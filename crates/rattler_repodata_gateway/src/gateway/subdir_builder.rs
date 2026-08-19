@@ -22,6 +22,7 @@ pub struct SubdirBuilder<'g> {
     platform: Platform,
     reporter: Option<Arc<dyn Reporter>>,
     gateway: &'g GatewayInner,
+    package_format_selection: PackageFormatSelection,
 }
 
 impl<'g> SubdirBuilder<'g> {
@@ -30,12 +31,14 @@ impl<'g> SubdirBuilder<'g> {
         channel: Channel,
         platform: Platform,
         reporter: Option<Arc<dyn Reporter>>,
+        package_format_selection: PackageFormatSelection,
     ) -> Self {
         Self {
             channel,
             platform,
             reporter,
             gateway,
+            package_format_selection,
         }
     }
 
@@ -138,7 +141,7 @@ impl<'g> SubdirBuilder<'g> {
             source_config.clone(),
             self.reporter.clone(),
             #[cfg(not(target_arch = "wasm32"))]
-            None,
+            Some(self.package_format_selection),
         )
         .await?;
         Ok(SubdirData::from_client(client))
@@ -174,13 +177,14 @@ impl<'g> SubdirBuilder<'g> {
     async fn build_local(&self, path: &Path) -> Result<SubdirData, GatewayError> {
         let channel = self.channel.clone();
         let platform = self.platform;
+        let package_format_selection = self.package_format_selection;
         let path = path.join("repodata.json");
         let build_client = move || {
             LocalSubdirClient::from_file(
                 &path,
                 channel.clone(),
                 platform.as_str(),
-                PackageFormatSelection::default(),
+                package_format_selection,
             )
         };
 

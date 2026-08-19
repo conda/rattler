@@ -355,6 +355,7 @@ struct QueryExecutor {
     recursive: bool,
     record_patch: Option<Arc<RecordPatch>>,
     reporter: Option<Arc<dyn Reporter>>,
+    package_format_selection: PackageFormatSelection,
 
     // Specs categorized at construction
     direct_url_specs: Vec<DirectUrlSpec>,
@@ -561,6 +562,7 @@ impl QueryExecutor {
                             reporter.clone(),
                             barrier.clone(),
                             FetchErrorPolicy::Propagate,
+                            package_format_selection,
                         );
                         (kind, fut)
                     }
@@ -633,6 +635,7 @@ impl QueryExecutor {
             recursive,
             record_patch,
             reporter,
+            package_format_selection,
             direct_url_specs,
             direct_url_result,
             pending_pattern_specs,
@@ -1096,6 +1099,7 @@ impl QueryExecutor {
             self.reporter.clone(),
             barrier.clone(),
             policy,
+            self.package_format_selection,
         );
         self.pending_subdirs.push(fut);
 
@@ -1228,6 +1232,7 @@ enum FetchErrorPolicy {
 /// applies `policy` to any fetch error. Used by `RepoDataQuery`'s
 /// executor; `NamesQuery` uses the simpler [`spawn_names_fetch`]
 /// wrapper around the same [`fetch_subdir_with_policy`] core.
+#[allow(clippy::too_many_arguments)]
 fn build_channel_subdir_future(
     gateway: Arc<GatewayInner>,
     channel: Arc<Channel>,
@@ -1236,10 +1241,19 @@ fn build_channel_subdir_future(
     reporter: Option<Arc<dyn Reporter>>,
     barrier: Arc<BarrierCell<Arc<Subdir>>>,
     policy: FetchErrorPolicy,
+    package_format_selection: PackageFormatSelection,
 ) -> BoxFuture<PendingSubdirResult> {
     box_future(async move {
-        let (subdir, warning) =
-            fetch_subdir_with_policy(&gateway, &channel, platform, &url, reporter, policy).await?;
+        let (subdir, warning) = fetch_subdir_with_policy(
+            &gateway,
+            &channel,
+            platform,
+            &url,
+            reporter,
+            policy,
+            package_format_selection,
+        )
+        .await?;
         barrier.set(subdir.clone()).expect("subdir was set twice");
         Ok(PendingSubdirOk {
             subdir,
@@ -1261,9 +1275,10 @@ async fn fetch_subdir_with_policy(
     url: &ChannelUrl,
     reporter: Option<Arc<dyn Reporter>>,
     policy: FetchErrorPolicy,
+    package_format_selection: PackageFormatSelection,
 ) -> Result<(Arc<Subdir>, Option<ChannelRelationsWarning>), GatewayError> {
     match gateway
-        .get_or_create_subdir(channel, platform, reporter)
+        .get_or_create_subdir(channel, platform, reporter, package_format_selection)
         .await
     {
         Ok(subdir) => Ok((subdir, None)),
@@ -1576,8 +1591,16 @@ fn spawn_names_fetch(
     policy: FetchErrorPolicy,
 ) -> BoxFuture<NamesFetchResult> {
     box_future(async move {
-        let (subdir, warning) =
-            fetch_subdir_with_policy(&gateway, &channel, platform, &url, reporter, policy).await?;
+        let (subdir, warning) = fetch_subdir_with_policy(
+            &gateway,
+            &channel,
+            platform,
+            &url,
+            reporter,
+            policy,
+            PackageFormatSelection::default(),
+        )
+        .await?;
         Ok((url, platform, subdir, warning))
     })
 }

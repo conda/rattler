@@ -23,6 +23,7 @@ mod warning;
 use std::{collections::HashSet, sync::Arc};
 
 use crate::reporter::report_unsupported_repodata_revisions;
+use crate::sparse::PackageFormatSelection;
 use crate::{Reporter, gateway::subdir_builder::SubdirBuilder};
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
@@ -219,7 +220,7 @@ impl Gateway {
     ) -> Result<Option<ChannelRelations>, GatewayError> {
         match self
             .inner
-            .get_or_create_subdir(channel, platform, None)
+            .get_or_create_subdir(channel, platform, None, PackageFormatSelection::default())
             .await
         {
             Ok(subdir) => Ok(subdir.channel_relations().cloned()),
@@ -388,6 +389,7 @@ impl GatewayInner {
         channel: &Channel,
         platform: Platform,
         reporter: Option<Arc<dyn Reporter>>,
+        package_format_selection: PackageFormatSelection,
     ) -> Result<Arc<Subdir>, GatewayError> {
         let key = (channel.clone(), platform);
         let channel_for_create = channel.clone();
@@ -397,7 +399,12 @@ impl GatewayInner {
             .subdirs
             .get_or_try_init(key, || async move {
                 let subdir = self
-                    .create_subdir(&channel_for_create, platform, reporter_for_create)
+                    .create_subdir(
+                        &channel_for_create,
+                        platform,
+                        reporter_for_create,
+                        package_format_selection,
+                    )
                     .await?;
                 Ok(Arc::new(subdir))
             })
@@ -425,10 +432,17 @@ impl GatewayInner {
         channel: &Channel,
         platform: Platform,
         reporter: Option<Arc<dyn Reporter>>,
+        package_format_selection: PackageFormatSelection,
     ) -> Result<Subdir, GatewayError> {
-        SubdirBuilder::new(self, channel.clone(), platform, reporter)
-            .build()
-            .await
+        SubdirBuilder::new(
+            self,
+            channel.clone(),
+            platform,
+            reporter,
+            package_format_selection,
+        )
+        .build()
+        .await
     }
 }
 
@@ -2297,7 +2311,6 @@ mod test {
     #[case::only_conda(PackageFormatSelection::OnlyConda, 2)]
     #[case::only_tar_bz2(PackageFormatSelection::OnlyTarBz2, 5)]
     #[case::both(PackageFormatSelection::Both, 7)]
-    #[ignore = "package format detection is not supported for channel sources"]
     #[tokio::test]
     async fn test_package_format_selection_channel_source(
         #[case] selection: PackageFormatSelection,
