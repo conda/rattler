@@ -1863,26 +1863,90 @@ mod test {
         }
     }
 
+    /// Filters and deduplicates records by their archive format, mirroring
+    /// the semantics of [`PackageFormatSelection`] used by sparse repodata.
+    fn filter_by_package_format(
+        records: Vec<RepoDataRecord>,
+        package_format_selection: PackageFormatSelection,
+    ) -> Vec<RepoDataRecord> {
+        use rattler_conda_types::package::{CondaArchiveType, DistArchiveType};
+
+        let is_included = |archive_type: DistArchiveType| match package_format_selection {
+            PackageFormatSelection::OnlyTarBz2 => {
+                archive_type == DistArchiveType::Conda(CondaArchiveType::TarBz2)
+            }
+            PackageFormatSelection::OnlyConda => {
+                archive_type == DistArchiveType::Conda(CondaArchiveType::Conda)
+            }
+            PackageFormatSelection::Both | PackageFormatSelection::PreferConda => {
+                matches!(archive_type, DistArchiveType::Conda(_))
+            }
+            PackageFormatSelection::PreferCondaWithWhl => true,
+        };
+
+        let filtered = records
+            .into_iter()
+            .filter(|record| is_included(record.identifier.archive_type));
+
+        match package_format_selection {
+            PackageFormatSelection::OnlyTarBz2
+            | PackageFormatSelection::OnlyConda
+            | PackageFormatSelection::Both => filtered.collect(),
+            PackageFormatSelection::PreferConda | PackageFormatSelection::PreferCondaWithWhl => {
+                let mut best: std::collections::HashMap<_, RepoDataRecord> =
+                    std::collections::HashMap::new();
+                for record in filtered {
+                    match best.entry(record.identifier.identifier.clone()) {
+                        std::collections::hash_map::Entry::Vacant(entry) => {
+                            entry.insert(record);
+                        }
+                        std::collections::hash_map::Entry::Occupied(mut entry) => {
+                            if record
+                                .identifier
+                                .archive_type
+                                .cmp_preference(entry.get().identifier.archive_type)
+                                == std::cmp::Ordering::Greater
+                            {
+                                entry.insert(record);
+                            }
+                        }
+                    }
+                }
+                best.into_values().collect()
+            }
+        }
+    }
+
     #[async_trait::async_trait]
     impl super::RepoDataSource for MockRepoDataSource {
         async fn fetch_package_records(
             &self,
             platform: Platform,
             name: &PackageName,
+            package_format_selection: PackageFormatSelection,
         ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
             let records = self
                 .records
                 .get(&(platform, name.clone()))
                 .cloned()
                 .unwrap_or_default();
+            let records = filter_by_package_format(records, package_format_selection);
             Ok(records.into_iter().map(Arc::new).collect())
         }
 
-        fn package_names(&self, platform: Platform) -> Vec<String> {
+        fn package_names(
+            &self,
+            platform: Platform,
+            package_format_selection: PackageFormatSelection,
+        ) -> Vec<String> {
             self.records
-                .keys()
-                .filter(|(p, _)| *p == platform)
-                .map(|(_, n)| n.as_source().to_string())
+                .iter()
+                .filter(|((p, _), _)| *p == platform)
+                .filter(|(_, records)| {
+                    !filter_by_package_format((*records).clone(), package_format_selection)
+                        .is_empty()
+                })
+                .map(|((_, n), _)| n.as_source().to_string())
                 .collect()
         }
     }
@@ -1946,6 +2010,59 @@ mod test {
                 .unwrap(),
             url: Url::parse(&format!(
                 "https://example.com/{subdir}/{name}-{version}-0.conda"
+            ))
+            .unwrap(),
+            channel: Some("example".to_string()),
+        }
+    }
+
+    /// Like [`make_test_record`] but lets the caller pick the archive
+    /// extension (e.g. `.conda` or `.tar.bz2`) of the resulting record.
+    fn make_test_record_with_extension(
+        name: &str,
+        version: &str,
+        subdir: &str,
+        extension: &str,
+    ) -> RepoDataRecord {
+        use rattler_conda_types::{
+            PackageRecord, VersionWithSource, package::DistArchiveIdentifier,
+        };
+
+        let package_record = PackageRecord {
+            name: PackageName::from_str(name).unwrap(),
+            version: VersionWithSource::from_str(version).unwrap(),
+            build: "0".to_string(),
+            build_number: 0,
+            subdir: subdir.to_string(),
+            md5: None,
+            sha256: None,
+            size: Some(1000),
+            arch: None,
+            platform: None,
+            depends: vec![],
+            constrains: vec![],
+            track_features: vec![],
+            features: None,
+            flags: vec![],
+            noarch: rattler_conda_types::NoArchType::default(),
+            license: None,
+            license_family: None,
+            timestamp: None,
+            legacy_bz2_size: None,
+            legacy_bz2_md5: None,
+            purls: None,
+            run_exports: None,
+            python_site_packages_path: None,
+            extra_depends: std::collections::BTreeMap::default(),
+        };
+
+        RepoDataRecord {
+            package_record,
+            identifier: format!("{name}-{version}-0{extension}")
+                .parse::<DistArchiveIdentifier>()
+                .unwrap(),
+            url: Url::parse(&format!(
+                "https://example.com/{subdir}/{name}-{version}-0{extension}"
             ))
             .unwrap(),
             channel: Some("example".to_string()),
@@ -2103,6 +2220,66 @@ mod test {
         let records = gateway
             .query(
                 vec![super::Source::SparseRepoData(vec![source])],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("bors").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .package_format_selection(selection)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(all_records.len(), expected_count);
+    }
+
+    #[rstest]
+    #[case::default_prefers_conda(PackageFormatSelection::PreferConda, 8)]
+    #[case::only_conda(PackageFormatSelection::OnlyConda, 5)]
+    #[case::only_tar_bz2(PackageFormatSelection::OnlyTarBz2, 6)]
+    #[case::both(PackageFormatSelection::Both, 11)]
+    #[tokio::test]
+    async fn test_package_format_selection_custom_source(
+        #[case] selection: PackageFormatSelection,
+        #[case] expected_count: usize,
+    ) {
+        let gateway = Gateway::new();
+        let mut mock_source = MockRepoDataSource::new();
+
+        // Packages that only exist as `.conda`.
+        for version in ["10.0", "11.0"] {
+            mock_source.add_record(
+                Platform::Linux64,
+                make_test_record_with_extension("bors", version, "linux-64", ".conda"),
+            );
+        }
+
+        // Packages that exist as both `.tar.bz2` and `.conda` under the same
+        // identifier, so `PreferConda` should dedup each pair down to the
+        // `.conda` variant.
+        for version in ["1.0", "2.0", "3.0"] {
+            mock_source.add_record(
+                Platform::Linux64,
+                make_test_record_with_extension("bors", version, "linux-64", ".tar.bz2"),
+            );
+            mock_source.add_record(
+                Platform::Linux64,
+                make_test_record_with_extension("bors", version, "linux-64", ".conda"),
+            );
+        }
+
+        // Packages that only exist as `.tar.bz2`.
+        for version in ["20.0", "21.0", "22.0"] {
+            mock_source.add_record(
+                Platform::Linux64,
+                make_test_record_with_extension("bors", version, "linux-64", ".tar.bz2"),
+            );
+        }
+
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(mock_source);
+
+        let records = gateway
+            .query(
+                vec![super::Source::Custom(source)],
                 vec![Platform::Linux64],
                 vec![PackageName::from_str("bors").unwrap()].into_iter(),
             )
@@ -2516,16 +2693,23 @@ mod test {
             &self,
             platform: Platform,
             name: &PackageName,
+            package_format_selection: PackageFormatSelection,
         ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
             self.fetched
                 .lock()
                 .unwrap()
                 .push(name.as_normalized().to_string());
-            self.inner.fetch_package_records(platform, name).await
+            self.inner
+                .fetch_package_records(platform, name, package_format_selection)
+                .await
         }
 
-        fn package_names(&self, platform: Platform) -> Vec<String> {
-            self.inner.package_names(platform)
+        fn package_names(
+            &self,
+            platform: Platform,
+            package_format_selection: PackageFormatSelection,
+        ) -> Vec<String> {
+            self.inner.package_names(platform, package_format_selection)
         }
     }
 

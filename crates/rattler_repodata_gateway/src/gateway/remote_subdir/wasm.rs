@@ -12,8 +12,8 @@ use crate::{
     gateway::{
         GatewayError, SourceConfig, error::SubdirNotFoundError, local_subdir::LocalSubdirClient,
     },
-    utils::js_fetch::JsFetcher,
     sparse::PackageFormatSelection,
+    utils::js_fetch::JsFetcher,
 };
 
 pub struct RemoteSubdirClient {

@@ -565,7 +565,11 @@ impl QueryExecutor {
                         (kind, fut)
                     }
                     Source::Custom(custom_source) => {
-                        let client = CustomSourceClient::new(custom_source, platform);
+                        let client = CustomSourceClient::new(
+                            custom_source,
+                            platform,
+                            package_format_selection,
+                        );
                         let subdir = Arc::new(Subdir::Found(SubdirData::from_client(client)));
                         let b = barrier.clone();
                         let fut = box_future(async move {
