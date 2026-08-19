@@ -41,7 +41,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build sdist"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: py-rattler
           command: sdist
@@ -58,20 +58,23 @@ jobs:
           path: py-rattler/dist
 
   windows:
-    runs-on: windows-latest
+    runs-on: ${{ matrix.platform.runner }}
     name: Build ${{ matrix.platform.target }}
     strategy:
       fail-fast: false
       matrix:
         platform:
           - target: x86_64-pc-windows-msvc
+            runner: windows-latest
             arch: x64
           - target: i686-pc-windows-msvc
+            runner: windows-latest
             arch: x86
-    #     There are a number of issues with cross compiling ring to windows on aarch64.
-    #     For now, we just won't build a wheel, we will revisit this in the future.
-    #      - target: aarch64-pc-windows-msvc
-    #        arch: x64
+          # Cross compiling ring to aarch64-windows is what kept this target
+          # off the list, so build it on a native arm64 runner instead.
+          - target: aarch64-pc-windows-msvc
+            runner: windows-11-arm
+            arch: arm64
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -81,13 +84,12 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.platform.arch }}
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
           args: --release --out dist --no-default-features --features rustls
       - name: "Test wheel"
-        if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
         shell: bash
         run: |
           python -m pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
@@ -116,7 +118,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: py-rattler
           target: ${{ matrix.target }}
@@ -134,19 +136,33 @@ jobs:
           path: py-rattler/dist
 
   linux-cross:
-    runs-on: ubuntu-latest
-    # The QEMU test step normally runs in a couple of minutes; anything much
-    # longer is a hang, not slow progress.
+    runs-on: ${{ matrix.platform.runner }}
+    # Entries with a distro test under QEMU, which normally takes a couple of
+    # minutes; anything much longer is a hang, not slow progress.
     timeout-minutes: 30
     name: Build ${{ matrix.platform.target }}
     strategy:
       fail-fast: false
       matrix:
         platform:
+          # Native arm64 runner, so no distro: this one builds in the aarch64
+          # manylinux image and tests on the host, no emulation anywhere.
           - target: aarch64-unknown-linux-gnu
-            arch: aarch64
+            runner: ubuntu-24.04-arm
+            manylinux: "2_28"
           - target: armv7-unknown-linux-gnueabihf
+            runner: ubuntu-latest
             arch: armv7
+            manylinux: "2_28"
+            distro: ubuntu22.04
+          # riscv64 has no manylinux_2_28 image, so it builds against 2_31.
+          # The distro still has to carry python 3.10 or newer for our abi3
+          # wheel, which rules out the ubuntu20.04 rootfs.
+          - target: riscv64gc-unknown-linux-gnu
+            runner: ubuntu-latest
+            arch: riscv64
+            manylinux: "2_31"
+            distro: ubuntu22.04
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -156,18 +172,34 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
-          manylinux: "2_28"
+          manylinux: ${{ matrix.platform.manylinux }}
           args: --release --out dist  --no-default-features --features rustls,pty
-      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
-        if: matrix.platform.arch != 'ppc64'
-        name: Test wheel
+      - name: "Test wheel"
+        if: ${{ !matrix.platform.distro }}
+        run: |
+          pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
+          python3 -c "import rattler; print(rattler.__version__)"
+      # run-on-arch runs `apt update` on the runner before it configures QEMU,
+      # and apt retries a failing mirror instead of moving on to the next one.
+      - name: "Bound apt on the runner"
+        if: ${{ matrix.platform.distro }}
+        run: |
+          cat /etc/apt/apt-mirrors.txt || true
+          printf '%s\n' \
+            'Acquire::Retries "0";' \
+            'Acquire::http::Timeout "10";' \
+            'Acquire::https::Timeout "10";' \
+            | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
+      - uses: uraimo/run-on-arch-action@460cb8e6d9f726a588fc9b5e681c8a6cab09ae41 # v3.2.0
+        if: ${{ matrix.platform.distro }}
+        name: Test wheel (emulated)
         with:
           arch: ${{ matrix.platform.arch }}
-          distro: ubuntu22.04
+          distro: ${{ matrix.platform.distro }}
           githubToken: ${{ github.token }}
           install: |
             apt-get update
@@ -209,17 +241,26 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
           args: --release --out dist --no-default-features --features native-tls,vendored-openssl,pty
-      # Skipped for both PowerPC targets: the emulated container hangs in
-      # apt-get while installing Python. uv dropped the same step for the
-      # same reason in astral-sh/uv#11229 and has never restored it.
-      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
-        if: ${{ !startsWith(matrix.platform.arch, 'ppc64') }}
+      # run-on-arch runs `apt update` on the runner before it configures QEMU,
+      # and apt retries a failing mirror instead of moving on to the next one.
+      - name: "Bound apt on the runner"
+        if: matrix.platform.arch != 'ppc64'
+        run: |
+          cat /etc/apt/apt-mirrors.txt || true
+          printf '%s\n' \
+            'Acquire::Retries "0";' \
+            'Acquire::http::Timeout "10";' \
+            'Acquire::https::Timeout "10";' \
+            | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
+      # Only ppc64le: run-on-arch ships no rootfs for big endian ppc64.
+      - uses: uraimo/run-on-arch-action@460cb8e6d9f726a588fc9b5e681c8a6cab09ae41 # v3.2.0
+        if: matrix.platform.arch != 'ppc64'
         name: Test wheel
         with:
           arch: ${{ matrix.platform.arch }}
@@ -257,7 +298,7 @@ jobs:
           architecture: x64
       - name: "Build wheels (rustls)"
         if: matrix.target == 'x86_64-unknown-linux-musl'
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: py-rattler
           target: ${{ matrix.target }}
@@ -265,7 +306,7 @@ jobs:
           args: --release --out dist --no-default-features --features rustls,pty
       - name: "Build wheels (native-tls)"
         if: matrix.target != 'x86_64-unknown-linux-musl'
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: py-rattler
           target: ${{ matrix.target }}
@@ -288,17 +329,25 @@ jobs:
           path: py-rattler/dist
 
   musllinux-cross:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.platform.runner }}
     timeout-minutes: 30
     name: Build ${{ matrix.platform.target }}
     strategy:
       fail-fast: false
       matrix:
         platform:
+          # Native arm64 runner, so no distro: this one tests in a plain alpine
+          # container on the host, the same way the x86_64 musllinux job does.
           - target: aarch64-unknown-linux-musl
-            arch: aarch64
+            runner: ubuntu-24.04-arm
           - target: armv7-unknown-linux-musleabihf
+            runner: ubuntu-latest
             arch: armv7
+            distro: alpine_latest
+          - target: riscv64gc-unknown-linux-musl
+            runner: ubuntu-latest
+            arch: riscv64
+            distro: alpine_latest
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -308,17 +357,39 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_2
           args: --release --out dist --no-default-features --features rustls,pty
-      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
-        name: Test wheel
+      - name: "Test wheel"
+        if: ${{ !matrix.platform.distro }}
+        uses: addnab/docker-run-action@4f65fabd2431ebc8d299f8e5a018d79a769ae185 # v3
+        with:
+          image: alpine:latest
+          options: -v ${{ github.workspace }}:/io -w /io
+          run: |
+            apk add py3-pip
+            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links /io/py-rattler/dist/ --force-reinstall --break-system-packages
+            python3 -c "import rattler; print(rattler.__version__)"
+      # run-on-arch runs `apt update` on the runner before it configures QEMU,
+      # and apt retries a failing mirror instead of moving on to the next one.
+      - name: "Bound apt on the runner"
+        if: ${{ matrix.platform.distro }}
+        run: |
+          cat /etc/apt/apt-mirrors.txt || true
+          printf '%s\n' \
+            'Acquire::Retries "0";' \
+            'Acquire::http::Timeout "10";' \
+            'Acquire::https::Timeout "10";' \
+            | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
+      - uses: uraimo/run-on-arch-action@460cb8e6d9f726a588fc9b5e681c8a6cab09ae41 # v3.2.0
+        if: ${{ matrix.platform.distro }}
+        name: Test wheel (emulated)
         with:
           arch: ${{ matrix.platform.arch }}
-          distro: alpine_latest
+          distro: ${{ matrix.platform.distro }}
           githubToken: ${{ github.token }}
           install: |
             apk add py3-pip
@@ -343,7 +414,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Build wheels - x86_64"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: py-rattler
           target: x86_64
@@ -370,7 +441,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Build wheels - universal2"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           args: --release --target universal2-apple-darwin --out dist --no-default-features --features rustls,pty
           working-directory: py-rattler
