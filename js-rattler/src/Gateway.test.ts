@@ -1,5 +1,17 @@
 import { describe, expect, it } from "@jest/globals";
 import { Gateway } from "./Gateway";
+import { Platform } from "./Platform";
+import { isRattlerError } from "./RattlerError";
+
+// Disable all repodata variants so the gateway requests exactly one URL per
+// subdir: the plain `repodata.json`.
+const plainOnly = {
+    default: {
+        shardedEnabled: false,
+        zstdEnabled: false,
+        bz2Enabled: false,
+    },
+};
 
 describe("Gateway", () => {
     describe("constructor", () => {
@@ -94,16 +106,6 @@ describe("Gateway", () => {
                 },
             },
         });
-
-        // Disable all repodata variants so the gateway requests exactly one
-        // URL per subdir: the plain `repodata.json`.
-        const plainOnly = {
-            default: {
-                shardedEnabled: false,
-                zstdEnabled: false,
-                bz2Enabled: false,
-            },
-        };
 
         it("routes requests through the provided fetch", async () => {
             const seen: Request[] = [];
@@ -240,6 +242,115 @@ describe("Gateway", () => {
                     ["foo"],
                 ),
             ).rejects.toBeDefined();
+        });
+    });
+    describe("error codes", () => {
+        it("marks a missing channel with SUBDIR_NOT_FOUND", async () => {
+            const gateway = new Gateway({
+                channelConfig: plainOnly,
+                fetch: () =>
+                    Promise.resolve(new Response(null, { status: 404 })),
+            });
+
+            const error: unknown = await gateway
+                .query(
+                    ["https://example.com/missing-channel"],
+                    ["noarch"],
+                    ["foo"],
+                )
+                .then(
+                    () => null,
+                    (err: unknown) => err,
+                );
+
+            expect(isRattlerError(error)).toBe(true);
+            if (isRattlerError(error)) {
+                expect(error.code).toBe("SUBDIR_NOT_FOUND");
+            }
+        });
+
+        it("marks fetch failures with FETCH", async () => {
+            const gateway = new Gateway({
+                channelConfig: plainOnly,
+                fetch: () =>
+                    Promise.resolve(new Response("nope", { status: 500 })),
+            });
+
+            const error: unknown = await gateway
+                .query(
+                    ["https://example.com/broken-channel"],
+                    ["noarch"],
+                    ["foo"],
+                )
+                .then(
+                    () => null,
+                    (err: unknown) => err,
+                );
+
+            expect(isRattlerError(error)).toBe(true);
+            if (isRattlerError(error)) {
+                expect(error.code).toBe("FETCH");
+                expect(error.message).toContain("500");
+            }
+        });
+
+        it("marks invalid platforms with PARSE_PLATFORM", async () => {
+            const gateway = new Gateway();
+
+            const error: unknown = await gateway
+                .query(
+                    ["https://example.com/channel"],
+                    ["not-a-platform" as Platform],
+                    ["foo"],
+                )
+                .then(
+                    () => null,
+                    (err: unknown) => err,
+                );
+
+            expect(isRattlerError(error)).toBe(true);
+            if (isRattlerError(error)) {
+                expect(error.code).toBe("PARSE_PLATFORM");
+            }
+        });
+    });
+    describe("onWarning", () => {
+        it("routes gateway warnings to the callback", async () => {
+            const relatedRepodata = JSON.stringify({
+                info: {
+                    subdir: "noarch",
+                    channel_relations: {
+                        base: "https://example.com/missing-base",
+                    },
+                },
+                packages: {},
+                "packages.conda": {},
+            });
+            const warnings: string[] = [];
+            const gateway = new Gateway({
+                channelConfig: plainOnly,
+                fetch: (request) => {
+                    if (request.url.includes("/missing-base/")) {
+                        return Promise.resolve(
+                            new Response("nope", { status: 500 }),
+                        );
+                    }
+                    return Promise.resolve(
+                        new Response(relatedRepodata, { status: 200 }),
+                    );
+                },
+                onWarning: (message) => {
+                    warnings.push(message);
+                },
+            });
+
+            await gateway.query(
+                ["https://example.com/test-channel"],
+                ["noarch"],
+                ["foo"],
+            );
+
+            expect(warnings.length).toBeGreaterThanOrEqual(1);
         });
     });
 });
