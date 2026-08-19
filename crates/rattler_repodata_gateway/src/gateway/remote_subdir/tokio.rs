@@ -26,6 +26,7 @@ impl RemoteSubdirClient {
         cache_dir: PathBuf,
         source_config: SourceConfig,
         reporter: Option<Arc<dyn Reporter>>,
+        package_format_selection: Option<PackageFormatSelection>,
     ) -> Result<Self, GatewayError> {
         let subdir_url = channel.platform_url(platform);
 
@@ -61,7 +62,7 @@ impl RemoteSubdirClient {
                 &repodata.repo_data_json_path,
                 channel.clone(),
                 platform.as_str(),
-                PackageFormatSelection::default(),
+                package_format_selection.unwrap_or_default(),
             )
         })
         .await?;

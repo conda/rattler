@@ -137,6 +137,8 @@ impl<'g> SubdirBuilder<'g> {
             self.gateway.cache.clone(),
             source_config.clone(),
             self.reporter.clone(),
+            #[cfg(not(target_arch = "wasm32"))]
+            None,
         )
         .await?;
         Ok(SubdirData::from_client(client))
