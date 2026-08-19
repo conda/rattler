@@ -136,26 +136,29 @@ jobs:
           path: py-rattler/dist
 
   linux-cross:
-    runs-on: ubuntu-latest
-    # The QEMU test step normally runs in a couple of minutes; anything much
-    # longer is a hang, not slow progress.
+    runs-on: ${{ matrix.platform.runner }}
+    # Entries with a distro test under QEMU, which normally takes a couple of
+    # minutes; anything much longer is a hang, not slow progress.
     timeout-minutes: 30
     name: Build ${{ matrix.platform.target }}
     strategy:
       fail-fast: false
       matrix:
         platform:
+          # Native arm64 runner, so no distro: this one builds in the aarch64
+          # manylinux image and tests on the host, no emulation anywhere.
           - target: aarch64-unknown-linux-gnu
-            arch: aarch64
+            runner: ubuntu-24.04-arm
             manylinux: "2_28"
-            distro: ubuntu22.04
           - target: armv7-unknown-linux-gnueabihf
+            runner: ubuntu-latest
             arch: armv7
             manylinux: "2_28"
             distro: ubuntu22.04
           # riscv64 has no manylinux_2_28 image, and run-on-arch only ships a
           # riscv64 rootfs for ubuntu20.04, so it carries its own pair.
           - target: riscv64gc-unknown-linux-gnu
+            runner: ubuntu-latest
             arch: riscv64
             manylinux: "2_31"
             distro: ubuntu20.04
@@ -174,8 +177,14 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
           args: --release --out dist  --no-default-features --features rustls,pty
+      - name: "Test wheel"
+        if: ${{ !matrix.platform.distro }}
+        run: |
+          pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
+          python3 -c "import rattler; print(rattler.__version__)"
       - uses: uraimo/run-on-arch-action@460cb8e6d9f726a588fc9b5e681c8a6cab09ae41 # v3.2.0
-        name: Test wheel
+        if: ${{ matrix.platform.distro }}
+        name: Test wheel (emulated)
         with:
           arch: ${{ matrix.platform.arch }}
           distro: ${{ matrix.platform.distro }}
@@ -299,19 +308,25 @@ jobs:
           path: py-rattler/dist
 
   musllinux-cross:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.platform.runner }}
     timeout-minutes: 30
     name: Build ${{ matrix.platform.target }}
     strategy:
       fail-fast: false
       matrix:
         platform:
+          # Native arm64 runner, so no distro: this one tests in a plain alpine
+          # container on the host, the same way the x86_64 musllinux job does.
           - target: aarch64-unknown-linux-musl
-            arch: aarch64
+            runner: ubuntu-24.04-arm
           - target: armv7-unknown-linux-musleabihf
+            runner: ubuntu-latest
             arch: armv7
+            distro: alpine_latest
           - target: riscv64gc-unknown-linux-musl
+            runner: ubuntu-latest
             arch: riscv64
+            distro: alpine_latest
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -327,11 +342,22 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_2
           args: --release --out dist --no-default-features --features rustls,pty
+      - name: "Test wheel"
+        if: ${{ !matrix.platform.distro }}
+        uses: addnab/docker-run-action@4f65fabd2431ebc8d299f8e5a018d79a769ae185 # v3
+        with:
+          image: alpine:latest
+          options: -v ${{ github.workspace }}:/io -w /io
+          run: |
+            apk add py3-pip
+            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links /io/py-rattler/dist/ --force-reinstall --break-system-packages
+            python3 -c "import rattler; print(rattler.__version__)"
       - uses: uraimo/run-on-arch-action@460cb8e6d9f726a588fc9b5e681c8a6cab09ae41 # v3.2.0
-        name: Test wheel
+        if: ${{ matrix.platform.distro }}
+        name: Test wheel (emulated)
         with:
           arch: ${{ matrix.platform.arch }}
-          distro: alpine_latest
+          distro: ${{ matrix.platform.distro }}
           githubToken: ${{ github.token }}
           install: |
             apk add py3-pip
