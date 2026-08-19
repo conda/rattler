@@ -91,7 +91,7 @@ fn patch_python_with_pip(record: &RepoDataRecord) -> Option<RepoDataRecord> {
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-#[pyo3(signature = (sources, platforms, specs, constraints, gateway, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, channel_relations=None, channel_relations_max_depth=None, add_pip_as_python_dependency=false)
+#[pyo3(signature = (sources, platforms, specs, constraints, gateway, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, channel_relations=None, channel_relations_max_depth=None, add_pip_as_python_dependency=false, package_format_selection=None)
 )]
 pub fn py_solve<'a>(
     py: Python<'a>,
@@ -111,6 +111,7 @@ pub fn py_solve<'a>(
     channel_relations: Option<Wrap<rattler_repodata_gateway::ChannelRelationsMode>>,
     channel_relations_max_depth: Option<usize>,
     add_pip_as_python_dependency: bool,
+    package_format_selection: Option<PyPackageFormatSelection>,
 ) -> PyResult<Bound<'a, PyAny>> {
     // Convert Python sources to Rust Source enum
     let rust_sources: Vec<rattler_repodata_gateway::Source> = sources
@@ -135,6 +136,9 @@ pub fn py_solve<'a>(
         }
         if add_pip_as_python_dependency {
             query = query.with_record_patch(patch_python_with_pip);
+        }
+        if let Some(package_format) = package_format_selection {
+            query = query.package_format_selection(package_format.into());
         }
         let output = query.execute().await.map_err(PyRattlerError::from)?;
         emit_gateway_warnings(output.warnings)?;

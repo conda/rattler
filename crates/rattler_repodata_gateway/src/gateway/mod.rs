@@ -460,7 +460,7 @@ mod test {
     use crate::{
         DownloadReporter, GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
         UnsupportedRepodataRevision, fetch::CacheAction, gateway::Gateway,
-        utils::simple_channel_server::SimpleChannelServer,
+        sparse::PackageFormatSelection, utils::simple_channel_server::SimpleChannelServer,
     };
     use rattler_conda_types::RepodataRevision;
 
@@ -2085,6 +2085,68 @@ mod test {
             all_records.is_empty(),
             "querying a platform other than the sparse repodata's own subdir should be empty"
         );
+    }
+
+    #[rstest]
+    #[case::default_prefers_conda(PackageFormatSelection::PreferConda, 5)]
+    #[case::only_conda(PackageFormatSelection::OnlyConda, 2)]
+    #[case::only_tar_bz2(PackageFormatSelection::OnlyTarBz2, 5)]
+    #[case::both(PackageFormatSelection::Both, 7)]
+    #[tokio::test]
+    async fn test_package_format_selection_sparse_repo_data_source(
+        #[case] selection: PackageFormatSelection,
+        #[case] expected_count: usize,
+    ) {
+        let gateway = Gateway::new();
+        let source = Arc::new(dummy_sparse_repo_data());
+
+        let records = gateway
+            .query(
+                vec![super::Source::SparseRepoData(vec![source])],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("bors").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .package_format_selection(selection)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(all_records.len(), expected_count);
+    }
+
+    #[rstest]
+    #[case::default_prefers_conda(PackageFormatSelection::PreferConda, 5)]
+    #[case::only_conda(PackageFormatSelection::OnlyConda, 2)]
+    #[case::only_tar_bz2(PackageFormatSelection::OnlyTarBz2, 5)]
+    #[case::both(PackageFormatSelection::Both, 7)]
+    #[ignore = "package format detection is not supported for channel sources"]
+    #[tokio::test]
+    async fn test_package_format_selection_channel_source(
+        #[case] selection: PackageFormatSelection,
+        #[case] expected_count: usize,
+    ) {
+        let channel = Channel::try_from_directory(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/channels/dummy"),
+        )
+        .unwrap();
+
+        // A fresh gateway per case, since the subdir cache isn't keyed by
+        // package_format_selection either.
+        let gateway = Gateway::new();
+        let records = gateway
+            .query(
+                vec![channel],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("bors").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .package_format_selection(selection)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(all_records.len(), expected_count);
     }
 
     #[tokio::test]

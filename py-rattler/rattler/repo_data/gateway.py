@@ -17,6 +17,7 @@ from rattler.repo_data.repo_data import ChannelRelations
 
 if TYPE_CHECKING:
     from rattler.repo_data.source import RepoDataSource
+    from rattler.repo_data.sparse import PackageFormatSelection
 
 
 ChannelRelationsMode = Literal["disabled", "warn", "strict"]
@@ -244,6 +245,7 @@ class Gateway:
         channel_relations: Optional[ChannelRelationsMode] = None,
         channel_relations_max_depth: Optional[int] = None,
         channel_notices: bool = False,
+        package_format_selection: Optional[PackageFormatSelection] = None,
     ) -> GatewayQueryResult:
         """Queries the gateway for repodata from channels and custom sources.
 
@@ -279,6 +281,7 @@ class Gateway:
                                          default (10). ``0`` behaves like
                                          ``channel_relations="disabled"``.
             channel_notices: Whether to fetch CEP-6 notices for this query.
+            package_format_selection: Defines which package formats are selected.
 
         Returns:
             A list of lists of `RepoDataRecord`s. The outer list contains one entry per
@@ -314,6 +317,7 @@ class Gateway:
             channel_notices=channel_notices,
             channel_relations=channel_relations,
             channel_relations_max_depth=channel_relations_max_depth,
+            package_format_selection=package_format_selection.value if package_format_selection is not None else None,
         )
 
         # Convert the records and notices into Python objects.

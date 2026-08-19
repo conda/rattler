@@ -6,14 +6,14 @@ use rattler_conda_types::{Channel, Platform};
 use crate::{
     GatewayError, Reporter, SourceConfig,
     fetch::FetchRepoDataError,
-    gateway,
     gateway::{
-        GatewayInner,
+        self, GatewayInner,
         error::SubdirNotFoundError,
         local_subdir::LocalSubdirClient,
         remote_subdir, sharded_subdir,
         subdir::{Subdir, SubdirData},
     },
+    sparse::PackageFormatSelection,
 };
 
 /// Builder for creating a `Subdir` instance.
@@ -173,8 +173,14 @@ impl<'g> SubdirBuilder<'g> {
         let channel = self.channel.clone();
         let platform = self.platform;
         let path = path.join("repodata.json");
-        let build_client =
-            move || LocalSubdirClient::from_file(&path, channel.clone(), platform.as_str());
+        let build_client = move || {
+            LocalSubdirClient::from_file(
+                &path,
+                channel.clone(),
+                platform.as_str(),
+                PackageFormatSelection::default(),
+            )
+        };
 
         #[cfg(target_arch = "wasm32")]
         let client = build_client()?;

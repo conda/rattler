@@ -19,7 +19,7 @@ use super::{
     source::{CustomSourceClient, Source},
     subdir::{PackageRecords, Subdir, SubdirData, extract_unique_deps_split},
 };
-use crate::Reporter;
+use crate::{Reporter, sparse::PackageFormatSelection};
 
 type RecordPatch = dyn Fn(&RepoDataRecord) -> Option<RepoDataRecord> + Send + Sync;
 
@@ -153,6 +153,9 @@ pub struct RepoDataQuery {
 
     /// Maximum recursion depth when following CEP-42 `channel_relations`.
     channel_relations_max_depth: usize,
+
+    /// Defines which package formats are selected.
+    package_format_selection: PackageFormatSelection,
 }
 
 /// Tracks whether specs came from user input or transitive dependencies.
@@ -247,6 +250,7 @@ impl RepoDataQuery {
             channel_notices: false,
             channel_relations_mode: ChannelRelationsMode::default(),
             channel_relations_max_depth: DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
+            package_format_selection: PackageFormatSelection::default(),
         }
     }
 
@@ -306,6 +310,15 @@ impl RepoDataQuery {
     ) -> Self {
         Self {
             record_patch: Some(Arc::new(patch)),
+            ..self
+        }
+    }
+
+    /// Defines which package formats are selected.
+    #[must_use]
+    pub fn package_format_selection(self, package_format: PackageFormatSelection) -> Self {
+        Self {
+            package_format_selection: package_format,
             ..self
         }
     }
@@ -452,6 +465,7 @@ impl QueryExecutor {
             channel_notices,
             channel_relations_mode,
             channel_relations_max_depth,
+            package_format_selection,
         } = query;
 
         let mut seen = hashbrown::HashMap::with_hasher(ahash::RandomState::new());
@@ -583,7 +597,7 @@ impl QueryExecutor {
                         };
                         let subdir = match matching {
                             Some(sparse) => Arc::new(Subdir::Found(SubdirData::from_client(
-                                LocalSubdirClient::new(sparse),
+                                LocalSubdirClient::new(sparse, package_format_selection),
                             ))),
                             None => Arc::new(Subdir::NotFound),
                         };
