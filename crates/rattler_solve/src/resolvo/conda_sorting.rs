@@ -152,8 +152,40 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             // Take the sub list of solvables
             let sub = &mut solvables[start..end];
             if sub.len() > 1 {
-                // Sort the sub list of solvables by the highest version of the dependencies
-                self.sort_subset_by_highest_dependency_versions(sub, version_cache);
+                let cache_hit = {
+                    let cache = self.solver.provider().dependency_tiebreak_cache.borrow();
+                    if let Some(cached) = cache.entries.get(sub) {
+                        sub.copy_from_slice(cached);
+                        true
+                    } else {
+                        false
+                    }
+                };
+
+                if !cache_hit {
+                    let stored_candidate_ids = sub.len().saturating_mul(2);
+                    let cache_key = {
+                        let cache = self.solver.provider().dependency_tiebreak_cache.borrow();
+                        (cache
+                            .stored_candidate_ids
+                            .saturating_add(stored_candidate_ids)
+                            <= super::DEPENDENCY_TIEBREAK_CACHE_CANDIDATE_LIMIT)
+                            .then(|| sub.to_vec())
+                    };
+
+                    // Sort the sub list of solvables by the highest version of the dependencies
+                    self.sort_subset_by_highest_dependency_versions(sub, version_cache);
+
+                    if let Some(cache_key) = cache_key {
+                        let mut cache = self
+                            .solver
+                            .provider()
+                            .dependency_tiebreak_cache
+                            .borrow_mut();
+                        cache.stored_candidate_ids += stored_candidate_ids;
+                        cache.entries.insert(cache_key, sub.to_vec());
+                    }
+                }
             }
 
             start = end;

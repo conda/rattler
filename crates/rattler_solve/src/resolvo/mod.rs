@@ -292,6 +292,29 @@ impl From<&PackageName> for NameType {
     }
 }
 
+/// Maximum number of solvable IDs retained across cache keys and values.
+const DEPENDENCY_TIEBREAK_CACHE_CANDIDATE_LIMIT: usize = 100_000;
+
+/// Caches the dependency-based ordering of otherwise equivalent candidates.
+///
+/// Candidate lists can be sorted repeatedly while Resolvo encodes a solve. Each
+/// entry maps the exact input order to its sorted output so repeated sorts can
+/// reuse the result. The input order is part of the key because sorting is
+/// stable and therefore affects how equal candidates are ordered.
+///
+/// The cache belongs to a single [`CondaDependencyProvider`], which limits its
+/// lifetime to one solve. Only completed, non-cancelled sorts are inserted. To
+/// keep memory use bounded, `stored_candidate_ids` tracks the number of IDs
+/// retained across both keys and values.
+#[derive(Default)]
+struct DependencyTiebreakCache {
+    /// Exact candidate input order mapped to its dependency-based output order.
+    entries: HashMap<Vec<SolvableId>, Vec<SolvableId>>,
+
+    /// Number of candidate IDs retained across all keys and values.
+    stored_candidate_ids: usize,
+}
+
 /// An implement of [`resolvo::DependencyProvider`] that implements the
 /// ecosystem behavior for conda. This allows resolvo to solve for conda
 /// packages.
@@ -303,6 +326,9 @@ pub struct CondaDependencyProvider<'a> {
 
     /// Holds all the cached candidates for each package name.
     records: HashMap<NameId, Candidates>,
+
+    /// Caches the dependency-based ordering of equivalent package variants.
+    dependency_tiebreak_cache: RefCell<DependencyTiebreakCache>,
 
     matchspec_to_highest_version:
         RefCell<HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>>,
@@ -651,6 +677,7 @@ impl<'a> CondaDependencyProvider<'a> {
             pool,
             name_to_condition: RefCell::default(),
             records,
+            dependency_tiebreak_cache: RefCell::default(),
             matchspec_to_highest_version: RefCell::default(),
             parse_match_spec_cache: RefCell::default(),
             stop_time,
