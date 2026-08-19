@@ -53,13 +53,13 @@ canonical : foo[version=">=1,<2|>3"]
 case      : conda-forge::foo >=1
 legacy    : conda-forge::foo >=1
   reparse : same spec
-canonical : foo[version=">=1",channel="https://conda.anaconda.org/conda-forge/"]
+canonical : foo[version=">=1",channel="conda-forge"]
   reparse : same spec, stable
 
 case      : conda-forge/linux-64::foo
 legacy    : conda-forge/linux-64::foo
   reparse : same spec
-canonical : foo[channel="https://conda.anaconda.org/conda-forge/",subdir="linux-64"]
+canonical : foo[channel="conda-forge",subdir="linux-64"]
   reparse : same spec, stable
 
 case      : foo[subdir="linux-64"]

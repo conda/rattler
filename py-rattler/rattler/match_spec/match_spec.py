@@ -213,7 +213,7 @@ class MatchSpec:
         ```python
         >>> spec = MatchSpec('conda-forge::foo >=1.0', strict=True)
         >>> spec.to_canonical_string()
-        'foo[version=">=1.0",channel="https://conda.anaconda.org/conda-forge/"]'
+        'foo[version=">=1.0",channel="conda-forge"]'
         >>>
         ```
         """

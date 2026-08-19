@@ -274,16 +274,6 @@ fn string_matcher_is_canonical(matcher: &StringMatcher) -> bool {
     }
 }
 
-/// Whether a track feature can stand as one element of a canonical
-/// `track_features=[..]` list. The parser splits elements on commas and
-/// whitespace and the bracket tokenizer ends the list at the first `]`, so a
-/// feature containing any of those has no element text.
-fn is_bare_track_feature(feature: &str) -> bool {
-    !feature.is_empty()
-        && !feature.chars().any(char::is_whitespace)
-        && !feature.contains([',', '[', ']', '"', '\'', '\\'])
-}
-
 /// Writes the positional package name for the canonical dialect, refusing
 /// matchers whose text would not reparse as the same matcher.
 fn fmt_canonical_name(f: &mut dyn Write, name: &PackageNameMatcher) -> Result<(), FormatError> {
@@ -347,34 +337,44 @@ fn name_matcher_is_canonical(name: &PackageNameMatcher) -> bool {
     }
 }
 
-/// Whether rendering this channel as its bare name reconstructs it: there is
-/// no explicit platform selector, and parsing the name under the default
-/// channel alias yields the same base URL. URL and path channels whose name
-/// is only derived fail this check and render as their full base URL instead.
-fn channel_renders_by_name(channel: &Channel) -> bool {
-    if channel.platforms.is_some() {
-        return false;
-    }
-    let Some(name) = channel.name.as_deref() else {
-        return false;
-    };
-    if !is_safe_positional_token(name) {
-        return false;
+/// The channel name that resolves back to `url`, if there is one. Writing a
+/// channel by name keeps the spec portable, since a URL bakes this machine's
+/// channel alias into the output. URLs outside the alias have no such name
+/// and render in full.
+///
+/// The name is derived from the URL rather than read from
+/// [`Channel::name`], so that rendering the same location twice — including
+/// re-rendering output whose URL had credentials stripped — yields the same
+/// name both times.
+fn channel_name_for_url(url: &Url) -> Option<String> {
+    // Only the channel alias matters for name resolution; the root dir is
+    // used for path channels alone, which never pass the URL comparison.
+    let config = ChannelConfig::default_with_root_dir(std::path::PathBuf::new());
+    let name = config.strip_channel_alias(url)?;
+    if !is_safe_positional_token(&name) {
+        return None;
     }
     // A name whose last segment is a platform (`conda-forge/linux-64`) would
-    // be split into channel and subdir on reparse; the bracket URL form keeps
-    // its trailing slash and survives.
+    // be split into channel and subdir on reparse; the URL form keeps its
+    // trailing slash and survives.
     if name
         .rsplit_once('/')
         .is_some_and(|(_, last)| Platform::from_str(last).is_ok())
     {
-        return false;
+        return None;
     }
-    // Only the channel alias matters for name resolution; the root dir is
-    // used for path channels alone, which never pass the URL comparison.
-    let config = ChannelConfig::default_with_root_dir(std::path::PathBuf::new());
-    Channel::try_from_name(name, &config)
-        .is_some_and(|derived| derived.base_url == channel.base_url)
+    Channel::try_from_name(&name, &config)
+        .is_some_and(|derived| derived.base_url.url().as_str() == url.as_str())
+        .then_some(name)
+}
+
+/// Whether the legacy `{name}::` prefix can carry this channel: the name has
+/// to be the one the URL resolves to, and the prefix has no room for a
+/// platform selector.
+fn channel_renders_by_name(channel: &Channel) -> bool {
+    channel.platforms.is_none()
+        && channel.name.is_some()
+        && channel_name_for_url(channel.base_url.url()) == channel.name
 }
 
 /// Whether a channel name or namespace can occupy a positional slot without
@@ -405,21 +405,23 @@ fn is_safe_positional_token(value: &str) -> bool {
         })
 }
 
-/// Renders a channel as its base URL plus any explicit platform selector.
-/// The canonical dialect strips credentials; the legacy dialect historically
-/// renders values raw.
-fn channel_url_value(channel: &Channel, strip: bool) -> String {
-    let mut value = if strip {
-        strip_url_for_serialization(channel.base_url.url()).to_string()
-    } else {
-        channel.base_url.url().to_string()
-    };
+/// Appends a channel's explicit platform selector, if it has one, to the
+/// rendering of its location.
+fn with_platform_selector(mut value: String, channel: &Channel) -> String {
     if let Some(platforms) = channel.platforms.as_ref() {
         value.push('[');
         value.push_str(&platforms.iter().format(",").to_string());
         value.push(']');
     }
     value
+}
+
+/// Renders a channel as its base URL plus any explicit platform selector.
+/// Values are raw: only the legacy dialect renders a channel this way, and it
+/// has always shown URLs as they are. See [`canonical_channel_value`] for the
+/// dialect that removes credentials.
+fn channel_url_value(channel: &Channel) -> String {
+    with_platform_selector(channel.base_url.url().to_string(), channel)
 }
 
 /// A borrowed, name-optional view over the fields shared by [`MatchSpec`] and
@@ -773,13 +775,13 @@ impl SpecView<'_> {
                             write!(
                                 f,
                                 "unrepresentable-channel=\"{}\"",
-                                escape_bracket_value(&channel_url_value(channel, false))
+                                escape_bracket_value(&channel_url_value(channel))
                             )?;
                             Ok(())
                         } else if channel_renders_by_name(channel) {
                             write_scalar(f, ctx, "channel", &channel.name())
                         } else {
-                            write_scalar(f, ctx, "channel", &channel_url_value(channel, false))
+                            write_scalar(f, ctx, "channel", &channel_url_value(channel))
                         }
                     }
                     DisplayStyle::Canonical => {
@@ -835,35 +837,24 @@ impl SpecView<'_> {
             }
             Field::TrackFeatures => {
                 let track_features = self.track_features.expect("presence checked by caller");
-                match ctx.style {
-                    // Historically one scalar holding the features separated
-                    // by spaces.
-                    DisplayStyle::Legacy => {
-                        write_scalar(f, ctx, "track_features", &track_features.iter().format(" "))
-                    }
-                    // Canonical writes the list as a list, like `extras` and
-                    // `flags`, so each feature stands on its own.
-                    DisplayStyle::Canonical => {
-                        let invalid = track_features
-                            .iter()
-                            .find(|feature| !is_bare_track_feature(feature))
-                            .cloned()
-                            .or_else(|| track_features.is_empty().then(String::new));
-                        if let Some(feature) = invalid {
-                            return Err(CanonicalMatchSpecError::UnrepresentableTrackFeature(
-                                feature,
-                            )
-                            .into());
-                        }
-                        write_list(
-                            f,
-                            ctx,
-                            "track_features",
-                            track_features.iter(),
-                            is_bare_track_feature,
-                        )
+                // One scalar holding the features separated by spaces. Unlike
+                // `extras` and `flags`, this field predates the list syntax
+                // and conda still reads it: its bracket scanner ends a value
+                // at the first `]`, quoted or not, so a list would not parse
+                // there.
+                if ctx.style == DisplayStyle::Canonical {
+                    let invalid = track_features
+                        .iter()
+                        .find(|feature| feature.is_empty() || feature.contains([',', ' ']))
+                        .cloned()
+                        .or_else(|| track_features.is_empty().then(String::new));
+                    if let Some(feature) = invalid {
+                        return Err(
+                            CanonicalMatchSpecError::UnrepresentableTrackFeature(feature).into(),
+                        );
                     }
                 }
+                write_scalar(f, ctx, "track_features", &track_features.iter().format(" "))
             }
         }
     }
@@ -1083,8 +1074,9 @@ fn canonical_bracket_value(value: impl Display) -> Result<String, CanonicalMatch
     }
 }
 
-/// Renders a channel without losing its base URL or explicit platform
-/// selectors, and without serializing credentials.
+/// Renders a channel by the name it was written with when that name resolves
+/// back to it, and by its full base URL otherwise. Either way the explicit
+/// platform selector is kept and no credentials are serialized.
 fn canonical_channel_value(channel: &Channel) -> Result<String, CanonicalMatchSpecError> {
     if channel.platforms.as_ref().is_some_and(Vec::is_empty) {
         // `url[]` cannot be distinguished from an omitted selector by the
@@ -1092,7 +1084,11 @@ fn canonical_channel_value(channel: &Channel) -> Result<String, CanonicalMatchSp
         return Err(CanonicalMatchSpecError::EmptyChannelPlatforms);
     }
 
-    Ok(channel_url_value(channel, true))
+    // The name is taken from the stripped URL, so a token path cannot smuggle
+    // credentials back in through the name it happens to produce.
+    let stripped = strip_url_for_serialization(channel.base_url.url());
+    let location = channel_name_for_url(&stripped).unwrap_or_else(|| stripped.to_string());
+    Ok(with_platform_selector(location, channel))
 }
 /// Renders `spec` canonically. Representability is checked while rendering;
 /// round-trip fidelity of the output is enforced by the property tests in

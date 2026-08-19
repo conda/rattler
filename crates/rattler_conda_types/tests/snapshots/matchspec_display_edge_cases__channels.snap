@@ -5,7 +5,7 @@ expression: cases.0
 case      : conda-forge::foo
 legacy    : conda-forge::foo
   reparse : same spec
-canonical : foo[channel="https://conda.anaconda.org/conda-forge/"]
+canonical : foo[channel="conda-forge"]
   reparse : same spec, stable
 
 case      : https://repo.example/custom::foo
@@ -23,7 +23,7 @@ canonical : foo[channel="https://repo.example/custom/[linux-64,noarch]"]
 case      : conda-forge[noarch]::foo
 legacy    : foo[channel="https://conda.anaconda.org/conda-forge/[noarch]"]
   reparse : same spec
-canonical : foo[channel="https://conda.anaconda.org/conda-forge/[noarch]"]
+canonical : foo[channel="conda-forge[noarch]"]
   reparse : same spec, stable
 
 case      : https://prefix.dev/t/path-token/conda-forge::foo
@@ -37,6 +37,18 @@ legacy    : foo[channel="https://user:secret@prefix.dev/t/path-token/conda-forge
   reparse : same spec
 canonical : foo[channel="https://prefix.dev/conda-forge/"]
   reparse : differs from input, stable
+
+case      : https://conda.anaconda.org/t/path-token/conda-forge::foo
+legacy    : t/path-token/conda-forge::foo
+  reparse : same spec
+canonical : foo[channel="conda-forge"]
+  reparse : differs from input, stable
+
+case      : t::foo
+legacy    : t::foo
+  reparse : same spec
+canonical : foo[channel="t"]
+  reparse : same spec, stable
 
 case      : channel named conda-forge/linux-64
 legacy    : foo[channel="https://conda.anaconda.org/conda-forge/linux-64/"]

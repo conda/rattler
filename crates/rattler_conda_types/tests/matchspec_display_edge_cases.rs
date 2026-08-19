@@ -277,6 +277,11 @@ fn channels() {
         // one without them.
         "https://prefix.dev/t/path-token/conda-forge::foo",
         r#"foo[channel="https://user:secret@prefix.dev/t/path-token/conda-forge"]"#,
+        // A token under the channel alias makes the derived name resolve, so
+        // the name must not be used to write it back out.
+        "https://conda.anaconda.org/t/path-token/conda-forge::foo",
+        // ...while a channel genuinely named `t` is not a token at all.
+        "t::foo",
     ]);
 
     let with_channel = |channel: Channel| MatchSpec {

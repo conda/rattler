@@ -92,12 +92,15 @@ pub fn strip_url_for_serialization(url: &Url) -> Url {
     }
 
     // A `/t/<token>/` prefix authenticates the request; the same location is
-    // reachable without it.
+    // reachable without it. An empty token means the path is just `/t/`,
+    // which is a channel named `t` rather than a credential.
     let path_without_token = url.path_segments().and_then(|mut segments| {
         match (segments.next(), segments.next()) {
             // The remaining segments include the empty one a trailing slash
             // produces, so rejoining them preserves it.
-            (Some("t"), Some(_)) => Some(format!("/{}", segments.collect::<Vec<_>>().join("/"))),
+            (Some("t"), Some(token)) if !token.is_empty() => {
+                Some(format!("/{}", segments.collect::<Vec<_>>().join("/")))
+            }
             _ => None,
         }
     });
@@ -231,6 +234,10 @@ mod test {
             .as_str(),
             "https://prefix.dev/channel/"
         );
+
+        // `/t/` with nothing after it is a channel named `t`, not a token.
+        let named_t = Url::parse("https://conda.anaconda.org/t/").unwrap();
+        assert_eq!(strip_url_for_serialization(&named_t), named_t);
 
         let digest_url = Url::parse("https://prefix.dev/pkg.conda#sha256:deadbeef").unwrap();
         assert_eq!(strip_url_for_serialization(&digest_url), digest_url);
