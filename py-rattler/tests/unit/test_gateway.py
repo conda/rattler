@@ -93,9 +93,7 @@ async def test_query_package_format_selection(package_format: PackageFormatSelec
         path=noarch_path,
     )
 
-    result = await Gateway().query(
-        [noarch_data], ["noarch"], ["six"], package_format_selection=package_format
-    )
+    result = await Gateway().query([noarch_data], ["noarch"], ["six"], package_format_selection=package_format)
     assert len(result[0]) == expected_results
 
 
@@ -103,11 +101,11 @@ async def test_query_package_format_selection(package_format: PackageFormatSelec
 @pytest.mark.parametrize(
     "package_format,expected_results",
     [
-        (PackageFormatSelection.BOTH, 6),
-        (PackageFormatSelection.ONLY_TAR_BZ2, 3),
-        (PackageFormatSelection.PREFER_CONDA, 6),
-        (PackageFormatSelection.ONLY_CONDA, 3),
-        (PackageFormatSelection.PREFER_CONDA_WITH_WHL, 25),
+        (PackageFormatSelection.BOTH, 1),
+        (PackageFormatSelection.ONLY_TAR_BZ2, 1),
+        (PackageFormatSelection.PREFER_CONDA, 1),
+        (PackageFormatSelection.ONLY_CONDA, 1),
+        (PackageFormatSelection.PREFER_CONDA_WITH_WHL, 6),
     ],
 )
 async def test_names_package_format_selection(package_format: PackageFormatSelection, expected_results: int) -> None:
@@ -121,10 +119,8 @@ async def test_names_package_format_selection(package_format: PackageFormatSelec
         path=noarch_path,
     )
 
-    result = await Gateway().names(
-        [noarch_data], ["noarch"]#, package_format_selection=package_format
-    )
-    assert len(result[0]) == expected_results
+    result = await Gateway().names([noarch_data], ["noarch"], package_format_selection=package_format)
+    assert len(result) == expected_results
 
 
 def test_init_per_channel_config_key() -> None:

@@ -438,6 +438,18 @@ impl PyGateway {
                 }
             }
 
+            // Collect names from sparse repodata sources directly
+            for sparse in &sparse_sources {
+                let subdir = sparse.subdir();
+                if platforms_vec.iter().any(|p| p.as_str() == subdir) {
+                    for name_str in sparse.package_names(package_format_selection) {
+                        if let Ok(name) = name_str.parse() {
+                            all_names.insert(name);
+                        }
+                    }
+                }
+            }
+
             // Convert to list of PyPackageName
             Ok((
                 all_names

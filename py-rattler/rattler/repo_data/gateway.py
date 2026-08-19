@@ -14,7 +14,7 @@ from rattler.platform.platform import Platform, PlatformLiteral
 from rattler.rattler import PyChannelNotice, PyGateway, PyMatchSpec, PySourceConfig
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.repo_data import ChannelRelations
-from rattler.repo_data.sparse import PackageFormatSelection
+from rattler.repo_data.sparse import PackageFormatSelection, SparseRepoData
 
 if TYPE_CHECKING:
     from rattler.repo_data.source import RepoDataSource
@@ -240,7 +240,7 @@ class Gateway:
 
     async def query(
         self,
-        sources: Iterable[Union[Channel, str, RepoDataSource]],
+        sources: Iterable[Union[Channel, str, SparseRepoData, RepoDataSource]],
         platforms: Iterable[Platform | PlatformLiteral],
         specs: Iterable[MatchSpec | PackageName | str],
         recursive: bool = True,
@@ -330,7 +330,7 @@ class Gateway:
 
     async def names(
         self,
-        sources: Iterable[Union[Channel, str, RepoDataSource]],
+        sources: Iterable[Union[Channel, str, SparseRepoData, RepoDataSource]],
         platforms: Iterable[Platform | PlatformLiteral],
         channel_relations: Optional[ChannelRelationsMode] = None,
         channel_relations_max_depth: Optional[int] = None,
