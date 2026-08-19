@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from rattler.platform.platform import Platform
     from rattler.package.package_name import PackageName
     from rattler.repo_data.record import RepoDataRecord
+    from rattler.repo_data.sparse import PackageFormatSelection
 
 
 @runtime_checkable
@@ -31,16 +32,16 @@ class RepoDataSource(Protocol):
     Example
     -------
     ```python
-    from rattler import Platform, PackageName, RepoDataRecord
+    from rattler import Platform, PackageName, PackageFormatSelection, RepoDataRecord
 
     class MyCustomSource:
         async def fetch_package_records(
-            self, platform: Platform, name: PackageName
+            self, platform: Platform, name: PackageName, package_format_selection: PackageFormatSelection
         ) -> List[RepoDataRecord]:
             # Fetch records from your custom source
             return [...]
 
-        def package_names(self, platform: Platform) -> List[str]:
+        def package_names(self, platform: Platform, package_format_selection: PackageFormatSelection) -> List[str]:
             # Return all available package names for the platform
             return ["numpy", "pandas", ...]
 
@@ -54,7 +55,9 @@ class RepoDataSource(Protocol):
     ```
     """
 
-    async def fetch_package_records(self, platform: Platform, name: PackageName) -> List[RepoDataRecord]:
+    async def fetch_package_records(
+        self, platform: Platform, name: PackageName, package_format_selection: PackageFormatSelection
+    ) -> List[RepoDataRecord]:
         """Fetch records for a specific package name and platform.
 
         This method is called by the gateway when it needs repodata records
@@ -64,13 +67,16 @@ class RepoDataSource(Protocol):
         Args:
             platform: The platform to fetch records for (e.g., linux-64, noarch)
             name: The package name to fetch records for
+            package_format_selection: Which package formats the caller is interested in.
+                                       Implementations that can distinguish between formats
+                                       should filter their results accordingly.
 
         Returns:
             List of RepoDataRecord objects for the package
         """
         ...
 
-    def package_names(self, platform: Platform) -> List[str]:
+    def package_names(self, platform: Platform, package_format_selection: PackageFormatSelection) -> List[str]:
         """Return all available package names for the given platform.
 
         This is used by the gateway to know which packages are available
@@ -78,6 +84,10 @@ class RepoDataSource(Protocol):
 
         Args:
             platform: The platform to list packages for
+            package_format_selection: Which package formats the caller is interested in.
+                                       Implementations that can distinguish between formats
+                                       should only return names that have at least one
+                                       matching record.
 
         Returns:
             List of package name strings

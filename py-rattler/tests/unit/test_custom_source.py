@@ -7,6 +7,7 @@ import pytest
 from rattler import (
     Channel,
     Gateway,
+    PackageFormatSelection,
     PackageName,
     PackageRecord,
     Platform,
@@ -16,6 +17,56 @@ from rattler import (
 )
 
 
+def _archive_type(file_name: str) -> str:
+    """Determine the archive format of a record from its file name."""
+    if file_name.endswith(".conda"):
+        return "conda"
+    if file_name.endswith(".tar.bz2"):
+        return "tar_bz2"
+    if file_name.endswith(".whl"):
+        return "whl"
+    return "unknown"
+
+
+def _filter_by_format(
+    records: List[RepoDataRecord], package_format_selection: PackageFormatSelection
+) -> List[RepoDataRecord]:
+    """Filter (and, for the `PREFER_*` variants, dedup) records by archive format.
+
+    Mirrors the semantics of `PackageFormatSelection` used by sparse repodata: `.conda`
+    is preferred over `.tar.bz2`, which is preferred over `.whl`, whenever a `PREFER_*`
+    variant is selected.
+    """
+    if package_format_selection is PackageFormatSelection.ONLY_TAR_BZ2:
+        allowed = {"tar_bz2"}
+    elif package_format_selection is PackageFormatSelection.ONLY_CONDA:
+        allowed = {"conda"}
+    elif package_format_selection is PackageFormatSelection.PREFER_CONDA_WITH_WHL:
+        allowed = {"conda", "tar_bz2", "whl"}
+    else:  # BOTH or PREFER_CONDA
+        allowed = {"conda", "tar_bz2"}
+
+    filtered = [r for r in records if _archive_type(r.file_name) in allowed]
+
+    if package_format_selection not in (
+        PackageFormatSelection.PREFER_CONDA,
+        PackageFormatSelection.PREFER_CONDA_WITH_WHL,
+    ):
+        return filtered
+
+    preference = {"conda": 2, "tar_bz2": 1, "whl": 0}
+    best: dict[Any, RepoDataRecord] = {}
+    for record in filtered:
+        key = (record.name.normalized, str(record.version), record.build)
+        existing = best.get(key)
+        if (
+            existing is None
+            or preference[_archive_type(record.file_name)] > preference[_archive_type(existing.file_name)]
+        ):
+            best[key] = record
+    return list(best.values())
+
+
 class MockRepoDataSource(RepoDataSource):
     """A mock implementation of the RepoDataSource protocol for testing."""
 
@@ -23,19 +74,25 @@ class MockRepoDataSource(RepoDataSource):
         """Initialize with a mapping of platform -> package_name -> records."""
         self._records = records_by_platform
 
-    async def fetch_package_records(self, platform: Platform, name: PackageName) -> List[RepoDataRecord]:
+    async def fetch_package_records(
+        self, platform: Platform, name: PackageName, package_format_selection: PackageFormatSelection
+    ) -> List[RepoDataRecord]:
         """Fetch records for a specific package name and platform."""
         platform_str = str(platform)
         name_str = name.normalized
         if platform_str in self._records and name_str in self._records[platform_str]:
-            return self._records[platform_str][name_str]
+            return _filter_by_format(self._records[platform_str][name_str], package_format_selection)
         return []
 
-    def package_names(self, platform: Platform) -> List[str]:
+    def package_names(self, platform: Platform, package_format_selection: PackageFormatSelection) -> List[str]:
         """Return all available package names for the given platform."""
         platform_str = str(platform)
         if platform_str in self._records:
-            return list(self._records[platform_str].keys())
+            return [
+                name
+                for name, records in self._records[platform_str].items()
+                if _filter_by_format(records, package_format_selection)
+            ]
         return []
 
 
@@ -106,8 +163,41 @@ async def test_custom_source_query() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "package_format,expected_results",
+    [(PackageFormatSelection.ONLY_TAR_BZ2, 0), (PackageFormatSelection.PREFER_CONDA, 1)],
+)
+async def test_custom_source_query_package_format_selection(
+    package_format: PackageFormatSelection, expected_results: int
+) -> None:
+    """Test querying with a custom RepoDataSource, filtering by package format."""
+    # `create_test_record` always produces a `.conda` record, so `ONLY_TAR_BZ2` should
+    # filter it out while `PREFER_CONDA` should keep it.
+    source = MockRepoDataSource(
+        {
+            "linux-64": {"test-package": [create_test_record("test-package", "1.0.0", "linux-64")]},
+        }
+    )
+
+    gateway = Gateway()
+    results = await gateway.query(
+        sources=[source],
+        platforms=["linux-64"],
+        specs=["test-package"],
+        recursive=False,
+        package_format_selection=package_format,
+    )
+
+    assert len(results_snapshot(results)[0]) == expected_results
+
+
+@pytest.mark.asyncio
 async def test_custom_source_names() -> None:
-    """Test querying package names from a custom RepoDataSource."""
+    """Test querying package names from a custom RepoDataSource.
+
+    `bar` has no records at all, so it has nothing matching any package format and
+    is correctly excluded from the result.
+    """
     source = MockRepoDataSource(
         {
             "linux-64": {
@@ -123,7 +213,7 @@ async def test_custom_source_names() -> None:
         platforms=["linux-64"],
     )
 
-    assert sorted(n.normalized for n in names) == ["bar", "foo"]
+    assert sorted(n.normalized for n in names) == ["foo"]
 
 
 @pytest.mark.asyncio
@@ -254,16 +344,18 @@ async def test_custom_source_backed_by_sparse_repodata() -> None:
         def __init__(self, repodata_by_platform: dict[str, SparseRepoData]):
             self._repodata = repodata_by_platform
 
-        async def fetch_package_records(self, platform: Platform, name: PackageName) -> List[RepoDataRecord]:
+        async def fetch_package_records(
+            self, platform: Platform, name: PackageName, package_format_selection: PackageFormatSelection
+        ) -> List[RepoDataRecord]:
             platform_str = str(platform)
             if platform_str in self._repodata:
-                return self._repodata[platform_str].load_records(name)
+                return self._repodata[platform_str].load_records(name, package_format_selection)
             return []
 
-        def package_names(self, platform: Platform) -> List[str]:
+        def package_names(self, platform: Platform, package_format_selection: PackageFormatSelection) -> List[str]:
             platform_str = str(platform)
             if platform_str in self._repodata:
-                return self._repodata[platform_str].package_names()
+                return self._repodata[platform_str].package_names(package_format_selection)
             return []
 
     # Create sparse repodata for linux-64

@@ -355,7 +355,9 @@ impl PyGateway {
         channel_relations=None,
         channel_relations_max_depth=None,
         channel_notices=false,
+        package_format_selection=None,
     ))]
+    #[allow(clippy::too_many_arguments)]
     pub fn names<'a>(
         &self,
         py: Python<'a>,
@@ -364,6 +366,7 @@ impl PyGateway {
         channel_relations: Option<Wrap<ChannelRelationsMode>>,
         channel_relations_max_depth: Option<usize>,
         channel_notices: bool,
+        package_format_selection: Option<PyPackageFormatSelection>,
     ) -> PyResult<Bound<'a, PyAny>> {
         // Convert Python sources to Rust Source enum
         let rust_sources: Vec<Source> = sources
@@ -387,6 +390,9 @@ impl PyGateway {
 
         let platforms_vec: Vec<rattler_conda_types::Platform> =
             platforms.into_iter().map(|p| p.inner).collect();
+
+        let package_format_selection: rattler_repodata_gateway::sparse::PackageFormatSelection =
+            package_format_selection.unwrap_or_default().into();
 
         let gateway = self.inner.clone();
         let show_progress = self.show_progress;
@@ -423,7 +429,7 @@ impl PyGateway {
             // Collect names from custom sources directly
             for custom_source in custom_sources {
                 for platform in &platforms_vec {
-                    let names = custom_source.package_names(*platform);
+                    let names = custom_source.package_names(*platform, package_format_selection);
                     for name_str in names {
                         if let Ok(name) = name_str.parse() {
                             all_names.insert(name);

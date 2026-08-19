@@ -5,11 +5,12 @@ use std::sync::Arc;
 use pyo3::prelude::*;
 use pyo3_async_runtimes::tokio::into_future;
 use rattler_conda_types::{PackageName, Platform, RepoDataRecord};
-use rattler_repodata_gateway::{GatewayError, RepoDataSource};
+use rattler_repodata_gateway::{GatewayError, RepoDataSource, sparse::PackageFormatSelection};
 
 use crate::package_name::PyPackageName;
 use crate::platform::PyPlatform;
 use crate::record::PyRecord;
+use crate::repo_data::sparse::PyPackageFormatSelection;
 
 /// Wraps a Python object implementing the `RepoDataSource` protocol.
 ///
@@ -36,8 +37,8 @@ impl PyRepoDataSource {
     /// Create a new adapter wrapping the given Python object.
     ///
     /// The object should implement the `RepoDataSource` protocol:
-    /// - `async def fetch_package_records(self, platform, name) -> List[RepoDataRecord]`
-    /// - `def package_names(self, platform) -> List[str]`
+    /// - `async def fetch_package_records(self, platform, name, package_format_selection) -> List[RepoDataRecord]`
+    /// - `def package_names(self, platform, package_format_selection) -> List[str]`
     pub fn new(obj: Py<PyAny>) -> Self {
         Self { inner: obj }
     }
@@ -54,6 +55,7 @@ impl RepoDataSource for PyRepoDataSource {
         &self,
         platform: Platform,
         name: &PackageName,
+        package_format_selection: PackageFormatSelection,
     ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
         // Clone what we need before the async block
         let name_clone = name.clone();
@@ -62,11 +64,16 @@ impl RepoDataSource for PyRepoDataSource {
         let future = Python::attach(|py| {
             let py_platform = PyPlatform::from(platform);
             let py_name = PyPackageName::from(name_clone);
+            let py_format = PyPackageFormatSelection::from(package_format_selection);
 
             // Call the async method - this returns a coroutine object
             let coro = self
                 .inner
-                .call_method1(py, "fetch_package_records", (py_platform, py_name))
+                .call_method1(
+                    py,
+                    "fetch_package_records",
+                    (py_platform, py_name, py_format),
+                )
                 .map_err(|e| GatewayError::Generic(e.to_string()))?;
 
             // Convert Python coroutine to Rust future
@@ -108,12 +115,17 @@ impl RepoDataSource for PyRepoDataSource {
         })
     }
 
-    fn package_names(&self, platform: Platform) -> Vec<String> {
+    fn package_names(
+        &self,
+        platform: Platform,
+        package_format_selection: PackageFormatSelection,
+    ) -> Vec<String> {
         Python::attach(|py| {
             let py_platform = PyPlatform::from(platform);
+            let py_format = PyPackageFormatSelection::from(package_format_selection);
 
             self.inner
-                .call_method1(py, "package_names", (py_platform,))
+                .call_method1(py, "package_names", (py_platform, py_format))
                 .and_then(|result| result.extract(py))
                 .unwrap_or_default()
         })
