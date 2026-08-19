@@ -1,0 +1,62 @@
+---
+source: crates/rattler_conda_types/tests/matchspec_display_edge_cases.rs
+expression: cases.0
+---
+case      : conda-forge::foo
+legacy    : conda-forge::foo
+  reparse : same spec
+canonical : foo[channel="https://conda.anaconda.org/conda-forge/"]
+  reparse : same spec, stable
+
+case      : https://repo.example/custom::foo
+legacy    : foo[channel="https://repo.example/custom/"]
+  reparse : same spec
+canonical : foo[channel="https://repo.example/custom/"]
+  reparse : same spec, stable
+
+case      : https://repo.example/custom[linux-64,noarch]::foo
+legacy    : foo[channel="https://repo.example/custom/[linux-64,noarch]"]
+  reparse : same spec
+canonical : foo[channel="https://repo.example/custom/[linux-64,noarch]"]
+  reparse : same spec, stable
+
+case      : conda-forge[noarch]::foo
+legacy    : foo[channel="https://conda.anaconda.org/conda-forge/[noarch]"]
+  reparse : same spec
+canonical : foo[channel="https://conda.anaconda.org/conda-forge/[noarch]"]
+  reparse : same spec, stable
+
+case      : channel named conda-forge/linux-64
+legacy    : foo[channel="https://conda.anaconda.org/conda-forge/linux-64/"]
+  reparse : same spec
+canonical : foo[channel="https://conda.anaconda.org/conda-forge/linux-64/"]
+  reparse : same spec, stable
+
+case      : ipv6 host with platform selector
+legacy    : foo[channel="https://[::1]:8080/channel/[linux-64]"]
+  reparse : same spec
+canonical : foo[channel="https://[::1]:8080/channel/[linux-64]"]
+  reparse : same spec, stable
+
+case      : explicit empty platform selector
+legacy    : foo[unrepresentable-channel="https://repo.example/custom/[]"]
+  reparse : rejected: invalid bracket key: unrepresentable-channel
+canonical : refused: an explicit empty channel-platform selector cannot be represented canonically
+
+case      : channel and url carrying credentials
+legacy    : foo[url="https://user:password@prefix.dev/t/path-token/channel/pkg.conda?auth=session#ticket=fragment-token", channel="https://user:password@prefix.dev/t/path-token/channel/pkg.conda/?auth=session#ticket=fragment-token"]
+  reparse : same spec
+canonical : foo[channel="https://prefix.dev/t/********/channel/pkg.conda/?********#********",url="https://prefix.dev/t/********/channel/pkg.conda?********#********"]
+  reparse : differs from input, stable
+
+case      : foo[url="https://repo.example/pkg.conda#sha256:deadbeef"]
+legacy    : foo[url="https://repo.example/pkg.conda#sha256:deadbeef"]
+  reparse : same spec
+canonical : foo[url="https://repo.example/pkg.conda#sha256:deadbeef"]
+  reparse : same spec, stable
+
+case      : foo[url="https://repo.example/pkg.conda#md5:0123456789abcdef0123456789abcdef"]
+legacy    : foo[url="https://repo.example/pkg.conda#md5:0123456789abcdef0123456789abcdef"]
+  reparse : same spec
+canonical : foo[url="https://repo.example/pkg.conda#md5:0123456789abcdef0123456789abcdef"]
+  reparse : same spec, stable

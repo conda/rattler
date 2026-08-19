@@ -400,14 +400,15 @@ fn is_safe_positional_token(value: &str) -> bool {
 /// renders values raw.
 fn channel_url_value(channel: &Channel, redact: bool) -> String {
     let mut value = if redact {
-        let mut redacted = redact_url_for_serialization(channel.base_url.url()).to_string();
+        let mut redacted = redact_url_for_serialization(channel.base_url.url());
         // Redacting a token path swallows the trailing slash channel URLs
         // carry; restore it so the rendered URL stays normalized and a second
         // render produces the same text.
-        if !redacted.ends_with('/') {
-            redacted.push('/');
+        if !redacted.path().ends_with('/') {
+            let path = format!("{}/", redacted.path());
+            redacted.set_path(&path);
         }
-        redacted
+        redacted.to_string()
     } else {
         channel.base_url.url().to_string()
     };
@@ -762,7 +763,18 @@ impl SpecView<'_> {
                     // reconstructs it faithfully; otherwise the full URL (and
                     // platform selector) is used so nothing is lost.
                     DisplayStyle::Legacy => {
-                        if channel_renders_by_name(channel) {
+                        // An explicit empty selector renders as `url[]`, which
+                        // the parser reads as no selector at all. No text
+                        // carries it, so use the loud key instead of silently
+                        // dropping the selector.
+                        if channel.platforms.as_ref().is_some_and(Vec::is_empty) {
+                            write!(
+                                f,
+                                "unrepresentable-channel=\"{}\"",
+                                escape_bracket_value(&channel_url_value(channel, false))
+                            )?;
+                            Ok(())
+                        } else if channel_renders_by_name(channel) {
                             write_scalar(f, ctx, "channel", &channel.name())
                         } else {
                             write_scalar(f, ctx, "channel", &channel_url_value(channel, false))

@@ -1,0 +1,107 @@
+---
+source: crates/rattler_conda_types/tests/matchspec_display_edge_cases.rs
+expression: cases.0
+---
+case      : target[when="a"]
+legacy    : target[when="a"]
+  reparse : same spec
+canonical : target[when="a"]
+  reparse : same spec, stable
+
+case      : target[when="a and b"]
+legacy    : target[when="a and b"]
+  reparse : same spec
+canonical : target[when="a and b"]
+  reparse : same spec, stable
+
+case      : target[when="a and b and c"]
+legacy    : target[when="a and b and c"]
+  reparse : same spec
+canonical : target[when="a and b and c"]
+  reparse : same spec, stable
+
+case      : target[when="a and b or c"]
+legacy    : target[when="a and b or c"]
+  reparse : same spec
+canonical : target[when="a and b or c"]
+  reparse : same spec, stable
+
+case      : target[when="a or b and c"]
+legacy    : target[when="a or b and c"]
+  reparse : same spec
+canonical : target[when="a or b and c"]
+  reparse : same spec, stable
+
+case      : target[when="(a or b) and c"]
+legacy    : target[when="(a or b) and c"]
+  reparse : same spec
+canonical : target[when="(a or b) and c"]
+  reparse : same spec, stable
+
+case      : target[when="a and (b and c)"]
+legacy    : target[when="a and (b and c)"]
+  reparse : same spec
+canonical : target[when="a and (b and c)"]
+  reparse : same spec, stable
+
+case      : target[when="(a or b) or c"]
+legacy    : target[when="a or b or c"]
+  reparse : same spec
+canonical : target[when="a or b or c"]
+  reparse : same spec, stable
+
+case      : target[when="a or (b or c)"]
+legacy    : target[when="a or (b or c)"]
+  reparse : same spec
+canonical : target[when="a or (b or c)"]
+  reparse : same spec, stable
+
+case      : target[when="((a and b) or (c and d)) and e"]
+legacy    : target[when="(a and b or c and d) and e"]
+  reparse : same spec
+canonical : target[when="(a and b or c and d) and e"]
+  reparse : same spec, stable
+
+case      : target[when="python >=3.11 and __linux"]
+legacy    : target[when="python>=3.11 and __linux"]
+  reparse : same spec
+canonical : target[when="python>=3.11 and __linux"]
+  reparse : same spec, stable
+
+case      : target[when="python 1.2.*"]
+legacy    : target[when="python[version=\"1.2.*\"]"]
+  reparse : same spec
+canonical : target[when="python[version=\"1.2.*\"]"]
+  reparse : same spec, stable
+
+case      : target[when="python[extras=[docs],flags=[cuda]] and __linux"]
+legacy    : target[when="python[extras=[docs], flags=[cuda]] and __linux"]
+  reparse : same spec
+canonical : target[when="python[extras=[docs],flags=[cuda]] and __linux"]
+  reparse : same spec, stable
+
+case      : target[when="pandas >=2"]
+legacy    : target[when="pandas>=2"]
+  reparse : same spec
+canonical : target[when="pandas>=2"]
+  reparse : same spec, stable
+
+case      : condition leaf named and
+legacy    : target[when="and"]
+  reparse : rejected: could not parse condition and: Parsing Error: Error { input: "and", code: TakeUntil }
+canonical : refused: condition leaf 'and' cannot be represented in canonical MatchSpec syntax
+
+case      : condition leaf named or
+legacy    : target[when="or"]
+  reparse : rejected: could not parse condition or: Parsing Error: Error { input: "or", code: TakeUntil }
+canonical : refused: condition leaf 'or' cannot be represented in canonical MatchSpec syntax
+
+case      : condition leaf with a grouped regex name
+legacy    : target[when="^(py|c)python$"]
+  reparse : rejected: could not parse condition ^(py|c)python$: Parsing Error: Error { input: "^(py|c)python$", code: MapRes }
+canonical : refused: condition leaf '^(py|c)python$' cannot be represented in canonical MatchSpec syntax
+
+case      : nested when in a condition leaf
+legacy    : target[when="target[when=\"__linux\"]"]
+  reparse : rejected: could not parse condition target[when=\"__linux\"]: Parsing Error: Error { input: "target[when=\"__linux\"]", code: MapRes }
+canonical : refused: nested `when` conditions cannot be represented in canonical MatchSpec syntax
