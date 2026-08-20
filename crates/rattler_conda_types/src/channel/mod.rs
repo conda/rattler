@@ -237,14 +237,15 @@ impl Channel {
                 }
             }
         } else {
-            // Validate that the channel is a valid name
-            if channel.contains([':', '\\']) {
+            // Validate that the channel is a valid name. Brackets are
+            // rejected so a malformed platform selector (`name[linux-64]x`)
+            // errors instead of becoming a literal channel name.
+            if channel.contains([':', '\\', '[', ']']) {
                 return Err(ParseChannelError::InvalidName(channel.to_owned()));
             }
-            Channel {
-                platforms,
-                ..Channel::from_name(channel, config)
-            }
+            let base = Channel::try_from_name(channel, config)
+                .ok_or_else(|| ParseChannelError::InvalidName(channel.to_owned()))?;
+            Channel { platforms, ..base }
         };
 
         Ok(channel)
@@ -295,6 +296,13 @@ impl Channel {
 
     /// Construct a channel from a name, platform and configuration.
     pub fn from_name(name: &str, config: &ChannelConfig) -> Self {
+        Self::try_from_name(name, config).expect("name is not a valid Url")
+    }
+
+    /// Fallible variant of [`Channel::from_name`], used by parsing and
+    /// rendering so a name that does not resolve against the channel alias
+    /// (e.g. `//x`) becomes an error instead of a panic.
+    pub(crate) fn try_from_name(name: &str, config: &ChannelConfig) -> Option<Self> {
         // TODO: custom channels
 
         let dir_name = if name.ends_with('/') {
@@ -304,15 +312,11 @@ impl Channel {
         };
 
         let name = name.trim_end_matches('/');
-        Self {
+        Some(Self {
             platforms: None,
-            base_url: config
-                .channel_alias
-                .join(dir_name.as_ref())
-                .expect("name is not a valid Url")
-                .into(),
+            base_url: config.channel_alias.join(dir_name.as_ref()).ok()?.into(),
             name: (!name.is_empty()).then_some(name).map(str::to_owned),
-        }
+        })
     }
 
     /// Constructs a channel from a directory path.
@@ -443,10 +447,15 @@ impl From<url::ParseError> for ParseChannelError {
 /// Extract the platforms from the given human readable channel.
 #[allow(clippy::type_complexity)]
 fn parse_platforms(channel: &str) -> Result<(Option<Vec<Platform>>, &str), ParsePlatformError> {
-    if channel.rfind(']').is_some()
-        && let Some(start_platform_idx) = channel.find('[')
+    // A platform selector is the last `[...]` group, and it must end the
+    // string. Using `strip_suffix` avoids panicking on a multi-byte trailing
+    // character and misreading a `]` in the middle of the string; `rfind`
+    // keeps an IPv6 host bracket (`https://[::1]/x[linux-64]`) out of the
+    // selector.
+    if let Some(channel_without_suffix) = channel.strip_suffix(']')
+        && let Some(start_platform_idx) = channel_without_suffix.rfind('[')
     {
-        let platform_part = &channel[start_platform_idx + 1..channel.len() - 1];
+        let platform_part = &channel_without_suffix[start_platform_idx + 1..];
         let platforms = platform_part
             .split(',')
             .map(str::trim)
@@ -511,6 +520,26 @@ mod tests {
     use url::Url;
 
     use super::*;
+
+    #[test]
+    fn test_malformed_platform_selector_is_rejected() {
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
+        assert!(matches!(
+            Channel::from_str("conda-forge[linux-64]suffix", &config),
+            Err(ParseChannelError::InvalidName(_))
+        ));
+    }
+
+    #[test]
+    fn test_ipv6_channel_with_platform_selector() {
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
+        let channel = Channel::from_str("https://[::1]/conda[linux-64,noarch]", &config).unwrap();
+        assert_eq!(
+            channel.platforms,
+            Some(vec![Platform::Linux64, Platform::NoArch])
+        );
+        assert_eq!(channel.base_url.url().as_str(), "https://[::1]/conda/");
+    }
 
     #[test]
     fn test_issue_1953_artifactory_path_parsing() {
