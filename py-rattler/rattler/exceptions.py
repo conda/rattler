@@ -4,6 +4,7 @@ try:
         ActivationScriptFormatError,
         AuthenticationStorageError,
         CacheDirError,
+        CanonicalMatchSpecError,
         ConversionError,
         ConvertSubdirError,
         DetectVirtualPackageError,
@@ -51,6 +52,9 @@ except ImportError:
 
     class CacheDirError(Exception):  # type: ignore[no-redef]
         """Error that can occur when querying the cache directory"""
+
+    class CanonicalMatchSpecError(Exception):  # type: ignore[no-redef]
+        """Error that can occur when a MatchSpec cannot be represented canonically"""
 
     class ConversionError(Exception):  # type: ignore[no-redef]
         """An error that can occur during conversion"""
@@ -152,6 +156,7 @@ __all__ = [
     "ActivationScriptFormatError",
     "AuthenticationStorageError",
     "CacheDirError",
+    "CanonicalMatchSpecError",
     "ConversionError",
     "ConvertSubdirError",
     "DetectVirtualPackageError",

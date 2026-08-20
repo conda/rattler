@@ -1,0 +1,103 @@
+---
+source: crates/rattler_conda_types/tests/matchspec_display_edge_cases.rs
+expression: cases.0
+---
+case      : fn (plain) = pkg.conda
+legacy    : foo[fn="pkg.conda"]
+  reparse : same spec
+canonical : foo[fn="pkg.conda"]
+  reparse : same spec, stable
+
+case      : fn (single quote) = it's-here.conda
+legacy    : foo[fn="it's-here.conda"]
+  reparse : same spec
+canonical : foo[fn="it's-here.conda"]
+  reparse : same spec, stable
+
+case      : fn (double quote) = say-"hi".conda
+legacy    : foo[fn='say-"hi".conda']
+  reparse : same spec
+canonical : foo[fn='say-"hi".conda']
+  reparse : same spec, stable
+
+case      : fn (escaped single quotes) = one \'single\' and "double"
+legacy    : foo[fn='one \'single\' and "double"']
+  reparse : same spec
+canonical : foo[fn='one \'single\' and "double"']
+  reparse : same spec, stable
+
+case      : fn (escaped double quotes) = one \"double\" and 'single'
+legacy    : foo[fn="one \"double\" and 'single'"]
+  reparse : same spec
+canonical : foo[fn="one \"double\" and 'single'"]
+  reparse : same spec, stable
+
+case      : fn (both delimiters unescaped) = both ' and " quotes
+legacy    : foo[unrepresentable-fn="both ' and \" quotes"]
+  reparse : rejected: invalid bracket key: unrepresentable-fn
+canonical : refused: scalar 'both ' and " quotes' cannot be represented in canonical MatchSpec syntax
+
+case      : fn (trailing backslash) = C:\cache\
+legacy    : foo[unrepresentable-fn="C:\\cache\\"]
+  reparse : rejected: invalid bracket key: unrepresentable-fn
+canonical : refused: scalar 'C:\cache\' cannot be represented in canonical MatchSpec syntax
+
+case      : fn (even backslash run) = C:\cache\\
+legacy    : foo[fn='C:\cache\\']
+  reparse : same spec
+canonical : foo[fn='C:\cache\\']
+  reparse : same spec, stable
+
+case      : fn (whitespace) = has space.conda
+legacy    : foo[fn="has space.conda"]
+  reparse : same spec
+canonical : foo[fn="has space.conda"]
+  reparse : same spec, stable
+
+case      : fn (comment character) = hash#comment.conda
+legacy    : foo[fn="hash#comment.conda"]
+  reparse : same spec
+canonical : foo[fn="hash#comment.conda"]
+  reparse : same spec, stable
+
+case      : fn (semicolon) = semi;colon.conda
+legacy    : foo[fn="semi;colon.conda"]
+  reparse : same spec
+canonical : foo[fn="semi;colon.conda"]
+  reparse : same spec, stable
+
+case      : fn (brackets) = bracket[0].conda
+legacy    : foo[fn="bracket[0].conda"]
+  reparse : same spec
+canonical : foo[fn="bracket[0].conda"]
+  reparse : same spec, stable
+
+case      : fn (comma) = comma,list.conda
+legacy    : foo[fn="comma,list.conda"]
+  reparse : same spec
+canonical : foo[fn="comma,list.conda"]
+  reparse : same spec, stable
+
+case      : fn (equals sign) = equals=sign.conda
+legacy    : foo[fn="equals=sign.conda"]
+  reparse : same spec
+canonical : foo[fn="equals=sign.conda"]
+  reparse : same spec, stable
+
+case      : fn (bracket field lookalike) = x],version=[2
+legacy    : foo[fn="x],version=[2"]
+  reparse : same spec
+canonical : foo[fn="x],version=[2"]
+  reparse : same spec, stable
+
+case      : fn (empty) = 
+legacy    : foo[fn=""]
+  reparse : same spec
+canonical : foo[fn=""]
+  reparse : same spec, stable
+
+case      : fn (non-ascii) = 🦀-αβ.conda
+legacy    : foo[fn="🦀-αβ.conda"]
+  reparse : same spec
+canonical : foo[fn="🦀-αβ.conda"]
+  reparse : same spec, stable

@@ -1,0 +1,54 @@
+---
+source: crates/rattler_conda_types/tests/matchspec_display_edge_cases.rs
+expression: cases.0
+---
+case      : foo[fn="]"]
+legacy    : foo[fn="]"]
+  reparse : same spec
+canonical : foo[fn="]"]
+  reparse : same spec, stable
+
+case      : foo]
+parse     : rejected: invalid bracket
+
+case      : foo[
+parse     : rejected: invalid package name 'foo[': 'foo[' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or .
+
+case      : foo[]
+legacy    : foo
+  reparse : same spec
+canonical : foo
+  reparse : same spec, stable
+
+case      : foo[unknown=1]
+parse     : rejected: invalid bracket key: unknown
+
+case      : conda-forge[linux-64]suffix::foo
+parse     : rejected: invalid channel
+
+case      : foo # comment
+legacy    : foo
+  reparse : same spec
+canonical : foo
+  reparse : same spec, stable
+
+case      : foo[build="py39"] # comment
+legacy    : foo[build="py39"]
+  reparse : same spec
+canonical : foo[build="py39"]
+  reparse : same spec, stable
+
+case      : foo;
+parse     : rejected: invalid package name 'foo;': 'foo;' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or .
+
+case      : https://[::1]:8080/channel[linux-64]::foo
+legacy    : foo[channel="https://[::1]:8080/channel/[linux-64]"]
+  reparse : same spec
+canonical : foo[channel="https://[::1]:8080/channel/[linux-64]"]
+  reparse : same spec, stable
+
+case      : foo ==1 ,*
+legacy    : foo ==1,*
+  reparse : same spec
+canonical : foo[version="==1,*"]
+  reparse : same spec, stable
