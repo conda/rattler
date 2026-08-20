@@ -418,7 +418,8 @@ impl<'a> CondaDependencyProvider<'a> {
             .collect::<Vec<_>>();
 
         // Hashmap that maps the package name to the channel it was first found in.
-        let mut package_name_found_in_channel = HashMap::<String, &Option<String>>::new();
+        // Only maintained (and consulted) for [`ChannelPriority::Strict`].
+        let mut package_name_found_in_channel = HashMap::<&str, &Option<String>>::new();
 
         // Maps each channel to a priority rank in the order channels are first
         // encountered (which matches the order channels were provided). Lower
@@ -512,8 +513,10 @@ impl<'a> CondaDependencyProvider<'a> {
                 let candidates = records.entry(package_name).or_default();
                 candidates.candidates.push(solvable_id);
 
-                // Record the priority rank of this channel (first-seen order).
-                if !channel_order.contains_key(&record.channel) {
+                // Only [`ChannelPriority::Flexible`] consults channel ranks.
+                if channel_priority == ChannelPriority::Flexible
+                    && !channel_order.contains_key(&record.channel)
+                {
                     let next_rank = channel_order.len() as u32;
                     channel_order.insert(record.channel.clone(), next_rank);
                 }
@@ -580,41 +583,43 @@ impl<'a> CondaDependencyProvider<'a> {
                     }
                 }
 
-                // Enforce channel priority
-                if let (Some(first_channel), ChannelPriority::Strict) = (
-                    package_name_found_in_channel.get(record.package_record.name.as_normalized()),
-                    channel_priority,
-                ) {
-                    // Add the record to the excluded list when it is from a different channel.
-                    if first_channel != &&record.channel {
-                        if let Some(channel) = &record.channel {
-                            tracing::debug!(
-                                "Ignoring '{}' from '{}' because of strict channel priority.",
-                                &record.package_record.name.as_normalized(),
-                                channel
-                            );
-                            candidates.excluded.push((
-                                solvable_id,
-                                pool.intern_string(format!(
-                                    "due to strict channel priority not using this option from: '{channel}'",
-                                )),
-                            ));
-                        } else {
-                            tracing::debug!(
-                                "Ignoring '{}' without a channel because of strict channel priority.",
-                                &record.package_record.name.as_normalized(),
-                            );
-                            candidates.excluded.push((
-                                solvable_id,
-                                pool.intern_string("due to strict channel priority not using from an unknown channel".to_string()),
-                            ));
+                // Enforce channel priority only in strict mode. Other modes do not
+                // consult this map, so avoid allocating and populating it for every record.
+                if channel_priority == ChannelPriority::Strict {
+                    match package_name_found_in_channel
+                        .entry(record.package_record.name.as_normalized())
+                    {
+                        std::collections::hash_map::Entry::Occupied(first_channel) => {
+                            // Add the record to the excluded list when it is from a different channel.
+                            if *first_channel.get() != &record.channel {
+                                if let Some(channel) = &record.channel {
+                                    tracing::debug!(
+                                        "Ignoring '{}' from '{}' because of strict channel priority.",
+                                        &record.package_record.name.as_normalized(),
+                                        channel
+                                    );
+                                    candidates.excluded.push((
+                                        solvable_id,
+                                        pool.intern_string(format!(
+                                            "due to strict channel priority not using this option from: '{channel}'",
+                                        )),
+                                    ));
+                                } else {
+                                    tracing::debug!(
+                                        "Ignoring '{}' without a channel because of strict channel priority.",
+                                        &record.package_record.name.as_normalized(),
+                                    );
+                                    candidates.excluded.push((
+                                        solvable_id,
+                                        pool.intern_string("due to strict channel priority not using from an unknown channel".to_string()),
+                                    ));
+                                }
+                            }
+                        }
+                        std::collections::hash_map::Entry::Vacant(entry) => {
+                            entry.insert(&record.channel);
                         }
                     }
-                } else {
-                    package_name_found_in_channel.insert(
-                        record.package_record.name.as_normalized().to_string(),
-                        &record.channel,
-                    );
                 }
             }
         }
