@@ -11,7 +11,7 @@ use resolvo::{
 };
 
 use super::{NameType, SolverMatchSpec, SolverPackageRecord};
-use crate::{ChannelPriority, resolvo::CondaDependencyProvider};
+use crate::{CancellationToken, ChannelPriority, resolvo::CondaDependencyProvider};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(super) enum CompareStrategy {
@@ -173,10 +173,11 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                             .then(|| sub.to_vec())
                     };
 
-                    // Sort the sub list of solvables by the highest version of the dependencies
-                    self.sort_subset_by_highest_dependency_versions(sub, version_cache);
+                    // Sort the sub list of solvables by the highest version of the dependencies.
+                    let completed =
+                        self.sort_subset_by_highest_dependency_versions(sub, version_cache);
 
-                    if let Some(cache_key) = cache_key {
+                    if completed && let Some(cache_key) = cache_key {
                         let mut cache = self
                             .solver
                             .provider()
@@ -207,7 +208,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         &self,
         solvables: &mut [SolvableId],
         version_cache: &mut HashMap<VersionSetId, Option<(Version, bool)>>,
-    ) {
+    ) -> bool {
         // Get the dependencies for each solvable
         let dependencies = solvables
             .iter()
@@ -223,7 +224,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         let dependencies = match dependencies {
             Ok(dependencies) => dependencies,
             // Solver cancellation, lets just return
-            Err(_) => return,
+            Err(_) => return false,
         };
 
         // Get the known dependencies for each solvable. Solvables with unknown
@@ -248,7 +249,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                     continue;
                 }
                 // Solver cancellation, lets just return
-                Err(_) => return,
+                Err(_) => return false,
             };
 
             for requirement in &known.requirements {
@@ -374,6 +375,15 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             let b_record = self.solvable_record(*b);
             b_record.timestamp().cmp(&a_record.timestamp())
         });
+
+        // Candidate matching reports cancellation as no matching version. Do not
+        // retain the resulting partial/timestamp-biased ordering in that case.
+        !self
+            .solver
+            .provider()
+            .cancellation_token
+            .as_ref()
+            .is_some_and(CancellationToken::is_cancelled)
     }
 }
 
