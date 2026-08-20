@@ -93,6 +93,7 @@ jobs:
   upload-release:
     name: Upload to NPM
     runs-on: ubuntu-latest
+    environment: npm
     if: ${{ inputs.tag }}
     needs:
       - validate-tag
