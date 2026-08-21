@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["MatchSpecUrlError"],"mod":["condition","matcher","package_name_matcher","parse"],"struct":["MatchSpec","NamelessMatchSpec"],"trait":["Matches"]};
+window.SIDEBAR_ITEMS = {"enum":["CanonicalMatchSpecError","MatchSpecUrlError"],"mod":["condition","matcher","package_name_matcher","parse"],"struct":["MatchSpec","NamelessMatchSpec"],"trait":["Matches"]};

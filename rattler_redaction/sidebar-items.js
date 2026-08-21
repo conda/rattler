@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DEFAULT_REDACTION_STR"],"fn":["redact_known_secrets_from_url"],"trait":["Redact"]};
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_REDACTION_STR"],"fn":["redact_known_secrets_from_url","redact_url_for_display","strip_url_for_serialization"],"trait":["Redact"]};
