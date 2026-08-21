@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.52.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.51.0...rattler_conda_types-v0.52.0) - 2026-08-21
+
+### Other
+
+- rename CEP 146 to CEP 48 ([#2717](https://github.com/conda/rattler/pull/2717))
+- extract conda version handling into its own crate ([#2714](https://github.com/conda/rattler/pull/2714))
+
 ## [0.51.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.50.0...rattler_conda_types-v0.51.0) - 2026-08-21
 
 ### Added
