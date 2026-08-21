@@ -1530,6 +1530,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#rattler.match_spec.match_spec.MatchSpec.to_canonical_string" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        to_canonical_string
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3411,6 +3422,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#rattler.match_spec.match_spec.MatchSpec.to_canonical_string" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        to_canonical_string
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3497,12 +3519,12 @@ full wildcard match.</p>
 keyword arguments. Keyword arguments also override any conflicting information
 provided in the positional argument. Conda has historically had several string
 representations for equivalent MatchSpecs.</p>
-<p>A series of rules are now followed for creating the canonical string
-representation of a MatchSpec instance. The canonical string representation can
-generically be represented by:</p>
+<p>The following historic syntax describes forms accepted by the parser and the
+legacy positional representation. It is not the canonical formatter output,
+which is provided by the Rust API.</p>
 <p><code>(channel(/subdir):(namespace):)name(version(build))[key1=value1,key2=value2]</code></p>
 <p>where <code>()</code> indicate optional fields.</p>
-<p>The rules for constructing a canonical string representation are:</p>
+<p>Historical MatchSpec syntax includes:</p>
 <ol>
 <li><code>name</code> (i.e. "package name") is required. Its position is always outside the
 key-value brackets. It can also be a glob pattern or a regex if <code>exact_names_only</code>
@@ -3518,15 +3540,13 @@ key-value brackets. <code>build_string</code> is an alias for <code>build</code>
 ignored.</li>
 <li>If <code>channel</code> is included and is an exact value, a <code>::</code> separator is used between
 <code>channel</code> and <code>name</code>.  <code>channel</code> can either be a canonical channel name or a
-channel url. In the canonical string representation, the canonical channel name
-will always be used.</li>
+channel URL. The legacy display representation uses the channel name.</li>
 <li>If <code>channel</code> is an exact value and <code>subdir</code> is an exact value, <code>subdir</code> is
 appended to <code>channel</code> with a <code>/</code> separator.  Otherwise, <code>subdir</code> is included in
 the key-value brackets.</li>
 <li>Key-value brackets can be delimited by comma, space, or comma+space. Value can
 optionally be wrapped in single or double quotes, but must be wrapped if <code>value</code>
-contains a comma, space, or equal sign.  The canonical format uses comma delimiters
-and single quotes.</li>
+contains a comma, space, or equal sign.</li>
 <li>When constructing a <code>MatchSpec</code> instance from a string, any key-value pair given
 inside the key-value brackets overrides any matching parameter given outside the
 brackets.</li>
@@ -4035,6 +4055,37 @@ and a name.</p>
     <div class="doc doc-contents ">
 
         <p>Match a MatchSpec against a PackageRecord.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="rattler.match_spec.match_spec.MatchSpec.to_canonical_string" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">to_canonical_string</span>
+
+
+<a href="#rattler.match_spec.match_spec.MatchSpec.to_canonical_string" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">to_canonical_string</span><span class="p">()</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Returns the stable, canonical string representation of this match
+spec: the package name first and every other populated field in a
+single bracket section, with the same spec always rendering to the
+same string.</p>
+<p>Raises <code>CanonicalMatchSpecError</code> when a value cannot be represented
+in canonical MatchSpec syntax.</p>
+<h5 id="rattler.match_spec.match_spec.MatchSpec.to_canonical_string--examples">Examples<a class="headerlink" href="#rattler.match_spec.match_spec.MatchSpec.to_canonical_string--examples" title="Permanent link">#</a></h5>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">spec</span> <span class="o">=</span> <span class="n">MatchSpec</span><span class="p">(</span><span class="s1">&#39;conda-forge::foo &gt;=1.0&#39;</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">spec</span><span class="o">.</span><span class="n">to_canonical_string</span><span class="p">()</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="s1">&#39;foo[version=&quot;&gt;=1.0&quot;,channel=&quot;conda-forge&quot;]&#39;</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span>
+</span></code></pre></div>
 
 
     </div>

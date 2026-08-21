@@ -1947,6 +1947,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rattler.repo_data.package_record.PackageRecord.flags" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        flags
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rattler.repo_data.package_record.PackageRecord.legacy_bz2_md5" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3500,6 +3511,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rattler.repo_data.package_record.PackageRecord.flags" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        flags
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rattler.repo_data.package_record.PackageRecord.legacy_bz2_md5" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4196,6 +4218,42 @@ to specify mutually exclusive features.</p>
 </span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">record</span><span class="o">.</span><span class="n">features</span> <span class="ow">is</span> <span class="kc">None</span>
 </span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="kc">True</span>
 </span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="o">&gt;&gt;&gt;</span>
+</span></code></pre></div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rattler.repo_data.package_record.PackageRecord.flags" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">flags</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+      <small class="doc doc-label doc-label-writable"><code>writable</code></small>
+  </span>
+
+<a href="#rattler.repo_data.package_record.PackageRecord.flags" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">flags</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Plain string flags used to select package variants.</p>
+<p>Rattler preserves unrecognized flags so applications can round-trip
+flags introduced by newer repodata revisions.</p>
+<h5 id="rattler.repo_data.package_record.PackageRecord.flags--examples">Examples<a class="headerlink" href="#rattler.repo_data.package_record.PackageRecord.flags--examples" title="Permanent link">#</a></h5>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">record</span> <span class="o">=</span> <span class="n">PackageRecord</span><span class="p">(</span><span class="s2">&quot;demo&quot;</span><span class="p">,</span> <span class="s2">&quot;1.0&quot;</span><span class="p">,</span> <span class="s2">&quot;0&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;noarch&quot;</span><span class="p">,</span> <span class="n">flags</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;optional&quot;</span><span class="p">,</span> <span class="s2">&quot;future-flag&quot;</span><span class="p">])</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">record</span><span class="o">.</span><span class="n">flags</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">[</span><span class="s1">&#39;optional&#39;</span><span class="p">,</span> <span class="s1">&#39;future-flag&#39;</span><span class="p">]</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">record</span><span class="o">.</span><span class="n">flags</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;another-future-flag&quot;</span><span class="p">]</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">record</span><span class="o">.</span><span class="n">flags</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">[</span><span class="s1">&#39;another-future-flag&#39;</span><span class="p">]</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
     </div>

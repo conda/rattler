@@ -561,10 +561,54 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rattler.index.RepodataRevisionInput" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RepodataRevisionInput
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rattler.index.RepodataRevisionSelection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RepodataRevisionSelection
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rattler.index.RepodataRevisions" class="md-nav__link">
     <span class="md-ellipsis">
       
         RepodataRevisions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rattler.index.RepodataRevisionMetadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RepodataRevisionMetadata
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rattler.index.RepodataRevisionWithMessage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RepodataRevisionWithMessage
       
     </span>
   </a>
@@ -3031,10 +3075,54 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rattler.index.RepodataRevisionInput" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RepodataRevisionInput
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rattler.index.RepodataRevisionSelection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RepodataRevisionSelection
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rattler.index.RepodataRevisions" class="md-nav__link">
     <span class="md-ellipsis">
       
         RepodataRevisions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rattler.index.RepodataRevisionMetadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RepodataRevisionMetadata
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rattler.index.RepodataRevisionWithMessage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RepodataRevisionWithMessage
       
     </span>
   </a>
@@ -3130,6 +3218,58 @@
 
 
 
+<h2 id="rattler.index.RepodataRevisionInput" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">RepodataRevisionInput</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
+  </span>
+
+<a href="#rattler.index.RepodataRevisionInput" class="headerlink" title="Permanent link">#</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">RepodataRevisionInput</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">RepodataRevisionSelection</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="o">|</span> <span class="n">RepodataRevisionWithMessage</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="o">|</span> <span class="n">RepodataRevisionWithoutMessage</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>One revision selected for indexing, optionally with a message.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="rattler.index.RepodataRevisionSelection" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">RepodataRevisionSelection</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
+  </span>
+
+<a href="#rattler.index.RepodataRevisionSelection" class="headerlink" title="Permanent link">#</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">RepodataRevisionSelection</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">&#39;v3&#39;</span><span class="p">]</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>A repodata layout revision supported by the indexer.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
 <h2 id="rattler.index.RepodataRevisions" class="doc doc-heading">
             <span class="doc doc-object-name doc-attribute-name">RepodataRevisions</span>
 
@@ -3154,6 +3294,104 @@ are derived by the indexer and cannot be supplied.</p>
 </div>
 
 
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="rattler.index.RepodataRevisionMetadata" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">RepodataRevisionMetadata</span>
+
+
+<a href="#rattler.index.RepodataRevisionMetadata" class="headerlink" title="Permanent link">#</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.TypedDict">TypedDict</span></code></p>
+
+
+
+        <p>Metadata advertised for one <code>vN</code> repodata revision.</p>
+<p>The indexer derives package statistics from the records it writes. <code>message</code>
+is the optional publisher-supplied description of the revision.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="rattler.index.RepodataRevisionWithMessage" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">RepodataRevisionWithMessage</span>
+
+
+<a href="#rattler.index.RepodataRevisionWithMessage" class="headerlink" title="Permanent link">#</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.TypedDict">TypedDict</span></code></p>
+
+
+
+        <p>A selected revision with a publisher-supplied message.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-class">
 
