@@ -19,7 +19,6 @@ mod repo_data;
 mod repo_data_record;
 mod run_export;
 pub mod utils;
-mod version;
 pub mod version_spec;
 
 pub mod compression_level;
@@ -61,10 +60,21 @@ pub use no_arch_type::{NoArchKind, NoArchType, RawNoArchType};
 pub use package_name::{
     InvalidPackageNameError, NormalizedPackageName, PackageName, SourcePackageName,
 };
-pub use parse_mode::{ParseMatchSpecOptions, ParseStrictness, ParseStrictnessWithNameMatcher};
+pub use parse_mode::{ParseMatchSpecOptions, ParseStrictnessWithNameMatcher};
 pub use platform::{Arch, ParseArchError, ParsePlatformError, Platform};
 pub use prefix_data::PrefixData;
 pub use prefix_record::PrefixRecord;
+#[cfg(feature = "semver")]
+pub use rattler_conda_version::version::VersionToSemverError;
+pub use rattler_conda_version::version::{
+    Component, ParseVersionError, ParseVersionErrorKind, StrictVersion, VersionBumpError,
+    VersionBumpType, VersionExtendError, VersionWithSource,
+};
+pub use rattler_conda_version::version_spec::{
+    EqualityOperator, LogicalOperator, ParseConstraintError, ParseVersionSpecError, RangeOperator,
+    StrictRangeOperator, VersionOperators,
+};
+pub use rattler_conda_version::{ParseStrictness, Version, VersionSpec};
 pub use record_traits::HasArtifactIdentificationRefs;
 pub use repo_data::{
     ChannelInfo, ChannelRelations, ConvertSubdirError, PackageRecord, RecordFromPath, RepoData,
@@ -76,13 +86,6 @@ pub use repo_data::{
 };
 pub use repo_data_record::{RepoDataRecord, SolverResult};
 pub use run_export::RunExportKind;
-#[cfg(feature = "semver")]
-pub use version::VersionToSemverError;
-pub use version::{
-    Component, ParseVersionError, ParseVersionErrorKind, StrictVersion, Version, VersionBumpError,
-    VersionBumpType, VersionExtendError, VersionWithSource,
-};
-pub use version_spec::VersionSpec;
 
 /// An package identifier that can be used to identify packages across package
 /// ecosystems.

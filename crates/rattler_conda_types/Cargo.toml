@@ -13,6 +13,7 @@ readme.workspace = true
 
 [features]
 default = ["rayon"]
+semver = ["rattler_conda_version/semver"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -31,6 +32,7 @@ purl = { workspace = true, features = ["serde"] }
 rattler_digest = { workspace = true, default-features = false, features = [
   "serde",
 ] }
+rattler_conda_version = { workspace = true }
 rattler_macros = { workspace = true, default-features = false }
 rattler_redaction = { workspace = true, default-features = false }
 fancy-regex = { workspace = true }
@@ -57,7 +59,6 @@ url = { workspace = true, features = ["serde"] }
 indexmap = { workspace = true }
 dirs = { workspace = true }
 rayon = { workspace = true, optional = true }
-semver = { workspace = true, optional = true }
 fs-err = { workspace = true }
 memmap2 = { workspace = true }
 

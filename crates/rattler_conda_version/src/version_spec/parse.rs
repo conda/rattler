@@ -11,8 +11,8 @@ use nom::{
 use thiserror::Error;
 
 use crate::{
-    ParseStrictness, ParseVersionError, ParseVersionErrorKind,
-    version::parse::version_parser,
+    ParseStrictness,
+    version::{ParseVersionError, ParseVersionErrorKind, parse::version_parser},
     version_spec::{
         EqualityOperator, LogicalOperator, RangeOperator, StrictRangeOperator, VersionOperators,
         VersionSpec, constraint::Constraint,
@@ -56,31 +56,38 @@ fn operator_parser(input: &str) -> IResult<&str, VersionOperators, ParseVersionO
     Ok((rest, op))
 }
 
-#[allow(missing_docs)]
+/// An error while parsing one conda version constraint.
 #[derive(Debug, Clone, Error, Eq, PartialEq)]
 pub enum ParseConstraintError {
+    /// A wildcard was combined with an operator that cannot use one.
     #[error("'*' is incompatible with '{0}' operator'")]
     GlobVersionIncompatibleWithOperator(VersionOperators),
+    /// The input uses a regular-expression constraint, which conda does not support here.
     #[error("regex constraints are not supported")]
     RegexConstraintsNotSupported,
+    /// The input looks like an unterminated regular-expression constraint.
     #[error("unterminated unsupported regular expression")]
     UnterminatedRegex,
+    /// The input contains an unrecognized comparison operator.
     #[error("invalid operator '{0}'")]
     InvalidOperator(String),
+    /// The version following an operator is invalid.
     #[error(transparent)]
     InvalidVersion(#[from] ParseVersionError),
+    /// A bare version is ambiguous in strict parsing mode.
     #[error("missing range specifier for '{0}'. Did you mean '=={0}' or '{0}.*'?")]
     AmbiguousVersion(String),
-    /// Expected a version
+    /// The constraint does not contain a version.
     #[error("expected a version")]
     ExpectedVersion,
-    /// Expected the end of the string
+    /// The parser encountered trailing input.
     #[error("encountered more characters but expected none")]
     ExpectedEof,
-    /// Nom error
+    /// The underlying parser rejected the input.
     #[error("{0:?}")]
     Nom(ErrorKind),
 
+    /// The wildcard pattern is not valid in the selected strictness mode.
     #[error("invalid glob pattern")]
     InvalidGlob,
 }
@@ -292,7 +299,7 @@ fn logical_constraint_parser(
 /// starts with pattern. E.g: `.*.*`
 ///
 /// This is an edge case found in the anaconda main repodata as `mkl 2023.*.*`.
-pub fn looks_like_infinite_starts_with(input: &str) -> bool {
+pub(crate) fn looks_like_infinite_starts_with(input: &str) -> bool {
     let mut input = input.strip_suffix('.').unwrap_or(input);
     while !input.is_empty() {
         match input.strip_suffix(".*") {
@@ -312,7 +319,7 @@ pub fn looks_like_infinite_starts_with(input: &str) -> bool {
 }
 
 /// Returns true if the input is `*` or a sequence of `.*`.
-pub fn is_star_or_star_dot_star(input: &str) -> bool {
+pub(crate) fn is_star_or_star_dot_star(input: &str) -> bool {
     if input == "*" {
         return true;
     }
@@ -324,7 +331,7 @@ pub fn is_star_or_star_dot_star(input: &str) -> bool {
 }
 
 /// Parses a version constraint.
-pub fn constraint_parser(
+pub(crate) fn constraint_parser(
     strictness: ParseStrictness,
 ) -> impl FnMut(&str) -> IResult<&str, Constraint, ParseConstraintError> {
     move |input| {

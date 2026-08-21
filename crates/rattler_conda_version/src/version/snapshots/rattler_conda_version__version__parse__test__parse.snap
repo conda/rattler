@@ -1,5 +1,6 @@
 ---
-source: crates/rattler_conda_types/src/version/parse.rs
+source: crates/rattler_conda_version/src/version/parse.rs
+assertion_line: 517
 expression: index_map
 ---
 {

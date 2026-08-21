@@ -1,3 +1,6 @@
+//! Types and operations for conda version literals as specified by
+//! [CEP 33](https://conda.org/learn/ceps/cep-0033).
+
 use std::{
     borrow::Cow,
     cell::RefCell,
@@ -7,7 +10,7 @@ use std::{
     fmt::{Debug, Display, Formatter},
     hash::{Hash, Hasher},
     iter,
-    ops::RangeBounds,
+    ops::{Deref, DerefMut, RangeBounds},
 };
 
 use itertools::{Either, EitherOrBoth, Itertools};
@@ -32,116 +35,45 @@ pub use self::semver::VersionToSemverError;
 use thiserror::Error;
 pub use with_source::VersionWithSource;
 
-/// This class implements an order relation between version strings. Version
-/// strings can contain the usual alphanumeric characters (A-Za-z0-9), separated
-/// into segments by dots and underscores. Empty segments (i.e. two consecutive
-/// dots, a leading/trailing underscore) are not permitted. An optional epoch
-/// number - an integer followed by '!' - can precede the actual version string
-/// (this is useful to indicate a change in the versioning scheme itself).
-/// Version comparison is case-insensitive.
+/// A parsed conda package version literal.
 ///
-/// Rattler supports six types of version strings:
+/// `Version` implements the literal parsing and ordering specified by
+/// [CEP 33](https://conda.org/learn/ceps/cep-0033), including epochs, local
+/// versions, arbitrary alphanumeric components, and the special `dev` and
+/// `post` identifiers. Equality is normalized version-literal equality:
+/// missing components compare as `0`, so `1.0 == 1.0.0`.
 ///
-/// * Release versions contain only integers, e.g. '1.0', '2.3.5'.
-/// * Pre-release versions use additional letters such as 'a' or 'rc', for
-///   example '1.0a1', '1.2.beta3', '2.3.5rc3'.
-/// * Development versions are indicated by the string 'dev', for example
-///   '1.0dev42', '2.3.5.dev12'.
-/// * Post-release versions are indicated by the string 'post', for example
-///   '1.0post1', '2.3.5.post2'.
-/// * Tagged versions have a suffix that specifies a particular property of
-///   interest, e.g. '1.1.parallel'. Tags can be added  to any of the preceding
-///   four types. As far as sorting is concerned, tags are treated like strings
-///   in pre-release versions.
-/// * An optional local version string separated by '+' can be appended to the
-///   main (upstream) version string. It is only considered in comparisons when
-///   the main versions are equal, but otherwise handled in exactly the same
-///   manner.
+/// # Parsing and normalization
 ///
-/// To obtain a predictable version ordering, it is crucial to keep the
-/// version number scheme of a given package consistent over time.
+/// A literal consists of an optional `epoch!`, release segments, and an
+/// optional local part after `+`. Release and local parts are split into
+/// segments at `.`, `_`, or the historically accepted `-`; each segment is
+/// split into numeric and textual components. Numeric components lose leading
+/// zeroes, textual components are lowercased, and a segment starting with text
+/// receives an implicit leading `0`. The `dev` and `post` components have their
+/// special ordering behavior.
 ///
-/// Specifically,
+/// Parsing retains the version model—its epoch, release and local segments,
+/// segment boundaries, component kinds, and separators—but not its exact
+/// spelling. [`StrictVersion`] and [`VersionSpec`][crate::VersionSpec] use the
+/// retained structure for prefix and compatible constraints. Use [`VersionWithSource`] when the
+/// original text must be retained for display or serialization.
 ///
-/// * version strings should always have the same number of components (except
-///   for an optional tag suffix or local version string),
-/// * letters/strings indicating non-release versions should always occur at the
-///   same position.
+/// ```
+/// # use rattler_conda_version::Version;
+/// # use std::str::FromStr;
+/// let release = Version::from_str("1.0").unwrap();
+/// let candidate = Version::from_str("1.0rc1").unwrap();
 ///
-/// Before comparison, version strings are parsed as follows:
-///
-/// * They are first split into epoch, version number, and local version number
-///   at '!' and '+' respectively. If there is no '!', the epoch is set to 0. If
-///   there is no '+', the local version is empty.
-/// * The version part is then split into components at '.' and '_'.
-/// * Each component is split again into runs of numerals and non-numerals
-/// * Sub-components containing only numerals are converted to integers.
-/// * Strings are converted to lower case, with special treatment for 'dev' and
-///   'post'.
-/// * When a component starts with a letter, the fill value 0 is inserted to keep
-///   numbers and strings in phase, resulting in '1.1.a1' == 1.1.0a1'.
-/// * The same is repeated for the local version part.
-///
-/// # Examples:
-///
-/// `1.2g.beta15.rc`  =>  `[[0], [1], [2, 'g'], [0, 'beta', 15], [0, 'rc']]`
-/// `1!2.15.1_ALPHA`  =>  `[[1], [2], [15], [1, '_alpha']]`
-///
-/// The resulting lists are compared lexicographically, where the following
-/// rules are applied to each pair of corresponding sub-components:
-///
-/// * integers are compared numerically
-/// * strings are compared lexicographically, case-insensitive
-/// * strings are smaller than integers, except
-/// * 'dev' versions are smaller than all corresponding versions of other types
-/// * 'post' versions are greater than all corresponding versions of other types
-/// * if a sub-component has no correspondent, the missing correspondent is
-///   treated as integer 0 to ensure '1.1' == '1.1.0'.
-///
-/// The resulting order is:
-///
-/// ```txt
-///
-///        0.4
-///      < 0.4.0
-///      < 0.4.1.rc
-///     == 0.4.1.RC   # case-insensitive comparison
-///      < 0.4.1
-///      < 0.5a1
-///      < 0.5b3
-///      < 0.5C1      # case-insensitive comparison
-///      < 0.5
-///      < 0.9.6
-///      < 0.960923
-///      < 1.0
-///      < 1.1dev1    # special case 'dev'
-///      < 1.1_       # appended underscore is special case for openssl-like versions
-///      < 1.1a1
-///      < 1.1.0dev1  # special case 'dev'
-///     == 1.1.dev1   # 0 is inserted before string
-///      < 1.1.a1
-///      < 1.1.0rc1
-///      < 1.1.0
-///     == 1.1
-///      < 1.1.0post1 # special case 'post'
-///     == 1.1.post1  # 0 is inserted before string
-///      < 1.1post1   # special case 'post'
-///      < 1996.07.12
-///      < 1!0.4.1    # epoch increased
-///      < 1!3.1.1.6
-///      < 2!0.4.1    # epoch increased again
+/// assert!(candidate < release);
+/// assert_eq!(release, Version::from_str("1.0.0").unwrap());
 /// ```
 ///
-/// Some packages (most notably openssl) have incompatible version conventions.
-/// In particular, openssl interprets letters as version counters rather than
-/// pre-release identifiers. For openssl, the relation
+/// # Optional `SemVer` interoperability
 ///
-/// 1.0.1 < 1.0.1a  =>  False  # should be true for openssl
-///
-/// holds, whereas conda packages use the opposite ordering. You can work-around
-/// this problem by appending an underscore to plain version numbers:
-///
-/// 1.0.1_ < 1.0.1a =>  True   # ensure correct ordering for openssl
+/// With the `semver` feature enabled, [`Version`] converts from
+/// `semver::Version`, and can be fallibly converted back. The latter may fail
+/// because conda version literals can express forms that `SemVer` cannot.
 #[derive(Clone, Eq)]
 pub struct Version {
     /// Individual components of the version.
@@ -180,18 +112,22 @@ pub struct Version {
 type ComponentVec = SmallVec<[Component; 3]>;
 type SegmentVec = SmallVec<[Segment; 4]>;
 
-/// Error that can occur when extending a version to a certain length.
+/// Explains why a [`Version`] could not be extended with zero-valued segments.
 #[derive(Error, Debug, PartialEq)]
 
 pub enum VersionExtendError {
-    /// The version is too long (there is a maximum number of segments allowed)
+    /// Adding segments would exceed the representation's maximum segment count.
     #[error("the version is too long")]
     VersionTooLong,
 }
 
 impl Version {
-    /// Constructs a version with just a major component and no other
-    /// components, e.g. "1".
+    /// Creates a release-style [`Version`] containing only its first numeric segment.
+    ///
+    /// ```
+    /// # use rattler_conda_version::Version;
+    /// assert_eq!(Version::major(2).to_string(), "2");
+    /// ```
     pub fn major(major: u64) -> Version {
         Version {
             components: smallvec::smallvec![Component::Numeral(major)],
@@ -200,12 +136,12 @@ impl Version {
         }
     }
 
-    /// Returns true if this version has an epoch.
+    /// Reports whether this [`Version`] was written with an epoch such as `1!2.0`.
     pub fn has_epoch(&self) -> bool {
         self.flags.has_epoch()
     }
 
-    /// Returns true if this version has a local version defined
+    /// Reports whether this [`Version`] has a local version following `+`.
     pub fn has_local(&self) -> bool {
         self.flags.local_segment_index() > 0
     }
@@ -221,14 +157,12 @@ impl Version {
         }
     }
 
-    /// Returns the epoch part of the version. If the version did not specify an
-    /// epoch `0` is returned.
+    /// Returns this [`Version`]'s epoch, or `0` when no epoch was written.
     pub fn epoch(&self) -> u64 {
         self.epoch_opt().unwrap_or(0)
     }
 
-    /// Returns the epoch part of the version or `None` if the version did not
-    /// specify an epoch.
+    /// Returns this [`Version`]'s explicit epoch, if it has one.
     pub fn epoch_opt(&self) -> Option<u64> {
         if self.has_epoch() {
             Some(
@@ -241,7 +175,7 @@ impl Version {
         }
     }
 
-    /// Returns the individual segments of the version.
+    /// Iterates the release segments of this [`Version`], excluding its local part.
     pub fn segments(
         &self,
     ) -> impl DoubleEndedIterator<Item = SegmentIter<'_>> + ExactSizeIterator + '_ {
@@ -262,9 +196,9 @@ impl Version {
         })
     }
 
-    /// Returns the segments that belong the local part of the version.
+    /// Iterates the local segments of this [`Version`].
     ///
-    /// The local part of a a version is the part behind the (optional) `+`.
+    /// The local part is the portion after `+`, such as `3.2.1-alpha0` in `1.2+3.2.1-alpha0`.
     /// E.g.:
     ///
     /// ```text
@@ -295,9 +229,7 @@ impl Version {
         }
     }
 
-    /// Tries to extract the major and minor versions from the version. Returns
-    /// None if this instance doesn't appear to contain a major and minor
-    /// version.
+    /// Returns the first two numeric release segments when this [`Version`] has a simple major-minor form.
     pub fn as_major_minor(&self) -> Option<(u64, u64)> {
         let mut segments = self.segments();
         let major_segment = segments.next()?;
@@ -319,35 +251,28 @@ impl Version {
         }
     }
 
-    /// Returns true if this is considered a dev version.
-    ///
-    /// If a version has a single component named "dev" it is considered to be a
-    /// dev version.
+    /// Reports whether this [`Version`] contains conda's special `dev` component.
     pub fn is_dev(&self) -> bool {
         self.segments()
             .flat_map(|segment| segment.components())
             .any(Component::is_dev)
     }
 
-    /// Returns true if this is considered a post version.
-    ///
-    /// If a version has a single component named "post" it is considered to be
-    /// a post version.
+    /// Reports whether this [`Version`] contains conda's special `post` component.
     pub fn is_post(&self) -> bool {
         self.segments()
             .flat_map(|segment| segment.components())
             .any(Component::is_post)
     }
 
-    /// Check if this version version and local strings start with the same as
-    /// other.
+    /// Reports whether this [`Version`] has `other` as a conda-version prefix.
     pub fn starts_with(&self, other: &Self) -> bool {
         self.epoch() == other.epoch()
             && segments_starts_with(self.segments(), other.segments())
             && segments_starts_with(self.local_segments(), other.local_segments())
     }
 
-    /// Returns true if this version is compatible with the given `other`.
+    /// Reports whether this [`Version`] satisfies conda's compatible-version relation with `other`.
     pub fn compatible_with(&self, other: &Self) -> bool {
         self.ge(other)
             && self.epoch() == other.epoch()
@@ -357,10 +282,19 @@ impl Version {
             && segments_starts_with(self.local_segments(), other.local_segments())
     }
 
-    /// Returns a new version with only the given segments.
+    /// Returns a [`Version`] made from the selected release segments of this [`Version`].
     ///
-    /// Calling this function on a version that looks like `1.3a.4-alpha3` with
-    /// the range `[1..3]` will return the version: `3a.4`.
+    /// The local part is retained. Returns `None` when the range is empty or
+    /// falls outside the release segments.
+    ///
+    /// ```
+    /// # use rattler_conda_version::Version;
+    /// # use std::str::FromStr;
+    /// let version = Version::from_str("1.3a.4-alpha3+build").unwrap();
+    /// let selected = version.with_segments(1..3).unwrap();
+    ///
+    /// assert_eq!(selected.to_string(), "3a.4+build");
+    /// ```
     pub fn with_segments(&self, segments: impl RangeBounds<usize>) -> Option<Version> {
         // Determine the actual bounds to use
         let segment_count = self.segment_count();
@@ -438,9 +372,9 @@ impl Version {
         })
     }
 
-    /// Pops the specified number of segments from the version. Returns `None`
-    /// if the resulting version would become invalid because it no longer
-    /// contains any segments.
+    /// Removes `n` release segments, returning `None` if no release segment would remain.
+    ///
+    /// The local part is retained when the operation succeeds.
     pub fn pop_segments(&self, n: usize) -> Option<Version> {
         let segment_count = self.segment_count();
         if segment_count < n {
@@ -450,8 +384,7 @@ impl Version {
         }
     }
 
-    /// Returns the number of segments in the version. Segments are the part of
-    /// the version separated by dots or dashes.
+    /// Returns the number of release segments in this [`Version`], excluding its local part.
     pub fn segment_count(&self) -> usize {
         if let Some(local_index) = self.local_segment_index() {
             local_index
@@ -460,8 +393,9 @@ impl Version {
         }
     }
 
-    /// Returns either this [`Version`] or a new [`Version`] where the local
-    /// version part has been removed.
+    /// Returns this [`Version`] without its local part, borrowing when none is present.
+    ///
+    /// For example, `1.0+build.1` becomes `1.0`.
     pub fn strip_local(&self) -> Cow<'_, Version> {
         if self.has_local() {
             let mut components = SmallVec::<[Component; 3]>::default();
@@ -492,9 +426,19 @@ impl Version {
         }
     }
 
-    /// Extend the version to the specified length by adding default components
-    /// (0s). If the version is already longer than the specified length it
-    /// is returned as is.
+    /// Extends this [`Version`] with zero-valued release segments to reach `length`.
+    ///
+    /// Returns a borrowed value when this [`Version`] already has at least
+    /// `length` release segments. The local part is preserved.
+    ///
+    /// ```
+    /// # use rattler_conda_version::Version;
+    /// # use std::str::FromStr;
+    /// let version = Version::from_str("1.2+build").unwrap();
+    /// let extended = version.extend_to_length(3).unwrap().into_owned();
+    ///
+    /// assert_eq!(extended, Version::from_str("1.2.0+build").unwrap());
+    /// ```
     pub fn extend_to_length(&self, length: usize) -> Result<Cow<'_, Version>, VersionExtendError> {
         if self.segment_count() >= length {
             return Ok(Cow::Borrowed(self));
@@ -521,7 +465,10 @@ impl Version {
                 .with_local_segment_index(segments.len() as u8)
                 .ok_or(VersionExtendError::VersionTooLong)?;
             for segment_iter in self.local_segments() {
-                for component in segment_iter.components().cloned() {
+                // The segment retains whether its leading zero is implicit, so
+                // do not store that generated component a second time.
+                let implicit_default = usize::from(segment_iter.has_implicit_default());
+                for component in segment_iter.components().skip(implicit_default).cloned() {
                     components.push(component);
                 }
                 segments.push(segment_iter.segment);
@@ -737,31 +684,33 @@ impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Display for SegmentForma
     }
 }
 
-/// Either a number, literal or the infinity.
+/// A single ordered component within a parsed [`Version`].
+///
+/// Components represent numeric and textual parts of a segment, plus conda's
+/// special `dev` and `post` values used during version comparison.
 #[derive(Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum Component {
-    /// Numeral Component.
+    /// A numeric component such as the `2` in `1.2`.
     Numeral(u64),
 
-    /// Post should always be ordered greater than anything else.
+    /// Conda's `post` component, ordered after every other component.
     Post,
 
-    /// Dev should always be ordered less than anything else.
+    /// Conda's `dev` component, ordered before every other component.
     Dev,
 
-    /// A generic string identifier. Identifiers are compared lexicographically.
-    /// They are always ordered less than numbers.
+    /// A textual identifier, ordered lexicographically before numeric components.
     Iden(Box<str>),
 
-    /// An underscore or dash.
+    /// A separator retained as a component for conda's ordering rules.
     UnderscoreOrDash {
-        /// Dash flag.
+        /// Whether the retained separator is `-` rather than `_`.
         is_dash: bool,
     },
 }
 
 impl Component {
-    /// Returns a component as numeric value.
+    /// Returns the numeric value when this [`Component`] is [`Component::Numeral`].
     pub fn as_number(&self) -> Option<u64> {
         match self {
             Component::Numeral(value) => Some(*value),
@@ -769,7 +718,7 @@ impl Component {
         }
     }
 
-    /// Returns a component as mutable numeric value.
+    /// Returns the mutable numeric value when this [`Component`] is [`Component::Numeral`].
     pub fn as_number_mut(&mut self) -> Option<&mut u64> {
         match self {
             Component::Numeral(value) => Some(value),
@@ -777,7 +726,7 @@ impl Component {
         }
     }
 
-    /// Returns a component as iden value
+    /// Returns the textual identifier when this [`Component`] is [`Component::Iden`].
     pub fn as_iden(&self) -> Option<&str> {
         match self {
             Component::Iden(value) => Some(value),
@@ -785,7 +734,7 @@ impl Component {
         }
     }
 
-    /// Returns a component as mutable iden value
+    /// Returns the mutable textual identifier when this [`Component`] is [`Component::Iden`].
     pub fn as_iden_mut(&mut self) -> Option<&mut Box<str>> {
         match self {
             Component::Iden(value) => Some(value),
@@ -793,7 +742,7 @@ impl Component {
         }
     }
 
-    /// Returns a component as string value.
+    /// Returns the textual identifier as a string slice, if this is [`Component::Iden`].
     #[allow(dead_code)]
     pub fn as_string(&self) -> Option<&str> {
         match self {
@@ -802,24 +751,24 @@ impl Component {
         }
     }
 
-    /// Checks whether a component is [`Component::Post`]
+    /// Reports whether this component is conda's special [`Component::Post`] value.
     #[allow(dead_code)]
     pub fn is_post(&self) -> bool {
         matches!(self, Component::Post)
     }
 
-    /// Checks whether a component is [`Component::Dev`]
+    /// Reports whether this component is conda's special [`Component::Dev`] value.
     #[allow(dead_code)]
     pub fn is_dev(&self) -> bool {
         matches!(self, Component::Dev)
     }
 
-    /// Checks whether a component is [`Component::Numeral`]
+    /// Reports whether this component is a numeric [`Component::Numeral`].
     pub fn is_numeric(&self) -> bool {
         matches!(self, Component::Numeral(_))
     }
 
-    /// Checks whether the component is a zero.
+    /// Reports whether this component is the numeric value `0`.
     pub fn is_zero(&self) -> bool {
         matches!(self, Component::Numeral(0))
     }
@@ -984,44 +933,43 @@ impl<'de> Deserialize<'de> for Version {
     }
 }
 
+/// A view of one release or local segment within a parsed [`Version`].
 pub struct SegmentIter<'v> {
-    /// Information about the segment we are iterating.
+    /// Internal metadata that identifies the segment.
     segment: Segment,
 
-    /// Offset in the components of the version.
+    /// Position of this segment's first stored component.
     offset: usize,
 
-    /// The version to which the segment belongs
+    /// Version that owns this segment.
     version: &'v Version,
 }
 
 impl<'v> SegmentIter<'v> {
-    /// Returns true if the
+    /// Reports whether every component in this segment is numeric zero.
     pub fn is_zero(&self) -> bool {
         self.components().all(Component::is_zero)
     }
 
-    /// Returns true if the first component is an implicit default added while
-    /// parsing the version. E.g. `2.a` is represented as `2.0a`. The `0` is
-    /// added implicitly.
+    /// Reports whether conda inserted an implicit leading zero while parsing this segment.
+    ///
+    /// The inserted value keeps letter-led segments comparable with numeric segments;
+    /// for example, `2.a` is represented as `2.0a`.
     pub fn has_implicit_default(&self) -> bool {
         self.segment.has_implicit_default()
     }
 
-    /// Returns the separator that is found in from of this segment or `None` if
-    /// this segment was not preceded by a separator.
+    /// Returns the separator before this segment, or `None` for the first segment.
     pub fn separator(&self) -> Option<char> {
         self.segment.separator()
     }
 
-    /// Returns the number of components stored in the version. Note that the
-    /// number of components returned by [`Self::components`] might differ
-    /// because it might include an implicit default.
+    /// Returns this segment's stored component count, excluding an implicit leading zero.
     pub fn component_count(&self) -> usize {
         self.segment.len() as usize
     }
 
-    /// Returns an iterator over the components of this segment.
+    /// Iterates this segment's components, including an implicit leading zero when present.
     pub fn components(&self) -> impl DoubleEndedIterator<Item = &'v Component> + use<'v> {
         static IMPLICIT_DEFAULT: Component = Component::Numeral(0);
 
@@ -1044,13 +992,69 @@ impl<'v> SegmentIter<'v> {
     }
 }
 
-/// Version that only has equality when it is exactly the same
-/// e.g for [`Version`] 1.0.0 == 1.0 while in [`StrictVersion`]
-/// this is not equal. Useful in ranges where we are talking
-/// about equality over version ranges instead of specific
-/// version instances
+/// A [`Version`] wrapper that distinguishes structurally different but
+/// normalization-equivalent versions.
+///
+/// Unlike [`Version`], a `StrictVersion` parsed from `1.0` and one parsed
+/// from `1.0.0` are not equal. [`crate::VersionSpec`] uses it for operators whose behavior depends
+/// on the written version structure.
+///
+/// The wrapped [`Version`] is private so callers cannot accidentally depend on
+/// the wrapper's representation. Use [`Deref`], [`AsRef`], or [`Into`] to work
+/// with the underlying version.
+#[repr(transparent)]
 #[derive(Clone, Eq, Debug, Deserialize)]
-pub struct StrictVersion(pub Version);
+pub struct StrictVersion(Version);
+
+impl StrictVersion {
+    /// Wraps `version` with structural equality.
+    pub fn new(version: Version) -> Self {
+        Self(version)
+    }
+
+    /// Returns the wrapped [`Version`], consuming the wrapper.
+    pub fn into_inner(self) -> Version {
+        self.0
+    }
+}
+
+impl From<Version> for StrictVersion {
+    fn from(version: Version) -> Self {
+        Self::new(version)
+    }
+}
+
+impl From<StrictVersion> for Version {
+    fn from(version: StrictVersion) -> Self {
+        version.into_inner()
+    }
+}
+
+impl AsRef<Version> for StrictVersion {
+    fn as_ref(&self) -> &Version {
+        &self.0
+    }
+}
+
+impl AsMut<Version> for StrictVersion {
+    fn as_mut(&mut self) -> &mut Version {
+        &mut self.0
+    }
+}
+
+impl Deref for StrictVersion {
+    type Target = Version;
+
+    fn deref(&self) -> &Self::Target {
+        self.as_ref()
+    }
+}
+
+impl DerefMut for StrictVersion {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.as_mut()
+    }
+}
 
 impl PartialEq for StrictVersion {
     fn eq(&self, other: &Self) -> bool {
@@ -1319,6 +1323,19 @@ mod test {
         random_versions.shuffle(&mut rand::rng());
         random_versions.sort();
         assert_eq!(random_versions, parsed_versions);
+    }
+
+    #[test]
+    fn strict_version_accessors() {
+        let version = Version::from_str("1.0").unwrap();
+        let mut strict = StrictVersion::from(version.clone());
+
+        assert_eq!(strict.as_ref(), &version);
+        let _: &Version = &strict;
+        let _: &mut Version = &mut strict;
+
+        let extracted: Version = strict.into();
+        assert_eq!(extracted, version);
     }
 
     #[test]
@@ -1660,6 +1677,7 @@ mod test {
     #[case("1", 3, "1.0.0")]
     #[case("1.2", 3, "1.2.0")]
     #[case("1.2+3.4", 3, "1.2.0+3.4")]
+    #[case("1.2+build", 3, "1.2.0+build")]
     #[case("4!1.2+3.4", 3, "4!1.2.0+3.4")]
     #[case("4!1.2+3.4", 5, "4!1.2.0.0.0+3.4")]
     #[test]

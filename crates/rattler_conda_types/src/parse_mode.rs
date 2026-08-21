@@ -1,4 +1,5 @@
 use crate::RepodataRevision;
+use rattler_conda_version::ParseStrictness;
 
 /// Defines how strict a parser should behave.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -16,16 +17,6 @@ impl From<ParseStrictness> for ParseStrictnessWithNameMatcher {
             parse_strictness: value,
         }
     }
-}
-
-/// Defines how strict a version parser should behave.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum ParseStrictness {
-    /// Allows guessing the users intent.
-    Lenient,
-
-    /// Very strictly follow parsing rules.
-    Strict,
 }
 
 /// Options for parsing match specifications.

@@ -5067,6 +5067,7 @@ dependencies = [
  "proptest",
  "purl",
  "rand 0.10.2",
+ "rattler_conda_version",
  "rattler_digest",
  "rattler_macros",
  "rattler_package_streaming",
@@ -5075,7 +5076,6 @@ dependencies = [
  "regex",
  "rmp-serde",
  "rstest",
- "semver",
  "serde",
  "serde-untagged",
  "serde_json",
@@ -5091,6 +5091,22 @@ dependencies = [
  "tracing",
  "typed-path",
  "url",
+]
+
+[[package]]
+name = "rattler_conda_version"
+version = "0.1.0"
+dependencies = [
+ "assert_matches",
+ "insta",
+ "itertools 0.15.0",
+ "nom 8.0.0",
+ "rand 0.10.2",
+ "rstest",
+ "semver",
+ "serde",
+ "smallvec",
+ "thiserror 2.0.20",
 ]
 
 [[package]]

@@ -74,8 +74,7 @@ impl From<&SemverVersion> for Version {
     ///
     /// ```
     /// # use std::str::FromStr;
-    /// use rattler_conda_types::Version;
-    ///
+    /// # use rattler_conda_version::Version;
     /// let semver = semver::Version::parse("1.2.3-rc.1+build.5").unwrap();
     /// assert_eq!(Version::from(&semver).to_string(), "1.2.3.rc.1+build.5");
     /// ```
@@ -253,8 +252,7 @@ impl TryFrom<&Version> for SemverVersion {
     ///
     /// ```
     /// # use std::str::FromStr;
-    /// use rattler_conda_types::Version;
-    ///
+    /// # use rattler_conda_version::Version;
     /// let version = Version::from_str("1.2.3rc1").unwrap();
     /// let semver = semver::Version::try_from(&version).unwrap();
     /// assert_eq!(semver.to_string(), "1.2.3-rc.1");

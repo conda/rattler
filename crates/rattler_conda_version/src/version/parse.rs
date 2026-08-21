@@ -20,13 +20,14 @@ use std::{
 };
 use thiserror::Error;
 
-/// An error that occurred during parsing of a string to a version.
+/// Explains why text could not be parsed into a conda [`Version`] literal as
+/// specified by [CEP 33](https://conda.org/learn/ceps/cep-0033).
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ParseVersionError {
-    /// The original string that was the input of the parser
+    /// Complete input supplied to the [`Version`] parser.
     pub version: String,
 
-    /// The type of parse error that occurred
+    /// Specific grammar rule that rejected [`Self::version`].
     pub kind: ParseVersionErrorKind,
 }
 
@@ -43,7 +44,7 @@ impl Display for ParseVersionError {
 impl Error for ParseVersionError {}
 
 impl ParseVersionError {
-    /// Create a new parse error
+    /// Creates a parse error for `text` and the violated grammar rule.
     pub fn new(text: impl Into<String>, kind: ParseVersionErrorKind) -> Self {
         Self {
             version: text.into(),
@@ -52,40 +53,41 @@ impl ParseVersionError {
     }
 }
 
-/// The type of parse error that occurred when parsing a version string.
+/// Identifies the [CEP 33](https://conda.org/learn/ceps/cep-0033) literal
+/// grammar rule that rejected an input string.
 #[derive(Debug, Eq, PartialEq, Clone, Error)]
 pub enum ParseVersionErrorKind {
-    /// The string was empty
+    /// The input contains no version components.
     #[error("empty string")]
     Empty,
-    /// The epoch was not an integer value
+    /// The epoch before `!` is not an unsigned integer.
     #[error("epoch is not a number")]
     EpochMustBeInteger(ParseIntError),
-    /// The string contained an invalid numeral
+    /// A numeric component does not fit in an unsigned integer.
     #[error("invalid number")]
     InvalidNumeral(ParseIntError),
-    /// The string contained an empty version component
+    /// Consecutive or misplaced separators produced an empty component.
     #[error("expected a version component e.g. `2` or `rc`")]
     EmptyVersionComponent,
-    /// Too many segments.
+    /// The input exceeds the maximum supported segment count.
     #[error("the version string contains too many version segments")]
     TooManySegments,
-    /// Too many segments.
+    /// One segment exceeds the maximum supported component count.
     #[error("there are too many components in a single segment")]
     TooManyComponentsInASegment,
-    /// Expected a version component
+    /// The parser expected a numeric or textual component.
     #[error("expected a version component e.g. `2` or `rc`")]
     ExpectedComponent,
-    /// Expected a segment separator
+    /// Components are not separated by `.`, `-`, or `_` as required.
     #[error("expected a '.', '-', or '_'")]
     ExpectedSegmentSeparator,
-    /// Cannot mix and match dashes and underscores
+    /// The version mixes `-` and `_` as segment separators.
     #[error("cannot use both underscores and dashes as version segment separators")]
     CannotMixAndMatchDashesAndUnderscores,
-    /// Expected the end of the string
+    /// The parser encountered trailing text after a valid version.
     #[error("encountered more characters but expected none")]
     ExpectedEof,
-    /// Nom error
+    /// The underlying parser rejected the input before it could identify a more specific rule.
     #[error("{0:?}")]
     Nom(ErrorKind),
 }
@@ -108,7 +110,7 @@ impl<'i> FromExternalError<&'i str, ParseVersionErrorKind> for ParseVersionError
 
 /// Parses the epoch part of a version. This is a number followed by `'!'` at the start of the
 /// version string.
-pub fn epoch_parser(input: &str) -> IResult<&str, u64, ParseVersionErrorKind> {
+pub(crate) fn epoch_parser(input: &str) -> IResult<&str, u64, ParseVersionErrorKind> {
     let (rest, digits) = terminated(digit1, char('!')).parse(input)?;
     let epoch = digits
         .parse()
@@ -359,7 +361,7 @@ fn version_part_parser<'i>(
     }
 }
 
-pub fn version_parser(input: &str) -> IResult<&str, Version, ParseVersionErrorKind> {
+pub(crate) fn version_parser(input: &str) -> IResult<&str, Version, ParseVersionErrorKind> {
     let mut components = SmallVec::default();
     let mut segments = SmallVec::default();
     let mut flags = Flags::default();
@@ -446,7 +448,7 @@ impl FromStr for StrictVersion {
     type Err = ParseVersionError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(StrictVersion(Version::from_str(s)?))
+        Ok(StrictVersion::from(Version::from_str(s)?))
     }
 }
 
@@ -519,7 +521,7 @@ mod test {
 
     /// Parse a large number of versions and see if parsing succeeded.
     /// TODO: This doesn't really verify that the parsing is correct. Maybe we can parse the version
-    /// with Conda too and verify that the results match?
+    /// with conda too and verify that the results match?
     #[test]
     fn test_parse_all() {
         let versions = std::fs::read_to_string(
