@@ -1,0 +1,89 @@
+---
+source: crates/rattler_conda_types/tests/matchspec_display_edge_cases.rs
+expression: cases.0
+---
+case      : foo[extras=[docs]]
+legacy    : foo[extras=[docs]]
+  reparse : same spec
+canonical : foo[extras=[docs]]
+  reparse : same spec, stable
+
+case      : foo[extras=[docs,tests]]
+legacy    : foo[extras=[docs, tests]]
+  reparse : same spec
+canonical : foo[extras=[docs,tests]]
+  reparse : same spec, stable
+
+case      : foo[flags=[cuda,mkl]]
+legacy    : foo[flags=[cuda, mkl]]
+  reparse : same spec
+canonical : foo[flags=[cuda,mkl]]
+  reparse : same spec, stable
+
+case      : foo[track_features="mkl debug"]
+legacy    : foo[track_features="mkl debug"]
+  reparse : same spec
+canonical : foo[track_features="mkl debug"]
+  reparse : same spec, stable
+
+case      : foo[track_features="mkl, debug"]
+legacy    : foo[track_features="mkl debug"]
+  reparse : same spec
+canonical : foo[track_features="mkl debug"]
+  reparse : same spec, stable
+
+case      : foo[track_features=[mkl,debug]]
+legacy    : foo[track_features="mkl debug"]
+  reparse : same spec
+canonical : foo[track_features="mkl debug"]
+  reparse : same spec, stable
+
+case      : extras = []
+legacy    : foo[extras=[]]
+  reparse : rejected: invalid bracket
+canonical : refused: extra '' cannot be represented in canonical MatchSpec syntax
+
+case      : extras = [""]
+legacy    : foo[extras=[""]]
+  reparse : rejected: invalid extras group name '': names must match the pattern [a-z0-9_.+-] and be between 1 and 64 characters long
+canonical : refused: extra '' cannot be represented in canonical MatchSpec syntax
+
+case      : extras = ["docs,tests"]
+legacy    : foo[extras=["docs,tests"]]
+  reparse : rejected: invalid extras group name 'docs,tests': names must match the pattern [a-z0-9_.+-] and be between 1 and 64 characters long
+canonical : refused: extra 'docs,tests' cannot be represented in canonical MatchSpec syntax
+
+case      : flags = [Exact("cuda*")]
+legacy    : foo[flags=[cuda*]]
+  reparse : differs, renders identically
+canonical : refused: flag matcher 'cuda*' cannot be represented in canonical MatchSpec syntax
+
+case      : flags = [Exact("")]
+legacy    : foo[flags=[""]]
+  reparse : rejected: invalid flag matcher:
+canonical : refused: flag matcher '' cannot be represented in canonical MatchSpec syntax
+
+case      : flags = [Exact("with space")]
+legacy    : foo[flags=["with space"]]
+  reparse : rejected: invalid flag matcher: with space
+canonical : refused: flag matcher 'with space' cannot be represented in canonical MatchSpec syntax
+
+case      : track_features = []
+legacy    : foo[track_features=""]
+  reparse : same spec
+canonical : refused: track feature '' cannot be represented in canonical MatchSpec syntax
+
+case      : track_features = [""]
+legacy    : foo[track_features=""]
+  reparse : differs, renders identically
+canonical : refused: track feature '' cannot be represented in canonical MatchSpec syntax
+
+case      : track_features = ["mkl debug"]
+legacy    : foo[track_features="mkl debug"]
+  reparse : differs, renders identically
+canonical : refused: track feature 'mkl debug' cannot be represented in canonical MatchSpec syntax
+
+case      : track_features = ["mkl,debug"]
+legacy    : foo[track_features="mkl,debug"]
+  reparse : DIVERGES: foo[track_features="mkl debug"]
+canonical : refused: track feature 'mkl,debug' cannot be represented in canonical MatchSpec syntax

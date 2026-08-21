@@ -1,0 +1,39 @@
+---
+source: crates/rattler_conda_types/tests/matchspec_display_edge_cases.rs
+expression: report
+---
+case      : 
+display   : *
+  reparse : differs, renders identically
+
+case      : *
+display   : *
+  reparse : same spec
+
+case      : >=1,<2
+display   : >=1,<2
+  reparse : same spec
+
+case      : >=1 py39h123_0
+display   : >=1 py39h123_0
+  reparse : same spec
+
+case      : [extras=[docs]]
+display   : [extras=[docs]]
+  reparse : same spec
+
+case      : [flags=[cuda]]
+display   : [flags=[cuda]]
+  reparse : same spec
+
+case      : [when="python >=3.11"]
+display   : [when="python>=3.11"]
+  reparse : same spec
+
+case      : [track_features="mkl"]
+display   : [track_features="mkl"]
+  reparse : same spec
+
+case      : [subdir="linux-64",license="BSD-3-Clause"]
+display   : [license="BSD-3-Clause", subdir="linux-64"]
+  reparse : same spec

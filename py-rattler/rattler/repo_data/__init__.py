@@ -12,6 +12,7 @@ from rattler.repo_data.gateway import (
     SourceConfig,
 )
 from rattler.repo_data.source import RepoDataSource
+from rattler.repo_data.revisions import RepodataRevisionMetadata
 
 __all__ = [
     "ChannelInfo",
@@ -29,4 +30,5 @@ __all__ = [
     "SourceConfig",
     "PackageFormatSelection",
     "RepoDataSource",
+    "RepodataRevisionMetadata",
 ]

@@ -12,6 +12,7 @@ export declare type PackageRecordJson = {
     arch?: Arch;
     constrains?: string[];
     depends?: string[];
+    extra_depends?: Record<string, string[]>;
     features?: string;
     flags?: string[];
     license?: string;

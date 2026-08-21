@@ -4,10 +4,10 @@ use pyo3::PyErr;
 use pyo3::exceptions::PyValueError;
 use rattler::install::TransactionError;
 use rattler_conda_types::{
-    ConvertSubdirError, InvalidPackageNameError, PackageNameMatcherParseError, ParseArchError,
-    ParseChannelError, ParseMatchSpecError, ParsePlatformError, ParseVersionError,
-    ValidatePackageRecordsError, VersionBumpError, VersionExtendError,
-    version_spec::ParseVersionSpecError,
+    CanonicalMatchSpecError, ConvertSubdirError, InvalidPackageNameError,
+    PackageNameMatcherParseError, ParseArchError, ParseChannelError, ParseMatchSpecError,
+    ParsePlatformError, ParseVersionError, ValidatePackageRecordsError, VersionBumpError,
+    VersionExtendError, version_spec::ParseVersionSpecError,
 };
 use rattler_lock::{ConversionError, ParseCondaLockError};
 use rattler_networking::authentication_storage::AuthenticationStorageError;
@@ -27,6 +27,8 @@ pub enum PyRattlerError {
     InvalidVersionSpec(#[from] ParseVersionSpecError),
     #[error(transparent)]
     InvalidMatchSpec(#[from] ParseMatchSpecError),
+    #[error(transparent)]
+    CanonicalMatchSpec(#[from] CanonicalMatchSpecError),
     #[error(transparent)]
     InvalidPackageName(#[from] InvalidPackageNameError),
     #[error(transparent)]
@@ -117,6 +119,9 @@ impl From<PyRattlerError> for PyErr {
             }
             PyRattlerError::InvalidMatchSpec(err) => {
                 crate::exceptions::InvalidMatchSpecError::new_err(pretty_print_error(&err))
+            }
+            PyRattlerError::CanonicalMatchSpec(err) => {
+                crate::exceptions::CanonicalMatchSpecError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::InvalidPackageName(err) => {
                 crate::exceptions::InvalidPackageNameError::new_err(pretty_print_error(&err))
