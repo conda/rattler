@@ -13,6 +13,7 @@ readme.workspace = true
 
 [features]
 default = ["rayon"]
+experimental-virtual-package-plugins = []
 
 [package.metadata.docs.rs]
 all-features = true
