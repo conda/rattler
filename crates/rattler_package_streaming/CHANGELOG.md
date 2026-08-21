@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.2](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.1...rattler_package_streaming-v0.27.2) - 2026-08-21
+
+### Fixed
+
+- recover merged CEP 146 PRs (#2674, #2673, #2670)
+
 ## [0.27.1](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.0...rattler_package_streaming-v0.27.1) - 2026-08-15
 
 ### Other

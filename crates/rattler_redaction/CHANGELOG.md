@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3](https://github.com/conda/rattler/compare/rattler_redaction-v0.2.2...rattler_redaction-v0.2.3) - 2026-08-21
+
+### Fixed
+
+- recover merged CEP 146 PRs (#2674, #2673, #2670)
+
 ## [0.2.2](https://github.com/conda/rattler/compare/rattler_redaction-v0.2.1...rattler_redaction-v0.2.2) - 2026-07-14
 
 ### Other
