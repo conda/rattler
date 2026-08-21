@@ -11,7 +11,7 @@ use resolvo::{
 };
 
 use super::{NameType, SolverMatchSpec, SolverPackageRecord};
-use crate::{ChannelPriority, resolvo::CondaDependencyProvider};
+use crate::{CancellationToken, ChannelPriority, resolvo::CondaDependencyProvider};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(super) enum CompareStrategy {
@@ -152,8 +152,41 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             // Take the sub list of solvables
             let sub = &mut solvables[start..end];
             if sub.len() > 1 {
-                // Sort the sub list of solvables by the highest version of the dependencies
-                self.sort_subset_by_highest_dependency_versions(sub, version_cache);
+                let cache_hit = {
+                    let cache = self.solver.provider().dependency_tiebreak_cache.borrow();
+                    if let Some(cached) = cache.entries.get(sub) {
+                        sub.copy_from_slice(cached);
+                        true
+                    } else {
+                        false
+                    }
+                };
+
+                if !cache_hit {
+                    let stored_candidate_ids = sub.len().saturating_mul(2);
+                    let cache_key = {
+                        let cache = self.solver.provider().dependency_tiebreak_cache.borrow();
+                        (cache
+                            .stored_candidate_ids
+                            .saturating_add(stored_candidate_ids)
+                            <= super::DEPENDENCY_TIEBREAK_CACHE_CANDIDATE_LIMIT)
+                            .then(|| sub.to_vec())
+                    };
+
+                    // Sort the sub list of solvables by the highest version of the dependencies.
+                    let completed =
+                        self.sort_subset_by_highest_dependency_versions(sub, version_cache);
+
+                    if completed && let Some(cache_key) = cache_key {
+                        let mut cache = self
+                            .solver
+                            .provider()
+                            .dependency_tiebreak_cache
+                            .borrow_mut();
+                        cache.stored_candidate_ids += stored_candidate_ids;
+                        cache.entries.insert(cache_key, sub.to_vec());
+                    }
+                }
             }
 
             start = end;
@@ -175,7 +208,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         &self,
         solvables: &mut [SolvableId],
         version_cache: &mut HashMap<VersionSetId, Option<(Version, bool)>>,
-    ) {
+    ) -> bool {
         // Get the dependencies for each solvable
         let dependencies = solvables
             .iter()
@@ -191,7 +224,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         let dependencies = match dependencies {
             Ok(dependencies) => dependencies,
             // Solver cancellation, lets just return
-            Err(_) => return,
+            Err(_) => return false,
         };
 
         // Get the known dependencies for each solvable. Solvables with unknown
@@ -216,7 +249,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                     continue;
                 }
                 // Solver cancellation, lets just return
-                Err(_) => return,
+                Err(_) => return false,
             };
 
             for requirement in &known.requirements {
@@ -342,6 +375,15 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             let b_record = self.solvable_record(*b);
             b_record.timestamp().cmp(&a_record.timestamp())
         });
+
+        // Candidate matching reports cancellation as no matching version. Do not
+        // retain the resulting partial/timestamp-biased ordering in that case.
+        !self
+            .solver
+            .provider()
+            .cancellation_token
+            .as_ref()
+            .is_some_and(CancellationToken::is_cancelled)
     }
 }
 
