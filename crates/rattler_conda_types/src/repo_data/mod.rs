@@ -183,7 +183,7 @@ pub struct RepodataRevisionSelection {
 /// A repodata revision.
 ///
 /// Legacy repodata predates numbered layouts and uses the `packages` and
-/// `packages.conda` maps. CEP 146 adds the v3 layout. Other numeric values are
+/// `packages.conda` maps. CEP 48 adds the v3 layout. Other numeric values are
 /// preserved so readers can report future revisions without interpreting them.
 #[derive(Debug, Default, Eq, PartialEq, Clone, Copy, Hash, Ord, PartialOrd)]
 pub enum RepodataRevision {
