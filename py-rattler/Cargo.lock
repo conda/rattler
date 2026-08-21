@@ -3405,7 +3405,7 @@ dependencies = [
 
 [[package]]
 name = "path_resolver"
-version = "0.2.12"
+version = "0.2.13"
 dependencies = [
  "ahash",
  "fs-err",
@@ -3967,7 +3967,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.48.3"
+version = "0.48.4"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -4014,7 +4014,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.10.6"
+version = "0.10.7"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4047,7 +4047,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.50.0"
+version = "0.51.0"
 dependencies = [
  "ahash",
  "core-foundation 0.10.1",
@@ -4087,7 +4087,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "dirs",
  "fs-err",
@@ -4122,7 +4122,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.31.1"
+version = "0.31.2"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4160,7 +4160,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.32.2"
+version = "0.32.3"
 dependencies = [
  "ahash",
  "file_url",
@@ -4195,7 +4195,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.74"
+version = "0.2.75"
 dependencies = [
  "configparser",
  "dirs",
@@ -4224,7 +4224,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.30.5"
+version = "0.30.6"
 dependencies = [
  "ambient-id",
  "anyhow",
@@ -4262,7 +4262,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.27.1"
+version = "0.27.2"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-tokio-tar",
@@ -4312,7 +4312,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_redaction"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "astral-reqwest-middleware",
  "reqwest",
@@ -4321,7 +4321,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.32.1"
+version = "0.33.0"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4388,7 +4388,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4404,7 +4404,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.27.14"
+version = "0.27.15"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4423,7 +4423,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "9.0.2"
+version = "9.0.3"
 dependencies = [
  "futures",
  "hex",
@@ -4441,7 +4441,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "5.0.1"
+version = "5.1.0"
 dependencies = [
  "archspec",
  "libloading",

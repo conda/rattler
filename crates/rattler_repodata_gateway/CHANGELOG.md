@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.32.1...rattler_repodata_gateway-v0.33.0) - 2026-08-21
+
+### Added
+
+- *(js)* support custom fetch and record queries in the gateway ([#2687](https://github.com/conda/rattler/pull/2687))
+- Accept sparse repodata in solve ([#2627](https://github.com/conda/rattler/pull/2627))
+- *(py)* expose pip injection for solve APIs ([#2677](https://github.com/conda/rattler/pull/2677))
+- add the CEP 146 repodata wire model ([#2669](https://github.com/conda/rattler/pull/2669))
+
 ## [0.32.1](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.32.0...rattler_repodata_gateway-v0.32.1) - 2026-08-15
 
 ### Fixed

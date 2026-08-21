@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.75](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.74...rattler_menuinst-v0.2.75) - 2026-08-21
+
+### Other
+
+- *(ci)* Pin dependencies ([#2691](https://github.com/conda/rattler/pull/2691))
+
 ## [0.2.74](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.73...rattler_menuinst-v0.2.74) - 2026-08-15
 
 ### Other

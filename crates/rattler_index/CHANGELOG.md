@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.2](https://github.com/conda/rattler/compare/rattler_index-v0.31.1...rattler_index-v0.31.2) - 2026-08-21
+
+### Added
+
+- add the CEP 146 repodata wire model ([#2669](https://github.com/conda/rattler/pull/2669))
+
+### Fixed
+
+- resolve build backends from conda-forge without a version pin ([#2689](https://github.com/conda/rattler/pull/2689))
+
 ## [0.31.1](https://github.com/conda/rattler/compare/rattler_index-v0.31.0...rattler_index-v0.31.1) - 2026-08-15
 
 ### Other

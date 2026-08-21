@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.51.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.50.0...rattler_conda_types-v0.51.0) - 2026-08-21
+
+### Added
+
+- add the CEP 146 repodata wire model ([#2669](https://github.com/conda/rattler/pull/2669))
+
+### Fixed
+
+- recover merged CEP 146 PRs (#2674, #2673, #2670)
+
 ## [0.50.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.49.1...rattler_conda_types-v0.50.0) - 2026-08-15
 
 ### Added

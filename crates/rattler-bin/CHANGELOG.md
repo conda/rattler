@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.10](https://github.com/conda/rattler/compare/rattler-bin-v0.2.9...rattler-bin-v0.2.10) - 2026-08-21
+
+### Fixed
+
+- resolve build backends from conda-forge without a version pin ([#2689](https://github.com/conda/rattler/pull/2689))
+
 ## [0.2.9](https://github.com/conda/rattler/compare/rattler-bin-v0.2.8...rattler-bin-v0.2.9) - 2026-08-15
 
 ### Other
