@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.1](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.33.0...rattler_repodata_gateway-v0.33.1) - 2026-08-21
+
+### Other
+
+- rename CEP 146 to CEP 48 ([#2717](https://github.com/conda/rattler/pull/2717))
+
 ## [0.33.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.32.1...rattler_repodata_gateway-v0.33.0) - 2026-08-21
 
 ### Added
