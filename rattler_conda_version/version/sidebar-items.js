@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Component","ParseVersionErrorKind","VersionBumpError","VersionBumpType","VersionExtendError","VersionToSemverError"],"struct":["ParseVersionError","SegmentIter","StrictVersion","Version","VersionWithSource"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["EqualityOperator","LogicalOperator","ParseConstraintError","ParseVersionSpecError","RangeOperator","StrictRangeOperator","VersionOperators","VersionSpec"]};
