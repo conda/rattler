@@ -6,14 +6,14 @@ use rattler_conda_types::{Channel, Platform};
 use crate::{
     GatewayError, Reporter, SourceConfig,
     fetch::FetchRepoDataError,
-    gateway,
     gateway::{
-        GatewayInner,
+        self, GatewayInner,
         error::SubdirNotFoundError,
         local_subdir::LocalSubdirClient,
         remote_subdir, sharded_subdir,
         subdir::{Subdir, SubdirData},
     },
+    sparse::PackageFormatSelection,
 };
 
 /// Builder for creating a `Subdir` instance.
@@ -22,6 +22,7 @@ pub struct SubdirBuilder<'g> {
     platform: Platform,
     reporter: Option<Arc<dyn Reporter>>,
     gateway: &'g GatewayInner,
+    package_format_selection: PackageFormatSelection,
 }
 
 impl<'g> SubdirBuilder<'g> {
@@ -30,12 +31,14 @@ impl<'g> SubdirBuilder<'g> {
         channel: Channel,
         platform: Platform,
         reporter: Option<Arc<dyn Reporter>>,
+        package_format_selection: PackageFormatSelection,
     ) -> Self {
         Self {
             channel,
             platform,
             reporter,
             gateway,
+            package_format_selection,
         }
     }
 
@@ -137,6 +140,8 @@ impl<'g> SubdirBuilder<'g> {
             self.gateway.cache.clone(),
             source_config.clone(),
             self.reporter.clone(),
+            #[cfg(not(target_arch = "wasm32"))]
+            Some(self.package_format_selection),
         )
         .await?;
         Ok(SubdirData::from_client(client))
@@ -172,9 +177,16 @@ impl<'g> SubdirBuilder<'g> {
     async fn build_local(&self, path: &Path) -> Result<SubdirData, GatewayError> {
         let channel = self.channel.clone();
         let platform = self.platform;
+        let package_format_selection = self.package_format_selection;
         let path = path.join("repodata.json");
-        let build_client =
-            move || LocalSubdirClient::from_file(&path, channel.clone(), platform.as_str());
+        let build_client = move || {
+            LocalSubdirClient::from_file(
+                &path,
+                channel.clone(),
+                platform.as_str(),
+                package_format_selection,
+            )
+        };
 
         #[cfg(target_arch = "wasm32")]
         let client = build_client()?;

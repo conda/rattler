@@ -14,6 +14,7 @@ from rattler.platform.platform import Platform, PlatformLiteral
 from rattler.rattler import PyChannelNotice, PyGateway, PyMatchSpec, PySourceConfig
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.repo_data import ChannelRelations
+from rattler.repo_data.sparse import PackageFormatSelection, SparseRepoData
 
 if TYPE_CHECKING:
     from rattler.repo_data.source import RepoDataSource
@@ -54,19 +55,21 @@ class _RepoDataSourceAdapter:
     def __init__(self, source: RepoDataSource) -> None:
         self._source = source
 
-    async def fetch_package_records(self, py_platform: Any, py_name: Any) -> List[RepoDataRecord]:
+    async def fetch_package_records(self, py_platform: Any, py_name: Any, py_format: Any) -> List[RepoDataRecord]:
         """Convert FFI types and delegate to the wrapped source."""
         # Wrap raw FFI types in Python wrapper classes
         platform = Platform._from_py_platform(py_platform)
         name = PackageName._from_py_package_name(py_name)
+        package_format_selection = PackageFormatSelection(py_format)
 
         # Call the user's implementation with proper Python types
-        return await self._source.fetch_package_records(platform, name)
+        return await self._source.fetch_package_records(platform, name, package_format_selection)
 
-    def package_names(self, py_platform: Any) -> List[str]:
+    def package_names(self, py_platform: Any, py_format: Any) -> List[str]:
         """Convert FFI types and delegate to the wrapped source."""
         platform = Platform._from_py_platform(py_platform)
-        return self._source.package_names(platform)
+        package_format_selection = PackageFormatSelection(py_format)
+        return self._source.package_names(platform, package_format_selection)
 
 
 @dataclass
@@ -237,13 +240,14 @@ class Gateway:
 
     async def query(
         self,
-        sources: Iterable[Union[Channel, str, RepoDataSource]],
+        sources: Iterable[Union[Channel, str, SparseRepoData, RepoDataSource]],
         platforms: Iterable[Platform | PlatformLiteral],
         specs: Iterable[MatchSpec | PackageName | str],
         recursive: bool = True,
         channel_relations: Optional[ChannelRelationsMode] = None,
         channel_relations_max_depth: Optional[int] = None,
         channel_notices: bool = False,
+        package_format_selection: Optional[PackageFormatSelection] = None,
     ) -> GatewayQueryResult:
         """Queries the gateway for repodata from channels and custom sources.
 
@@ -279,6 +283,7 @@ class Gateway:
                                          default (10). ``0`` behaves like
                                          ``channel_relations="disabled"``.
             channel_notices: Whether to fetch CEP-6 notices for this query.
+            package_format_selection: Defines which package formats are selected.
 
         Returns:
             A list of lists of `RepoDataRecord`s. The outer list contains one entry per
@@ -314,6 +319,7 @@ class Gateway:
             channel_notices=channel_notices,
             channel_relations=channel_relations,
             channel_relations_max_depth=channel_relations_max_depth,
+            package_format_selection=package_format_selection.value if package_format_selection is not None else None,
         )
 
         # Convert the records and notices into Python objects.
@@ -324,11 +330,12 @@ class Gateway:
 
     async def names(
         self,
-        sources: Iterable[Union[Channel, str, RepoDataSource]],
+        sources: Iterable[Union[Channel, str, SparseRepoData, RepoDataSource]],
         platforms: Iterable[Platform | PlatformLiteral],
         channel_relations: Optional[ChannelRelationsMode] = None,
         channel_relations_max_depth: Optional[int] = None,
         channel_notices: bool = False,
+        package_format_selection: Optional[PackageFormatSelection] = None,
     ) -> GatewayNamesResult:
         """Queries all the names of packages in channels or custom sources.
 
@@ -342,6 +349,8 @@ class Gateway:
                                          ``channel_relations``. ``None`` uses the
                                          default (10).
             channel_notices: Whether to fetch CEP-6 notices for this query.
+            package_format_selection: Defines which package formats are selected when
+                                       listing names from custom `RepoDataSource` instances.
 
         Returns:
             A list of package names that are present in the given subdirectories.
@@ -367,6 +376,7 @@ class Gateway:
             channel_notices=channel_notices,
             channel_relations=channel_relations,
             channel_relations_max_depth=channel_relations_max_depth,
+            package_format_selection=package_format_selection.value if package_format_selection is not None else None,
         )
 
         # Convert the names and notices into Python objects.

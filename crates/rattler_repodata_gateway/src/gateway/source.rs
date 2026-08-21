@@ -8,7 +8,10 @@ use super::{
     GatewayError,
     subdir::{PackageRecords, SubdirClient, extract_unique_deps_split},
 };
-use crate::{Reporter, sparse::SparseRepoData};
+use crate::{
+    Reporter,
+    sparse::{PackageFormatSelection, SparseRepoData},
+};
 
 /// A source of repodata records for a specific subdirectory.
 ///
@@ -27,13 +30,18 @@ pub trait RepoDataSource: Send + Sync {
         &self,
         platform: Platform,
         name: &PackageName,
+        package_format_selection: PackageFormatSelection,
     ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError>;
 
     /// Return all available package names for the given platform.
     ///
     /// This is used by the gateway to know which packages are available
     /// in this source for a given platform/subdirectory.
-    fn package_names(&self, platform: Platform) -> Vec<String>;
+    fn package_names(
+        &self,
+        platform: Platform,
+        package_format_selection: PackageFormatSelection,
+    ) -> Vec<String>;
 }
 
 /// A source of repodata, either a channel or a custom source.
@@ -85,12 +93,21 @@ impl From<Vec<Arc<SparseRepoData>>> for Source {
 pub(super) struct CustomSourceClient {
     source: Arc<dyn RepoDataSource>,
     platform: Platform,
+    package_format_selection: PackageFormatSelection,
 }
 
 impl CustomSourceClient {
     /// Create a new adapter for the given source and platform.
-    pub fn new(source: Arc<dyn RepoDataSource>, platform: Platform) -> Self {
-        Self { source, platform }
+    pub fn new(
+        source: Arc<dyn RepoDataSource>,
+        platform: Platform,
+        package_format_selection: PackageFormatSelection,
+    ) -> Self {
+        Self {
+            source,
+            platform,
+            package_format_selection,
+        }
     }
 }
 
@@ -104,7 +121,7 @@ impl SubdirClient for CustomSourceClient {
     ) -> Result<PackageRecords, GatewayError> {
         let records = self
             .source
-            .fetch_package_records(self.platform, name)
+            .fetch_package_records(self.platform, name, self.package_format_selection)
             .await?;
         let (unique_base_deps, unique_extra_deps) =
             extract_unique_deps_split(records.iter().map(|r| &**r));
@@ -116,6 +133,7 @@ impl SubdirClient for CustomSourceClient {
     }
 
     fn package_names(&self) -> Vec<String> {
-        self.source.package_names(self.platform)
+        self.source
+            .package_names(self.platform, self.package_format_selection)
     }
 }

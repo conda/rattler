@@ -19,7 +19,7 @@ use super::{
     source::{CustomSourceClient, Source},
     subdir::{PackageRecords, Subdir, SubdirData, extract_unique_deps_split},
 };
-use crate::Reporter;
+use crate::{Reporter, sparse::PackageFormatSelection};
 
 type RecordPatch = dyn Fn(&RepoDataRecord) -> Option<RepoDataRecord> + Send + Sync;
 
@@ -153,6 +153,9 @@ pub struct RepoDataQuery {
 
     /// Maximum recursion depth when following CEP-42 `channel_relations`.
     channel_relations_max_depth: usize,
+
+    /// Defines which package formats are selected.
+    package_format_selection: PackageFormatSelection,
 }
 
 /// Tracks whether specs came from user input or transitive dependencies.
@@ -247,6 +250,7 @@ impl RepoDataQuery {
             channel_notices: false,
             channel_relations_mode: ChannelRelationsMode::default(),
             channel_relations_max_depth: DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
+            package_format_selection: PackageFormatSelection::default(),
         }
     }
 
@@ -310,6 +314,15 @@ impl RepoDataQuery {
         }
     }
 
+    /// Defines which package formats are selected.
+    #[must_use]
+    pub fn package_format_selection(self, package_format: PackageFormatSelection) -> Self {
+        Self {
+            package_format_selection: package_format,
+            ..self
+        }
+    }
+
     /// Sets the reporter to use for this query.
     ///
     /// The reporter is notified of important evens during the execution of the
@@ -342,6 +355,7 @@ struct QueryExecutor {
     recursive: bool,
     record_patch: Option<Arc<RecordPatch>>,
     reporter: Option<Arc<dyn Reporter>>,
+    package_format_selection: PackageFormatSelection,
 
     // Specs categorized at construction
     direct_url_specs: Vec<DirectUrlSpec>,
@@ -452,6 +466,7 @@ impl QueryExecutor {
             channel_notices,
             channel_relations_mode,
             channel_relations_max_depth,
+            package_format_selection,
         } = query;
 
         let mut seen = hashbrown::HashMap::with_hasher(ahash::RandomState::new());
@@ -547,11 +562,16 @@ impl QueryExecutor {
                             reporter.clone(),
                             barrier.clone(),
                             FetchErrorPolicy::Propagate,
+                            package_format_selection,
                         );
                         (kind, fut)
                     }
                     Source::Custom(custom_source) => {
-                        let client = CustomSourceClient::new(custom_source, platform);
+                        let client = CustomSourceClient::new(
+                            custom_source,
+                            platform,
+                            package_format_selection,
+                        );
                         let subdir = Arc::new(Subdir::Found(SubdirData::from_client(client)));
                         let b = barrier.clone();
                         let fut = box_future(async move {
@@ -583,7 +603,7 @@ impl QueryExecutor {
                         };
                         let subdir = match matching {
                             Some(sparse) => Arc::new(Subdir::Found(SubdirData::from_client(
-                                LocalSubdirClient::new(sparse),
+                                LocalSubdirClient::new(sparse, package_format_selection),
                             ))),
                             None => Arc::new(Subdir::NotFound),
                         };
@@ -615,6 +635,7 @@ impl QueryExecutor {
             recursive,
             record_patch,
             reporter,
+            package_format_selection,
             direct_url_specs,
             direct_url_result,
             pending_pattern_specs,
@@ -1078,6 +1099,7 @@ impl QueryExecutor {
             self.reporter.clone(),
             barrier.clone(),
             policy,
+            self.package_format_selection,
         );
         self.pending_subdirs.push(fut);
 
@@ -1210,6 +1232,7 @@ enum FetchErrorPolicy {
 /// applies `policy` to any fetch error. Used by `RepoDataQuery`'s
 /// executor; `NamesQuery` uses the simpler [`spawn_names_fetch`]
 /// wrapper around the same [`fetch_subdir_with_policy`] core.
+#[allow(clippy::too_many_arguments)]
 fn build_channel_subdir_future(
     gateway: Arc<GatewayInner>,
     channel: Arc<Channel>,
@@ -1218,10 +1241,19 @@ fn build_channel_subdir_future(
     reporter: Option<Arc<dyn Reporter>>,
     barrier: Arc<BarrierCell<Arc<Subdir>>>,
     policy: FetchErrorPolicy,
+    package_format_selection: PackageFormatSelection,
 ) -> BoxFuture<PendingSubdirResult> {
     box_future(async move {
-        let (subdir, warning) =
-            fetch_subdir_with_policy(&gateway, &channel, platform, &url, reporter, policy).await?;
+        let (subdir, warning) = fetch_subdir_with_policy(
+            &gateway,
+            &channel,
+            platform,
+            &url,
+            reporter,
+            policy,
+            package_format_selection,
+        )
+        .await?;
         barrier.set(subdir.clone()).expect("subdir was set twice");
         Ok(PendingSubdirOk {
             subdir,
@@ -1243,9 +1275,10 @@ async fn fetch_subdir_with_policy(
     url: &ChannelUrl,
     reporter: Option<Arc<dyn Reporter>>,
     policy: FetchErrorPolicy,
+    package_format_selection: PackageFormatSelection,
 ) -> Result<(Arc<Subdir>, Option<ChannelRelationsWarning>), GatewayError> {
     match gateway
-        .get_or_create_subdir(channel, platform, reporter)
+        .get_or_create_subdir(channel, platform, reporter, package_format_selection)
         .await
     {
         Ok(subdir) => Ok((subdir, None)),
@@ -1558,8 +1591,16 @@ fn spawn_names_fetch(
     policy: FetchErrorPolicy,
 ) -> BoxFuture<NamesFetchResult> {
     box_future(async move {
-        let (subdir, warning) =
-            fetch_subdir_with_policy(&gateway, &channel, platform, &url, reporter, policy).await?;
+        let (subdir, warning) = fetch_subdir_with_policy(
+            &gateway,
+            &channel,
+            platform,
+            &url,
+            reporter,
+            policy,
+            PackageFormatSelection::default(),
+        )
+        .await?;
         Ok((url, platform, subdir, warning))
     })
 }

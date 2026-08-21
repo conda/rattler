@@ -12,6 +12,7 @@ use crate::{
     gateway::{
         GatewayError, SourceConfig, error::SubdirNotFoundError, local_subdir::LocalSubdirClient,
     },
+    sparse::PackageFormatSelection,
     utils::js_fetch::JsFetcher,
 };
 
@@ -53,8 +54,12 @@ impl RemoteSubdirClient {
 
         // Create a new sparse repodata client that can be used to read records from the
         // repodata.
-        let sparse =
-            LocalSubdirClient::from_bytes(repodata_bytes, channel.clone(), platform.as_str())?;
+        let sparse = LocalSubdirClient::from_bytes(
+            repodata_bytes,
+            channel.clone(),
+            platform.as_str(),
+            PackageFormatSelection::default(),
+        )?;
 
         Ok(Self { sparse })
     }
