@@ -375,120 +375,165 @@ impl VirtualPackages {
         let virtual_packages = Self::detect(overrides, cache_dir)?;
         if platform == Platform::current() {
             // If we're targeting the current platform, just return the detected packages
-            Ok(virtual_packages)
-        } else {
-            // When cross-compiling, respect overrides but fall back to defaults
-            let win = if platform.is_windows() {
-                // Check override first, fall back to the default version
-                virtual_packages.win.or_else(|| {
-                    let version = defaults::default_windows_version();
-                    log_default_virtual_package(
-                        "__win",
-                        platform,
-                        &version,
-                        Windows::DEFAULT_ENV_NAME,
-                    );
-                    Some(Windows {
-                        version: Some(version),
-                    })
-                })
-            } else {
-                None
-            };
+            return Ok(virtual_packages);
+        }
 
-            let linux = if platform.is_linux() {
+        // When cross-compiling, a detected or overridden value wins; anything the
+        // host could not speak for falls back to what the platform is assumed to
+        // provide.
+        let Self {
+            win: baseline_win,
+            unix: baseline_unix,
+            linux: baseline_linux,
+            osx: baseline_osx,
+            ios: baseline_ios,
+            android: baseline_android,
+            libc: baseline_libc,
+            cuda: _,
+            cuda_arch: _,
+            archspec: baseline_archspec,
+        } = Self::baseline_for_platform(platform);
+
+        // A slot only survives if the *target* can carry it: this machine's
+        // `__linux` says nothing about a `win-64` target.
+        let win = platform
+            .is_windows()
+            .then(|| {
+                virtual_packages.win.or_else(|| {
+                    let win = baseline_win?;
+                    if let Some(version) = win.version.as_ref() {
+                        log_default_virtual_package(
+                            "__win",
+                            platform,
+                            version,
+                            Windows::DEFAULT_ENV_NAME,
+                        );
+                    }
+                    Some(win)
+                })
+            })
+            .flatten();
+
+        let linux = platform
+            .is_linux()
+            .then(|| {
                 virtual_packages.linux.or_else(|| {
-                    let version = defaults::default_linux_version();
+                    let linux = baseline_linux?;
                     log_default_virtual_package(
                         "__linux",
                         platform,
-                        &version,
+                        &linux.version,
                         Linux::DEFAULT_ENV_NAME,
                     );
-                    Some(Linux { version })
+                    Some(linux)
                 })
-            } else {
-                None
-            };
+            })
+            .flatten();
 
-            let osx = if platform.is_osx() {
-                // Check override first, fall back to the default version
+        let osx = platform
+            .is_osx()
+            .then(|| {
                 virtual_packages.osx.or_else(|| {
-                    defaults::default_mac_os_version(platform).map(|version| {
-                        log_default_virtual_package(
-                            "__osx",
-                            platform,
-                            &version,
-                            Osx::DEFAULT_ENV_NAME,
-                        );
-                        Osx { version }
-                    })
+                    let osx = baseline_osx?;
+                    log_default_virtual_package(
+                        "__osx",
+                        platform,
+                        &osx.version,
+                        Osx::DEFAULT_ENV_NAME,
+                    );
+                    Some(osx)
                 })
-            } else {
-                None
-            };
+            })
+            .flatten();
 
-            let ios = if platform.is_ios() {
-                // Check override first, fall back to version 0
-                virtual_packages.ios.or_else(|| {
-                    Some(Ios {
-                        version: Version::major(0),
-                    })
-                })
-            } else {
-                None
-            };
-
-            let android = if platform.is_android() {
-                // Check override first, fall back to version 0
-                virtual_packages.android.or_else(|| {
-                    Some(Android {
-                        version: Version::major(0),
-                    })
-                })
-            } else {
-                None
-            };
-
-            let libc = if platform.is_linux() {
-                // Check override first, fall back to the default glibc version
+        let libc = platform
+            .is_linux()
+            .then(|| {
                 virtual_packages.libc.or_else(|| {
-                    let version = defaults::default_glibc_version();
+                    let libc = baseline_libc?;
                     log_default_virtual_package(
                         "__glibc",
                         platform,
-                        &version,
+                        &libc.version,
                         LibC::DEFAULT_ENV_NAME,
                     );
-                    Some(LibC {
-                        family: "glibc".into(),
-                        version,
-                    })
+                    Some(libc)
                 })
-            } else {
-                None
-            };
-
-            let archspec = Archspec::detect_with_fallback(
-                overrides
-                    .archspec
-                    .as_ref()
-                    .unwrap_or(&Override::DefaultEnvVar),
-                || Ok(Archspec::from_platform(platform)),
-            )?;
-
-            Ok(Self {
-                win,
-                unix: platform.is_unix(),
-                linux,
-                osx,
-                ios,
-                android,
-                libc,
-                cuda: virtual_packages.cuda,
-                cuda_arch: virtual_packages.cuda_arch,
-                archspec,
             })
+            .flatten();
+
+        let archspec = Archspec::detect_with_fallback(
+            overrides
+                .archspec
+                .as_ref()
+                .unwrap_or(&Override::DefaultEnvVar),
+            || Ok(baseline_archspec),
+        )?;
+
+        Ok(Self {
+            win,
+            unix: baseline_unix,
+            linux,
+            osx,
+            ios: platform
+                .is_ios()
+                .then(|| virtual_packages.ios.or(baseline_ios))
+                .flatten(),
+            android: platform
+                .is_android()
+                .then(|| virtual_packages.android.or(baseline_android))
+                .flatten(),
+            libc,
+            cuda: virtual_packages.cuda,
+            cuda_arch: virtual_packages.cuda_arch,
+            archspec,
+        })
+    }
+
+    /// The virtual packages `platform` is assumed to provide, without probing
+    /// this machine or reading any environment variable.
+    ///
+    /// Every slot a platform carries at all is filled with the value conda
+    /// assumes for it, and every slot it cannot carry is left empty: a
+    /// `win-64` baseline has no `__linux`, `__osx` or `__glibc`, and a
+    /// `linux-64` baseline has no `__win`. `__cuda` and `__cuda_arch` are
+    /// never part of a baseline - no platform is assumed to have a GPU - even
+    /// though both are valid on any platform once something detects or
+    /// declares them.
+    ///
+    /// This is what [`VirtualPackages::detect_for_platform`] falls back to per
+    /// slot when it cross-compiles, exposed on its own for callers that want
+    /// the assumption rather than a reading: describing a target this machine
+    /// cannot run, or comparing a recorded set against what a platform is
+    /// supposed to look like.
+    ///
+    /// See the [`defaults`] module for the individual versions.
+    pub fn baseline_for_platform(platform: Platform) -> Self {
+        Self {
+            win: platform.is_windows().then(|| Windows {
+                version: Some(defaults::default_windows_version()),
+            }),
+            unix: platform.is_unix(),
+            linux: platform.is_linux().then(|| Linux {
+                version: defaults::default_linux_version(),
+            }),
+            osx: platform
+                .is_osx()
+                .then(|| defaults::default_mac_os_version(platform).map(|version| Osx { version }))
+                .flatten(),
+            ios: platform.is_ios().then(|| Ios {
+                version: Version::major(0),
+            }),
+            android: platform.is_android().then(|| Android {
+                version: Version::major(0),
+            }),
+            libc: platform.is_linux().then(|| LibC {
+                family: "glibc".into(),
+                version: defaults::default_glibc_version(),
+            }),
+            cuda: None,
+            cuda_arch: None,
+            archspec: Archspec::from_platform(platform),
         }
     }
 }
@@ -1552,6 +1597,94 @@ mod test {
         assert!(win_names.contains(&"__win".to_string()));
         assert!(!win_names.contains(&"__unix".to_string()));
         assert!(win_names.contains(&"__archspec".to_string()));
+    }
+
+    #[test]
+    fn baseline_only_fills_slots_the_platform_carries() {
+        let linux = VirtualPackages::baseline_for_platform(Platform::Linux64);
+        assert!(linux.linux.is_some());
+        assert!(linux.libc.is_some());
+        assert!(linux.unix);
+        assert!(linux.win.is_none());
+        assert!(linux.osx.is_none());
+
+        let win = VirtualPackages::baseline_for_platform(Platform::Win64);
+        assert!(win.win.is_some());
+        assert!(!win.unix);
+        assert!(win.linux.is_none());
+        assert!(win.libc.is_none());
+        assert!(win.osx.is_none());
+
+        let osx = VirtualPackages::baseline_for_platform(Platform::OsxArm64);
+        assert!(osx.osx.is_some());
+        assert!(osx.unix);
+        assert!(osx.linux.is_none());
+        assert!(osx.libc.is_none());
+        assert!(osx.win.is_none());
+    }
+
+    #[test]
+    fn baseline_assumes_no_gpu() {
+        // Both CUDA slots are valid on any platform, but nothing is assumed to
+        // have a GPU -- they only appear once something detects or declares them.
+        for platform in [Platform::Linux64, Platform::Win64, Platform::OsxArm64] {
+            let baseline = VirtualPackages::baseline_for_platform(platform);
+            assert!(baseline.cuda.is_none(), "{platform}");
+            assert!(baseline.cuda_arch.is_none(), "{platform}");
+        }
+    }
+
+    #[test]
+    fn baseline_uses_the_documented_default_versions() {
+        let linux = VirtualPackages::baseline_for_platform(Platform::Linux64);
+        assert_eq!(
+            linux.linux.unwrap().version,
+            defaults::default_linux_version()
+        );
+        let libc = linux.libc.unwrap();
+        assert_eq!(libc.family, "glibc");
+        assert_eq!(libc.version, defaults::default_glibc_version());
+
+        let osx = VirtualPackages::baseline_for_platform(Platform::OsxArm64);
+        assert_eq!(
+            osx.osx.unwrap().version,
+            defaults::default_mac_os_version(Platform::OsxArm64).unwrap()
+        );
+
+        let win = VirtualPackages::baseline_for_platform(Platform::Win64);
+        assert_eq!(
+            win.win.unwrap().version.unwrap(),
+            defaults::default_windows_version()
+        );
+
+        assert_eq!(
+            VirtualPackages::baseline_for_platform(Platform::Linux64).archspec,
+            Archspec::from_platform(Platform::Linux64)
+        );
+    }
+
+    /// The baseline is what `detect_for_platform` falls back to, so for a
+    /// platform this machine cannot run the two must agree on every slot the
+    /// host has nothing to say about.
+    #[test]
+    fn baseline_matches_cross_compiled_detection() {
+        let current = Platform::current();
+        let target = if current.is_linux() {
+            Platform::Win64
+        } else {
+            Platform::Linux64
+        };
+
+        let baseline = VirtualPackages::baseline_for_platform(target);
+        let detected =
+            VirtualPackages::detect_for_platform(target, &VirtualPackageOverrides::default(), None)
+                .unwrap();
+
+        assert_eq!(baseline.win, detected.win);
+        assert_eq!(baseline.unix, detected.unix);
+        assert_eq!(baseline.linux, detected.linux);
+        assert_eq!(baseline.osx, detected.osx);
+        assert_eq!(baseline.libc, detected.libc);
     }
 
     #[test]
