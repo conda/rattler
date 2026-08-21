@@ -6,7 +6,7 @@
     Unknown(<a class="primitive" href="https://doc.rust-lang.org/1.95.0/std/primitive.u64.html">u64</a>),
 }</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A repodata revision.</p>
 <p>Legacy repodata predates numbered layouts and uses the <code>packages</code> and
-<code>packages.conda</code> maps. CEP 146 adds the v3 layout. Other numeric values are
+<code>packages.conda</code> maps. CEP 48 adds the v3 layout. Other numeric values are
 preserved so readers can report future revisions without interpreting them.</p>
 </div></details><h2 id="variants" class="variants section-header">Variants<a href="#variants" class="anchor">§</a></h2><div class="variants"><section id="variant.Legacy" class="variant"><a href="#variant.Legacy" class="anchor">§</a><h3 class="code-header">Legacy</h3></section><div class="docblock"><p>Repodata using the legacy <code>packages</code> and <code>packages.conda</code> maps.</p>
 </div><section id="variant.V3" class="variant"><a href="#variant.V3" class="anchor">§</a><h3 class="code-header">V3</h3></section><div class="docblock"><p>Repodata records stored under the top-level <code>v3</code> map.</p>
