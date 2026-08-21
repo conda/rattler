@@ -155,13 +155,13 @@ impl IndexJson {
     /// Validates that the fields in this `index.json` are representable by its
     /// required repodata revision.
     ///
-    /// Prefer [`Self::into_validated`] when the parsed MatchSpecs are needed
+    /// Prefer [`Self::into_validated`] when the parsed `MatchSpecs` are needed
     /// afterwards, such as while indexing a package.
     pub fn validate(&self) -> Result<(), ValidateIndexJsonError> {
         self.clone().into_validated().map(|_| ())
     }
 
-    /// Validates this `index.json` and retains its parsed MatchSpecs.
+    /// Validates this `index.json` and retains its parsed `MatchSpecs`.
     ///
     /// This avoids parsing dependency specifications again when an indexer must
     /// render them for the effective repodata revision.
@@ -234,7 +234,7 @@ impl IndexJson {
     }
 }
 
-/// An `index.json` whose dependency MatchSpecs have been parsed and validated.
+/// An `index.json` whose dependency `MatchSpecs` have been parsed and validated.
 #[derive(Debug, Clone)]
 pub struct ValidatedIndexJson {
     index: IndexJson,
@@ -255,7 +255,7 @@ impl ValidatedIndexJson {
     }
 }
 
-/// Parsed dependency MatchSpecs retained after validating an `index.json`.
+/// Parsed dependency `MatchSpecs` retained after validating an `index.json`.
 #[derive(Debug, Clone)]
 pub struct ValidatedMatchSpecs {
     depends: Vec<MatchSpec>,
@@ -264,7 +264,7 @@ pub struct ValidatedMatchSpecs {
 }
 
 impl ValidatedMatchSpecs {
-    /// Renders the validated MatchSpecs for a repodata revision.
+    /// Renders the validated `MatchSpecs` for a repodata revision.
     pub fn render_for_revision(
         self,
         revision: RepodataRevision,
@@ -303,7 +303,7 @@ impl ValidatedMatchSpecs {
     }
 }
 
-/// Dependency MatchSpecs rendered for a repodata record.
+/// Dependency `MatchSpecs` rendered for a repodata record.
 #[derive(Debug, Clone)]
 pub struct RenderedMatchSpecs {
     /// Rendered package dependencies.
