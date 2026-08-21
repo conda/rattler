@@ -15,6 +15,7 @@ readme.workspace = true
 default = ['rustls']
 native-tls =['reqwest/native-tls', 'rattler_package_streaming/native-tls', 'rattler_cache/native-tls', 'rattler_networking/native-tls']
 rustls = ['reqwest/rustls', 'rattler_package_streaming/rustls', 'rattler_cache/rustls', 'rattler_networking/rustls']
+rustls-no-provider = ['reqwest/rustls-no-provider', 'rattler_package_streaming/rustls-no-provider', 'rattler_cache/rustls-no-provider', 'rattler_networking/rustls-no-provider']
 oauth = ["dep:openidconnect", "dep:oauth2-reqwest", "dep:open"]
 cli-tools = ['dep:clap', 'oauth', 'dep:console']
 # Adds an interactive MultiSelect picker to `auth logout` when run without

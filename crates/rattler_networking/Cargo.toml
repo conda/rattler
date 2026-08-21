@@ -15,6 +15,7 @@ readme.workspace = true
 default = ["rustls", "system-integration"]
 native-tls = ["reqwest/native-tls", "ambient-id/native-tls"]
 rustls = ["reqwest/rustls", "ambient-id/rustls"]
+rustls-no-provider = ["reqwest/rustls-no-provider"]
 gcs = ["google-cloud-auth", "tokio/sync"]
 s3 = ["aws-config", "aws-sdk-s3", "aws-smithy-http-client"]
 system-integration = ["keyring", "netrc-rs", "dirs"]
