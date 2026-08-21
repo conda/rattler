@@ -69,11 +69,11 @@ pub use with_source::VersionWithSource;
 /// assert_eq!(release, Version::from_str("1.0.0").unwrap());
 /// ```
 ///
-/// # Optional SemVer interoperability
+/// # Optional `SemVer` interoperability
 ///
 /// With the `semver` feature enabled, [`Version`] converts from
 /// `semver::Version`, and can be fallibly converted back. The latter may fail
-/// because conda version literals can express forms that SemVer cannot.
+/// because conda version literals can express forms that `SemVer` cannot.
 #[derive(Clone, Eq)]
 pub struct Version {
     /// Individual components of the version.

@@ -1,7 +1,7 @@
-//! Version-matching constraints from conda MatchSpecs, as specified by
+//! Version-matching constraints from conda `MatchSpecs`, as specified by
 //! [CEP 29](https://conda.org/learn/ceps/cep-0029).
 //!
-//! [`VersionSpec`] represents the version portion of a MatchSpec, such as
+//! [`VersionSpec`] represents the version portion of a `MatchSpec`, such as
 //! `>=3.4,<4.0`. It supports equality, ranges, prefix matching, compatible
 //! matching, and groups joined with `,` (and) or `|` (or).
 
@@ -129,7 +129,7 @@ impl LogicalOperator {
 
 /// A parsed conda version constraint.
 ///
-/// This is the version-matching portion of a conda MatchSpec, specified by
+/// This is the version-matching portion of a conda `MatchSpec`, specified by
 /// [CEP 29](https://conda.org/learn/ceps/cep-0029).
 ///
 /// ```
