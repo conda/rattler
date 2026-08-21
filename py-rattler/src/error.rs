@@ -12,7 +12,7 @@ use rattler_conda_types::{
 use rattler_lock::{ConversionError, ParseCondaLockError};
 use rattler_networking::authentication_storage::AuthenticationStorageError;
 use rattler_package_streaming::ExtractError;
-use rattler_package_streaming::local_package::LocalPackageRecordError;
+use rattler_package_streaming::fs::LocalPackageRecordError;
 use rattler_repodata_gateway::{GatewayError, fetch::FetchRepoDataError};
 use rattler_shell::activation::ActivationError;
 use rattler_solve::SolveError;

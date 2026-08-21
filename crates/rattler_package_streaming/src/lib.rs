@@ -13,7 +13,6 @@ use rattler_redaction::Redact;
 
 #[cfg(all(feature = "reqwest", not(target_arch = "wasm32")))]
 pub mod archive;
-pub mod local_package;
 pub mod read;
 pub mod seek;
 
