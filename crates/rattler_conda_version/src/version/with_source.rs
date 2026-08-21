@@ -1,5 +1,4 @@
-use super::Version;
-use crate::ParseVersionError;
+use super::{ParseVersionError, Version};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
 use std::borrow::Cow;
 use std::hash::{Hash, Hasher};
@@ -11,17 +10,19 @@ use std::{
     str::FromStr,
 };
 
-/// Holds a version and the string it was created from. This is useful if you want to retain the
-/// original string the version was created from. This might be useful in cases where you have
-/// multiple strings that are represented by the same [`Version`] but you still want to be able to
-/// distinguish them.
+/// A conda version together with its original textual representation.
 ///
-/// The string `1.0` and `1.01` represent the same version. When you print the parsed version though
-/// it will come out as `1.0`. You loose the original representation. This struct stores the
-/// original source string.
+/// Conda considers `1.0` and `1.00` equal, while this type preserves the input
+/// spelling for display and serialization. Converting from [`Version`] uses its
+/// canonical display representation instead.
 ///
-/// It is also possible to convert directly from a [`Version`] but the [`Display`] implementation
-/// is then used to generate the string representation.
+/// ```
+/// # use rattler_conda_version::version::VersionWithSource;
+/// # use std::str::FromStr;
+/// let version = VersionWithSource::from_str("1.00").unwrap();
+/// assert_eq!(version.to_string(), "1.00");
+/// assert_eq!(version.version().to_string(), "1.0");
+/// ```
 #[derive(Debug, Clone)]
 pub struct VersionWithSource {
     version: Version,
@@ -70,7 +71,7 @@ impl Ord for VersionWithSource {
 }
 
 impl VersionWithSource {
-    /// Constructs a new instance from a [`Version`] and a source representation.
+    /// Associates a parsed [`Version`] with `source` for later display and serialization.
     pub fn new(version: Version, source: impl ToString) -> Self {
         Self {
             version,
@@ -78,13 +79,12 @@ impl VersionWithSource {
         }
     }
 
-    /// Returns the [`Version`]
+    /// Returns the parsed [`Version`] used for comparison and matching.
     pub fn version(&self) -> &Version {
         &self.version
     }
 
-    /// Returns the string representation of this instance. Either this is a reference to the source
-    /// string or an owned formatted version of the stored version.
+    /// Returns the preserved source text, or the canonical [`Version`] text when none was retained.
     pub fn as_str(&self) -> Cow<'_, str> {
         match &self.source {
             Some(source) => Cow::Borrowed(source.as_ref()),
@@ -92,7 +92,7 @@ impl VersionWithSource {
         }
     }
 
-    /// Convert this instance back into a [`Version`].
+    /// Consumes this value and returns the parsed [`Version`], discarding its source text.
     pub fn into_version(self) -> Version {
         self.version
     }

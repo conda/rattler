@@ -7,7 +7,7 @@ use std::fmt::{Debug, Formatter};
 /// or not the segment starts with an implicit default component.
 #[derive(Copy, Clone, Eq, PartialEq)]
 #[repr(transparent)]
-pub struct Segment(u16);
+pub(crate) struct Segment(u16);
 
 /// Bitmask used to encode segment length.
 const COMPONENT_COUNT_MASK: u16 = (1 << 13) - 1;

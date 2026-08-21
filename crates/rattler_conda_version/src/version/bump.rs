@@ -2,45 +2,51 @@ use std::borrow::Cow;
 
 use thiserror::Error;
 
-use crate::{Component, Version};
+use super::{Component, ComponentVec, SegmentVec, Version, VersionExtendError, segment::Segment};
 
-use super::{ComponentVec, SegmentVec, segment::Segment};
-
-/// `VersionBumpType` is used to specify the type of bump to perform on a version.
+/// Selects which release segment [`Version::bump`] changes.
 #[derive(Clone)]
 pub enum VersionBumpType {
-    /// Bump the major version number.
+    /// Increments the first release segment and resets minor and patch segments.
     Major,
-    /// Bump the minor version number.
+    /// Increments the second release segment and resets the patch segment.
     Minor,
-    /// Bump the patch version number.
+    /// Increments the third release segment.
     Patch,
-    /// Bump the last version number.
+    /// Increments the final release segment.
     Last,
-    /// Bump a given segment. If negative, count from the end.
+    /// Increments a selected release segment; negative indexes count from the end.
     Segment(i32),
 }
 
-/// `VersionBumpError` is used to specify the type of error that occurred when bumping a version.
+/// Explains why [`Version::bump`] could not produce a new [`Version`].
 #[derive(Error, Debug, PartialEq)]
 pub enum VersionBumpError {
-    /// Invalid segment index.
+    /// The requested release-segment index does not exist.
     #[error("cannot bump the segment '{index:?}' of a version if it's not present")]
     InvalidSegment {
-        /// The segment index that was attempted to be bumped.
+        /// Index supplied to [`VersionBumpType::Segment`].
         index: i32,
     },
 
-    /// Could not extend the version
+    /// Extending a short version to the requested segment failed.
     #[error("could not extend the version: {0}")]
-    VersionExtendError(#[from] crate::VersionExtendError),
+    VersionExtendError(#[from] VersionExtendError),
 }
 
 impl Version {
-    /// Add alpha specifier to the end of the version when the last element does not contain an `iden` component.
+    /// Adds an alpha suffix to a release [`Version`] that does not already end in text.
     ///
-    /// For example, `1.0.0` will become `1.0.0.0a0`.
-    /// If the last version element contains a character, it's not modified (e.g. `1.0.0a` will remain `1.0.0a`).
+    /// `1.0.0` becomes `1.0.0.0a0`, while `1.0.0a` is borrowed unchanged.
+    ///
+    /// ```
+    /// # use rattler_conda_version::Version;
+    /// # use std::str::FromStr;
+    /// let version = Version::from_str("1.0.0").unwrap();
+    /// let alpha = version.with_alpha().into_owned();
+    ///
+    /// assert_eq!(alpha, Version::from_str("1.0.0.0a0").unwrap());
+    /// ```
     pub fn with_alpha(&self) -> Cow<'_, Self> {
         let last_segment = self.segments().last().expect("at least one segment");
         // check if there is an iden component in the last segment
@@ -76,10 +82,16 @@ impl Version {
         })
     }
 
-    /// Remove the local segment from the version if it exists.
-    /// Returns a new version without the local segment.
+    /// Removes the local part from this [`Version`], borrowing when none is present.
     ///
-    /// For example, `1.0.0+3.4` will become `1.0.0`.
+    /// ```
+    /// # use rattler_conda_version::Version;
+    /// # use std::str::FromStr;
+    /// let version = Version::from_str("1.0.0+3.4").unwrap();
+    /// let without_local = version.remove_local().into_owned();
+    ///
+    /// assert_eq!(without_local, Version::from_str("1.0.0").unwrap());
+    /// ```
     pub fn remove_local(&self) -> Cow<'_, Self> {
         if let Some(local_segment_index) = self.local_segment_index() {
             let segments = self.segments[0..local_segment_index].to_vec();
@@ -98,9 +110,18 @@ impl Version {
         }
     }
 
-    /// Returns a new version after bumping it according to the specified bump type.
-    /// Note: if a version ends with a character, the next bigger version will use `a` as the character.
-    /// For example: `1.1l` -> `1.2a`, but also `1.1.0alpha` -> `1.1.1a`.
+    /// Produces the next [`Version`] by changing the release segment selected by `bump_type`.
+    ///
+    /// Major and minor bumps reset the following SemVer-style segments. A
+    /// bumped textual suffix becomes `a`; for example, `1.1l` becomes `1.2a`.
+    ///
+    /// ```
+    /// # use rattler_conda_version::{Version, version::VersionBumpType};
+    /// # use std::str::FromStr;
+    /// let version = Version::from_str("1.2.3").unwrap();
+    /// let bumped = version.bump(VersionBumpType::Minor).unwrap();
+    /// assert_eq!(bumped.to_string(), "1.3.0");
+    /// ```
     pub fn bump(&self, bump_type: VersionBumpType) -> Result<Self, VersionBumpError> {
         // Sanity check whether the version has enough segments for this bump type.
         let segment_count = self.segment_count();
@@ -282,7 +303,7 @@ impl Version {
 
 #[cfg(test)]
 mod test {
-    use crate::{Version, VersionBumpType};
+    use crate::version::{Version, VersionBumpType};
     use rstest::rstest;
     use std::str::FromStr;
 

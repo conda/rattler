@@ -8,7 +8,7 @@ use std::str::FromStr;
 /// A single version constraint (e.g. `>3.4.5` or `1.2.*`)
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub enum Constraint {
+pub(crate) enum Constraint {
     /// Matches anything (`*`)
     Any,
 
@@ -22,11 +22,6 @@ pub enum Constraint {
     Exact(EqualityOperator, Version),
 }
 
-/// Returns true if the specified character is the first character of a version constraint.
-pub(crate) fn is_start_of_version_constraint(c: char) -> bool {
-    matches!(c, '>' | '<' | '=' | '!' | '~')
-}
-
 impl FromStr for Constraint {
     type Err = ParseConstraintError;
 
@@ -36,7 +31,7 @@ impl FromStr for Constraint {
 }
 
 impl Constraint {
-    pub fn from_str(
+    pub(crate) fn from_str(
         input: &str,
         strictness: ParseStrictness,
     ) -> Result<Self, ParseConstraintError> {

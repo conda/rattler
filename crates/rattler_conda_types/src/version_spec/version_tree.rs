@@ -1,3 +1,4 @@
+use crate::version_spec::{EqualityOperator, RangeOperator, StrictRangeOperator, VersionOperators};
 use nom::{
     IResult, Parser,
     branch::alt,
@@ -7,15 +8,6 @@ use nom::{
     error::{ContextError, ParseError, context},
     sequence::{delimited, preceded, terminated},
 };
-use thiserror::Error;
-
-use crate::version_spec::{EqualityOperator, RangeOperator, StrictRangeOperator, VersionOperators};
-
-#[derive(Debug, Clone, Error, Eq, PartialEq)]
-pub enum ParseVersionTreeError {
-    #[error("{0}")]
-    ParseError(String),
-}
 
 /// A parser that parses version operators.
 fn parse_operator<'a, E: ParseError<&'a str>>(

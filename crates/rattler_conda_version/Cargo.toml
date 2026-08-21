@@ -1,0 +1,32 @@
+[package]
+name = "rattler_conda_version"
+version = "0.1.0"
+edition.workspace = true
+authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
+description = "Conda version parsing, comparison, and matching"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+
+[features]
+default = []
+semver = ["dep:semver"]
+
+[package.metadata.docs.rs]
+all-features = true
+
+[dependencies]
+itertools = { workspace = true }
+nom = { workspace = true }
+semver = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
+smallvec = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+assert_matches = { workspace = true }
+insta = { workspace = true }
+rand = { workspace = true }
+rstest = { workspace = true }
