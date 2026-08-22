@@ -3,10 +3,7 @@
 use crate::{ExtractError, ExtractResult, seek::read_package_file};
 use rattler_conda_types::{
     ConvertSubdirError, PackageRecord, RepoDataRecord,
-    package::{
-        ArchiveIdentifier, CondaArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier,
-        IndexJson,
-    },
+    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, IndexJson},
 };
 use rattler_digest::Sha256;
 use std::fs::File;
@@ -126,24 +123,13 @@ pub async fn repodata_record_from_package_archive(
 
         let index_json: IndexJson = read_package_file(package_path)?;
 
-        // Prefer deriving the identifier straight from the filename, since
-        // that is the canonical form. But local files aren't always named
-        // following the `name-version-build.ext` convention (e.g. a
-        // package downloaded and renamed by a user), so fall back to
-        // building the identifier from the archive's own `index.json`
-        // metadata instead of failing outright.
-        let identifier = CondaArchiveIdentifier::try_from_path(package_path).map_or_else(
-            || {
-                DistArchiveIdentifier::new(
-                    ArchiveIdentifier {
-                        name: index_json.name.as_source().to_string(),
-                        version: index_json.version.to_string(),
-                        build_string: index_json.build.clone(),
-                    },
-                    archive_type,
-                )
+        let identifier = DistArchiveIdentifier::new(
+            ArchiveIdentifier {
+                name: index_json.name.as_source().to_string(),
+                version: index_json.version.to_string(),
+                build_string: index_json.build.clone(),
             },
-            Into::into,
+            archive_type,
         );
 
         let size = std::fs::metadata(package_path)?.len();
