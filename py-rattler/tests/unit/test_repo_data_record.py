@@ -15,7 +15,7 @@ async def test_from_package_archive_conda(test_data_dir: str) -> None:
     assert isinstance(record, RepoDataRecord)
     assert record.name.normalized == "clobber-fd-1"
     assert record.channel is None
-    assert record.url == f"file://{path.resolve()}"
+    assert record.url == path.resolve().as_uri()
     assert record.sha256 is not None
     assert record.md5 is None
     assert record.size is not None
@@ -30,7 +30,7 @@ async def test_from_package_archive_tar_bz2(test_data_dir: str) -> None:
     assert isinstance(record, RepoDataRecord)
     assert record.name.normalized == "clobber-1"
     assert record.channel is None
-    assert record.url == f"file://{path.resolve()}"
+    assert record.url == path.resolve().as_uri()
 
 
 @pytest.mark.asyncio
