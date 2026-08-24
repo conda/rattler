@@ -1030,10 +1030,7 @@ impl PyRecord {
     #[staticmethod]
     fn from_package_archive(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, PyAny>> {
         future_into_py(py, async move {
-            let record =
-                rattler_package_streaming::fs::repodata_record_from_package_archive(
-                    path,
-                )
+            let record = rattler_package_streaming::fs::repodata_record_from_package_archive(path)
                 .await
                 .map_err(PyRattlerError::from)?;
 
