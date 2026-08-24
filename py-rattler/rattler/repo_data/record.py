@@ -17,7 +17,7 @@ class RepoDataRecord(PackageRecord):
         self._record = record
 
     @staticmethod
-    async def from_package_archive(path: os.PathLike[str]) -> RepoDataRecord:
+    async def from_package_archive(path: str | os.PathLike[str]) -> RepoDataRecord:
         """
         Builds a `RepoDataRecord` directly from a local `.conda` or
         `.tar.bz2` package file, without requiring a channel or
