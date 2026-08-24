@@ -110,10 +110,12 @@ impl From<simple_spawn_blocking::Cancelled> for LocalPackageRecordError {
 /// # }
 /// ```
 pub async fn repodata_record_from_package_archive(
-    package_path: impl AsRef<Path> + Send + 'static,
+    package_path: impl AsRef<Path>,
 ) -> Result<RepoDataRecord, LocalPackageRecordError> {
+    let package_path = package_path.as_ref().to_path_buf();
+
     simple_spawn_blocking::tokio::run_blocking_task(move || {
-        let package_path = package_path.as_ref();
+        let package_path = package_path.as_path();
 
         // Determine the archive type from the file extension first: it's
         // cheap (no IO) and lets us fail fast on a non-conda archive path
