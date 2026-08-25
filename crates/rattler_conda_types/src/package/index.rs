@@ -134,7 +134,7 @@ impl IndexJson {
             return revision;
         }
 
-        if !self.extra_depends.is_empty() || !self.flags.is_empty() {
+        if !self.flags.is_empty() {
             return RepodataRevision::V3;
         }
 
@@ -144,6 +144,7 @@ impl IndexJson {
             .depends
             .iter()
             .chain(self.constrains.iter())
+            .chain(self.extra_depends.values().flatten())
             .any(|spec| matchspec_requires_v3(spec, parse_options))
         {
             RepodataRevision::V3
@@ -180,11 +181,11 @@ impl IndexJson {
             .collect::<Result<BTreeMap<_, _>, _>>()?;
 
         let required_revision = self.repodata_revision.unwrap_or_else(|| {
-            if !self.extra_depends.is_empty()
-                || !self.flags.is_empty()
+            if !self.flags.is_empty()
                 || depends
                     .iter()
                     .chain(constrains.iter())
+                    .chain(extra_depends.values().flatten())
                     .any(|spec| spec.required_repodata_revision() == RepodataRevision::V3)
             {
                 RepodataRevision::V3
@@ -193,9 +194,6 @@ impl IndexJson {
             }
         });
 
-        if required_revision.uses_legacy_package_layout() && !self.extra_depends.is_empty() {
-            return Err(ValidateIndexJsonError::LegacyExtraDepends);
-        }
         if required_revision.uses_legacy_package_layout() && !self.flags.is_empty() {
             return Err(ValidateIndexJsonError::LegacyFlags);
         }
@@ -367,10 +365,6 @@ fn matchspec_requires_v3(spec: &str, parse_options: ParseMatchSpecOptions) -> bo
 /// An error when validating an [`IndexJson`] value.
 #[derive(Debug, Error)]
 pub enum ValidateIndexJsonError {
-    /// Legacy repodata cannot represent `extra_depends`.
-    #[error("legacy repodata cannot represent extra_depends")]
-    LegacyExtraDepends,
-
     /// Legacy repodata cannot represent package flags.
     #[error("legacy repodata cannot represent flags")]
     LegacyFlags,
@@ -458,8 +452,27 @@ mod test {
         .unwrap();
         assert_eq!(
             inferred_revision.required_repodata_revision(),
+            RepodataRevision::Legacy
+        );
+        inferred_revision.validate().unwrap();
+
+        let inferred_revision: IndexJson = serde_json::from_str(
+            r#"{
+                "build": "0",
+                "build_number": 0,
+                "extra_depends": {
+                    "test": ["pytest[when=\"python >=3.10\"]"]
+                },
+                "name": "demo",
+                "version": "1.0"
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            inferred_revision.required_repodata_revision(),
             RepodataRevision::V3
         );
+        inferred_revision.validate().unwrap();
 
         let inferred_revision: IndexJson = serde_json::from_str(
             r#"{
@@ -570,10 +583,7 @@ mod test {
             }"#,
         )
         .unwrap();
-        assert!(matches!(
-            extra_depends.validate(),
-            Err(ValidateIndexJsonError::LegacyExtraDepends)
-        ));
+        extra_depends.validate().unwrap();
 
         let extras_matchspec: IndexJson = serde_json::from_str(
             r#"{
@@ -604,6 +614,24 @@ mod test {
         .unwrap();
         assert!(matches!(
             conditional_matchspec.validate(),
+            Err(ValidateIndexJsonError::LegacyMatchSpecCondition { .. })
+        ));
+
+        let conditional_extra_dependency: IndexJson = serde_json::from_str(
+            r#"{
+                "build": "0",
+                "build_number": 0,
+                "extra_depends": {
+                    "test": ["pytest[when=\"python >=3.10\"]"]
+                },
+                "name": "demo",
+                "repodata_revision": 0,
+                "version": "1.0"
+            }"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            conditional_extra_dependency.validate(),
             Err(ValidateIndexJsonError::LegacyMatchSpecCondition { .. })
         ));
 
