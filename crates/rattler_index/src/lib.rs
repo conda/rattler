@@ -1123,9 +1123,9 @@ fn package_records_from_repodata(repodata: RepoData) -> ExistingRepodata {
     }
 }
 
-/// Renders package dependency fields in CEP 48's required v3 MatchSpec form.
+/// Renders package dependency fields in CEP 48's required v3 `MatchSpec` form.
 ///
-/// Fresh package archives retain their parsed MatchSpecs from `index.json`
+/// Fresh package archives retain their parsed `MatchSpecs` from `index.json`
 /// validation. Records read from existing repodata are parsed here only when
 /// they are emitted into the v3 map.
 fn render_record_matchspecs_for_v3(
@@ -1133,43 +1133,42 @@ fn render_record_matchspecs_for_v3(
     matchspecs: Option<ValidatedMatchSpecs>,
 ) -> Result<(), RepodataError> {
     let rendered: anyhow::Result<rattler_conda_types::package::RenderedMatchSpecs> =
-        match matchspecs {
-            Some(matchspecs) => matchspecs
+        if let Some(matchspecs) = matchspecs {
+            matchspecs
                 .render_for_revision(RepodataRevision::V3)
-                .map_err(anyhow::Error::from),
-            None => {
-                let parse_options =
-                    ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3);
-                let render = |spec: &str| -> anyhow::Result<String> {
-                    MatchSpec::from_str(spec, parse_options)
-                        .with_context(|| format!("failed to parse v3 repodata MatchSpec '{spec}'"))?
-                        .to_canonical_string()
-                        .map_err(anyhow::Error::from)
-                };
-                Ok(rattler_conda_types::package::RenderedMatchSpecs {
-                    depends: record
-                        .depends
-                        .iter()
-                        .map(|spec| render(spec))
-                        .collect::<Result<_, _>>()?,
-                    constrains: record
-                        .constrains
-                        .iter()
-                        .map(|spec| render(spec))
-                        .collect::<Result<_, _>>()?,
-                    extra_depends: record
-                        .extra_depends
-                        .iter()
-                        .map(|(group, specs)| {
-                            specs
-                                .iter()
-                                .map(|spec| render(spec))
-                                .collect::<Result<_, _>>()
-                                .map(|rendered| (group.clone(), rendered))
-                        })
-                        .collect::<Result<_, _>>()?,
-                })
-            }
+                .map_err(anyhow::Error::from)
+        } else {
+            let parse_options =
+                ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3);
+            let render = |spec: &str| -> anyhow::Result<String> {
+                MatchSpec::from_str(spec, parse_options)
+                    .with_context(|| format!("failed to parse v3 repodata MatchSpec '{spec}'"))?
+                    .to_canonical_string()
+                    .map_err(anyhow::Error::from)
+            };
+            Ok(rattler_conda_types::package::RenderedMatchSpecs {
+                depends: record
+                    .depends
+                    .iter()
+                    .map(|spec| render(spec))
+                    .collect::<Result<_, _>>()?,
+                constrains: record
+                    .constrains
+                    .iter()
+                    .map(|spec| render(spec))
+                    .collect::<Result<_, _>>()?,
+                extra_depends: record
+                    .extra_depends
+                    .iter()
+                    .map(|(group, specs)| {
+                        specs
+                            .iter()
+                            .map(|spec| render(spec))
+                            .collect::<Result<_, _>>()
+                            .map(|rendered| (group.clone(), rendered))
+                    })
+                    .collect::<Result<_, _>>()?,
+            })
         };
     let rendered = rendered?;
 
@@ -1179,7 +1178,7 @@ fn render_record_matchspecs_for_v3(
     Ok(())
 }
 
-/// Canonicalizes all dependency MatchSpecs in the v3 maps before publication.
+/// Canonicalizes all dependency `MatchSpecs` in the v3 maps before publication.
 ///
 /// Patches apply after initial package indexing and can replace dependency
 /// strings, so this is deliberately run immediately before writing repodata
