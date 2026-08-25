@@ -849,8 +849,10 @@ async fn test_index_repodata_revision_from_index_json() {
         r#"{
             "build": "h123_0",
             "build_number": 0,
+            "constrains": ["python >=3.10"],
+            "depends": ["python >=3.10"],
             "extra_depends": {
-                "docs": ["sphinx"]
+                "docs": ["sphinx >=8"]
             },
             "name": "revision-demo",
             "noarch": "generic",
@@ -912,10 +914,18 @@ async fn test_index_repodata_revision_from_index_json() {
             .pointer("/packages/revision-demo-1.0.0-h123_0.tar.bz2")
             .is_none()
     );
-    assert!(
-        repodata_json
-            .pointer("/v3/tar.bz2/revision-demo-1.0.0-h123_0")
-            .is_some()
+    let record = &repodata_json["v3"]["tar.bz2"]["revision-demo-1.0.0-h123_0"];
+    assert_eq!(
+        record["depends"],
+        serde_json::json!(["python[version=\">=3.10\"]"])
+    );
+    assert_eq!(
+        record["constrains"],
+        serde_json::json!(["python[version=\">=3.10\"]"])
+    );
+    assert_eq!(
+        record["extra_depends"]["docs"],
+        serde_json::json!(["sphinx[version=\">=8\"]"])
     );
     let revision = &repodata_json["info"]["repodata_revisions"]["v3"];
     assert_eq!(revision["n_packages"], 1);

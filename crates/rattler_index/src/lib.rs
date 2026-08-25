@@ -29,12 +29,12 @@ use opendal::layers::RetryLayer;
 use opendal::services::S3Config;
 use opendal::{Configurator, Operator, services::FsConfig};
 use rattler_conda_types::{
-    ChannelInfo, ChannelNotice, ChannelNotices, ChannelRelations, PackageRecord, PatchInstructions,
-    Platform, RepoData, Shard, ShardedRepodata, ShardedSubdirInfo, UrlOrPath, V3Extensions,
-    V3Packages, WhlPackageRecord,
+    ChannelInfo, ChannelNotice, ChannelNotices, ChannelRelations, MatchSpec, PackageRecord,
+    ParseMatchSpecOptions, PatchInstructions, Platform, RepoData, Shard, ShardedRepodata,
+    ShardedSubdirInfo, UrlOrPath, V3Extensions, V3Packages, WhlPackageRecord,
     package::{
         CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
-        RunExportsJson, WheelArchiveType,
+        RunExportsJson, ValidatedMatchSpecs, WheelArchiveType,
     },
 };
 pub use rattler_conda_types::{
@@ -117,6 +117,10 @@ impl PreconditionChecks {
 pub(crate) struct IndexedPackageRecord {
     record: PackageRecord,
     repodata_revision: RepodataRevision,
+    /// Parsed `index.json` dependency specifications, when this record was
+    /// read from a package archive. Existing repodata records do not retain
+    /// this cache and are parsed only if they are emitted as v3.
+    matchspecs: Option<ValidatedMatchSpecs>,
     wheel_url: Option<UrlOrPath>,
 }
 
@@ -180,11 +184,11 @@ fn indexed_package_record_from_index_json<T: Read>(
     package_as_bytes: impl AsRef<[u8]>,
     index_json_reader: &mut T,
 ) -> std::io::Result<IndexedPackageRecord> {
-    let index = IndexJson::from_reader(index_json_reader)?;
-    index
-        .validate()
+    let validated = IndexJson::from_reader(index_json_reader)?
+        .into_validated()
         .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
-    let repodata_revision = index.required_repodata_revision();
+    let repodata_revision = validated.required_repodata_revision();
+    let (index, matchspecs) = validated.into_parts();
 
     let sha256_result =
         rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(&package_as_bytes);
@@ -222,6 +226,7 @@ fn indexed_package_record_from_index_json<T: Read>(
     Ok(IndexedPackageRecord {
         record: package_record,
         repodata_revision,
+        matchspecs: Some(matchspecs),
         wheel_url: None,
     })
 }
@@ -1091,6 +1096,7 @@ fn package_records_from_repodata(repodata: RepoData) -> ExistingRepodata {
                     IndexedPackageRecord {
                         record,
                         repodata_revision: RepodataRevision::Legacy,
+                        matchspecs: None,
                         wheel_url: None,
                     },
                 )
@@ -1104,6 +1110,7 @@ fn package_records_from_repodata(repodata: RepoData) -> ExistingRepodata {
             IndexedPackageRecord {
                 record,
                 repodata_revision: RepodataRevision::V3,
+                matchspecs: None,
                 wheel_url,
             },
         )
@@ -1116,6 +1123,112 @@ fn package_records_from_repodata(repodata: RepoData) -> ExistingRepodata {
     }
 }
 
+/// Renders package dependency fields for their destination repodata revision.
+///
+/// Fresh package archives retain their parsed `MatchSpecs` from `index.json`
+/// validation. Records read from existing repodata are parsed here before they
+/// are re-emitted, so patches and layout migrations cannot publish syntax that
+/// the target revision cannot represent.
+fn render_record_matchspecs_for_revision(
+    record: &mut PackageRecord,
+    matchspecs: Option<ValidatedMatchSpecs>,
+    revision: RepodataRevision,
+) -> Result<(), RepodataError> {
+    if revision.uses_legacy_package_layout()
+        && (!record.extra_depends.is_empty() || !record.flags.is_empty())
+    {
+        return Err(RepodataError::Other(anyhow::anyhow!(
+            "legacy repodata cannot represent extra_depends or package flags"
+        )));
+    }
+
+    let rendered: anyhow::Result<rattler_conda_types::package::RenderedMatchSpecs> =
+        if let Some(matchspecs) = matchspecs {
+            matchspecs
+                .render_for_revision(revision)
+                .map_err(anyhow::Error::from)
+        } else {
+            let parse_options =
+                ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3);
+            let render = |field: &str, spec: &str| -> anyhow::Result<String> {
+                let parsed = MatchSpec::from_str(spec, parse_options).with_context(|| {
+                    format!("failed to parse {revision} repodata MatchSpec in {field}: '{spec}'")
+                })?;
+                if revision.uses_legacy_package_layout()
+                    && !parsed
+                        .required_repodata_revision()
+                        .uses_legacy_package_layout()
+                {
+                    anyhow::bail!(
+                        "legacy repodata cannot represent MatchSpec in {field}: '{spec}'"
+                    );
+                }
+                if revision.as_u64() >= RepodataRevision::V3.as_u64() {
+                    parsed.to_canonical_string().map_err(anyhow::Error::from)
+                } else {
+                    Ok(parsed.to_string())
+                }
+            };
+            Ok(rattler_conda_types::package::RenderedMatchSpecs {
+                depends: record
+                    .depends
+                    .iter()
+                    .map(|spec| render("depends", spec))
+                    .collect::<Result<_, _>>()?,
+                constrains: record
+                    .constrains
+                    .iter()
+                    .map(|spec| render("constrains", spec))
+                    .collect::<Result<_, _>>()?,
+                extra_depends: record
+                    .extra_depends
+                    .iter()
+                    .map(|(group, specs)| {
+                        specs
+                            .iter()
+                            .map(|spec| render(&format!("extra_depends.{group}"), spec))
+                            .collect::<Result<_, _>>()
+                            .map(|rendered| (group.clone(), rendered))
+                    })
+                    .collect::<Result<_, _>>()?,
+            })
+        };
+    let rendered = rendered?;
+
+    record.depends = rendered.depends;
+    record.constrains = rendered.constrains;
+    record.extra_depends = rendered.extra_depends;
+    Ok(())
+}
+
+/// Validates legacy records and canonicalizes v3 dependency `MatchSpecs`.
+///
+/// Patches apply after initial package indexing and can replace dependency
+/// strings, so this is deliberately run immediately before writing repodata
+/// (and before deriving its shards).
+fn validate_repodata_matchspecs(repodata: &mut RepoData) -> Result<(), RepodataError> {
+    for record in repodata.packages.values_mut() {
+        render_record_matchspecs_for_revision(record, None, RepodataRevision::Legacy)?;
+    }
+    for record in repodata.conda_packages.values_mut() {
+        render_record_matchspecs_for_revision(record, None, RepodataRevision::Legacy)?;
+    }
+    for record in repodata.v3.tar_bz2.values_mut() {
+        render_record_matchspecs_for_revision(record, None, RepodataRevision::V3)?;
+    }
+    for record in repodata.v3.conda.values_mut() {
+        render_record_matchspecs_for_revision(record, None, RepodataRevision::V3)?;
+    }
+    for record in repodata.v3.whl.values_mut() {
+        render_record_matchspecs_for_revision(
+            &mut record.package_record,
+            None,
+            RepodataRevision::V3,
+        )?;
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn insert_package_record_by_revision(
     packages: &mut IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
@@ -1125,11 +1238,27 @@ fn insert_package_record_by_revision(
     package: IndexedPackageRecord,
     revision: RepodataRevision,
 ) -> Result<(), RepodataError> {
+    if package.repodata_revision.as_u64() > RepodataRevision::V3.as_u64()
+        && revision.as_u64() < package.repodata_revision.as_u64()
+    {
+        return Err(RepodataError::Other(anyhow::anyhow!(
+            "package requires repodata revision {}, but the effective index revision is {}",
+            package.repodata_revision,
+            revision
+        )));
+    }
+
     let IndexedPackageRecord {
-        record, wheel_url, ..
+        mut record,
+        wheel_url,
+        matchspecs,
+        ..
     } = package;
 
     if revision.uses_legacy_package_layout() {
+        // Reparse records placed in legacy maps so v3-origin metadata is
+        // checked against the legacy feature set before it is emitted.
+        render_record_matchspecs_for_revision(&mut record, None, revision)?;
         match filename.archive_type {
             DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
                 packages.insert(filename, record);
@@ -1145,6 +1274,7 @@ fn insert_package_record_by_revision(
             }
         }
     } else if revision == RepodataRevision::V3 {
+        render_record_matchspecs_for_revision(&mut record, matchspecs, revision)?;
         match filename.archive_type {
             DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
                 v3.tar_bz2.insert(filename.identifier, record);
@@ -1288,7 +1418,7 @@ pub async fn write_repodata(
         .await?;
     }
 
-    let repodata = if let Some(instructions) = repodata_patch {
+    let mut repodata = if let Some(instructions) = repodata_patch {
         tracing::info!("Patching repodata");
         let mut patched_repodata = repodata.clone();
         patched_repodata.apply_patches(&instructions);
@@ -1296,6 +1426,7 @@ pub async fn write_repodata(
     } else {
         repodata
     };
+    validate_repodata_matchspecs(&mut repodata)?;
 
     let repodata_bytes = serde_json::to_vec(&repodata)?;
 
@@ -2217,6 +2348,187 @@ mod tests {
     }
 
     #[test]
+    fn latest_assignment_rejects_future_revision_demotion() {
+        let filename = DistArchiveIdentifier::try_from_filename("demo-1.0-0.tar.bz2").unwrap();
+        let indexed = IndexedPackageRecord {
+            record: PackageRecord::new(
+                PackageName::new_unchecked("demo"),
+                Version::from_str("1.0").unwrap(),
+                "0".to_string(),
+            ),
+            repodata_revision: RepodataRevision::from(4),
+            matchspecs: None,
+            wheel_url: None,
+        };
+        let error = insert_package_record_by_revision(
+            &mut IndexMap::default(),
+            &mut IndexMap::default(),
+            &mut V3Packages::default(),
+            filename,
+            indexed,
+            RepodataRevision::V3,
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("requires repodata revision v4"));
+    }
+
+    #[test]
+    fn legacy_representable_v3_record_can_be_downleveled() {
+        let filename = DistArchiveIdentifier::try_from_filename("demo-1.0-0.tar.bz2").unwrap();
+        let indexed = IndexedPackageRecord {
+            record: PackageRecord::new(
+                PackageName::new_unchecked("demo"),
+                Version::from_str("1.0").unwrap(),
+                "0".to_string(),
+            ),
+            repodata_revision: RepodataRevision::V3,
+            matchspecs: None,
+            wheel_url: None,
+        };
+        let mut packages = IndexMap::default();
+        insert_package_record_by_revision(
+            &mut packages,
+            &mut IndexMap::default(),
+            &mut V3Packages::default(),
+            filename.clone(),
+            indexed,
+            RepodataRevision::Legacy,
+        )
+        .unwrap();
+
+        assert!(packages.contains_key(&filename));
+    }
+
+    #[test]
+    fn legacy_repodata_rejects_v3_matchspecs_after_patching() {
+        let mut repodata = RepoData {
+            info: None,
+            packages: IndexMap::default(),
+            conda_packages: IndexMap::default(),
+            v3: V3Packages::default(),
+            removed: HashSet::default(),
+            version: None,
+        };
+        let mut record = PackageRecord::new(
+            PackageName::new_unchecked("demo"),
+            Version::from_str("1.0").unwrap(),
+            "0".to_string(),
+        );
+        record.depends = vec!["python[extras=[\"test\"]]".to_string()];
+        repodata.packages.insert(
+            DistArchiveIdentifier::try_from_filename("demo-1.0-0.tar.bz2").unwrap(),
+            record,
+        );
+
+        let error = validate_repodata_matchspecs(&mut repodata).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("legacy repodata cannot represent MatchSpec")
+        );
+    }
+
+    #[test]
+    fn latest_assignment_canonicalizes_validated_legacy_index_json() {
+        let filename = DistArchiveIdentifier::try_from_filename("demo-1.0-0.tar.bz2").unwrap();
+        let mut index_json = Cursor::new(
+            br#"{
+                "build": "0",
+                "build_number": 0,
+                "depends": ["python >=3.10"],
+                "name": "demo",
+                "version": "1.0"
+            }"#,
+        );
+        let indexed = indexed_package_record_from_index_json(b"package", &mut index_json).unwrap();
+        assert_eq!(indexed.repodata_revision, RepodataRevision::Legacy);
+
+        let mut v3 = V3Packages::default();
+        insert_package_record_by_revision(
+            &mut IndexMap::default(),
+            &mut IndexMap::default(),
+            &mut v3,
+            filename.clone(),
+            indexed,
+            RepodataRevision::V3,
+        )
+        .unwrap();
+
+        assert_eq!(
+            v3.tar_bz2[&filename.identifier].depends,
+            ["python[version=\">=3.10\"]"]
+        );
+    }
+
+    #[test]
+    fn v3_patches_are_canonicalized_before_publication() {
+        let identifier = ArchiveIdentifier::from_str("demo-1.0-0").unwrap();
+        let mut record = PackageRecord::new(
+            PackageName::new_unchecked("demo"),
+            Version::from_str("1.0").unwrap(),
+            "0".to_string(),
+        );
+        let patch = serde_json::from_value(serde_json::json!({
+            "depends": ["python >=3.10"],
+            "constrains": ["python >=3.10"]
+        }))
+        .unwrap();
+        record.apply_patch(&patch);
+
+        let mut repodata = RepoData {
+            info: None,
+            packages: IndexMap::default(),
+            conda_packages: IndexMap::default(),
+            v3: V3Packages::default(),
+            removed: HashSet::default(),
+            version: Some(1),
+        };
+        repodata.v3.tar_bz2.insert(identifier.clone(), record);
+        validate_repodata_matchspecs(&mut repodata).unwrap();
+
+        let record = &repodata.v3.tar_bz2[&identifier];
+        assert_eq!(record.depends, ["python[version=\">=3.10\"]"]);
+        assert_eq!(record.constrains, ["python[version=\">=3.10\"]"]);
+    }
+
+    #[test]
+    fn v3_records_from_existing_repodata_are_canonicalized() {
+        let filename = DistArchiveIdentifier::try_from_filename("demo-1.0-0.tar.bz2").unwrap();
+        let mut record = PackageRecord::new(
+            PackageName::new_unchecked("demo"),
+            Version::from_str("1.0").unwrap(),
+            "0".to_string(),
+        );
+        record.depends = vec!["python >=3.10".to_string()];
+        record.constrains = vec!["python >=3.10".to_string()];
+        record
+            .extra_depends
+            .insert("test".to_string(), vec!["pytest >=8".to_string()]);
+
+        let mut v3 = V3Packages::default();
+        insert_package_record_by_revision(
+            &mut IndexMap::default(),
+            &mut IndexMap::default(),
+            &mut v3,
+            filename.clone(),
+            IndexedPackageRecord {
+                record,
+                repodata_revision: RepodataRevision::V3,
+                matchspecs: None,
+                wheel_url: None,
+            },
+            RepodataRevision::V3,
+        )
+        .unwrap();
+
+        let record = &v3.tar_bz2[&filename.identifier];
+        assert_eq!(record.depends, ["python[version=\">=3.10\"]"]);
+        assert_eq!(record.constrains, ["python[version=\">=3.10\"]"]);
+        assert_eq!(record.extra_depends["test"], ["pytest[version=\">=8\"]"]);
+    }
+
+    #[test]
     fn indexer_only_produces_legacy_and_v3_package_layouts() {
         let filename = DistArchiveIdentifier::try_from_filename("demo-1.0-0.tar.bz2").unwrap();
         let indexed_record = |revision| IndexedPackageRecord {
@@ -2226,6 +2538,7 @@ mod tests {
                 "0".to_string(),
             ),
             repodata_revision: revision,
+            matchspecs: None,
             wheel_url: None,
         };
 

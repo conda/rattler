@@ -10,8 +10,8 @@ use thiserror::Error;
 
 use super::PackageFile;
 use crate::{
-    Flag, MatchSpec, NoArchType, PackageName, PackageUrl, ParseMatchSpecError,
-    ParseMatchSpecOptions, RepodataRevision, VersionWithSource,
+    CanonicalMatchSpecError, Flag, MatchSpec, NoArchType, PackageName, PackageUrl,
+    ParseMatchSpecError, ParseMatchSpecOptions, RepodataRevision, VersionWithSource,
 };
 
 /// A representation of the `index.json` file found in package archives.
@@ -154,16 +154,51 @@ impl IndexJson {
 
     /// Validates that the fields in this `index.json` are representable by its
     /// required repodata revision.
+    ///
+    /// Prefer [`Self::into_validated`] when the parsed `MatchSpecs` are needed
+    /// afterwards, such as while indexing a package.
     pub fn validate(&self) -> Result<(), ValidateIndexJsonError> {
-        let required_revision = self.required_repodata_revision();
+        self.clone().into_validated().map(|_| ())
+    }
+
+    /// Validates this `index.json` and retains its parsed `MatchSpecs`.
+    ///
+    /// This avoids parsing dependency specifications again when an indexer must
+    /// render them for the effective repodata revision.
+    pub fn into_validated(self) -> Result<ValidatedIndexJson, ValidateIndexJsonError> {
+        let parse_options =
+            ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3);
+        let depends = parse_matchspecs("depends", &self.depends, parse_options)?;
+        let constrains = parse_matchspecs("constrains", &self.constrains, parse_options)?;
+        let extra_depends = self
+            .extra_depends
+            .iter()
+            .map(|(group, specs)| {
+                parse_matchspecs(format!("extra_depends.{group}"), specs, parse_options)
+                    .map(|parsed| (group.clone(), parsed))
+            })
+            .collect::<Result<BTreeMap<_, _>, _>>()?;
+
+        let required_revision = self.repodata_revision.unwrap_or_else(|| {
+            if !self.extra_depends.is_empty()
+                || !self.flags.is_empty()
+                || depends
+                    .iter()
+                    .chain(constrains.iter())
+                    .any(|spec| spec.required_repodata_revision() == RepodataRevision::V3)
+            {
+                RepodataRevision::V3
+            } else {
+                RepodataRevision::Legacy
+            }
+        });
+
         if required_revision.uses_legacy_package_layout() && !self.extra_depends.is_empty() {
             return Err(ValidateIndexJsonError::LegacyExtraDepends);
         }
-
         if required_revision.uses_legacy_package_layout() && !self.flags.is_empty() {
             return Err(ValidateIndexJsonError::LegacyFlags);
         }
-
         for flag in &self.flags {
             if flag.validate().is_err() {
                 return Err(ValidateIndexJsonError::InvalidFlag {
@@ -172,71 +207,156 @@ impl IndexJson {
             }
         }
 
-        let parse_options =
-            ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3);
-
-        for spec in &self.depends {
-            Self::validate_matchspec(required_revision, "depends", spec, parse_options)?;
-        }
-
-        for spec in &self.constrains {
-            Self::validate_matchspec(required_revision, "constrains", spec, parse_options)?;
-        }
-
-        for (group, specs) in &self.extra_depends {
-            for spec in specs {
-                Self::validate_matchspec(
-                    required_revision,
-                    format!("extra_depends.{group}"),
-                    spec,
-                    parse_options,
-                )?;
-            }
-        }
-
-        Ok(())
-    }
-
-    fn validate_matchspec(
-        required_revision: RepodataRevision,
-        field: impl Into<String>,
-        spec: &str,
-        parse_options: ParseMatchSpecOptions,
-    ) -> Result<(), ValidateIndexJsonError> {
-        let field = field.into();
-        let matchspec = MatchSpec::from_str(spec, parse_options).map_err(|source| {
-            ValidateIndexJsonError::InvalidMatchSpec {
-                field: field.clone(),
-                spec: spec.to_string(),
-                source,
-            }
-        })?;
-
         if required_revision.uses_legacy_package_layout() {
-            if matchspec.extras.is_some() {
-                return Err(ValidateIndexJsonError::LegacyMatchSpecExtras {
-                    field,
-                    spec: spec.to_string(),
-                });
-            }
-
-            if matchspec.condition.is_some() {
-                return Err(ValidateIndexJsonError::LegacyMatchSpecCondition {
-                    field,
-                    spec: spec.to_string(),
-                });
-            }
-
-            if matchspec.flags.is_some() {
-                return Err(ValidateIndexJsonError::LegacyMatchSpecFlags {
-                    field,
-                    spec: spec.to_string(),
-                });
+            for (field, specs) in std::iter::once(("depends".to_string(), &depends))
+                .chain(std::iter::once(("constrains".to_string(), &constrains)))
+                .chain(
+                    extra_depends
+                        .iter()
+                        .map(|(group, specs)| (format!("extra_depends.{group}"), specs)),
+                )
+            {
+                for spec in specs {
+                    validate_legacy_matchspec(&field, spec)?;
+                }
             }
         }
 
-        Ok(())
+        Ok(ValidatedIndexJson {
+            index: self,
+            required_revision,
+            matchspecs: ValidatedMatchSpecs {
+                depends,
+                constrains,
+                extra_depends,
+            },
+        })
     }
+}
+
+/// An `index.json` whose dependency `MatchSpecs` have been parsed and validated.
+#[derive(Debug, Clone)]
+pub struct ValidatedIndexJson {
+    index: IndexJson,
+    required_revision: RepodataRevision,
+    matchspecs: ValidatedMatchSpecs,
+}
+
+impl ValidatedIndexJson {
+    /// Returns the repodata revision required by this package.
+    pub fn required_repodata_revision(&self) -> RepodataRevision {
+        self.required_revision
+    }
+
+    /// Splits the validated metadata into the original index record and its
+    /// parsed dependency specifications.
+    pub fn into_parts(self) -> (IndexJson, ValidatedMatchSpecs) {
+        (self.index, self.matchspecs)
+    }
+}
+
+/// Parsed dependency `MatchSpecs` retained after validating an `index.json`.
+#[derive(Debug, Clone)]
+pub struct ValidatedMatchSpecs {
+    depends: Vec<MatchSpec>,
+    constrains: Vec<MatchSpec>,
+    extra_depends: BTreeMap<String, Vec<MatchSpec>>,
+}
+
+impl ValidatedMatchSpecs {
+    /// Renders the validated `MatchSpecs` for a repodata revision.
+    pub fn render_for_revision(
+        self,
+        revision: RepodataRevision,
+    ) -> Result<RenderedMatchSpecs, CanonicalMatchSpecError> {
+        let render = |spec: MatchSpec| {
+            if revision.as_u64() >= RepodataRevision::V3.as_u64() {
+                spec.to_canonical_string()
+            } else {
+                Ok(spec.to_string())
+            }
+        };
+
+        Ok(RenderedMatchSpecs {
+            depends: self
+                .depends
+                .into_iter()
+                .map(&render)
+                .collect::<Result<_, _>>()?,
+            constrains: self
+                .constrains
+                .into_iter()
+                .map(&render)
+                .collect::<Result<_, _>>()?,
+            extra_depends: self
+                .extra_depends
+                .into_iter()
+                .map(|(group, specs)| {
+                    specs
+                        .into_iter()
+                        .map(&render)
+                        .collect::<Result<_, _>>()
+                        .map(|rendered| (group, rendered))
+                })
+                .collect::<Result<_, _>>()?,
+        })
+    }
+}
+
+/// Dependency `MatchSpecs` rendered for a repodata record.
+#[derive(Debug, Clone)]
+pub struct RenderedMatchSpecs {
+    /// Rendered package dependencies.
+    pub depends: Vec<String>,
+    /// Rendered package constraints.
+    pub constrains: Vec<String>,
+    /// Rendered optional dependency groups.
+    pub extra_depends: BTreeMap<String, Vec<String>>,
+}
+
+fn parse_matchspecs(
+    field: impl Into<String>,
+    specs: &[String],
+    parse_options: ParseMatchSpecOptions,
+) -> Result<Vec<MatchSpec>, ValidateIndexJsonError> {
+    let field = field.into();
+    specs
+        .iter()
+        .map(|spec| {
+            MatchSpec::from_str(spec, parse_options).map_err(|source| {
+                ValidateIndexJsonError::InvalidMatchSpec {
+                    field: field.clone(),
+                    spec: spec.clone(),
+                    source,
+                }
+            })
+        })
+        .collect()
+}
+
+fn validate_legacy_matchspec(
+    field: &str,
+    matchspec: &MatchSpec,
+) -> Result<(), ValidateIndexJsonError> {
+    if matchspec.extras.is_some() {
+        return Err(ValidateIndexJsonError::LegacyMatchSpecExtras {
+            field: field.to_string(),
+            spec: matchspec.to_string(),
+        });
+    }
+    if matchspec.condition.is_some() {
+        return Err(ValidateIndexJsonError::LegacyMatchSpecCondition {
+            field: field.to_string(),
+            spec: matchspec.to_string(),
+        });
+    }
+    if matchspec.flags.is_some() {
+        return Err(ValidateIndexJsonError::LegacyMatchSpecFlags {
+            field: field.to_string(),
+            spec: matchspec.to_string(),
+        });
+    }
+    Ok(())
 }
 
 fn matchspec_requires_v3(spec: &str, parse_options: ParseMatchSpecOptions) -> bool {
@@ -385,6 +505,54 @@ mod test {
             inferred_revision.required_repodata_revision(),
             RepodataRevision::V3
         );
+    }
+
+    #[test]
+    pub fn test_validated_matchspecs_render_for_revision() {
+        let index: IndexJson = serde_json::from_str(
+            r#"{
+                "build": "0",
+                "build_number": 0,
+                "constrains": ["python >=3.10"],
+                "depends": ["python >=3.10"],
+                "extra_depends": { "test": ["pytest >=8"] },
+                "name": "demo",
+                "version": "1.0"
+            }"#,
+        )
+        .unwrap();
+        let (_, matchspecs) = index.into_validated().unwrap().into_parts();
+
+        let v3 = matchspecs
+            .clone()
+            .render_for_revision(RepodataRevision::V3)
+            .unwrap();
+        assert_eq!(v3.depends, ["python[version=\">=3.10\"]"]);
+        assert_eq!(v3.constrains, ["python[version=\">=3.10\"]"]);
+        assert_eq!(v3.extra_depends["test"], ["pytest[version=\">=8\"]"]);
+
+        let revision_4 = matchspecs
+            .clone()
+            .render_for_revision(RepodataRevision::Unknown(4))
+            .unwrap();
+        assert_eq!(revision_4.depends, v3.depends);
+        assert_eq!(revision_4.constrains, v3.constrains);
+        assert_eq!(revision_4.extra_depends, v3.extra_depends);
+
+        let legacy = matchspecs
+            .clone()
+            .render_for_revision(RepodataRevision::Legacy)
+            .unwrap();
+        assert_eq!(legacy.depends, ["python >=3.10"]);
+        assert_eq!(legacy.constrains, ["python >=3.10"]);
+        assert_eq!(legacy.extra_depends["test"], ["pytest >=8"]);
+
+        let revision_2 = matchspecs
+            .render_for_revision(RepodataRevision::Unknown(2))
+            .unwrap();
+        assert_eq!(revision_2.depends, legacy.depends);
+        assert_eq!(revision_2.constrains, legacy.constrains);
+        assert_eq!(revision_2.extra_depends, legacy.extra_depends);
     }
 
     #[test]
