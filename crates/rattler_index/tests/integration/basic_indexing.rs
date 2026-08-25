@@ -387,7 +387,7 @@ async fn test_reindex_derives_authoritative_legacy_and_v3_stats_and_message_prec
             r#"{
                 "build": "0",
                 "build_number": 0,
-                "extra_depends": { "docs": ["sphinx"] },
+                "extra_depends": { "docs": ["sphinx[when=\"python >=3.10\"]"] },
                 "name": "v3-stats",
                 "noarch": "generic",
                 "subdir": "noarch",
@@ -909,28 +909,18 @@ async fn test_index_repodata_revision_from_index_json() {
             .pointer("/packages.conda/empty-0.1.0-h4616a5c_0.conda")
             .is_some()
     );
-    assert!(
-        repodata_json
-            .pointer("/packages/revision-demo-1.0.0-h123_0.tar.bz2")
-            .is_none()
-    );
-    let record = &repodata_json["v3"]["tar.bz2"]["revision-demo-1.0.0-h123_0"];
-    assert_eq!(
-        record["depends"],
-        serde_json::json!(["python[version=\">=3.10\"]"])
-    );
-    assert_eq!(
-        record["constrains"],
-        serde_json::json!(["python[version=\">=3.10\"]"])
-    );
+    let record = &repodata_json["packages"][package_name];
+    assert_eq!(record["depends"], serde_json::json!(["python >=3.10"]));
+    assert_eq!(record["constrains"], serde_json::json!(["python >=3.10"]));
     assert_eq!(
         record["extra_depends"]["docs"],
-        serde_json::json!(["sphinx[version=\">=8\"]"])
+        serde_json::json!(["sphinx >=8"])
     );
-    let revision = &repodata_json["info"]["repodata_revisions"]["v3"];
-    assert_eq!(revision["n_packages"], 1);
-    assert_eq!(revision["oldest"], 1710000000000i64);
-    assert_eq!(revision["newest"], 1710000000000i64);
+    assert!(
+        repodata_json
+            .pointer("/v3/tar.bz2/revision-demo-1.0.0-h123_0")
+            .is_none()
+    );
 }
 
 #[tokio::test]

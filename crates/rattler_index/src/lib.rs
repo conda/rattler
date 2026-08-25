@@ -1134,11 +1134,9 @@ fn render_record_matchspecs_for_revision(
     matchspecs: Option<ValidatedMatchSpecs>,
     revision: RepodataRevision,
 ) -> Result<(), RepodataError> {
-    if revision.uses_legacy_package_layout()
-        && (!record.extra_depends.is_empty() || !record.flags.is_empty())
-    {
+    if revision.uses_legacy_package_layout() && !record.flags.is_empty() {
         return Err(RepodataError::Other(anyhow::anyhow!(
-            "legacy repodata cannot represent extra_depends or package flags"
+            "legacy repodata cannot represent package flags"
         )));
     }
 
