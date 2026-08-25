@@ -68,6 +68,12 @@ impl<T> BarrierCell<T> {
         unsafe { (*self.value.get()).assume_init_ref() }
     }
 
+    /// Returns the value when the cell has been initialized.
+    pub fn get(&self) -> Option<&T> {
+        (self.state.load(Ordering::Acquire) == BarrierCellState::Initialized as u8)
+            .then(|| unsafe { (*self.value.get()).assume_init_ref() })
+    }
+
     /// Set the value in the cell, if the cell was already initialized this will return an error.
     pub fn set(&self, value: T) -> Result<(), SetError> {
         // Only one thread should be able to transition from Uninitialized to Initializing.
@@ -127,8 +133,10 @@ mod test {
     #[test]
     pub fn test_drop() {
         let barrier = BarrierCell::new();
+        assert!(barrier.get().is_none());
         let arc = Arc::new(42);
         barrier.set(arc.clone()).unwrap();
+        assert_eq!(barrier.get().map(AsRef::as_ref), Some(&42));
         assert_eq!(Arc::strong_count(&arc), 2);
         drop(barrier);
         assert_eq!(Arc::strong_count(&arc), 1);

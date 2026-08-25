@@ -211,6 +211,30 @@ where
         F: FnOnce() -> Fut,
         Fut: std::future::Future<Output = Result<V, E>>,
     {
+        self.initialize(key, init, false).await
+    }
+
+    /// Refreshes the value for `key` using the provided async `init` function.
+    /// Concurrent refreshes and reads are coalesced behind the same in-flight
+    /// initialization.
+    pub async fn refresh<E, Fut, F>(&self, key: K, init: F) -> Result<V, CoalescedGetError<E>>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<V, E>>,
+    {
+        self.initialize(key, init, true).await
+    }
+
+    async fn initialize<E, Fut, F>(
+        &self,
+        key: K,
+        init: F,
+        refresh: bool,
+    ) -> Result<V, CoalescedGetError<E>>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<V, E>>,
+    {
         // Attempt to occupy or observe the entry.
         let sender = match self.map.entry(key.clone()) {
             Entry::Vacant(entry) => {
@@ -221,7 +245,13 @@ where
                 tx
             }
             Entry::Occupied(mut entry) => match entry.get() {
-                PendingOrFetched::Fetched(v) => return Ok(v.clone()),
+                PendingOrFetched::Fetched(v) if !refresh => return Ok(v.clone()),
+                PendingOrFetched::Fetched(_) => {
+                    let (tx, _) = broadcast::channel(1);
+                    let tx = Arc::new(tx);
+                    entry.insert(PendingOrFetched::Pending(Arc::downgrade(&tx)));
+                    tx
+                }
                 PendingOrFetched::Pending(weak_tx) => {
                     if let Some(tx) = weak_tx.upgrade() {
                         // Subscribe before dropping the entry to avoid missing the send.
@@ -332,6 +362,23 @@ mod tests {
             .unwrap();
 
         assert_eq!(result2, "value1");
+    }
+
+    #[tokio::test]
+    async fn test_refresh() {
+        let map: CoalescedMap<String, String> = CoalescedMap::new();
+        let key = "key".to_string();
+        map.get_or_try_init(key.clone(), || async { Ok::<_, &str>("old".to_string()) })
+            .await
+            .unwrap();
+
+        let refreshed = map
+            .refresh(key.clone(), || async { Ok::<_, &str>("new".to_string()) })
+            .await
+            .unwrap();
+
+        assert_eq!(refreshed, "new");
+        assert_eq!(map.get(&key).as_deref(), Some("new"));
     }
 
     #[tokio::test]

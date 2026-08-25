@@ -314,6 +314,10 @@ impl SubdirClient for ShardedSubdir {
         self.sharded_repodata.shards.keys().cloned().collect()
     }
 
+    fn sharded_repodata(&self) -> Option<&ShardedRepodata> {
+        Some(&self.sharded_repodata)
+    }
+
     fn repodata_revisions(&self) -> &RepodataRevisions {
         &self.sharded_repodata.info.repodata_revisions
     }

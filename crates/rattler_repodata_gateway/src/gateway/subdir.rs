@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use ahash::HashMap;
-use rattler_conda_types::{ChannelRelations, PackageName, RepoDataRecord, RepodataRevisions};
+use rattler_conda_types::{
+    ChannelRelations, PackageName, RepoDataRecord, RepodataRevisions, ShardedRepodata,
+};
 
 use super::GatewayError;
 use crate::Reporter;
@@ -96,6 +98,14 @@ impl Subdir {
         }
     }
 
+    /// Returns the sharded-repodata index, if this subdirectory used CEP-16.
+    pub fn sharded_repodata(&self) -> Option<&ShardedRepodata> {
+        match self {
+            Subdir::Found(subdir) => subdir.sharded_repodata(),
+            Subdir::NotFound => None,
+        }
+    }
+
     /// Returns repodata revisions advertised by this subdirectory.
     pub fn repodata_revisions(&self) -> &RepodataRevisions {
         match self {
@@ -162,6 +172,10 @@ impl SubdirData {
         self.client.package_names()
     }
 
+    pub fn sharded_repodata(&self) -> Option<&ShardedRepodata> {
+        self.client.sharded_repodata()
+    }
+
     pub fn repodata_revisions(&self) -> &RepodataRevisions {
         self.client.repodata_revisions()
     }
@@ -188,6 +202,11 @@ pub trait SubdirClient: Send + Sync {
 
     /// Returns the names of all packages in the subdirectory.
     fn package_names(&self) -> Vec<String>;
+
+    /// Returns the sharded-repodata index when this source uses CEP-16.
+    fn sharded_repodata(&self) -> Option<&ShardedRepodata> {
+        None
+    }
 
     /// Returns repodata revisions advertised by the subdirectory.
     fn repodata_revisions(&self) -> &RepodataRevisions {

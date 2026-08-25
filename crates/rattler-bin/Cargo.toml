@@ -72,6 +72,7 @@ rattler_upload = { workspace = true }
 rattler_shell = { workspace = true, default-features = false }
 reqwest = { workspace = true, features = ["stream", "query"] }
 reqwest-middleware = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }

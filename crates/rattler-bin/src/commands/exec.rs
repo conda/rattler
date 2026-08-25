@@ -10,14 +10,17 @@ use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
     ParseMatchSpecOptions, Platform,
 };
-use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
+use rattler_repodata_gateway::{
+    Gateway, RepoData, RepoDataQueryResult, ShardQuerySnapshot, SourceConfig,
+};
 use rattler_shell::shell::ShellEnum;
 use rattler_solve::{SolverImpl, SolverTask, resolvo::Solver};
 use rattler_virtual_packages::{VirtualPackage, VirtualPackageOverrides};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeSet, HashMap},
-    env,
+    env, fs,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -69,6 +72,25 @@ pub struct Opt {
     /// Disable modification of PS1 to indicate the temporary environment.
     #[clap(long)]
     pub no_modify_ps1: bool,
+}
+
+/// The solver inputs and shard-index entries that produced an exec environment.
+///
+/// This is intentionally private to `rattler exec`: it is a fail-closed cache
+/// validation format, not a lockfile format.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+struct ShardStamp {
+    input: ResolutionInput,
+    query_snapshot: ShardQuerySnapshot,
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+struct ResolutionInput {
+    rattler_version: String,
+    specs: Vec<String>,
+    channels: Vec<String>,
+    platform: Platform,
+    virtual_packages: Vec<String>,
 }
 
 /// CLI entry point for `rattler exec`.
@@ -213,16 +235,7 @@ async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Res
     let prefix = cache_dir.join(EXEC_ENVS_DIR).join(&dir_name);
 
     let sentinel = prefix.join(".exec-ready");
-
-    // If the environment already exists, and we are not forcing a
-    // reinstallation, we can return early.
-    if sentinel.exists() && !force_reinstall {
-        tracing::info!("reusing existing environment in {}", prefix.display());
-        return Ok(prefix);
-    }
-
     let download_client = create_client_with_middleware(offline)?;
-
     let gateway = Gateway::builder()
         .with_cache_dir(cache_dir.join(rattler_cache::REPODATA_CACHE_DIR))
         .with_package_cache(PackageCache::new(
@@ -238,20 +251,72 @@ async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Res
             per_channel: HashMap::new(),
         })
         .finish();
+    let virtual_packages = detect_virtual_packages()?;
+    let input = resolution_input(specs, channels, platform, &virtual_packages);
 
-    let repo_data = wrap_in_async_progress(
-        "fetching repodata",
-        gateway
-            .query(
-                channels.to_vec(),
-                [platform, Platform::NoArch],
-                specs.to_vec(),
-            )
-            .recursive(true),
-    )
-    .await
-    .into_diagnostic()
-    .context("failed to fetch repodata")?;
+    // A ready prefix is reusable only if the exact solver inputs and the
+    // query's complete CEP-16 lookup trace are still unchanged.
+    let mut refreshed_repo_data = None;
+    if sentinel.exists() && !force_reinstall {
+        match read_shard_stamp(&sentinel) {
+            Ok(stamp) if stamp.input == input => {
+                match wrap_in_async_progress(
+                    "checking environment freshness",
+                    gateway
+                        .query(
+                            channels.to_vec(),
+                            [platform, Platform::NoArch],
+                            specs.to_vec(),
+                        )
+                        .recursive(true)
+                        .execute_if_unchanged(&stamp.query_snapshot),
+                )
+                .await
+                {
+                    Ok(RepoDataQueryResult::NotModified) => {
+                        tracing::info!("reusing up-to-date environment in {}", prefix.display());
+                        return Ok(prefix);
+                    }
+                    Ok(RepoDataQueryResult::Updated(output)) => {
+                        tracing::info!(
+                            "environment in {} is stale or cannot use sharded repodata; resolving again",
+                            prefix.display()
+                        );
+                        refreshed_repo_data = Some(output);
+                    }
+                    Err(error) => tracing::info!(
+                        "could not validate cached environment in {} ({error}); resolving again",
+                        prefix.display()
+                    ),
+                }
+            }
+            Ok(_) => tracing::info!(
+                "cached environment in {} has different solver inputs; resolving again",
+                prefix.display()
+            ),
+            Err(error) => tracing::info!(
+                "cached environment in {} has no usable shard stamp ({error}); resolving again",
+                prefix.display()
+            ),
+        }
+    }
+
+    let repo_data = match refreshed_repo_data {
+        Some(output) => output,
+        None => wrap_in_async_progress(
+            "fetching repodata",
+            gateway
+                .query(
+                    channels.to_vec(),
+                    [platform, Platform::NoArch],
+                    specs.to_vec(),
+                )
+                .recursive(true),
+        )
+        .await
+        .into_diagnostic()
+        .context("failed to fetch repodata")?,
+    };
 
     // Surface any non-fatal CEP-42 channel-relation problems.
     for warning in &repo_data.warnings {
@@ -261,16 +326,13 @@ async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Res
     let total_records: usize = repo_data.iter().map(RepoData::len).sum();
     tracing::debug!("loaded {} records from repodata", total_records);
 
-    // Determine virtual packages of the current platform
-    let virtual_packages: Vec<GenericVirtualPackage> = VirtualPackage::detect(
-        &VirtualPackageOverrides::from_env(),
-        rattler::default_cache_dir().ok().as_deref(),
-    )
-    .into_diagnostic()
-    .context("failed to determine virtual packages")?
-    .into_iter()
-    .map(GenericVirtualPackage::from)
-    .collect();
+    let shard_stamp = repo_data
+        .shard_query_snapshot()
+        .cloned()
+        .map(|query_snapshot| ShardStamp {
+            input,
+            query_snapshot,
+        });
 
     let solver_task = SolverTask {
         specs: specs.to_vec(),
@@ -281,6 +343,14 @@ async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Res
     let solved = wrap_in_progress("solving environment", || Solver.solve(solver_task))
         .into_diagnostic()
         .context("failed to solve environment")?;
+
+    // A stale prefix must be recreated instead of linked over. Do this only
+    // after resolving successfully, so a solve failure leaves the old prefix intact.
+    if prefix.exists() {
+        fs::remove_dir_all(&prefix)
+            .into_diagnostic()
+            .context("failed to remove stale exec environment")?;
+    }
 
     // Solve the environment
     tracing::info!(
@@ -308,10 +378,13 @@ async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Res
         .into_diagnostic()
         .context("failed to install environment")?;
 
-    // Mark the environment as ready so future runs can skip solve+install
-    std::fs::write(&sentinel, b"")
-        .into_diagnostic()
-        .context("failed to write sentinel file")?;
+    if let Some(shard_stamp) = shard_stamp {
+        write_shard_stamp(&sentinel, &shard_stamp)?;
+    } else {
+        fs::write(&sentinel, b"")
+            .into_diagnostic()
+            .context("failed to write sentinel file")?;
+    }
 
     if let Some(regex) = list {
         list_environment(specs, &solved.records, regex)?;
@@ -328,6 +401,59 @@ fn parse_specs(raw: &[String]) -> miette::Result<Vec<MatchSpec>> {
                 .with_context(|| format!("failed to parse matchspec '{s}'"))
         })
         .collect()
+}
+
+fn detect_virtual_packages() -> miette::Result<Vec<GenericVirtualPackage>> {
+    VirtualPackage::detect(
+        &VirtualPackageOverrides::from_env(),
+        rattler::default_cache_dir().ok().as_deref(),
+    )
+    .into_diagnostic()
+    .context("failed to determine virtual packages")
+    .map(|packages| {
+        packages
+            .into_iter()
+            .map(GenericVirtualPackage::from)
+            .collect()
+    })
+}
+
+fn resolution_input(
+    specs: &[MatchSpec],
+    channels: &[Channel],
+    platform: Platform,
+    virtual_packages: &[GenericVirtualPackage],
+) -> ResolutionInput {
+    let mut specs: Vec<_> = specs.iter().map(ToString::to_string).collect();
+    specs.sort_unstable();
+    let mut virtual_packages: Vec<_> = virtual_packages.iter().map(ToString::to_string).collect();
+    virtual_packages.sort_unstable();
+    ResolutionInput {
+        rattler_version: env!("CARGO_PKG_VERSION").to_string(),
+        specs,
+        channels: channels
+            .iter()
+            .map(|channel| channel.base_url.to_string())
+            .collect(),
+        platform,
+        virtual_packages,
+    }
+}
+
+fn read_shard_stamp(path: &Path) -> miette::Result<ShardStamp> {
+    let bytes = fs::read(path).into_diagnostic()?;
+    serde_json::from_slice(&bytes).into_diagnostic()
+}
+
+fn write_shard_stamp(path: &Path, stamp: &ShardStamp) -> miette::Result<()> {
+    let temporary_path = path.with_extension("tmp");
+    fs::write(
+        &temporary_path,
+        serde_json::to_vec(stamp).into_diagnostic()?,
+    )
+    .into_diagnostic()?;
+    fs::rename(&temporary_path, path).into_diagnostic()?;
+    Ok(())
 }
 
 /// Produces a deterministic hex hash over (sorted specs, sorted channels, platform).

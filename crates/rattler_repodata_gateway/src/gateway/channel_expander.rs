@@ -7,6 +7,7 @@ use std::{
 };
 
 use rattler_conda_types::{Channel, ChannelRelations, ChannelUrl, Platform};
+use serde::{Deserialize, Serialize};
 
 use super::{
     channel_relations::{EdgeSource, PriorityEdge, Resolution, resolve_channel_priority},
@@ -22,7 +23,8 @@ use crate::Reporter;
 /// failing the query and are returned as [`ChannelRelationsWarning`]s.
 ///
 /// [CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ChannelRelationsMode {
     /// Ignore declared relations. Same as `channel_relations_max_depth(0)`.
     Disabled,

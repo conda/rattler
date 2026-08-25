@@ -35,7 +35,10 @@ use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use error::GatewayError;
 #[cfg(feature = "indicatif")]
 pub use indicatif::{IndicatifReporter, IndicatifReporterBuilder};
-pub use query::{NamesQuery, NamesQueryOutput, RepoDataQuery, RepoDataQueryOutput};
+pub use query::{
+    NamesQuery, NamesQueryOutput, RepoDataQuery, RepoDataQueryOutput, RepoDataQueryResult,
+    ShardQuerySnapshot,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, ChannelRelations, MatchSpec, Platform, RepoDataRecord};
@@ -374,6 +377,29 @@ struct GatewayInner {
 }
 
 impl GatewayInner {
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn revalidate_subdir(
+        &self,
+        channel: &Channel,
+        platform: Platform,
+    ) -> Result<Arc<Subdir>, GatewayError> {
+        let channel = channel.clone();
+        self.subdirs
+            .refresh((channel.clone(), platform), || async {
+                self.create_subdir(&channel, platform, None)
+                    .await
+                    .map(Arc::new)
+            })
+            .await
+            .map_err(|error| match error {
+                CoalescedGetError::Init(error) => error,
+                CoalescedGetError::CoalescedRequestFailed => GatewayError::IoError(
+                    "a coalesced request failed".to_string(),
+                    std::io::ErrorKind::Other.into(),
+                ),
+            })
+    }
+
     /// Returns the [`Subdir`] for the given channel and platform. This
     /// function will create the [`Subdir`] if it does not exist yet, otherwise
     /// it will return the previously created subdir.

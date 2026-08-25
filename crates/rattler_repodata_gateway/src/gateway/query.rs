@@ -1,14 +1,15 @@
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     future::{Future, IntoFuture},
     sync::Arc,
 };
 
 use futures::{FutureExt, StreamExt, select_biased, stream::FuturesUnordered};
 use rattler_conda_types::{
-    Channel, ChannelUrl, MatchSpec, Matches, PackageName, PackageNameMatcher, Platform,
-    RepoDataRecord,
+    Channel, ChannelRelations, ChannelUrl, MatchSpec, Matches, PackageName, PackageNameMatcher,
+    Platform, RepoDataRecord, ShardedRepodata,
 };
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 use super::{
@@ -30,6 +31,9 @@ type RecordPatch = dyn Fn(&RepoDataRecord) -> Option<RepoDataRecord> + Send + Sy
 /// it like a `Vec<RepoData>`.
 #[derive(Debug, Default)]
 pub struct RepoDataQueryOutput {
+    /// A replayable CEP-16 snapshot of the exact package-name lookups used by
+    /// this query. `None` means the query used an unsupported source or shape.
+    shard_snapshot: Option<ShardQuerySnapshot>,
     /// One bucket per source. CEP-42-discovered channels are inserted
     /// next to the channel that introduced them; caller-supplied
     /// sources keep their positions.
@@ -40,6 +44,17 @@ pub struct RepoDataQueryOutput {
     /// Non-fatal warnings encountered during the query. Also streamed
     /// to [`Reporter::on_gateway_warning`] as they are recorded.
     pub warnings: Vec<GatewayWarning>,
+}
+
+impl RepoDataQueryOutput {
+    /// Returns the CEP-16 snapshot that can conditionally replay this query.
+    ///
+    /// A snapshot is available only for supported exact-name queries against
+    /// sharded repodata. Persist it together with any inputs that influence
+    /// the subsequent solve.
+    pub fn shard_query_snapshot(&self) -> Option<&ShardQuerySnapshot> {
+        self.shard_snapshot.as_ref()
+    }
 }
 
 impl std::ops::Deref for RepoDataQueryOutput {
@@ -56,6 +71,116 @@ impl IntoIterator for RepoDataQueryOutput {
 
     fn into_iter(self) -> Self::IntoIter {
         self.repodata.into_iter()
+    }
+}
+
+/// Result of conditionally replaying a repodata query from a shard snapshot.
+#[derive(Debug)]
+pub enum RepoDataQueryResult {
+    /// The previous query's candidate universe remains unchanged.
+    NotModified,
+    /// The candidate universe may have changed; use the returned repodata for
+    /// the normal solve and persist its fresh snapshot.
+    Updated(RepoDataQueryOutput),
+}
+
+/// An opaque, serializable trace of the CEP-16 shard lookups made by a query.
+///
+/// It implements [`Serialize`] and [`Deserialize`], so callers can persist it
+/// with any serde format. It includes absent-name lookups and, when channel
+/// relations are enabled, their declared state. Consumers must treat an
+/// unsupported or missing snapshot as a normal-query fallback.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct ShardQuerySnapshot {
+    version: u8,
+    query: ShardQueryIdentity,
+    indexes: Vec<ShardQueryIndex>,
+}
+
+/// The query shape that determines whether a shard snapshot can be replayed.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+struct ShardQueryIdentity {
+    recursive: bool,
+    channel_relations_mode: ChannelRelationsMode,
+    channel_relations_max_depth: usize,
+    channels: Vec<ChannelUrl>,
+    platforms: Vec<Platform>,
+    specs: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+struct ShardQueryIndex {
+    channel: ChannelUrl,
+    subdir: Platform,
+    channel_relations: Option<ChannelRelations>,
+    hashes: BTreeMap<String, Option<String>>,
+}
+
+impl ShardQueryIndex {
+    fn from_repodata(
+        channel: &Channel,
+        platform: Platform,
+        names: &[String],
+        repodata: &ShardedRepodata,
+        include_channel_relations: bool,
+    ) -> Self {
+        let channel_relations = include_channel_relations
+            .then(|| repodata.info.channel_relations.clone())
+            .flatten();
+        let hashes = names
+            .iter()
+            .map(|name| (name.clone(), repodata.shards.get(name).map(hex::encode)))
+            .collect();
+        Self {
+            channel: channel.base_url.clone(),
+            subdir: platform,
+            channel_relations,
+            hashes,
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn matches(
+        &self,
+        gateway: &GatewayInner,
+        include_channel_relations: bool,
+    ) -> Result<bool, GatewayError> {
+        let channel = Channel::from_url(self.channel.url().as_ref().clone());
+        let platform = self.subdir;
+        let subdir = gateway.revalidate_subdir(&channel, platform).await?;
+        let Some(repodata) = subdir.sharded_repodata() else {
+            return Ok(false);
+        };
+        let current = Self::from_repodata(
+            &channel,
+            platform,
+            self.hashes.keys().cloned().collect::<Vec<_>>().as_slice(),
+            repodata,
+            include_channel_relations,
+        );
+        Ok(self == &current)
+    }
+}
+
+impl ShardQuerySnapshot {
+    #[cfg(not(target_arch = "wasm32"))]
+    fn is_valid(&self) -> bool {
+        self.version == 1 && !self.indexes.is_empty()
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn matches(&self, gateway: &GatewayInner) -> Result<bool, GatewayError> {
+        let include_channel_relations = !matches!(
+            self.query.channel_relations_mode,
+            ChannelRelationsMode::Disabled
+        );
+        let matches = futures::future::try_join_all(
+            self.indexes
+                .iter()
+                .map(|index| index.matches(gateway, include_channel_relations)),
+        )
+        .await?;
+        Ok(matches.into_iter().all(std::convert::identity))
     }
 }
 
@@ -332,6 +457,68 @@ impl RepoDataQuery {
         let executor = QueryExecutor::new(self)?;
         executor.run().await
     }
+
+    /// Replays this query against a snapshot produced by an earlier
+    /// [`RepoDataQuery::execute`].
+    ///
+    /// The gateway revalidates only the snapshot's indexes. If their relevant
+    /// entries and metadata are unchanged, no package shards are fetched and
+    /// [`RepoDataQueryResult::NotModified`] is returned. Otherwise this
+    /// executes the normal query and returns [`RepoDataQueryResult::Updated`].
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn execute_if_unchanged(
+        self,
+        snapshot: &ShardQuerySnapshot,
+    ) -> Result<RepoDataQueryResult, GatewayError> {
+        if !snapshot.is_valid() || self.shard_query_identity().as_ref() != Some(&snapshot.query) {
+            return self.execute().await.map(RepoDataQueryResult::Updated);
+        }
+
+        if snapshot.matches(&self.gateway).await? {
+            Ok(RepoDataQueryResult::NotModified)
+        } else {
+            // Validation refreshed the normal gateway cache, so the full query
+            // can reuse those subdirs without fetching their indexes again.
+            self.execute().await.map(RepoDataQueryResult::Updated)
+        }
+    }
+
+    /// WASM does not currently expose an index-only refresh path, so it always
+    /// falls back to the ordinary query.
+    #[cfg(target_arch = "wasm32")]
+    pub async fn execute_if_unchanged(
+        self,
+        _snapshot: &ShardQuerySnapshot,
+    ) -> Result<RepoDataQueryResult, GatewayError> {
+        self.execute().await.map(RepoDataQueryResult::Updated)
+    }
+
+    fn shard_query_identity(&self) -> Option<ShardQueryIdentity> {
+        if self.record_patch.is_some()
+            || self.specs.iter().any(|spec| {
+                spec.url.is_some() || !matches!(&spec.name, PackageNameMatcher::Exact(_))
+            })
+        {
+            return None;
+        }
+
+        let channels = self
+            .sources
+            .iter()
+            .map(|source| match source {
+                Source::Channel(channel) => Some(channel.base_url.clone()),
+                _ => None,
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(ShardQueryIdentity {
+            recursive: self.recursive,
+            channel_relations_mode: self.channel_relations_mode,
+            channel_relations_max_depth: self.channel_relations_max_depth,
+            channels,
+            platforms: self.platforms.clone(),
+            specs: self.specs.iter().map(ToString::to_string).collect(),
+        })
+    }
 }
 
 /// Owns all mutable state during query execution and provides methods for each phase.
@@ -342,6 +529,7 @@ struct QueryExecutor {
     recursive: bool,
     record_patch: Option<Arc<RecordPatch>>,
     reporter: Option<Arc<dyn Reporter>>,
+    shard_query_identity: Option<ShardQueryIdentity>,
 
     // Specs categorized at construction
     direct_url_specs: Vec<DirectUrlSpec>,
@@ -440,6 +628,8 @@ impl NoticeCollector {
 impl QueryExecutor {
     /// Construct executor, categorizing specs and initializing subdirs.
     fn new(query: RepoDataQuery) -> Result<Self, GatewayError> {
+        let shard_query_identity = query.shard_query_identity();
+
         // Destructure query to take ownership of all fields
         let RepoDataQuery {
             gateway,
@@ -615,6 +805,7 @@ impl QueryExecutor {
             recursive,
             record_patch,
             reporter,
+            shard_query_identity,
             direct_url_specs,
             direct_url_result,
             pending_pattern_specs,
@@ -1091,6 +1282,53 @@ impl QueryExecutor {
         self.spawn_package_fetches_for_new_handle(handle_idx);
     }
 
+    fn capture_shard_snapshot(
+        &self,
+        handles: &[SubdirHandle],
+    ) -> Result<Option<ShardQuerySnapshot>, GatewayError> {
+        let Some(query) = &self.shard_query_identity else {
+            return Ok(None);
+        };
+
+        let mut names: Vec<String> = self
+            .all_queued_specs
+            .keys()
+            .map(|name| name.as_normalized().to_string())
+            .collect();
+        names.sort_unstable();
+
+        let mut indexes = Vec::with_capacity(handles.len());
+        for handle in handles {
+            let SubdirKind::Channel { url, platform } = &handle.kind else {
+                return Ok(None);
+            };
+            let channel = Channel::from_url(url.url().as_ref().clone());
+            let Some(repodata) = handle
+                .barrier
+                .get()
+                .and_then(|subdir| subdir.sharded_repodata())
+            else {
+                return Ok(None);
+            };
+            indexes.push(ShardQueryIndex::from_repodata(
+                &channel,
+                *platform,
+                &names,
+                repodata,
+                self.expander.enabled(),
+            ));
+        }
+        indexes.sort_by(|left, right| {
+            (&left.channel, left.subdir).cmp(&(&right.channel, right.subdir))
+        });
+
+        Ok(Some(ShardQuerySnapshot {
+            version: 1,
+            query: query.clone(),
+            indexes,
+        }))
+    }
+
     /// Build the final [`RepoDataQueryOutput`]. When relations were
     /// observed, buckets sort by
     /// `(caller anchor, CEP-42 priority, platform, original index)`:
@@ -1099,6 +1337,7 @@ impl QueryExecutor {
     /// introduced them) and priority orders channels within an
     /// anchor, placing bases before the declaring channel.
     fn finalize_channel_relations(mut self) -> Result<RepoDataQueryOutput, GatewayError> {
+        let shard_snapshot = self.capture_shard_snapshot(&self.subdir_handles)?;
         let direct = self.direct_url_result;
         let mut handles = self.subdir_handles;
 
@@ -1180,6 +1419,7 @@ impl QueryExecutor {
         }
         repodata.extend(handles.into_iter().map(|h| h.data));
         Ok(RepoDataQueryOutput {
+            shard_snapshot,
             repodata,
             notices: self.notices.collected,
             warnings: self

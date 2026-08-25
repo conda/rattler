@@ -4989,6 +4989,7 @@ dependencies = [
  "rattler_virtual_packages",
  "regex",
  "reqwest",
+ "serde",
  "serde_json",
  "sha2 0.11.0",
  "tempfile",

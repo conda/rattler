@@ -182,24 +182,30 @@ mod tests {
         http::{Response, StatusCode},
         routing::get,
     };
-    use rattler_conda_types::{Channel, RepodataRevisions, ShardedRepodata, ShardedSubdirInfo};
+    use rattler_conda_types::{
+        Channel, PackageName, Platform, RepodataRevisions, Shard, ShardedRepodata,
+        ShardedSubdirInfo,
+    };
     use rattler_digest::{Sha256, parse_digest_from_hex};
-    use std::future::IntoFuture;
     use std::net::SocketAddr;
     use std::path::Path;
     use std::sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
     };
+    use std::{future::IntoFuture, str::FromStr};
     use tokio::sync::oneshot;
     use url::Url;
 
     use super::{ShardCachePolicy, ShardedSubdir};
+    use crate::{Gateway, RepoDataQueryResult, ShardQuerySnapshot, SourceConfig};
 
     /// A mock server that serves a sharded repodata index but returns
     /// configurable responses for shard requests.
     struct MockShardedServer {
         local_addr: SocketAddr,
+        sharded_index: Arc<Mutex<ShardedRepodata>>,
+        index_requests: Arc<AtomicUsize>,
         shard_requests: Arc<AtomicUsize>,
         _shutdown_sender: oneshot::Sender<()>,
     }
@@ -227,23 +233,41 @@ mod tests {
                 shards,
             };
 
-            // Encode the index as msgpack and compress with zstd
-            let index_bytes = rmp_serde::to_vec_named(&sharded_index).unwrap();
-            let compressed_index = zstd::encode_all(index_bytes.as_slice(), 3).unwrap();
+            let sharded_index = Arc::new(Mutex::new(sharded_index));
+            let valid_shard = zstd::encode_all(
+                rmp_serde::to_vec_named(&Shard::default())
+                    .unwrap()
+                    .as_slice(),
+                3,
+            )
+            .unwrap();
 
+            let index_requests = Arc::new(AtomicUsize::new(0));
             let shard_requests = Arc::new(AtomicUsize::new(0));
             let app = Router::new()
                 .route(
                     "/linux-64/repodata_shards.msgpack.zst",
-                    get(move || async move {
-                        Response::builder()
-                            .status(StatusCode::OK)
-                            .header("Content-Type", "application/octet-stream")
-                            // Keep the cached copy fresh, so `UseCacheOnly`
-                            // accepts it in the cold-shard tests.
-                            .header("Cache-Control", "max-age=3600")
-                            .body(Body::from(compressed_index.clone()))
-                            .unwrap()
+                    get({
+                        let sharded_index = Arc::clone(&sharded_index);
+                        let index_requests = Arc::clone(&index_requests);
+                        move || {
+                            let sharded_index = Arc::clone(&sharded_index);
+                            let index_requests = Arc::clone(&index_requests);
+                            async move {
+                                index_requests.fetch_add(1, Ordering::SeqCst);
+                                let index_bytes =
+                                    rmp_serde::to_vec_named(&*sharded_index.lock().unwrap())
+                                        .unwrap();
+                                let compressed_index =
+                                    zstd::encode_all(index_bytes.as_slice(), 3).unwrap();
+                                Response::builder()
+                                    .status(StatusCode::OK)
+                                    .header("Content-Type", "application/octet-stream")
+                                    .header("Cache-Control", "max-age=3600")
+                                    .body(Body::from(compressed_index))
+                                    .unwrap()
+                            }
+                        }
                     }),
                 )
                 .route(
@@ -253,6 +277,10 @@ mod tests {
                         move || async move {
                             shard_requests.fetch_add(1, Ordering::SeqCst);
                             match shard_response {
+                                MockShardResponse::Valid => Response::builder()
+                                    .status(StatusCode::OK)
+                                    .body(Body::from(valid_shard.clone()))
+                                    .unwrap(),
                                 MockShardResponse::Empty => Response::builder()
                                     .status(StatusCode::OK)
                                     .body(Body::empty())
@@ -284,6 +312,8 @@ mod tests {
 
             Self {
                 local_addr,
+                sharded_index,
+                index_requests,
                 shard_requests,
                 _shutdown_sender: tx,
             }
@@ -297,6 +327,21 @@ mod tests {
             Channel::from_url(self.url())
         }
 
+        fn index_request_count(&self) -> usize {
+            self.index_requests.load(Ordering::SeqCst)
+        }
+
+        fn refresh_created_at(&self) {
+            self.sharded_index.lock().unwrap().info.created_at = Some(jiff::Timestamp::now());
+        }
+
+        fn replace_shard_hash(&self, hash: &str) {
+            self.sharded_index.lock().unwrap().shards.insert(
+                "test-package".to_string(),
+                parse_digest_from_hex::<Sha256>(hash).unwrap(),
+            );
+        }
+
         /// How many shard downloads the server has answered so far. The index
         /// request is not counted.
         fn shard_request_count(&self) -> usize {
@@ -306,6 +351,7 @@ mod tests {
 
     #[derive(Clone, Copy)]
     enum MockShardResponse {
+        Valid,
         Empty,
         Truncated,
     }
@@ -503,6 +549,114 @@ mod tests {
         )
         .await
         .expect("the index comes from the cache")
+    }
+
+    #[tokio::test]
+    async fn query_snapshot_ignores_volatile_index_metadata() {
+        let server = MockShardedServer::new(MockShardResponse::Valid).await;
+        let cache_dir = tempfile::tempdir().unwrap();
+        let gateway = Gateway::builder()
+            .with_cache_dir(cache_dir.path())
+            .with_channel_config(crate::ChannelConfig {
+                default: SourceConfig {
+                    cache_action: CacheAction::NoCache,
+                    ..SourceConfig::default()
+                },
+                per_channel: std::collections::HashMap::default(),
+            })
+            .finish();
+        let package = PackageName::from_str("test-package").unwrap();
+
+        let initial = gateway
+            .query(
+                vec![server.channel()],
+                [Platform::Linux64],
+                [package.clone()],
+            )
+            .recursive(true)
+            .execute()
+            .await
+            .unwrap();
+        let snapshot = initial
+            .shard_query_snapshot()
+            .cloned()
+            .expect("exact-name sharded query has a replay snapshot");
+        let serialized = serde_json::to_vec(&snapshot).unwrap();
+        let round_tripped: ShardQuerySnapshot = serde_json::from_slice(&serialized).unwrap();
+        assert_eq!(round_tripped, snapshot);
+        assert_eq!(server.shard_request_count(), 1);
+
+        let mut forged = serde_json::to_value(&snapshot).unwrap();
+        assert_eq!(forged["version"], 1);
+        assert_eq!(forged["query"]["channel_relations_mode"], "warn");
+        forged["indexes"] = serde_json::Value::Array(Vec::new());
+        let forged: ShardQuerySnapshot = serde_json::from_value(forged).unwrap();
+        let replay = gateway
+            .query(
+                vec![server.channel()],
+                [Platform::Linux64],
+                [package.clone()],
+            )
+            .recursive(true)
+            .execute_if_unchanged(&forged)
+            .await
+            .unwrap();
+        assert!(matches!(replay, RepoDataQueryResult::Updated(_)));
+        assert_eq!(server.shard_request_count(), 1);
+
+        server.refresh_created_at();
+        let replay = gateway
+            .query(vec![server.channel()], [Platform::Linux64], [package])
+            .recursive(true)
+            .execute_if_unchanged(&snapshot)
+            .await
+            .unwrap();
+
+        assert!(matches!(replay, RepoDataQueryResult::NotModified));
+        assert_eq!(server.shard_request_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn query_snapshot_falls_back_when_a_shard_hash_changes() {
+        let server = MockShardedServer::new(MockShardResponse::Valid).await;
+        let cache_dir = tempfile::tempdir().unwrap();
+        let gateway = Gateway::builder()
+            .with_cache_dir(cache_dir.path())
+            .with_channel_config(crate::ChannelConfig {
+                default: SourceConfig {
+                    cache_action: CacheAction::NoCache,
+                    ..SourceConfig::default()
+                },
+                per_channel: std::collections::HashMap::default(),
+            })
+            .finish();
+        let package = PackageName::from_str("test-package").unwrap();
+
+        let initial = gateway
+            .query(
+                vec![server.channel()],
+                [Platform::Linux64],
+                [package.clone()],
+            )
+            .recursive(true)
+            .execute()
+            .await
+            .unwrap();
+        let snapshot = initial.shard_query_snapshot().cloned().unwrap();
+        assert_eq!(server.index_request_count(), 1);
+        server
+            .replace_shard_hash("c3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+
+        let replay = gateway
+            .query(vec![server.channel()], [Platform::Linux64], [package])
+            .recursive(true)
+            .execute_if_unchanged(&snapshot)
+            .await
+            .unwrap();
+
+        assert!(matches!(replay, RepoDataQueryResult::Updated(_)));
+        assert_eq!(server.index_request_count(), 2);
+        assert_eq!(server.shard_request_count(), 2);
     }
 
     /// The cache-only modes a cold shard behaves the same under.
