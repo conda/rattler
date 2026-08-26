@@ -4,7 +4,7 @@
 //! directory for copy-on-write semantics. Implements the same `VfsOps` trait
 //! so it can be used interchangeably with the read-only VFS.
 
-use libc::{EIO, ENOENT};
+use libc::{EINVAL, EIO, ENOENT};
 use std::{
     collections::HashMap,
     ffi::{OsStr, OsString},
@@ -22,6 +22,41 @@ mod inode;
 use crate::overlay::{OverlayState, STATE_FILENAME, STATE_LOCK_FILENAME, STATE_TMP_FILENAME};
 use crate::vfs_ops::{ContentSource, DirEntry, FileAttr, FileKind, VfsOps, set_file_permissions};
 use inode::{ResolvedIno, UPPER_INODE_BASE, UpperInodeMap};
+
+/// Reject a wire filename that is not a single, safe path component.
+///
+/// Transport adapters (NFS in particular) hand us filenames straight off the
+/// wire. NFS `AUTH_UNIX` is unauthenticated and the protocol does not stop a
+/// client from sending a multi-component or `..` name, so without this check a
+/// request such as `CREATE(dir, "../../../home/user/.bashrc")` would escape the
+/// overlay directory once joined onto the on-disk upper path. Every name that
+/// reaches a `parent_path.join(name)` must pass through here first.
+///
+/// A valid component is non-empty, is neither `.` nor `..`, and contains no NUL
+/// byte or path separator (`/` always; `\` additionally on Windows). Violations
+/// return `EINVAL`.
+fn validate_component(name: &OsStr) -> Result<(), i32> {
+    if name.is_empty() || name == "." || name == ".." {
+        return Err(EINVAL);
+    }
+    let bytes = name.as_encoded_bytes();
+    let has_separator = bytes
+        .iter()
+        .any(|&b| b == b'/' || (cfg!(windows) && b == b'\\'));
+    if has_separator || bytes.contains(&0) {
+        return Err(EINVAL);
+    }
+    Ok(())
+}
+
+/// Join a validated single-component `name` onto `parent_path`.
+///
+/// Central guard against path-traversal via untrusted wire filenames — see
+/// [`validate_component`].
+fn child_path(parent_path: &Path, name: &OsStr) -> Result<PathBuf, i32> {
+    validate_component(name)?;
+    Ok(parent_path.join(name))
+}
 
 /// Create a symlink at `link` pointing to `target`, cross-platform.
 #[cfg(unix)]
@@ -154,7 +189,7 @@ impl<T: VfsOps> OverlayFS<T> {
         let parent_path = match self.resolve_ino(parent)? {
             ResolvedIno::Upper(p) | ResolvedIno::Lower(_, p) => p,
         };
-        Ok(parent_path.join(name))
+        child_path(&parent_path, name)
     }
 
     fn resolve_ino(&self, ino: u64) -> Result<ResolvedIno, i32> {
@@ -348,7 +383,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
         let parent_path = match self.resolve_ino(parent)? {
             ResolvedIno::Upper(p) | ResolvedIno::Lower(_, p) => p,
         };
-        let virtual_path = parent_path.join(name);
+        let virtual_path = child_path(&parent_path, name)?;
 
         // Single state lock: check whiteout and opaque in one acquisition
         {
@@ -986,6 +1021,50 @@ mod tests {
                 Err(ENOENT)
             }
         }
+    }
+
+    #[test]
+    fn test_validate_component_rejects_traversal() {
+        // Single safe components are accepted.
+        assert!(validate_component(OsStr::new("file.txt")).is_ok());
+        assert!(validate_component(OsStr::new("a.b.c")).is_ok());
+
+        // Empty, self, and parent references are rejected.
+        assert_eq!(validate_component(OsStr::new("")), Err(EINVAL));
+        assert_eq!(validate_component(OsStr::new(".")), Err(EINVAL));
+        assert_eq!(validate_component(OsStr::new("..")), Err(EINVAL));
+
+        // Any embedded separator or NUL is rejected.
+        assert_eq!(validate_component(OsStr::new("../etc/passwd")), Err(EINVAL));
+        assert_eq!(
+            validate_component(OsStr::new("../../../home/user/.bashrc")),
+            Err(EINVAL)
+        );
+        assert_eq!(validate_component(OsStr::new("sub/dir")), Err(EINVAL));
+        assert_eq!(validate_component(OsStr::new("a\0b")), Err(EINVAL));
+    }
+
+    #[test]
+    fn test_overlay_create_rejects_traversal_name() {
+        let tmp = TempDir::new().unwrap();
+        let overlay_dir = tmp.path().join("upper");
+        let ofs = OverlayFS::new(
+            MockLowerFS,
+            overlay_dir.clone(),
+            "hash".into(),
+            "test".into(),
+        )
+        .unwrap();
+
+        // A crafted NFS filename must not escape the overlay directory.
+        let escape = OsStr::new("../../../home/user/.bashrc");
+        assert_eq!(ofs.create(1, escape, 0o644).err(), Some(EINVAL));
+        assert_eq!(ofs.mkdir(1, escape, 0o755).err(), Some(EINVAL));
+        assert_eq!(ofs.lookup(1, escape).err(), Some(EINVAL));
+        assert_eq!(ofs.unlink(1, escape).err(), Some(EINVAL));
+
+        // Nothing was written outside the overlay directory.
+        assert!(!tmp.path().join("home/user/.bashrc").exists());
     }
 
     #[test]
