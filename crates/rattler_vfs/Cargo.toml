@@ -16,6 +16,7 @@ libc = { workspace = true }
 thiserror = { workspace = true }
 memchr = { workspace = true }
 memmap2 = { workspace = true }
+rayon = { workspace = true }
 rattler = { workspace = true, default-features = false }
 reflink-copy = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
