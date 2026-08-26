@@ -813,6 +813,14 @@ pub(crate) async fn build_metadata_tree(
             .cmp(&a.package_record.size.unwrap_or(0))
     });
 
+    let total_packages = conda_packages.len();
+    tracing::info!(
+        environment = environment_name,
+        platform = %platform,
+        packages = total_packages,
+        "building VFS metadata tree"
+    );
+
     // Fetch + parse packages in parallel (the expensive part); tree mutation
     // stays serial. Each task carries its `conda_packages` index so results can
     // be reordered deterministically regardless of completion order.
@@ -877,10 +885,13 @@ pub(crate) async fn build_metadata_tree(
     // deterministic order so clobbering resolves the same way every run.
     let mut fetched: Vec<Option<FetchedPackage>> =
         (0..conda_packages.len()).map(|_| None).collect();
+    let mut fetched_count = 0usize;
     while let Some(result) = join_set.join_next().await {
         let (idx, cache_path, paths_json, is_noarch_python, entry_points) =
             result.map_err(|e| anyhow::anyhow!("fetch task failed: {e}"))??;
         fetched[idx] = Some((cache_path, paths_json, is_noarch_python, entry_points));
+        fetched_count += 1;
+        tracing::debug!("fetched {fetched_count}/{total_packages} packages");
     }
 
     // Build in topological order so clobbering resolves like the installer:
@@ -926,6 +937,11 @@ pub(crate) async fn build_metadata_tree(
         tracing::debug!("parsed {} metadata entries", env_paths.len());
     }
 
+    tracing::info!(
+        nodes = env_paths.len(),
+        packages = total_packages,
+        "VFS metadata tree built"
+    );
     Ok(MetadataTree(env_paths))
 }
 
@@ -1046,6 +1062,14 @@ pub async fn mount(metadata: MetadataTree, config: &MountConfig) -> anyhow::Resu
             }
         }
     }
+
+    let read_only = matches!(config.mode, Mode::ReadOnly | Mode::ReadOnlyIfSupported);
+    tracing::info!(
+        transport = transport.name(),
+        mount_point = %config.mount_point.display(),
+        read_only,
+        "mounting virtual environment"
+    );
 
     // Construct the VirtualFS once. Each transport branch consumes it.
     // VFS construction does eager prefix-offset computation, so we want
