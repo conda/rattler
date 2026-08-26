@@ -22,7 +22,7 @@ use nfs3_types::nfs3::{
 };
 use nfs3_types::xdr_codec::Opaque;
 
-use crate::vfs_ops::{FileAttr, FileKind, VfsError, VfsOps};
+use crate::vfs_ops::{Fh, FileAttr, FileKind, VfsError, VfsOps};
 
 /// LRU cache of open write handles, keyed by inode.
 ///
@@ -34,7 +34,7 @@ use crate::vfs_ops::{FileAttr, FileKind, VfsError, VfsOps};
 /// touch.
 struct WriteHandleCache {
     /// inode → file handle
-    map: HashMap<u64, u64>,
+    map: HashMap<u64, Fh>,
     /// Insertion / touch order. The front is the least recently used.
     order: VecDeque<u64>,
 }
@@ -48,7 +48,7 @@ impl WriteHandleCache {
     }
 
     /// Get the handle for `ino`, marking it as most recently used.
-    fn get(&mut self, ino: u64) -> Option<u64> {
+    fn get(&mut self, ino: u64) -> Option<Fh> {
         let fh = *self.map.get(&ino)?;
         // Move ino to the back (most recently used). O(N) for N <= 64 is fine;
         // swap to a real LRU crate if MAX_WRITE_HANDLES grows.
@@ -59,13 +59,13 @@ impl WriteHandleCache {
         Some(fh)
     }
 
-    fn insert(&mut self, ino: u64, fh: u64) {
+    fn insert(&mut self, ino: u64, fh: Fh) {
         self.map.insert(ino, fh);
         self.order.push_back(ino);
     }
 
     /// Evict and return the least recently used `(ino, fh)` pair.
-    fn pop_lru(&mut self) -> Option<(u64, u64)> {
+    fn pop_lru(&mut self) -> Option<(u64, Fh)> {
         let ino = self.order.pop_front()?;
         let fh = self.map.remove(&ino)?;
         Some((ino, fh))
@@ -150,7 +150,7 @@ impl<T: VfsOps> NfsAdapter<T> {
     /// Handles are cached to avoid reopening on consecutive writes to the same file.
     /// When the cache exceeds `MAX_WRITE_HANDLES`, the least recently used
     /// handle is evicted (see [`WriteHandleCache::pop_lru`]).
-    fn get_write_handle(&self, ino: u64) -> Result<u64, nfsstat3> {
+    fn get_write_handle(&self, ino: u64) -> Result<Fh, nfsstat3> {
         let mut cache = self.write_handles.lock().unwrap();
         if let Some(fh) = cache.get(ino) {
             return Ok(fh);

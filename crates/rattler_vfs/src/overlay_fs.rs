@@ -22,7 +22,7 @@ use crate::overlay::{
     OverlayState, STATE_FILENAME, STATE_JOURNAL_FILENAME, STATE_LOCK_FILENAME, STATE_TMP_FILENAME,
 };
 use crate::vfs_ops::{
-    ContentSource, DirEntry, FileAttr, FileKind, VfsError, VfsOps, set_file_permissions,
+    ContentSource, DirEntry, Fh, FileAttr, FileKind, VfsError, VfsOps, set_file_permissions,
 };
 use inode::{ResolvedIno, UPPER_INODE_BASE, UpperInodeMap};
 
@@ -90,7 +90,7 @@ pub struct OverlayFS<T: VfsOps> {
     overlay_dir: PathBuf,
     upper_inodes: Mutex<UpperInodeMap>,
     lower_ino_cache: Mutex<HashMap<PathBuf, u64>>,
-    open_files: Mutex<HashMap<u64, File>>,
+    open_files: Mutex<HashMap<Fh, File>>,
     next_fh: AtomicU64,
     /// Lower inodes promoted to upper layer via rename or `open_write` COW.
     /// Maps `lower_ino` → `upper_ino` so the kernel's cached handle still works.
@@ -494,7 +494,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
         }
     }
 
-    fn open_write(&self, ino: u64) -> Result<u64, VfsError> {
+    fn open_write(&self, ino: u64) -> Result<Fh, VfsError> {
         let (virtual_path, needs_cow_from) = match self.resolve_ino(ino)? {
             ResolvedIno::Upper(path) => {
                 let p = self.upper_path(&path);
@@ -527,12 +527,12 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
                 tracing::warn!("overlay open write failed {:?}: {}", upper_path, e);
                 VfsError::Io
             })?;
-        let fh = self.next_fh.fetch_add(1, Ordering::Relaxed);
+        let fh = Fh(self.next_fh.fetch_add(1, Ordering::Relaxed));
         self.open_files.lock().unwrap().insert(fh, file);
         Ok(fh)
     }
 
-    fn read_handle(&self, fh: u64, offset: u64, size: u32) -> Result<Vec<u8>, VfsError> {
+    fn read_handle(&self, fh: Fh, offset: u64, size: u32) -> Result<Vec<u8>, VfsError> {
         let mut files = self.open_files.lock().unwrap();
         let file = files.get_mut(&fh).ok_or(VfsError::Io)?;
         file.seek(SeekFrom::Start(offset))
@@ -543,7 +543,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
         Ok(buf)
     }
 
-    fn release_write(&self, fh: u64) {
+    fn release_write(&self, fh: Fh) {
         self.open_files.lock().unwrap().remove(&fh);
     }
 
@@ -641,7 +641,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
         Ok(result)
     }
 
-    fn create(&self, parent: u64, name: &OsStr, mode: u32) -> Result<(FileAttr, u64), VfsError> {
+    fn create(&self, parent: u64, name: &OsStr, mode: u32) -> Result<(FileAttr, Fh), VfsError> {
         let virtual_path = self.resolve_path(parent, name).inspect_err(|&e| {
             tracing::warn!(
                 "overlay create: resolve_path failed for parent={} name={:?}: errno={}",
@@ -687,13 +687,13 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
         let ino = self.assign_upper_ino(virtual_path.clone());
         let attr = self.make_upper_attr(&virtual_path, ino)?;
 
-        let fh = self.next_fh.fetch_add(1, Ordering::Relaxed);
+        let fh = Fh(self.next_fh.fetch_add(1, Ordering::Relaxed));
         self.open_files.lock().unwrap().insert(fh, file);
 
         Ok((attr, fh))
     }
 
-    fn write(&self, fh: u64, offset: u64, data: &[u8]) -> Result<u32, VfsError> {
+    fn write(&self, fh: Fh, offset: u64, data: &[u8]) -> Result<u32, VfsError> {
         let mut files = self.open_files.lock().unwrap();
         let file = files.get_mut(&fh).ok_or_else(|| {
             tracing::warn!("overlay write: fh={} not found in open_files", fh);

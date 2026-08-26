@@ -96,6 +96,44 @@ impl std::error::Error for VfsError {}
 /// Convenience alias for VFS operation results.
 pub type VfsResult<T> = Result<T, VfsError>;
 
+/// An opaque write-handle token returned by [`VfsOps::open_write`] /
+/// [`VfsOps::create`] and passed back to [`VfsOps::write`],
+/// [`VfsOps::read_handle`], and [`VfsOps::release_write`].
+///
+/// A newtype rather than a bare `u64` so a file handle can't be silently
+/// swapped for an inode (both would otherwise be `u64`) — the NFS adapter in
+/// particular keeps an inode→handle map where mixing the two would be a subtle
+/// bug. Inodes are deliberately left as `u64`: they're used as array indices,
+/// map keys, and in the overlay's `UPPER_INODE_BASE` partition arithmetic,
+/// where a newtype would add noise without preventing a real error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Fh(pub u64);
+
+impl Fh {
+    /// The underlying handle value.
+    pub fn get(self) -> u64 {
+        self.0
+    }
+}
+
+impl From<u64> for Fh {
+    fn from(v: u64) -> Self {
+        Self(v)
+    }
+}
+
+impl From<Fh> for u64 {
+    fn from(fh: Fh) -> Self {
+        fh.0
+    }
+}
+
+impl std::fmt::Display for Fh {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// File type — transport-agnostic equivalent of `fuser::FileType`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileKind {
@@ -255,19 +293,19 @@ pub trait VfsOps: Send + Sync + 'static {
     // Write operations — default to read-only (`EROFS`) for read-only impls.
 
     /// Open a file for writing. Returns a write handle.
-    fn open_write(&self, _ino: u64) -> VfsResult<u64> {
+    fn open_write(&self, _ino: u64) -> VfsResult<Fh> {
         Err(VfsError::ReadOnly)
     }
     /// Read from a write handle (for files currently open for writing).
-    fn read_handle(&self, _fh: u64, _offset: u64, _size: u32) -> VfsResult<Vec<u8>> {
+    fn read_handle(&self, _fh: Fh, _offset: u64, _size: u32) -> VfsResult<Vec<u8>> {
         Err(VfsError::ReadOnly)
     }
-    fn write(&self, _fh: u64, _offset: u64, _data: &[u8]) -> VfsResult<u32> {
+    fn write(&self, _fh: Fh, _offset: u64, _data: &[u8]) -> VfsResult<u32> {
         Err(VfsError::ReadOnly)
     }
-    fn release_write(&self, _fh: u64) {}
+    fn release_write(&self, _fh: Fh) {}
 
-    fn create(&self, _parent: u64, _name: &OsStr, _mode: u32) -> VfsResult<(FileAttr, u64)> {
+    fn create(&self, _parent: u64, _name: &OsStr, _mode: u32) -> VfsResult<(FileAttr, Fh)> {
         Err(VfsError::ReadOnly)
     }
     fn unlink(&self, _parent: u64, _name: &OsStr) -> VfsResult<()> {
