@@ -22,7 +22,7 @@ use nfs3_types::nfs3::{
 };
 use nfs3_types::xdr_codec::Opaque;
 
-use crate::vfs_ops::{FileAttr, FileKind, VfsOps};
+use crate::vfs_ops::{FileAttr, FileKind, VfsError, VfsOps};
 
 /// LRU cache of open write handles, keyed by inode.
 ///
@@ -162,7 +162,7 @@ impl<T: VfsOps> NfsAdapter<T> {
                 break;
             }
         }
-        let fh = self.vfs.open_write(ino).map_err(errno_to_nfsstat)?;
+        let fh = self.vfs.open_write(ino).map_err(vfs_err_to_nfsstat)?;
         cache.insert(ino, fh);
         Ok(fh)
     }
@@ -353,17 +353,19 @@ fn os_str_from_nfs_bytes(bytes: &[u8]) -> Result<OsString, nfsstat3> {
     }
 }
 
-fn errno_to_nfsstat(errno: i32) -> nfsstat3 {
-    match errno {
-        libc::ENOENT => nfsstat3::NFS3ERR_NOENT,
-        libc::EACCES => nfsstat3::NFS3ERR_ACCES,
-        libc::ENOTDIR => nfsstat3::NFS3ERR_NOTDIR,
-        libc::EISDIR => nfsstat3::NFS3ERR_ISDIR,
-        libc::EROFS => nfsstat3::NFS3ERR_ROFS,
-        libc::EEXIST => nfsstat3::NFS3ERR_EXIST,
-        libc::ENOTEMPTY => nfsstat3::NFS3ERR_NOTEMPTY,
-        libc::ENOSPC => nfsstat3::NFS3ERR_NOSPC,
-        _ => nfsstat3::NFS3ERR_IO,
+fn vfs_err_to_nfsstat(err: VfsError) -> nfsstat3 {
+    match err {
+        VfsError::NotFound => nfsstat3::NFS3ERR_NOENT,
+        VfsError::PermissionDenied => nfsstat3::NFS3ERR_ACCES,
+        VfsError::NotADirectory => nfsstat3::NFS3ERR_NOTDIR,
+        VfsError::IsADirectory => nfsstat3::NFS3ERR_ISDIR,
+        VfsError::ReadOnly => nfsstat3::NFS3ERR_ROFS,
+        VfsError::AlreadyExists => nfsstat3::NFS3ERR_EXIST,
+        VfsError::NotEmpty => nfsstat3::NFS3ERR_NOTEMPTY,
+        VfsError::NoSpace => nfsstat3::NFS3ERR_NOSPC,
+        VfsError::InvalidArgument => nfsstat3::NFS3ERR_INVAL,
+        VfsError::NotPermitted => nfsstat3::NFS3ERR_PERM,
+        VfsError::Io => nfsstat3::NFS3ERR_IO,
     }
 }
 
@@ -408,7 +410,7 @@ impl<T: VfsOps> NfsReadFileSystem for NfsAdapter<T> {
         let name_bytes = filename.0.as_ref().to_vec();
         tokio::task::spawn_blocking(move || {
             let name = &os_str_from_nfs_bytes(&name_bytes)?;
-            let attr = vfs.lookup(parent_ino, name).map_err(errno_to_nfsstat)?;
+            let attr = vfs.lookup(parent_ino, name).map_err(vfs_err_to_nfsstat)?;
             Ok(FileHandleU64::new(attr.ino))
         })
         .await
@@ -422,7 +424,7 @@ impl<T: VfsOps> NfsReadFileSystem for NfsAdapter<T> {
         let vfs = self.vfs.clone();
         let ino = id.as_u64();
         tokio::task::spawn_blocking(move || {
-            let attr = vfs.getattr(ino).map_err(errno_to_nfsstat)?;
+            let attr = vfs.getattr(ino).map_err(vfs_err_to_nfsstat)?;
             Ok(file_attr_to_fattr3(&attr))
         })
         .await
@@ -441,7 +443,7 @@ impl<T: VfsOps> NfsReadFileSystem for NfsAdapter<T> {
         let vfs = self.vfs.clone();
         let ino = id.as_u64();
         tokio::task::spawn_blocking(move || {
-            let data = vfs.read(ino, offset, count).map_err(errno_to_nfsstat)?;
+            let data = vfs.read(ino, offset, count).map_err(vfs_err_to_nfsstat)?;
             let eof = (data.len() as u32) < count;
             Ok((data, eof))
         })
@@ -460,7 +462,7 @@ impl<T: VfsOps> NfsReadFileSystem for NfsAdapter<T> {
         let vfs = self.vfs.clone();
         let ino = dirid.as_u64();
         tokio::task::spawn_blocking(move || {
-            let dir_entries = vfs.readdir(ino, cookie).map_err(errno_to_nfsstat)?;
+            let dir_entries = vfs.readdir(ino, cookie).map_err(vfs_err_to_nfsstat)?;
             let mut entries = Vec::with_capacity(dir_entries.len());
             for (i, de) in dir_entries.into_iter().enumerate() {
                 let attr = vfs.getattr(de.ino).ok().map(|a| file_attr_to_fattr3(&a));
@@ -485,7 +487,7 @@ impl<T: VfsOps> NfsReadFileSystem for NfsAdapter<T> {
         let vfs = self.vfs.clone();
         let ino = id.as_u64();
         tokio::task::spawn_blocking(move || {
-            let target = vfs.readlink(ino).map_err(errno_to_nfsstat)?;
+            let target = vfs.readlink(ino).map_err(vfs_err_to_nfsstat)?;
             let bytes = target.as_os_str().as_encoded_bytes().to_vec();
             Ok(nfspath3(Opaque::owned(bytes)))
         })
@@ -514,7 +516,7 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
                 Nfs3Option::Some(m) => Some(m),
                 Nfs3Option::None => None,
             };
-            let attr = vfs.setattr(ino, size, mode).map_err(errno_to_nfsstat)?;
+            let attr = vfs.setattr(ino, size, mode).map_err(vfs_err_to_nfsstat)?;
             Ok(file_attr_to_fattr3(&attr))
         })
         .await
@@ -545,7 +547,7 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
                 .await
                 .unwrap_or_else(|e| {
                     tracing::error!("NFS write handler panicked: {e}");
-                    Err(libc::EIO)
+                    Err(VfsError::Io)
                 });
 
             match write_result {
@@ -555,14 +557,14 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
                         .await
                         .unwrap_or_else(|e| {
                             tracing::error!("NFS handler panicked: {e}");
-                            Err(libc::EIO)
+                            Err(VfsError::Io)
                         })
                         .map(|attr| file_attr_to_fattr3(&attr))
-                        .map_err(errno_to_nfsstat);
+                        .map_err(vfs_err_to_nfsstat);
                 }
                 // Evicted handle on the first try: fall through to reopen+retry.
-                Err(libc::EIO) if attempt == 0 => {}
-                Err(e) => return Err(errno_to_nfsstat(e)),
+                Err(VfsError::Io) if attempt == 0 => {}
+                Err(e) => return Err(vfs_err_to_nfsstat(e)),
             }
         }
         Err(nfsstat3::NFS3ERR_IO)
@@ -585,7 +587,7 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
             let name = &os_str_from_nfs_bytes(&name_bytes)?;
             let (file_attr, fh) = vfs
                 .create(parent_ino, name, mode)
-                .map_err(errno_to_nfsstat)?;
+                .map_err(vfs_err_to_nfsstat)?;
             vfs.release_write(fh);
             Ok((
                 FileHandleU64::new(file_attr.ino),
@@ -615,7 +617,7 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
                 tracing::warn!(
                     "create_exclusive failed: parent={parent_ino} name={name:?} errno={errno}"
                 );
-                errno_to_nfsstat(errno)
+                vfs_err_to_nfsstat(errno)
             })?;
             vfs.release_write(fh);
             Ok(FileHandleU64::new(file_attr.ino))
@@ -639,7 +641,7 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
             let name = &os_str_from_nfs_bytes(&name_bytes)?;
             let dir_attr = vfs
                 .mkdir(parent_ino, name, 0o755)
-                .map_err(errno_to_nfsstat)?;
+                .map_err(vfs_err_to_nfsstat)?;
             Ok((
                 FileHandleU64::new(dir_attr.ino),
                 file_attr_to_fattr3(&dir_attr),
@@ -662,7 +664,7 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
         let name_bytes = filename.0.as_ref().to_vec();
         tokio::task::spawn_blocking(move || {
             let name = &os_str_from_nfs_bytes(&name_bytes)?;
-            vfs.unlink(parent_ino, name).map_err(errno_to_nfsstat)
+            vfs.unlink(parent_ino, name).map_err(vfs_err_to_nfsstat)
         })
         .await
         .unwrap_or_else(|e| {
@@ -687,7 +689,7 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
             let from = os_str_from_nfs_bytes(&from_name)?;
             let to = os_str_from_nfs_bytes(&to_name)?;
             vfs.rename(from_parent, &from, to_parent, &to, 0)
-                .map_err(errno_to_nfsstat)
+                .map_err(vfs_err_to_nfsstat)
         })
         .await
         .unwrap_or_else(|e| {
@@ -841,20 +843,33 @@ mod tests {
 
     #[test]
     fn errno_maps_to_expected_nfsstat() {
-        assert_eq!(errno_to_nfsstat(libc::ENOENT), nfsstat3::NFS3ERR_NOENT);
-        assert_eq!(errno_to_nfsstat(libc::EACCES), nfsstat3::NFS3ERR_ACCES);
-        assert_eq!(errno_to_nfsstat(libc::ENOTDIR), nfsstat3::NFS3ERR_NOTDIR);
-        assert_eq!(errno_to_nfsstat(libc::EISDIR), nfsstat3::NFS3ERR_ISDIR);
-        assert_eq!(errno_to_nfsstat(libc::EROFS), nfsstat3::NFS3ERR_ROFS);
-        assert_eq!(errno_to_nfsstat(libc::EEXIST), nfsstat3::NFS3ERR_EXIST);
+        use crate::vfs_ops::VfsError as E;
+        assert_eq!(vfs_err_to_nfsstat(E::NotFound), nfsstat3::NFS3ERR_NOENT);
         assert_eq!(
-            errno_to_nfsstat(libc::ENOTEMPTY),
-            nfsstat3::NFS3ERR_NOTEMPTY
+            vfs_err_to_nfsstat(E::PermissionDenied),
+            nfsstat3::NFS3ERR_ACCES
         );
-        assert_eq!(errno_to_nfsstat(libc::ENOSPC), nfsstat3::NFS3ERR_NOSPC);
-        // Anything unmapped (e.g. EINVAL from the traversal guard) falls back to IO.
-        assert_eq!(errno_to_nfsstat(libc::EINVAL), nfsstat3::NFS3ERR_IO);
-        assert_eq!(errno_to_nfsstat(-12345), nfsstat3::NFS3ERR_IO);
+        assert_eq!(
+            vfs_err_to_nfsstat(E::NotADirectory),
+            nfsstat3::NFS3ERR_NOTDIR
+        );
+        assert_eq!(vfs_err_to_nfsstat(E::IsADirectory), nfsstat3::NFS3ERR_ISDIR);
+        assert_eq!(vfs_err_to_nfsstat(E::ReadOnly), nfsstat3::NFS3ERR_ROFS);
+        assert_eq!(
+            vfs_err_to_nfsstat(E::AlreadyExists),
+            nfsstat3::NFS3ERR_EXIST
+        );
+        assert_eq!(vfs_err_to_nfsstat(E::NotEmpty), nfsstat3::NFS3ERR_NOTEMPTY);
+        assert_eq!(vfs_err_to_nfsstat(E::NoSpace), nfsstat3::NFS3ERR_NOSPC);
+        // The traversal guard's InvalidArgument now maps to a distinct status.
+        assert_eq!(
+            vfs_err_to_nfsstat(E::InvalidArgument),
+            nfsstat3::NFS3ERR_INVAL
+        );
+        assert_eq!(vfs_err_to_nfsstat(E::Io), nfsstat3::NFS3ERR_IO);
+        // errno round-trips through VfsError.
+        assert_eq!(E::from_errno(libc::ENOENT), E::NotFound);
+        assert_eq!(E::from_errno(-12345), E::Io);
     }
 
     #[test]
