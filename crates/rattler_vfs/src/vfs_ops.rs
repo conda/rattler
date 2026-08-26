@@ -4,12 +4,97 @@
 //! and `OverlayFS` (writable) implement. Transport adapters (FUSE, NFS, etc.)
 //! are generic over this trait.
 
-use libc::{ENOENT, EROFS};
 use std::{
     ffi::{OsStr, OsString},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
+
+/// Error returned by [`VfsOps`] operations.
+///
+/// A small, transport-agnostic error enum rather than a bare `errno` `i32`, so
+/// the VFS layer names its failure modes explicitly. Transport adapters convert
+/// it to their own wire error (NFS `nfsstat3`, FUSE `Errno`, `ProjFS` `HRESULT`)
+/// — usually via [`VfsError::errno`] / `From<VfsError> for i32`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VfsError {
+    /// No such file or directory (`ENOENT`).
+    NotFound,
+    /// Permission denied (`EACCES`).
+    PermissionDenied,
+    /// Not a directory (`ENOTDIR`).
+    NotADirectory,
+    /// Is a directory (`EISDIR`).
+    IsADirectory,
+    /// Read-only filesystem (`EROFS`).
+    ReadOnly,
+    /// File exists (`EEXIST`).
+    AlreadyExists,
+    /// Directory not empty (`ENOTEMPTY`).
+    NotEmpty,
+    /// No space left on device (`ENOSPC`).
+    NoSpace,
+    /// Invalid argument (`EINVAL`) — e.g. an unsafe wire filename.
+    InvalidArgument,
+    /// Operation not permitted (`EPERM`).
+    NotPermitted,
+    /// Catch-all I/O error (`EIO`).
+    Io,
+}
+
+impl VfsError {
+    /// The POSIX `errno` this error maps to.
+    pub fn errno(self) -> i32 {
+        match self {
+            Self::NotFound => libc::ENOENT,
+            Self::PermissionDenied => libc::EACCES,
+            Self::NotADirectory => libc::ENOTDIR,
+            Self::IsADirectory => libc::EISDIR,
+            Self::ReadOnly => libc::EROFS,
+            Self::AlreadyExists => libc::EEXIST,
+            Self::NotEmpty => libc::ENOTEMPTY,
+            Self::NoSpace => libc::ENOSPC,
+            Self::InvalidArgument => libc::EINVAL,
+            Self::NotPermitted => libc::EPERM,
+            Self::Io => libc::EIO,
+        }
+    }
+
+    /// Map a POSIX `errno` back to a [`VfsError`], collapsing anything unknown
+    /// to [`VfsError::Io`].
+    pub fn from_errno(errno: i32) -> Self {
+        match errno {
+            libc::ENOENT => Self::NotFound,
+            libc::EACCES => Self::PermissionDenied,
+            libc::ENOTDIR => Self::NotADirectory,
+            libc::EISDIR => Self::IsADirectory,
+            libc::EROFS => Self::ReadOnly,
+            libc::EEXIST => Self::AlreadyExists,
+            libc::ENOTEMPTY => Self::NotEmpty,
+            libc::ENOSPC => Self::NoSpace,
+            libc::EINVAL => Self::InvalidArgument,
+            libc::EPERM => Self::NotPermitted,
+            _ => Self::Io,
+        }
+    }
+}
+
+impl From<VfsError> for i32 {
+    fn from(e: VfsError) -> Self {
+        e.errno()
+    }
+}
+
+impl std::fmt::Display for VfsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?} (errno {})", self.errno())
+    }
+}
+
+impl std::error::Error for VfsError {}
+
+/// Convenience alias for VFS operation results.
+pub type VfsResult<T> = Result<T, VfsError>;
 
 /// File type — transport-agnostic equivalent of `fuser::FileType`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -147,52 +232,52 @@ pub struct DirEntry {
 /// Read operations are required. Write operations default to `EROFS` (read-only
 /// filesystem), allowing read-only implementations to skip them.
 pub trait VfsOps: Send + Sync + 'static {
-    fn lookup(&self, parent: u64, name: &OsStr) -> Result<FileAttr, i32>;
-    fn getattr(&self, ino: u64) -> Result<FileAttr, i32>;
-    fn readlink(&self, ino: u64) -> Result<PathBuf, i32>;
+    fn lookup(&self, parent: u64, name: &OsStr) -> VfsResult<FileAttr>;
+    fn getattr(&self, ino: u64) -> VfsResult<FileAttr>;
+    fn readlink(&self, ino: u64) -> VfsResult<PathBuf>;
 
     /// Read bytes from a file at the given offset. The VFS handles prefix
     /// replacement, codesign, and passthrough transparently.
-    fn read(&self, ino: u64, offset: u64, size: u32) -> Result<Vec<u8>, i32>;
+    fn read(&self, ino: u64, offset: u64, size: u32) -> VfsResult<Vec<u8>>;
 
     /// Hint about how the adapter should serve this file's content.
-    fn content_source(&self, ino: u64) -> Result<ContentSource, i32>;
+    fn content_source(&self, ino: u64) -> VfsResult<ContentSource>;
 
-    fn readdir(&self, ino: u64, offset: u64) -> Result<Vec<DirEntry>, i32>;
+    fn readdir(&self, ino: u64, offset: u64) -> VfsResult<Vec<DirEntry>>;
 
     /// Resolve an inode to its virtual path (relative to root).
     /// Used by the overlay to map lower inodes to paths for whiteout checks.
-    fn ino_to_path(&self, ino: u64) -> Result<PathBuf, i32> {
+    fn ino_to_path(&self, ino: u64) -> VfsResult<PathBuf> {
         let _ = ino;
-        Err(ENOENT)
+        Err(VfsError::NotFound)
     }
 
-    // Write operations — default to EROFS for read-only implementations.
+    // Write operations — default to read-only (`EROFS`) for read-only impls.
 
     /// Open a file for writing. Returns a write handle.
-    fn open_write(&self, _ino: u64) -> Result<u64, i32> {
-        Err(EROFS)
+    fn open_write(&self, _ino: u64) -> VfsResult<u64> {
+        Err(VfsError::ReadOnly)
     }
     /// Read from a write handle (for files currently open for writing).
-    fn read_handle(&self, _fh: u64, _offset: u64, _size: u32) -> Result<Vec<u8>, i32> {
-        Err(EROFS)
+    fn read_handle(&self, _fh: u64, _offset: u64, _size: u32) -> VfsResult<Vec<u8>> {
+        Err(VfsError::ReadOnly)
     }
-    fn write(&self, _fh: u64, _offset: u64, _data: &[u8]) -> Result<u32, i32> {
-        Err(EROFS)
+    fn write(&self, _fh: u64, _offset: u64, _data: &[u8]) -> VfsResult<u32> {
+        Err(VfsError::ReadOnly)
     }
     fn release_write(&self, _fh: u64) {}
 
-    fn create(&self, _parent: u64, _name: &OsStr, _mode: u32) -> Result<(FileAttr, u64), i32> {
-        Err(EROFS)
+    fn create(&self, _parent: u64, _name: &OsStr, _mode: u32) -> VfsResult<(FileAttr, u64)> {
+        Err(VfsError::ReadOnly)
     }
-    fn unlink(&self, _parent: u64, _name: &OsStr) -> Result<(), i32> {
-        Err(EROFS)
+    fn unlink(&self, _parent: u64, _name: &OsStr) -> VfsResult<()> {
+        Err(VfsError::ReadOnly)
     }
-    fn mkdir(&self, _parent: u64, _name: &OsStr, _mode: u32) -> Result<FileAttr, i32> {
-        Err(EROFS)
+    fn mkdir(&self, _parent: u64, _name: &OsStr, _mode: u32) -> VfsResult<FileAttr> {
+        Err(VfsError::ReadOnly)
     }
-    fn rmdir(&self, _parent: u64, _name: &OsStr) -> Result<(), i32> {
-        Err(EROFS)
+    fn rmdir(&self, _parent: u64, _name: &OsStr) -> VfsResult<()> {
+        Err(VfsError::ReadOnly)
     }
     fn rename(
         &self,
@@ -201,10 +286,10 @@ pub trait VfsOps: Send + Sync + 'static {
         _newparent: u64,
         _newname: &OsStr,
         _flags: u32,
-    ) -> Result<(), i32> {
-        Err(EROFS)
+    ) -> VfsResult<()> {
+        Err(VfsError::ReadOnly)
     }
-    fn setattr(&self, _ino: u64, _size: Option<u64>, _mode: Option<u32>) -> Result<FileAttr, i32> {
-        Err(EROFS)
+    fn setattr(&self, _ino: u64, _size: Option<u64>, _mode: Option<u32>) -> VfsResult<FileAttr> {
+        Err(VfsError::ReadOnly)
     }
 }

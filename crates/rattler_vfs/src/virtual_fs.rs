@@ -1,4 +1,3 @@
-use libc::{EIO, ENOENT, ENOTDIR};
 use memmap2::Mmap;
 #[cfg(target_os = "macos")]
 use rattler::install::link::copy_and_replace_placeholders_with_offsets;
@@ -20,7 +19,7 @@ use std::{
 use crate::vfs_ops::current_uid_gid;
 
 use crate::metadata_tree::{FileNode, MetadataNode};
-use crate::vfs_ops::{ContentSource, DirEntry, FileAttr, FileKind, VfsOps};
+use crate::vfs_ops::{ContentSource, DirEntry, FileAttr, FileKind, VfsError, VfsOps};
 
 /// Compare a directory entry's name against a lookup name. Case-sensitive on
 /// Unix; case-insensitive on Windows, where NTFS/ProjFS resolve paths
@@ -380,9 +379,9 @@ impl VirtualFS {
     }
 
     /// Validate an inode number and return the 0-based metadata index.
-    fn validate_ino(&self, ino: u64) -> Result<usize, i32> {
+    fn validate_ino(&self, ino: u64) -> Result<usize, VfsError> {
         if ino == 0 || ino > self.metadata.len() as u64 {
-            return Err(ENOENT);
+            return Err(VfsError::NotFound);
         }
         Ok((ino - 1) as usize)
     }
@@ -449,11 +448,11 @@ impl VirtualFS {
 
     // -- Testable inner methods --
 
-    pub(crate) fn do_lookup(&self, parent_ino: u64, name: &OsStr) -> Result<FileAttr, i32> {
+    pub(crate) fn do_lookup(&self, parent_ino: u64, name: &OsStr) -> Result<FileAttr, VfsError> {
         let parent_index = self.validate_ino(parent_ino)?;
 
         let Some(parent_directory) = self.metadata[parent_index].as_directory() else {
-            return Err(ENOTDIR);
+            return Err(VfsError::NotADirectory);
         };
 
         for child_index in parent_directory.children.iter() {
@@ -463,36 +462,36 @@ impl VirtualFS {
             }
         }
 
-        Err(ENOENT)
+        Err(VfsError::NotFound)
     }
 
-    pub(crate) fn do_getattr(&self, ino: u64) -> Result<FileAttr, i32> {
+    pub(crate) fn do_getattr(&self, ino: u64) -> Result<FileAttr, VfsError> {
         let index = self.validate_ino(ino)?;
         let entry = &self.metadata[index];
         Ok(self._getattr(entry, &index))
     }
 
-    pub(crate) fn do_readlink(&self, ino: u64) -> Result<PathBuf, i32> {
+    pub(crate) fn do_readlink(&self, ino: u64) -> Result<PathBuf, VfsError> {
         let index = self.validate_ino(ino)?;
         let Some(current_file) = self.metadata[index].as_file() else {
-            return Err(ENOENT);
+            return Err(VfsError::NotFound);
         };
         let path = self._getpath(current_file);
         fs::read_link(&path).map_err(|e| {
             tracing::warn!("readlink failed for {}: {}", path.display(), e);
-            EIO
+            VfsError::Io
         })
     }
 
-    pub(crate) fn do_content_source(&self, ino: u64) -> Result<ContentSource, i32> {
+    pub(crate) fn do_content_source(&self, ino: u64) -> Result<ContentSource, VfsError> {
         let index = self.validate_ino(ino)?;
 
         let Some(current_file) = self.metadata[index].as_file() else {
-            return Err(ENOENT); // directories don't have readable content
+            return Err(VfsError::NotFound); // directories don't have readable content
         };
 
         if current_file.path_type == PathType::SoftLink {
-            return Err(ENOENT); // symlinks don't have readable content
+            return Err(VfsError::NotFound); // symlinks don't have readable content
         }
 
         if current_file.virtual_content.is_some() {
@@ -512,23 +511,23 @@ impl VirtualFS {
     /// concurrent miss on the same inode simply maps twice and keeps whichever
     /// mapping the cache records — both are valid views of an immutable cache
     /// file.
-    fn mmap_for(&self, ino: u64, path: &Path) -> Result<Arc<Mmap>, i32> {
+    fn mmap_for(&self, ino: u64, path: &Path) -> Result<Arc<Mmap>, VfsError> {
         if let Some(mmap) = self.mmap_cache.lock().unwrap().get(ino).cloned() {
             return Ok(mmap);
         }
         let file = File::open(path).map_err(|e| {
             tracing::warn!("failed to open {}: {}", path.display(), e);
-            EIO
+            VfsError::Io
         })?;
         let mmap = Arc::new(unsafe { Mmap::map(&file) }.map_err(|e| {
             tracing::warn!("failed to memory map {}: {}", path.display(), e);
-            EIO
+            VfsError::Io
         })?);
         self.mmap_cache.lock().unwrap().insert(ino, mmap.clone());
         Ok(mmap)
     }
 
-    pub(crate) fn do_read(&self, ino: u64, offset: u64, size: u32) -> Result<Vec<u8>, i32> {
+    pub(crate) fn do_read(&self, ino: u64, offset: u64, size: u32) -> Result<Vec<u8>, VfsError> {
         let index = self.validate_ino(ino)?;
 
         let Some(current_file) = self.metadata[index].as_file() else {
@@ -552,16 +551,16 @@ impl VirtualFS {
         if current_file.prefix_placeholder.is_none() {
             let mut file = File::open(&path).map_err(|e| {
                 tracing::warn!("failed to open {}: {}", path.display(), e);
-                EIO
+                VfsError::Io
             })?;
             file.seek(SeekFrom::Start(offset)).map_err(|e| {
                 tracing::warn!("failed to seek {}: {}", path.display(), e);
-                EIO
+                VfsError::Io
             })?;
             let mut buf = vec![0u8; size as usize];
             let n = file.read(&mut buf).map_err(|e| {
                 tracing::warn!("failed to read {}: {}", path.display(), e);
-                EIO
+                VfsError::Io
             })?;
             buf.truncate(n);
             return Ok(buf);
@@ -670,11 +669,11 @@ impl VirtualFS {
         }
     }
 
-    pub(crate) fn do_readdir(&self, ino: u64, offset: u64) -> Result<Vec<DirEntry>, i32> {
+    pub(crate) fn do_readdir(&self, ino: u64, offset: u64) -> Result<Vec<DirEntry>, VfsError> {
         let index = self.validate_ino(ino)?;
 
         let Some(current_directory) = self.metadata[index].as_directory() else {
-            return Err(ENOTDIR);
+            return Err(VfsError::NotADirectory);
         };
 
         let mut entries = Vec::new();
@@ -722,26 +721,26 @@ impl VirtualFS {
 }
 
 impl VfsOps for VirtualFS {
-    fn lookup(&self, parent: u64, name: &OsStr) -> Result<FileAttr, i32> {
+    fn lookup(&self, parent: u64, name: &OsStr) -> Result<FileAttr, VfsError> {
         self.do_lookup(parent, name)
     }
-    fn getattr(&self, ino: u64) -> Result<FileAttr, i32> {
+    fn getattr(&self, ino: u64) -> Result<FileAttr, VfsError> {
         self.do_getattr(ino)
     }
-    fn readlink(&self, ino: u64) -> Result<PathBuf, i32> {
+    fn readlink(&self, ino: u64) -> Result<PathBuf, VfsError> {
         self.do_readlink(ino)
     }
-    fn read(&self, ino: u64, offset: u64, size: u32) -> Result<Vec<u8>, i32> {
+    fn read(&self, ino: u64, offset: u64, size: u32) -> Result<Vec<u8>, VfsError> {
         self.do_read(ino, offset, size)
     }
-    fn content_source(&self, ino: u64) -> Result<ContentSource, i32> {
+    fn content_source(&self, ino: u64) -> Result<ContentSource, VfsError> {
         self.do_content_source(ino)
     }
-    fn readdir(&self, ino: u64, offset: u64) -> Result<Vec<DirEntry>, i32> {
+    fn readdir(&self, ino: u64, offset: u64) -> Result<Vec<DirEntry>, VfsError> {
         self.do_readdir(ino, offset)
     }
 
-    fn ino_to_path(&self, ino: u64) -> Result<PathBuf, i32> {
+    fn ino_to_path(&self, ino: u64) -> Result<PathBuf, VfsError> {
         let index = self.validate_ino(ino)?;
         let entry = &self.metadata[index];
 
@@ -761,7 +760,7 @@ impl VfsOps for VirtualFS {
             }
             MetadataNode::File(file) => {
                 let parent = &self.metadata[file.parent];
-                let parent_dir = parent.as_directory().ok_or(ENOENT)?;
+                let parent_dir = parent.as_directory().ok_or(VfsError::NotFound)?;
                 let parent_path = parent_dir
                     .prefix_path
                     .strip_prefix("./")
@@ -963,7 +962,7 @@ mod tests {
         let (_tmp, vfs) = create_fixture();
         assert_eq!(
             vfs.do_lookup(1, OsStr::new("nonexistent")).unwrap_err(),
-            ENOENT
+            VfsError::NotFound
         );
     }
 
@@ -978,7 +977,7 @@ mod tests {
         assert_eq!(
             vfs.do_lookup(file_attr.ino, OsStr::new("child"))
                 .unwrap_err(),
-            ENOTDIR
+            VfsError::NotADirectory
         );
     }
 
@@ -1027,7 +1026,7 @@ mod tests {
     #[test]
     fn test_getattr_invalid_ino() {
         let (_tmp, vfs) = create_fixture();
-        assert_eq!(vfs.do_getattr(9999).unwrap_err(), ENOENT);
+        assert_eq!(vfs.do_getattr(9999).unwrap_err(), VfsError::NotFound);
     }
 
     // --- readlink tests ---
@@ -1062,14 +1061,14 @@ mod tests {
             .do_lookup(lib_attr.ino, OsStr::new("libfoo.so"))
             .unwrap();
         // read_link on a regular file should fail
-        assert_eq!(vfs.do_readlink(file_attr.ino), Err(EIO));
+        assert_eq!(vfs.do_readlink(file_attr.ino), Err(VfsError::Io));
     }
 
     #[test]
     fn test_readlink_directory() {
         let (_tmp, vfs) = create_fixture();
         // readlink on a directory should fail (not a file)
-        assert_eq!(vfs.do_readlink(1), Err(ENOENT));
+        assert_eq!(vfs.do_readlink(1), Err(VfsError::NotFound));
     }
 
     // --- read tests ---
@@ -1237,7 +1236,10 @@ mod tests {
         let file_attr = vfs
             .do_lookup(lib_attr.ino, OsStr::new("libfoo.so"))
             .unwrap();
-        assert_eq!(vfs.do_readdir(file_attr.ino, 0), Err(ENOTDIR));
+        assert_eq!(
+            vfs.do_readdir(file_attr.ino, 0),
+            Err(VfsError::NotADirectory)
+        );
     }
 
     // --- virtual file tests ---

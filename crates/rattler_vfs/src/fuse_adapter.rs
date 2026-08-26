@@ -126,7 +126,7 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                 let fattr: fuser::FileAttr = attr.into();
                 reply.entry(&Duration::MAX, &fattr, fuser::Generation(0));
             }
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
@@ -136,14 +136,14 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                 let fattr: fuser::FileAttr = attr.into();
                 reply.attr(&Duration::MAX, &fattr);
             }
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
     fn readlink(&self, _req: &Request, ino: INodeNo, reply: ReplyData) {
         match self.vfs.readlink(ino.0) {
             Ok(target) => reply.data(target.as_os_str().as_encoded_bytes()),
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
@@ -160,7 +160,7 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                     let fh = self.store_content(OpenFileContent::VfsManaged(vfs_fh));
                     reply.opened(FileHandle(fh), FopenFlags::empty());
                 }
-                Err(e) => reply.error(Errno::from_i32(e)),
+                Err(e) => reply.error(Errno::from_i32(e.errno())),
             }
             return;
         }
@@ -292,7 +292,7 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                 drop(lock); // release adapter lock before calling into VFS
                 match self.vfs.read_handle(vfs_fh, offset, size) {
                     Ok(data) => reply.data(&data),
-                    Err(e) => reply.error(Errno::from_i32(e)),
+                    Err(e) => reply.error(Errno::from_i32(e.errno())),
                 }
             }
             OpenFileContent::InodeRead(ino) => {
@@ -300,7 +300,7 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                 drop(lock); // release adapter lock before calling into VFS
                 match self.vfs.read(ino, offset, size) {
                     Ok(data) => reply.data(&data),
-                    Err(e) => reply.error(Errno::from_i32(e)),
+                    Err(e) => reply.error(Errno::from_i32(e.errno())),
                 }
             }
             _ => match content.as_bytes() {
@@ -359,7 +359,7 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                 }
                 reply.ok();
             }
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
@@ -387,7 +387,7 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                     FopenFlags::empty(),
                 );
             }
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
@@ -413,14 +413,14 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
         };
         match self.vfs.write(vfs_fh, offset, data) {
             Ok(written) => reply.written(written),
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
     fn unlink(&self, _req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEmpty) {
         match self.vfs.unlink(parent.0, name) {
             Ok(()) => reply.ok(),
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
@@ -438,14 +438,14 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                 let fattr: fuser::FileAttr = attr.into();
                 reply.entry(&Duration::MAX, &fattr, fuser::Generation(0));
             }
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
     fn rmdir(&self, _req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEmpty) {
         match self.vfs.rmdir(parent.0, name) {
             Ok(()) => reply.ok(),
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
@@ -464,7 +464,7 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
             .rename(parent.0, name, newparent.0, newname, flags.bits())
         {
             Ok(()) => reply.ok(),
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
@@ -491,7 +491,7 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                 let fattr: fuser::FileAttr = attr.into();
                 reply.attr(&Duration::MAX, &fattr);
             }
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 }
