@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4](https://github.com/conda/rattler/compare/rattler_redaction-v0.2.3...rattler_redaction-v0.2.4) - 2026-08-26
+
+### Other
+
+- rename CEP 146 to CEP 48 ([#2717](https://github.com/conda/rattler/pull/2717))
+
 ## [0.2.3](https://github.com/conda/rattler/compare/rattler_redaction-v0.2.2...rattler_redaction-v0.2.3) - 2026-08-21
 
 ### Fixed
