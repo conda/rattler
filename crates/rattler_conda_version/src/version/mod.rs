@@ -550,23 +550,66 @@ fn segments_starts_with<
     true
 }
 
+/// The padding component compared against when one version has fewer
+/// components than the other. `1.0` and `1` are equal because versions
+/// conceptually end in an infinite run of default components.
+const DEFAULT_COMPONENT: Component = Component::Numeral(0);
+
+/// Returns the `index`-th component of a segment as the comparison functions
+/// see it: the optional implicit default first, then the stored components,
+/// and the default component beyond the end.
+#[inline]
+fn component_at(has_implicit_default: bool, components: &[Component], index: usize) -> &Component {
+    let index = match (has_implicit_default, index) {
+        (true, 0) => return &DEFAULT_COMPONENT,
+        (true, index) => index - 1,
+        (false, index) => index,
+    };
+    components.get(index).unwrap_or(&DEFAULT_COMPONENT)
+}
+
+/// Compares the flattened components of two segment lists, padding the
+/// shorter side with default components.
+fn compare_segments<'i, I: Iterator<Item = SegmentIter<'i>>>(a: I, b: I) -> Ordering {
+    for segments in a.zip_longest(b) {
+        let (a_segment, b_segment) = segments.map_any(Some, Some).or_default();
+        let (a_implicit, a_components) = a_segment
+            .as_ref()
+            .map_or((false, [].as_slice()), SegmentIter::raw_components);
+        let (b_implicit, b_components) = b_segment
+            .as_ref()
+            .map_or((false, [].as_slice()), SegmentIter::raw_components);
+        let a_len = a_components.len() + usize::from(a_implicit);
+        let b_len = b_components.len() + usize::from(b_implicit);
+        for index in 0..a_len.max(b_len) {
+            let a_component = component_at(a_implicit, a_components, index);
+            let b_component = component_at(b_implicit, b_components, index);
+            match a_component.cmp(b_component) {
+                Ordering::Equal => {}
+                ordering => return ordering,
+            }
+        }
+    }
+    Ordering::Equal
+}
+
 impl PartialEq<Self> for Version {
     fn eq(&self, other: &Self) -> bool {
         fn segments_equal<'i, I: Iterator<Item = SegmentIter<'i>>>(a: I, b: I) -> bool {
-            for ranges in a.zip_longest(b) {
-                let (a_range, b_range) = ranges.map_any(Some, Some).or_default();
-                let default = Component::default();
-                for components in a_range
-                    .iter()
-                    .flat_map(SegmentIter::components)
-                    .zip_longest(b_range.iter().flat_map(SegmentIter::components))
-                {
-                    let (a_component, b_component) = match components {
-                        EitherOrBoth::Left(l) => (l, &default),
-                        EitherOrBoth::Right(r) => (&default, r),
-                        EitherOrBoth::Both(l, r) => (l, r),
-                    };
-                    if a_component != b_component {
+            for segments in a.zip_longest(b) {
+                let (a_segment, b_segment) = segments.map_any(Some, Some).or_default();
+                let (a_implicit, a_components) = a_segment
+                    .as_ref()
+                    .map_or((false, [].as_slice()), SegmentIter::raw_components);
+                let (b_implicit, b_components) = b_segment
+                    .as_ref()
+                    .map_or((false, [].as_slice()), SegmentIter::raw_components);
+                let a_len = a_components.len() + usize::from(a_implicit);
+                let b_len = b_components.len() + usize::from(b_implicit);
+                for index in 0..a_len.max(b_len) {
+                    if component_at(a_implicit, a_components, index)
+                        != component_at(b_implicit, b_components, index)
+                    {
                         return false;
                     }
                 }
@@ -861,34 +904,10 @@ impl Debug for Component {
 
 impl Ord for Version {
     fn cmp(&self, other: &Self) -> Ordering {
-        fn cmp_segments<'i, I: Iterator<Item = SegmentIter<'i>>>(a: I, b: I) -> Ordering {
-            for ranges in a.zip_longest(b) {
-                let (a_range, b_range) = ranges.map_any(Some, Some).or_default();
-                for components in a_range
-                    .iter()
-                    .flat_map(SegmentIter::components)
-                    .zip_longest(b_range.iter().flat_map(SegmentIter::components))
-                {
-                    let default = Component::default();
-                    let (a_component, b_component) = match components {
-                        EitherOrBoth::Left(l) => (l, &default),
-                        EitherOrBoth::Right(r) => (&default, r),
-                        EitherOrBoth::Both(l, r) => (l, r),
-                    };
-                    match a_component.cmp(b_component) {
-                        Ordering::Less => return Ordering::Less,
-                        Ordering::Equal => {}
-                        Ordering::Greater => return Ordering::Greater,
-                    }
-                }
-            }
-            Ordering::Equal
-        }
-
         self.epoch()
             .cmp(&other.epoch())
-            .then_with(|| cmp_segments(self.segments(), other.segments()))
-            .then_with(|| cmp_segments(self.local_segments(), other.local_segments()))
+            .then_with(|| compare_segments(self.segments(), other.segments()))
+            .then_with(|| compare_segments(self.local_segments(), other.local_segments()))
     }
 }
 
@@ -967,6 +986,16 @@ impl<'v> SegmentIter<'v> {
     /// Returns this segment's stored component count, excluding an implicit leading zero.
     pub fn component_count(&self) -> usize {
         self.segment.len() as usize
+    }
+
+    /// Returns whether this segment starts with an implicit default component
+    /// together with the components stored for the segment (which do not
+    /// include the implicit default).
+    fn raw_components(&self) -> (bool, &'v [Component]) {
+        (
+            self.segment.has_implicit_default(),
+            &self.version.components[self.offset..self.offset + self.segment.len() as usize],
+        )
     }
 
     /// Iterates this segment's components, including an implicit leading zero when present.
