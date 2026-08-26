@@ -200,12 +200,20 @@ mod tests {
     /// configurable responses for shard requests.
     struct MockShardedServer {
         local_addr: SocketAddr,
+        index_requests: Arc<AtomicUsize>,
         shard_requests: Arc<AtomicUsize>,
         _shutdown_sender: oneshot::Sender<()>,
     }
 
     impl MockShardedServer {
         async fn new(shard_response: MockShardResponse) -> Self {
+            Self::new_with_revalidation(shard_response, false).await
+        }
+
+        async fn new_with_revalidation(
+            shard_response: MockShardResponse,
+            revalidate: bool,
+        ) -> Self {
             // Create a minimal sharded index with one package
             let mut shards = ahash::HashMap::default();
             // Use a known hash for the "test-package" shard (SHA256 of empty string)
@@ -231,19 +239,42 @@ mod tests {
             let index_bytes = rmp_serde::to_vec_named(&sharded_index).unwrap();
             let compressed_index = zstd::encode_all(index_bytes.as_slice(), 3).unwrap();
 
+            let index_requests = Arc::new(AtomicUsize::new(0));
             let shard_requests = Arc::new(AtomicUsize::new(0));
             let app = Router::new()
                 .route(
                     "/linux-64/repodata_shards.msgpack.zst",
-                    get(move || async move {
-                        Response::builder()
-                            .status(StatusCode::OK)
-                            .header("Content-Type", "application/octet-stream")
-                            // Keep the cached copy fresh, so `UseCacheOnly`
-                            // accepts it in the cold-shard tests.
-                            .header("Cache-Control", "max-age=3600")
-                            .body(Body::from(compressed_index.clone()))
-                            .unwrap()
+                    get({
+                        let index_requests = Arc::clone(&index_requests);
+                        move |headers: axum::http::HeaderMap| {
+                            let index_requests = Arc::clone(&index_requests);
+                            let compressed_index = compressed_index.clone();
+                            async move {
+                                index_requests.fetch_add(1, Ordering::SeqCst);
+                                if revalidate && headers.contains_key("if-none-match") {
+                                    return Response::builder()
+                                        .status(StatusCode::NOT_MODIFIED)
+                                        .header("Cache-Control", "max-age=3600")
+                                        .header("ETag", "\"test-index\"")
+                                        .body(Body::empty())
+                                        .unwrap();
+                                }
+                                Response::builder()
+                                    .status(StatusCode::OK)
+                                    .header("Content-Type", "application/octet-stream")
+                                    .header(
+                                        "Cache-Control",
+                                        if revalidate {
+                                            "max-age=0"
+                                        } else {
+                                            "max-age=3600"
+                                        },
+                                    )
+                                    .header("ETag", "\"test-index\"")
+                                    .body(Body::from(compressed_index))
+                                    .unwrap()
+                            }
+                        }
                     }),
                 )
                 .route(
@@ -284,6 +315,7 @@ mod tests {
 
             Self {
                 local_addr,
+                index_requests,
                 shard_requests,
                 _shutdown_sender: tx,
             }
@@ -295,6 +327,10 @@ mod tests {
 
         fn channel(&self) -> Channel {
             Channel::from_url(self.url())
+        }
+
+        fn index_request_count(&self) -> usize {
+            self.index_requests.load(Ordering::SeqCst)
         }
 
         /// How many shard downloads the server has answered so far. The index
@@ -503,6 +539,35 @@ mod tests {
         )
         .await
         .expect("the index comes from the cache")
+    }
+
+    #[tokio::test]
+    async fn not_modified_index_refreshes_its_cache_policy() {
+        let server = MockShardedServer::new_with_revalidation(MockShardResponse::Empty, true).await;
+        let cache_dir = tempfile::tempdir().unwrap();
+        let client = rattler_networking::LazyClient::default();
+
+        for _ in 0..3 {
+            ShardedSubdir::new(
+                server.channel(),
+                "linux-64".to_string(),
+                client.clone(),
+                cache_dir.path().to_path_buf(),
+                ShardCachePolicy {
+                    action: CacheAction::CacheOrFetch,
+                    missing_shards_are_empty: false,
+                },
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        }
+
+        // The initial 200 is immediately stale, the 304 refreshes its policy,
+        // and the third load must use the now-fresh cache.
+        assert_eq!(server.index_request_count(), 2);
     }
 
     /// The cache-only modes a cold shard behaves the same under.
