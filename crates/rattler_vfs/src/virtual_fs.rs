@@ -6,6 +6,7 @@ use rattler_conda_types::Platform;
 use rattler_conda_types::package::{FileMode, OffsetRanges, PathType, select_utf8_offset_ranges};
 #[cfg(target_os = "macos")]
 use rattler_conda_types::package::{OffsetEncoding, OffsetGroup};
+use rayon::prelude::*;
 use std::{
     collections::{HashMap, VecDeque},
     ffi::{OsStr, OsString},
@@ -166,181 +167,203 @@ impl VirtualFS {
         platform: Platform,
     ) -> Self {
         let target_prefix = target_prefix_for_platform(mount_point, platform);
-        let mut offset_cache = HashMap::new();
 
-        // Eagerly compute replacement offsets and text-mode file sizes.
-        for i in 0..metadata.len() {
-            let Some(file) = metadata[i].as_file() else {
-                continue;
-            };
-            let Some(placeholder) = &file.prefix_placeholder else {
-                continue;
-            };
+        // Compute replacement offsets and text-mode file sizes. Files without
+        // recorded CEP offsets (still the common case for real packages) fall
+        // back to reading and scanning their full contents; running that
+        // serially on the caller's thread makes mount time grow with the total
+        // byte size of every prefix-bearing file (all the `.so`s and
+        // binaries). Scan files in parallel instead so mount time is bounded by
+        // the largest file rather than their sum.
+        let planned: Vec<(u64, ReplacementPlan, Option<u64>)> = (0..metadata.len())
+            .into_par_iter()
+            .filter_map(|i| {
+                let file = metadata[i].as_file()?;
+                let placeholder = file.prefix_placeholder.as_ref()?;
 
-            let ino = (i + 1) as u64;
-            let old_prefix = placeholder.placeholder.as_bytes();
+                let ino = (i + 1) as u64;
+                let old_prefix = placeholder.placeholder.as_bytes();
 
-            // Resolve the on-disk cache path, preferring cache_prefix_path
-            // (set for noarch Python files where virtual path differs from cache path).
-            let cache_path = {
-                let p = (*file.cache_base_path).to_path_buf();
-                let prefix = match &file.cache_prefix_path {
-                    Some(cp) => cp.as_path(),
-                    None => &metadata[file.parent].as_directory().unwrap().prefix_path,
-                };
-                p.join(prefix).join(&file.file_name)
-            };
-
-            // Build the replacement plan. Both modes prefer the offsets
-            // recorded in paths.json — that metadata exists precisely so
-            // consumers don't have to scan file contents. Per the CEP, rattler
-            // applies exactly the groups its own search-based replacement
-            // covers (UTF-8 only): `Some(selection)` below is usable metadata
-            // (`selection = None` meaning there are validly no UTF-8
-            // occurrences to splice), while `None` sends the file down the
-            // scanning fallback — the field is absent (pre-CEP package) or
-            // structurally invalid/unrecognized. The selected ranges are then
-            // trusted as-is (the ranged reads are total, so a non-conformant
-            // producer yields wrong bytes for its own package, never a panic).
-            let recorded_ranges: Option<Option<&OffsetRanges>> =
-                match &placeholder.experimental_offsets {
-                    None => None,
-                    Some(groups) => match select_utf8_offset_ranges(
-                        groups,
-                        placeholder.file_mode,
-                        placeholder.experimental_shebang_length.is_some(),
-                    ) {
-                        Ok(selection) => Some(selection),
-                        Err(e) => {
-                            tracing::warn!(
-                                "{}: unusable offset metadata ({e}); falling back to scanning",
-                                cache_path.display()
-                            );
-                            None
-                        }
-                    },
+                // Resolve the on-disk cache path, preferring cache_prefix_path
+                // (set for noarch Python files where virtual path differs from cache path).
+                let cache_path = {
+                    let p = (*file.cache_base_path).to_path_buf();
+                    let prefix = match &file.cache_prefix_path {
+                        Some(cp) => cp.as_path(),
+                        None => &metadata[file.parent].as_directory().unwrap().prefix_path,
+                    };
+                    p.join(prefix).join(&file.file_name)
                 };
 
-            let plan = match placeholder.file_mode {
-                FileMode::Text => {
-                    // With recorded offsets, construction reads at most the
-                    // shebang region (`shebang_length` bytes) — the one part
-                    // of the transformation a bare offset list can't express.
-                    let recorded_plan = if let Some(selection) = recorded_ranges {
-                        let body_offsets = match selection {
-                            Some(OffsetRanges::Text(offsets)) => offsets.clone(),
-                            // Validated by the selection: no UTF-8 occurrences
-                            // are recorded outside the shebang region.
-                            _ => Vec::new(),
-                        };
-                        let region = match placeholder.experimental_shebang_length {
-                            Some(len) if len > 0 => match read_leading_bytes(&cache_path, len) {
-                                Ok(region) => region,
-                                Err(e) => {
-                                    tracing::warn!(
-                                        "failed to read {} for offset computation: {}",
-                                        cache_path.display(),
-                                        e
-                                    );
-                                    continue;
+                // Build the replacement plan. Both modes prefer the offsets
+                // recorded in paths.json — that metadata exists precisely so
+                // consumers don't have to scan file contents. Per the CEP, rattler
+                // applies exactly the groups its own search-based replacement
+                // covers (UTF-8 only): `Some(selection)` below is usable metadata
+                // (`selection = None` meaning there are validly no UTF-8
+                // occurrences to splice), while `None` sends the file down the
+                // scanning fallback — the field is absent (pre-CEP package) or
+                // structurally invalid/unrecognized. The selected ranges are then
+                // trusted as-is (the ranged reads are total, so a non-conformant
+                // producer yields wrong bytes for its own package, never a panic).
+                let recorded_ranges: Option<Option<&OffsetRanges>> =
+                    match &placeholder.experimental_offsets {
+                        None => None,
+                        Some(groups) => match select_utf8_offset_ranges(
+                            groups,
+                            placeholder.file_mode,
+                            placeholder.experimental_shebang_length.is_some(),
+                        ) {
+                            Ok(selection) => Some(selection),
+                            Err(e) => {
+                                tracing::warn!(
+                                    "{}: unusable offset metadata ({e}); falling back to scanning",
+                                    cache_path.display()
+                                );
+                                None
+                            }
+                        },
+                    };
+
+                let mut computed_size: Option<u64> = None;
+                let plan = match placeholder.file_mode {
+                    FileMode::Text => {
+                        // With recorded offsets, construction reads at most the
+                        // shebang region (`shebang_length` bytes) — the one part
+                        // of the transformation a bare offset list can't express.
+                        let recorded_plan = if let Some(selection) = recorded_ranges {
+                            let body_offsets = match selection {
+                                Some(OffsetRanges::Text(offsets)) => offsets.clone(),
+                                // Validated by the selection: no UTF-8 occurrences
+                                // are recorded outside the shebang region.
+                                _ => Vec::new(),
+                            };
+                            let region = match placeholder.experimental_shebang_length {
+                                Some(len) if len > 0 => {
+                                    match read_leading_bytes(&cache_path, len) {
+                                        Ok(region) => region,
+                                        Err(e) => {
+                                            tracing::warn!(
+                                                "failed to read {} for offset computation: {}",
+                                                cache_path.display(),
+                                                e
+                                            );
+                                            return None;
+                                        }
+                                    }
                                 }
-                            },
-                            _ => Vec::new(),
-                        };
-                        let plan = crate::prefix_replacement::TextPlan::from_recorded(
-                            &region,
-                            body_offsets,
-                            &placeholder.placeholder,
-                            &target_prefix,
-                            &platform,
-                        );
-                        if plan.is_none() {
-                            tracing::warn!(
-                                "{}: recorded shebang_length does not match the file \
+                                _ => Vec::new(),
+                            };
+                            let plan = crate::prefix_replacement::TextPlan::from_recorded(
+                                &region,
+                                body_offsets,
+                                &placeholder.placeholder,
+                                &target_prefix,
+                                &platform,
+                            );
+                            if plan.is_none() {
+                                tracing::warn!(
+                                    "{}: recorded shebang_length does not match the file \
                                  contents; falling back to scanning",
-                                cache_path.display()
-                            );
-                        }
-                        plan
-                    } else {
-                        None
-                    };
-
-                    let (text_plan, source_len) = match recorded_plan {
-                        Some(plan) => match fs::symlink_metadata(&cache_path) {
-                            Ok(m) => (plan, m.len() as usize),
-                            Err(e) => {
-                                tracing::warn!(
-                                    "failed to stat {} for offset computation: {}",
-                                    cache_path.display(),
-                                    e
+                                    cache_path.display()
                                 );
-                                continue;
                             }
-                        },
-                        None => match fs::read(&cache_path) {
-                            Ok(source) => {
-                                let plan = crate::prefix_replacement::plan_text_replacement(
-                                    &source,
-                                    &placeholder.placeholder,
-                                    &target_prefix,
-                                    &platform,
-                                );
-                                (plan, source.len())
-                            }
-                            Err(e) => {
-                                tracing::warn!(
-                                    "failed to read {} for offset computation: {}",
-                                    cache_path.display(),
-                                    e
-                                );
-                                continue;
-                            }
-                        },
-                    };
+                            plan
+                        } else {
+                            None
+                        };
 
-                    // Post-replacement size: the transformed shebang region plus
-                    // the unchanged body length plus the per-occurrence delta.
-                    let delta =
-                        target_prefix.len() as isize - placeholder.placeholder.len() as isize;
-                    let body_len = source_len.saturating_sub(text_plan.region_end);
-                    let new_size = (text_plan.transformed_region.len() as isize
-                        + body_len as isize
-                        + delta * text_plan.body_offsets.len() as isize)
-                        .max(0) as u64;
-                    metadata[i].as_file_mut().unwrap().computed_size = Some(new_size);
-
-                    ReplacementPlan::Text(text_plan)
-                }
-                FileMode::Binary => {
-                    // Like rattler's installer, skip binary prefix replacement
-                    // on Windows (empty groups serve the bytes verbatim).
-                    let groups = if platform.is_windows() {
-                        Vec::new()
-                    } else {
-                        match recorded_ranges {
-                            Some(Some(OffsetRanges::Binary(g))) => g.clone(),
-                            // Valid metadata, no UTF-8 group: nothing to splice.
-                            Some(None) => Vec::new(),
-                            _ => match fs::read(&cache_path) {
-                                Ok(source) => crate::prefix_replacement::collect_binary_offsets(
-                                    &source, old_prefix,
-                                ),
+                        let (text_plan, source_len) = match recorded_plan {
+                            Some(plan) => match fs::symlink_metadata(&cache_path) {
+                                Ok(m) => (plan, m.len() as usize),
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "failed to stat {} for offset computation: {}",
+                                        cache_path.display(),
+                                        e
+                                    );
+                                    return None;
+                                }
+                            },
+                            None => match fs::read(&cache_path) {
+                                Ok(source) => {
+                                    let plan = crate::prefix_replacement::plan_text_replacement(
+                                        &source,
+                                        &placeholder.placeholder,
+                                        &target_prefix,
+                                        &platform,
+                                    );
+                                    (plan, source.len())
+                                }
                                 Err(e) => {
                                     tracing::warn!(
                                         "failed to read {} for offset computation: {}",
                                         cache_path.display(),
                                         e
                                     );
-                                    continue;
+                                    return None;
                                 }
                             },
-                        }
-                    };
-                    ReplacementPlan::Binary(groups)
-                }
-            };
+                        };
 
+                        // Post-replacement size: the transformed shebang region plus
+                        // the unchanged body length plus the per-occurrence delta.
+                        let delta =
+                            target_prefix.len() as isize - placeholder.placeholder.len() as isize;
+                        let body_len = source_len.saturating_sub(text_plan.region_end);
+                        let new_size = (text_plan.transformed_region.len() as isize
+                            + body_len as isize
+                            + delta * text_plan.body_offsets.len() as isize)
+                            .max(0) as u64;
+                        computed_size = Some(new_size);
+
+                        ReplacementPlan::Text(text_plan)
+                    }
+                    FileMode::Binary => {
+                        // Like rattler's installer, skip binary prefix replacement
+                        // on Windows (empty groups serve the bytes verbatim).
+                        let groups = if platform.is_windows() {
+                            Vec::new()
+                        } else {
+                            match recorded_ranges {
+                                Some(Some(OffsetRanges::Binary(g))) => g.clone(),
+                                // Valid metadata, no UTF-8 group: nothing to splice.
+                                Some(None) => Vec::new(),
+                                _ => match fs::read(&cache_path) {
+                                    Ok(source) => {
+                                        crate::prefix_replacement::collect_binary_offsets(
+                                            &source, old_prefix,
+                                        )
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!(
+                                            "failed to read {} for offset computation: {}",
+                                            cache_path.display(),
+                                            e
+                                        );
+                                        return None;
+                                    }
+                                },
+                            }
+                        };
+                        ReplacementPlan::Binary(groups)
+                    }
+                };
+
+                Some((ino, plan, computed_size))
+            })
+            .collect();
+
+        // Apply the parallel results sequentially: insert each plan and record
+        // the transformed text-file sizes back into the metadata tree.
+        let mut offset_cache = HashMap::with_capacity(planned.len());
+        for (ino, plan, computed_size) in planned {
+            if let Some(size) = computed_size {
+                metadata[(ino - 1) as usize]
+                    .as_file_mut()
+                    .unwrap()
+                    .computed_size = Some(size);
+            }
             offset_cache.insert(ino, plan);
         }
 
