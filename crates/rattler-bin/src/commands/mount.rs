@@ -114,12 +114,10 @@ pub async fn mount(opt: Opt) -> Result<()> {
         );
     }
 
-    let config = match opt.overlay {
-        Some(overlay) => {
-            MountConfig::new_writable(mount_point.clone(), Some(overlay), transport, env_hash)
-        }
-        None => MountConfig::new_read_only(mount_point.clone(), transport, env_hash),
-    };
+    let mut config = MountConfig::new(mount_point.clone(), transport, env_hash);
+    if let Some(overlay) = opt.overlay {
+        config = config.with_writable(overlay);
+    }
     let config = config.with_allow_other(opt.allow_other);
 
     let handle = build_and_mount(
