@@ -832,3 +832,81 @@ pub(crate) async fn mount_nfs(
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::vfs_ops::FileAttr;
+    use std::time::{Duration, UNIX_EPOCH};
+
+    #[test]
+    fn errno_maps_to_expected_nfsstat() {
+        assert_eq!(errno_to_nfsstat(libc::ENOENT), nfsstat3::NFS3ERR_NOENT);
+        assert_eq!(errno_to_nfsstat(libc::EACCES), nfsstat3::NFS3ERR_ACCES);
+        assert_eq!(errno_to_nfsstat(libc::ENOTDIR), nfsstat3::NFS3ERR_NOTDIR);
+        assert_eq!(errno_to_nfsstat(libc::EISDIR), nfsstat3::NFS3ERR_ISDIR);
+        assert_eq!(errno_to_nfsstat(libc::EROFS), nfsstat3::NFS3ERR_ROFS);
+        assert_eq!(errno_to_nfsstat(libc::EEXIST), nfsstat3::NFS3ERR_EXIST);
+        assert_eq!(
+            errno_to_nfsstat(libc::ENOTEMPTY),
+            nfsstat3::NFS3ERR_NOTEMPTY
+        );
+        assert_eq!(errno_to_nfsstat(libc::ENOSPC), nfsstat3::NFS3ERR_NOSPC);
+        // Anything unmapped (e.g. EINVAL from the traversal guard) falls back to IO.
+        assert_eq!(errno_to_nfsstat(libc::EINVAL), nfsstat3::NFS3ERR_IO);
+        assert_eq!(errno_to_nfsstat(-12345), nfsstat3::NFS3ERR_IO);
+    }
+
+    #[test]
+    fn system_time_converts_and_clamps_pre_epoch() {
+        let t = system_time_to_nfstime(UNIX_EPOCH + Duration::new(1_700_000_000, 500));
+        assert_eq!(t.seconds, 1_700_000_000);
+        assert_eq!(t.nseconds, 500);
+        // Pre-epoch times can't be represented; clamp to zero rather than panic.
+        let pre = system_time_to_nfstime(UNIX_EPOCH - Duration::from_secs(10));
+        assert_eq!(pre.seconds, 0);
+        assert_eq!(pre.nseconds, 0);
+    }
+
+    #[test]
+    fn file_attr_maps_kind_mode_and_size() {
+        let mk = |kind, perm| FileAttr {
+            ino: 42,
+            size: 1234,
+            blocks: 3,
+            atime: UNIX_EPOCH,
+            mtime: UNIX_EPOCH,
+            ctime: UNIX_EPOCH,
+            kind,
+            perm,
+            nlink: 1,
+            uid: 501,
+            gid: 20,
+        };
+
+        let reg = file_attr_to_fattr3(&mk(FileKind::RegularFile, 0o644));
+        assert_eq!(reg.type_, ftype3::NF3REG);
+        assert_eq!(reg.mode, 0o644);
+        assert_eq!(reg.size, 1234);
+        assert_eq!(reg.fileid, 42);
+        assert_eq!(reg.used, 3 * 512);
+
+        assert_eq!(
+            file_attr_to_fattr3(&mk(FileKind::Directory, 0o755)).type_,
+            ftype3::NF3DIR
+        );
+        assert_eq!(
+            file_attr_to_fattr3(&mk(FileKind::Symlink, 0o777)).type_,
+            ftype3::NF3LNK
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn os_str_from_nfs_bytes_roundtrips_arbitrary_bytes() {
+        // On Unix, filenames are arbitrary byte sequences.
+        let name = os_str_from_nfs_bytes(b"lib\xff.so").unwrap();
+        use std::os::unix::ffi::OsStrExt;
+        assert_eq!(name.as_bytes(), b"lib\xff.so");
+    }
+}
