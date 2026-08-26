@@ -23,6 +23,9 @@ classifiers = [
 ]
 license = "BSD-3-Clause"
 
+[project.optional-dependencies]
+networkx = ["networkx"]
+
 [project.urls]
 Homepage = "https://github.com/conda/rattler"
 Documentation = "https://conda.github.io/rattler/py-rattler/"

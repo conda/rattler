@@ -33,6 +33,7 @@ python = "3.10.*"
 boto3 = "*"
 requests = ">=2.32.3,<3"
 types-requests = ">=2.32,<3"
+networkx = "*"
 types-networkx = "*"
 
 ruff = ">=0.14.1"
