@@ -4,7 +4,6 @@ use futures::{StreamExt, select_biased, stream::FuturesUnordered};
 use rattler_conda_types::{
     Channel, ChannelUrl, MatchSpec, Matches, PackageName, PackageNameMatcher, Platform,
     RepoDataRecord,
-    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveType},
 };
 use url::Url;
 
@@ -717,6 +716,7 @@ impl QueryExecutor {
         let pending_records = &mut self.pending_records;
         let reporter = &self.reporter;
         let subdir_handles = &self.subdir_handles;
+        let package_format_selection = self.package_format_selection;
         for (package_name, request) in self.pending_package_specs.drain() {
             for (idx, handle) in subdir_handles.iter().enumerate() {
                 spawn_one_package_fetch(
@@ -726,6 +726,7 @@ impl QueryExecutor {
                     AccumulateTarget::Subdir(idx),
                     handle.barrier.clone(),
                     reporter.clone(),
+                    package_format_selection,
                 );
             }
             self.all_queued_specs.insert(package_name, request);
@@ -744,6 +745,7 @@ impl QueryExecutor {
                 AccumulateTarget::Subdir(handle_idx),
                 barrier.clone(),
                 self.reporter.clone(),
+                self.package_format_selection,
             );
         }
     }
@@ -1335,12 +1337,13 @@ fn spawn_one_package_fetch(
     target: AccumulateTarget,
     barrier: Arc<BarrierCell<Arc<Subdir>>>,
     reporter: Option<Arc<dyn Reporter>>,
+    package_format_selection: PackageFormatSelection,
 ) {
     pending_records.push(box_future(async move {
         let subdir = barrier.wait().await;
         match subdir.as_ref() {
             Subdir::Found(subdir) => subdir
-                .get_or_fetch_package_records(&package_name, reporter)
+                .get_or_fetch_package_records(&package_name, reporter, package_format_selection)
                 .await
                 .map(|pkg| (target, request, pkg)),
             Subdir::NotFound => Ok((target, request, PackageRecords::default())),

@@ -2259,7 +2259,7 @@ mod test {
         assert_eq!(all_records.len(), expected_count);
     }
 
-        #[rstest]
+    #[rstest]
     #[case::default_prefers_conda(PackageFormatSelection::PreferConda, 5)]
     #[case::only_conda(PackageFormatSelection::OnlyConda, 2)]
     #[case::only_tar_bz2(PackageFormatSelection::OnlyTarBz2, 5)]
@@ -2291,7 +2291,6 @@ mod test {
         let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
         assert_eq!(all_records.len(), expected_count);
     }
-
 
     #[tokio::test]
     async fn test_mixed_channel_and_custom_source() {
