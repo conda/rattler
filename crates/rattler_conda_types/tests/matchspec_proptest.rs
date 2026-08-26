@@ -20,15 +20,13 @@
 //! * A `NamelessMatchSpec` with no fields at all renders as `*`, which
 //!   reparses as `version: Any`, a matcher identical to `version: None`.
 
-use std::sync::Arc;
-
 use proptest::prelude::*;
+use rattler_conda_types::proptest::{match_spec, match_spec_condition};
 use rattler_conda_types::{
-    Channel, ChannelConfig, MatchSpec, MatchSpecCondition, NamelessMatchSpec, PackageName,
-    PackageNameMatcher, ParseMatchSpecOptions, RepodataRevision, StringMatcher, VersionSpec,
+    Channel, ChannelConfig, MatchSpec, MatchSpecCondition, NamelessMatchSpec,
+    ParseMatchSpecOptions, RepodataRevision, StringMatcher,
 };
 use rattler_redaction::strip_url_for_serialization;
-use url::Url;
 
 fn strict_v3() -> ParseMatchSpecOptions {
     ParseMatchSpecOptions::strict()
@@ -49,147 +47,11 @@ fn channel_cfg() -> ChannelConfig {
 // -------------------------------------------------------------------------
 // Strategies
 // -------------------------------------------------------------------------
-
-/// Always-valid version text built from components; shrinks toward `0`.
-fn version_text() -> BoxedStrategy<String> {
-    (
-        prop::collection::vec(0u8..30, 1..4),
-        prop::option::weighted(0.15, 1u8..3),
-    )
-        .prop_map(|(segments, epoch)| {
-            let segments = segments
-                .iter()
-                .map(u8::to_string)
-                .collect::<Vec<_>>()
-                .join(".");
-            match epoch {
-                Some(epoch) => format!("{epoch}!{segments}"),
-                None => segments,
-            }
-        })
-        .boxed()
-}
-
-/// Always-valid package-name text; shrinks toward `a`.
-fn package_name_text() -> BoxedStrategy<String> {
-    prop::collection::vec(
-        prop_oneof![
-            8 => prop::char::range('a', 'z'),
-            1 => prop::char::range('0', '9'),
-            1 => prop::sample::select(&['_', '-', '.'][..]),
-        ],
-        1..8,
-    )
-    .prop_map(|mut chars| {
-        // Keep the first character a letter so every value is a valid name.
-        if !chars[0].is_ascii_lowercase() {
-            chars[0] = 'a';
-        }
-        chars.into_iter().collect()
-    })
-    .boxed()
-}
-
-fn name_matcher() -> BoxedStrategy<PackageNameMatcher> {
-    prop_oneof![
-        // Constructive arms first: always valid, so shrinking moves through
-        // them without hitting parse-rejection walls.
-        4 => package_name_text().prop_map(|name| {
-            PackageNameMatcher::Exact(
-                PackageName::try_from(name).expect("constructed package name must be valid"),
-            )
-        }),
-        // Names that read like condition keywords.
-        1 => prop::sample::select(&["and", "or", "pandoc", "android"][..]).prop_map(|name| {
-            PackageNameMatcher::Exact(PackageName::try_from(name.to_string()).expect("valid name"))
-        }),
-        // Globs and regexes, including regex bodies with version-constraint
-        // characters and whitespace.
-        1 => prop_oneof![
-            package_name_text().prop_map(|name| format!("{name}*")),
-            package_name_text().prop_map(|name| format!("*{name}")),
-            Just("^py(?!py).*$".to_string()),
-            Just("^foo bar$".to_string()),
-            Just("^py.*$".to_string()),
-        ]
-        .prop_filter_map("valid name matcher", |name| {
-            name.parse::<PackageNameMatcher>().ok()
-        }),
-    ]
-    .boxed()
-}
-
-fn version_spec() -> BoxedStrategy<VersionSpec> {
-    let operator = prop::sample::select(&[">=", ">", "<=", "<", "==", "!="][..]);
-    prop_oneof![
-        // Constructive arms first, for the same shrinking reason.
-        4 => (operator, version_text()).prop_map(|(op, version)| format!("{op}{version}")),
-        1 => Just("*".to_string()),
-        1 => version_text().prop_map(|version| format!("{version}.*")),
-        1 => (version_text(), version_text()).prop_map(|(low, high)| format!(">={low},<{high}")),
-        1 => (version_text(), version_text()).prop_map(|(a, b)| format!(">={a}|<{b}")),
-        // Oddities the constructive arms do not produce.
-        1 => prop_oneof![
-            Just(">=1.2.3dev_".to_string()),
-            Just("==1!2.0".to_string()),
-            Just("~=1.2".to_string()),
-        ],
-    ]
-    .prop_map(|spec| {
-        VersionSpec::from_str(&spec, rattler_conda_types::ParseStrictness::Lenient)
-            .expect("constructed version spec must parse")
-    })
-    .boxed()
-}
-
-/// Exact-matcher text; shrinks toward `a`.
-fn matcher_text() -> BoxedStrategy<String> {
-    prop::collection::vec(
-        prop_oneof![
-            6 => prop::char::range('a', 'z'),
-            1 => prop::char::range('0', '9'),
-            1 => Just('_'),
-        ],
-        1..8,
-    )
-    .prop_map(|chars| chars.into_iter().collect())
-    .boxed()
-}
-
-/// String matchers as the parser produces them: their rendered text always
-/// reparses to the identical matcher. Constructive arms first so failures
-/// shrink toward a plain exact matcher.
-fn parsed_string_matcher() -> BoxedStrategy<StringMatcher> {
-    prop_oneof![
-        4 => matcher_text(),
-        1 => Just("*".to_string()),
-        1 => (matcher_text(), matcher_text()).prop_map(|(a, b)| format!("{a}*{b}")),
-        1 => matcher_text().prop_map(|body| format!("^{body}.*$")),
-    ]
-    .prop_map(|value| {
-        value
-            .parse::<StringMatcher>()
-            .expect("constructed matcher must parse")
-    })
-    .boxed()
-}
-
-fn string_matcher() -> BoxedStrategy<StringMatcher> {
-    prop_oneof![
-        6 => parsed_string_matcher(),
-        // Regex matchers with arbitrary bodies stay behind a filter because
-        // not every body compiles; listed late so shrinking prefers the
-        // constructive arms.
-        1 => "\\^py.*\\$".prop_filter_map("valid matcher", |value| {
-            value.parse::<StringMatcher>().ok()
-        }),
-        // Programmatic construction can force states whose text reparses as a
-        // different matcher variant, e.g. an Exact matcher that reads as a
-        // glob; see `matcher_equivalent`.
-        1 => Just(StringMatcher::Exact("cuda*".to_string())),
-    ]
-    .boxed()
-}
+//
+// The well-formed value generators live in `rattler_conda_types::proptest`
+// (behind the `proptest` feature) so other crates can reuse them. This file
+// only adds the adversarial layer: constructible-but-unrepresentable states
+// the never-lie properties must also cover, and the raw-input fuzz.
 
 /// Fragments the fuzz property concatenates into parser input. Grammar
 /// pieces dominate so a decent share of inputs parses; the rest exercises
@@ -251,201 +113,82 @@ fn fuzz_input() -> BoxedStrategy<String> {
         .boxed()
 }
 
-/// Scalar values mixing plain text with the characters that stress quoting:
-/// quotes, backslashes, brackets, `#`, commas, spaces, and raw unicode.
-/// Built from a char vec so shrinking removes characters and drifts the rest
-/// toward `a`.
-fn scalar_value() -> BoxedStrategy<String> {
-    prop::collection::vec(
-        prop_oneof![
-            6 => prop::char::range('a', 'z'),
-            2 => prop::sample::select(
-                &[' ', '"', '\'', '\\', '[', ']', '#', ',', '=', ':', '?'][..]
-            ),
-            1 => prop::char::any(),
-        ],
-        1..12,
-    )
-    .prop_map(|chars| chars.into_iter().collect())
-    .boxed()
+/// Constructible states the library generators deliberately exclude because
+/// they violate a field grammar or matcher text identity. The never-lie
+/// properties must hold for them too: loud failures or documented
+/// equivalences, never silent divergence.
+#[derive(Debug, Clone)]
+enum Mutation {
+    /// An Exact matcher whose text reads as a glob; see `matcher_equivalent`.
+    GlobLikeExactBuild,
+    GlobLikeExactFlag,
+    /// A regex build with an arbitrary body.
+    WildRegexBuild(StringMatcher),
+    /// An extras element that violates the CEP 44 group-name grammar.
+    InvalidExtra(String),
+    /// A track feature containing a list delimiter, or nothing at all.
+    InvalidTrackFeature(String),
+    /// A condition leaf carrying its own `when`, which the grammar cannot
+    /// represent.
+    NestedWhen,
 }
 
-fn extras() -> BoxedStrategy<Vec<String>> {
-    prop::collection::vec(
-        prop_oneof![
-            4 => "[a-z][a-z0-9_.+-]{0,8}",
-            // Invalid group names must produce loud failures or errors.
-            1 => prop_oneof![Just("Docs".to_string()), Just("a,b".to_string()), Just(String::new())],
-        ],
-        1..3,
-    ).boxed()
-}
-
-fn flags() -> BoxedStrategy<Vec<StringMatcher>> {
-    prop::collection::vec(
-        prop_oneof![
-            "[a-z][a-z0-9_]{0,6}".prop_map(StringMatcher::Exact),
-            Just(StringMatcher::Exact("cuda*".to_string())),
-        ],
-        1..3,
-    )
-    .boxed()
-}
-
-fn track_features() -> BoxedStrategy<Vec<String>> {
-    prop::collection::vec(
-        prop_oneof![
-            4 => "[a-z][a-z0-9_]{0,6}",
-            1 => prop_oneof![Just("a b".to_string()), Just(String::new())],
-        ],
-        1..3,
-    )
-    .boxed()
-}
-
-/// Channels composed from parts instead of a hand-picked list, so the
-/// randomness reaches the dimensions bugs have lived in: names whose last
-/// segment is a platform, multi-segment label paths, IPv6 hosts, embedded
-/// credentials, and platform selectors on any of them.
-fn channel() -> BoxedStrategy<Arc<Channel>> {
-    let segment = prop_oneof![
-        3 => "[a-z][a-z0-9-]{0,8}",
-        1 => Just("linux-64".to_string()),
-        1 => Just("noarch".to_string()),
-    ];
-    let name = prop_oneof![
-        4 => prop::collection::vec(segment, 1..4).prop_map(|segments| segments.join("/")),
-        1 => Just("*".to_string()),
-    ];
-    let host = prop_oneof![
-        3 => Just("repo.example".to_string()),
-        1 => Just("[::1]".to_string()),
-        1 => Just("user:secret@repo.example".to_string()),
-    ];
-    let selector = prop::option::weighted(
-        0.3,
-        prop_oneof![
-            Just("[linux-64]".to_string()),
-            Just("[linux-64,noarch]".to_string()),
-        ],
-    );
-
+fn mutation() -> BoxedStrategy<Mutation> {
     prop_oneof![
-        (name.clone(), selector.clone())
-            .prop_map(|(name, selector)| format!("{name}{}", selector.unwrap_or_default())),
-        (host, name, selector).prop_map(|(host, name, selector)| {
-            format!("https://{host}/{name}{}", selector.unwrap_or_default())
-        }),
-    ]
-    .prop_map(|channel| {
-        // Every composed channel is valid by construction, keeping the shrink
-        // chain free of parse-rejection walls.
-        Arc::new(Channel::from_str(&channel, &channel_cfg()).expect("constructed channel"))
-    })
-    .boxed()
-}
-
-fn url() -> BoxedStrategy<Url> {
-    prop_oneof![
-        "[a-z0-9-]{1,8}".prop_map(|segment| {
-            Url::parse(&format!("https://repo.example/{segment}.conda")).unwrap()
-        }),
-        Just(Url::parse("https://u:p@repo.example/pkg.conda?auth=tok#frag").unwrap()),
-        Just(Url::parse("https://repo.example/pkg.conda#sha256:deadbeef").unwrap()),
-    ]
-    .boxed()
-}
-
-prop_compose! {
-    /// A random match spec without a condition (conditions are layered on
-    /// separately so leaves never nest).
-    fn bare_spec()(
-        name in name_matcher(),
-        version in prop::option::weighted(0.5, version_spec()),
-        build in prop::option::weighted(0.3, string_matcher()),
-        build_number in prop::option::weighted(0.15, Just(">=2".parse().unwrap())),
-        file_name in prop::option::weighted(0.2, scalar_value()),
-        extras in prop::option::weighted(0.2, extras()),
-        flags in prop::option::weighted(0.2, flags()),
-        channel in prop::option::weighted(0.3, channel()),
-        subdir in prop::option::weighted(0.2, prop_oneof![
-            Just("linux-64".to_string()),
-            Just("noarch".to_string()),
-            Just("plain".to_string()),
-        ]),
-        namespace in prop::option::weighted(0.1, prop_oneof![
-            Just("ns".to_string()),
-            Just("name#space".to_string()),
-        ]),
-        md5 in prop::option::weighted(0.1, any::<[u8; 16]>()),
-        sha256 in prop::option::weighted(0.1, any::<[u8; 32]>()),
-        url in prop::option::weighted(0.15, url()),
-        license in prop::option::weighted(0.2, scalar_value()),
-        license_family in prop::option::weighted(0.1, "[A-Z]{2,6}"),
-        track_features in prop::option::weighted(0.15, track_features()),
-    ) -> MatchSpec {
-        MatchSpec {
-            name,
-            version,
-            build,
-            build_number,
-            file_name,
-            extras,
-            flags,
-            channel,
-            subdir,
-            namespace,
-            md5: md5.map(Into::into),
-            sha256: sha256.map(Into::into),
-            url,
-            license,
-            license_family,
-            condition: None,
-            track_features,
-        }
-    }
-}
-
-fn condition() -> BoxedStrategy<MatchSpecCondition> {
-    let leaf = (
-        name_matcher(),
-        prop::option::weighted(0.6, version_spec()),
-        prop::option::weighted(0.2, parsed_string_matcher()),
-        // The grammar cannot represent a nested `when` on a leaf: canonical
-        // must return NestedWhen and legacy Display must fail loudly, never
-        // panic or drop the condition.
-        prop::option::weighted(0.08, "[a-z]{1,6}"),
-    )
-        .prop_map(|(name, version, build, nested)| {
-            MatchSpecCondition::MatchSpec(Box::new(MatchSpec {
-                name,
-                version,
-                build,
-                condition: nested.and_then(|nested| {
-                    let name = nested.parse().ok()?;
-                    Some(MatchSpecCondition::MatchSpec(Box::new(MatchSpec {
-                        name,
-                        ..MatchSpec::default()
-                    })))
-                }),
-                ..MatchSpec::default()
-            }))
-        });
-    leaf.prop_recursive(4, 24, 2, |inner| {
+        Just(Mutation::GlobLikeExactBuild),
+        Just(Mutation::GlobLikeExactFlag),
+        "\\^py.*\\$"
+            .prop_filter_map("valid matcher", |value| value.parse::<StringMatcher>().ok())
+            .prop_map(Mutation::WildRegexBuild),
         prop_oneof![
-            (inner.clone(), inner.clone())
-                .prop_map(|(a, b)| MatchSpecCondition::And(Box::new(a), Box::new(b))),
-            (inner.clone(), inner)
-                .prop_map(|(a, b)| MatchSpecCondition::Or(Box::new(a), Box::new(b))),
+            Just("Docs".to_string()),
+            Just("a,b".to_string()),
+            Just(String::new()),
         ]
-    })
+        .prop_map(Mutation::InvalidExtra),
+        prop_oneof![Just("a b".to_string()), Just(String::new())]
+            .prop_map(Mutation::InvalidTrackFeature),
+        Just(Mutation::NestedWhen),
+    ]
     .boxed()
 }
 
-fn spec_with_optional_condition() -> BoxedStrategy<MatchSpec> {
-    (bare_spec(), prop::option::weighted(0.4, condition()))
-        .prop_map(|(mut spec, condition)| {
-            spec.condition = condition;
+/// The library's well-formed specs, with an occasional adversarial mutation
+/// layered on top.
+fn spec_under_test() -> BoxedStrategy<MatchSpec> {
+    (match_spec(), prop::option::weighted(0.3, mutation()))
+        .prop_map(|(mut spec, mutation)| {
+            match mutation {
+                None => {}
+                Some(Mutation::GlobLikeExactBuild) => {
+                    spec.build = Some(StringMatcher::Exact("cuda*".to_string()));
+                }
+                Some(Mutation::GlobLikeExactFlag) => {
+                    spec.flags
+                        .get_or_insert_with(Vec::new)
+                        .push(StringMatcher::Exact("cuda*".to_string()));
+                }
+                Some(Mutation::WildRegexBuild(matcher)) => {
+                    spec.build = Some(matcher);
+                }
+                Some(Mutation::InvalidExtra(extra)) => {
+                    spec.extras.get_or_insert_with(Vec::new).push(extra);
+                }
+                Some(Mutation::InvalidTrackFeature(feature)) => {
+                    spec.track_features
+                        .get_or_insert_with(Vec::new)
+                        .push(feature);
+                }
+                Some(Mutation::NestedWhen) => {
+                    let leaf = MatchSpec {
+                        condition: Some(MatchSpecCondition::MatchSpec(Box::new(
+                            MatchSpec::from_str("__linux", strict_v3()).unwrap(),
+                        ))),
+                        ..MatchSpec::from_str("python", strict_v3()).unwrap()
+                    };
+                    spec.condition = Some(MatchSpecCondition::MatchSpec(Box::new(leaf)));
+                }
+            }
             spec
         })
         .boxed()
@@ -600,7 +343,7 @@ proptest! {
     /// Legacy `Display` never lies: its output either fails to parse (loud)
     /// or reparses to the same query.
     #[test]
-    fn display_never_silently_diverges(spec in spec_with_optional_condition()) {
+    fn display_never_silently_diverges(spec in spec_under_test()) {
         let rendered = spec.to_string();
         if let Ok(reparsed) = MatchSpec::from_str(&rendered, strict_v3()) {
             assert_faithful(&spec, &reparsed, &rendered, false);
@@ -611,7 +354,7 @@ proptest! {
     /// credentials) and the canonical form is idempotent. Errors are allowed;
     /// panics and silent divergence are not.
     #[test]
-    fn canonical_is_verified_and_idempotent(spec in spec_with_optional_condition()) {
+    fn canonical_is_verified_and_idempotent(spec in spec_under_test()) {
         if let Ok(canonical) = spec.to_canonical_string() {
             let reparsed = MatchSpec::from_str(&canonical, strict_v3()).unwrap_or_else(|error| {
                 panic!("canonical {canonical:?} does not reparse: {error}")
@@ -627,7 +370,7 @@ proptest! {
     /// Condition ASTs survive both dialects: whenever the rendered spec
     /// parses, the reparsed condition is the identical tree.
     #[test]
-    fn condition_ast_roundtrips(condition in condition()) {
+    fn condition_ast_roundtrips(condition in match_spec_condition(4)) {
         let spec = MatchSpec {
             name: "target".parse().unwrap(),
             condition: Some(condition),
@@ -655,7 +398,7 @@ proptest! {
 
     /// `NamelessMatchSpec` follows the same never-lie rule as the named form.
     #[test]
-    fn nameless_display_never_silently_diverges(spec in spec_with_optional_condition()) {
+    fn nameless_display_never_silently_diverges(spec in spec_under_test()) {
         let nameless = NamelessMatchSpec::from(spec);
         let rendered = nameless.to_string();
         let Ok(reparsed) = NamelessMatchSpec::from_str(&rendered, strict_v3()) else {

@@ -15,6 +15,8 @@ pub mod menuinst;
 mod no_arch_type;
 mod parse_mode;
 pub mod platform;
+#[cfg(feature = "proptest")]
+pub mod proptest;
 mod repo_data;
 mod repo_data_record;
 mod run_export;
