@@ -495,3 +495,67 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Mount helper (moved from lib.rs — issue #2576)
+// ---------------------------------------------------------------------------
+
+use crate::{Mode, MountConfig, VirtualFS, create_overlay};
+
+/// Mount via FUSE, with optional writable overlay.
+///
+/// The overlay is retried once if the env hash mismatches (environment updated).
+#[cfg(any(target_os = "linux", feature = "fuse"))]
+pub(crate) fn mount_fuse(
+    vfs: VirtualFS,
+    config: &MountConfig,
+) -> anyhow::Result<fuser::BackgroundSession> {
+    use fuser::{Config as FuserConfig, MountOption, SessionACL};
+
+    let mut fuser_config = FuserConfig::default();
+    fuser_config.mount_options = vec![
+        MountOption::FSName("conda-packages".to_string()),
+        MountOption::NoAtime,
+    ];
+    if matches!(config.mode, Mode::ReadOnly | Mode::ReadOnlyIfSupported) {
+        fuser_config.mount_options.push(MountOption::RO);
+    }
+    if config.allow_other {
+        fuser_config.acl = SessionACL::All;
+    }
+
+    match &config.mode {
+        Mode::Writable {
+            overlay_dir: Some(overlay_dir),
+        } => {
+            let overlay = create_overlay(
+                vfs,
+                overlay_dir,
+                &config.env_hash,
+                "fuse",
+                config.overlay_mismatch,
+            )?;
+            let adapter = FuseAdapter::new(overlay);
+            Ok(fuser::spawn_mount2(
+                adapter,
+                &config.mount_point,
+                &fuser_config,
+            )?)
+        }
+        Mode::Writable { overlay_dir: None } => {
+            anyhow::bail!(
+                "FUSE writable mode requires an overlay directory. Use \
+                 MountConfig::new_writable(.., Some(overlay_dir), ..) or \
+                 MountConfig::new_read_only(..) for a read-only mount."
+            );
+        }
+        Mode::ReadOnly | Mode::ReadOnlyIfSupported => {
+            let adapter = FuseAdapter::new(vfs);
+            Ok(fuser::spawn_mount2(
+                adapter,
+                &config.mount_point,
+                &fuser_config,
+            )?)
+        }
+    }
+}

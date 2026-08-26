@@ -1023,9 +1023,9 @@ pub async fn mount(metadata: MetadataTree, config: &MountConfig) -> anyhow::Resu
 
     match transport {
         #[cfg(feature = "nfs")]
-        Transport::Nfs => Ok(MountHandle::Nfs(mount_nfs(vfs, config).await?)),
+        Transport::Nfs => Ok(MountHandle::Nfs(nfs_adapter::mount_nfs(vfs, config).await?)),
         #[cfg(any(target_os = "linux", feature = "fuse"))]
-        Transport::Fuse => Ok(MountHandle::Fuse(mount_fuse(vfs, config)?)),
+        Transport::Fuse => Ok(MountHandle::Fuse(fuse_adapter::mount_fuse(vfs, config)?)),
         #[cfg(target_os = "windows")]
         Transport::ProjFs => {
             let adapter = projfs_adapter::ProjFsAdapter::new(vfs);
@@ -1160,185 +1160,6 @@ pub fn compute_env_hash(
     Ok(format!("sha256:{}", hex::encode(hasher.finalize())))
 }
 
-// ---------------------------------------------------------------------------
-// Internal: transport-specific mount helpers
-// ---------------------------------------------------------------------------
-
-/// Mount via FUSE, with optional writable overlay.
-///
-/// The overlay is retried once if the env hash mismatches (environment updated).
-#[cfg(any(target_os = "linux", feature = "fuse"))]
-fn mount_fuse(vfs: VirtualFS, config: &MountConfig) -> anyhow::Result<fuser::BackgroundSession> {
-    use fuse_adapter::FuseAdapter;
-    use fuser::{Config as FuserConfig, MountOption, SessionACL};
-
-    let mut fuser_config = FuserConfig::default();
-    fuser_config.mount_options = vec![
-        MountOption::FSName("conda-packages".to_string()),
-        MountOption::NoAtime,
-    ];
-    if matches!(config.mode, Mode::ReadOnly | Mode::ReadOnlyIfSupported) {
-        fuser_config.mount_options.push(MountOption::RO);
-    }
-    if config.allow_other {
-        fuser_config.acl = SessionACL::All;
-    }
-
-    match &config.mode {
-        Mode::Writable {
-            overlay_dir: Some(overlay_dir),
-        } => {
-            let overlay = create_overlay(
-                vfs,
-                overlay_dir,
-                &config.env_hash,
-                "fuse",
-                config.overlay_mismatch,
-            )?;
-            let adapter = FuseAdapter::new(overlay);
-            Ok(fuser::spawn_mount2(
-                adapter,
-                &config.mount_point,
-                &fuser_config,
-            )?)
-        }
-        Mode::Writable { overlay_dir: None } => {
-            anyhow::bail!(
-                "FUSE writable mode requires an overlay directory. Use \
-                 MountConfig::new_writable(.., Some(overlay_dir), ..) or \
-                 MountConfig::new_read_only(..) for a read-only mount."
-            );
-        }
-        Mode::ReadOnly | Mode::ReadOnlyIfSupported => {
-            let adapter = FuseAdapter::new(vfs);
-            Ok(fuser::spawn_mount2(
-                adapter,
-                &config.mount_point,
-                &fuser_config,
-            )?)
-        }
-    }
-}
-
-/// Mount via NFS, with optional writable overlay.
-///
-/// The overlay is retried once if the env hash mismatches (environment updated).
-#[cfg(feature = "nfs")]
-async fn mount_nfs(
-    vfs: VirtualFS,
-    config: &MountConfig,
-) -> anyhow::Result<nfs_adapter::NfsMountHandle> {
-    use nfs_adapter::NfsAdapter;
-
-    let read_only = matches!(config.mode, Mode::ReadOnly | Mode::ReadOnlyIfSupported);
-
-    let bind_port = 0u16;
-
-    let server_handle = match &config.mode {
-        Mode::Writable {
-            overlay_dir: Some(overlay_dir),
-        } => {
-            let overlay = create_overlay(
-                vfs,
-                overlay_dir,
-                &config.env_hash,
-                "nfs",
-                config.overlay_mismatch,
-            )?;
-            NfsAdapter::new(overlay).serve(bind_port).await?
-        }
-        Mode::Writable { overlay_dir: None } => {
-            anyhow::bail!(
-                "NFS writable mode requires an overlay directory. Use \
-                 MountConfig::new_writable(.., Some(overlay_dir), ..) or \
-                 MountConfig::new_read_only(..) for a read-only mount."
-            );
-        }
-        Mode::ReadOnly | Mode::ReadOnlyIfSupported => NfsAdapter::new(vfs).serve(bind_port).await?,
-    };
-
-    let port = server_handle.port();
-
-    // `soft` with a bounded timeout so a dead userspace NFS server (e.g. the
-    // sidecar crashed) surfaces EIO to clients instead of wedging them in
-    // uninterruptible D-state on every access, which a hard mount would. The
-    // server is always local, so the usual soft-mount data-loss caveat is moot:
-    // if it dies, the mount is gone regardless. timeo is in deciseconds.
-    let mut opts = format!(
-        "noacl,nolock,soft,timeo=100,retrans=3,vers=3,tcp,port={port},mountport={port},rsize=1048576"
-    );
-    if read_only {
-        opts.push_str(",ro");
-    } else {
-        opts.push_str(",wsize=1048576");
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        let mnt = config.mount_point.display().to_string();
-        let status = tokio::process::Command::new("mount_nfs")
-            .args(["-o", &opts, "localhost:/", &mnt])
-            .status()
-            .await?;
-        if !status.success() {
-            server_handle.abort();
-            anyhow::bail!("NFS mount failed with exit status {status}");
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let mnt = config.mount_point.display().to_string();
-        // Probe passwordless sudo first — `mount -t nfs` needs CAP_SYS_ADMIN
-        // which isn't available in unprivileged user namespaces, so there's no
-        // userspace fallback we can reach for. Fail loudly instead of letting
-        // sudo prompt interactively (terrible UX in `pixi run`).
-        //
-        // TODO(bind-mount): investigate `unshare -Urm` + `mount --bind` as a
-        // rootless alternative transport on Linux. That would work in rootless
-        // containers where neither FUSE nor sudo is available.
-        let probe = tokio::process::Command::new("sudo")
-            .args(["-n", "true"])
-            .status()
-            .await;
-        match probe {
-            Ok(s) if s.success() => {}
-            _ => {
-                server_handle.abort();
-                return Err(MountError::SudoRequired.into());
-            }
-        }
-
-        let status = tokio::process::Command::new("sudo")
-            .args(["mount", "-t", "nfs", "-o", &opts, "localhost:/", &mnt])
-            .status()
-            .await?;
-        if !status.success() {
-            server_handle.abort();
-            anyhow::bail!("NFS mount failed with exit status {status}");
-        }
-    }
-
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    {
-        server_handle.abort();
-        anyhow::bail!("NFS mount is not supported on this platform. Use ProjFS on Windows.");
-    }
-
-    // Only reachable on the NFS-capable targets; on other platforms the block
-    // above diverges, so gate the success tail to avoid unreachable-code errors.
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    {
-        tracing::info!("mounted via NFS on {}", config.mount_point.display());
-
-        Ok(nfs_adapter::NfsMountHandle {
-            mount_point: config.mount_point.clone(),
-            server_handle,
-            unmounted: false,
-        })
-    }
-}
-
 /// Create an overlay, wiping and retrying transparently on state-version
 /// mismatch (internal schema change). Returns a structured error on env-hash
 /// mismatch so the caller can decide whether to wipe — the overlay may contain
@@ -1347,7 +1168,7 @@ async fn mount_nfs(
 /// Acquires the directory lock once and carries it through the wipe-and-retry
 /// path so no other process can sneak in between the wipe and the reload.
 #[cfg(any(feature = "nfs", target_os = "linux", feature = "fuse"))]
-fn create_overlay(
+pub(crate) fn create_overlay(
     vfs: VirtualFS,
     overlay_dir: &Path,
     env_hash: &str,
