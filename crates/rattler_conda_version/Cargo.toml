@@ -1,6 +1,6 @@
 [package]
 name = "rattler_conda_version"
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Conda version parsing, comparison, and matching"

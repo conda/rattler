@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.3](https://github.com/conda/rattler/compare/rattler_index-v0.31.2...rattler_index-v0.31.3) - 2026-08-26
+
+### Fixed
+
+- keep legacy-compatible extra_depends in legacy repodata ([#2721](https://github.com/conda/rattler/pull/2721))
+- canonicalize MatchSpecs in v3 repodata ([#2718](https://github.com/conda/rattler/pull/2718))
+
+### Other
+
+- rename CEP 146 to CEP 48 ([#2717](https://github.com/conda/rattler/pull/2717))
+
 ## [0.31.2](https://github.com/conda/rattler/compare/rattler_index-v0.31.1...rattler_index-v0.31.2) - 2026-08-21
 
 ### Added
