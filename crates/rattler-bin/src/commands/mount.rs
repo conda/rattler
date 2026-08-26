@@ -14,6 +14,8 @@ use rattler_conda_types::Platform;
 use rattler_lock::{DEFAULT_ENVIRONMENT_NAME, LockFile};
 use rattler_vfs::{MountConfig, Transport, build_and_mount, compute_env_hash};
 
+use super::progress::wrap_in_async_progress;
+
 /// Mount a lockfile as a virtual conda environment.
 #[derive(Debug, Parser)]
 pub struct Opt {
@@ -120,20 +122,24 @@ pub async fn mount(opt: Opt) -> Result<()> {
     }
     let config = config.with_allow_other(opt.allow_other);
 
-    let handle = build_and_mount(
-        &lockfile,
-        &opt.environment,
-        platform,
-        &package_cache,
-        &config,
+    let handle = wrap_in_async_progress(
+        format!("building and mounting {}", opt.lock_file.display()),
+        build_and_mount(
+            &lockfile,
+            &opt.environment,
+            platform,
+            &package_cache,
+            &config,
+        ),
     )
     .await
     .map_err(anyhow_to_miette)?;
 
     eprintln!(
-        "mounted {} at {}",
+        "mounted {} at {} (via {})",
         opt.lock_file.display(),
-        mount_point.display()
+        mount_point.display(),
+        transport.name(),
     );
 
     // Wait for ctrl-c (or sigterm on Unix) then explicitly unmount so any
