@@ -1,20 +1,50 @@
 //! Persistent overlay state management.
 //!
-//! Tracks whiteouts (deleted files) and environment identity in a JSON state
-//! file. The state file is written atomically (write-tmp → fsync → rename) on
-//! every mutation for crash safety.
+//! Tracks whiteouts (deleted files) and environment identity. A JSON *snapshot*
+//! holds the full state and is written atomically (write-tmp → fsync → rename)
+//! at load and on compaction; between snapshots, each mutation is a single
+//! O(1) append to a *journal* file (fsync per record) rather than a full-state
+//! rewrite. This keeps a bulk delete (e.g. `pip uninstall`) O(N) instead of
+//! O(N²), and keeps the state lock held only briefly per op. On load the
+//! journal is replayed on top of the snapshot and then folded back into a fresh
+//! snapshot.
 
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
     fs,
-    io::Write,
+    io::{Seek, SeekFrom, Write},
     path::{Path, PathBuf},
 };
 
 pub(crate) const STATE_FILENAME: &str = ".rattler_vfs_state.json";
 pub(crate) const STATE_TMP_FILENAME: &str = ".rattler_vfs_state.tmp";
 pub(crate) const STATE_LOCK_FILENAME: &str = ".rattler_vfs_state.lock";
+pub(crate) const STATE_JOURNAL_FILENAME: &str = ".rattler_vfs_state.journal";
+
+/// Rewrite the JSON snapshot (and truncate the journal) once the journal grows
+/// past this many records. Bounds both journal-replay time on the next load and
+/// the amortized cost of snapshotting: steady-state mutation is O(1), with an
+/// O(N) compaction every `JOURNAL_COMPACT_THRESHOLD` mutations.
+const JOURNAL_COMPACT_THRESHOLD: usize = 1024;
+
+/// A single overlay mutation, appended to the journal.
+///
+/// Writing one of these is O(1) — a short line plus an fsync — whereas
+/// re-serializing the whole state on every mutation is O(N) and turns a bulk
+/// delete (e.g. `pip uninstall`) into O(N²) work under the state lock. The full
+/// state is only rewritten periodically (see [`JOURNAL_COMPACT_THRESHOLD`]).
+#[derive(Serialize, Deserialize)]
+enum JournalOp {
+    #[serde(rename = "aw")]
+    AddWhiteout(PathBuf),
+    #[serde(rename = "rw")]
+    RemoveWhiteout(PathBuf),
+    #[serde(rename = "ao")]
+    AddOpaque(PathBuf),
+    #[serde(rename = "ro")]
+    RemoveOpaque(PathBuf),
+}
 
 #[derive(Debug)]
 pub enum OverlayError {
@@ -137,6 +167,13 @@ pub struct OverlayState {
     state_path: PathBuf,
     env_hash: String,
     transport: String,
+    /// Append-only journal of mutations since the last snapshot. Kept open for
+    /// the lifetime of the state so each mutation is a single append + fsync
+    /// rather than a full-state rewrite.
+    journal: fs::File,
+    /// Number of records appended to the journal since the last snapshot.
+    /// Triggers compaction once it exceeds [`JOURNAL_COMPACT_THRESHOLD`].
+    journal_len: usize,
     /// Exclusive file lock held for the lifetime of this state.  Dropping
     /// the `File` releases the lock.
     _lock: fs::File,
@@ -270,24 +307,65 @@ impl OverlayState {
                 });
             }
             (
-                state.whiteouts.into_iter().collect(),
-                state.opaque_dirs.into_iter().collect(),
+                state.whiteouts.into_iter().collect::<HashSet<_>>(),
+                state.opaque_dirs.into_iter().collect::<HashSet<_>>(),
             )
         } else {
             (HashSet::new(), HashSet::new())
         };
 
-        let overlay = OverlayState {
+        let journal_path = dir.join(STATE_JOURNAL_FILENAME);
+
+        // Replay any journal records written since the last snapshot. Malformed
+        // trailing lines (e.g. a torn write from a crash) are skipped: the
+        // snapshot + intact prefix are still a consistent state.
+        let (mut whiteouts, mut opaque_dirs) = (whiteouts, opaque_dirs);
+        if let Ok(journal) = fs::read_to_string(&journal_path) {
+            for line in journal.lines().filter(|l| !l.trim().is_empty()) {
+                match serde_json::from_str::<JournalOp>(line) {
+                    Ok(JournalOp::AddWhiteout(p)) => {
+                        whiteouts.insert(p);
+                    }
+                    Ok(JournalOp::RemoveWhiteout(p)) => {
+                        whiteouts.remove(&p);
+                    }
+                    Ok(JournalOp::AddOpaque(p)) => {
+                        opaque_dirs.insert(p);
+                    }
+                    Ok(JournalOp::RemoveOpaque(p)) => {
+                        opaque_dirs.remove(&p);
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "ignoring malformed overlay journal record ({e}); \
+                             the snapshot + earlier records remain consistent"
+                        );
+                    }
+                }
+            }
+        }
+
+        let journal = fs::OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .truncate(false)
+            .open(&journal_path)?;
+
+        let mut overlay = OverlayState {
             dir,
             whiteouts,
             opaque_dirs,
             state_path,
             env_hash,
             transport,
+            journal,
+            journal_len: 0,
             _lock: lock,
         };
-        // Write initial state file if it didn't exist
-        overlay.flush()?;
+        // Fold any replayed journal records (and the initial state for a fresh
+        // overlay) into a fresh snapshot, leaving the journal empty.
+        overlay.write_snapshot()?;
         Ok(overlay)
     }
 
@@ -296,16 +374,17 @@ impl OverlayState {
         self.whiteouts.contains(path)
     }
 
-    /// Mark a virtual path as deleted. Flushes state to disk.
+    /// Mark a virtual path as deleted. Appends to the journal.
     pub fn add_whiteout(&mut self, path: PathBuf) -> Result<(), OverlayError> {
-        self.whiteouts.insert(path);
-        self.flush()
+        self.whiteouts.insert(path.clone());
+        self.append_journal(&JournalOp::AddWhiteout(path))
     }
 
-    /// Remove a whiteout (e.g. when recreating a deleted file). Flushes state to disk.
+    /// Remove a whiteout (e.g. when recreating a deleted file). Appends to the
+    /// journal.
     pub fn remove_whiteout(&mut self, path: &Path) -> Result<(), OverlayError> {
         if self.whiteouts.remove(path) {
-            self.flush()?;
+            self.append_journal(&JournalOp::RemoveWhiteout(path.to_path_buf()))?;
         }
         Ok(())
     }
@@ -325,16 +404,18 @@ impl OverlayState {
         self.opaque_dirs.contains(path)
     }
 
-    /// Mark a directory as opaque. Flushes state to disk.
+    /// Mark a directory as opaque. Appends to the journal.
     pub fn add_opaque_dir(&mut self, path: PathBuf) -> Result<(), OverlayError> {
-        self.opaque_dirs.insert(path);
-        self.flush()
+        self.opaque_dirs.insert(path.clone());
+        self.append_journal(&JournalOp::AddOpaque(path))
     }
 
-    /// Remove opaque marker from a directory. Flushes state to disk.
+    /// Remove opaque marker from a directory. Appends to the journal.
     pub fn remove_opaque_dir(&mut self, path: &Path) -> Result<(), OverlayError> {
-        self.opaque_dirs.remove(path);
-        self.flush()
+        if self.opaque_dirs.remove(path) {
+            self.append_journal(&JournalOp::RemoveOpaque(path.to_path_buf()))?;
+        }
+        Ok(())
     }
 
     /// The overlay directory path.
@@ -342,8 +423,31 @@ impl OverlayState {
         &self.dir
     }
 
-    /// Atomically write state to disk (write-tmp → fsync → rename).
-    pub(crate) fn flush(&self) -> Result<(), OverlayError> {
+    /// Append one mutation to the journal and fsync it — O(1) in the state
+    /// size. Compacts into a fresh snapshot once the journal grows past
+    /// [`JOURNAL_COMPACT_THRESHOLD`].
+    ///
+    /// The in-memory set has already been updated by the caller; the journal
+    /// record makes that change durable. On a torn/partial append the record is
+    /// dropped on the next load (see the replay logic), which at worst loses the
+    /// last mutation — the same crash window the previous full-rewrite had.
+    fn append_journal(&mut self, op: &JournalOp) -> Result<(), OverlayError> {
+        let mut line = serde_json::to_string(op)?;
+        line.push('\n');
+        self.journal.seek(SeekFrom::End(0))?;
+        self.journal.write_all(line.as_bytes())?;
+        self.journal.sync_data()?;
+        self.journal_len += 1;
+        if self.journal_len >= JOURNAL_COMPACT_THRESHOLD {
+            self.write_snapshot()?;
+        }
+        Ok(())
+    }
+
+    /// Atomically rewrite the full JSON snapshot (write-tmp → fsync → rename)
+    /// and truncate the journal. O(N) in the state size, so it runs only at
+    /// load and on compaction — never per mutation.
+    pub(crate) fn write_snapshot(&mut self) -> Result<(), OverlayError> {
         let state = StateFile {
             version: STATE_VERSION,
             env_hash: self.env_hash.clone(),
@@ -358,6 +462,14 @@ impl OverlayState {
         file.write_all(json.as_bytes())?;
         file.sync_all()?;
         fs::rename(&tmp_path, &self.state_path)?;
+
+        // Snapshot is durable and covers every record; the journal can restart
+        // empty. Truncate the existing handle rather than reopening so the
+        // fsync'd snapshot and the emptied journal reflect the same state.
+        self.journal.set_len(0)?;
+        self.journal.seek(SeekFrom::Start(0))?;
+        self.journal.sync_data()?;
+        self.journal_len = 0;
         Ok(())
     }
 }
@@ -442,10 +554,25 @@ mod tests {
         assert!(state.is_whiteout(Path::new("lib/foo.py")));
 
         state.add_whiteout(PathBuf::from("lib/bar.py")).unwrap();
+
+        // The snapshot written at load records the adopted hash; the second
+        // whiteout lives in the journal until the next compaction.
         let content = fs::read_to_string(dir.join(STATE_FILENAME)).unwrap();
         let parsed: StateFile = serde_json::from_str(&content).unwrap();
         assert_eq!(parsed.env_hash, "hash_b");
-        assert_eq!(parsed.whiteouts.len(), 2);
+
+        // Reloading replays the journal, so both whiteouts survive.
+        drop(state);
+        let reloaded = OverlayState::load(
+            dir,
+            "hash_b".into(),
+            "test".into(),
+            crate::OverlayMismatch::Error,
+        )
+        .unwrap();
+        assert!(reloaded.is_whiteout(Path::new("lib/foo.py")));
+        assert!(reloaded.is_whiteout(Path::new("lib/bar.py")));
+        assert_eq!(reloaded.whiteouts.len(), 2);
     }
 
     #[test]
@@ -560,7 +687,7 @@ mod tests {
     }
 
     #[test]
-    fn test_flush_produces_valid_json() {
+    fn test_snapshot_is_valid_json_and_journal_roundtrips() {
         let tmp = TempDir::new().unwrap();
         let dir = tmp.path().join("overlay");
         let mut state = OverlayState::load(
@@ -574,10 +701,60 @@ mod tests {
         state.add_whiteout(PathBuf::from("a/b.py")).unwrap();
         state.add_whiteout(PathBuf::from("c/d.py")).unwrap();
 
-        // Read and verify the state file is valid JSON
+        // The snapshot on disk is always valid JSON, even while recent
+        // mutations are still only in the journal.
         let content = fs::read_to_string(dir.join(STATE_FILENAME)).unwrap();
         let parsed: StateFile = serde_json::from_str(&content).unwrap();
         assert_eq!(parsed.env_hash, "hash");
-        assert_eq!(parsed.whiteouts.len(), 2);
+
+        // Both whiteouts are durable: reloading replays the journal on top of
+        // the snapshot.
+        drop(state);
+        let reloaded = OverlayState::load(
+            dir,
+            "hash".into(),
+            "test".into(),
+            crate::OverlayMismatch::Error,
+        )
+        .unwrap();
+        assert!(reloaded.is_whiteout(Path::new("a/b.py")));
+        assert!(reloaded.is_whiteout(Path::new("c/d.py")));
+        assert_eq!(reloaded.whiteouts.len(), 2);
+    }
+
+    #[test]
+    fn test_journal_compaction_preserves_state() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join("overlay");
+        let mut state = OverlayState::load(
+            dir.clone(),
+            "hash".into(),
+            "test".into(),
+            crate::OverlayMismatch::Error,
+        )
+        .unwrap();
+
+        // Exceed the compaction threshold so at least one snapshot rewrite +
+        // journal truncation happens mid-run.
+        let n = JOURNAL_COMPACT_THRESHOLD + 50;
+        for i in 0..n {
+            state
+                .add_whiteout(PathBuf::from(format!("f/{i}.py")))
+                .unwrap();
+        }
+        // After compaction the live journal holds only the post-snapshot tail.
+        assert!(state.journal_len < JOURNAL_COMPACT_THRESHOLD);
+
+        drop(state);
+        let reloaded = OverlayState::load(
+            dir,
+            "hash".into(),
+            "test".into(),
+            crate::OverlayMismatch::Error,
+        )
+        .unwrap();
+        assert_eq!(reloaded.whiteouts.len(), n);
+        assert!(reloaded.is_whiteout(Path::new("f/0.py")));
+        assert!(reloaded.is_whiteout(Path::new(&format!("f/{}.py", n - 1))));
     }
 }

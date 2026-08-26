@@ -19,7 +19,9 @@ use std::{
 
 mod inode;
 
-use crate::overlay::{OverlayState, STATE_FILENAME, STATE_LOCK_FILENAME, STATE_TMP_FILENAME};
+use crate::overlay::{
+    OverlayState, STATE_FILENAME, STATE_JOURNAL_FILENAME, STATE_LOCK_FILENAME, STATE_TMP_FILENAME,
+};
 use crate::vfs_ops::{ContentSource, DirEntry, FileAttr, FileKind, VfsOps, set_file_permissions};
 use inode::{ResolvedIno, UPPER_INODE_BASE, UpperInodeMap};
 
@@ -156,7 +158,11 @@ impl<T: VfsOps> OverlayFS<T> {
             let name = path.file_name().unwrap_or_default();
 
             // Skip overlay internal files
-            if name == STATE_FILENAME || name == STATE_TMP_FILENAME || name == STATE_LOCK_FILENAME {
+            if name == STATE_FILENAME
+                || name == STATE_TMP_FILENAME
+                || name == STATE_LOCK_FILENAME
+                || name == STATE_JOURNAL_FILENAME
+            {
                 continue;
             }
 
@@ -581,6 +587,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
                 let name = entry.file_name();
                 if name == STATE_FILENAME
                     || name == STATE_LOCK_FILENAME
+                    || name == STATE_JOURNAL_FILENAME
                     || name.to_str().is_some_and(|s| s.ends_with(".tmp"))
                 {
                     continue;
@@ -918,17 +925,11 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
         let src_in_lower = self.lower_ino_for_path(&src_path).is_some();
         let mut state = self.state.lock().unwrap();
         let dst_whiteoutd = state.is_whiteout(&dst_path);
-        let mut dirty = false;
         if src_in_lower {
-            state.whiteouts.insert(src_path.clone());
-            dirty = true;
+            state.add_whiteout(src_path.clone()).map_err(|_e| EIO)?;
         }
         if dst_whiteoutd {
-            state.whiteouts.remove(&dst_path);
-            dirty = true;
-        }
-        if dirty {
-            state.flush().map_err(|_e| EIO)?;
+            state.remove_whiteout(&dst_path).map_err(|_e| EIO)?;
         }
         drop(state);
 
