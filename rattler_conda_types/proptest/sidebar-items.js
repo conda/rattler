@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["channel","match_spec","match_spec_condition","nameless_match_spec","package_name","package_name_matcher","string_matcher","version_spec"]};

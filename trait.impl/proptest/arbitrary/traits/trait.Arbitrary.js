@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["rattler_conda_types",[["impl Arbitrary for <a class=\"enum\" href=\"rattler_conda_types/match_spec/condition/enum.MatchSpecCondition.html\" title=\"enum rattler_conda_types::match_spec::condition::MatchSpecCondition\">MatchSpecCondition</a>",0],["impl Arbitrary for <a class=\"enum\" href=\"rattler_conda_types/match_spec/matcher/enum.StringMatcher.html\" title=\"enum rattler_conda_types::match_spec::matcher::StringMatcher\">StringMatcher</a>",0],["impl Arbitrary for <a class=\"enum\" href=\"rattler_conda_types/match_spec/package_name_matcher/enum.PackageNameMatcher.html\" title=\"enum rattler_conda_types::match_spec::package_name_matcher::PackageNameMatcher\">PackageNameMatcher</a>",0],["impl Arbitrary for <a class=\"struct\" href=\"rattler_conda_types/match_spec/struct.MatchSpec.html\" title=\"struct rattler_conda_types::match_spec::MatchSpec\">MatchSpec</a>",0],["impl Arbitrary for <a class=\"struct\" href=\"rattler_conda_types/match_spec/struct.NamelessMatchSpec.html\" title=\"struct rattler_conda_types::match_spec::NamelessMatchSpec\">NamelessMatchSpec</a>",0],["impl Arbitrary for <a class=\"struct\" href=\"rattler_conda_types/struct.Channel.html\" title=\"struct rattler_conda_types::Channel\">Channel</a>",0],["impl Arbitrary for <a class=\"struct\" href=\"rattler_conda_types/struct.PackageName.html\" title=\"struct rattler_conda_types::PackageName\">PackageName</a>",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[1399]}
