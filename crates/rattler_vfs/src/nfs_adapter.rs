@@ -97,6 +97,23 @@ impl<T: VfsOps> NfsAdapter<T> {
     /// implementations return EROFS naturally via `VfsOps` defaults,
     /// matching how the FUSE adapter handles this.
     /// Pass `port = 0` to let the OS pick a free port.
+    ///
+    /// # Security
+    ///
+    /// The server binds `127.0.0.1`, so remote hosts cannot reach it, but that
+    /// bind is the **only** access gate. NFS `AUTH_UNIX` is unauthenticated: the
+    /// adapter cannot verify caller credentials, and a client picks whatever
+    /// uid/gid it likes on the wire. **Any other local user can therefore speak
+    /// NFS3 to this port and read — and, on a writable overlay, write or delete —
+    /// the mounted environment, bypassing the mount point's Unix permission
+    /// bits.** A loopback-TCP NFS server is inherently shared among local users.
+    ///
+    /// Do not use this transport to serve data that other local users must not
+    /// see or modify. Path-traversal via crafted wire filenames is mitigated in
+    /// the overlay layer (see `validate_component`), but per-user access control
+    /// is **not** enforced. On single-user machines this is not a concern; on
+    /// shared hosts prefer FUSE (which honours process credentials) where
+    /// available.
     pub async fn serve(self, port: u16) -> std::io::Result<NfsServerHandle> {
         let addr = format!("127.0.0.1:{port}");
         let listener = NFSTcpListener::bind(&addr, self).await?;
