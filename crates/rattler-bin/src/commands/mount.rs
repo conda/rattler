@@ -59,7 +59,7 @@ pub enum TransportArg {
 impl From<TransportArg> for Transport {
     fn from(t: TransportArg) -> Self {
         match t {
-            TransportArg::Auto => Transport::Auto,
+            TransportArg::Auto => Transport::best(),
             TransportArg::Fuse => Transport::Fuse,
             TransportArg::Nfs => Transport::Nfs,
             TransportArg::Projfs => Transport::ProjFs,

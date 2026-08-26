@@ -20,7 +20,7 @@
 //!
 //! let config = MountConfig::new_read_only(
 //!     "/path/to/env".into(),
-//!     Transport::Auto,
+//!     Transport::best(),
 //!     env_hash,
 //! );
 //! let handle = build_and_mount(&lockfile, "default", platform, &cache, &config).await?;
@@ -38,7 +38,7 @@
 //! | macOS | NFS | NFS, FUSE (requires [macFUSE]) |
 //! | Windows | [ProjFS] | `ProjFS` |
 //!
-//! [`Transport::Auto`] selects the default for the current platform.
+//! [`Transport::best`]`()` selects the default for the current platform.
 //!
 //! **Why NFS on macOS?** FUSE on macOS requires [macFUSE], a third-party
 //! kernel extension that needs System Integrity Protection (SIP) to be
@@ -419,9 +419,6 @@ pub struct MetadataTree(pub(crate) Vec<MetadataNode>);
 /// has a different default.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Transport {
-    /// Auto-detect the best backend for the current platform: FUSE on Linux,
-    /// NFS on macOS, `ProjFS` on Windows.
-    Auto,
     /// `NFSv3` userspace server on localhost. Works on all platforms without
     /// kernel extensions. On Windows, constrained to port 2049 and drive letters.
     ///
@@ -429,7 +426,7 @@ pub enum Transport {
     /// granted in unprivileged user namespaces. The adapter probes for
     /// passwordless `sudo` before attempting the mount and fails fast if it's
     /// not available. On Linux, prefer [`Transport::Fuse`] unless you
-    /// specifically need NFS parity with macOS — [`Transport::Auto`] already
+    /// specifically need NFS parity with macOS — [`Transport::best`]`()` already
     /// picks FUSE.
     Nfs,
     /// FUSE via libfuse3 (Linux) or macFUSE (macOS, requires `fuse` feature).
@@ -441,29 +438,27 @@ pub enum Transport {
 }
 
 impl Transport {
-    /// Short name for state file tracking.
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Auto => "auto",
-            Self::Nfs => "nfs",
-            Self::Fuse => "fuse",
-            Self::ProjFs => "projfs",
+    /// The best transport for the current platform: `ProjFS` on Windows, NFS on
+    /// macOS, FUSE elsewhere (Linux).
+    ///
+    /// Prefer this over a catch-all `Auto` enum variant so every [`Transport`]
+    /// value names a concrete backend and callers never have to resolve one.
+    pub fn best() -> Self {
+        if cfg!(target_os = "windows") {
+            Self::ProjFs
+        } else if cfg!(target_os = "macos") {
+            Self::Nfs
+        } else {
+            Self::Fuse
         }
     }
 
-    /// Resolve `Auto` to the platform-appropriate transport.
-    pub fn resolve(self) -> Self {
+    /// Short name for state file tracking.
+    pub fn name(self) -> &'static str {
         match self {
-            Self::Auto => {
-                if cfg!(target_os = "windows") {
-                    Self::ProjFs
-                } else if cfg!(target_os = "macos") {
-                    Self::Nfs
-                } else {
-                    Self::Fuse
-                }
-            }
-            other => other,
+            Self::Nfs => "nfs",
+            Self::Fuse => "fuse",
+            Self::ProjFs => "projfs",
         }
     }
 
@@ -472,8 +467,7 @@ impl Transport {
     /// Use this at config-parse time to reject invalid combinations early
     /// instead of waiting for [`mount`] to fail at runtime.
     pub fn is_available(self) -> bool {
-        match self.resolve() {
-            Self::Auto => unreachable!("resolve() never returns Auto"),
+        match self {
             Self::Fuse => cfg!(any(target_os = "linux", feature = "fuse")),
             Self::Nfs => cfg!(feature = "nfs"),
             Self::ProjFs => cfg!(target_os = "windows"),
@@ -547,7 +541,7 @@ pub struct MountConfig {
     /// Read-only or writable, and where the overlay lives.
     pub mode: Mode,
 
-    /// Transport backend. Use [`Transport::Auto`] to let the platform decide.
+    /// Transport backend. Use [`Transport::best`]`()` to let the platform decide.
     pub transport: Transport,
 
     /// Identity hash of the resolved environment, used to detect when the
@@ -951,7 +945,7 @@ fn topological_order_of_records(records: &[PackageRecord]) -> Vec<usize> {
 
 /// Mount a pre-built metadata tree. Returns a handle that unmounts on drop.
 pub async fn mount(metadata: MetadataTree, config: &MountConfig) -> anyhow::Result<MountHandle> {
-    let transport = config.transport.resolve();
+    let transport = config.transport;
 
     // ProjFS-specific pre-flight checks: DLL availability, mode validity,
     // overlay state. Done before VFS construction so we don't waste offset
@@ -1425,7 +1419,7 @@ fn create_overlay(
 /// | macOS | FUSE / NFS | `umount -f` |
 /// | Windows | `ProjFS` | Not yet supported — returns an error |
 ///
-/// Pass [`Transport::Auto`] to use the platform default.
+/// Pass [`Transport::best`]`()` to use the platform default.
 ///
 /// **NFS on Linux note:** `umount -f` requires `CAP_SYS_ADMIN`.  If
 /// passwordless sudo is not available, this will fail.  Consider switching
@@ -1437,7 +1431,6 @@ fn create_overlay(
 /// A future version may support re-attaching to an existing virtualization
 /// root.
 pub fn force_unmount(mount_point: &Path, transport: Transport) -> anyhow::Result<()> {
-    let transport = transport.resolve();
     let mnt = mount_point.display().to_string();
 
     match transport {
