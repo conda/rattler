@@ -18,11 +18,7 @@
 //! let env_hash = compute_env_hash(&lockfile, "default", platform)?;
 //! let cache = PackageCache::new(default_cache_dir()?.join("pkgs"));
 //!
-//! let config = MountConfig::new_read_only(
-//!     "/path/to/env".into(),
-//!     Transport::best(),
-//!     env_hash,
-//! );
+//! let config = MountConfig::new("/path/to/env".into(), Transport::best(), env_hash);
 //! let handle = build_and_mount(&lockfile, "default", platform, &cache, &config).await?;
 //! // Environment is live at /path/to/env.
 //! // Dropping `handle` unmounts; call `handle.unmount().await` for explicit error handling.
@@ -272,7 +268,7 @@ pub(crate) fn path_parse(
 ///
 /// Clobbered paths (the same path shipped by two packages) resolve last-writer-
 /// wins. The caller feeds packages in topological order (see
-/// [`build_metadata_tree`]), so the winner matches what `rattler`'s installer
+/// [`MetadataTree::build`]), so the winner matches what `rattler`'s installer
 /// keeps after `unclobber`. Replacing in place keeps `readdir` duplicate-free.
 fn upsert_file_node(
     node: MetadataNode,
@@ -405,13 +401,45 @@ pub(crate) fn new_empty_tree() -> (
 // Library API: mount orchestration
 // ---------------------------------------------------------------------------
 
-/// Opaque metadata tree produced by [`build_metadata_tree`].
+/// Opaque metadata tree produced by [`MetadataTree::build`].
 ///
 /// Pass to [`mount`] or [`build_and_mount`]; the internal representation is
 /// not stable and is intentionally not exposed. The newtype wrapper means
 /// downstream consumers cannot construct one directly — guaranteeing every
-/// mount went through `build_metadata_tree`'s validation.
+/// mount went through [`MetadataTree::build`]'s validation.
 pub struct MetadataTree(pub(crate) Vec<MetadataNode>);
+
+impl MetadataTree {
+    /// Build the in-memory metadata tree from a parsed lock file.
+    ///
+    /// Fetches packages from `package_cache` as needed, reads `PathsJson` for
+    /// each, and constructs the virtual directory tree with noarch Python path
+    /// rewriting and entry-point generation.
+    ///
+    /// Caller responsibilities:
+    /// - Parse the lock file once via [`LockFile::from_path`].
+    /// - Pick a [`Platform`] (usually [`Platform::current()`]).
+    /// - Construct a [`PackageCache`] (commonly via
+    ///   [`rattler_cache::default_cache_dir()`]). Decoupling the cache from
+    ///   this function lets pixi share its own cache and lets tests use a temp
+    ///   dir.
+    pub async fn build(
+        lockfile: &LockFile,
+        environment_name: &str,
+        platform: Platform,
+        package_cache: &PackageCache,
+        mount_point: &Path,
+    ) -> anyhow::Result<Self> {
+        build_metadata_tree(
+            lockfile,
+            environment_name,
+            platform,
+            package_cache,
+            mount_point,
+        )
+        .await
+    }
+}
 
 /// Transport backend for the virtual filesystem.
 ///
@@ -529,10 +557,16 @@ pub enum OverlayMismatch {
 /// Configuration for mounting a virtual environment.
 ///
 /// Marked `#[non_exhaustive]` so new fields can be added without a `SemVer`
-/// break. Construct via [`MountConfig::new_read_only`] or
-/// [`MountConfig::new_writable`], optionally chaining
-/// [`with_allow_other`](MountConfig::with_allow_other) or
-/// [`with_overlay_mismatch`](MountConfig::with_overlay_mismatch).
+/// break. Start from [`MountConfig::new`] (read-only) and customize with the
+/// chained `with_*` builders or the `&mut self` `set_*` setters, e.g.
+///
+/// ```no_run
+/// # use std::path::PathBuf;
+/// # use rattler_vfs::{MountConfig, Mode, Transport, OverlayMismatch};
+/// let config = MountConfig::new("/env".into(), Transport::best(), "sha256:…".into())
+///     .with_writable(PathBuf::from("/overlay"))
+///     .with_overlay_mismatch(OverlayMismatch::Adopt);
+/// ```
 #[non_exhaustive]
 pub struct MountConfig {
     /// Directory where the virtual environment will appear.
@@ -559,8 +593,12 @@ pub struct MountConfig {
 }
 
 impl MountConfig {
-    /// Read-only mount. Writes return `EROFS`.
-    pub fn new_read_only(mount_point: PathBuf, transport: Transport, env_hash: String) -> Self {
+    /// A read-only mount config with default options. Customize it with the
+    /// `with_*` (chained, by value) or `set_*` (`&mut self`) builders.
+    ///
+    /// Read-only is the safe default; call [`with_writable`](Self::with_writable)
+    /// or [`with_mode`](Self::with_mode) for a writable overlay.
+    pub fn new(mount_point: PathBuf, transport: Transport, env_hash: String) -> Self {
         Self {
             mount_point,
             mode: Mode::ReadOnly,
@@ -571,58 +609,50 @@ impl MountConfig {
         }
     }
 
-    /// Read-only if the transport supports it, otherwise writable.
-    ///
-    /// On FUSE/NFS this behaves like [`Self::new_read_only`]. On `ProjFS` —
-    /// which cannot enforce read-only, since it has no pre-creation
-    /// notification — it falls through to a writable mount (logging a warning)
-    /// instead of erroring with [`MountError::ProjFsReadOnlyUnsupported`]. Use
-    /// this for cross-platform configs where `mount-read-only = true` should
-    /// still work on Windows.
-    pub fn new_read_only_if_supported(
-        mount_point: PathBuf,
-        transport: Transport,
-        env_hash: String,
-    ) -> Self {
-        Self {
-            mount_point,
-            mode: Mode::ReadOnlyIfSupported,
-            transport,
-            env_hash,
-            allow_other: false,
-            overlay_mismatch: OverlayMismatch::Error,
-        }
+    /// Set the read-only/writable [`Mode`] (chained).
+    pub fn with_mode(mut self, mode: Mode) -> Self {
+        self.mode = mode;
+        self
     }
 
-    /// Writable mount with a persistent COW overlay.
-    ///
-    /// `overlay_dir` is required for FUSE/NFS and must be a separate directory
-    /// from `mount_point`. Pass `None` for `ProjFS` — `ProjFS` uses the mount
-    /// point itself as the virtualization root.
-    pub fn new_writable(
-        mount_point: PathBuf,
-        overlay_dir: Option<PathBuf>,
-        transport: Transport,
-        env_hash: String,
-    ) -> Self {
-        Self {
-            mount_point,
-            mode: Mode::Writable { overlay_dir },
-            transport,
-            env_hash,
-            allow_other: false,
-            overlay_mismatch: OverlayMismatch::Error,
-        }
+    /// Make the mount writable with a persistent COW overlay at `overlay_dir`
+    /// (chained). Convenience for `with_mode(Mode::Writable { overlay_dir:
+    /// Some(overlay_dir) })`; for `ProjFS`, use [`with_mode`](Self::with_mode)
+    /// with `overlay_dir: None`.
+    pub fn with_writable(mut self, overlay_dir: PathBuf) -> Self {
+        self.mode = Mode::Writable {
+            overlay_dir: Some(overlay_dir),
+        };
+        self
     }
 
-    /// Allow other users to access the mount (FUSE only).
+    /// Allow other users to access the mount (FUSE only) (chained).
     pub fn with_allow_other(mut self, allow_other: bool) -> Self {
         self.allow_other = allow_other;
         self
     }
 
-    /// Set what to do when the overlay was created for a different environment.
+    /// Set what to do when the overlay was created for a different environment
+    /// (chained).
     pub fn with_overlay_mismatch(mut self, overlay_mismatch: OverlayMismatch) -> Self {
+        self.overlay_mismatch = overlay_mismatch;
+        self
+    }
+
+    /// Set the [`Mode`] in place, returning `&mut Self` for chaining.
+    pub fn set_mode(&mut self, mode: Mode) -> &mut Self {
+        self.mode = mode;
+        self
+    }
+
+    /// Set `allow_other` in place, returning `&mut Self` for chaining.
+    pub fn set_allow_other(&mut self, allow_other: bool) -> &mut Self {
+        self.allow_other = allow_other;
+        self
+    }
+
+    /// Set `overlay_mismatch` in place, returning `&mut Self` for chaining.
+    pub fn set_overlay_mismatch(&mut self, overlay_mismatch: OverlayMismatch) -> &mut Self {
         self.overlay_mismatch = overlay_mismatch;
         self
     }
@@ -710,7 +740,7 @@ type FetchedPackage = (PathBuf, PathsJson, bool, Vec<EntryPoint>);
 /// - Construct a [`PackageCache`] (commonly via
 ///   [`rattler_cache::default_cache_dir()`]). Decoupling the cache from this
 ///   function lets pixi share its own cache and lets tests use a temp dir.
-pub async fn build_metadata_tree(
+pub(crate) async fn build_metadata_tree(
     lockfile: &LockFile,
     environment_name: &str,
     platform: Platform,

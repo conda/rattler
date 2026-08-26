@@ -744,8 +744,8 @@ pub(crate) async fn mount_nfs(
         Mode::Writable { overlay_dir: None } => {
             anyhow::bail!(
                 "NFS writable mode requires an overlay directory. Use \
-                 MountConfig::new_writable(.., Some(overlay_dir), ..) or \
-                 MountConfig::new_read_only(..) for a read-only mount."
+                 MountConfig::new(..).with_writable(overlay_dir) or \
+                 MountConfig::new(..) for a read-only mount."
             );
         }
         Mode::ReadOnly | Mode::ReadOnlyIfSupported => NfsAdapter::new(vfs).serve(bind_port).await?,
