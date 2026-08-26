@@ -21,7 +21,7 @@ use std::{
     time::Duration,
 };
 
-use crate::vfs_ops::{ContentSource, FileAttr, FileKind, VfsOps};
+use crate::vfs_ops::{ContentSource, Fh, FileAttr, FileKind, VfsOps};
 
 // ---------------------------------------------------------------------------
 // Conversions between crate-local types and fuser types
@@ -70,7 +70,7 @@ enum OpenFileContent {
     Passthrough { _backing_id: Arc<fuser::BackingId> },
     /// VFS-managed handle (overlay writable files). Reads/writes/release
     /// must be delegated back to the VFS using this key.
-    VfsManaged(u64),
+    VfsManaged(Fh),
     /// Inode-based reads for transformed/virtual content. Each `read()`
     /// call delegates to `VfsOps::read(ino, offset, size)`.
     InodeRead(u64),
