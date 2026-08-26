@@ -13,7 +13,6 @@
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
 };
 
 /// Inodes at or above this value belong to the upper (overlay) layer.
@@ -23,16 +22,18 @@ pub(crate) const UPPER_INODE_BASE: u64 = u64::MAX / 2;
 /// Bidirectional inode ↔ path mapping for upper-layer entries.
 pub(crate) struct UpperInodeMap {
     path_to_ino: HashMap<PathBuf, u64>,
-    ino_to_path: HashMap<u64, PathBuf>,
-    next_ino: AtomicU64,
+    /// Reverse map, indexed by `ino - UPPER_INODE_BASE`. Upper inodes are handed
+    /// out sequentially from `UPPER_INODE_BASE`, so a `Vec` is denser and faster
+    /// than a `HashMap`. A slot is `None` once a rename orphans its inode (the
+    /// overwritten destination — see [`Self::rename_path`]).
+    ino_to_path: Vec<Option<PathBuf>>,
 }
 
 impl UpperInodeMap {
     pub(crate) fn new() -> Self {
         Self {
             path_to_ino: HashMap::new(),
-            ino_to_path: HashMap::new(),
-            next_ino: AtomicU64::new(UPPER_INODE_BASE),
+            ino_to_path: Vec::new(),
         }
     }
 
@@ -40,14 +41,16 @@ impl UpperInodeMap {
         if let Some(&ino) = self.path_to_ino.get(&virtual_path) {
             return ino;
         }
-        let ino = self.next_ino.fetch_add(1, Ordering::Relaxed);
-        self.ino_to_path.insert(ino, virtual_path.clone());
+        // Next sequential inode = base + number already assigned.
+        let ino = UPPER_INODE_BASE + self.ino_to_path.len() as u64;
+        self.ino_to_path.push(Some(virtual_path.clone()));
         self.path_to_ino.insert(virtual_path, ino);
         ino
     }
 
     pub(crate) fn path_for(&self, ino: u64) -> Option<&PathBuf> {
-        self.ino_to_path.get(&ino)
+        let idx = ino.checked_sub(UPPER_INODE_BASE)? as usize;
+        self.ino_to_path.get(idx)?.as_ref()
     }
 
     /// Reverse lookup. Used by tests; production code asks the upper map
@@ -61,15 +64,27 @@ impl UpperInodeMap {
     /// The kernel expects the source inode to remain valid after rename,
     /// just pointing at the new path.
     pub(crate) fn rename_path(&mut self, old_path: &Path, new_path: PathBuf) {
-        // Clean up any existing inode at the destination (overwrite case)
-        if let Some(old_dst_ino) = self.path_to_ino.remove(&new_path) {
-            self.ino_to_path.remove(&old_dst_ino);
+        // Clean up any existing inode at the destination (overwrite case):
+        // orphan its slot rather than shifting the Vec, so other inodes keep
+        // their indices.
+        if let Some(old_dst_ino) = self.path_to_ino.remove(&new_path)
+            && let Some(slot) = self.slot_mut(old_dst_ino)
+        {
+            *slot = None;
         }
         // Remap source inode to destination path
         if let Some(ino) = self.path_to_ino.remove(old_path) {
-            self.ino_to_path.insert(ino, new_path.clone());
+            if let Some(slot) = self.slot_mut(ino) {
+                *slot = Some(new_path.clone());
+            }
             self.path_to_ino.insert(new_path, ino);
         }
+    }
+
+    /// Mutable access to the reverse-map slot for an upper inode, if in range.
+    fn slot_mut(&mut self, ino: u64) -> Option<&mut Option<PathBuf>> {
+        let idx = ino.checked_sub(UPPER_INODE_BASE)? as usize;
+        self.ino_to_path.get_mut(idx)
     }
 }
 
