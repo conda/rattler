@@ -9,15 +9,8 @@ use serde::Serialize;
 #[derive(Debug, clap::Parser)]
 #[clap(after_help = r#"Examples:
   rattler info
-  rattler info --platform linux-64
   rattler info --json"#)]
 pub struct Opt {
-    /// Also show the virtual packages that would be used when solving for this
-    /// platform. Slots that this machine cannot speak for fall back to the
-    /// defaults assumed for the platform.
-    #[clap(long)]
-    platform: Option<Platform>,
-
     /// Output in JSON format
     #[clap(long)]
     json: bool,
@@ -46,25 +39,15 @@ fn auth_storage_path() -> Option<PathBuf> {
     dirs::home_dir().map(|home| home.join(".rattler").join("credentials.json"))
 }
 
-fn detect(platform: Platform, cache_dir: Option<&std::path::Path>) -> miette::Result<Vec<String>> {
-    let overrides = VirtualPackageOverrides::from_env();
-    let virtual_packages = if platform == Platform::current() {
-        VirtualPackages::detect(&overrides, cache_dir)
-    } else {
-        VirtualPackages::detect_for_platform(platform, &overrides, cache_dir)
-    }
-    .into_diagnostic()?;
+/// The virtual packages detected for the current platform.
+fn detect(cache_dir: Option<&std::path::Path>) -> miette::Result<Vec<String>> {
+    let virtual_packages = VirtualPackages::detect(&VirtualPackageOverrides::from_env(), cache_dir)
+        .into_diagnostic()?;
 
     Ok(virtual_packages
         .into_virtual_packages()
         .map(|package| GenericVirtualPackage::from(package).to_string())
         .collect())
-}
-
-#[derive(Debug, Serialize)]
-struct TargetPlatformInfo {
-    platform: Platform,
-    virtual_packages: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -75,8 +58,6 @@ struct Info {
     cache_dir: Option<PathBuf>,
     auth_storage: Option<PathBuf>,
     virtual_packages: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    target_platform: Option<TargetPlatformInfo>,
 }
 
 const LABEL_WIDTH: usize = 18;
@@ -106,31 +87,15 @@ fn print_list(label: &str, values: &[String]) {
 
 pub fn info(opt: Opt) -> miette::Result<()> {
     let cache_dir = rattler::default_cache_dir().ok();
-    let current_platform = Platform::current();
-
-    let virtual_packages = detect(current_platform, cache_dir.as_deref())?;
-
-    // Only report a target platform separately when it differs from the current
-    // one, otherwise it would just repeat the list above.
-    let target_platform = opt
-        .platform
-        .filter(|platform| *platform != current_platform)
-        .map(|platform| {
-            detect(platform, cache_dir.as_deref()).map(|virtual_packages| TargetPlatformInfo {
-                platform,
-                virtual_packages,
-            })
-        })
-        .transpose()?;
+    let virtual_packages = detect(cache_dir.as_deref())?;
 
     let info = Info {
         version: env!("CARGO_PKG_VERSION"),
-        platform: current_platform,
+        platform: Platform::current(),
         tls_backend: tls_backend(),
         cache_dir,
         auth_storage: auth_storage_path(),
         virtual_packages,
-        target_platform,
     };
 
     if opt.json {
@@ -163,12 +128,6 @@ pub fn info(opt: Opt) -> miette::Result<()> {
         ),
     );
     print_list("Virtual packages", &info.virtual_packages);
-
-    if let Some(target) = &info.target_platform {
-        println!();
-        print_field("Target platform", target.platform);
-        print_list("Virtual packages", &target.virtual_packages);
-    }
 
     Ok(())
 }
