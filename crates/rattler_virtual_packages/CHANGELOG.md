@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.0.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v5.1.1...rattler_virtual_packages-v6.0.0) - 2026-08-27
+
+### Added
+
+- default `__glibc` to 2.39 on `linux-riscv64` ([#2731](https://github.com/conda/rattler/pull/2731))
+
 ## [5.1.1](https://github.com/conda/rattler/compare/rattler_virtual_packages-v5.1.0...rattler_virtual_packages-v5.1.1) - 2026-08-26
 
 ### Other
