@@ -6,6 +6,7 @@ pub mod download;
 pub mod exec;
 pub mod extract;
 pub mod fetch_file;
+pub mod info;
 pub mod inspect;
 pub mod link;
 pub mod list;
