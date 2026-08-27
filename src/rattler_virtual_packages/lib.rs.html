@@ -531,7 +531,7 @@
 <a href=#529 id=529 data-nosnippet>529</a>            }),
 <a href=#530 id=530 data-nosnippet>530</a>            libc: platform.is_linux().then(|| LibC {
 <a href=#531 id=531 data-nosnippet>531</a>                family: <span class="string">"glibc"</span>.into(),
-<a href=#532 id=532 data-nosnippet>532</a>                version: defaults::default_glibc_version(),
+<a href=#532 id=532 data-nosnippet>532</a>                version: defaults::default_glibc_version(platform),
 <a href=#533 id=533 data-nosnippet>533</a>            }),
 <a href=#534 id=534 data-nosnippet>534</a>            cuda: <span class="prelude-val">None</span>,
 <a href=#535 id=535 data-nosnippet>535</a>            cuda_arch: <span class="prelude-val">None</span>,
@@ -1645,275 +1645,301 @@
 <a href=#1643 id=1643 data-nosnippet>1643</a>        );
 <a href=#1644 id=1644 data-nosnippet>1644</a>        <span class="kw">let </span>libc = linux.libc.unwrap();
 <a href=#1645 id=1645 data-nosnippet>1645</a>        <span class="macro">assert_eq!</span>(libc.family, <span class="string">"glibc"</span>);
-<a href=#1646 id=1646 data-nosnippet>1646</a>        <span class="macro">assert_eq!</span>(libc.version, defaults::default_glibc_version());
-<a href=#1647 id=1647 data-nosnippet>1647</a>
-<a href=#1648 id=1648 data-nosnippet>1648</a>        <span class="kw">let </span>osx = VirtualPackages::baseline_for_platform(Platform::OsxArm64);
-<a href=#1649 id=1649 data-nosnippet>1649</a>        <span class="macro">assert_eq!</span>(
-<a href=#1650 id=1650 data-nosnippet>1650</a>            osx.osx.unwrap().version,
-<a href=#1651 id=1651 data-nosnippet>1651</a>            defaults::default_mac_os_version(Platform::OsxArm64).unwrap()
-<a href=#1652 id=1652 data-nosnippet>1652</a>        );
-<a href=#1653 id=1653 data-nosnippet>1653</a>
-<a href=#1654 id=1654 data-nosnippet>1654</a>        <span class="kw">let </span>win = VirtualPackages::baseline_for_platform(Platform::Win64);
-<a href=#1655 id=1655 data-nosnippet>1655</a>        <span class="macro">assert_eq!</span>(
-<a href=#1656 id=1656 data-nosnippet>1656</a>            win.win.unwrap().version.unwrap(),
-<a href=#1657 id=1657 data-nosnippet>1657</a>            defaults::default_windows_version()
-<a href=#1658 id=1658 data-nosnippet>1658</a>        );
-<a href=#1659 id=1659 data-nosnippet>1659</a>
-<a href=#1660 id=1660 data-nosnippet>1660</a>        <span class="macro">assert_eq!</span>(
-<a href=#1661 id=1661 data-nosnippet>1661</a>            VirtualPackages::baseline_for_platform(Platform::Linux64).archspec,
-<a href=#1662 id=1662 data-nosnippet>1662</a>            Archspec::from_platform(Platform::Linux64)
-<a href=#1663 id=1663 data-nosnippet>1663</a>        );
-<a href=#1664 id=1664 data-nosnippet>1664</a>    }
-<a href=#1665 id=1665 data-nosnippet>1665</a>
-<a href=#1666 id=1666 data-nosnippet>1666</a>    <span class="doccomment">/// The baseline is what `detect_for_platform` falls back to, so for a
-<a href=#1667 id=1667 data-nosnippet>1667</a>    /// platform this machine cannot run the two must agree on every slot the
-<a href=#1668 id=1668 data-nosnippet>1668</a>    /// host has nothing to say about.
-<a href=#1669 id=1669 data-nosnippet>1669</a>    </span><span class="attr">#[test]
-<a href=#1670 id=1670 data-nosnippet>1670</a>    </span><span class="kw">fn </span>baseline_matches_cross_compiled_detection() {
-<a href=#1671 id=1671 data-nosnippet>1671</a>        <span class="kw">let </span>current = Platform::current();
-<a href=#1672 id=1672 data-nosnippet>1672</a>        <span class="kw">let </span>target = <span class="kw">if </span>current.is_linux() {
-<a href=#1673 id=1673 data-nosnippet>1673</a>            Platform::Win64
-<a href=#1674 id=1674 data-nosnippet>1674</a>        } <span class="kw">else </span>{
-<a href=#1675 id=1675 data-nosnippet>1675</a>            Platform::Linux64
-<a href=#1676 id=1676 data-nosnippet>1676</a>        };
-<a href=#1677 id=1677 data-nosnippet>1677</a>
-<a href=#1678 id=1678 data-nosnippet>1678</a>        <span class="kw">let </span>baseline = VirtualPackages::baseline_for_platform(target);
-<a href=#1679 id=1679 data-nosnippet>1679</a>        <span class="kw">let </span>detected =
-<a href=#1680 id=1680 data-nosnippet>1680</a>            VirtualPackages::detect_for_platform(target, <span class="kw-2">&amp;</span>VirtualPackageOverrides::default(), <span class="prelude-val">None</span>)
-<a href=#1681 id=1681 data-nosnippet>1681</a>                .unwrap();
-<a href=#1682 id=1682 data-nosnippet>1682</a>
-<a href=#1683 id=1683 data-nosnippet>1683</a>        <span class="macro">assert_eq!</span>(baseline.win, detected.win);
-<a href=#1684 id=1684 data-nosnippet>1684</a>        <span class="macro">assert_eq!</span>(baseline.unix, detected.unix);
-<a href=#1685 id=1685 data-nosnippet>1685</a>        <span class="macro">assert_eq!</span>(baseline.linux, detected.linux);
-<a href=#1686 id=1686 data-nosnippet>1686</a>        <span class="macro">assert_eq!</span>(baseline.osx, detected.osx);
-<a href=#1687 id=1687 data-nosnippet>1687</a>        <span class="macro">assert_eq!</span>(baseline.libc, detected.libc);
-<a href=#1688 id=1688 data-nosnippet>1688</a>    }
-<a href=#1689 id=1689 data-nosnippet>1689</a>
-<a href=#1690 id=1690 data-nosnippet>1690</a>    <span class="attr">#[test]
-<a href=#1691 id=1691 data-nosnippet>1691</a>    </span><span class="kw">fn </span>test_cross_platform_default_versions() {
-<a href=#1692 id=1692 data-nosnippet>1692</a>        <span class="comment">// When targeting a platform whose virtual packages cannot be detected
-<a href=#1693 id=1693 data-nosnippet>1693</a>        // on the host, the pixi default versions are used instead of 0. The
-<a href=#1694 id=1694 data-nosnippet>1694</a>        // host's own platform family is skipped because there the detected
-<a href=#1695 id=1695 data-nosnippet>1695</a>        // (host) versions take precedence over the defaults.
-<a href=#1696 id=1696 data-nosnippet>1696</a>        </span><span class="kw">let </span>overrides = VirtualPackageOverrides::default();
-<a href=#1697 id=1697 data-nosnippet>1697</a>        <span class="kw">let </span>current = Platform::current();
-<a href=#1698 id=1698 data-nosnippet>1698</a>
-<a href=#1699 id=1699 data-nosnippet>1699</a>        <span class="kw">if </span>!current.is_linux() {
-<a href=#1700 id=1700 data-nosnippet>1700</a>            <span class="kw">let </span>packages =
-<a href=#1701 id=1701 data-nosnippet>1701</a>                VirtualPackages::detect_for_platform(Platform::Linux64, <span class="kw-2">&amp;</span>overrides, <span class="prelude-val">None</span>).unwrap();
-<a href=#1702 id=1702 data-nosnippet>1702</a>            <span class="macro">assert_eq!</span>(
-<a href=#1703 id=1703 data-nosnippet>1703</a>                packages.linux.expect(<span class="string">"__linux should be present"</span>).version,
-<a href=#1704 id=1704 data-nosnippet>1704</a>                defaults::default_linux_version()
-<a href=#1705 id=1705 data-nosnippet>1705</a>            );
-<a href=#1706 id=1706 data-nosnippet>1706</a>            <span class="kw">let </span>libc = packages.libc.expect(<span class="string">"__glibc should be present"</span>);
-<a href=#1707 id=1707 data-nosnippet>1707</a>            <span class="macro">assert_eq!</span>(libc.family, <span class="string">"glibc"</span>);
-<a href=#1708 id=1708 data-nosnippet>1708</a>            <span class="macro">assert_eq!</span>(libc.version, defaults::default_glibc_version());
-<a href=#1709 id=1709 data-nosnippet>1709</a>        }
-<a href=#1710 id=1710 data-nosnippet>1710</a>
-<a href=#1711 id=1711 data-nosnippet>1711</a>        <span class="kw">if </span>!current.is_osx() {
-<a href=#1712 id=1712 data-nosnippet>1712</a>            <span class="kw">let </span>packages =
-<a href=#1713 id=1713 data-nosnippet>1713</a>                VirtualPackages::detect_for_platform(Platform::OsxArm64, <span class="kw-2">&amp;</span>overrides, <span class="prelude-val">None</span>).unwrap();
-<a href=#1714 id=1714 data-nosnippet>1714</a>            <span class="macro">assert_eq!</span>(
-<a href=#1715 id=1715 data-nosnippet>1715</a>                packages.osx.expect(<span class="string">"__osx should be present"</span>).version,
-<a href=#1716 id=1716 data-nosnippet>1716</a>                defaults::default_mac_os_version(Platform::OsxArm64).unwrap()
-<a href=#1717 id=1717 data-nosnippet>1717</a>            );
-<a href=#1718 id=1718 data-nosnippet>1718</a>        }
-<a href=#1719 id=1719 data-nosnippet>1719</a>
-<a href=#1720 id=1720 data-nosnippet>1720</a>        <span class="kw">if </span>!current.is_windows() {
-<a href=#1721 id=1721 data-nosnippet>1721</a>            <span class="kw">let </span>packages =
-<a href=#1722 id=1722 data-nosnippet>1722</a>                VirtualPackages::detect_for_platform(Platform::Win64, <span class="kw-2">&amp;</span>overrides, <span class="prelude-val">None</span>).unwrap();
-<a href=#1723 id=1723 data-nosnippet>1723</a>            <span class="macro">assert_eq!</span>(
-<a href=#1724 id=1724 data-nosnippet>1724</a>                packages.win.expect(<span class="string">"__win should be present"</span>).version,
-<a href=#1725 id=1725 data-nosnippet>1725</a>                <span class="prelude-val">Some</span>(defaults::default_windows_version())
-<a href=#1726 id=1726 data-nosnippet>1726</a>            );
-<a href=#1727 id=1727 data-nosnippet>1727</a>        }
-<a href=#1728 id=1728 data-nosnippet>1728</a>    }
-<a href=#1729 id=1729 data-nosnippet>1729</a>
-<a href=#1730 id=1730 data-nosnippet>1730</a>    <span class="attr">#[test]
-<a href=#1731 id=1731 data-nosnippet>1731</a>    </span><span class="kw">fn </span>test_ios_android_virtual_packages() {
-<a href=#1732 id=1732 data-nosnippet>1732</a>        <span class="comment">// Cross-compiling to an ios-* subdir yields __ios (falling back to
-<a href=#1733 id=1733 data-nosnippet>1733</a>        // version 0) plus __unix, but not __osx.
-<a href=#1734 id=1734 data-nosnippet>1734</a>        </span><span class="kw">let </span>ios_packages = VirtualPackages::detect_for_platform(
-<a href=#1735 id=1735 data-nosnippet>1735</a>            Platform::IosArm64,
-<a href=#1736 id=1736 data-nosnippet>1736</a>            <span class="kw-2">&amp;</span>VirtualPackageOverrides::default(),
-<a href=#1737 id=1737 data-nosnippet>1737</a>            <span class="prelude-val">None</span>,
-<a href=#1738 id=1738 data-nosnippet>1738</a>        )
-<a href=#1739 id=1739 data-nosnippet>1739</a>        .unwrap();
-<a href=#1740 id=1740 data-nosnippet>1740</a>        <span class="kw">let </span>ios_names: Vec&lt;String&gt; = ios_packages
-<a href=#1741 id=1741 data-nosnippet>1741</a>            .into_generic_virtual_packages()
-<a href=#1742 id=1742 data-nosnippet>1742</a>            .map(|pkg| pkg.name.as_normalized().to_string())
-<a href=#1743 id=1743 data-nosnippet>1743</a>            .collect();
-<a href=#1744 id=1744 data-nosnippet>1744</a>        <span class="macro">assert!</span>(ios_names.contains(<span class="kw-2">&amp;</span><span class="string">"__ios"</span>.to_string()));
-<a href=#1745 id=1745 data-nosnippet>1745</a>        <span class="macro">assert!</span>(ios_names.contains(<span class="kw-2">&amp;</span><span class="string">"__unix"</span>.to_string()));
-<a href=#1746 id=1746 data-nosnippet>1746</a>        <span class="macro">assert!</span>(!ios_names.contains(<span class="kw-2">&amp;</span><span class="string">"__osx"</span>.to_string()));
-<a href=#1747 id=1747 data-nosnippet>1747</a>
-<a href=#1748 id=1748 data-nosnippet>1748</a>        <span class="comment">// The __ios version can be overridden (mirrors CONDA_OVERRIDE_OSX).
-<a href=#1749 id=1749 data-nosnippet>1749</a>        </span><span class="kw">let </span>overrides = VirtualPackageOverrides {
-<a href=#1750 id=1750 data-nosnippet>1750</a>            ios: <span class="prelude-val">Some</span>(Override::String(<span class="string">"15.0"</span>.to_string())),
-<a href=#1751 id=1751 data-nosnippet>1751</a>            ..Default::default()
-<a href=#1752 id=1752 data-nosnippet>1752</a>        };
-<a href=#1753 id=1753 data-nosnippet>1753</a>        <span class="kw">let </span>ios_packages =
-<a href=#1754 id=1754 data-nosnippet>1754</a>            VirtualPackages::detect_for_platform(Platform::IosSimulatorArm64, <span class="kw-2">&amp;</span>overrides, <span class="prelude-val">None</span>)
-<a href=#1755 id=1755 data-nosnippet>1755</a>                .unwrap();
-<a href=#1756 id=1756 data-nosnippet>1756</a>        <span class="kw">let </span>ios = ios_packages
-<a href=#1757 id=1757 data-nosnippet>1757</a>            .into_generic_virtual_packages()
-<a href=#1758 id=1758 data-nosnippet>1758</a>            .find(|pkg| pkg.name.as_normalized() == <span class="string">"__ios"</span>)
-<a href=#1759 id=1759 data-nosnippet>1759</a>            .expect(<span class="string">"__ios should be present"</span>);
-<a href=#1760 id=1760 data-nosnippet>1760</a>        <span class="macro">assert_eq!</span>(ios.version, Version::from_str(<span class="string">"15.0"</span>).unwrap());
-<a href=#1761 id=1761 data-nosnippet>1761</a>
-<a href=#1762 id=1762 data-nosnippet>1762</a>        <span class="comment">// Cross-compiling to an android-* subdir yields __android plus __unix,
-<a href=#1763 id=1763 data-nosnippet>1763</a>        // but not __linux.
-<a href=#1764 id=1764 data-nosnippet>1764</a>        </span><span class="kw">let </span>android_packages = VirtualPackages::detect_for_platform(
-<a href=#1765 id=1765 data-nosnippet>1765</a>            Platform::AndroidAarch64,
-<a href=#1766 id=1766 data-nosnippet>1766</a>            <span class="kw-2">&amp;</span>VirtualPackageOverrides::default(),
-<a href=#1767 id=1767 data-nosnippet>1767</a>            <span class="prelude-val">None</span>,
-<a href=#1768 id=1768 data-nosnippet>1768</a>        )
-<a href=#1769 id=1769 data-nosnippet>1769</a>        .unwrap();
-<a href=#1770 id=1770 data-nosnippet>1770</a>        <span class="kw">let </span>android_names: Vec&lt;String&gt; = android_packages
-<a href=#1771 id=1771 data-nosnippet>1771</a>            .into_generic_virtual_packages()
-<a href=#1772 id=1772 data-nosnippet>1772</a>            .map(|pkg| pkg.name.as_normalized().to_string())
-<a href=#1773 id=1773 data-nosnippet>1773</a>            .collect();
-<a href=#1774 id=1774 data-nosnippet>1774</a>        <span class="macro">assert!</span>(android_names.contains(<span class="kw-2">&amp;</span><span class="string">"__android"</span>.to_string()));
-<a href=#1775 id=1775 data-nosnippet>1775</a>        <span class="macro">assert!</span>(android_names.contains(<span class="kw-2">&amp;</span><span class="string">"__unix"</span>.to_string()));
-<a href=#1776 id=1776 data-nosnippet>1776</a>        <span class="macro">assert!</span>(!android_names.contains(<span class="kw-2">&amp;</span><span class="string">"__linux"</span>.to_string()));
-<a href=#1777 id=1777 data-nosnippet>1777</a>
-<a href=#1778 id=1778 data-nosnippet>1778</a>        <span class="comment">// The __android version (API level) can be overridden.
-<a href=#1779 id=1779 data-nosnippet>1779</a>        </span><span class="kw">let </span>overrides = VirtualPackageOverrides {
-<a href=#1780 id=1780 data-nosnippet>1780</a>            android: <span class="prelude-val">Some</span>(Override::String(<span class="string">"21"</span>.to_string())),
-<a href=#1781 id=1781 data-nosnippet>1781</a>            ..Default::default()
-<a href=#1782 id=1782 data-nosnippet>1782</a>        };
-<a href=#1783 id=1783 data-nosnippet>1783</a>        <span class="kw">let </span>android_packages =
-<a href=#1784 id=1784 data-nosnippet>1784</a>            VirtualPackages::detect_for_platform(Platform::AndroidArmV7a, <span class="kw-2">&amp;</span>overrides, <span class="prelude-val">None</span>)
-<a href=#1785 id=1785 data-nosnippet>1785</a>                .unwrap();
-<a href=#1786 id=1786 data-nosnippet>1786</a>        <span class="kw">let </span>android = android_packages
-<a href=#1787 id=1787 data-nosnippet>1787</a>            .into_generic_virtual_packages()
-<a href=#1788 id=1788 data-nosnippet>1788</a>            .find(|pkg| pkg.name.as_normalized() == <span class="string">"__android"</span>)
-<a href=#1789 id=1789 data-nosnippet>1789</a>            .expect(<span class="string">"__android should be present"</span>);
-<a href=#1790 id=1790 data-nosnippet>1790</a>        <span class="macro">assert_eq!</span>(android.version, Version::from_str(<span class="string">"21"</span>).unwrap());
-<a href=#1791 id=1791 data-nosnippet>1791</a>    }
-<a href=#1792 id=1792 data-nosnippet>1792</a>
-<a href=#1793 id=1793 data-nosnippet>1793</a>    <span class="attr">#[test]
-<a href=#1794 id=1794 data-nosnippet>1794</a>    </span><span class="kw">fn </span>test_is_valid_cuda_version_format() {
-<a href=#1795 id=1795 data-nosnippet>1795</a>        <span class="comment">// Valid formats
-<a href=#1796 id=1796 data-nosnippet>1796</a>        </span><span class="macro">assert!</span>(cuda::is_valid_cuda_version_format(<span class="string">"8.6"</span>));
-<a href=#1797 id=1797 data-nosnippet>1797</a>        <span class="macro">assert!</span>(cuda::is_valid_cuda_version_format(<span class="string">"7.5"</span>));
-<a href=#1798 id=1798 data-nosnippet>1798</a>        <span class="macro">assert!</span>(cuda::is_valid_cuda_version_format(<span class="string">"10.2"</span>));
-<a href=#1799 id=1799 data-nosnippet>1799</a>        <span class="macro">assert!</span>(cuda::is_valid_cuda_version_format(<span class="string">"0.0"</span>));
-<a href=#1800 id=1800 data-nosnippet>1800</a>        <span class="macro">assert!</span>(cuda::is_valid_cuda_version_format(<span class="string">"12.0"</span>));
-<a href=#1801 id=1801 data-nosnippet>1801</a>
-<a href=#1802 id=1802 data-nosnippet>1802</a>        <span class="comment">// Invalid formats - not major.minor
-<a href=#1803 id=1803 data-nosnippet>1803</a>        </span><span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"8"</span>));
-<a href=#1804 id=1804 data-nosnippet>1804</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"8.6.1"</span>));
-<a href=#1805 id=1805 data-nosnippet>1805</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"8.6.1.0"</span>));
-<a href=#1806 id=1806 data-nosnippet>1806</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">""</span>));
-<a href=#1807 id=1807 data-nosnippet>1807</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">".6"</span>));
-<a href=#1808 id=1808 data-nosnippet>1808</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"8."</span>));
-<a href=#1809 id=1809 data-nosnippet>1809</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"."</span>));
-<a href=#1810 id=1810 data-nosnippet>1810</a>
-<a href=#1811 id=1811 data-nosnippet>1811</a>        <span class="comment">// Invalid formats - non-digit characters
-<a href=#1812 id=1812 data-nosnippet>1812</a>        </span><span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"8.6a"</span>));
-<a href=#1813 id=1813 data-nosnippet>1813</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"a.6"</span>));
-<a href=#1814 id=1814 data-nosnippet>1814</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"8.b"</span>));
-<a href=#1815 id=1815 data-nosnippet>1815</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"eight.six"</span>));
-<a href=#1816 id=1816 data-nosnippet>1816</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"8-6"</span>));
-<a href=#1817 id=1817 data-nosnippet>1817</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"8_6"</span>));
-<a href=#1818 id=1818 data-nosnippet>1818</a>    }
-<a href=#1819 id=1819 data-nosnippet>1819</a>
-<a href=#1820 id=1820 data-nosnippet>1820</a>    <span class="attr">#[test]
-<a href=#1821 id=1821 data-nosnippet>1821</a>    </span><span class="kw">fn </span>test_parse_cuda_arch() {
-<a href=#1822 id=1822 data-nosnippet>1822</a>        <span class="comment">// Test parsing valid version format
-<a href=#1823 id=1823 data-nosnippet>1823</a>        </span><span class="kw">let </span>cuda_arch = CudaArch::parse_version(<span class="string">"8.6"</span>).unwrap();
-<a href=#1824 id=1824 data-nosnippet>1824</a>        <span class="macro">assert_eq!</span>(cuda_arch.version, Version::from_str(<span class="string">"8.6"</span>).unwrap());
-<a href=#1825 id=1825 data-nosnippet>1825</a>
-<a href=#1826 id=1826 data-nosnippet>1826</a>        <span class="kw">let </span>cuda_arch = CudaArch::parse_version(<span class="string">"7.5"</span>).unwrap();
-<a href=#1827 id=1827 data-nosnippet>1827</a>        <span class="macro">assert_eq!</span>(cuda_arch.version, Version::from_str(<span class="string">"7.5"</span>).unwrap());
-<a href=#1828 id=1828 data-nosnippet>1828</a>
-<a href=#1829 id=1829 data-nosnippet>1829</a>        <span class="kw">let </span>cuda_arch = CudaArch::parse_version(<span class="string">"9.0"</span>).unwrap();
-<a href=#1830 id=1830 data-nosnippet>1830</a>        <span class="macro">assert_eq!</span>(cuda_arch.version, Version::from_str(<span class="string">"9.0"</span>).unwrap());
-<a href=#1831 id=1831 data-nosnippet>1831</a>
-<a href=#1832 id=1832 data-nosnippet>1832</a>        <span class="comment">// Test invalid version format (should return error)
-<a href=#1833 id=1833 data-nosnippet>1833</a>        </span><span class="macro">assert!</span>(CudaArch::parse_version(<span class="string">"invalid"</span>).is_err());
-<a href=#1834 id=1834 data-nosnippet>1834</a>        <span class="macro">assert!</span>(CudaArch::parse_version(<span class="string">"8"</span>).is_err());
-<a href=#1835 id=1835 data-nosnippet>1835</a>        <span class="macro">assert!</span>(CudaArch::parse_version(<span class="string">"8.6.1"</span>).is_err());
+<a href=#1646 id=1646 data-nosnippet>1646</a>        <span class="macro">assert_eq!</span>(
+<a href=#1647 id=1647 data-nosnippet>1647</a>            libc.version,
+<a href=#1648 id=1648 data-nosnippet>1648</a>            defaults::default_glibc_version(Platform::Linux64)
+<a href=#1649 id=1649 data-nosnippet>1649</a>        );
+<a href=#1650 id=1650 data-nosnippet>1650</a>
+<a href=#1651 id=1651 data-nosnippet>1651</a>        <span class="kw">let </span>osx = VirtualPackages::baseline_for_platform(Platform::OsxArm64);
+<a href=#1652 id=1652 data-nosnippet>1652</a>        <span class="macro">assert_eq!</span>(
+<a href=#1653 id=1653 data-nosnippet>1653</a>            osx.osx.unwrap().version,
+<a href=#1654 id=1654 data-nosnippet>1654</a>            defaults::default_mac_os_version(Platform::OsxArm64).unwrap()
+<a href=#1655 id=1655 data-nosnippet>1655</a>        );
+<a href=#1656 id=1656 data-nosnippet>1656</a>
+<a href=#1657 id=1657 data-nosnippet>1657</a>        <span class="kw">let </span>win = VirtualPackages::baseline_for_platform(Platform::Win64);
+<a href=#1658 id=1658 data-nosnippet>1658</a>        <span class="macro">assert_eq!</span>(
+<a href=#1659 id=1659 data-nosnippet>1659</a>            win.win.unwrap().version.unwrap(),
+<a href=#1660 id=1660 data-nosnippet>1660</a>            defaults::default_windows_version()
+<a href=#1661 id=1661 data-nosnippet>1661</a>        );
+<a href=#1662 id=1662 data-nosnippet>1662</a>
+<a href=#1663 id=1663 data-nosnippet>1663</a>        <span class="macro">assert_eq!</span>(
+<a href=#1664 id=1664 data-nosnippet>1664</a>            VirtualPackages::baseline_for_platform(Platform::Linux64).archspec,
+<a href=#1665 id=1665 data-nosnippet>1665</a>            Archspec::from_platform(Platform::Linux64)
+<a href=#1666 id=1666 data-nosnippet>1666</a>        );
+<a href=#1667 id=1667 data-nosnippet>1667</a>    }
+<a href=#1668 id=1668 data-nosnippet>1668</a>
+<a href=#1669 id=1669 data-nosnippet>1669</a>    <span class="doccomment">/// conda-forge builds `linux-riscv64` against a much newer `glibc` than the
+<a href=#1670 id=1670 data-nosnippet>1670</a>    /// RHEL 8 baseline the other Linux platforms use, so assuming 2.28 there
+<a href=#1671 id=1671 data-nosnippet>1671</a>    /// would make every package look uninstallable.
+<a href=#1672 id=1672 data-nosnippet>1672</a>    </span><span class="attr">#[test]
+<a href=#1673 id=1673 data-nosnippet>1673</a>    </span><span class="kw">fn </span>baseline_assumes_a_newer_glibc_on_riscv64() {
+<a href=#1674 id=1674 data-nosnippet>1674</a>        <span class="kw">let </span>riscv = VirtualPackages::baseline_for_platform(Platform::LinuxRiscv64);
+<a href=#1675 id=1675 data-nosnippet>1675</a>        <span class="kw">let </span>libc = riscv.libc.expect(<span class="string">"__glibc should be present"</span>);
+<a href=#1676 id=1676 data-nosnippet>1676</a>        <span class="macro">assert_eq!</span>(libc.family, <span class="string">"glibc"</span>);
+<a href=#1677 id=1677 data-nosnippet>1677</a>        <span class="macro">assert_eq!</span>(libc.version, Version::from_str(<span class="string">"2.39"</span>).unwrap());
+<a href=#1678 id=1678 data-nosnippet>1678</a>
+<a href=#1679 id=1679 data-nosnippet>1679</a>        <span class="comment">// Other Linux platforms keep the RHEL 8 baseline.
+<a href=#1680 id=1680 data-nosnippet>1680</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#1681 id=1681 data-nosnippet>1681</a>            VirtualPackages::baseline_for_platform(Platform::Linux64)
+<a href=#1682 id=1682 data-nosnippet>1682</a>                .libc
+<a href=#1683 id=1683 data-nosnippet>1683</a>                .expect(<span class="string">"__glibc should be present"</span>)
+<a href=#1684 id=1684 data-nosnippet>1684</a>                .version,
+<a href=#1685 id=1685 data-nosnippet>1685</a>            Version::from_str(<span class="string">"2.28"</span>).unwrap()
+<a href=#1686 id=1686 data-nosnippet>1686</a>        );
+<a href=#1687 id=1687 data-nosnippet>1687</a>    }
+<a href=#1688 id=1688 data-nosnippet>1688</a>
+<a href=#1689 id=1689 data-nosnippet>1689</a>    <span class="doccomment">/// The baseline is what `detect_for_platform` falls back to, so for a
+<a href=#1690 id=1690 data-nosnippet>1690</a>    /// platform this machine cannot run the two must agree on every slot the
+<a href=#1691 id=1691 data-nosnippet>1691</a>    /// host has nothing to say about.
+<a href=#1692 id=1692 data-nosnippet>1692</a>    </span><span class="attr">#[test]
+<a href=#1693 id=1693 data-nosnippet>1693</a>    </span><span class="kw">fn </span>baseline_matches_cross_compiled_detection() {
+<a href=#1694 id=1694 data-nosnippet>1694</a>        <span class="kw">let </span>current = Platform::current();
+<a href=#1695 id=1695 data-nosnippet>1695</a>        <span class="kw">let </span>target = <span class="kw">if </span>current.is_linux() {
+<a href=#1696 id=1696 data-nosnippet>1696</a>            Platform::Win64
+<a href=#1697 id=1697 data-nosnippet>1697</a>        } <span class="kw">else </span>{
+<a href=#1698 id=1698 data-nosnippet>1698</a>            Platform::Linux64
+<a href=#1699 id=1699 data-nosnippet>1699</a>        };
+<a href=#1700 id=1700 data-nosnippet>1700</a>
+<a href=#1701 id=1701 data-nosnippet>1701</a>        <span class="kw">let </span>baseline = VirtualPackages::baseline_for_platform(target);
+<a href=#1702 id=1702 data-nosnippet>1702</a>        <span class="kw">let </span>detected =
+<a href=#1703 id=1703 data-nosnippet>1703</a>            VirtualPackages::detect_for_platform(target, <span class="kw-2">&amp;</span>VirtualPackageOverrides::default(), <span class="prelude-val">None</span>)
+<a href=#1704 id=1704 data-nosnippet>1704</a>                .unwrap();
+<a href=#1705 id=1705 data-nosnippet>1705</a>
+<a href=#1706 id=1706 data-nosnippet>1706</a>        <span class="macro">assert_eq!</span>(baseline.win, detected.win);
+<a href=#1707 id=1707 data-nosnippet>1707</a>        <span class="macro">assert_eq!</span>(baseline.unix, detected.unix);
+<a href=#1708 id=1708 data-nosnippet>1708</a>        <span class="macro">assert_eq!</span>(baseline.linux, detected.linux);
+<a href=#1709 id=1709 data-nosnippet>1709</a>        <span class="macro">assert_eq!</span>(baseline.osx, detected.osx);
+<a href=#1710 id=1710 data-nosnippet>1710</a>        <span class="macro">assert_eq!</span>(baseline.libc, detected.libc);
+<a href=#1711 id=1711 data-nosnippet>1711</a>    }
+<a href=#1712 id=1712 data-nosnippet>1712</a>
+<a href=#1713 id=1713 data-nosnippet>1713</a>    <span class="attr">#[test]
+<a href=#1714 id=1714 data-nosnippet>1714</a>    </span><span class="kw">fn </span>test_cross_platform_default_versions() {
+<a href=#1715 id=1715 data-nosnippet>1715</a>        <span class="comment">// When targeting a platform whose virtual packages cannot be detected
+<a href=#1716 id=1716 data-nosnippet>1716</a>        // on the host, the pixi default versions are used instead of 0. The
+<a href=#1717 id=1717 data-nosnippet>1717</a>        // host's own platform family is skipped because there the detected
+<a href=#1718 id=1718 data-nosnippet>1718</a>        // (host) versions take precedence over the defaults.
+<a href=#1719 id=1719 data-nosnippet>1719</a>        </span><span class="kw">let </span>overrides = VirtualPackageOverrides::default();
+<a href=#1720 id=1720 data-nosnippet>1720</a>        <span class="kw">let </span>current = Platform::current();
+<a href=#1721 id=1721 data-nosnippet>1721</a>
+<a href=#1722 id=1722 data-nosnippet>1722</a>        <span class="kw">if </span>!current.is_linux() {
+<a href=#1723 id=1723 data-nosnippet>1723</a>            <span class="kw">let </span>packages =
+<a href=#1724 id=1724 data-nosnippet>1724</a>                VirtualPackages::detect_for_platform(Platform::Linux64, <span class="kw-2">&amp;</span>overrides, <span class="prelude-val">None</span>).unwrap();
+<a href=#1725 id=1725 data-nosnippet>1725</a>            <span class="macro">assert_eq!</span>(
+<a href=#1726 id=1726 data-nosnippet>1726</a>                packages.linux.expect(<span class="string">"__linux should be present"</span>).version,
+<a href=#1727 id=1727 data-nosnippet>1727</a>                defaults::default_linux_version()
+<a href=#1728 id=1728 data-nosnippet>1728</a>            );
+<a href=#1729 id=1729 data-nosnippet>1729</a>            <span class="kw">let </span>libc = packages.libc.expect(<span class="string">"__glibc should be present"</span>);
+<a href=#1730 id=1730 data-nosnippet>1730</a>            <span class="macro">assert_eq!</span>(libc.family, <span class="string">"glibc"</span>);
+<a href=#1731 id=1731 data-nosnippet>1731</a>            <span class="macro">assert_eq!</span>(
+<a href=#1732 id=1732 data-nosnippet>1732</a>                libc.version,
+<a href=#1733 id=1733 data-nosnippet>1733</a>                defaults::default_glibc_version(Platform::Linux64)
+<a href=#1734 id=1734 data-nosnippet>1734</a>            );
+<a href=#1735 id=1735 data-nosnippet>1735</a>        }
+<a href=#1736 id=1736 data-nosnippet>1736</a>
+<a href=#1737 id=1737 data-nosnippet>1737</a>        <span class="kw">if </span>!current.is_osx() {
+<a href=#1738 id=1738 data-nosnippet>1738</a>            <span class="kw">let </span>packages =
+<a href=#1739 id=1739 data-nosnippet>1739</a>                VirtualPackages::detect_for_platform(Platform::OsxArm64, <span class="kw-2">&amp;</span>overrides, <span class="prelude-val">None</span>).unwrap();
+<a href=#1740 id=1740 data-nosnippet>1740</a>            <span class="macro">assert_eq!</span>(
+<a href=#1741 id=1741 data-nosnippet>1741</a>                packages.osx.expect(<span class="string">"__osx should be present"</span>).version,
+<a href=#1742 id=1742 data-nosnippet>1742</a>                defaults::default_mac_os_version(Platform::OsxArm64).unwrap()
+<a href=#1743 id=1743 data-nosnippet>1743</a>            );
+<a href=#1744 id=1744 data-nosnippet>1744</a>        }
+<a href=#1745 id=1745 data-nosnippet>1745</a>
+<a href=#1746 id=1746 data-nosnippet>1746</a>        <span class="kw">if </span>!current.is_windows() {
+<a href=#1747 id=1747 data-nosnippet>1747</a>            <span class="kw">let </span>packages =
+<a href=#1748 id=1748 data-nosnippet>1748</a>                VirtualPackages::detect_for_platform(Platform::Win64, <span class="kw-2">&amp;</span>overrides, <span class="prelude-val">None</span>).unwrap();
+<a href=#1749 id=1749 data-nosnippet>1749</a>            <span class="macro">assert_eq!</span>(
+<a href=#1750 id=1750 data-nosnippet>1750</a>                packages.win.expect(<span class="string">"__win should be present"</span>).version,
+<a href=#1751 id=1751 data-nosnippet>1751</a>                <span class="prelude-val">Some</span>(defaults::default_windows_version())
+<a href=#1752 id=1752 data-nosnippet>1752</a>            );
+<a href=#1753 id=1753 data-nosnippet>1753</a>        }
+<a href=#1754 id=1754 data-nosnippet>1754</a>    }
+<a href=#1755 id=1755 data-nosnippet>1755</a>
+<a href=#1756 id=1756 data-nosnippet>1756</a>    <span class="attr">#[test]
+<a href=#1757 id=1757 data-nosnippet>1757</a>    </span><span class="kw">fn </span>test_ios_android_virtual_packages() {
+<a href=#1758 id=1758 data-nosnippet>1758</a>        <span class="comment">// Cross-compiling to an ios-* subdir yields __ios (falling back to
+<a href=#1759 id=1759 data-nosnippet>1759</a>        // version 0) plus __unix, but not __osx.
+<a href=#1760 id=1760 data-nosnippet>1760</a>        </span><span class="kw">let </span>ios_packages = VirtualPackages::detect_for_platform(
+<a href=#1761 id=1761 data-nosnippet>1761</a>            Platform::IosArm64,
+<a href=#1762 id=1762 data-nosnippet>1762</a>            <span class="kw-2">&amp;</span>VirtualPackageOverrides::default(),
+<a href=#1763 id=1763 data-nosnippet>1763</a>            <span class="prelude-val">None</span>,
+<a href=#1764 id=1764 data-nosnippet>1764</a>        )
+<a href=#1765 id=1765 data-nosnippet>1765</a>        .unwrap();
+<a href=#1766 id=1766 data-nosnippet>1766</a>        <span class="kw">let </span>ios_names: Vec&lt;String&gt; = ios_packages
+<a href=#1767 id=1767 data-nosnippet>1767</a>            .into_generic_virtual_packages()
+<a href=#1768 id=1768 data-nosnippet>1768</a>            .map(|pkg| pkg.name.as_normalized().to_string())
+<a href=#1769 id=1769 data-nosnippet>1769</a>            .collect();
+<a href=#1770 id=1770 data-nosnippet>1770</a>        <span class="macro">assert!</span>(ios_names.contains(<span class="kw-2">&amp;</span><span class="string">"__ios"</span>.to_string()));
+<a href=#1771 id=1771 data-nosnippet>1771</a>        <span class="macro">assert!</span>(ios_names.contains(<span class="kw-2">&amp;</span><span class="string">"__unix"</span>.to_string()));
+<a href=#1772 id=1772 data-nosnippet>1772</a>        <span class="macro">assert!</span>(!ios_names.contains(<span class="kw-2">&amp;</span><span class="string">"__osx"</span>.to_string()));
+<a href=#1773 id=1773 data-nosnippet>1773</a>
+<a href=#1774 id=1774 data-nosnippet>1774</a>        <span class="comment">// The __ios version can be overridden (mirrors CONDA_OVERRIDE_OSX).
+<a href=#1775 id=1775 data-nosnippet>1775</a>        </span><span class="kw">let </span>overrides = VirtualPackageOverrides {
+<a href=#1776 id=1776 data-nosnippet>1776</a>            ios: <span class="prelude-val">Some</span>(Override::String(<span class="string">"15.0"</span>.to_string())),
+<a href=#1777 id=1777 data-nosnippet>1777</a>            ..Default::default()
+<a href=#1778 id=1778 data-nosnippet>1778</a>        };
+<a href=#1779 id=1779 data-nosnippet>1779</a>        <span class="kw">let </span>ios_packages =
+<a href=#1780 id=1780 data-nosnippet>1780</a>            VirtualPackages::detect_for_platform(Platform::IosSimulatorArm64, <span class="kw-2">&amp;</span>overrides, <span class="prelude-val">None</span>)
+<a href=#1781 id=1781 data-nosnippet>1781</a>                .unwrap();
+<a href=#1782 id=1782 data-nosnippet>1782</a>        <span class="kw">let </span>ios = ios_packages
+<a href=#1783 id=1783 data-nosnippet>1783</a>            .into_generic_virtual_packages()
+<a href=#1784 id=1784 data-nosnippet>1784</a>            .find(|pkg| pkg.name.as_normalized() == <span class="string">"__ios"</span>)
+<a href=#1785 id=1785 data-nosnippet>1785</a>            .expect(<span class="string">"__ios should be present"</span>);
+<a href=#1786 id=1786 data-nosnippet>1786</a>        <span class="macro">assert_eq!</span>(ios.version, Version::from_str(<span class="string">"15.0"</span>).unwrap());
+<a href=#1787 id=1787 data-nosnippet>1787</a>
+<a href=#1788 id=1788 data-nosnippet>1788</a>        <span class="comment">// Cross-compiling to an android-* subdir yields __android plus __unix,
+<a href=#1789 id=1789 data-nosnippet>1789</a>        // but not __linux.
+<a href=#1790 id=1790 data-nosnippet>1790</a>        </span><span class="kw">let </span>android_packages = VirtualPackages::detect_for_platform(
+<a href=#1791 id=1791 data-nosnippet>1791</a>            Platform::AndroidAarch64,
+<a href=#1792 id=1792 data-nosnippet>1792</a>            <span class="kw-2">&amp;</span>VirtualPackageOverrides::default(),
+<a href=#1793 id=1793 data-nosnippet>1793</a>            <span class="prelude-val">None</span>,
+<a href=#1794 id=1794 data-nosnippet>1794</a>        )
+<a href=#1795 id=1795 data-nosnippet>1795</a>        .unwrap();
+<a href=#1796 id=1796 data-nosnippet>1796</a>        <span class="kw">let </span>android_names: Vec&lt;String&gt; = android_packages
+<a href=#1797 id=1797 data-nosnippet>1797</a>            .into_generic_virtual_packages()
+<a href=#1798 id=1798 data-nosnippet>1798</a>            .map(|pkg| pkg.name.as_normalized().to_string())
+<a href=#1799 id=1799 data-nosnippet>1799</a>            .collect();
+<a href=#1800 id=1800 data-nosnippet>1800</a>        <span class="macro">assert!</span>(android_names.contains(<span class="kw-2">&amp;</span><span class="string">"__android"</span>.to_string()));
+<a href=#1801 id=1801 data-nosnippet>1801</a>        <span class="macro">assert!</span>(android_names.contains(<span class="kw-2">&amp;</span><span class="string">"__unix"</span>.to_string()));
+<a href=#1802 id=1802 data-nosnippet>1802</a>        <span class="macro">assert!</span>(!android_names.contains(<span class="kw-2">&amp;</span><span class="string">"__linux"</span>.to_string()));
+<a href=#1803 id=1803 data-nosnippet>1803</a>
+<a href=#1804 id=1804 data-nosnippet>1804</a>        <span class="comment">// The __android version (API level) can be overridden.
+<a href=#1805 id=1805 data-nosnippet>1805</a>        </span><span class="kw">let </span>overrides = VirtualPackageOverrides {
+<a href=#1806 id=1806 data-nosnippet>1806</a>            android: <span class="prelude-val">Some</span>(Override::String(<span class="string">"21"</span>.to_string())),
+<a href=#1807 id=1807 data-nosnippet>1807</a>            ..Default::default()
+<a href=#1808 id=1808 data-nosnippet>1808</a>        };
+<a href=#1809 id=1809 data-nosnippet>1809</a>        <span class="kw">let </span>android_packages =
+<a href=#1810 id=1810 data-nosnippet>1810</a>            VirtualPackages::detect_for_platform(Platform::AndroidArmV7a, <span class="kw-2">&amp;</span>overrides, <span class="prelude-val">None</span>)
+<a href=#1811 id=1811 data-nosnippet>1811</a>                .unwrap();
+<a href=#1812 id=1812 data-nosnippet>1812</a>        <span class="kw">let </span>android = android_packages
+<a href=#1813 id=1813 data-nosnippet>1813</a>            .into_generic_virtual_packages()
+<a href=#1814 id=1814 data-nosnippet>1814</a>            .find(|pkg| pkg.name.as_normalized() == <span class="string">"__android"</span>)
+<a href=#1815 id=1815 data-nosnippet>1815</a>            .expect(<span class="string">"__android should be present"</span>);
+<a href=#1816 id=1816 data-nosnippet>1816</a>        <span class="macro">assert_eq!</span>(android.version, Version::from_str(<span class="string">"21"</span>).unwrap());
+<a href=#1817 id=1817 data-nosnippet>1817</a>    }
+<a href=#1818 id=1818 data-nosnippet>1818</a>
+<a href=#1819 id=1819 data-nosnippet>1819</a>    <span class="attr">#[test]
+<a href=#1820 id=1820 data-nosnippet>1820</a>    </span><span class="kw">fn </span>test_is_valid_cuda_version_format() {
+<a href=#1821 id=1821 data-nosnippet>1821</a>        <span class="comment">// Valid formats
+<a href=#1822 id=1822 data-nosnippet>1822</a>        </span><span class="macro">assert!</span>(cuda::is_valid_cuda_version_format(<span class="string">"8.6"</span>));
+<a href=#1823 id=1823 data-nosnippet>1823</a>        <span class="macro">assert!</span>(cuda::is_valid_cuda_version_format(<span class="string">"7.5"</span>));
+<a href=#1824 id=1824 data-nosnippet>1824</a>        <span class="macro">assert!</span>(cuda::is_valid_cuda_version_format(<span class="string">"10.2"</span>));
+<a href=#1825 id=1825 data-nosnippet>1825</a>        <span class="macro">assert!</span>(cuda::is_valid_cuda_version_format(<span class="string">"0.0"</span>));
+<a href=#1826 id=1826 data-nosnippet>1826</a>        <span class="macro">assert!</span>(cuda::is_valid_cuda_version_format(<span class="string">"12.0"</span>));
+<a href=#1827 id=1827 data-nosnippet>1827</a>
+<a href=#1828 id=1828 data-nosnippet>1828</a>        <span class="comment">// Invalid formats - not major.minor
+<a href=#1829 id=1829 data-nosnippet>1829</a>        </span><span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"8"</span>));
+<a href=#1830 id=1830 data-nosnippet>1830</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"8.6.1"</span>));
+<a href=#1831 id=1831 data-nosnippet>1831</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"8.6.1.0"</span>));
+<a href=#1832 id=1832 data-nosnippet>1832</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">""</span>));
+<a href=#1833 id=1833 data-nosnippet>1833</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">".6"</span>));
+<a href=#1834 id=1834 data-nosnippet>1834</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"8."</span>));
+<a href=#1835 id=1835 data-nosnippet>1835</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"."</span>));
 <a href=#1836 id=1836 data-nosnippet>1836</a>
-<a href=#1837 id=1837 data-nosnippet>1837</a>        <span class="comment">// Test override via environment variable
-<a href=#1838 id=1838 data-nosnippet>1838</a>        </span><span class="kw">let </span>env_var_name = <span class="macro">format!</span>(<span class="string">"{}_{}"</span>, CudaArch::DEFAULT_ENV_NAME, <span class="string">"test123"</span>);
-<a href=#1839 id=1839 data-nosnippet>1839</a>        temp_env::with_var(<span class="kw-2">&amp;</span>env_var_name, <span class="prelude-val">Some</span>(<span class="string">"7.5"</span>), || {
-<a href=#1840 id=1840 data-nosnippet>1840</a>            <span class="kw">let </span>result = CudaArch::detect(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>Override::EnvVar(env_var_name.clone()))).unwrap();
-<a href=#1841 id=1841 data-nosnippet>1841</a>            <span class="macro">assert!</span>(result.is_some());
-<a href=#1842 id=1842 data-nosnippet>1842</a>            <span class="kw">let </span>cuda_arch = result.unwrap();
-<a href=#1843 id=1843 data-nosnippet>1843</a>            <span class="macro">assert_eq!</span>(cuda_arch.version, Version::from_str(<span class="string">"7.5"</span>).unwrap());
-<a href=#1844 id=1844 data-nosnippet>1844</a>        });
-<a href=#1845 id=1845 data-nosnippet>1845</a>    }
-<a href=#1846 id=1846 data-nosnippet>1846</a>
-<a href=#1847 id=1847 data-nosnippet>1847</a>    <span class="attr">#[test]
-<a href=#1848 id=1848 data-nosnippet>1848</a>    </span><span class="kw">fn </span>test_cuda_arch_coupling() {
-<a href=#1849 id=1849 data-nosnippet>1849</a>        <span class="comment">// Test that cuda_arch is absent when cuda is absent (CEP requirement)
-<a href=#1850 id=1850 data-nosnippet>1850</a>        // Even with cuda_arch override, it should be None if cuda is None
+<a href=#1837 id=1837 data-nosnippet>1837</a>        <span class="comment">// Invalid formats - non-digit characters
+<a href=#1838 id=1838 data-nosnippet>1838</a>        </span><span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"8.6a"</span>));
+<a href=#1839 id=1839 data-nosnippet>1839</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"a.6"</span>));
+<a href=#1840 id=1840 data-nosnippet>1840</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"8.b"</span>));
+<a href=#1841 id=1841 data-nosnippet>1841</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"eight.six"</span>));
+<a href=#1842 id=1842 data-nosnippet>1842</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"8-6"</span>));
+<a href=#1843 id=1843 data-nosnippet>1843</a>        <span class="macro">assert!</span>(!cuda::is_valid_cuda_version_format(<span class="string">"8_6"</span>));
+<a href=#1844 id=1844 data-nosnippet>1844</a>    }
+<a href=#1845 id=1845 data-nosnippet>1845</a>
+<a href=#1846 id=1846 data-nosnippet>1846</a>    <span class="attr">#[test]
+<a href=#1847 id=1847 data-nosnippet>1847</a>    </span><span class="kw">fn </span>test_parse_cuda_arch() {
+<a href=#1848 id=1848 data-nosnippet>1848</a>        <span class="comment">// Test parsing valid version format
+<a href=#1849 id=1849 data-nosnippet>1849</a>        </span><span class="kw">let </span>cuda_arch = CudaArch::parse_version(<span class="string">"8.6"</span>).unwrap();
+<a href=#1850 id=1850 data-nosnippet>1850</a>        <span class="macro">assert_eq!</span>(cuda_arch.version, Version::from_str(<span class="string">"8.6"</span>).unwrap());
 <a href=#1851 id=1851 data-nosnippet>1851</a>
-<a href=#1852 id=1852 data-nosnippet>1852</a>        // Case 1: Both not present - cuda_arch should be None
-<a href=#1853 id=1853 data-nosnippet>1853</a>        </span><span class="kw">let </span>overrides = VirtualPackageOverrides::default();
-<a href=#1854 id=1854 data-nosnippet>1854</a>        <span class="kw">let </span>packages = VirtualPackages::detect(<span class="kw-2">&amp;</span>overrides, <span class="prelude-val">None</span>).unwrap();
-<a href=#1855 id=1855 data-nosnippet>1855</a>        <span class="comment">// If cuda is None, cuda_arch must also be None
-<a href=#1856 id=1856 data-nosnippet>1856</a>        </span><span class="kw">if </span>packages.cuda.is_none() {
-<a href=#1857 id=1857 data-nosnippet>1857</a>            <span class="macro">assert!</span>(
-<a href=#1858 id=1858 data-nosnippet>1858</a>                packages.cuda_arch.is_none(),
-<a href=#1859 id=1859 data-nosnippet>1859</a>                <span class="string">"cuda_arch should be None when cuda is None"
-<a href=#1860 id=1860 data-nosnippet>1860</a>            </span>);
-<a href=#1861 id=1861 data-nosnippet>1861</a>        }
+<a href=#1852 id=1852 data-nosnippet>1852</a>        <span class="kw">let </span>cuda_arch = CudaArch::parse_version(<span class="string">"7.5"</span>).unwrap();
+<a href=#1853 id=1853 data-nosnippet>1853</a>        <span class="macro">assert_eq!</span>(cuda_arch.version, Version::from_str(<span class="string">"7.5"</span>).unwrap());
+<a href=#1854 id=1854 data-nosnippet>1854</a>
+<a href=#1855 id=1855 data-nosnippet>1855</a>        <span class="kw">let </span>cuda_arch = CudaArch::parse_version(<span class="string">"9.0"</span>).unwrap();
+<a href=#1856 id=1856 data-nosnippet>1856</a>        <span class="macro">assert_eq!</span>(cuda_arch.version, Version::from_str(<span class="string">"9.0"</span>).unwrap());
+<a href=#1857 id=1857 data-nosnippet>1857</a>
+<a href=#1858 id=1858 data-nosnippet>1858</a>        <span class="comment">// Test invalid version format (should return error)
+<a href=#1859 id=1859 data-nosnippet>1859</a>        </span><span class="macro">assert!</span>(CudaArch::parse_version(<span class="string">"invalid"</span>).is_err());
+<a href=#1860 id=1860 data-nosnippet>1860</a>        <span class="macro">assert!</span>(CudaArch::parse_version(<span class="string">"8"</span>).is_err());
+<a href=#1861 id=1861 data-nosnippet>1861</a>        <span class="macro">assert!</span>(CudaArch::parse_version(<span class="string">"8.6.1"</span>).is_err());
 <a href=#1862 id=1862 data-nosnippet>1862</a>
-<a href=#1863 id=1863 data-nosnippet>1863</a>        <span class="comment">// Case 2: cuda_arch override with no cuda - cuda_arch should be None
-<a href=#1864 id=1864 data-nosnippet>1864</a>        </span><span class="kw">let </span>cuda_arch_override = Override::String(<span class="string">"8.6"</span>.to_string());
-<a href=#1865 id=1865 data-nosnippet>1865</a>        <span class="kw">let </span>overrides = VirtualPackageOverrides {
-<a href=#1866 id=1866 data-nosnippet>1866</a>            cuda: <span class="prelude-val">None</span>, <span class="comment">// No cuda
-<a href=#1867 id=1867 data-nosnippet>1867</a>            </span>cuda_arch: <span class="prelude-val">Some</span>(cuda_arch_override),
-<a href=#1868 id=1868 data-nosnippet>1868</a>            ..Default::default()
-<a href=#1869 id=1869 data-nosnippet>1869</a>        };
-<a href=#1870 id=1870 data-nosnippet>1870</a>        <span class="kw">let </span>packages = VirtualPackages::detect(<span class="kw-2">&amp;</span>overrides, <span class="prelude-val">None</span>).unwrap();
-<a href=#1871 id=1871 data-nosnippet>1871</a>        <span class="kw">if </span>packages.cuda.is_none() {
-<a href=#1872 id=1872 data-nosnippet>1872</a>            <span class="macro">assert!</span>(
-<a href=#1873 id=1873 data-nosnippet>1873</a>                packages.cuda_arch.is_none(),
-<a href=#1874 id=1874 data-nosnippet>1874</a>                <span class="string">"cuda_arch should be None when cuda is None, even with override"
-<a href=#1875 id=1875 data-nosnippet>1875</a>            </span>);
-<a href=#1876 id=1876 data-nosnippet>1876</a>        }
+<a href=#1863 id=1863 data-nosnippet>1863</a>        <span class="comment">// Test override via environment variable
+<a href=#1864 id=1864 data-nosnippet>1864</a>        </span><span class="kw">let </span>env_var_name = <span class="macro">format!</span>(<span class="string">"{}_{}"</span>, CudaArch::DEFAULT_ENV_NAME, <span class="string">"test123"</span>);
+<a href=#1865 id=1865 data-nosnippet>1865</a>        temp_env::with_var(<span class="kw-2">&amp;</span>env_var_name, <span class="prelude-val">Some</span>(<span class="string">"7.5"</span>), || {
+<a href=#1866 id=1866 data-nosnippet>1866</a>            <span class="kw">let </span>result = CudaArch::detect(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>Override::EnvVar(env_var_name.clone()))).unwrap();
+<a href=#1867 id=1867 data-nosnippet>1867</a>            <span class="macro">assert!</span>(result.is_some());
+<a href=#1868 id=1868 data-nosnippet>1868</a>            <span class="kw">let </span>cuda_arch = result.unwrap();
+<a href=#1869 id=1869 data-nosnippet>1869</a>            <span class="macro">assert_eq!</span>(cuda_arch.version, Version::from_str(<span class="string">"7.5"</span>).unwrap());
+<a href=#1870 id=1870 data-nosnippet>1870</a>        });
+<a href=#1871 id=1871 data-nosnippet>1871</a>    }
+<a href=#1872 id=1872 data-nosnippet>1872</a>
+<a href=#1873 id=1873 data-nosnippet>1873</a>    <span class="attr">#[test]
+<a href=#1874 id=1874 data-nosnippet>1874</a>    </span><span class="kw">fn </span>test_cuda_arch_coupling() {
+<a href=#1875 id=1875 data-nosnippet>1875</a>        <span class="comment">// Test that cuda_arch is absent when cuda is absent (CEP requirement)
+<a href=#1876 id=1876 data-nosnippet>1876</a>        // Even with cuda_arch override, it should be None if cuda is None
 <a href=#1877 id=1877 data-nosnippet>1877</a>
-<a href=#1878 id=1878 data-nosnippet>1878</a>        <span class="comment">// Case 3: Both have overrides - cuda_arch should be present
-<a href=#1879 id=1879 data-nosnippet>1879</a>        </span><span class="kw">let </span>cuda_override = Override::String(<span class="string">"12.0"</span>.to_string());
-<a href=#1880 id=1880 data-nosnippet>1880</a>        <span class="kw">let </span>cuda_arch_override = Override::String(<span class="string">"8.6"</span>.to_string());
-<a href=#1881 id=1881 data-nosnippet>1881</a>        <span class="kw">let </span>overrides = VirtualPackageOverrides {
-<a href=#1882 id=1882 data-nosnippet>1882</a>            cuda: <span class="prelude-val">Some</span>(cuda_override),
-<a href=#1883 id=1883 data-nosnippet>1883</a>            cuda_arch: <span class="prelude-val">Some</span>(cuda_arch_override),
-<a href=#1884 id=1884 data-nosnippet>1884</a>            ..Default::default()
-<a href=#1885 id=1885 data-nosnippet>1885</a>        };
-<a href=#1886 id=1886 data-nosnippet>1886</a>        <span class="kw">let </span>packages = VirtualPackages::detect(<span class="kw-2">&amp;</span>overrides, <span class="prelude-val">None</span>).unwrap();
-<a href=#1887 id=1887 data-nosnippet>1887</a>        <span class="macro">assert!</span>(
-<a href=#1888 id=1888 data-nosnippet>1888</a>            packages.cuda.is_some(),
-<a href=#1889 id=1889 data-nosnippet>1889</a>            <span class="string">"cuda should be present with override"
-<a href=#1890 id=1890 data-nosnippet>1890</a>        </span>);
-<a href=#1891 id=1891 data-nosnippet>1891</a>        <span class="macro">assert!</span>(
-<a href=#1892 id=1892 data-nosnippet>1892</a>            packages.cuda_arch.is_some(),
-<a href=#1893 id=1893 data-nosnippet>1893</a>            <span class="string">"cuda_arch should be present when cuda is present"
-<a href=#1894 id=1894 data-nosnippet>1894</a>        </span>);
-<a href=#1895 id=1895 data-nosnippet>1895</a>        <span class="kw">let </span>cuda_arch = packages.cuda_arch.unwrap();
-<a href=#1896 id=1896 data-nosnippet>1896</a>        <span class="macro">assert_eq!</span>(cuda_arch.version, Version::from_str(<span class="string">"8.6"</span>).unwrap());
-<a href=#1897 id=1897 data-nosnippet>1897</a>
-<a href=#1898 id=1898 data-nosnippet>1898</a>        <span class="comment">// Case 4: Empty string cuda override (disables cuda) - cuda_arch should be None
-<a href=#1899 id=1899 data-nosnippet>1899</a>        </span><span class="kw">let </span>cuda_override = Override::String(<span class="string">""</span>.to_string());
-<a href=#1900 id=1900 data-nosnippet>1900</a>        <span class="kw">let </span>cuda_arch_override = Override::String(<span class="string">"8.6"</span>.to_string());
-<a href=#1901 id=1901 data-nosnippet>1901</a>        <span class="kw">let </span>overrides = VirtualPackageOverrides {
-<a href=#1902 id=1902 data-nosnippet>1902</a>            cuda: <span class="prelude-val">Some</span>(cuda_override),
-<a href=#1903 id=1903 data-nosnippet>1903</a>            cuda_arch: <span class="prelude-val">Some</span>(cuda_arch_override),
-<a href=#1904 id=1904 data-nosnippet>1904</a>            ..Default::default()
-<a href=#1905 id=1905 data-nosnippet>1905</a>        };
-<a href=#1906 id=1906 data-nosnippet>1906</a>        <span class="kw">let </span>packages = VirtualPackages::detect(<span class="kw-2">&amp;</span>overrides, <span class="prelude-val">None</span>).unwrap();
-<a href=#1907 id=1907 data-nosnippet>1907</a>        <span class="macro">assert!</span>(
-<a href=#1908 id=1908 data-nosnippet>1908</a>            packages.cuda.is_none(),
-<a href=#1909 id=1909 data-nosnippet>1909</a>            <span class="string">"cuda should be None with empty string override"
-<a href=#1910 id=1910 data-nosnippet>1910</a>        </span>);
-<a href=#1911 id=1911 data-nosnippet>1911</a>        <span class="macro">assert!</span>(
-<a href=#1912 id=1912 data-nosnippet>1912</a>            packages.cuda_arch.is_none(),
-<a href=#1913 id=1913 data-nosnippet>1913</a>            <span class="string">"cuda_arch should be None when cuda is disabled via empty string"
-<a href=#1914 id=1914 data-nosnippet>1914</a>        </span>);
-<a href=#1915 id=1915 data-nosnippet>1915</a>    }
-<a href=#1916 id=1916 data-nosnippet>1916</a>}
+<a href=#1878 id=1878 data-nosnippet>1878</a>        // Case 1: Both not present - cuda_arch should be None
+<a href=#1879 id=1879 data-nosnippet>1879</a>        </span><span class="kw">let </span>overrides = VirtualPackageOverrides::default();
+<a href=#1880 id=1880 data-nosnippet>1880</a>        <span class="kw">let </span>packages = VirtualPackages::detect(<span class="kw-2">&amp;</span>overrides, <span class="prelude-val">None</span>).unwrap();
+<a href=#1881 id=1881 data-nosnippet>1881</a>        <span class="comment">// If cuda is None, cuda_arch must also be None
+<a href=#1882 id=1882 data-nosnippet>1882</a>        </span><span class="kw">if </span>packages.cuda.is_none() {
+<a href=#1883 id=1883 data-nosnippet>1883</a>            <span class="macro">assert!</span>(
+<a href=#1884 id=1884 data-nosnippet>1884</a>                packages.cuda_arch.is_none(),
+<a href=#1885 id=1885 data-nosnippet>1885</a>                <span class="string">"cuda_arch should be None when cuda is None"
+<a href=#1886 id=1886 data-nosnippet>1886</a>            </span>);
+<a href=#1887 id=1887 data-nosnippet>1887</a>        }
+<a href=#1888 id=1888 data-nosnippet>1888</a>
+<a href=#1889 id=1889 data-nosnippet>1889</a>        <span class="comment">// Case 2: cuda_arch override with no cuda - cuda_arch should be None
+<a href=#1890 id=1890 data-nosnippet>1890</a>        </span><span class="kw">let </span>cuda_arch_override = Override::String(<span class="string">"8.6"</span>.to_string());
+<a href=#1891 id=1891 data-nosnippet>1891</a>        <span class="kw">let </span>overrides = VirtualPackageOverrides {
+<a href=#1892 id=1892 data-nosnippet>1892</a>            cuda: <span class="prelude-val">None</span>, <span class="comment">// No cuda
+<a href=#1893 id=1893 data-nosnippet>1893</a>            </span>cuda_arch: <span class="prelude-val">Some</span>(cuda_arch_override),
+<a href=#1894 id=1894 data-nosnippet>1894</a>            ..Default::default()
+<a href=#1895 id=1895 data-nosnippet>1895</a>        };
+<a href=#1896 id=1896 data-nosnippet>1896</a>        <span class="kw">let </span>packages = VirtualPackages::detect(<span class="kw-2">&amp;</span>overrides, <span class="prelude-val">None</span>).unwrap();
+<a href=#1897 id=1897 data-nosnippet>1897</a>        <span class="kw">if </span>packages.cuda.is_none() {
+<a href=#1898 id=1898 data-nosnippet>1898</a>            <span class="macro">assert!</span>(
+<a href=#1899 id=1899 data-nosnippet>1899</a>                packages.cuda_arch.is_none(),
+<a href=#1900 id=1900 data-nosnippet>1900</a>                <span class="string">"cuda_arch should be None when cuda is None, even with override"
+<a href=#1901 id=1901 data-nosnippet>1901</a>            </span>);
+<a href=#1902 id=1902 data-nosnippet>1902</a>        }
+<a href=#1903 id=1903 data-nosnippet>1903</a>
+<a href=#1904 id=1904 data-nosnippet>1904</a>        <span class="comment">// Case 3: Both have overrides - cuda_arch should be present
+<a href=#1905 id=1905 data-nosnippet>1905</a>        </span><span class="kw">let </span>cuda_override = Override::String(<span class="string">"12.0"</span>.to_string());
+<a href=#1906 id=1906 data-nosnippet>1906</a>        <span class="kw">let </span>cuda_arch_override = Override::String(<span class="string">"8.6"</span>.to_string());
+<a href=#1907 id=1907 data-nosnippet>1907</a>        <span class="kw">let </span>overrides = VirtualPackageOverrides {
+<a href=#1908 id=1908 data-nosnippet>1908</a>            cuda: <span class="prelude-val">Some</span>(cuda_override),
+<a href=#1909 id=1909 data-nosnippet>1909</a>            cuda_arch: <span class="prelude-val">Some</span>(cuda_arch_override),
+<a href=#1910 id=1910 data-nosnippet>1910</a>            ..Default::default()
+<a href=#1911 id=1911 data-nosnippet>1911</a>        };
+<a href=#1912 id=1912 data-nosnippet>1912</a>        <span class="kw">let </span>packages = VirtualPackages::detect(<span class="kw-2">&amp;</span>overrides, <span class="prelude-val">None</span>).unwrap();
+<a href=#1913 id=1913 data-nosnippet>1913</a>        <span class="macro">assert!</span>(
+<a href=#1914 id=1914 data-nosnippet>1914</a>            packages.cuda.is_some(),
+<a href=#1915 id=1915 data-nosnippet>1915</a>            <span class="string">"cuda should be present with override"
+<a href=#1916 id=1916 data-nosnippet>1916</a>        </span>);
+<a href=#1917 id=1917 data-nosnippet>1917</a>        <span class="macro">assert!</span>(
+<a href=#1918 id=1918 data-nosnippet>1918</a>            packages.cuda_arch.is_some(),
+<a href=#1919 id=1919 data-nosnippet>1919</a>            <span class="string">"cuda_arch should be present when cuda is present"
+<a href=#1920 id=1920 data-nosnippet>1920</a>        </span>);
+<a href=#1921 id=1921 data-nosnippet>1921</a>        <span class="kw">let </span>cuda_arch = packages.cuda_arch.unwrap();
+<a href=#1922 id=1922 data-nosnippet>1922</a>        <span class="macro">assert_eq!</span>(cuda_arch.version, Version::from_str(<span class="string">"8.6"</span>).unwrap());
+<a href=#1923 id=1923 data-nosnippet>1923</a>
+<a href=#1924 id=1924 data-nosnippet>1924</a>        <span class="comment">// Case 4: Empty string cuda override (disables cuda) - cuda_arch should be None
+<a href=#1925 id=1925 data-nosnippet>1925</a>        </span><span class="kw">let </span>cuda_override = Override::String(<span class="string">""</span>.to_string());
+<a href=#1926 id=1926 data-nosnippet>1926</a>        <span class="kw">let </span>cuda_arch_override = Override::String(<span class="string">"8.6"</span>.to_string());
+<a href=#1927 id=1927 data-nosnippet>1927</a>        <span class="kw">let </span>overrides = VirtualPackageOverrides {
+<a href=#1928 id=1928 data-nosnippet>1928</a>            cuda: <span class="prelude-val">Some</span>(cuda_override),
+<a href=#1929 id=1929 data-nosnippet>1929</a>            cuda_arch: <span class="prelude-val">Some</span>(cuda_arch_override),
+<a href=#1930 id=1930 data-nosnippet>1930</a>            ..Default::default()
+<a href=#1931 id=1931 data-nosnippet>1931</a>        };
+<a href=#1932 id=1932 data-nosnippet>1932</a>        <span class="kw">let </span>packages = VirtualPackages::detect(<span class="kw-2">&amp;</span>overrides, <span class="prelude-val">None</span>).unwrap();
+<a href=#1933 id=1933 data-nosnippet>1933</a>        <span class="macro">assert!</span>(
+<a href=#1934 id=1934 data-nosnippet>1934</a>            packages.cuda.is_none(),
+<a href=#1935 id=1935 data-nosnippet>1935</a>            <span class="string">"cuda should be None with empty string override"
+<a href=#1936 id=1936 data-nosnippet>1936</a>        </span>);
+<a href=#1937 id=1937 data-nosnippet>1937</a>        <span class="macro">assert!</span>(
+<a href=#1938 id=1938 data-nosnippet>1938</a>            packages.cuda_arch.is_none(),
+<a href=#1939 id=1939 data-nosnippet>1939</a>            <span class="string">"cuda_arch should be None when cuda is disabled via empty string"
+<a href=#1940 id=1940 data-nosnippet>1940</a>        </span>);
+<a href=#1941 id=1941 data-nosnippet>1941</a>    }
+<a href=#1942 id=1942 data-nosnippet>1942</a>}
 </code></pre></div></section></main></body></html>
