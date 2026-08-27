@@ -39,6 +39,16 @@ endpoint-url = "https://s3.example.com"
 region = "eu-central-1"
 force-path-style = true
 
+[azure-options."mycompany.blob.core.windows.net".auth]
+releases = true
+public = false
+
+[azure-options."127.0.0.1:10000/devstoreaccount1"]
+scheme = "http"
+
+[azure-options."127.0.0.1:10000/devstoreaccount1".auth]
+general = true
+
 [index-config]
 write-zst = true
 write-shards = false

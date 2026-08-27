@@ -5199,12 +5199,13 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.7.3"
+version = "0.8.0"
 dependencies = [
  "dirs",
  "fs-err",
  "indexmap 2.14.0",
  "insta",
+ "rattler_azure",
  "rattler_conda_types",
  "serde",
  "serde_ignored",

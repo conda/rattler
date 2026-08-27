@@ -30,6 +30,9 @@ pub enum ConfigEditError {
 
     #[error("TOML serialization error: {0}")]
     TomlSerializeError(#[from] toml::ser::Error),
+
+    #[error(transparent)]
+    Invalid(#[from] crate::config::ValidationError),
 }
 
 /// Split a dotted key path into segments, honoring TOML-style quoting so
@@ -216,7 +219,10 @@ where
     }
 
     /// Save the config to the given path.
+    /// Refuses to write a configuration that would be rejected on load, so a
+    /// tool cannot leave the user with a file it will not start from.
     pub fn save(&self, to: &Path) -> Result<(), ConfigEditError> {
+        self.validate()?;
         let contents = self.to_toml()?;
         tracing::debug!("Saving config to: {}", to.display());
 

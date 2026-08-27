@@ -18,3 +18,7 @@ solves = 9
 endpoint-url = "https://minio.example.com"
 region = "auto"
 force-path-style = false
+
+[azure-options."mycompany.blob.core.windows.net".auth]
+staging = true
+public = false
