@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.4](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.3...rattler_package_streaming-v0.27.4) - 2026-08-27
+
+### Added
+
+- Add RepoDataRecord.from_package_archive method to allow installing local packages without a channel ([#2698](https://github.com/conda/rattler/pull/2698))
+
 ## [0.27.3](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.2...rattler_package_streaming-v0.27.3) - 2026-08-26
 
 ### Other

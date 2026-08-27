@@ -529,7 +529,7 @@ impl VirtualPackages {
             }),
             libc: platform.is_linux().then(|| LibC {
                 family: "glibc".into(),
-                version: defaults::default_glibc_version(),
+                version: defaults::default_glibc_version(platform),
             }),
             cuda: None,
             cuda_arch: None,
@@ -1643,7 +1643,10 @@ mod test {
         );
         let libc = linux.libc.unwrap();
         assert_eq!(libc.family, "glibc");
-        assert_eq!(libc.version, defaults::default_glibc_version());
+        assert_eq!(
+            libc.version,
+            defaults::default_glibc_version(Platform::Linux64)
+        );
 
         let osx = VirtualPackages::baseline_for_platform(Platform::OsxArm64);
         assert_eq!(
@@ -1660,6 +1663,26 @@ mod test {
         assert_eq!(
             VirtualPackages::baseline_for_platform(Platform::Linux64).archspec,
             Archspec::from_platform(Platform::Linux64)
+        );
+    }
+
+    /// conda-forge builds `linux-riscv64` against a much newer `glibc` than the
+    /// RHEL 8 baseline the other Linux platforms use, so assuming 2.28 there
+    /// would make every package look uninstallable.
+    #[test]
+    fn baseline_assumes_a_newer_glibc_on_riscv64() {
+        let riscv = VirtualPackages::baseline_for_platform(Platform::LinuxRiscv64);
+        let libc = riscv.libc.expect("__glibc should be present");
+        assert_eq!(libc.family, "glibc");
+        assert_eq!(libc.version, Version::from_str("2.39").unwrap());
+
+        // Other Linux platforms keep the RHEL 8 baseline.
+        assert_eq!(
+            VirtualPackages::baseline_for_platform(Platform::Linux64)
+                .libc
+                .expect("__glibc should be present")
+                .version,
+            Version::from_str("2.28").unwrap()
         );
     }
 
@@ -1705,7 +1728,10 @@ mod test {
             );
             let libc = packages.libc.expect("__glibc should be present");
             assert_eq!(libc.family, "glibc");
-            assert_eq!(libc.version, defaults::default_glibc_version());
+            assert_eq!(
+                libc.version,
+                defaults::default_glibc_version(Platform::Linux64)
+            );
         }
 
         if !current.is_osx() {
