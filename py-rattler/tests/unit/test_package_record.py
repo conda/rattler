@@ -1,9 +1,9 @@
+import datetime
 import json
 import random
-import datetime
 from pathlib import Path
 
-from rattler import Channel, NoArchType, PackageRecord, PackageName, RepoData, VersionWithSource
+from rattler import Channel, NoArchType, PackageName, PackageRecord, RepoData, VersionWithSource
 
 
 def test_platform_arch() -> None:
@@ -198,6 +198,23 @@ def test_extra_depends_not_in_json_when_empty() -> None:
     record = PackageRecord(name="pkg", version="1.0", build="py_0", build_number=0, subdir="noarch")
     json_data = json.loads(record.to_json())
     assert "extra_depends" not in json_data
+
+
+def test_package_record_to_graph() -> None:
+    dependency = PackageRecord(name="dependency", version="1", build="0", build_number=0, subdir="noarch")
+    package = PackageRecord(
+        name="package",
+        version="1",
+        build="0",
+        build_number=0,
+        subdir="noarch",
+        depends=["dependency >=1"],
+    )
+
+    graph = PackageRecord.to_graph([package, dependency])
+
+    assert set(graph.nodes) == {package, dependency}
+    assert set(graph.edges) == {(package, dependency)}
 
 
 def test_package_record_topological_sort_robust() -> None:
