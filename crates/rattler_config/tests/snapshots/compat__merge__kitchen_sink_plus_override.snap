@@ -52,6 +52,19 @@ endpoint-url = "https://minio.example.com/"
 region = "auto"
 force-path-style = false
 
+[azure-options."127.0.0.1:10000/devstoreaccount1"]
+scheme = "http"
+
+[azure-options."127.0.0.1:10000/devstoreaccount1".auth]
+general = true
+
+[azure-options."mycompany.blob.core.windows.net"]
+scheme = "https"
+
+[azure-options."mycompany.blob.core.windows.net".auth]
+public = false
+staging = true
+
 [index-config]
 write-zst = true
 write-shards = false

@@ -149,6 +149,7 @@ rstest = { version = "0.26" }
 rstest_reuse = "0.7"
 rustix = { version = "1.1", default-features = false }
 simd-json = { version = "0.17", features = ["serde_impl"] }
+secrecy = "0.10"
 self_cell = "1"
 semver = "1"
 send_wrapper = "0.6"
@@ -217,10 +218,11 @@ coalesced_map = { path = "crates/coalesced_map", version = "=0.1.4", default-fea
 file_url = { path = "crates/file_url", version = "=0.3.2", default-features = false }
 path_resolver = { path = "crates/path_resolver", version = "=0.2.13", default-features = false }
 rattler = { path = "crates/rattler", version = "=0.48.5", default-features = false }
+rattler_azure = { path = "crates/rattler_azure", version = "=0.1.0", default-features = false }
 rattler_cache = { path = "crates/rattler_cache", version = "=0.10.8", default-features = false }
 rattler_conda_types = { path = "crates/rattler_conda_types", version = "=0.52.0", default-features = false }
 rattler_conda_version = { path = "crates/rattler_conda_version", version = "=0.1.1", default-features = false }
-rattler_config = { path = "crates/rattler_config", version = "=0.7.3", default-features = false }
+rattler_config = { path = "crates/rattler_config", version = "=0.8.0", default-features = false }
 rattler_digest = { path = "crates/rattler_digest", version = "=1.3.2", default-features = false }
 rattler_git = { path = "crates/rattler_git", version = "=0.3.3", default-features = false }
 rattler_index = { path = "crates/rattler_index", version = "=0.31.3", default-features = false }

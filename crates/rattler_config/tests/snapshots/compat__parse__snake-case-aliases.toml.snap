@@ -68,6 +68,9 @@ expression: "(unused, normalized(config))"
             s3_options: S3OptionsMap(
                 {},
             ),
+            azure_options: AzureOptionsMap(
+                {},
+            ),
             index_config: IndexConfig {
                 default: IndexChannelConfig {
                     write_zst: None,
