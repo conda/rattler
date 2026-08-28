@@ -21,9 +21,7 @@ use crate::{AzureHost, AzureScheme, AzureUrlError};
 pub struct AzureChannelUrl {
     host: AzureHost,
 
-    /// The path as the URL Standard normalizes it: always a leading `/`, still
-    /// percent-encoded.
-    path: String,
+    path: EncodedPath,
 
     /// A SAS token may be written inline.
     query: Option<String>,
@@ -87,7 +85,7 @@ impl AzureChannelUrl {
 
         Ok(Self {
             host,
-            path: url.path().to_string(),
+            path: EncodedPath(url.path().to_string()),
             query: url.query().map(str::to_string),
             fragment: url.fragment().map(str::to_string),
         })
@@ -140,10 +138,45 @@ impl AzureChannelUrl {
         self.fragment.as_deref()
     }
 
-    /// The still-encoded path segments, exactly as [`Url::path_segments`] would
-    /// yield them for the wire spelling.
-    pub(crate) fn path_segments(&self) -> std::str::Split<'_, char> {
-        self.path.strip_prefix('/').unwrap_or(&self.path).split('/')
+    pub(crate) fn path(&self) -> &EncodedPath {
+        &self.path
+    }
+}
+
+/// A channel URL's path in wire form, carrying what [`AzureChannelUrl::parse`]
+/// established about it: a leading `/`, percent-encoded as the URL Standard's
+/// special-scheme parser normalizes it, and segments that are none of a dot
+/// segment, an empty segment before the last, a malformed percent-escape, or an
+/// escape that decodes to bytes that are not UTF-8.
+///
+/// Nothing outside [`AzureChannelUrl::parse`] builds one, so those hold wherever
+/// one is held — which is what makes [`decoded_segments`](Self::decoded_segments)
+/// infallible.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(crate) struct EncodedPath(String);
+
+impl EncodedPath {
+    /// The still-encoded segments, exactly as [`Url::path_segments`] would yield
+    /// them for the wire spelling.
+    pub(crate) fn segments(&self) -> std::str::Split<'_, char> {
+        self.0.strip_prefix('/').unwrap_or(&self.0).split('/')
+    }
+
+    /// The percent-decoded segments, for a consumer that re-encodes what it is
+    /// given and would otherwise double-encode a space or a `+`.
+    #[cfg(feature = "opendal")]
+    pub(crate) fn decoded_segments(&self) -> impl Iterator<Item = std::borrow::Cow<'_, str>> {
+        self.segments().map(|segment| {
+            percent_encoding::percent_decode_str(segment)
+                .decode_utf8()
+                .expect("a parsed channel path decodes to UTF-8")
+        })
+    }
+}
+
+impl std::fmt::Display for EncodedPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -553,10 +586,21 @@ mod tests {
 
     #[test]
     fn segments_that_cannot_name_a_blob_are_rejected() {
-        assert!(matches!(
-            AzureChannelUrl::parse("az://acct.blob.core.windows.net/general/%ff"),
-            Err(AzureUrlError::NonUtf8Path { .. })
-        ));
+        for input in [
+            "az://acct.blob.core.windows.net/general/%ff",
+
+            // only becomes invalid UTF-8 once the parser encodes the raw character
+            "az://acct.blob.core.windows.net/general/caf%C3é",
+            "az://acct.blob.core.windows.net/general/%C3é",
+        ] {
+            assert!(
+                matches!(
+                    AzureChannelUrl::parse(input),
+                    Err(AzureUrlError::NonUtf8Path { .. })
+                ),
+                "expected a rejection for {input}"
+            );
+        }
 
         // An encoded slash past the container is a blob name containing a slash,
         // which Azure supports. It cannot move the container, which is read from a

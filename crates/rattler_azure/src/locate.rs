@@ -141,7 +141,8 @@ fn segment(channel: &AzureChannelUrl, index: usize) -> Option<&str> {
     // `az://host//general` would read as having no container and silently fetch a
     // granted one anonymously.
     channel
-        .path_segments()
+        .path()
+        .segments()
         .nth(index)
         .filter(|segment| !segment.is_empty())
 }

@@ -22,28 +22,17 @@ pub fn azblob_config(
     let (key, container) = location.addressed()?;
     let endpoint = format!("{scheme}://{key}");
 
-    // Percent-decode each segment: `path_segments()` yields still-encoded segments
-    // and opendal percent-encodes `root + path` again, so passing them through
-    // verbatim would double-encode a prefix containing a space or a `+`.
-    // `addressed` has already confirmed the consumed segments exist.
+    // opendal percent-encodes `root + path` again, so the wire form would
+    // double-encode a prefix containing a space or a `+`. `addressed` has already
+    // confirmed the consumed segments exist.
     let root = format!(
         "/{}",
         location
             .channel()
-            .path_segments()
+            .path()
+            .decoded_segments()
             .skip(key.segments_before_root())
-            // Infallible in practice: `AzureChannelUrl::parse` rejects a segment that
-            // does not decode to UTF-8. Erroring rather than substituting U+FFFD is
-            // what keeps that a guarantee instead of an assumption.
-            .map(|segment| {
-                percent_encoding::percent_decode_str(segment)
-                    .decode_utf8()
-                    .map_err(|source| AzureUrlError::NonUtf8Path {
-                        segment: segment.to_string(),
-                        source,
-                    })
-            })
-            .collect::<Result<Vec<_>, _>>()?
+            .collect::<Vec<_>>()
             .join("/")
     );
 

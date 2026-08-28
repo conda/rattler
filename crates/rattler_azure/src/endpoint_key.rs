@@ -92,7 +92,8 @@ impl AzureEndpointKey {
         }
 
         let segments = channel
-            .path_segments()
+            .path()
+            .segments()
             .filter(|segment| !segment.is_empty())
             .collect::<Vec<_>>();
         match segments.as_slice() {
