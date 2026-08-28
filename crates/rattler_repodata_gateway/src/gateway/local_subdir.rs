@@ -79,17 +79,13 @@ impl SubdirClient for LocalSubdirClient {
         &self,
         name: &PackageName,
         _reporter: Option<&dyn Reporter>,
+        package_format_selection: PackageFormatSelection,
     ) -> Result<PackageRecords, GatewayError> {
         let sparse_repodata = self.sparse.clone();
         let name = name.clone();
 
-        // The client is cached across queries with potentially different
-        // package format selections (and, for a `SparseRepoData` source,
-        // constructed once up front regardless of the query); load every
-        // format here and let `SubdirData::get_or_fetch_package_records`
-        // filter per query.
         let load_records =
-            move || match sparse_repodata.load_records(&name, PackageFormatSelection::Both) {
+            move || match sparse_repodata.load_records(&name, package_format_selection) {
                 Ok(records) => {
                     let (unique_base_deps, unique_extra_deps) = extract_unique_deps_split(&records);
                     Ok(PackageRecords {
