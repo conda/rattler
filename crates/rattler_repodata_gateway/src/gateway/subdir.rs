@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
 use ahash::HashMap;
-use rattler_conda_types::{
-    ChannelRelations, PackageName, RepoDataRecord, RepodataRevisions,
-    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveType},
-};
+use rattler_conda_types::{ChannelRelations, PackageName, RepoDataRecord, RepodataRevisions};
 
 use super::GatewayError;
 use crate::sparse::empty_repodata_revisions;
@@ -82,77 +79,6 @@ pub(crate) fn extract_unique_deps_split<'a>(
     (Arc::from(base), Arc::new(per_extra))
 }
 
-/// Filters and, where applicable, deduplicates `records` according to
-/// `selection`. Applied once per name/subdir fetch in
-/// [`SubdirData::get_or_fetch_package_records`], after the (query-agnostic,
-/// cross-query-cached) record set has been retrieved.
-fn filter_records_by_package_format(
-    records: Vec<Arc<RepoDataRecord>>,
-    selection: PackageFormatSelection,
-) -> Vec<Arc<RepoDataRecord>> {
-    match selection {
-        PackageFormatSelection::Both => records,
-        PackageFormatSelection::OnlyTarBz2 => records
-            .into_iter()
-            .filter(|r| {
-                matches!(
-                    r.identifier.archive_type,
-                    DistArchiveType::Conda(CondaArchiveType::TarBz2)
-                )
-            })
-            .collect(),
-        PackageFormatSelection::OnlyConda => records
-            .into_iter()
-            .filter(|r| {
-                matches!(
-                    r.identifier.archive_type,
-                    DistArchiveType::Conda(CondaArchiveType::Conda)
-                )
-            })
-            .collect(),
-        PackageFormatSelection::PreferConda => dedup_records_by_preference(records, false),
-        PackageFormatSelection::PreferCondaWithWhl => dedup_records_by_preference(records, true),
-    }
-}
-
-/// Keeps, for each unique (name, version, build) archive identifier, only
-/// the most-preferred variant, per [`DistArchiveType::cmp_preference`]
-/// (`.conda` over `.tar.bz2` over `.whl`). When `include_whl` is `false`,
-/// `.whl` records are dropped outright rather than being allowed to win a
-/// group. The relative order of the surviving records is otherwise
-/// preserved.
-fn dedup_records_by_preference(
-    records: Vec<Arc<RepoDataRecord>>,
-    include_whl: bool,
-) -> Vec<Arc<RepoDataRecord>> {
-    let mut positions: std::collections::HashMap<ArchiveIdentifier, usize> =
-        std::collections::HashMap::new();
-    let mut out: Vec<Arc<RepoDataRecord>> = Vec::with_capacity(records.len());
-    for record in records {
-        if !include_whl && matches!(record.identifier.archive_type, DistArchiveType::Wheel(_)) {
-            continue;
-        }
-        match positions.entry(record.identifier.identifier.clone()) {
-            std::collections::hash_map::Entry::Occupied(entry) => {
-                let idx = *entry.get();
-                if record
-                    .identifier
-                    .archive_type
-                    .cmp_preference(out[idx].identifier.archive_type)
-                    == std::cmp::Ordering::Greater
-                {
-                    out[idx] = record;
-                }
-            }
-            std::collections::hash_map::Entry::Vacant(entry) => {
-                entry.insert(out.len());
-                out.push(record);
-            }
-        }
-    }
-    out
-}
-
 pub enum Subdir {
     /// The subdirectory is missing from the channel, it is considered empty.
     NotFound,
@@ -217,11 +143,14 @@ impl SubdirData {
         let client = self.client.clone();
         let name_clone = name.clone();
 
-        let mut records = self
-            .records
+        self.records
             .get_or_try_init(name.clone(), || async move {
                 client
-                    .fetch_package_records(&name_clone, reporter.as_deref(), package_format_selection)
+                    .fetch_package_records(
+                        &name_clone,
+                        reporter.as_deref(),
+                        package_format_selection,
+                    )
                     .await
             })
             .await
@@ -231,14 +160,7 @@ impl SubdirData {
                     "a coalesced request failed".to_string(),
                     std::io::ErrorKind::Other.into(),
                 ),
-            })?;
-
-        // `records` is the entry cloned out of the shared, cross-query
-        // cache, so filtering it here is safe: it never mutates what other
-        // queries (potentially with a different selection) will see.
-        records.records =
-            filter_records_by_package_format(records.records, package_format_selection);
-        Ok(records)
+            })
     }
 
     pub fn package_names(&self) -> Vec<String> {

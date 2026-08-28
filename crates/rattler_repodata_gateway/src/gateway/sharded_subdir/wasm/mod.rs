@@ -17,7 +17,8 @@ use crate::{
     gateway::{
         error::SubdirNotFoundError,
         sharded_subdir::{
-            decode_zst_bytes_async, is_missing_sharded_repodata_status, parse_records,
+            PackageFormatSelection, decode_zst_bytes_async, is_missing_sharded_repodata_status,
+            parse_records,
         },
         subdir::{PackageRecords, SubdirClient},
     },
@@ -120,6 +121,7 @@ impl SubdirClient for ShardedSubdir {
         &self,
         name: &PackageName,
         reporter: Option<&dyn Reporter>,
+        package_format_selection: PackageFormatSelection,
     ) -> Result<PackageRecords, GatewayError> {
         // Find the shard that contains the package
         let Some(shard) = self.sharded_repodata.shards.get(name.as_normalized()) else {
@@ -182,6 +184,7 @@ impl SubdirClient for ShardedSubdir {
             shard_bytes,
             self.channel.base_url.clone(),
             self.package_base_url.clone(),
+            package_format_selection,
         )
         .await
     }

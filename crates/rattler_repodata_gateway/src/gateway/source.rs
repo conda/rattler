@@ -8,7 +8,10 @@ use super::{
     GatewayError,
     subdir::{PackageRecords, SubdirClient, extract_unique_deps_split},
 };
-use crate::{Reporter, sparse::{PackageFormatSelection, SparseRepoData}};
+use crate::{
+    Reporter,
+    sparse::{PackageFormatSelection, SparseRepoData},
+};
 
 /// A source of repodata records for a specific subdirectory.
 ///

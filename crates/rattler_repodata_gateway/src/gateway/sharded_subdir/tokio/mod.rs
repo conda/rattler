@@ -12,10 +12,14 @@ use super::{
     add_trailing_slash, decode_zst_bytes_async, is_missing_sharded_repodata_status, parse_records,
 };
 use crate::{
-    GatewayError, Reporter, fetch::{CacheAction, FetchRepoDataError}, gateway::{
+    GatewayError, Reporter,
+    fetch::{CacheAction, FetchRepoDataError},
+    gateway::{
         error::SubdirNotFoundError,
         subdir::{PackageRecords, SubdirClient},
-    }, reporter::ResponseReporterExt, sparse::PackageFormatSelection,
+    },
+    reporter::ResponseReporterExt,
+    sparse::PackageFormatSelection,
 };
 use fs_err::tokio as tokio_fs;
 use futures::future::OptionFuture;

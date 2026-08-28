@@ -22,7 +22,9 @@ impl SubdirClient for RemoteSubdirClient {
         reporter: Option<&dyn Reporter>,
         package_format_selection: PackageFormatSelection,
     ) -> Result<PackageRecords, GatewayError> {
-        self.sparse.fetch_package_records(name, reporter, package_format_selection).await
+        self.sparse
+            .fetch_package_records(name, reporter, package_format_selection)
+            .await
     }
 
     fn package_names(&self) -> Vec<String> {
