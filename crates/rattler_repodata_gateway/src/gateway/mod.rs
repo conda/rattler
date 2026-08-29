@@ -1869,14 +1869,14 @@ mod test {
             &self,
             platform: Platform,
             name: &PackageName,
-            _package_format_selection: PackageFormatSelection,
+            package_format_selection: PackageFormatSelection,
         ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
             let records = self
                 .records
                 .get(&(platform, name.clone()))
                 .cloned()
                 .unwrap_or_default();
-            Ok(records.into_iter().map(Arc::new).collect())
+            Ok(filter_by_package_format(records, package_format_selection))
         }
 
         fn package_names(&self, platform: Platform) -> Vec<String> {
@@ -1886,6 +1886,73 @@ mod test {
                 .map(|(_, n)| n.as_source().to_string())
                 .collect()
         }
+    }
+
+    /// Filters and, where applicable, deduplicates `records` by `selection`.
+    /// A real `RepoDataSource` is expected to honor `package_format_selection`
+    /// itself (the gateway applies no fallback filtering for custom sources),
+    /// so `MockRepoDataSource` implements the same selection contract here to
+    /// exercise it in tests.
+    fn filter_by_package_format(
+        records: Vec<RepoDataRecord>,
+        selection: PackageFormatSelection,
+    ) -> Vec<Arc<RepoDataRecord>> {
+        use rattler_conda_types::package::{ArchiveIdentifier, CondaArchiveType, DistArchiveType};
+
+        let selected: Vec<RepoDataRecord> = match selection {
+            PackageFormatSelection::Both => records,
+            PackageFormatSelection::OnlyTarBz2 => records
+                .into_iter()
+                .filter(|r| {
+                    matches!(
+                        r.identifier.archive_type,
+                        DistArchiveType::Conda(CondaArchiveType::TarBz2)
+                    )
+                })
+                .collect(),
+            PackageFormatSelection::OnlyConda => records
+                .into_iter()
+                .filter(|r| {
+                    matches!(
+                        r.identifier.archive_type,
+                        DistArchiveType::Conda(CondaArchiveType::Conda)
+                    )
+                })
+                .collect(),
+            PackageFormatSelection::PreferConda | PackageFormatSelection::PreferCondaWithWhl => {
+                let include_whl = selection == PackageFormatSelection::PreferCondaWithWhl;
+                let mut positions: std::collections::HashMap<ArchiveIdentifier, usize> =
+                    std::collections::HashMap::new();
+                let mut out: Vec<RepoDataRecord> = Vec::new();
+                for record in records {
+                    if !include_whl
+                        && matches!(record.identifier.archive_type, DistArchiveType::Wheel(_))
+                    {
+                        continue;
+                    }
+                    match positions.entry(record.identifier.identifier.clone()) {
+                        std::collections::hash_map::Entry::Occupied(entry) => {
+                            let idx = *entry.get();
+                            if record
+                                .identifier
+                                .archive_type
+                                .cmp_preference(out[idx].identifier.archive_type)
+                                == std::cmp::Ordering::Greater
+                            {
+                                out[idx] = record;
+                            }
+                        }
+                        std::collections::hash_map::Entry::Vacant(entry) => {
+                            entry.insert(out.len());
+                            out.push(record);
+                        }
+                    }
+                }
+                out
+            }
+        };
+
+        selected.into_iter().map(Arc::new).collect()
     }
 
     fn make_test_record(name: &str, version: &str, subdir: &str) -> RepoDataRecord {
@@ -2139,6 +2206,47 @@ mod test {
                 vec![channel],
                 vec![Platform::Linux64],
                 vec![PackageName::from_str("bors").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .package_format_selection(selection)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(all_records.len(), expected_count);
+    }
+
+    #[rstest]
+    #[case::default_prefers_conda(PackageFormatSelection::PreferConda, 2)]
+    #[case::only_conda(PackageFormatSelection::OnlyConda, 2)]
+    #[case::only_tar_bz2(PackageFormatSelection::OnlyTarBz2, 0)]
+    #[case::both(PackageFormatSelection::Both, 2)]
+    #[tokio::test]
+    async fn test_package_format_selection_custom_source(
+        #[case] selection: PackageFormatSelection,
+        #[case] expected_count: usize,
+    ) {
+        let gateway = Gateway::new();
+
+        // Create a mock source with some records
+        let mut mock_source = MockRepoDataSource::new();
+        mock_source.add_record(
+            Platform::Linux64,
+            make_test_record("testpkg", "1.0.0", "linux-64"),
+        );
+        mock_source.add_record(
+            Platform::Linux64,
+            make_test_record("testpkg", "2.0.0", "linux-64"),
+        );
+
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(mock_source);
+
+        // Query using the custom source
+        let records = gateway
+            .query(
+                vec![super::Source::Custom(source.clone())],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
             )
             .recursive(false)
             .package_format_selection(selection)
