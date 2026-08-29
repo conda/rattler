@@ -1,22 +1,9 @@
+use std::borrow::Cow;
+
 use url::Url;
 
 use crate::{AzureHost, AzureScheme, AzureUrlError};
 
-/// A validated Azure Blob **channel** URL, which has two spellings: `az://…` as
-/// the user writes it and in configuration, and `http(s)://…` on the wire.
-///
-/// The parts are stored rather than a `Url`, because a `Url`'s port is
-/// scheme-relative: storing `az://host:443/…` as `https` drops the port, and
-/// [`wire`](Self::wire) would then hand out `http://host/…`, a different endpoint.
-/// [`AzureHost`] holds host and port explicitly and normalizes both without a
-/// scheme. Every spelling is built from those same parts, so no two spellings can
-/// disagree.
-///
-/// The wire scheme is an argument to [`wire`](Self::wire) rather than a field
-/// because it comes from the matched `azure-options` entry, while
-/// [`parse`](Self::parse) runs as a clap `value_parser`, before any config file is
-/// read. `rattler-index` takes it from that entry; `rattler_upload` passes the
-/// default, because it reads no config file at all.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct AzureChannelUrl {
     host: AzureHost,
@@ -26,36 +13,17 @@ pub struct AzureChannelUrl {
     /// A SAS token may be written inline.
     query: Option<String>,
 
-    /// Kept so [`canonical`](Self::canonical) spells the channel back the way the
-    /// user wrote it. It reaches no server: an HTTP request carries only the path
-    /// and query.
     fragment: Option<String>,
 }
 
-/// `\` is a path separator as much as `/` is: the URL Standard's special-scheme
-/// parser (what the `url` crate implements for `http`/`https`, which is what
-/// [`AzureChannelUrl::parse`] parses the tail as) folds `\` into `/` while
-/// parsing a special-scheme URL's path, so anything validated against this
-/// type's own idea of "separator" has to agree.
 const PATH_SEPARATORS: [char; 2] = ['/', '\\'];
 
-/// Starts a query (`?`) or fragment (`#`), ending whatever came before it.
 const QUERY_OR_FRAGMENT_MARKERS: [char; 2] = ['?', '#'];
 
-/// [`PATH_SEPARATORS`] and [`QUERY_OR_FRAGMENT_MARKERS`] combined, written out
-/// because `const` arrays cannot be concatenated: anything that is none of
-/// these can still be part of an authority.
 const AUTHORITY_TERMINATORS: [char; 4] = ['/', '\\', '?', '#'];
 
 impl AzureChannelUrl {
     /// Parse and validate an `az://` channel URL.
-    ///
-    /// The only accepted spelling is `az://<host>/<…>`. A bare `http(s)://` URL is
-    /// not accepted, so there is one canonical spelling for an Azure channel.
-    ///
-    /// Account and container derivation happens in [`locate`](crate::locate), not
-    /// here: it depends on which [`AzureEndpointKey`](crate::AzureEndpointKey) the
-    /// URL matches, which is config that does not exist yet at clap parse time.
     pub fn parse(value: &str) -> Result<Self, AzureUrlError> {
         let rest = strip_az_scheme(value)
             .ok_or_else(|| AzureUrlError::InvalidScheme(value.to_string()))?;
@@ -65,8 +33,8 @@ impl AzureChannelUrl {
         let url = parse_wire_url(value, authority, tail)?;
 
         let written_segments = decode_written_path_segments(tail)?;
-        if let Some(segment) = has_dot_segment(&written_segments) {
-            return Err(AzureUrlError::DotSegmentInPath(segment.to_string()));
+        if let Some(segment) = written_segments.iter().find(|s| s.is_dot_segment()) {
+            return Err(AzureUrlError::DotSegmentInPath(segment.raw.to_string()));
         }
 
         let segments = url
@@ -103,26 +71,13 @@ impl AzureChannelUrl {
         let mut text = format!("{scheme}://{}{}", self.host, self.path);
         if let Some(query) = &self.query {
             text.push('?');
-            match sas {
-                Sas::Exposed => text.push_str(query),
-                Sas::Masked => text.push_str(&mask_sas_signature(query)),
-            }
+            text.push_str(&sas.spell(query));
         }
         if let Some(fragment) = &self.fragment {
             text.push('#');
-            // Masked on the same terms as the query: this spelling is the one that
-            // reaches logs and error messages, and a `sig` is no less a signature
-            // for having been written after a `#`.
-            match sas {
-                Sas::Exposed => text.push_str(fragment),
-                Sas::Masked => text.push_str(&mask_sas_signature(fragment)),
-            }
+            text.push_str(&sas.spell(fragment));
         }
-        // Cannot fail: the authority re-serializes to the normalized form it was
-        // parsed from, and the path, query and fragment are already-encoded output
-        // of a `Url` parse. Every host shape `AzureHost` can hold (normalized
-        // domain, IPv4 literal, bracketed IPv6) is valid both to the special-scheme
-        // host parser and to the opaque-host parser `az://` gets.
+
         Url::parse(&text).expect("a normalized authority, path and query is a valid URL")
     }
 
@@ -143,29 +98,19 @@ impl AzureChannelUrl {
     }
 }
 
-/// A channel URL's path in wire form, carrying what [`AzureChannelUrl::parse`]
-/// established about it: a leading `/`, percent-encoded as the URL Standard's
-/// special-scheme parser normalizes it, and segments that are none of a dot
-/// segment, an empty segment before the last, a malformed percent-escape, or an
-/// escape that decodes to bytes that are not UTF-8.
-///
-/// Nothing outside [`AzureChannelUrl::parse`] builds one, so those hold wherever
-/// one is held — which is what makes [`decoded_segments`](Self::decoded_segments)
-/// infallible.
+/// A URL's path in wire form with a leading `/` and percent-encoded
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) struct EncodedPath(String);
 
 impl EncodedPath {
-    /// The still-encoded segments, exactly as [`Url::path_segments`] would yield
-    /// them for the wire spelling.
+    /// The still-encoded segments
     pub(crate) fn segments(&self) -> std::str::Split<'_, char> {
         self.0.strip_prefix('/').unwrap_or(&self.0).split('/')
     }
 
-    /// The percent-decoded segments, for a consumer that re-encodes what it is
-    /// given and would otherwise double-encode a space or a `+`.
+    /// The percent-decoded segments
     #[cfg(feature = "opendal")]
-    pub(crate) fn decoded_segments(&self) -> impl Iterator<Item = std::borrow::Cow<'_, str>> {
+    pub(crate) fn decoded_segments(&self) -> impl Iterator<Item = Cow<'_, str>> {
         self.segments().map(|segment| {
             percent_encoding::percent_decode_str(segment)
                 .decode_utf8()
@@ -188,8 +133,6 @@ impl std::fmt::Display for AzureChannelUrl {
 
 impl std::fmt::Debug for AzureChannelUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Derived, this would print the raw query and hand a `{:?}` on any struct
-        // holding a channel the signature that `canonical()` exists to withhold.
         f.debug_tuple("AzureChannelUrl")
             .field(&self.canonical().as_str())
             .finish()
@@ -202,8 +145,15 @@ enum Sas {
     Masked,
 }
 
-/// The other SAS parameters (`sv`, `se`, `sp`, …) only describe the grant; `sig`
-/// is the secret that makes it usable.
+impl Sas {
+    fn spell<'a>(self, text: &'a str) -> Cow<'a, str> {
+        match self {
+            Self::Exposed => Cow::Borrowed(text),
+            Self::Masked => Cow::Owned(mask_sas_signature(text)),
+        }
+    }
+}
+
 fn mask_sas_signature(query: &str) -> String {
     query
         .split('&')
@@ -223,30 +173,17 @@ impl std::str::FromStr for AzureChannelUrl {
     }
 }
 
-// URL schemes are case-insensitive and `Url` lowercases them, so `AZ://…`
-// reaches every downstream `scheme() == "az"` comparison as `az`.
 fn strip_az_scheme(value: &str) -> Option<&str> {
-    const PREFIX: &str = "az://";
-    let prefix = value.get(..PREFIX.len())?;
-    prefix
-        // `str` has no case-insensitive `starts_with`
-        .eq_ignore_ascii_case(PREFIX)
-        .then(|| &value[PREFIX.len()..])
+    let (scheme, rest) = value.split_once("://")?;
+    scheme.eq_ignore_ascii_case("az").then_some(rest)
 }
 
-/// Splits `az://<host>/<…>`'s tail into the authority and everything after
-/// it. The authority runs to the first [`AUTHORITY_TERMINATORS`] character,
-/// so it ends at the same point the URL Standard's special-scheme parser
-/// would end it.
 fn split_authority(rest: &str) -> (&str, &str) {
     let authority_end = rest.find(AUTHORITY_TERMINATORS).unwrap_or(rest.len());
     rest.split_at(authority_end)
 }
 
-/// Parses `<authority><tail>` as an `https` URL: the URL Standard's
-/// special-scheme parser is what normalizes the path, query and fragment, and
-/// [`AzureChannelUrl::wire`] hands them straight to an `http(s)` URL, so they
-/// have to be normalized that same way.
+/// Parses `<authority><tail>` as an `https` URL
 fn parse_wire_url(value: &str, authority: &str, tail: &str) -> Result<Url, AzureUrlError> {
     Url::parse(&format!("https://{authority}{tail}")).map_err(|source| AzureUrlError::InvalidUrl {
         value: value.to_string(),
@@ -254,21 +191,20 @@ fn parse_wire_url(value: &str, authority: &str, tail: &str) -> Result<Url, Azure
     })
 }
 
-/// Percent-decodes and UTF-8-validates every segment of the path as the user
-/// wrote it, pairing each with the raw (still-encoded) text it came from.
-///
-/// The segments are taken from the text the user wrote, not from a `Url`,
-/// because by the time a `Url` exists the pre-resolution evidence dot-segment
-/// detection needs is gone: the URL Standard's special-scheme parser resolves
-/// dot segments while parsing.
-///
-/// This is also the only place a segment's percent-decoded bytes are checked
-/// for validity as UTF-8: every segment `Url::path_segments` later yields for
-/// this same tail carries the identical escapes (the special-scheme parser
-/// only adds percent-encoding around characters that were not already
-/// escaped, and decoding those trivially succeeds), so re-decoding them there
-/// would just repeat this check.
-fn decode_written_path_segments(tail: &str) -> Result<Vec<(&str, String)>, AzureUrlError> {
+/// One segment of a url path
+struct WrittenSegment<'a> {
+    raw: &'a str,
+    decoded: String,
+}
+
+impl WrittenSegment<'_> {
+    fn is_dot_segment(&self) -> bool {
+        self.decoded == "." || self.decoded == ".."
+    }
+}
+
+/// Percent-decodes and UTF-8-validates every segment of the url tail
+fn decode_written_path_segments(tail: &str) -> Result<Vec<WrittenSegment<'_>>, AzureUrlError> {
     let written = match tail
         .split(QUERY_OR_FRAGMENT_MARKERS)
         .next()
@@ -277,6 +213,7 @@ fn decode_written_path_segments(tail: &str) -> Result<Vec<(&str, String)>, Azure
         "" => "/",
         path => path,
     };
+
     written
         .trim_start_matches(PATH_SEPARATORS)
         .split(PATH_SEPARATORS)
@@ -287,47 +224,30 @@ fn decode_written_path_segments(tail: &str) -> Result<Vec<(&str, String)>, Azure
                     segment: segment.to_string(),
                     source,
                 })?;
-            Ok((segment, decoded.into_owned()))
+            Ok(WrittenSegment {
+                raw: segment,
+                decoded: decoded.into_owned(),
+            })
         })
         .collect()
 }
 
-/// A dot segment — `%2e%2e` as much as `..` — anywhere in the path lets a path
-/// reading as one container (path-style: one *account*) address another:
-/// `/general/a/../../evil/x` eats backwards into the container from a segment
-/// that reads as harmless, and `/general\..\..\evil/x` climbs exactly as far
-/// because the special-scheme parser treats `\` as a separator too. Returns
-/// the raw (still-encoded) offending segment, since that is what the error
-/// quotes back to the user.
-fn has_dot_segment<'a>(segments: &[(&'a str, String)]) -> Option<&'a str> {
-    segments
-        .iter()
-        .find(|(_, decoded)| decoded == "." || decoded == "..")
-        .map(|(raw, _)| *raw)
-}
-
-/// Whether an empty segment appears anywhere but at the end of the path.
-///
-/// An empty segment is not a blob name and not a container name, but
-/// `path_segments()` yields it, so without this `az://host//general` reads as
-/// "no container" and downgrades a granted fetch to anonymous. A trailing one
-/// is just a trailing slash, so it is excluded rather than reported.
+/// Whether an empty segment appears anywhere but at the end of the path
 fn has_empty_segments(segments: &[&str]) -> bool {
     let last = segments.len().saturating_sub(1);
     segments[..last].iter().any(|segment| segment.is_empty())
 }
 
 /// The first `%` that does not start a valid escape, and the malformed escape
-/// itself: the one encoding defect the user cannot be left to own.
-/// `percent_decode` passes it through literally, so the fetch path sends
-/// `gen%eral` while opendal re-encodes the decoded form to `gen%25eral` and
-/// indexes under a different blob.
+/// itself
 fn malformed_percent_escape_in(segments: &[&str]) -> Option<(String, String)> {
     segments.iter().find_map(|segment| {
         malformed_percent_escape(segment).map(|escape| (segment.to_string(), escape))
     })
 }
 
+/// The first `%` in `segment` that does not begin a valid escape, with up to
+/// two following characters
 fn malformed_percent_escape(segment: &str) -> Option<String> {
     let bytes = segment.as_bytes();
     bytes.iter().enumerate().find_map(|(index, byte)| {
@@ -348,38 +268,34 @@ mod tests {
     use super::*;
     use crate::test_support::{channel, container, located};
 
-    #[test]
-    fn parse_requires_the_az_scheme() {
-        for input in [
-            "https://acct.blob.core.windows.net/general",
-            "http://acct.blob.core.windows.net/general",
-            "ftp://acct.blob.core.windows.net/general",
-            "acct.blob.core.windows.net/general",
-        ] {
-            assert!(
-                matches!(
-                    AzureChannelUrl::parse(input),
-                    Err(AzureUrlError::InvalidScheme(_))
-                ),
-                "expected InvalidScheme for {input}"
-            );
+    #[track_caller]
+    fn assert_rejects(inputs: &[&str], expected: fn(&AzureUrlError) -> bool) {
+        for input in inputs {
+            match AzureChannelUrl::parse(input) {
+                Ok(_) => panic!("expected a rejection for {input}"),
+                Err(err) => assert!(expected(&err), "wrong error for {input}: {err:?}"),
+            }
+        }
+    }
+
+    #[track_caller]
+    fn assert_canonical_paths(cases: &[(&str, &str)]) {
+        for (input, path) in cases {
+            assert_eq!(channel(input).canonical().path(), *path, "{input}");
         }
     }
 
     #[test]
-    fn parse_accepts_a_scheme_in_any_case() {
-        for input in [
-            "AZ://acct.blob.core.windows.net/general",
-            "Az://acct.blob.core.windows.net/general",
-            "aZ://acct.blob.core.windows.net/general",
-        ] {
-            let channel = AzureChannelUrl::parse(input)
-                .unwrap_or_else(|err| panic!("{input} should parse: {err}"));
-            assert_eq!(
-                channel.canonical().as_str(),
-                "az://acct.blob.core.windows.net/general"
-            );
-        }
+    fn parse_requires_the_az_scheme() {
+        assert_rejects(
+            &[
+                "https://acct.blob.core.windows.net/general",
+                "http://acct.blob.core.windows.net/general",
+                "ftp://acct.blob.core.windows.net/general",
+                "acct.blob.core.windows.net/general",
+            ],
+            |err| matches!(err, AzureUrlError::InvalidScheme(_)),
+        );
     }
 
     #[test]
@@ -416,8 +332,6 @@ mod tests {
             "az://acct.blob.core.windows.net/general/noarch",
             "az://127.0.0.1:10000/devstoreaccount1/general",
             "az://acct.blob.core.windows.net/general/with%20space?sv=token",
-            // An IPv6 literal is the host shape most likely to break the canonical
-            // rebuild, since it has to survive being re-parsed as an opaque host.
             "az://[::1]:10000/devstoreaccount1/general",
             "az://azurite.local:443/devstoreaccount1/general",
             "az://azurite.local:80/devstoreaccount1/general",
@@ -431,10 +345,6 @@ mod tests {
                 assert_eq!(canonical.path(), wire.path(), "{input}");
                 assert_eq!(canonical.query(), wire.query(), "{input}");
 
-                // Ports are compared semantically, not textually: `az` has no
-                // default port so the canonical form always spells one out when the
-                // URL has one, while a wire URL omits a port equal to its scheme's
-                // default. An omitted port on `http` *is* 80, so those agree.
                 let default = match scheme {
                     AzureScheme::Https => 443,
                     AzureScheme::Http => 80,
@@ -468,9 +378,8 @@ mod tests {
             "https://azurite.local/devstoreaccount1/general"
         );
 
-        // Identity must not be scheme-relative either: a host on 443 is not the
-        // same endpoint as the same host with no port, because the scheme that
-        // would make them equal is not known here.
+        // a host on 443 is not the same endpoint as the same host with
+        // no port, because the scheme that would make them equal is not known here.
         let no_port =
             AzureChannelUrl::parse("az://azurite.local/devstoreaccount1/general").unwrap();
         assert_ne!(channel, no_port);
@@ -498,67 +407,47 @@ mod tests {
 
     #[test]
     fn a_rewritten_path_is_rejected() {
-        for input in [
-            "az://acct.blob.core.windows.net/general/%2e%2e/%2e%2e/othercontainer/x",
-            "az://127.0.0.1:10000/devstoreaccount1/general/%2e%2e/%2e%2e/otheraccount/othercontainer",
-            "az://acct.blob.core.windows.net/general/../../othercontainer",
-            "az://acct.blob.core.windows.net/general/./noarch",
-            "az://acct.blob.core.windows.net/general/%2E%2E/othercontainer",
-        ] {
-            assert!(
-                matches!(
-                    AzureChannelUrl::parse(input),
-                    Err(AzureUrlError::DotSegmentInPath(_))
-                ),
-                "expected a rejection for {input}"
-            );
-        }
-    }
-
-    #[test]
-    fn an_empty_segment_is_rejected() {
-        for input in [
-            "az://acct.blob.core.windows.net//general/noarch",
-            "az://acct.blob.core.windows.net/general//noarch",
-            "az://127.0.0.1:10000//devstoreaccount1/general",
-        ] {
-            assert!(
-                matches!(
-                    AzureChannelUrl::parse(input),
-                    Err(AzureUrlError::EmptyPathSegment { .. })
-                ),
-                "expected a rejection for {input}"
-            );
-        }
-
-        assert_eq!(
-            channel("az://acct.blob.core.windows.net/general/")
-                .canonical()
-                .path(),
-            "/general/"
+        assert_rejects(
+            &[
+                "az://acct.blob.core.windows.net/general/%2e%2e/%2e%2e/othercontainer/x",
+                "az://127.0.0.1:10000/devstoreaccount1/general/%2e%2e/%2e%2e/otheraccount/othercontainer",
+                "az://acct.blob.core.windows.net/general/../../othercontainer",
+                "az://acct.blob.core.windows.net/general/./noarch",
+                "az://acct.blob.core.windows.net/general/%2E%2E/othercontainer",
+            ],
+            |err| matches!(err, AzureUrlError::DotSegmentInPath(_)),
         );
     }
 
     #[test]
+    fn an_empty_segment_is_rejected() {
+        assert_rejects(
+            &[
+                "az://acct.blob.core.windows.net//general/noarch",
+                "az://acct.blob.core.windows.net/general//noarch",
+                "az://127.0.0.1:10000//devstoreaccount1/general",
+            ],
+            |err| matches!(err, AzureUrlError::EmptyPathSegment { .. }),
+        );
+
+        assert_canonical_paths(&[("az://acct.blob.core.windows.net/general/", "/general/")]);
+    }
+
+    #[test]
     fn a_malformed_percent_escape_is_rejected() {
-        for input in [
-            "az://acct.blob.core.windows.net/general/gen%eral",
-            "az://acct.blob.core.windows.net/general/100%",
-            "az://acct.blob.core.windows.net/general/%zz",
-        ] {
-            assert!(
-                matches!(
-                    AzureChannelUrl::parse(input),
-                    Err(AzureUrlError::MalformedPercentEscape { .. })
-                ),
-                "expected a rejection for {input}"
-            );
-        }
+        assert_rejects(
+            &[
+                "az://acct.blob.core.windows.net/general/gen%eral",
+                "az://acct.blob.core.windows.net/general/100%",
+                "az://acct.blob.core.windows.net/general/%zz",
+            ],
+            |err| matches!(err, AzureUrlError::MalformedPercentEscape { .. }),
+        );
     }
 
     #[test]
     fn unrewritten_paths_still_parse() {
-        for (input, path) in [
+        assert_canonical_paths(&[
             (
                 "az://acct.blob.core.windows.net/general/prefix",
                 "/general/prefix",
@@ -579,34 +468,23 @@ mod tests {
                 "az://acct.blob.core.windows.net/general/..hidden/...",
                 "/general/..hidden/...",
             ),
-        ] {
-            assert_eq!(channel(input).canonical().path(), path, "{input}");
-        }
+        ]);
     }
 
     #[test]
     fn segments_that_cannot_name_a_blob_are_rejected() {
-        for input in [
-            "az://acct.blob.core.windows.net/general/%ff",
-
-            // only becomes invalid UTF-8 once the parser encodes the raw character
-            "az://acct.blob.core.windows.net/general/caf%C3é",
-            "az://acct.blob.core.windows.net/general/%C3é",
-        ] {
-            assert!(
-                matches!(
-                    AzureChannelUrl::parse(input),
-                    Err(AzureUrlError::NonUtf8Path { .. })
-                ),
-                "expected a rejection for {input}"
-            );
-        }
+        assert_rejects(
+            &[
+                "az://acct.blob.core.windows.net/general/%ff",
+                // only becomes invalid UTF-8 once the parser encodes the raw character
+                "az://acct.blob.core.windows.net/general/caf%C3é",
+                "az://acct.blob.core.windows.net/general/%C3é",
+            ],
+            |err| matches!(err, AzureUrlError::NonUtf8Path { .. }),
+        );
 
         // An encoded slash past the container is a blob name containing a slash,
-        // which Azure supports. It cannot move the container, which is read from a
-        // separate raw segment, and `ContainerName`'s charset admits neither `/`
-        // nor `%`, so the boundary is held by the type rather than by banning the
-        // escape everywhere.
+        // which Azure supports
         for input in [
             "az://acct.blob.core.windows.net/general/a%2Fb",
             "az://acct.blob.core.windows.net/general/a%2fb",
@@ -618,7 +496,7 @@ mod tests {
             );
         }
 
-        for (input, path) in [
+        assert_canonical_paths(&[
             (
                 "az://acct.blob.core.windows.net/general/café",
                 "/general/caf%C3%A9",
@@ -627,53 +505,45 @@ mod tests {
                 "az://acct.blob.core.windows.net/general/with space",
                 "/general/with%20space",
             ),
-        ] {
-            assert_eq!(channel(input).canonical().path(), path, "{input}");
-        }
-
-        assert_eq!(
-            channel("az://acct.blob.core.windows.net/general/caf%C3%A9")
-                .canonical()
-                .path(),
-            "/general/caf%C3%A9"
-        );
+            (
+                "az://acct.blob.core.windows.net/general/caf%C3%A9",
+                "/general/caf%C3%A9",
+            ),
+        ]);
     }
 }
 
 #[cfg(test)]
 mod debug_redaction_tests {
     use super::*;
+    use crate::test_support::channel;
 
-    #[test]
-    fn only_the_wire_spelling_carries_the_signature() {
-        let channel = AzureChannelUrl::parse(
-            "az://acct.blob.core.windows.net/general/p?sv=2024-11-04&sig=SECRETSIG&se=z",
-        )
-        .unwrap();
-
-        for shown in [
+    fn masked_spellings(channel: &AzureChannelUrl) -> [String; 3] {
+        [
             channel.canonical().to_string(),
             channel.to_string(),
             format!("{channel:?}"),
-        ] {
+        ]
+    }
+
+    #[test]
+    fn only_the_wire_spelling_carries_the_signature() {
+        let signed =
+            channel("az://acct.blob.core.windows.net/general/p?sv=2024-11-04&sig=SECRETSIG&se=z");
+
+        for shown in masked_spellings(&signed) {
             assert!(!shown.contains("SECRETSIG"), "signature leaked: {shown}");
             assert!(shown.contains("sv=2024-11-04"), "over-redacted: {shown}");
             assert!(shown.contains("se=z"), "over-redacted: {shown}");
         }
 
-        let fragmented =
-            AzureChannelUrl::parse("az://acct.blob.core.windows.net/general/p?sv=1#sig=SECRETFRAG")
-                .unwrap();
-        for shown in [
-            fragmented.canonical().to_string(),
-            fragmented.to_string(),
-            format!("{fragmented:?}"),
-        ] {
+        let fragmented = channel("az://acct.blob.core.windows.net/general/p?sv=1#sig=SECRETFRAG");
+        for shown in masked_spellings(&fragmented) {
             assert!(!shown.contains("SECRETFRAG"), "signature leaked: {shown}");
         }
 
         assert!(
-            channel
+            signed
                 .wire(AzureScheme::Https)
                 .to_string()
                 .contains("sig=SECRETSIG"),

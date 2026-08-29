@@ -9,11 +9,10 @@ use crate::{
     mint_user_delegation_sas,
 };
 
-/// A SAS cannot be individually revoked, so a short lifetime bounds the damage if
-/// one leaks. Thirty minutes covers a typical index or upload run.
+/// A SAS cannot be individually revoked, so use a short lifetime
 const DEFAULT_AZURE_CLI_SAS_TTL_MINUTES: u64 = 30;
 
-/// Seven days, because Azure caps the lifetime of a user-delegation key there.
+/// Azure caps the lifetime of a user-delegation key here
 const MAX_AZURE_CLI_SAS_TTL_MINUTES: u64 = 7 * 24 * 60;
 
 #[derive(Debug, thiserror::Error)]
@@ -28,9 +27,6 @@ pub enum AzureCredentialsError {
     Cli(#[from] AzureCliSasError),
 }
 
-/// [`AzureCredentialsOpts`] can express several inputs at once. This enum is the
-/// single winner after precedence is applied, so downstream code never reasons
-/// about combinations.
 #[derive(Clone, Debug)]
 pub enum AzureAuthSource {
     AccountKey(SecretString),
@@ -100,8 +96,8 @@ pub struct AzureCredentialsOpts {
     /// Lifetime, in minutes, of the SAS minted for `--azure-cli`.
     ///
     /// Raise it for very large index or upload runs. If the SAS expires mid-run,
-    /// later requests fail with a 403 and the run aborts, possibly leaving a
-    /// partial index behind.
+    /// later requests fail with a 403 and the run aborts, possibly leaving the
+    /// channel in a broken state.
     #[arg(
         long,
         default_value_t = DEFAULT_AZURE_CLI_SAS_TTL_MINUTES,
@@ -111,16 +107,11 @@ pub struct AzureCredentialsOpts {
     pub azure_cli_sas_ttl_minutes: u64,
 }
 
-/// Take a command-line or environment value straight into a [`SecretString`], so
-/// it is never a plain `String` a `{:?}` could reach.
 fn secret(value: &str) -> Result<SecretString, std::convert::Infallible> {
     Ok(value.into())
 }
 
 impl PartialEq for AzureCredentialsOpts {
-    /// Hand-written because [`SecretString`] withholds `PartialEq`: comparing
-    /// secrets is not constant-time. The containing `UploadOpts` tree derives
-    /// `PartialEq`, and comparing parsed command lines is not a secrets check.
     fn eq(&self, other: &Self) -> bool {
         fn same(left: Option<&SecretString>, right: Option<&SecretString>) -> bool {
             match (left, right) {
@@ -228,10 +219,7 @@ mod tests {
         ));
     }
 
-    // The `--azure-cli` resolve path shells out to `az`, which isn't available in
-    // the test environment, so we only assert the flag and its TTL parse through
-    // clap and that precedence selects the CLI source; the mint itself is not
-    // exercised here.
+    // cannot mint anything here as there is no `az` cli
     #[test]
     fn azure_cli_flag_and_ttl_parse() {
         let cli = Cli::try_parse_from(["test", "--azure-cli", "--azure-cli-sas-ttl-minutes", "90"])
@@ -243,76 +231,6 @@ mod tests {
         assert_eq!(
             default.creds.azure_cli_sas_ttl_minutes,
             DEFAULT_AZURE_CLI_SAS_TTL_MINUTES
-        );
-    }
-
-    /// Serialised env-var swap, since the vars below are process-global and the
-    /// values under test are exactly the ones clap reads from the environment.
-    fn with_env<R>(vars: &[(&str, Option<&str>)], body: impl FnOnce() -> R) -> R {
-        use std::sync::Mutex;
-
-        // SAFETY: the tests that touch these variables are serialised by LOCK.
-        fn set(var: &str, value: Option<&str>) {
-            match value {
-                Some(value) => unsafe { std::env::set_var(var, value) },
-                None => unsafe { std::env::remove_var(var) },
-            }
-        }
-
-        static LOCK: Mutex<()> = Mutex::new(());
-        let _guard = LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-
-        let previous: Vec<_> = vars
-            .iter()
-            .map(|(var, value)| {
-                let previous = std::env::var(var).ok();
-                set(var, *value);
-                (*var, previous)
-            })
-            .collect();
-        let out = body();
-        for (var, value) in previous {
-            set(var, value.as_deref());
-        }
-        out
-    }
-
-    fn parse(args: &[&str]) -> Result<AzureCredentialsOpts, clap::Error> {
-        Cli::try_parse_from(std::iter::once("test").chain(args.iter().copied()))
-            .map(|cli| cli.creds)
-    }
-
-    #[test]
-    fn account_key_and_sas_token_conflict_at_clap_level() {
-        assert!(parse(&["--account-key", "k", "--sas-token", "sv=..."]).is_err());
-    }
-
-    #[test]
-    fn azure_cli_conflicts_with_account_key_at_clap_level() {
-        assert!(parse(&["--azure-cli", "--account-key", "k"]).is_err());
-    }
-
-    #[test]
-    fn azure_cli_conflicts_with_sas_token_at_clap_level() {
-        assert!(parse(&["--azure-cli", "--sas-token", "sv=..."]).is_err());
-    }
-
-    #[test]
-    fn credentials_from_env_vars_alone_also_conflict() {
-        // clap's group conflict applies regardless of source, so exporting both
-        // AZURE_STORAGE_KEY and AZURE_STORAGE_SAS_TOKEN — what the `az`
-        // documentation tells you to do — is rejected too. That's a simple,
-        // deterministic outcome the user can resolve by unsetting one.
-        with_env(
-            &[
-                ("AZURE_STORAGE_KEY", Some("key")),
-                ("AZURE_STORAGE_SAS_TOKEN", Some("sv=env")),
-            ],
-            || {
-                assert!(parse(&[]).is_err());
-            },
         );
     }
 

@@ -25,26 +25,16 @@ impl AzureHost {
             });
         }
 
-        // Two parses, each for the one thing it is authoritative about, because no
-        // single scheme gives both. `https` is a special scheme, so it runs the URL
-        // Standard's host parser: lowercasing, IDNA, and IP literals as typed
-        // `Ipv4`/`Ipv6` hosts — but it also drops `:443`. `az` is not special, so
-        // it has no default port to drop, but its opaque-host parsing leaves the
-        // host unnormalized (`MyCompany.X` stays mixed case, `127.0.0.1` arrives as
-        // a `Domain`). Host from the first, port from the second.
+        // parse as https to properly handle hosts but this drops `:443`, so parse as `az` for port
         let normalized = Self::parse_as(authority, "https")?;
         let verbatim = Self::parse_as(authority, "az")?;
 
-        // `url` reads a bare trailing colon as "no port at all", so `host:` would
-        // otherwise be accepted as `host` — a silent downgrade to a different
-        // endpoint, so a dangling colon is an explicit error rather than being
-        // read as "no port". Port 0 it keeps, and `wire()` then hands out
-        // `https://host:0/…`, which no connection can be made to.
         let port_reason = match (Self::written_port(authority), verbatim.port()) {
             (Some(""), _) => Some("its port is empty"),
             (_, Some(0)) => Some("port 0 cannot be connected to"),
             _ => None,
         };
+
         if let Some(reason) = port_reason {
             return Err(AzureUrlError::InvalidHostAuthority {
                 authority: authority.to_string(),
@@ -56,8 +46,7 @@ impl AzureHost {
         Self::normalized(host, verbatim.port(), authority)
     }
 
-    /// The text after the authority's last `:`, unless that text ends with `]` —
-    /// the closing bracket of an IPv6 literal that spells no port.
+    /// The text after the authority's last `:`, unless that text is an IPv6 literal
     fn written_port(authority: &str) -> Option<&str> {
         let (_, port) = authority.rsplit_once(':')?;
         (!port.ends_with(']')).then_some(port)

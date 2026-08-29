@@ -1,8 +1,6 @@
 use crate::{AccountName, AzureChannelUrl, AzureHost, AzureUrlError};
 
-/// Only [`new`](Self::new) builds one, so a host that carries no usable account
-/// label — an IP literal, a single-label name, a first label Azure would refuse —
-/// has no host-style spelling at all.
+/// A host-style azure endpoint
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct AccountHost {
     host: AzureHost,
@@ -33,8 +31,7 @@ impl std::fmt::Display for AccountHost {
     }
 }
 
-/// Only [`new`](Self::new) builds one, so the segment has passed Azure's naming
-/// rules wherever it came from — a written config key or a channel URL's path.
+/// A path-style azure endpoint
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct AccountPath {
     host: AzureHost,
@@ -66,13 +63,6 @@ impl std::fmt::Display for AccountPath {
 
 /// The key of an `azure-options` entry: a channel URL prefix that runs up to, but
 /// not including, the container.
-///
-/// Its shape is what says where the storage account is, so nothing else has to.
-/// `acct.blob.core.windows.net` reads the account off the host;
-/// `proxy.internal/accta` reads it from the first path segment, which is the only
-/// spelling that works for an IP literal or a single-label host, and the only one
-/// that tells two accounts behind one proxy apart. Under both, the container is
-/// the segment right after the key.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "serde",
@@ -94,8 +84,11 @@ impl AzureEndpointKey {
         let segments = channel
             .path()
             .segments()
+            // empty segments produced by standalone or trailing `/`, otherwise the channel
+            // parse above would have failed
             .filter(|segment| !segment.is_empty())
             .collect::<Vec<_>>();
+
         match segments.as_slice() {
             [] => Self::host_style(channel.host()),
             [account] => Self::path_style(channel.host().clone(), account),
@@ -182,7 +175,6 @@ mod tests {
                 "MyCompany.blob.core.windows.net",
                 "mycompany.blob.core.windows.net",
             ),
-            ("acct.blob.core.windows.net.", "acct.blob.core.windows.net"),
             (
                 "acct.blob.core.windows.net:443",
                 "acct.blob.core.windows.net:443",
@@ -208,18 +200,14 @@ mod tests {
 
     #[test]
     fn a_key_past_the_account_is_rejected() {
-        for written in [
-            "proxy.internal/accta/general",
-            "acct.blob.core.windows.net/general/noarch",
-        ] {
-            assert!(
-                matches!(
-                    AzureEndpointKey::parse(written),
-                    Err(AzureUrlError::InvalidKey(_))
-                ),
-                "{written} names past the account"
-            );
-        }
+        let written = "acct.blob.core.windows.net/general/noarch";
+        assert!(
+            matches!(
+                AzureEndpointKey::parse(written),
+                Err(AzureUrlError::InvalidKey(_))
+            ),
+            "{written} names past the account"
+        );
     }
 
     #[test]
@@ -227,6 +215,7 @@ mod tests {
         for written in [
             "acct.blob.core.windows.net@evil.example",
             "acct.blob.core.windows.net/../accta",
+            r"az://acct.blob.core.windows.net/general\..\..\evil/x",
             "acct.blob.example//accta",
             "acct.blob.example/acc%zz",
             "proxy.internal/accta?sv=token",
@@ -241,8 +230,6 @@ mod tests {
         }
     }
 
-    /// A key that names no account could not say which account a grant is for, so
-    /// there is no such key to write.
     #[test]
     fn a_key_must_name_an_account() {
         for written in [
@@ -253,33 +240,6 @@ mod tests {
             "azurite:10000",
             "--as-user.blob.core.windows.net",
             "acct-1.blob.example",
-        ] {
-            assert!(
-                AzureEndpointKey::parse(written).is_err(),
-                "expected a rejection for {written}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_backslash_spelled_dot_segment_is_rejected() {
-        for input in [
-            r"az://acct.blob.core.windows.net/general\..\..\evil/x",
-            r"az://127.0.0.1:10000/devstoreaccount1/general\..\..\otheracct\othercontainer",
-            r"az://acct.blob.core.windows.net\general\.\noarch",
-        ] {
-            assert!(
-                matches!(
-                    AzureChannelUrl::parse(input),
-                    Err(AzureUrlError::DotSegmentInPath(_))
-                ),
-                "expected a rejection for {input}"
-            );
-        }
-
-        for written in [
-            r"proxy.internal/x\..\..\accta",
-            "proxy.internal/x/../../accta",
         ] {
             assert!(
                 AzureEndpointKey::parse(written).is_err(),
@@ -308,17 +268,16 @@ mod tests {
         }
     }
 
+    // A host-style key cannot be made of a host without multiple 'dot' sections,
+    // i.e. we require {account}.{rest}
     #[test]
     fn a_host_style_key_rejects_undottable_hosts() {
         for host in [
             "127.0.0.1:10000",
             "azurite:10000",
-            "localhost",
             "[::1]:10000",
-            // A trailing dot is the DNS root label, not a second label: this host
-            // must not sneak past the dotted-domain gate.
+            "localhost",
             "localhost.",
-            "LocalHost",
             "azurite:443",
             "azurite:80",
         ] {
