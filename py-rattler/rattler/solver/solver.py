@@ -37,6 +37,7 @@ async def solve(
     channel_relations: Optional[ChannelRelationsMode] = None,
     channel_relations_max_depth: Optional[int] = None,
     add_pip_as_python_dependency: bool = False,
+    package_format_selection: Optional[PackageFormatSelection] = None,
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -92,6 +93,7 @@ async def solve(
             ``channel_relations``. ``0`` behaves like ``channel_relations="disabled"``.
         add_pip_as_python_dependency: Add `pip` as a dependency of Python 2 and 3
             package records before solving.
+        package_format_selection: Defines which package formats are selected
 
     Returns:
         Resolved list of `RepoDataRecord`s.
@@ -140,6 +142,7 @@ async def solve(
             channel_relations=channel_relations,
             channel_relations_max_depth=channel_relations_max_depth,
             add_pip_as_python_dependency=add_pip_as_python_dependency,
+            package_format_selection=package_format_selection.value if package_format_selection is not None else None,
         )
     ]
 

@@ -506,3 +506,53 @@ async def test_solve_with_sparse_repodata_with_wheels() -> None:
     # solve needs to include these two packages
     assert "starlette" in package_names
     assert "python" in package_names
+
+
+@pytest.mark.asyncio
+async def test_solve_repodata_with_wheels() -> None:
+    """
+    Test that solve when repodata includes `packages.whl` works as expected.
+    """
+    from rattler import GenericVirtualPackage, PackageName, Version
+
+    chn = Channel("with-wheels")
+
+    data_dir = os.path.join(os.path.dirname(__file__), "../../../test-data/")
+    noarch_path = os.path.join(data_dir, "channels/with-wheels/noarch/repodata.json")
+    noarch_data = SparseRepoData(
+        channel=chn,
+        subdir="noarch",
+        path=noarch_path,
+    )
+    linux_64_path = os.path.join(data_dir, "channels/with-wheels/linux-64/repodata.json")
+    linux_64_data = SparseRepoData(
+        channel=chn,
+        subdir="linux-64",
+        path=linux_64_path,
+    )
+
+    # Test: Version-conditional dependency - when side-dependency=0.2 is requested,
+    # "package" should be included due to the conditional "package; if side-dependency=0.2"
+    solved_data = await solve(
+        [noarch_data, linux_64_data],
+        [MatchSpec("starlette")],
+        virtual_packages=[
+            GenericVirtualPackage(PackageName("__unix"), Version("15"), "0"),
+            GenericVirtualPackage(PackageName("__linux"), Version("0"), "0"),
+        ],
+        package_format_selection=PackageFormatSelection.PREFER_CONDA_WITH_WHL,
+    )
+
+    whl_files = sum(r.file_name.endswith(".whl") for r in solved_data)
+    conda_files = sum(r.file_name.endswith(".conda") for r in solved_data)
+    tar_bz2_files = sum(r.file_name.endswith(".tar.bz2") for r in solved_data)
+
+    assert whl_files == 2
+    assert conda_files == 21
+    assert tar_bz2_files == 4
+
+    assert isinstance(solved_data, list)
+    package_names = [r.name.normalized for r in solved_data]
+    # solve needs to include these two packages
+    assert "starlette" in package_names
+    assert "python" in package_names
