@@ -287,6 +287,24 @@ where
         self.map
             .retain(|_, v| matches!(v, PendingOrFetched::Pending(_)));
     }
+
+    /// Removes the cached value for `key` if it has been successfully fetched.
+    ///
+    /// Returns `Some(value)` if a `Fetched` entry was removed, or `None` if the
+    /// key was not present or is currently `Pending` (i.e. an in-flight
+    /// initialization is in progress and will not be disrupted).
+    pub fn remove(&self, key: &K) -> Option<V> {
+        // Only remove the entry when it is in the `Fetched` state.  If it is
+        // `Pending` we must leave it alone so that the in-flight initializer
+        // and any waiters subscribed to its broadcast channel are unaffected.
+        let removed = self
+            .map
+            .remove_if(key, |_, v| matches!(v, PendingOrFetched::Fetched(_)));
+        removed.and_then(|(_, v)| match v {
+            PendingOrFetched::Fetched(value) => Some(value),
+            PendingOrFetched::Pending(_) => None,
+        })
+    }
 }
 
 /// Internal state for a coalesced entry.
@@ -696,6 +714,66 @@ mod tests {
             .unwrap();
 
         assert_eq!(result2, "value2");
+    }
+
+    #[tokio::test]
+    async fn test_remove_fetched_entry() {
+        let map: CoalescedMap<String, String> = CoalescedMap::new();
+
+        // Insert a value
+        map.get_or_try_init("key1".to_string(), || async {
+            Ok::<_, &str>("value1".to_string())
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(map.get(&"key1".to_string()), Some("value1".to_string()));
+
+        // remove should return the evicted value
+        assert_eq!(map.remove(&"key1".to_string()), Some("value1".to_string()));
+        assert_eq!(map.get(&"key1".to_string()), None);
+        assert_eq!(map.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_remove_nonexistent_key() {
+        let map: CoalescedMap<String, String> = CoalescedMap::new();
+
+        // Removing a key that was never inserted should return None
+        assert_eq!(map.remove(&"ghost".to_string()), None);
+        assert!(map.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_remove_pending_entry_is_noop() {
+        let map = Arc::new(CoalescedMap::new());
+        let barrier = Arc::new(tokio::sync::Barrier::new(2));
+
+        let map1 = map.clone();
+        let barrier1 = barrier.clone();
+        let handle = tokio::spawn(async move {
+            map1.get_or_try_init("pending_key".to_string(), || {
+                let barrier = barrier1.clone();
+                async move {
+                    barrier.wait().await;
+                    // Park here so the entry stays Pending for the duration of the test.
+                    let () = std::future::pending().await;
+                    #[allow(unreachable_code)]
+                    Ok::<_, &str>("never".to_string())
+                }
+            })
+            .await
+        });
+
+        // Wait until the initializer has started and the entry is Pending.
+        barrier.wait().await;
+
+        // remove on a Pending entry must be a no-op (returns None, entry stays).
+        assert_eq!(map.remove(&"pending_key".to_string()), None);
+        assert_eq!(map.len(), 1, "Pending entry must not be removed");
+
+        handle.abort();
+        let _ = handle.await;
     }
 
     #[tokio::test]
