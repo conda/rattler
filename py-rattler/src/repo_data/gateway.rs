@@ -24,7 +24,7 @@ use crate::platform::PyPlatform;
 use crate::record::PyRecord;
 use crate::repo_data::PyChannelRelations;
 use crate::repo_data::source::PyRepoDataSource;
-use crate::repo_data::sparse::PySparseRepoData;
+use crate::repo_data::sparse::{PyPackageFormatSelection, PySparseRepoData};
 use crate::{PyChannel, Wrap};
 
 #[pyclass(from_py_object)]
@@ -283,6 +283,7 @@ impl PyGateway {
         channel_relations=None,
         channel_relations_max_depth=None,
         channel_notices=false,
+        package_format_selection=None,
     ))]
     #[allow(clippy::too_many_arguments)]
     pub fn query<'a>(
@@ -295,6 +296,7 @@ impl PyGateway {
         channel_relations: Option<Wrap<ChannelRelationsMode>>,
         channel_relations_max_depth: Option<usize>,
         channel_notices: bool,
+        package_format_selection: Option<PyPackageFormatSelection>,
     ) -> PyResult<Bound<'a, PyAny>> {
         // Convert Python sources to Rust Source enum
         let rust_sources: Vec<Source> = sources
@@ -315,6 +317,9 @@ impl PyGateway {
             }
             if let Some(depth) = channel_relations_max_depth {
                 query = query.channel_relations_max_depth(depth);
+            }
+            if let Some(package_format) = package_format_selection {
+                query = query.package_format_selection(package_format.into());
             }
 
             if show_progress {
@@ -350,7 +355,9 @@ impl PyGateway {
         channel_relations=None,
         channel_relations_max_depth=None,
         channel_notices=false,
+        package_format_selection=None,
     ))]
+    #[allow(clippy::too_many_arguments)]
     pub fn names<'a>(
         &self,
         py: Python<'a>,
@@ -359,6 +366,7 @@ impl PyGateway {
         channel_relations: Option<Wrap<ChannelRelationsMode>>,
         channel_relations_max_depth: Option<usize>,
         channel_notices: bool,
+        package_format_selection: Option<PyPackageFormatSelection>,
     ) -> PyResult<Bound<'a, PyAny>> {
         // Convert Python sources to Rust Source enum
         let rust_sources: Vec<Source> = sources
@@ -382,6 +390,8 @@ impl PyGateway {
 
         let platforms_vec: Vec<rattler_conda_types::Platform> =
             platforms.into_iter().map(|p| p.inner).collect();
+        let format_selection: rattler_repodata_gateway::sparse::PackageFormatSelection =
+            package_format_selection.map(Into::into).unwrap_or_default();
 
         let gateway = self.inner.clone();
         let show_progress = self.show_progress;
@@ -420,6 +430,20 @@ impl PyGateway {
                 for platform in &platforms_vec {
                     let names = custom_source.package_names(*platform);
                     for name_str in names {
+                        if let Ok(name) = name_str.parse() {
+                            all_names.insert(name);
+                        }
+                    }
+                }
+            }
+
+            // Collect names from sparse repodata sources directly
+            for sparse in &sparse_sources {
+                if platforms_vec
+                    .iter()
+                    .any(|platform| platform.as_str() == sparse.subdir())
+                {
+                    for name_str in sparse.package_names(format_selection) {
                         if let Ok(name) = name_str.parse() {
                             all_names.insert(name);
                         }
