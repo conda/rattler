@@ -62,6 +62,8 @@
 //! ```
 
 pub mod fetch;
+#[cfg(feature = "repoquery")]
+pub mod repoquery;
 mod reporter;
 #[cfg(feature = "sparse")]
 pub mod sparse;
