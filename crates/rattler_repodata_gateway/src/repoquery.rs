@@ -5,13 +5,80 @@
 //! `SparseRepoData`) and perform no I/O themselves.
 //!
 //! Currently this module provides [`who_needs`], the equivalent of
-//! `conda repoquery whoneeds`: given a package (or match spec), find all
-//! records that reference it through their `depends` (and optionally
-//! `constrains`) entries.
+//! `conda repoquery whoneeds`: given a package, find all records that
+//! reference it through their `depends`, `constrains`, or run exports.
 
-use std::collections::{HashMap, HashSet};
+use rattler_conda_types::{MatchSpec, PackageName, ParseMatchSpecOptions, RepoDataRecord, Version};
 
-use rattler_conda_types::{MatchSpec, Matches, PackageName, ParseMatchSpecOptions, RepoDataRecord};
+/// The concrete package to find reverse dependencies for with [`who_needs`].
+///
+/// Unlike a `MatchSpec`, this describes a single concrete package — a name,
+/// optionally pinned to a version and build string — so that the dependency
+/// match specs of candidate records can be unambiguously matched against it.
+#[derive(Debug, Clone)]
+pub struct WhoNeedsTarget {
+    /// The name of the package.
+    pub name: PackageName,
+
+    /// The version of the package. When `None`, matching is purely name
+    /// based and version constraints on dependencies are ignored.
+    pub version: Option<Version>,
+
+    /// The build string of the package. When `None`, build string
+    /// constraints on dependencies are ignored.
+    pub build: Option<String>,
+}
+
+impl WhoNeedsTarget {
+    /// Constructs a target that matches any version of `name`.
+    pub fn new(name: PackageName) -> Self {
+        Self {
+            name,
+            version: None,
+            build: None,
+        }
+    }
+
+    /// Restricts the target to a concrete version.
+    #[must_use]
+    pub fn with_version(self, version: Version) -> Self {
+        Self {
+            version: Some(version),
+            ..self
+        }
+    }
+
+    /// Restricts the target to a concrete build string.
+    #[must_use]
+    pub fn with_build(self, build: impl Into<String>) -> Self {
+        Self {
+            build: Some(build.into()),
+            ..self
+        }
+    }
+}
+
+impl From<PackageName> for WhoNeedsTarget {
+    fn from(name: PackageName) -> Self {
+        Self::new(name)
+    }
+}
+
+/// The run export field through which a record references the queried
+/// package.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RunExportKind {
+    /// The `weak` run exports (applied from host to run).
+    Weak,
+    /// The `strong` run exports (applied from build to host and run).
+    Strong,
+    /// The `noarch` run exports (applied only to noarch packages).
+    Noarch,
+    /// The `weak_constrains` run exports.
+    WeakConstrains,
+    /// The `strong_constrains` run exports.
+    StrongConstrains,
+}
 
 /// How a dependent record references the queried package.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -20,255 +87,164 @@ pub enum DependencyKind {
     Depends,
     /// The package is referenced through the `constrains` field.
     Constrains,
+    /// The package is referenced through a run export: using the record as
+    /// a build/host dependency injects a dependency on the queried package.
+    RunExport(RunExportKind),
 }
 
-/// A record that (transitively) references the package queried through
-/// [`who_needs`].
+/// A record that references the package queried through [`who_needs`].
 #[derive(Debug, Clone)]
 pub struct Dependent<'r> {
     /// The record that references the queried package.
     pub record: &'r RepoDataRecord,
 
     /// The dependency string through which [`Self::record`] references the
-    /// queried package (for a direct dependent) or the previous level of
-    /// dependents (for a transitive one).
+    /// queried package.
     pub dependency: &'r str,
 
-    /// Whether [`Self::dependency`] comes from the `depends` or the
-    /// `constrains` field of the record.
+    /// The field of the record that [`Self::dependency`] comes from.
     pub kind: DependencyKind,
-
-    /// The distance from the queried package: `1` for a record that
-    /// references the package directly, `2` for a record that references a
-    /// direct dependent, and so on. Always `1` unless
-    /// [`WhoNeedsOptions::recursive`] is enabled. When a record is reachable
-    /// at multiple depths, the smallest depth is reported.
-    pub depth: usize,
-}
-
-/// Options that control the behavior of [`who_needs`].
-#[derive(Debug, Clone, Default)]
-pub struct WhoNeedsOptions {
-    /// Also report records that reference the queried package through their
-    /// `constrains` field. Disabled by default.
-    pub include_constrains: bool,
-
-    /// Also report records that reference the queried package transitively:
-    /// packages that depend on a package that (transitively) depends on the
-    /// queried package. Disabled by default.
-    pub recursive: bool,
-}
-
-/// An error returned by [`who_needs`].
-#[derive(Debug, thiserror::Error)]
-pub enum WhoNeedsError {
-    /// The queried match spec does not have an exact package name (e.g. a
-    /// glob or regex name), which reverse dependency lookup requires.
-    #[error("the match spec '{0}' does not contain an exact package name")]
-    MatchSpecWithoutExactName(Box<MatchSpec>),
 }
 
 /// Returns all records in `records` that reference the package described by
-/// `spec` — the equivalent of `conda repoquery whoneeds`.
+/// `target` — the equivalent of `conda repoquery whoneeds`.
 ///
-/// The `spec` must contain an exact package name. When it carries nothing
-/// but a name, matching is purely name based: every record with a `depends`
-/// entry (or `constrains` entry, when
-/// [`WhoNeedsOptions::include_constrains`] is enabled) on that name is
-/// reported. This also makes it possible to query for virtual packages
-/// (e.g. `__cuda`) which have no records of their own.
+/// A record references the target when one of its `depends` or `constrains`
+/// entries, or one of its run exports, matches the target; the
+/// [`Dependent::kind`] of each result tells which field matched, so callers
+/// interested in only some of the kinds can simply filter the result. Note
+/// that run exports can only be found on records that carry them (e.g.
+/// repodata patched with run export information, or records enriched
+/// through the gateway's run export extraction).
 ///
-/// When the spec additionally constrains the version, build, or build
-/// number (e.g. `python >=3.13`), a dependent is only reported if its
-/// dependency constraint admits at least one record in `records` that
-/// matches `spec`. In other words: "who could use a python that matches
-/// `>=3.13`".
+/// When the target carries nothing but a name, matching is purely name
+/// based: every record with a dependency entry on that name is reported.
+/// This also makes it possible to query for virtual packages (e.g.
+/// `__cuda`) which have no records of their own.
+///
+/// When the target additionally carries a version (and optionally a build
+/// string), a dependent is only reported if its dependency match spec
+/// matches that concrete package. For example, with target
+/// `python 3.13.1` a record depending on `python >=3.9` is reported while
+/// a record depending on `python >=3.8,<3.10` is not.
 ///
 /// Note that reverse dependency lookup requires the *complete* set of
 /// records of the queried channels and platforms — any record not passed in
 /// here is invisible to the search. Use a wildcard gateway query (spec `*`)
 /// or `SparseRepoData` to obtain them.
 ///
-/// The result is ordered by ascending [`Dependent::depth`]; within a depth
-/// records keep the order of `records`. Every record is reported at most
-/// once, through the first dependency string that matches (`depends`
-/// entries take precedence over `constrains` entries).
+/// The result keeps the order of `records`. Every record is reported at
+/// most once per [`DependencyKind`], through the first dependency string of
+/// that field that matches.
 pub fn who_needs<'r>(
     records: impl IntoIterator<Item = &'r RepoDataRecord>,
-    spec: &MatchSpec,
-    options: &WhoNeedsOptions,
-) -> Result<Vec<Dependent<'r>>, WhoNeedsError> {
-    let target_name = spec
-        .name
-        .clone()
-        .into_exact()
-        .ok_or_else(|| WhoNeedsError::MatchSpecWithoutExactName(Box::new(spec.clone())))?;
-    let target_name = target_name.as_normalized();
-
-    let records: Vec<&'r RepoDataRecord> = records.into_iter().collect();
-
-    // When the spec constrains more than the name, collect the records that
-    // match it so dependency constraints can be checked against them.
-    let is_constrained =
-        spec.version.is_some() || spec.build.is_some() || spec.build_number.is_some();
-    let targets: Vec<&RepoDataRecord> = if is_constrained {
-        records
-            .iter()
-            .copied()
-            .filter(|record| spec.matches(*record))
-            .collect()
-    } else {
-        Vec::new()
-    };
+    target: &WhoNeedsTarget,
+) -> Vec<Dependent<'r>> {
+    let target_name = target.name.as_normalized();
+    let is_pinned = target.version.is_some() || target.build.is_some();
 
     let edge_matches = |dependency: &str| -> bool {
         if PackageName::normalized_name_from_matchspec_str(dependency) != target_name {
             return false;
         }
-        if !is_constrained {
+        if !is_pinned {
             return true;
         }
         match MatchSpec::from_str(dependency, ParseMatchSpecOptions::lenient()) {
-            Ok(dependency_spec) => targets
-                .iter()
-                .any(|target| dependency_spec.matches(&target.package_record)),
+            Ok(dependency_spec) => {
+                let version_matches = match (&target.version, &dependency_spec.version) {
+                    (Some(version), Some(constraint)) => constraint.matches(version),
+                    _ => true,
+                };
+                let build_matches = match (&target.build, &dependency_spec.build) {
+                    (Some(build), Some(matcher)) => matcher.matches(build),
+                    _ => true,
+                };
+                version_matches && build_matches
+            }
             // A dependency string that names the package but fails to parse
             // is reported rather than silently dropped.
             Err(_) => true,
         }
     };
 
-    // Direct dependents.
     let mut result = Vec::new();
-    let mut emitted: HashSet<usize> = HashSet::new();
-    let mut frontier: Vec<&str> = Vec::new();
-    let mut visited_names: HashSet<&str> = HashSet::from([target_name]);
-    for (idx, record) in records.iter().enumerate() {
-        let Some((dependency, kind)) = first_matching_edge(record, options, &edge_matches) else {
-            continue;
-        };
-        emitted.insert(idx);
-        let name = record.package_record.name.as_normalized();
-        if visited_names.insert(name) {
-            frontier.push(name);
-        }
-        result.push(Dependent {
-            record,
-            dependency,
-            kind,
-            depth: 1,
-        });
-    }
-
-    if !options.recursive || result.is_empty() {
-        return Ok(result);
-    }
-
-    // Transitive dependents: breadth-first search over a reverse dependency
-    // index, so every record and edge is visited at most once regardless of
-    // the number of levels.
-    let mut reverse_index: HashMap<String, Vec<(usize, &'r str, DependencyKind)>> = HashMap::new();
-    for (idx, record) in records.iter().enumerate() {
-        for (dependencies, kind) in dependency_fields(record, options) {
-            for dependency in dependencies {
-                let name = PackageName::normalized_name_from_matchspec_str(dependency);
-                // Allocates only once per unique dependency name.
-                match reverse_index.get_mut(name.as_ref()) {
-                    Some(edges) => edges.push((idx, dependency, kind)),
-                    None => {
-                        reverse_index.insert(name.into_owned(), vec![(idx, dependency, kind)]);
-                    }
-                }
-            }
-        }
-    }
-
-    let mut depth = 1;
-    while !frontier.is_empty() {
-        depth += 1;
-        // Sort for deterministic traversal order within a depth.
-        frontier.sort_unstable();
-        let mut next_frontier = Vec::new();
-        for name in frontier {
-            let Some(edges) = reverse_index.get(name) else {
+    for record in records {
+        for (dependencies, kind) in dependency_fields(record) {
+            let Some(dependency) = dependencies
+                .iter()
+                .find(|dependency| edge_matches(dependency))
+            else {
                 continue;
             };
-            for &(idx, dependency, kind) in edges {
-                if !emitted.insert(idx) {
-                    continue;
-                }
-                let record = records[idx];
-                let record_name = record.package_record.name.as_normalized();
-                if visited_names.insert(record_name) {
-                    next_frontier.push(record_name);
-                }
-                result.push(Dependent {
-                    record,
-                    dependency,
-                    kind,
-                    depth,
-                });
-            }
+            result.push(Dependent {
+                record,
+                dependency,
+                kind,
+            });
         }
-        frontier = next_frontier;
     }
-
-    Ok(result)
+    result
 }
 
-/// Returns the dependency fields of `record` to consider, in match
-/// precedence order.
-fn dependency_fields<'r>(
-    record: &'r RepoDataRecord,
-    options: &WhoNeedsOptions,
-) -> impl Iterator<Item = (&'r [String], DependencyKind)> {
-    std::iter::once((
-        record.package_record.depends.as_slice(),
-        DependencyKind::Depends,
-    ))
-    .chain(options.include_constrains.then_some((
-        record.package_record.constrains.as_slice(),
-        DependencyKind::Constrains,
-    )))
-}
-
-/// Returns the first dependency string of `record` for which `edge_matches`
-/// returns true, together with the field it came from.
-fn first_matching_edge<'r>(
-    record: &'r RepoDataRecord,
-    options: &WhoNeedsOptions,
-    edge_matches: &impl Fn(&str) -> bool,
-) -> Option<(&'r str, DependencyKind)> {
-    dependency_fields(record, options)
-        .flat_map(|(dependencies, kind)| dependencies.iter().map(move |dep| (dep.as_str(), kind)))
-        .find(|(dependency, _)| edge_matches(dependency))
+/// Returns the dependency fields of `record` to consider.
+fn dependency_fields(record: &RepoDataRecord) -> [(&[String], DependencyKind); 7] {
+    const NO_DEPS: &[String] = &[];
+    let run_exports = record.package_record.run_exports.as_ref();
+    let run_export_field =
+        |field: fn(&rattler_conda_types::package::RunExportsJson) -> &Vec<String>| {
+            run_exports.map_or(NO_DEPS, |run_exports| field(run_exports).as_slice())
+        };
+    [
+        (
+            record.package_record.depends.as_slice(),
+            DependencyKind::Depends,
+        ),
+        (
+            record.package_record.constrains.as_slice(),
+            DependencyKind::Constrains,
+        ),
+        (
+            run_export_field(|re| &re.weak),
+            DependencyKind::RunExport(RunExportKind::Weak),
+        ),
+        (
+            run_export_field(|re| &re.strong),
+            DependencyKind::RunExport(RunExportKind::Strong),
+        ),
+        (
+            run_export_field(|re| &re.noarch),
+            DependencyKind::RunExport(RunExportKind::Noarch),
+        ),
+        (
+            run_export_field(|re| &re.weak_constrains),
+            DependencyKind::RunExport(RunExportKind::WeakConstrains),
+        ),
+        (
+            run_export_field(|re| &re.strong_constrains),
+            DependencyKind::RunExport(RunExportKind::StrongConstrains),
+        ),
+    ]
 }
 
 #[cfg(feature = "gateway")]
 impl crate::RepoDataQueryOutput {
     /// Returns all records in this query result that reference the package
-    /// described by `spec`. See [`who_needs`] for the exact semantics.
+    /// described by `target`. See [`who_needs`] for the exact semantics.
     ///
     /// Reverse dependency lookup requires the complete set of records of
     /// the queried channels and platforms, so the query this output came
     /// from should have used a wildcard spec (`*`).
-    pub fn who_needs(
-        &self,
-        spec: &MatchSpec,
-        options: &WhoNeedsOptions,
-    ) -> Result<Vec<Dependent<'_>>, WhoNeedsError> {
-        who_needs(
-            self.repodata.iter().flat_map(crate::RepoData::iter),
-            spec,
-            options,
-        )
+    pub fn who_needs(&self, target: &WhoNeedsTarget) -> Vec<Dependent<'_>> {
+        who_needs(self.repodata.iter().flat_map(crate::RepoData::iter), target)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use rattler_conda_types::{
-        PackageRecord, ParseMatchSpecOptions, package::DistArchiveIdentifier,
+        PackageRecord,
+        package::{DistArchiveIdentifier, RunExportsJson},
     };
     use url::Url;
 
@@ -283,7 +259,7 @@ mod tests {
     ) -> RepoDataRecord {
         let mut package_record = PackageRecord::new(
             name.parse().unwrap(),
-            version.parse::<rattler_conda_types::Version>().unwrap(),
+            version.parse::<Version>().unwrap(),
             build.to_string(),
         );
         package_record.depends = depends.into_iter().map(String::from).collect();
@@ -298,6 +274,11 @@ mod tests {
     }
 
     fn test_records() -> Vec<RepoDataRecord> {
+        let mut zlib = record("zlib", "1.3.1", "0", vec!["libzlib 1.3.1 h0_1"], vec![]);
+        zlib.package_record.run_exports = Some(RunExportsJson {
+            weak: vec!["libzlib >=1.3.1,<2.0a0".to_string()],
+            ..RunExportsJson::default()
+        });
         vec![
             record("python", "3.9.0", "0", vec![], vec![]),
             record("python", "3.13.0", "0", vec![], vec![]),
@@ -319,128 +300,130 @@ mod tests {
                 vec![],
             ),
             record("cuda-tool", "1.0.0", "0", vec!["__cuda >=12"], vec![]),
+            record(
+                "cpython-lib",
+                "1.0.0",
+                "0",
+                vec!["python 3.13.* *_cpython"],
+                vec![],
+            ),
+            zlib,
         ]
     }
 
-    fn spec(s: &str) -> MatchSpec {
-        MatchSpec::from_str(s, ParseMatchSpecOptions::strict()).unwrap()
+    fn target(name: &str) -> WhoNeedsTarget {
+        WhoNeedsTarget::new(name.parse().unwrap())
     }
 
-    fn names<'r>(dependents: &[Dependent<'r>]) -> Vec<(&'r str, usize)> {
+    fn version(v: &str) -> Version {
+        v.parse().unwrap()
+    }
+
+    fn names<'r>(dependents: &[Dependent<'r>]) -> Vec<&'r str> {
         dependents
             .iter()
-            .map(|d| (d.record.package_record.name.as_normalized(), d.depth))
+            .map(|d| d.record.package_record.name.as_normalized())
             .collect()
     }
 
     #[test]
     fn test_direct_by_name() {
         let records = test_records();
-        let result = who_needs(&records, &spec("python"), &WhoNeedsOptions::default()).unwrap();
+        let result = who_needs(&records, &target("python"));
         assert_eq!(
             names(&result),
-            vec![("old-lib", 1), ("numpy", 1), ("scipy", 1), ("pandas", 1)]
+            vec!["old-lib", "numpy", "scipy", "pandas", "cpython-lib"]
         );
         assert_eq!(result[0].dependency, "python >=3.8,<3.10");
         assert_eq!(result[0].kind, DependencyKind::Depends);
     }
 
     #[test]
-    fn test_version_constrained() {
+    fn test_pinned_version() {
         let records = test_records();
-        // old-lib requires python <3.10 and therefore cannot use python 3.13.
-        let result = who_needs(
-            &records,
-            &spec("python >=3.13"),
-            &WhoNeedsOptions::default(),
-        )
-        .unwrap();
+        // Only old-lib's constraint (>=3.8,<3.10) admits python 3.9.5; the
+        // other dependents require >=3.10 or 3.13.*.
+        let result = who_needs(&records, &target("python").with_version(version("3.9.5")));
+        assert_eq!(names(&result), vec!["old-lib"]);
+
+        // Everything except old-lib can use python 3.13.1.
+        let result = who_needs(&records, &target("python").with_version(version("3.13.1")));
         assert_eq!(
             names(&result),
-            vec![("numpy", 1), ("scipy", 1), ("pandas", 1)]
+            vec!["numpy", "scipy", "pandas", "cpython-lib"]
         );
     }
 
     #[test]
-    fn test_version_constrained_without_matching_target() {
+    fn test_pinned_build() {
         let records = test_records();
-        // No python 4 exists in the records, so nothing can use it.
-        let result = who_needs(&records, &spec("python >=4"), &WhoNeedsOptions::default()).unwrap();
-        assert!(result.is_empty());
+        // cpython-lib requires build `*_cpython`, which excludes it for a
+        // pypy build of python 3.13.
+        let result = who_needs(
+            &records,
+            &target("python")
+                .with_version(version("3.13.1"))
+                .with_build("h123_0_pypy"),
+        );
+        assert_eq!(names(&result), vec!["numpy", "scipy", "pandas"]);
+
+        let result = who_needs(
+            &records,
+            &target("python")
+                .with_version(version("3.13.1"))
+                .with_build("h123_0_cpython"),
+        );
+        assert_eq!(
+            names(&result),
+            vec!["numpy", "scipy", "pandas", "cpython-lib"]
+        );
     }
 
     #[test]
     fn test_constrains() {
         let records = test_records();
-        let result = who_needs(&records, &spec("pandas"), &WhoNeedsOptions::default()).unwrap();
-        assert!(result.is_empty());
-
-        let result = who_needs(
-            &records,
-            &spec("pandas"),
-            &WhoNeedsOptions {
-                include_constrains: true,
-                ..WhoNeedsOptions::default()
-            },
-        )
-        .unwrap();
-        assert_eq!(names(&result), vec![("pandas-stubs", 1)]);
+        let result = who_needs(&records, &target("pandas"));
+        assert_eq!(names(&result), vec!["pandas-stubs"]);
         assert_eq!(result[0].kind, DependencyKind::Constrains);
     }
 
     #[test]
-    fn test_recursive() {
+    fn test_run_exports() {
         let records = test_records();
-        let result = who_needs(
-            &records,
-            &spec("numpy"),
-            &WhoNeedsOptions {
-                recursive: true,
-                ..WhoNeedsOptions::default()
-            },
-        )
-        .unwrap();
-        // scipy and pandas depend on numpy directly; pandas-stubs only
-        // reaches numpy through a `constrains` edge, which is disabled.
-        assert_eq!(names(&result), vec![("scipy", 1), ("pandas", 1)]);
-
-        let result = who_needs(
-            &records,
-            &spec("numpy"),
-            &WhoNeedsOptions {
-                recursive: true,
-                include_constrains: true,
-            },
-        )
-        .unwrap();
+        // zlib references libzlib both through `depends` and through its
+        // weak run exports; both edges are reported.
+        let result = who_needs(&records, &target("libzlib"));
+        assert_eq!(names(&result), vec!["zlib", "zlib"]);
+        assert_eq!(result[0].kind, DependencyKind::Depends);
+        assert_eq!(result[0].dependency, "libzlib 1.3.1 h0_1");
         assert_eq!(
-            names(&result),
-            vec![("scipy", 1), ("pandas", 1), ("pandas-stubs", 2)]
+            result[1].kind,
+            DependencyKind::RunExport(RunExportKind::Weak)
         );
-        assert_eq!(result[2].dependency, "pandas >=2.2");
-        assert_eq!(result[2].kind, DependencyKind::Constrains);
+        assert_eq!(result[1].dependency, "libzlib >=1.3.1,<2.0a0");
+
+        // A pinned version outside the run export range only matches the
+        // edges whose constraint admits it.
+        let result = who_needs(&records, &target("libzlib").with_version(version("2.1")));
+        assert!(result.is_empty());
+
+        let result = who_needs(&records, &target("libzlib").with_version(version("1.3.5")));
+        assert_eq!(names(&result), vec!["zlib"]);
+        assert_eq!(
+            result[0].kind,
+            DependencyKind::RunExport(RunExportKind::Weak)
+        );
     }
 
     #[test]
     fn test_virtual_package() {
         let records = test_records();
         // No record named __cuda exists; name-based matching still works.
-        let result = who_needs(&records, &spec("__cuda"), &WhoNeedsOptions::default()).unwrap();
-        assert_eq!(names(&result), vec![("cuda-tool", 1)]);
-    }
+        let result = who_needs(&records, &target("__cuda"));
+        assert_eq!(names(&result), vec!["cuda-tool"]);
 
-    #[test]
-    fn test_requires_exact_name() {
-        let records = test_records();
-        let glob_spec = MatchSpec::from_str(
-            "py*",
-            ParseMatchSpecOptions::strict().with_exact_names_only(false),
-        )
-        .unwrap();
-        let result = who_needs(&records, &glob_spec, &WhoNeedsOptions::default());
-        assert!(matches!(
-            result,
-            Err(WhoNeedsError::MatchSpecWithoutExactName(_))
-        ));
+        // And so does matching a concrete virtual package version.
+        let result = who_needs(&records, &target("__cuda").with_version(version("11.8")));
+        assert!(result.is_empty());
     }
 }

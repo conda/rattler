@@ -4,27 +4,32 @@ use indexmap::IndexMap;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
-use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, ParseMatchSpecOptions, Platform};
+use rattler_conda_types::{
+    Channel, ChannelConfig, MatchSpec, PackageName, ParseMatchSpecOptions, Platform, Version,
+};
 use rattler_repodata_gateway::{
     Gateway, SourceConfig,
-    repoquery::{DependencyKind, Dependent, WhoNeedsOptions},
+    repoquery::{DependencyKind, Dependent, RunExportKind, WhoNeedsTarget},
 };
 
 /// Show packages that depend on the given package (reverse dependencies).
 #[derive(Debug, clap::Parser)]
 #[clap(after_help = r#"Examples:
-  rattler whoneeds numpy                     # packages that depend on numpy
-  rattler whoneeds 'python >=3.13'           # packages that can use python >=3.13
-  rattler whoneeds numpy --recursive         # also transitive dependents
-  rattler whoneeds pandas --include-constrains"#)]
+  rattler whoneeds numpy                  # packages that depend on numpy
+  rattler whoneeds python 3.13.1          # packages whose constraint admits python 3.13.1
+  rattler whoneeds python 3.13.1 h123_0   # ... with this exact build string"#)]
 pub struct Opt {
-    /// The package name (or matchspec) to find reverse dependencies for.
-    ///
-    /// A bare name (numpy) matches any dependency on that name. A spec with
-    /// a version (python >=3.13) only matches dependents whose constraint
-    /// admits such a version.
+    /// The name of the package to find reverse dependencies for.
     #[clap(required = true)]
-    matchspec: String,
+    package: String,
+
+    /// A concrete version of the package. When given, only dependents whose
+    /// version constraint admits this version are shown.
+    version: Option<Version>,
+
+    /// A concrete build string of the package. When given, only dependents
+    /// whose build string constraint admits this build are shown.
+    build: Option<String>,
 
     /// Channels to search in
     #[clap(short, long, default_value = "conda-forge")]
@@ -34,14 +39,6 @@ pub struct Opt {
     #[clap(short, long, default_value_t = Platform::current())]
     platform: Platform,
 
-    /// Also match packages that reference the package through `constrains`
-    #[clap(long)]
-    include_constrains: bool,
-
-    /// Also show packages that transitively depend on the package
-    #[clap(short, long)]
-    recursive: bool,
-
     /// Maximum number of packages to display
     #[clap(long, default_value = "100")]
     limit: usize,
@@ -49,13 +46,6 @@ pub struct Opt {
     /// Show all packages (no limit)
     #[clap(long)]
     all: bool,
-
-    /// Enable sharded repodata. Disabled by default because a reverse
-    /// dependency lookup needs the records of every package in the channel,
-    /// which is one request per package with shards but a single request
-    /// with a full repodata.json.
-    #[clap(long, default_value = "false", action = clap::ArgAction::Set)]
-    sharded: bool,
 
     /// Output in JSON format
     #[clap(long, conflicts_with_all = ["limit", "all"])]
@@ -66,14 +56,28 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
 
-    // Parse the user input as a matchspec with an exact package name.
-    let matchspec = MatchSpec::from_str(&opt.matchspec, ParseMatchSpecOptions::strict())
+    let package_name: PackageName = opt
+        .package
+        .parse()
         .into_diagnostic()
-        .context("failed to parse the package as a matchspec")?;
+        .context("failed to parse the package name")?;
+    let mut target = WhoNeedsTarget::new(package_name);
+    if let Some(version) = opt.version.clone() {
+        target = target.with_version(version);
+    }
+    if let Some(build) = opt.build.clone() {
+        target = target.with_build(build);
+    }
+
+    // Human readable form of the queried package, e.g. `python 3.13.1`.
+    let target_display = std::iter::once(opt.package.clone())
+        .chain(opt.version.as_ref().map(ToString::to_string))
+        .chain(opt.build.clone())
+        .join(" ");
 
     eprintln!(
         "Searching for packages that depend on '{}' on {}",
-        opt.matchspec, opt.platform
+        target_display, opt.platform
     );
 
     // Determine the channels
@@ -92,12 +96,15 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
     // Create HTTP client
     let download_client = super::client::create_client_with_middleware(offline)?;
 
-    // Create gateway
+    // Create gateway. Sharded repodata is disabled because a reverse
+    // dependency lookup needs the records of every package in the channel,
+    // which is one request per package with shards but a single request
+    // with a full repodata.json.
     let gateway = Gateway::builder()
         .with_client(download_client)
         .with_channel_config(rattler_repodata_gateway::ChannelConfig {
             default: SourceConfig {
-                sharded_enabled: opt.sharded,
+                sharded_enabled: false,
                 cache_action: super::client::repodata_cache_action(offline),
                 ..SourceConfig::default()
             },
@@ -129,13 +136,7 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
 
     pb.set_message("Computing reverse dependencies...");
 
-    let options = WhoNeedsOptions {
-        include_constrains: opt.include_constrains,
-        recursive: opt.recursive,
-    };
-    let dependents = repo_data
-        .who_needs(&matchspec, &options)
-        .into_diagnostic()?;
+    let dependents = repo_data.who_needs(&target);
 
     pb.finish_and_clear();
 
@@ -150,11 +151,7 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
                     "subdir": dependent.record.package_record.subdir,
                     "channel": dependent.record.channel,
                     "dependency": dependent.dependency,
-                    "kind": match dependent.kind {
-                        DependencyKind::Depends => "depends",
-                        DependencyKind::Constrains => "constrains",
-                    },
-                    "depth": dependent.depth,
+                    "kind": kind_str(dependent.kind),
                 })
             })
             .collect();
@@ -164,18 +161,15 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
     }
 
     if dependents.is_empty() {
-        println!("No packages found that depend on '{}'", opt.matchspec);
+        println!("No packages found that depend on '{target_display}'");
         return Ok(());
     }
 
-    // Group by (depth, package name), keeping the record with the highest
-    // version per package as the representative shown in the output.
-    let mut grouped: IndexMap<(usize, &str), (&Dependent<'_>, usize)> = IndexMap::new();
+    // Group by package name, keeping the record with the highest version
+    // per package as the representative shown in the output.
+    let mut grouped: IndexMap<&str, (&Dependent<'_>, usize)> = IndexMap::new();
     for dependent in &dependents {
-        let key = (
-            dependent.depth,
-            dependent.record.package_record.name.as_normalized(),
-        );
+        let key = dependent.record.package_record.name.as_normalized();
         grouped
             .entry(key)
             .and_modify(|(best, count)| {
@@ -196,24 +190,17 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
         dependents.len(),
         if dependents.len() == 1 { "" } else { "s" },
         if total_packages == 1 { "s" } else { "" },
-        opt.matchspec,
+        target_display,
         start.elapsed()
     );
 
     let limit = if opt.all { usize::MAX } else { opt.limit };
-    let mut current_depth = 0;
-    for (&(depth, name), &(dependent, record_count)) in grouped.iter().take(limit) {
-        if opt.recursive && depth != current_depth {
-            current_depth = depth;
-            println!(
-                "{}",
-                console::style(format!("Depth {depth}:")).bold().yellow()
-            );
-        }
+    for (&name, &(dependent, record_count)) in grouped.iter().take(limit) {
         let record = &dependent.record.package_record;
         let kind = match dependent.kind {
             DependencyKind::Depends => "via",
             DependencyKind::Constrains => "via constraint",
+            DependencyKind::RunExport(_) => "via run export",
         };
         println!(
             "  {} {} {} ({} {}){}",
@@ -241,4 +228,19 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
     }
 
     Ok(())
+}
+
+/// Stable string form of a dependency kind for the JSON output.
+fn kind_str(kind: DependencyKind) -> &'static str {
+    match kind {
+        DependencyKind::Depends => "depends",
+        DependencyKind::Constrains => "constrains",
+        DependencyKind::RunExport(RunExportKind::Weak) => "run_export/weak",
+        DependencyKind::RunExport(RunExportKind::Strong) => "run_export/strong",
+        DependencyKind::RunExport(RunExportKind::Noarch) => "run_export/noarch",
+        DependencyKind::RunExport(RunExportKind::WeakConstrains) => "run_export/weak_constrains",
+        DependencyKind::RunExport(RunExportKind::StrongConstrains) => {
+            "run_export/strong_constrains"
+        }
+    }
 }
