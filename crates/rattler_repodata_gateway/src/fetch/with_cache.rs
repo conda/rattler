@@ -24,7 +24,7 @@ use url::Url;
 use crate::{
     Reporter,
     fetch::{
-        CacheAction, FetchRepoDataError, RepoDataNotFoundError, Variant,
+        CacheAction, CacheFreshness, FetchRepoDataError, RepoDataNotFoundError, Variant,
         cache::{CacheHeaders, Expiring, RepoDataState},
     },
     reporter::{DownloadReporter, ResponseReporterExt},
@@ -38,6 +38,9 @@ pub struct FetchRepoDataOptions {
     /// How to use the cache. By default it will cache and reuse downloaded
     /// repodata.json (if the server allows it).
     pub cache_action: CacheAction,
+
+    /// Controls how long cached repodata is considered fresh.
+    pub cache_freshness: CacheFreshness,
 
     /// Determines which variant to download. See [`Variant`] for more
     /// information.
@@ -58,6 +61,7 @@ impl Default for FetchRepoDataOptions {
     fn default() -> Self {
         Self {
             cache_action: CacheAction::default(),
+            cache_freshness: CacheFreshness::default(),
             variant: Variant::default(),
             zstd_enabled: true,
             bz2_enabled: true,
@@ -131,6 +135,7 @@ async fn repodata_from_file(
             cache_control: None,
         },
         cache_last_modified: SystemTime::now(),
+        cache_last_validated: Some(SystemTime::now()),
         blake2_hash: None,
         has_zst: None,
         has_bz2: None,
@@ -220,7 +225,12 @@ pub async fn fetch_repo_data(
         let owned_cache_path = cache_path.clone();
         let owned_cache_key = cache_key.clone();
         let cache_state = tokio::task::spawn_blocking(move || {
-            validate_cached_state(&owned_cache_path, &owned_subdir_url, &owned_cache_key)
+            validate_cached_state(
+                &owned_cache_path,
+                &owned_subdir_url,
+                &owned_cache_key,
+                options.cache_freshness,
+            )
         })
         .await?;
         match (cache_state, options.cache_action) {
@@ -386,6 +396,7 @@ pub async fn fetch_repo_data(
                 // Update the cache on disk with any new findings.
                 let cache_state = RepoDataState {
                     url: repo_data_url,
+                    cache_last_validated: Some(SystemTime::now()),
                     has_zst: variant_availability.has_zst,
                     has_bz2: variant_availability.has_bz2,
                     ..cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
@@ -498,6 +509,7 @@ pub async fn fetch_repo_data(
             .modified()
             .map_err(FetchRepoDataError::FailedToGetMetadata)?,
         cache_size: repo_data_json_metadata.len(),
+        cache_last_validated: Some(SystemTime::now()),
         blake2_hash: Some(blake2_hash),
         has_zst: variant_availability.has_zst,
         has_bz2: variant_availability.has_bz2,
@@ -771,6 +783,7 @@ fn validate_cached_state(
     cache_path: &Path,
     subdir_url: &Url,
     cache_key: &str,
+    cache_freshness: CacheFreshness,
 ) -> ValidatedCacheState {
     let repo_data_json_path = cache_path.join(format!("{cache_key}.json"));
     let cache_state_path = cache_path.join(format!("{cache_key}.info.json"));
@@ -870,13 +883,31 @@ fn validate_cached_state(
     }
 
     // Determine the age of the cache
-    let cache_age = match SystemTime::now().duration_since(cache_last_modified) {
+    let cache_age = match SystemTime::now().duration_since(
+        cache_state
+            .cache_last_validated
+            .unwrap_or(cache_last_modified),
+    ) {
         Ok(duration) => duration,
         Err(e) => {
             tracing::warn!("failed to determine cache age: {e}. Ignoring cached files...");
             return ValidatedCacheState::Mismatched(cache_state);
         }
     };
+
+    match cache_freshness {
+        CacheFreshness::AlwaysRevalidate => {
+            return ValidatedCacheState::OutOfDate(cache_state);
+        }
+        CacheFreshness::Override(max_age) => {
+            return if cache_age < max_age {
+                ValidatedCacheState::UpToDate(cache_state)
+            } else {
+                ValidatedCacheState::OutOfDate(cache_state)
+            };
+        }
+        CacheFreshness::HttpCacheControl => {}
+    }
 
     // Parse the cache control header, and determine if the cache is out of date or
     // not.
@@ -940,6 +971,7 @@ mod test {
             Arc,
             atomic::{AtomicUsize, Ordering},
         },
+        time::Duration,
     };
 
     use assert_matches::assert_matches;
@@ -967,7 +999,7 @@ mod test {
     use crate::{
         DownloadReporter, Reporter,
         fetch::{
-            FetchRepoDataError, RepoDataNotFoundError,
+            CacheFreshness, FetchRepoDataError, RepoDataNotFoundError,
             cache::{CacheHeaders, RepoDataState},
             with_cache::{
                 CacheResult, CachedRepoData, FetchRepoDataOptions, ValidatedCacheState,
@@ -1022,6 +1054,10 @@ mod test {
     }
 
     fn validate_cache_with_cache_control(cache_control: &str) -> ValidatedCacheState {
+        validate_cache(cache_control, CacheFreshness::HttpCacheControl)
+    }
+
+    fn validate_cache(cache_control: &str, cache_freshness: CacheFreshness) -> ValidatedCacheState {
         let cache_dir = TempDir::new().unwrap();
         let cache_key = "test-cache";
         let repo_data_path = cache_dir.path().join(format!("{cache_key}.json"));
@@ -1037,6 +1073,7 @@ mod test {
                 cache_control: Some(cache_control.to_string()),
             },
             cache_last_modified: metadata.modified().unwrap(),
+            cache_last_validated: Some(metadata.modified().unwrap()),
             cache_size: metadata.len(),
             blake2_hash: None,
             has_zst: None,
@@ -1045,7 +1082,7 @@ mod test {
         .to_path(&cache_dir.path().join(format!("{cache_key}.info.json")))
         .unwrap();
 
-        validate_cached_state(cache_dir.path(), &subdir_url, cache_key)
+        validate_cached_state(cache_dir.path(), &subdir_url, cache_key, cache_freshness)
     }
 
     #[test]
@@ -1057,6 +1094,25 @@ mod test {
         assert_matches!(
             validate_cache_with_cache_control("private, max-age=30"),
             ValidatedCacheState::UpToDate(_)
+        );
+    }
+
+    #[test]
+    fn test_cache_freshness_overrides_http_headers() {
+        assert_matches!(
+            validate_cache(
+                "no-cache",
+                CacheFreshness::Override(Duration::from_secs(30))
+            ),
+            ValidatedCacheState::UpToDate(_)
+        );
+        assert_matches!(
+            validate_cache("max-age=3600", CacheFreshness::AlwaysRevalidate),
+            ValidatedCacheState::OutOfDate(_)
+        );
+        assert_matches!(
+            validate_cache("max-age=3600", CacheFreshness::Override(Duration::ZERO)),
+            ValidatedCacheState::OutOfDate(_)
         );
     }
 
@@ -1191,6 +1247,53 @@ mod test {
         .unwrap();
 
         assert_matches!(cache_result, CacheResult::CacheOutdated);
+    }
+
+    #[tracing_test::traced_test]
+    #[tokio::test]
+    async fn revalidation_refreshes_the_override_ttl() {
+        let subdir_path = TempDir::new().unwrap();
+        std::fs::write(subdir_path.path().join("repodata.json"), FAKE_REPO_DATA).unwrap();
+        let server = SimpleChannelServer::new(subdir_path.path()).await;
+        let cache_dir = TempDir::new().unwrap();
+
+        fetch_repo_data(
+            server.url(),
+            LazyClient::default(),
+            cache_dir.path().to_owned(),
+            FetchRepoDataOptions::default(),
+            None,
+        )
+        .await
+        .unwrap();
+        let revalidated = fetch_repo_data(
+            server.url(),
+            LazyClient::default(),
+            cache_dir.path().to_owned(),
+            FetchRepoDataOptions {
+                cache_freshness: CacheFreshness::AlwaysRevalidate,
+                ..FetchRepoDataOptions::default()
+            },
+            None,
+        )
+        .await
+        .unwrap();
+        assert_matches!(revalidated.cache_result, CacheResult::CacheHitAfterFetch);
+        drop(revalidated);
+
+        let cached = fetch_repo_data(
+            server.url(),
+            LazyClient::default(),
+            cache_dir.path().to_owned(),
+            FetchRepoDataOptions {
+                cache_freshness: CacheFreshness::Override(Duration::from_secs(3600)),
+                ..FetchRepoDataOptions::default()
+            },
+            None,
+        )
+        .await
+        .unwrap();
+        assert_matches!(cached.cache_result, CacheResult::CacheHit);
     }
 
     #[tracing_test::traced_test]

@@ -173,7 +173,7 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
 // Tests are only run on non-wasm targets since they use tokio and axum
 #[cfg(test)]
 mod tests {
-    use crate::fetch::CacheAction;
+    use crate::fetch::{CacheAction, CacheFreshness};
     use crate::gateway::error::GatewayError;
     use crate::gateway::subdir::SubdirClient;
     use axum::{
@@ -200,6 +200,7 @@ mod tests {
     /// configurable responses for shard requests.
     struct MockShardedServer {
         local_addr: SocketAddr,
+        index_requests: Arc<AtomicUsize>,
         shard_requests: Arc<AtomicUsize>,
         _shutdown_sender: oneshot::Sender<()>,
     }
@@ -231,19 +232,28 @@ mod tests {
             let index_bytes = rmp_serde::to_vec_named(&sharded_index).unwrap();
             let compressed_index = zstd::encode_all(index_bytes.as_slice(), 3).unwrap();
 
+            let index_requests = Arc::new(AtomicUsize::new(0));
             let shard_requests = Arc::new(AtomicUsize::new(0));
             let app = Router::new()
                 .route(
                     "/linux-64/repodata_shards.msgpack.zst",
-                    get(move || async move {
-                        Response::builder()
-                            .status(StatusCode::OK)
-                            .header("Content-Type", "application/octet-stream")
-                            // Keep the cached copy fresh, so `UseCacheOnly`
-                            // accepts it in the cold-shard tests.
-                            .header("Cache-Control", "max-age=3600")
-                            .body(Body::from(compressed_index.clone()))
-                            .unwrap()
+                    get({
+                        let index_requests = Arc::clone(&index_requests);
+                        move || {
+                            let compressed_index = compressed_index.clone();
+                            let index_requests = Arc::clone(&index_requests);
+                            async move {
+                                index_requests.fetch_add(1, Ordering::SeqCst);
+                                Response::builder()
+                                    .status(StatusCode::OK)
+                                    .header("Content-Type", "application/octet-stream")
+                                    // Keep the cached copy fresh, so `UseCacheOnly`
+                                    // accepts it in the cold-shard tests.
+                                    .header("Cache-Control", "max-age=3600")
+                                    .body(Body::from(compressed_index))
+                                    .unwrap()
+                            }
+                        }
                     }),
                 )
                 .route(
@@ -284,6 +294,7 @@ mod tests {
 
             Self {
                 local_addr,
+                index_requests,
                 shard_requests,
                 _shutdown_sender: tx,
             }
@@ -297,6 +308,10 @@ mod tests {
             Channel::from_url(self.url())
         }
 
+        fn index_request_count(&self) -> usize {
+            self.index_requests.load(Ordering::SeqCst)
+        }
+
         /// How many shard downloads the server has answered so far. The index
         /// request is not counted.
         fn shard_request_count(&self) -> usize {
@@ -308,6 +323,36 @@ mod tests {
     enum MockShardResponse {
         Empty,
         Truncated,
+    }
+
+    #[tokio::test]
+    async fn shard_index_freshness_can_force_revalidation() {
+        let server = MockShardedServer::new(MockShardResponse::Empty).await;
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        for freshness in [
+            CacheFreshness::HttpCacheControl,
+            CacheFreshness::AlwaysRevalidate,
+        ] {
+            ShardedSubdir::new(
+                server.channel(),
+                "linux-64".to_string(),
+                rattler_networking::LazyClient::default(),
+                cache_dir.path().to_path_buf(),
+                ShardCachePolicy {
+                    action: CacheAction::CacheOrFetch,
+                    freshness,
+                    missing_shards_are_empty: false,
+                },
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        }
+
+        assert_eq!(server.index_request_count(), 2);
     }
 
     #[tokio::test]
@@ -325,6 +370,7 @@ mod tests {
             cache_dir.path().to_path_buf(),
             ShardCachePolicy {
                 action: CacheAction::NoCache,
+                freshness: CacheFreshness::default(),
                 missing_shards_are_empty: false,
             },
             None,
@@ -394,6 +440,7 @@ mod tests {
             cache_dir.path().to_path_buf(),
             ShardCachePolicy {
                 action: CacheAction::NoCache,
+                freshness: CacheFreshness::default(),
                 missing_shards_are_empty: false,
             },
             None,
@@ -436,6 +483,7 @@ mod tests {
             cache_dir.path().to_path_buf(),
             ShardCachePolicy {
                 action: CacheAction::NoCache,
+                freshness: CacheFreshness::default(),
                 missing_shards_are_empty: false,
             },
             None,
@@ -479,6 +527,7 @@ mod tests {
             cache_dir.to_path_buf(),
             ShardCachePolicy {
                 action: CacheAction::CacheOrFetch,
+                freshness: CacheFreshness::default(),
                 missing_shards_are_empty: false,
             },
             None,
@@ -495,6 +544,7 @@ mod tests {
             cache_dir.to_path_buf(),
             ShardCachePolicy {
                 action: cache_only_action,
+                freshness: CacheFreshness::default(),
                 missing_shards_are_empty,
             },
             None,
@@ -525,6 +575,7 @@ mod tests {
             cache_dir.path().to_path_buf(),
             ShardCachePolicy {
                 action: CacheAction::ForceCacheOnly,
+                freshness: CacheFreshness::default(),
                 missing_shards_are_empty: true,
             },
             None,
