@@ -1,0 +1,20 @@
+---
+source: crates/rattler_azure/src/locate.rs
+expression: outcomes
+---
+"az://acct.blob.core.windows.net/general/noarch configured=[]": "key: acct.blob.core.windows.net, container: general"
+"az://acct.blob.core.windows.net/general/noarch configured=[\"acct.blob.core.windows.net\"]": "key: acct.blob.core.windows.net, container: general"
+"az://proxy.internal/accta/general/noarch configured=[\"proxy.internal/accta\"]": "key: proxy.internal/accta, container: general"
+"az://proxy.internal/accta/general configured=[\"proxy.internal\"]": "key: proxy.internal, container: accta"
+"az://proxy.internal/accta/general/noarch configured=[\"proxy.internal\", \"proxy.internal/accta\"]": "key: proxy.internal/accta, container: general"
+"az://127.0.0.1:10000/devstoreaccount1/general configured=[\"127.0.0.1:10000/devstoreaccount1\"]": "key: 127.0.0.1:10000/devstoreaccount1, container: general"
+"az://127.0.0.1:10000/devstoreaccount1/general configured=[]": "key: none, container: none"
+"az://acct.blob.core.windows.net/General/noarch configured=[]": "error: `General` is not a valid Azure blob container name: container names are 3-63 characters of lowercase letters, digits and hyphens, must start and end with a letter or digit, and must not contain consecutive hyphens"
+"az://acct.blob.core.windows.net/ab/noarch configured=[]": "error: `ab` is not a valid Azure blob container name: container names are 3-63 characters of lowercase letters, digits and hyphens, must start and end with a letter or digit, and must not contain consecutive hyphens"
+"az://acct.blob.core.windows.net/a--b/noarch configured=[]": "error: `a--b` is not a valid Azure blob container name: container names are 3-63 characters of lowercase letters, digits and hyphens, must start and end with a letter or digit, and must not contain consecutive hyphens"
+"az://acct.blob.core.windows.net/general;evil/noarch configured=[]": "error: `general;evil` is not a valid Azure blob container name: container names are 3-63 characters of lowercase letters, digits and hyphens, must start and end with a letter or digit, and must not contain consecutive hyphens"
+"az://acct.blob.core.windows.net/-o/noarch configured=[]": "error: `-o` is not a valid Azure blob container name: container names are 3-63 characters of lowercase letters, digits and hyphens, must start and end with a letter or digit, and must not contain consecutive hyphens"
+"az://127.0.0.1:10000/Conda_Channel/noarch/repodata.json configured=[]": "key: none, container: none"
+"az://azurite/Conda_Channel/noarch/repodata.json configured=[]": "key: none, container: none"
+"az://mirror/ab/noarch/repodata.json configured=[]": "key: none, container: none"
+"az://localhost:8080/My_Repo/noarch/repodata.json configured=[]": "key: none, container: none"

@@ -1,0 +1,27 @@
+---
+source: crates/rattler_azure/src/endpoint_key.rs
+expression: rejections
+---
+acct.blob.core.windows.net/general/noarch: "`acct.blob.core.windows.net/general/noarch` is not a valid Azure endpoint key: a key is a channel URL prefix up to the container, so it is spelled `<host>` or `<host>/<account>` and nothing more"
+acct.blob.core.windows.net@evil.example: "Azure blob URL must not contain userinfo (`user:pass@host`), userinfo is invalid in blob URLs"
+acct.blob.core.windows.net/../accta: "Azure blob channel URL segment `..` is a relative path segment; a channel URL must name the container it addresses directly, so write the path without `.` or `..`"
+"az://acct.blob.core.windows.net/general\\..\\..\\evil/x": "`az:` is not a valid Azure host: its port is empty; expected `host` or `host:port`"
+acct.blob.example//accta: "Azure blob channel URL path `//accta` has an empty segment; a doubled `/` names nothing, so write the path with single separators"
+acct.blob.example/acc%zz: "Azure blob channel URL segment `acc%zz` contains `%zz`, which is not a valid percent-escape; write a literal `%` as `%25`"
+proxy.internal/accta?sv=token: "`proxy.internal/accta?sv=token` is not a valid Azure endpoint key: a key is a channel URL prefix up to the container, so it is spelled `<host>` or `<host>/<account>` and nothing more"
+"proxy.internal/accta#frag": "`proxy.internal/accta#frag` is not a valid Azure endpoint key: a key is a channel URL prefix up to the container, so it is spelled `<host>` or `<host>/<account>` and nothing more"
+"acct.blob.core.windows.net:": "`acct.blob.core.windows.net:` is not a valid Azure host: its port is empty; expected `host` or `host:port`"
+acct..blob.core.windows.net: "`acct..blob.core.windows.net` is not a valid Azure host: one of its labels is empty; expected `host` or `host:port`"
+"127.0.0.1:10000": "Azure blob URL host `127.0.0.1:10000` is not a dotted domain of the form `<account>.blob.<suffix>`, so its first label cannot be a storage account; such a host can only be addressed path-style, with the account as the first path segment"
+"[::1]:10000": "Azure blob URL host `[::1]:10000` is not a dotted domain of the form `<account>.blob.<suffix>`, so its first label cannot be a storage account; such a host can only be addressed path-style, with the account as the first path segment"
+localhost: "Azure blob URL host `localhost` is not a dotted domain of the form `<account>.blob.<suffix>`, so its first label cannot be a storage account; such a host can only be addressed path-style, with the account as the first path segment"
+localhost.: "Azure blob URL host `localhost` is not a dotted domain of the form `<account>.blob.<suffix>`, so its first label cannot be a storage account; such a host can only be addressed path-style, with the account as the first path segment"
+"azurite:10000": "Azure blob URL host `azurite:10000` is not a dotted domain of the form `<account>.blob.<suffix>`, so its first label cannot be a storage account; such a host can only be addressed path-style, with the account as the first path segment"
+"--as-user.blob.core.windows.net": "`--as-user` is not a valid Azure storage account name: account names are 3-24 characters of lowercase letters and digits only"
+acct-1.blob.example: "`acct-1` is not a valid Azure storage account name: account names are 3-24 characters of lowercase letters and digits only"
+"127.0.0.1:10000/devstore;evil": "`devstore;evil` is not a valid Azure storage account name: account names are 3-24 characters of lowercase letters and digits only"
+"127.0.0.1:10000/DevStoreAccount1": "`DevStoreAccount1` is not a valid Azure storage account name: account names are 3-24 characters of lowercase letters and digits only"
+"127.0.0.1:10000/dev-store": "`dev-store` is not a valid Azure storage account name: account names are 3-24 characters of lowercase letters and digits only"
+"127.0.0.1:10000/ab": "`ab` is not a valid Azure storage account name: account names are 3-24 characters of lowercase letters and digits only"
+"127.0.0.1:10000/-o": "`-o` is not a valid Azure storage account name: account names are 3-24 characters of lowercase letters and digits only"
+"127.0.0.1:10000/--as-user": "`--as-user` is not a valid Azure storage account name: account names are 3-24 characters of lowercase letters and digits only"

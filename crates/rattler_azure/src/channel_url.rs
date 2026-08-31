@@ -273,34 +273,83 @@ mod tests {
     use super::*;
     use crate::test_support::{channel, container, located};
 
-    #[track_caller]
-    fn assert_rejects(inputs: &[&str], expected: fn(&AzureUrlError) -> bool) {
-        for input in inputs {
-            match AzureChannelUrl::parse(input) {
-                Ok(_) => panic!("expected a rejection for {input}"),
-                Err(err) => assert!(expected(&err), "wrong error for {input}: {err:?}"),
-            }
-        }
-    }
+    #[test]
+    fn rejected_urls() {
+        let inputs = [
+            // not the az scheme
+            "https://acct.blob.core.windows.net/general",
+            "http://acct.blob.core.windows.net/general",
+            "ftp://acct.blob.core.windows.net/general",
+            "acct.blob.core.windows.net/general",
+            // dot segments rewrite the path
+            "az://acct.blob.core.windows.net/general/%2e%2e/%2e%2e/othercontainer/x",
+            "az://127.0.0.1:10000/devstoreaccount1/general/%2e%2e/%2e%2e/otheraccount/othercontainer",
+            "az://acct.blob.core.windows.net/general/../../othercontainer",
+            "az://acct.blob.core.windows.net/general/./noarch",
+            "az://acct.blob.core.windows.net/general/%2E%2E/othercontainer",
+            // empty segments
+            "az://acct.blob.core.windows.net//general/noarch",
+            "az://acct.blob.core.windows.net/general//noarch",
+            "az://127.0.0.1:10000//devstoreaccount1/general",
+            // malformed percent escapes
+            "az://acct.blob.core.windows.net/general/gen%eral",
+            "az://acct.blob.core.windows.net/general/100%",
+            "az://acct.blob.core.windows.net/general/%zz",
+            // segments that decode to invalid UTF-8; the second only becomes
+            // invalid once the parser encodes the raw character
+            "az://acct.blob.core.windows.net/general/%ff",
+            "az://acct.blob.core.windows.net/general/caf%C3é",
+            "az://acct.blob.core.windows.net/general/%C3é",
+        ];
 
-    #[track_caller]
-    fn assert_canonical_paths(cases: &[(&str, &str)]) {
-        for (input, path) in cases {
-            assert_eq!(channel(input).canonical().path(), *path, "{input}");
-        }
+        let rejections: indexmap::IndexMap<&str, String> = inputs
+            .iter()
+            .map(|input| match AzureChannelUrl::parse(input) {
+                Ok(_) => panic!("expected a rejection for {input}"),
+                Err(err) => (*input, err.to_string()),
+            })
+            .collect();
+        insta::assert_yaml_snapshot!(rejections);
     }
 
     #[test]
-    fn parse_requires_the_az_scheme() {
-        assert_rejects(
-            &[
-                "https://acct.blob.core.windows.net/general",
-                "http://acct.blob.core.windows.net/general",
-                "ftp://acct.blob.core.windows.net/general",
-                "acct.blob.core.windows.net/general",
-            ],
-            |err| matches!(err, AzureUrlError::InvalidScheme(_)),
-        );
+    fn accepted_urls_canonicalize() {
+        let inputs = [
+            "az://acct.blob.core.windows.net/general/prefix",
+            "az://acct.blob.core.windows.net/general/",
+            "az://acct.blob.core.windows.net/",
+            "az://acct.blob.core.windows.net",
+            "az://acct.blob.core.windows.net/general/p?sv=token#frag",
+            // a dot inside a segment is not a dot segment
+            "az://acct.blob.core.windows.net/general/..hidden/...",
+            // spellings normalize to percent-encoded UTF-8
+            "az://acct.blob.core.windows.net/general/café",
+            "az://acct.blob.core.windows.net/general/with space",
+            "az://acct.blob.core.windows.net/general/with%20space",
+            "az://acct.blob.core.windows.net/general/caf%C3%A9",
+        ];
+
+        let canonical: indexmap::IndexMap<&str, String> = inputs
+            .iter()
+            .map(|input| (*input, channel(input).canonical().to_string()))
+            .collect();
+        insta::assert_yaml_snapshot!(canonical);
+    }
+
+    // An encoded slash past the container is a blob name containing a slash,
+    // which Azure supports
+    #[test]
+    fn an_encoded_slash_is_a_blob_name_not_a_separator() {
+        for input in [
+            "az://acct.blob.core.windows.net/general/a%2Fb",
+            "az://acct.blob.core.windows.net/general/a%2fb",
+        ] {
+            assert_eq!(
+                located(input, &[]).container(),
+                Some(&container("general")),
+                "{input}"
+            );
+        }
     }
 
     #[test]
@@ -408,113 +457,6 @@ mod tests {
         let azure = AzureChannelUrl::parse("az://acct.blob.core.windows.net/general").unwrap();
         assert_eq!(azure.host().to_string(), "acct.blob.core.windows.net");
         assert_eq!(azure.host().port(), None);
-    }
-
-    #[test]
-    fn a_rewritten_path_is_rejected() {
-        assert_rejects(
-            &[
-                "az://acct.blob.core.windows.net/general/%2e%2e/%2e%2e/othercontainer/x",
-                "az://127.0.0.1:10000/devstoreaccount1/general/%2e%2e/%2e%2e/otheraccount/othercontainer",
-                "az://acct.blob.core.windows.net/general/../../othercontainer",
-                "az://acct.blob.core.windows.net/general/./noarch",
-                "az://acct.blob.core.windows.net/general/%2E%2E/othercontainer",
-            ],
-            |err| matches!(err, AzureUrlError::DotSegmentInPath(_)),
-        );
-    }
-
-    #[test]
-    fn an_empty_segment_is_rejected() {
-        assert_rejects(
-            &[
-                "az://acct.blob.core.windows.net//general/noarch",
-                "az://acct.blob.core.windows.net/general//noarch",
-                "az://127.0.0.1:10000//devstoreaccount1/general",
-            ],
-            |err| matches!(err, AzureUrlError::EmptyPathSegment { .. }),
-        );
-
-        assert_canonical_paths(&[("az://acct.blob.core.windows.net/general/", "/general/")]);
-    }
-
-    #[test]
-    fn a_malformed_percent_escape_is_rejected() {
-        assert_rejects(
-            &[
-                "az://acct.blob.core.windows.net/general/gen%eral",
-                "az://acct.blob.core.windows.net/general/100%",
-                "az://acct.blob.core.windows.net/general/%zz",
-            ],
-            |err| matches!(err, AzureUrlError::MalformedPercentEscape { .. }),
-        );
-    }
-
-    #[test]
-    fn unrewritten_paths_still_parse() {
-        assert_canonical_paths(&[
-            (
-                "az://acct.blob.core.windows.net/general/prefix",
-                "/general/prefix",
-            ),
-            ("az://acct.blob.core.windows.net/general/", "/general/"),
-            ("az://acct.blob.core.windows.net/", "/"),
-            ("az://acct.blob.core.windows.net", "/"),
-            (
-                "az://acct.blob.core.windows.net/general/with%20space",
-                "/general/with%20space",
-            ),
-            (
-                "az://acct.blob.core.windows.net/general/p?sv=token#frag",
-                "/general/p",
-            ),
-            // A dot inside a segment is not a dot segment.
-            (
-                "az://acct.blob.core.windows.net/general/..hidden/...",
-                "/general/..hidden/...",
-            ),
-        ]);
-    }
-
-    #[test]
-    fn segments_that_cannot_name_a_blob_are_rejected() {
-        assert_rejects(
-            &[
-                "az://acct.blob.core.windows.net/general/%ff",
-                // only becomes invalid UTF-8 once the parser encodes the raw character
-                "az://acct.blob.core.windows.net/general/caf%C3é",
-                "az://acct.blob.core.windows.net/general/%C3é",
-            ],
-            |err| matches!(err, AzureUrlError::NonUtf8Path { .. }),
-        );
-
-        // An encoded slash past the container is a blob name containing a slash,
-        // which Azure supports
-        for input in [
-            "az://acct.blob.core.windows.net/general/a%2Fb",
-            "az://acct.blob.core.windows.net/general/a%2fb",
-        ] {
-            assert_eq!(
-                located(input, &[]).container(),
-                Some(&container("general")),
-                "{input}"
-            );
-        }
-
-        assert_canonical_paths(&[
-            (
-                "az://acct.blob.core.windows.net/general/café",
-                "/general/caf%C3%A9",
-            ),
-            (
-                "az://acct.blob.core.windows.net/general/with space",
-                "/general/with%20space",
-            ),
-            (
-                "az://acct.blob.core.windows.net/general/caf%C3%A9",
-                "/general/caf%C3%A9",
-            ),
-        ]);
     }
 }
 

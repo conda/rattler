@@ -144,12 +144,19 @@ fn segment(channel: &AzureChannelUrl, index: usize) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{channel, container, key, located};
+    use crate::test_support::{channel, container, key};
 
+    /// One `url configured=[keys]` entry per case; the snapshot pins the
+    /// matched key and container, or the error.
+    ///
+    /// Covers: the longest configured key winning, the host-style fallback
+    /// for unconfigured Azure hosts (and its absence for IP literals), an
+    /// illegal container name erroring only once a key grants one, and
+    /// unkeyed URLs reporting no container rather than a bad one.
     #[test]
-    fn the_container_follows_the_matched_key() {
-        for (url, configured) in [
-            ("az://acct.blob.core.windows.net/general/noarch", &[][..]),
+    fn located_outcomes() {
+        let cases: &[(&str, &[&str])] = &[
+            ("az://acct.blob.core.windows.net/general/noarch", &[]),
             (
                 "az://acct.blob.core.windows.net/general/noarch",
                 &["acct.blob.core.windows.net"],
@@ -160,83 +167,46 @@ mod tests {
             ),
             ("az://proxy.internal/accta/general", &["proxy.internal"]),
             (
+                "az://proxy.internal/accta/general/noarch",
+                &["proxy.internal", "proxy.internal/accta"],
+            ),
+            (
                 "az://127.0.0.1:10000/devstoreaccount1/general",
                 &["127.0.0.1:10000/devstoreaccount1"],
             ),
-        ] {
-            let located = located(url, configured);
-            let Some(container) = located.container() else {
-                panic!("{url} names a container");
-            };
-            let prefix = match located.key() {
-                Some(AzureEndpointKey::PathStyle(path)) => format!("/{}", path.account()),
-                Some(AzureEndpointKey::HostStyle(_)) | None => String::new(),
-            };
-            assert!(
-                channel(url)
-                    .canonical()
-                    .path()
-                    .starts_with(&format!("{prefix}/{container}")),
-                "{url}: `{container}` does not follow `{prefix}`"
-            );
-        }
-    }
+            ("az://127.0.0.1:10000/devstoreaccount1/general", &[]),
+            ("az://acct.blob.core.windows.net/General/noarch", &[]),
+            ("az://acct.blob.core.windows.net/ab/noarch", &[]),
+            ("az://acct.blob.core.windows.net/a--b/noarch", &[]),
+            ("az://acct.blob.core.windows.net/general;evil/noarch", &[]),
+            ("az://acct.blob.core.windows.net/-o/noarch", &[]),
+            (
+                "az://127.0.0.1:10000/Conda_Channel/noarch/repodata.json",
+                &[],
+            ),
+            ("az://azurite/Conda_Channel/noarch/repodata.json", &[]),
+            ("az://mirror/ab/noarch/repodata.json", &[]),
+            ("az://localhost:8080/My_Repo/noarch/repodata.json", &[]),
+        ];
 
-    #[test]
-    fn the_longest_configured_key_wins() {
-        let url = "az://proxy.internal/accta/general/noarch";
-
-        let both = located(url, &["proxy.internal", "proxy.internal/accta"]);
-        assert_eq!(both.key(), Some(&key("proxy.internal/accta")));
-        assert_eq!(both.container(), Some(&container("general")));
-    }
-
-    #[test]
-    fn an_unmatched_url_falls_back_to_host_style() {
-        // An IP literal has no account label, so not even the host-style
-        // fallback key can be built.
-        let anonymous = located("az://127.0.0.1:10000/devstoreaccount1/general", &[]);
-        assert_eq!(anonymous.key(), None);
-        assert_eq!(anonymous.container(), None);
-
-        // `acct` is an account label, so the fallback key exists unconfigured.
-        let azure = located("az://acct.blob.core.windows.net/general/noarch", &[]);
-        assert_eq!(azure.key(), Some(&key("acct.blob.core.windows.net")));
-        assert_eq!(azure.container(), Some(&container("general")));
-    }
-
-    #[test]
-    fn a_url_with_an_unusable_container_is_an_error() {
-        for url in [
-            "az://acct.blob.core.windows.net/General/noarch",
-            "az://acct.blob.core.windows.net/ab/noarch",
-            "az://acct.blob.core.windows.net/a--b/noarch",
-            "az://acct.blob.core.windows.net/general;evil/noarch",
-            "az://acct.blob.core.windows.net/-o/noarch",
-        ] {
-            let err = locate(&channel(url), |_| false)
-                .expect_err("an illegal container name must be reported");
-            assert!(
-                matches!(err, AzureUrlError::InvalidContainerName(_)),
-                "{url}: {err}"
-            );
-        }
-    }
-
-    /// Without a key nothing is granted, so a segment Azure would refuse as a
-    /// container should not error
-    #[test]
-    fn an_unkeyed_url_reports_no_container_rather_than_a_bad_one() {
-        for url in [
-            "az://127.0.0.1:10000/Conda_Channel/noarch/repodata.json",
-            "az://azurite/Conda_Channel/noarch/repodata.json",
-            "az://mirror/ab/noarch/repodata.json",
-            "az://localhost:8080/My_Repo/noarch/repodata.json",
-        ] {
-            let located = located(url, &[]);
-            assert_eq!(located.key(), None, "{url}");
-            assert_eq!(located.container(), None, "{url}");
-        }
+        let outcomes: indexmap::IndexMap<String, String> = cases
+            .iter()
+            .map(|(url, configured)| {
+                let keys = configured.iter().copied().map(key).collect::<Vec<_>>();
+                let outcome = match locate(&channel(url), |candidate| keys.contains(candidate)) {
+                    Ok(located) => format!(
+                        "key: {}, container: {}",
+                        located.key().map_or("none".into(), ToString::to_string),
+                        located
+                            .container()
+                            .map_or("none".into(), ToString::to_string),
+                    ),
+                    Err(err) => format!("error: {err}"),
+                };
+                (format!("{url} configured={configured:?}"), outcome)
+            })
+            .collect();
+        insta::assert_yaml_snapshot!(outcomes);
     }
 
     #[test]

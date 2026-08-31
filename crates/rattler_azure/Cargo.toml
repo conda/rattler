@@ -33,5 +33,8 @@ url = { workspace = true }
 which = { workspace = true, optional = true }
 
 [dev-dependencies]
+indexmap = { workspace = true, features = ["serde"] }
+insta = { workspace = true, features = ["yaml"] }
+rstest = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
 toml = { workspace = true }

@@ -183,30 +183,29 @@ mod tests {
         location
     }
 
+    #[rstest::rstest]
+    #[case::account_key(Some("key"), None)]
+    #[case::sas_token(None, Some("sv=..."))]
+    #[case::missing(None, None)]
     #[tokio::test]
-    async fn account_key_resolves() {
-        assert!(matches!(
-            opts(Some("key"), None, false).resolve("cw", &unaddressable(), AzureScheme::Https).await,
-            Ok(AzureCredentials::AccountKey(k)) if k.expose_secret() == "key"
-        ));
-    }
+    async fn given_credentials_resolve(
+        #[case] account_key: Option<&str>,
+        #[case] sas_token: Option<&str>,
+    ) {
+        let resolved = opts(account_key, sas_token, false)
+            .resolve("cw", &unaddressable(), AzureScheme::Https)
+            .await;
 
-    #[tokio::test]
-    async fn sas_token_resolves() {
-        assert!(matches!(
-            opts(None, Some("sv=..."), false).resolve("cw", &unaddressable(), AzureScheme::Https).await,
-            Ok(AzureCredentials::SasToken(t)) if t.expose_secret() == "sv=..."
-        ));
-    }
-
-    #[tokio::test]
-    async fn none_is_rejected() {
-        assert!(matches!(
-            opts(None, None, false)
-                .resolve("cw", &unaddressable(), AzureScheme::Https)
-                .await,
-            Err(AzureCredentialsError::Missing)
-        ));
+        match (account_key, sas_token) {
+            (Some(k), None) => assert!(matches!(
+                resolved, Ok(AzureCredentials::AccountKey(s)) if s.expose_secret() == k
+            )),
+            (None, Some(t)) => assert!(matches!(
+                resolved, Ok(AzureCredentials::SasToken(s)) if s.expose_secret() == t
+            )),
+            (None, None) => assert!(matches!(resolved, Err(AzureCredentialsError::Missing))),
+            (Some(_), Some(_)) => unreachable!("no such case"),
+        }
     }
 
     #[test]

@@ -200,20 +200,11 @@ mod tests {
     }
 
     #[test]
-    fn a_key_past_the_account_is_rejected() {
-        let written = "acct.blob.core.windows.net/general/noarch";
-        assert!(
-            matches!(
-                AzureEndpointKey::parse(written),
-                Err(AzureUrlError::InvalidKey(_))
-            ),
-            "{written} names past the account"
-        );
-    }
-
-    #[test]
-    fn a_key_inherits_the_channel_url_rejections() {
-        for written in [
+    fn rejected_keys() {
+        let inputs = [
+            // names past the account
+            "acct.blob.core.windows.net/general/noarch",
+            // inherits the channel URL rejections
             "acct.blob.core.windows.net@evil.example",
             "acct.blob.core.windows.net/../accta",
             r"az://acct.blob.core.windows.net/general\..\..\evil/x",
@@ -223,17 +214,7 @@ mod tests {
             "proxy.internal/accta#frag",
             "acct.blob.core.windows.net:",
             "acct..blob.core.windows.net",
-        ] {
-            assert!(
-                AzureEndpointKey::parse(written).is_err(),
-                "expected a rejection for {written}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_key_must_name_an_account() {
-        for written in [
+            // names no account
             "127.0.0.1:10000",
             "[::1]:10000",
             "localhost",
@@ -241,32 +222,23 @@ mod tests {
             "azurite:10000",
             "--as-user.blob.core.windows.net",
             "acct-1.blob.example",
-        ] {
-            assert!(
-                AzureEndpointKey::parse(written).is_err(),
-                "expected a rejection for {written}"
-            );
-        }
-    }
-
-    #[test]
-    fn an_account_a_key_names_is_held_to_azures_rules() {
-        for written in [
+            // the account is held to Azure's rules
             "127.0.0.1:10000/devstore;evil",
             "127.0.0.1:10000/DevStoreAccount1",
             "127.0.0.1:10000/dev-store",
             "127.0.0.1:10000/ab",
             "127.0.0.1:10000/-o",
             "127.0.0.1:10000/--as-user",
-        ] {
-            assert!(
-                matches!(
-                    AzureEndpointKey::parse(written),
-                    Err(AzureUrlError::InvalidAccountName(_))
-                ),
-                "expected a rejection for {written}"
-            );
-        }
+        ];
+
+        let rejections: indexmap::IndexMap<&str, String> = inputs
+            .iter()
+            .map(|written| match AzureEndpointKey::parse(written) {
+                Ok(_) => panic!("expected a rejection for {written}"),
+                Err(err) => (*written, err.to_string()),
+            })
+            .collect();
+        insta::assert_yaml_snapshot!(rejections);
     }
 
     // A host-style key cannot be made of a host without multiple 'dot' sections,

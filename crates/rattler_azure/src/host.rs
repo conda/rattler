@@ -234,28 +234,8 @@ mod tests {
     }
 
     #[test]
-    fn empty_host_labels_are_rejected() {
-        for host in [
-            "acct..blob.core.windows.net",
-            "acct.blob.example..",
-            ".example",
-        ] {
-            assert!(
-                matches!(
-                    AzureHost::parse(host),
-                    Err(AzureUrlError::InvalidHostAuthority { .. })
-                ),
-                "expected a rejection for {host}"
-            );
-        }
-    }
-
-    #[test]
     fn host_rejects_anything_that_is_not_a_bare_authority() {
-        // Labels of 60, so length is the only rule under test.
-        let label = "a".repeat(60);
-        let too_long = format!("{}.blob.example", [label.as_str(); 8].join("."));
-        for authority in [
+        let inputs = [
             "acct.blob.core.windows.net/general",
             "acct.blob.core.windows.net?sv=token",
             "acct.blob.core.windows.net#frag",
@@ -266,13 +246,28 @@ mod tests {
             "acct.blob.core.windows.net:0",
             "[::1]:",
             "[::1]:0",
-            &too_long,
-        ] {
-            assert!(
-                AzureHost::parse(authority).is_err(),
-                "expected a rejection for {authority:?}"
-            );
-        }
+            // empty labels
+            "acct..blob.core.windows.net",
+            "acct.blob.example..",
+            ".example",
+        ];
+
+        let rejections: indexmap::IndexMap<&str, String> = inputs
+            .iter()
+            .map(|authority| match AzureHost::parse(authority) {
+                Ok(_) => panic!("expected a rejection for {authority:?}"),
+                Err(err) => (*authority, err.to_string()),
+            })
+            .collect();
+        insta::assert_yaml_snapshot!(rejections);
+    }
+
+    #[test]
+    fn host_length_is_bounded() {
+        // Labels of 60, so length is the only rule under test.
+        let label = "a".repeat(60);
+        let too_long = format!("{}.blob.example", [label.as_str(); 8].join("."));
+        assert!(AzureHost::parse(&too_long).is_err());
 
         // A name right at the limit still parses, so the check bounds the length
         // rather than the number of labels.
