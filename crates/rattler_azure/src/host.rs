@@ -2,6 +2,7 @@ use url::Url;
 
 use crate::AzureUrlError;
 
+/// A validated and normalized `host[:port]` authority.
 #[derive(Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "serde",

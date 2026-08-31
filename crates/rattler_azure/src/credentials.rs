@@ -1,5 +1,7 @@
 use secrecy::SecretString;
 
+/// A credential for authenticating blob requests. `Debug` redacts the
+/// secret, so the value is log-safe.
 #[derive(Clone, Debug)]
 pub enum AzureCredentials {
     AccountKey(SecretString),

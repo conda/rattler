@@ -1,3 +1,4 @@
+/// Why a channel URL, host, name or endpoint key failed to parse.
 #[derive(Debug, thiserror::Error)]
 pub enum AzureUrlError {
     #[error("no host in Azure blob URL")]
