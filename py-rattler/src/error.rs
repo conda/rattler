@@ -100,6 +100,8 @@ pub enum PyRattlerError {
     InvalidHeaderValueError(#[from] reqwest::header::InvalidHeaderValue),
     #[error(transparent)]
     FromSdkError(#[from] rattler_s3::FromSDKError),
+    #[error(transparent)]
+    ConfigLoadError(#[from] rattler_config::config::LoadError),
 }
 
 fn pretty_print_error(mut err: &dyn Error) -> String {
@@ -224,6 +226,9 @@ impl From<PyRattlerError> for PyErr {
                 crate::exceptions::InvalidHeaderValueError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::FromSdkError(err) => PyValueError::new_err(pretty_print_error(&err)),
+            PyRattlerError::ConfigLoadError(err) => {
+                crate::exceptions::ConfigError::new_err(pretty_print_error(&err))
+            }
         }
     }
 }

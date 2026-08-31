@@ -19,6 +19,7 @@ from rattler.repo_data import (
     RepodataRevisionMetadata,
 )
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
+from rattler.config import Config, RunPostLinkScripts, TlsRootCerts
 from rattler.networking import Client, fetch_repo_data
 from rattler.virtual_package import GenericVirtualPackage, VirtualPackage, VirtualPackageOverrides, Override
 from rattler.package import (
@@ -69,6 +70,9 @@ __all__ = [
     "Channel",
     "ChannelConfig",
     "ChannelPriority",
+    "Config",
+    "RunPostLinkScripts",
+    "TlsRootCerts",
     "Client",
     "PatchInstructions",
     "RepoDataRecord",

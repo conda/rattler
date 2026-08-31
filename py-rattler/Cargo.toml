@@ -39,7 +39,9 @@ rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", defaul
   "indicatif",
 ] }
 rattler_conda_types = { path = "../crates/rattler_conda_types", default-features = false }
-rattler_config = { path = "../crates/rattler_config", default-features = false }
+rattler_config = { path = "../crates/rattler_config", default-features = false, features = [
+  "edit",
+] }
 rattler_digest = { path = "../crates/rattler_digest" }
 rattler_networking = { path = "../crates/rattler_networking", default-features = false, features = [
   "gcs",
@@ -77,6 +79,7 @@ url = "2"
 openssl = { version = "0.10", optional = true }
 pep440_rs = "0.7"
 pep508_rs = "0.9"
+serde = "1"
 serde_json = "1"
 pyo3-file = "0.17"
 nix = { version = "0.31", features = ["process"], optional = true }
