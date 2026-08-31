@@ -8,59 +8,79 @@
 //! lookup: given a package, find all records that reference it through
 //! their `depends`, `constrains`, or run exports.
 
-use rattler_conda_types::{MatchSpec, PackageName, ParseMatchSpecOptions, RepoDataRecord, Version};
+use rattler_conda_types::{
+    GenericVirtualPackage, MatchSpec, Matches, PackageName, PackageRecord, ParseMatchSpecOptions,
+    RepoDataRecord,
+};
 
-/// The concrete package to find reverse dependencies for with [`who_needs`].
+/// The package to find reverse dependencies for with [`who_needs`].
 ///
-/// Unlike a `MatchSpec`, this describes a single concrete package — a name,
-/// optionally pinned to a version and build string — so that the dependency
-/// match specs of candidate records can be unambiguously matched against it.
+/// The target determines how the dependency match specs of candidate
+/// records are evaluated:
+///
+/// * [`Name`](Self::Name): any dependency naming the package matches,
+///   regardless of its version or build constraints.
+/// * [`Record`](Self::Record): a dependency matches if its match spec
+///   matches the concrete record.
+/// * [`VirtualPackage`](Self::VirtualPackage): a dependency matches if its
+///   name, version, and build string constraints match the virtual
+///   package.
 #[derive(Debug, Clone)]
-pub struct WhoNeedsTarget {
-    /// The name of the package.
-    pub name: PackageName,
+pub enum WhoNeedsTarget {
+    /// Match every dependency that names this package.
+    Name(PackageName),
 
-    /// The version of the package. When `None`, matching is purely name
-    /// based and version constraints on dependencies are ignored.
-    pub version: Option<Version>,
+    /// Match dependencies whose match spec matches this concrete record.
+    Record(Box<PackageRecord>),
 
-    /// The build string of the package. When `None`, build string
-    /// constraints on dependencies are ignored.
-    pub build: Option<String>,
+    /// Match dependencies whose match spec matches this virtual package
+    /// (e.g. `__cuda`). Virtual packages have no records of their own, so
+    /// they get their own variant instead of a full [`PackageRecord`].
+    VirtualPackage(GenericVirtualPackage),
 }
 
 impl WhoNeedsTarget {
-    /// Constructs a target that matches any version of `name`.
-    pub fn new(name: PackageName) -> Self {
-        Self {
-            name,
-            version: None,
-            build: None,
+    /// The normalized name of the targeted package.
+    fn name(&self) -> &str {
+        match self {
+            WhoNeedsTarget::Name(name) => name.as_normalized(),
+            WhoNeedsTarget::Record(record) => record.name.as_normalized(),
+            WhoNeedsTarget::VirtualPackage(virtual_package) => virtual_package.name.as_normalized(),
         }
     }
 
-    /// Restricts the target to a concrete version.
-    #[must_use]
-    pub fn with_version(self, version: Version) -> Self {
-        Self {
-            version: Some(version),
-            ..self
-        }
-    }
-
-    /// Restricts the target to a concrete build string.
-    #[must_use]
-    pub fn with_build(self, build: impl Into<String>) -> Self {
-        Self {
-            build: Some(build.into()),
-            ..self
+    /// Whether `spec` matches this target. Only called for dependencies
+    /// that already passed the name check.
+    fn matches(&self, spec: &MatchSpec) -> bool {
+        match self {
+            WhoNeedsTarget::Name(_) => true,
+            WhoNeedsTarget::Record(record) => spec.matches(record.as_ref()),
+            WhoNeedsTarget::VirtualPackage(virtual_package) => spec.matches(virtual_package),
         }
     }
 }
 
 impl From<PackageName> for WhoNeedsTarget {
     fn from(name: PackageName) -> Self {
-        Self::new(name)
+        Self::Name(name)
+    }
+}
+
+impl From<PackageRecord> for WhoNeedsTarget {
+    fn from(record: PackageRecord) -> Self {
+        Self::Record(Box::new(record))
+    }
+}
+
+impl From<RepoDataRecord> for WhoNeedsTarget {
+    fn from(record: RepoDataRecord) -> Self {
+        record.package_record.into()
+    }
+}
+
+impl From<GenericVirtualPackage> for WhoNeedsTarget {
+    fn from(virtual_package: GenericVirtualPackage) -> Self {
+        Self::VirtualPackage(virtual_package)
     }
 }
 
@@ -117,16 +137,13 @@ pub struct Dependent<'r> {
 /// repodata patched with run export information, or records enriched
 /// through the gateway's run export extraction).
 ///
-/// When the target carries nothing but a name, matching is purely name
-/// based: every record with a dependency entry on that name is reported.
-/// This also makes it possible to query for virtual packages (e.g.
-/// `__cuda`) which have no records of their own.
-///
-/// When the target additionally carries a version (and optionally a build
-/// string), a dependent is only reported if its dependency match spec
-/// matches that concrete package. For example, with target
-/// `python 3.13.1` a record depending on `python >=3.9` is reported while
-/// a record depending on `python >=3.8,<3.10` is not.
+/// How dependencies are matched depends on the [`WhoNeedsTarget`] variant:
+/// a [`PackageName`] reports every record with a dependency entry on that
+/// name, while a concrete [`PackageRecord`] or [`GenericVirtualPackage`]
+/// only reports dependents whose dependency match spec matches it. For
+/// example, with a `python 3.13.1` record as the target, a record
+/// depending on `python >=3.9` is reported while a record depending on
+/// `python >=3.8,<3.10` is not.
 ///
 /// Note that reverse dependency lookup requires the *complete* set of
 /// records of the queried channels and platforms — any record not passed in
@@ -138,30 +155,20 @@ pub struct Dependent<'r> {
 /// that field that matches.
 pub fn who_needs<'r>(
     records: impl IntoIterator<Item = &'r RepoDataRecord>,
-    target: &WhoNeedsTarget,
+    target: impl Into<WhoNeedsTarget>,
 ) -> Vec<Dependent<'r>> {
-    let target_name = target.name.as_normalized();
-    let is_pinned = target.version.is_some() || target.build.is_some();
+    let target = target.into();
+    let target_name = target.name();
 
     let edge_matches = |dependency: &str| -> bool {
         if PackageName::normalized_name_from_matchspec_str(dependency) != target_name {
             return false;
         }
-        if !is_pinned {
+        if matches!(target, WhoNeedsTarget::Name(_)) {
             return true;
         }
         match MatchSpec::from_str(dependency, ParseMatchSpecOptions::lenient()) {
-            Ok(dependency_spec) => {
-                let version_matches = match (&target.version, &dependency_spec.version) {
-                    (Some(version), Some(constraint)) => constraint.matches(version),
-                    _ => true,
-                };
-                let build_matches = match (&target.build, &dependency_spec.build) {
-                    (Some(build), Some(matcher)) => matcher.matches(build),
-                    _ => true,
-                };
-                version_matches && build_matches
-            }
+            Ok(dependency_spec) => target.matches(&dependency_spec),
             // A dependency string that names the package but fails to parse
             // is reported rather than silently dropped.
             Err(_) => true,
@@ -235,7 +242,7 @@ impl crate::RepoDataQueryOutput {
     /// Reverse dependency lookup requires the complete set of records of
     /// the queried channels and platforms, so the query this output came
     /// from should have used a wildcard spec (`*`).
-    pub fn who_needs(&self, target: &WhoNeedsTarget) -> Vec<Dependent<'_>> {
+    pub fn who_needs(&self, target: impl Into<WhoNeedsTarget>) -> Vec<Dependent<'_>> {
         who_needs(self.repodata.iter().flat_map(crate::RepoData::iter), target)
     }
 }
@@ -243,7 +250,7 @@ impl crate::RepoDataQueryOutput {
 #[cfg(test)]
 mod tests {
     use rattler_conda_types::{
-        PackageRecord,
+        Version,
         package::{DistArchiveIdentifier, RunExportsJson},
     };
     use url::Url;
@@ -311,12 +318,16 @@ mod tests {
         ]
     }
 
-    fn target(name: &str) -> WhoNeedsTarget {
-        WhoNeedsTarget::new(name.parse().unwrap())
+    fn name(name: &str) -> PackageName {
+        name.parse().unwrap()
     }
 
-    fn version(v: &str) -> Version {
-        v.parse().unwrap()
+    fn concrete(name: &str, version: &str, build: &str) -> PackageRecord {
+        PackageRecord::new(
+            name.parse().unwrap(),
+            version.parse::<Version>().unwrap(),
+            build.to_string(),
+        )
     }
 
     fn names<'r>(dependents: &[Dependent<'r>]) -> Vec<&'r str> {
@@ -327,9 +338,9 @@ mod tests {
     }
 
     #[test]
-    fn test_direct_by_name() {
+    fn test_by_name() {
         let records = test_records();
-        let result = who_needs(&records, &target("python"));
+        let result = who_needs(&records, name("python"));
         assert_eq!(
             names(&result),
             vec!["old-lib", "numpy", "scipy", "pandas", "cpython-lib"]
@@ -339,50 +350,30 @@ mod tests {
     }
 
     #[test]
-    fn test_pinned_version() {
+    fn test_by_record() {
         let records = test_records();
         // Only old-lib's constraint (>=3.8,<3.10) admits python 3.9.5; the
         // other dependents require >=3.10 or 3.13.*.
-        let result = who_needs(&records, &target("python").with_version(version("3.9.5")));
+        let result = who_needs(&records, concrete("python", "3.9.5", "h123_0_cpython"));
         assert_eq!(names(&result), vec!["old-lib"]);
 
-        // Everything except old-lib can use python 3.13.1.
-        let result = who_needs(&records, &target("python").with_version(version("3.13.1")));
+        // Everything except old-lib can use this python 3.13.1 build.
+        let result = who_needs(&records, concrete("python", "3.13.1", "h123_0_cpython"));
         assert_eq!(
             names(&result),
             vec!["numpy", "scipy", "pandas", "cpython-lib"]
         );
-    }
 
-    #[test]
-    fn test_pinned_build() {
-        let records = test_records();
         // cpython-lib requires build `*_cpython`, which excludes it for a
         // pypy build of python 3.13.
-        let result = who_needs(
-            &records,
-            &target("python")
-                .with_version(version("3.13.1"))
-                .with_build("h123_0_pypy"),
-        );
+        let result = who_needs(&records, concrete("python", "3.13.1", "h123_0_pypy"));
         assert_eq!(names(&result), vec!["numpy", "scipy", "pandas"]);
-
-        let result = who_needs(
-            &records,
-            &target("python")
-                .with_version(version("3.13.1"))
-                .with_build("h123_0_cpython"),
-        );
-        assert_eq!(
-            names(&result),
-            vec!["numpy", "scipy", "pandas", "cpython-lib"]
-        );
     }
 
     #[test]
     fn test_constrains() {
         let records = test_records();
-        let result = who_needs(&records, &target("pandas"));
+        let result = who_needs(&records, name("pandas"));
         assert_eq!(names(&result), vec!["pandas-stubs"]);
         assert_eq!(result[0].kind, DependencyKind::Constrains);
     }
@@ -392,7 +383,7 @@ mod tests {
         let records = test_records();
         // zlib references libzlib both through `depends` and through its
         // weak run exports; both edges are reported.
-        let result = who_needs(&records, &target("libzlib"));
+        let result = who_needs(&records, name("libzlib"));
         assert_eq!(names(&result), vec!["zlib", "zlib"]);
         assert_eq!(result[0].kind, DependencyKind::Depends);
         assert_eq!(result[0].dependency, "libzlib 1.3.1 h0_1");
@@ -402,12 +393,12 @@ mod tests {
         );
         assert_eq!(result[1].dependency, "libzlib >=1.3.1,<2.0a0");
 
-        // A pinned version outside the run export range only matches the
-        // edges whose constraint admits it.
-        let result = who_needs(&records, &target("libzlib").with_version(version("2.1")));
+        // A record outside the run export range only matches the edges
+        // whose constraint admits it.
+        let result = who_needs(&records, concrete("libzlib", "2.1", "h0_0"));
         assert!(result.is_empty());
 
-        let result = who_needs(&records, &target("libzlib").with_version(version("1.3.5")));
+        let result = who_needs(&records, concrete("libzlib", "1.3.5", "h0_0"));
         assert_eq!(names(&result), vec!["zlib"]);
         assert_eq!(
             result[0].kind,
@@ -419,11 +410,19 @@ mod tests {
     fn test_virtual_package() {
         let records = test_records();
         // No record named __cuda exists; name-based matching still works.
-        let result = who_needs(&records, &target("__cuda"));
+        let result = who_needs(&records, name("__cuda"));
         assert_eq!(names(&result), vec!["cuda-tool"]);
 
-        // And so does matching a concrete virtual package version.
-        let result = who_needs(&records, &target("__cuda").with_version(version("11.8")));
+        // A concrete virtual package matches against the dependency's
+        // version and build string constraints.
+        let cuda = |version: &str| GenericVirtualPackage {
+            name: "__cuda".parse().unwrap(),
+            version: version.parse().unwrap(),
+            build_string: "0".to_string(),
+        };
+        let result = who_needs(&records, cuda("12.4"));
+        assert_eq!(names(&result), vec!["cuda-tool"]);
+        let result = who_needs(&records, cuda("11.8"));
         assert!(result.is_empty());
     }
 }

@@ -1,35 +1,35 @@
-use std::{collections::HashMap, env, time::Instant};
+use std::{collections::HashMap, env, path::Path, time::Instant};
 
 use indexmap::IndexMap;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::{
-    Channel, ChannelConfig, MatchSpec, PackageName, ParseMatchSpecOptions, Platform, Version,
+    Channel, ChannelConfig, MatchSpec, PackageName, PackageRecord, ParseMatchSpecOptions, Platform,
+    package::IndexJson,
 };
 use rattler_repodata_gateway::{
     Gateway, SourceConfig,
     repoquery::{DependencyKind, Dependent, RunExportKind, WhoNeedsTarget},
 };
+use url::Url;
 
 /// Show packages that depend on the given package (reverse dependencies).
 #[derive(Debug, clap::Parser)]
 #[clap(after_help = r#"Examples:
-  rattler whoneeds numpy                  # packages that depend on numpy
-  rattler whoneeds python 3.13.1          # packages whose constraint admits python 3.13.1
-  rattler whoneeds python 3.13.1 h123_0   # ... with this exact build string"#)]
+  rattler whoneeds numpy                      # packages that depend on numpy
+  rattler whoneeds __cuda                     # packages that depend on a virtual package
+  rattler whoneeds ./python-3.13.1-h123_0.conda   # packages that can use this exact package
+  rattler whoneeds https://conda.anaconda.org/conda-forge/linux-64/python-3.13.1-hc26e970_100_cp313.conda"#)]
 pub struct Opt {
-    /// The name of the package to find reverse dependencies for.
+    /// The package to find reverse dependencies for.
+    ///
+    /// Either a package name (numpy, __cuda), matching every dependency
+    /// that names the package; or a path or URL to a .conda/.tar.bz2
+    /// package, matching only dependents whose match spec matches the
+    /// package.
     #[clap(required = true)]
     package: String,
-
-    /// A concrete version of the package. When given, only dependents whose
-    /// version constraint admits this version are shown.
-    version: Option<Version>,
-
-    /// A concrete build string of the package. When given, only dependents
-    /// whose build string constraint admits this build are shown.
-    build: Option<String>,
 
     /// Channels to search in
     #[clap(short, long, default_value = "conda-forge")]
@@ -52,28 +52,66 @@ pub struct Opt {
     json: bool,
 }
 
+/// Interprets the package argument as a package archive URL or path, or as
+/// a package name, and builds the corresponding target. Returns the target
+/// together with a human readable form of it.
+async fn resolve_target(
+    package: &str,
+    client: &reqwest_middleware::ClientWithMiddleware,
+) -> miette::Result<(WhoNeedsTarget, String)> {
+    let is_archive = package.ends_with(".conda") || package.ends_with(".tar.bz2");
+    let index_json: Option<IndexJson> = if is_archive && package.contains("://") {
+        let url = Url::parse(package)
+            .into_diagnostic()
+            .context("failed to parse the package URL")?;
+        Some(
+            rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url(
+                client.clone(),
+                url,
+            )
+            .await
+            .into_diagnostic()
+            .context("failed to read index.json from the package URL")?,
+        )
+    } else if is_archive {
+        Some(
+            rattler_package_streaming::seek::read_package_file(Path::new(package))
+                .into_diagnostic()
+                .context("failed to read index.json from the package file")?,
+        )
+    } else {
+        None
+    };
+
+    let Some(index_json) = index_json else {
+        let name: PackageName = package
+            .parse()
+            .into_diagnostic()
+            .context("failed to parse the package name")?;
+        let display = name.as_source().to_string();
+        return Ok((name.into(), display));
+    };
+
+    let record = PackageRecord::from_index_json(index_json, None, None, None)
+        .into_diagnostic()
+        .context("failed to convert the package's index.json into a record")?;
+    let display = format!(
+        "{} {} {}",
+        record.name.as_source(),
+        record.version,
+        record.build
+    );
+    Ok((record.into(), display))
+}
+
 pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
 
-    let package_name: PackageName = opt
-        .package
-        .parse()
-        .into_diagnostic()
-        .context("failed to parse the package name")?;
-    let mut target = WhoNeedsTarget::new(package_name);
-    if let Some(version) = opt.version.clone() {
-        target = target.with_version(version);
-    }
-    if let Some(build) = opt.build.clone() {
-        target = target.with_build(build);
-    }
+    // Create HTTP client
+    let download_client = super::client::create_client_with_middleware(offline)?;
 
-    // Human readable form of the queried package, e.g. `python 3.13.1`.
-    let target_display = std::iter::once(opt.package.clone())
-        .chain(opt.version.as_ref().map(ToString::to_string))
-        .chain(opt.build.clone())
-        .join(" ");
+    let (target, target_display) = resolve_target(&opt.package, &download_client).await?;
 
     eprintln!(
         "Searching for packages that depend on '{}' on {}",
@@ -92,9 +130,6 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
         "Channels: {}",
         channels.iter().map(Channel::canonical_name).join(", ")
     );
-
-    // Create HTTP client
-    let download_client = super::client::create_client_with_middleware(offline)?;
 
     // Create gateway. Sharded repodata is disabled because a reverse
     // dependency lookup needs the records of every package in the channel,
@@ -136,7 +171,7 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
 
     pb.set_message("Computing reverse dependencies...");
 
-    let dependents = repo_data.who_needs(&target);
+    let dependents = repo_data.who_needs(target);
 
     pb.finish_and_clear();
 
