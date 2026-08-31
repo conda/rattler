@@ -77,8 +77,6 @@ pub enum AzureUrlError {
         source: std::str::Utf8Error,
     },
 
-    #[error(
-        "Azure blob channel URL must use the `az://` scheme, got `{0}`"
-    )]
+    #[error("Azure blob channel URL must use the `az://` scheme, got `{0}`")]
     InvalidScheme(String),
 }
