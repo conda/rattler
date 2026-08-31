@@ -1,11 +1,10 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use pyo3::prelude::PyAnyMethods;
 use pyo3::{Bound, PyAny, PyResult, exceptions::PyTypeError, pyclass, pyfunction, pymethods};
 use rattler_conda_types::RepoDataRecord;
 use rattler_repodata_gateway::repoquery::{
-    DependencyKind, Dependent, RunExportKind, WhoNeedsTarget, who_needs,
+    DependencyKind, OwnedDependent, RunExportKind, WhoNeedsTarget, who_needs,
 };
 
 use crate::{
@@ -48,15 +47,12 @@ impl PyDependent {
     }
 }
 
-impl PyDependent {
-    /// Builds a `PyDependent` from a borrowed `Dependent` and the record it
-    /// borrows from, passed as an `Arc` so the record is shared rather than
-    /// deep copied.
-    pub fn new(dependent: &Dependent<'_>, record: Arc<RepoDataRecord>) -> Self {
+impl From<OwnedDependent> for PyDependent {
+    fn from(dependent: OwnedDependent) -> Self {
         let (kind, run_export_kind) = split_kind(dependent.kind);
         Self {
-            record: PyRecord::from(record),
-            dependency: dependent.dependency.to_string(),
+            record: PyRecord::from(dependent.record),
+            dependency: dependent.dependency,
             kind: kind.to_string(),
             run_export_kind: run_export_kind.map(String::from),
         }

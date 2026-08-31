@@ -5,12 +5,11 @@ use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::{
-    Channel, ChannelConfig, MatchSpec, PackageName, PackageRecord, ParseMatchSpecOptions, Platform,
-    package::IndexJson,
+    Channel, ChannelConfig, PackageName, PackageRecord, Platform, package::IndexJson,
 };
 use rattler_repodata_gateway::{
     Gateway, SourceConfig,
-    repoquery::{DependencyKind, Dependent, RunExportKind, WhoNeedsTarget},
+    repoquery::{DependencyKind, OwnedDependent, RunExportKind, WhoNeedsTarget},
 };
 use url::Url;
 
@@ -153,25 +152,14 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
     pb.set_style(ProgressStyle::with_template("{spinner:.green} {msg}").unwrap());
     pb.set_message("Loading repodata...");
 
-    // Reverse dependencies can hide anywhere, so fetch all records of the
-    // queried subdirs with a wildcard spec.
-    let wildcard = MatchSpec::from_str(
-        "*",
-        ParseMatchSpecOptions::strict().with_exact_names_only(false),
-    )
-    .into_diagnostic()?;
-
     let start = Instant::now();
-    let repo_data = gateway
-        .query(channels, [opt.platform, Platform::NoArch], vec![wildcard])
-        .recursive(false)
+    let output = gateway
+        .who_needs(channels, [opt.platform, Platform::NoArch], target)
+        .execute()
         .await
         .into_diagnostic()
-        .context("failed to query repodata")?;
-
-    pb.set_message("Computing reverse dependencies...");
-
-    let dependents = repo_data.who_needs(target);
+        .context("failed to compute reverse dependencies")?;
+    let dependents = output.dependents;
 
     pb.finish_and_clear();
 
@@ -185,7 +173,7 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
                     "build": dependent.record.package_record.build,
                     "subdir": dependent.record.package_record.subdir,
                     "channel": dependent.record.channel,
-                    "dependency": dependent.dependency,
+                    "dependency": &dependent.dependency,
                     "kind": kind_str(dependent.kind),
                 })
             })
@@ -202,7 +190,7 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
 
     // Group by package name, keeping the record with the highest version
     // per package as the representative shown in the output.
-    let mut grouped: IndexMap<&str, (&Dependent<'_>, usize)> = IndexMap::new();
+    let mut grouped: IndexMap<&str, (&OwnedDependent, usize)> = IndexMap::new();
     for dependent in &dependents {
         let key = dependent.record.package_record.name.as_normalized();
         grouped
@@ -243,7 +231,7 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
             console::style(&record.version).cyan(),
             record.build,
             kind,
-            console::style(dependent.dependency).dim(),
+            console::style(&dependent.dependency).dim(),
             if record_count > 1 {
                 format!(" and {} more record{}", record_count - 1, {
                     if record_count == 2 { "" } else { "s" }

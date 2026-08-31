@@ -1195,7 +1195,7 @@ impl QueryExecutor {
 /// How a channel subdir fetch should handle errors from
 /// `get_or_create_subdir`.
 #[derive(Clone, Copy)]
-enum FetchErrorPolicy {
+pub(super) enum FetchErrorPolicy {
     /// Surface the error to the caller (user-supplied channels).
     Propagate,
     /// Emit a [`ChannelRelationsWarning::DiscoveryFetchFailed`] and
@@ -1236,7 +1236,7 @@ fn build_channel_subdir_future(
 /// `NamesQuery`. Returns the resolved subdir plus an optional
 /// [`ChannelRelationsWarning`] when the policy swallowed a fetch
 /// failure.
-async fn fetch_subdir_with_policy(
+pub(super) async fn fetch_subdir_with_policy(
     gateway: &GatewayInner,
     channel: &Channel,
     platform: Platform,
@@ -1324,18 +1324,18 @@ fn spawn_one_package_fetch(
 }
 
 #[cfg(target_arch = "wasm32")]
-type BoxFuture<T> = futures::future::LocalBoxFuture<'static, T>;
+pub(super) type BoxFuture<T> = futures::future::LocalBoxFuture<'static, T>;
 
 #[cfg(target_arch = "wasm32")]
-fn box_future<T, F: Future<Output = T> + 'static>(future: F) -> BoxFuture<T> {
+pub(super) fn box_future<T, F: Future<Output = T> + 'static>(future: F) -> BoxFuture<T> {
     future.boxed_local()
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-type BoxFuture<T> = futures::future::BoxFuture<'static, T>;
+pub(super) type BoxFuture<T> = futures::future::BoxFuture<'static, T>;
 
 #[cfg(not(target_arch = "wasm32"))]
-fn box_future<T, F: Future<Output = T> + Send + 'static>(future: F) -> BoxFuture<T> {
+pub(super) fn box_future<T, F: Future<Output = T> + Send + 'static>(future: F) -> BoxFuture<T> {
     future.boxed()
 }
 

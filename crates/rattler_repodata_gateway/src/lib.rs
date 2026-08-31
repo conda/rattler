@@ -83,6 +83,7 @@ pub use gateway::{
     ChannelRelationsWarning, DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH, Gateway, GatewayBuilder,
     GatewayError, GatewayWarning, MaxConcurrency, NamesQuery, NamesQueryOutput, RepoData,
     RepoDataQuery, RepoDataQueryOutput, RepoDataSource, Source, SourceConfig, SubdirSelection,
+    WhoNeedsQuery, WhoNeedsQueryOutput,
 };
 #[cfg(feature = "indicatif")]
 pub use gateway::{IndicatifReporter, IndicatifReporterBuilder};

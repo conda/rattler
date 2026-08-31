@@ -8,6 +8,8 @@
 //! lookup: given a package, find all records that reference it through
 //! their `depends`, `constrains`, or run exports.
 
+use std::sync::Arc;
+
 use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, Matches, PackageName, PackageRecord, ParseMatchSpecOptions,
     RepoDataRecord,
@@ -56,6 +58,24 @@ impl WhoNeedsTarget {
             WhoNeedsTarget::Name(_) => true,
             WhoNeedsTarget::Record(record) => spec.matches(record.as_ref()),
             WhoNeedsTarget::VirtualPackage(virtual_package) => spec.matches(virtual_package),
+        }
+    }
+
+    /// Whether the dependency string `dependency` references this target.
+    /// `target_name` must be [`Self::name`], passed in so the caller can
+    /// compute it once per scan instead of once per dependency.
+    fn edge_matches(&self, target_name: &str, dependency: &str) -> bool {
+        if PackageName::normalized_name_from_matchspec_str(dependency) != target_name {
+            return false;
+        }
+        if matches!(self, WhoNeedsTarget::Name(_)) {
+            return true;
+        }
+        match MatchSpec::from_str(dependency, ParseMatchSpecOptions::lenient()) {
+            Ok(dependency_spec) => self.matches(&dependency_spec),
+            // A dependency string that names the package but fails to parse
+            // is reported rather than silently dropped.
+            Err(_) => true,
         }
     }
 }
@@ -160,33 +180,63 @@ pub fn who_needs<'r>(
     let target = target.into();
     let target_name = target.name();
 
-    let edge_matches = |dependency: &str| -> bool {
-        if PackageName::normalized_name_from_matchspec_str(dependency) != target_name {
-            return false;
-        }
-        if matches!(target, WhoNeedsTarget::Name(_)) {
-            return true;
-        }
-        match MatchSpec::from_str(dependency, ParseMatchSpecOptions::lenient()) {
-            Ok(dependency_spec) => target.matches(&dependency_spec),
-            // A dependency string that names the package but fails to parse
-            // is reported rather than silently dropped.
-            Err(_) => true,
-        }
-    };
-
     let mut result = Vec::new();
     for record in records {
         for (dependencies, kind) in dependency_fields(record) {
             let Some(dependency) = dependencies
                 .iter()
-                .find(|dependency| edge_matches(dependency))
+                .find(|dependency| target.edge_matches(target_name, dependency))
             else {
                 continue;
             };
             result.push(Dependent {
                 record,
                 dependency,
+                kind,
+            });
+        }
+    }
+    result
+}
+
+/// An owned counterpart of [`Dependent`], sharing the matching record
+/// through an [`Arc`] instead of borrowing it. Returned by streaming scans
+/// that discard the scanned records as they go (e.g. the gateway's
+/// `who_needs` query) and therefore cannot hand out borrows.
+#[derive(Debug, Clone)]
+pub struct OwnedDependent {
+    /// The record that references the queried package.
+    pub record: Arc<RepoDataRecord>,
+
+    /// The dependency string through which [`Self::record`] references the
+    /// queried package.
+    pub dependency: String,
+
+    /// The field of the record that [`Self::dependency`] comes from.
+    pub kind: DependencyKind,
+}
+
+/// The owned counterpart of [`who_needs`]: identical matching semantics,
+/// but the matching records are shared via [`Arc`] so the caller can drop
+/// `records` afterwards. See [`who_needs`] for the semantics.
+pub fn who_needs_owned(
+    records: &[Arc<RepoDataRecord>],
+    target: &WhoNeedsTarget,
+) -> Vec<OwnedDependent> {
+    let target_name = target.name();
+
+    let mut result = Vec::new();
+    for record in records {
+        for (dependencies, kind) in dependency_fields(record) {
+            let Some(dependency) = dependencies
+                .iter()
+                .find(|dependency| target.edge_matches(target_name, dependency))
+            else {
+                continue;
+            };
+            result.push(OwnedDependent {
+                record: record.clone(),
+                dependency: dependency.clone(),
                 kind,
             });
         }

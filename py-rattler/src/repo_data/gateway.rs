@@ -2,7 +2,6 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use futures::{StreamExt, TryStreamExt};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyAnyMethods;
@@ -345,18 +344,12 @@ impl PyGateway {
         })
     }
 
-    /// Runs a wildcard query over `sources`/`platforms` and computes the
-    /// reverse dependencies of `target` entirely in Rust, converting only
-    /// the matching records to Python. This avoids materializing a Python
-    /// object for every record in the queried repodata.
-    ///
-    /// Platforms are queried independently with bounded concurrency: each
-    /// platform's repodata is scanned and released as soon as its query
-    /// completes, instead of retaining the records of every platform at
-    /// once. This keeps peak memory bounded and lets subdir loading run in
-    /// parallel; a combined multi-platform query would also spawn a fetch
-    /// for every package name on every subdir, which scales poorly with
-    /// the number of platforms.
+    /// Computes the reverse dependencies of `target` in the given sources
+    /// and platforms entirely in Rust, converting only the matching records
+    /// to Python. The scan streams over the repodata package by package:
+    /// scanned records are neither materialized as Python objects nor
+    /// inserted into the gateway's long-lived record cache, so peak memory
+    /// is bounded by the in-flight scans instead of the complete repodata.
     pub fn who_needs<'a>(
         &self,
         py: Python<'a>,
@@ -364,118 +357,28 @@ impl PyGateway {
         platforms: Vec<PyPlatform>,
         target: &Bound<'a, PyAny>,
     ) -> PyResult<Bound<'a, PyAny>> {
-        /// How many platforms are queried and scanned concurrently. Bounds
-        /// peak memory: at most this many platforms' repodata are alive at
-        /// the same time.
-        const PLATFORM_CONCURRENCY: usize = 4;
-
         let rust_sources: Vec<Source> = sources
             .into_iter()
             .map(py_object_to_source)
             .collect::<PyResult<_>>()?;
         let target = crate::repoquery::extract_who_needs_target(target)?;
 
-        let wildcard = rattler_conda_types::MatchSpec::from_str(
-            "*",
-            rattler_conda_types::ParseMatchSpecOptions::strict().with_exact_names_only(false),
-        )
-        .map_err(PyRattlerError::from)?;
+        let mut query =
+            self.inner
+                .who_needs(rust_sources, platforms.into_iter().map(|p| p.inner), target);
+        if self.show_progress {
+            query = query
+                .with_reporter(rattler_repodata_gateway::IndicatifReporter::builder().finish());
+        }
 
-        // Deduplicate platforms while keeping the input order, so the
-        // result order stays deterministic and no subdir is scanned twice.
-        let mut seen_platforms = HashSet::new();
-        let platforms: Vec<rattler_conda_types::Platform> = platforms
-            .into_iter()
-            .map(|p| p.inner)
-            .filter(|p| seen_platforms.insert(*p))
-            .collect();
-
-        let gateway = self.inner.clone();
-        let show_progress = self.show_progress;
         future_into_py(py, async move {
-            let per_platform = futures::stream::iter(platforms.into_iter().enumerate().map(
-                |(platform_index, platform)| {
-                    let gateway = gateway.clone();
-                    let sources = rust_sources.clone();
-                    let target = target.clone();
-                    let wildcard = wildcard.clone();
-                    let query_platform = async move {
-                        let mut query = gateway
-                            .query(sources, [platform], vec![wildcard])
-                            .recursive(false);
-
-                        if show_progress {
-                            query = query.with_reporter(
-                                rattler_repodata_gateway::IndicatifReporter::builder().finish(),
-                            );
-                        }
-
-                        let mut output = query.execute().await?;
-                        let warnings = std::mem::take(&mut output.warnings);
-
-                        // The dependents borrow records from `output`; look
-                        // their `Arc`s up by pointer identity so the conversion
-                        // shares the records instead of deep copying them. The
-                        // rest of the platform's repodata is dropped when
-                        // `output` goes out of scope here.
-                        let arc_by_ptr: HashMap<usize, &Arc<rattler_conda_types::RepoDataRecord>> =
-                            output
-                                .repodata
-                                .iter()
-                                .flat_map(rattler_repodata_gateway::RepoData::iter_arc)
-                                .map(|arc| (Arc::as_ptr(arc) as usize, arc))
-                                .collect();
-
-                        let dependents = output
-                            .who_needs(target)
-                            .iter()
-                            .map(|dependent| {
-                                let arc = arc_by_ptr
-                                    [&(std::ptr::from_ref(dependent.record) as usize)]
-                                    .clone();
-                                crate::repoquery::PyDependent::new(dependent, arc)
-                            })
-                            .collect::<Vec<_>>();
-                        Ok::<_, rattler_repodata_gateway::GatewayError>((
-                            platform_index,
-                            warnings,
-                            dependents,
-                        ))
-                    };
-                    // Spawn each platform query as its own tokio task so the
-                    // queries run in parallel on the runtime's worker threads
-                    // instead of interleaving on the single task driving this
-                    // stream. The spawn happens only when `buffer_unordered`
-                    // polls the wrapper, so at most PLATFORM_CONCURRENCY
-                    // tasks run at a time.
-                    async move {
-                        tokio::spawn(query_platform)
-                            .await
-                            .expect("the platform query task panicked")
-                    }
-                },
-            ))
-            // `buffer_unordered` starts the next platform as soon as any
-            // in-flight one finishes; `buffered` would hold completed
-            // results in their slots until the slowest earlier platform
-            // yields, blocking slot refill behind e.g. a large linux-64.
-            .buffer_unordered(PLATFORM_CONCURRENCY)
-            .try_collect::<Vec<_>>()
-            .await
-            .map_err(PyRattlerError::from)?;
-
-            // Restore the input platform order for a deterministic result.
-            let mut per_platform = per_platform;
-            per_platform.sort_unstable_by_key(|(platform_index, _, _)| *platform_index);
-
-            let mut warnings = Vec::new();
-            let mut dependents = Vec::new();
-            for (_, platform_warnings, platform_dependents) in per_platform {
-                warnings.extend(platform_warnings);
-                dependents.extend(platform_dependents);
-            }
-            emit_gateway_warnings(warnings)?;
-            Ok(dependents)
+            let output = query.execute().await.map_err(PyRattlerError::from)?;
+            emit_gateway_warnings(output.warnings)?;
+            Ok(output
+                .dependents
+                .into_iter()
+                .map(crate::repoquery::PyDependent::from)
+                .collect::<Vec<_>>())
         })
     }
 
