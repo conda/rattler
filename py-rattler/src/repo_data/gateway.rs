@@ -393,60 +393,84 @@ impl PyGateway {
         let gateway = self.inner.clone();
         let show_progress = self.show_progress;
         future_into_py(py, async move {
-            let per_platform = futures::stream::iter(platforms.into_iter().map(|platform| {
-                let gateway = gateway.clone();
-                let sources = rust_sources.clone();
-                let target = target.clone();
-                let wildcard = wildcard.clone();
-                async move {
-                    let mut query = gateway
-                        .query(sources, [platform], vec![wildcard])
-                        .recursive(false);
+            let per_platform = futures::stream::iter(platforms.into_iter().enumerate().map(
+                |(platform_index, platform)| {
+                    let gateway = gateway.clone();
+                    let sources = rust_sources.clone();
+                    let target = target.clone();
+                    let wildcard = wildcard.clone();
+                    let query_platform = async move {
+                        let mut query = gateway
+                            .query(sources, [platform], vec![wildcard])
+                            .recursive(false);
 
-                    if show_progress {
-                        query = query.with_reporter(
-                            rattler_repodata_gateway::IndicatifReporter::builder().finish(),
-                        );
-                    }
+                        if show_progress {
+                            query = query.with_reporter(
+                                rattler_repodata_gateway::IndicatifReporter::builder().finish(),
+                            );
+                        }
 
-                    let mut output = query.execute().await?;
-                    let warnings = std::mem::take(&mut output.warnings);
+                        let mut output = query.execute().await?;
+                        let warnings = std::mem::take(&mut output.warnings);
 
-                    // The dependents borrow records from `output`; look
-                    // their `Arc`s up by pointer identity so the conversion
-                    // shares the records instead of deep copying them. The
-                    // rest of the platform's repodata is dropped when
-                    // `output` goes out of scope here.
-                    let arc_by_ptr: HashMap<usize, &Arc<rattler_conda_types::RepoDataRecord>> =
-                        output
-                            .repodata
+                        // The dependents borrow records from `output`; look
+                        // their `Arc`s up by pointer identity so the conversion
+                        // shares the records instead of deep copying them. The
+                        // rest of the platform's repodata is dropped when
+                        // `output` goes out of scope here.
+                        let arc_by_ptr: HashMap<usize, &Arc<rattler_conda_types::RepoDataRecord>> =
+                            output
+                                .repodata
+                                .iter()
+                                .flat_map(rattler_repodata_gateway::RepoData::iter_arc)
+                                .map(|arc| (Arc::as_ptr(arc) as usize, arc))
+                                .collect();
+
+                        let dependents = output
+                            .who_needs(target)
                             .iter()
-                            .flat_map(rattler_repodata_gateway::RepoData::iter_arc)
-                            .map(|arc| (Arc::as_ptr(arc) as usize, arc))
-                            .collect();
-
-                    let dependents = output
-                        .who_needs(target)
-                        .iter()
-                        .map(|dependent| {
-                            let arc = arc_by_ptr[&(std::ptr::from_ref(dependent.record) as usize)]
-                                .clone();
-                            crate::repoquery::PyDependent::new(dependent, arc)
-                        })
-                        .collect::<Vec<_>>();
-                    Ok::<_, rattler_repodata_gateway::GatewayError>((warnings, dependents))
-                }
-            }))
-            // `buffered` (not `buffered_unordered`) yields results in input
-            // platform order, keeping the result deterministic.
-            .buffered(PLATFORM_CONCURRENCY)
+                            .map(|dependent| {
+                                let arc = arc_by_ptr
+                                    [&(std::ptr::from_ref(dependent.record) as usize)]
+                                    .clone();
+                                crate::repoquery::PyDependent::new(dependent, arc)
+                            })
+                            .collect::<Vec<_>>();
+                        Ok::<_, rattler_repodata_gateway::GatewayError>((
+                            platform_index,
+                            warnings,
+                            dependents,
+                        ))
+                    };
+                    // Spawn each platform query as its own tokio task so the
+                    // queries run in parallel on the runtime's worker threads
+                    // instead of interleaving on the single task driving this
+                    // stream. The spawn happens only when `buffer_unordered`
+                    // polls the wrapper, so at most PLATFORM_CONCURRENCY
+                    // tasks run at a time.
+                    async move {
+                        tokio::spawn(query_platform)
+                            .await
+                            .expect("the platform query task panicked")
+                    }
+                },
+            ))
+            // `buffer_unordered` starts the next platform as soon as any
+            // in-flight one finishes; `buffered` would hold completed
+            // results in their slots until the slowest earlier platform
+            // yields, blocking slot refill behind e.g. a large linux-64.
+            .buffer_unordered(PLATFORM_CONCURRENCY)
             .try_collect::<Vec<_>>()
             .await
             .map_err(PyRattlerError::from)?;
 
+            // Restore the input platform order for a deterministic result.
+            let mut per_platform = per_platform;
+            per_platform.sort_unstable_by_key(|(platform_index, _, _)| *platform_index);
+
             let mut warnings = Vec::new();
             let mut dependents = Vec::new();
-            for (platform_warnings, platform_dependents) in per_platform {
+            for (_, platform_warnings, platform_dependents) in per_platform {
                 warnings.extend(platform_warnings);
                 dependents.extend(platform_dependents);
             }
