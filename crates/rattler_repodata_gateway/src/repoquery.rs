@@ -4,9 +4,9 @@
 //! already been fetched (e.g. through a `Gateway` query, or read from
 //! `SparseRepoData`) and perform no I/O themselves.
 //!
-//! Currently this module provides [`who_needs`], the equivalent of
-//! `conda repoquery whoneeds`: given a package, find all records that
-//! reference it through their `depends`, `constrains`, or run exports.
+//! Currently this module provides [`who_needs`], a reverse dependency
+//! lookup: given a package, find all records that reference it through
+//! their `depends`, `constrains`, or run exports.
 
 use rattler_conda_types::{MatchSpec, PackageName, ParseMatchSpecOptions, RepoDataRecord, Version};
 
@@ -107,7 +107,7 @@ pub struct Dependent<'r> {
 }
 
 /// Returns all records in `records` that reference the package described by
-/// `target` — the equivalent of `conda repoquery whoneeds`.
+/// `target` — its reverse dependencies.
 ///
 /// A record references the target when one of its `depends` or `constrains`
 /// entries, or one of its run exports, matches the target; the
