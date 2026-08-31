@@ -4,8 +4,7 @@ use url::Url;
 
 use crate::{AzureHost, AzureScheme, AzureUrlError};
 
-/// `Display` and `Debug` mask any SAS signature, so the value is log-safe;
-/// only [`Self::wire`] reproduces the signed form.
+/// `Display` and `Debug` mask any SAS signature, so the value is log-safe.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct AzureChannelUrl {
     host: AzureHost,
