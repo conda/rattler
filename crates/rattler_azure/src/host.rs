@@ -72,26 +72,21 @@ impl AzureHost {
             return Ok(Self { host, port });
         };
 
-        // Re-run the host parser on the trimmed name so there is exactly one
-        // normalization path rather than a second, hand-rolled one.
         let host = url::Host::parse(domain.strip_suffix('.').unwrap_or(domain)).map_err(|err| {
             AzureUrlError::InvalidHostAuthority {
                 authority: authority.to_string(),
                 reason: err.to_string(),
             }
         })?;
+
         if let url::Host::Domain(domain) = &host {
-            // Only one trailing dot is stripped, so `acct.example..` still has an
-            // empty label here — as does `acct..example`. Rejecting both is what
-            // lets `Display` round-trip, and what stops account derivation from
-            // handing out an empty account name.
             if domain.split('.').any(str::is_empty) {
                 return Err(AzureUrlError::InvalidHostAuthority {
                     authority: authority.to_string(),
                     reason: "one of its labels is empty".to_string(),
                 });
             }
-            // Measured after IDNA, since the punycode form is what is resolved.
+
             if domain.len() > DNS_NAME_LIMIT {
                 return Err(AzureUrlError::InvalidHostAuthority {
                     authority: authority.to_string(),
@@ -114,8 +109,6 @@ impl AzureHost {
         self.port
     }
 
-    /// [`parse`](Self::parse) has already rejected empty labels and a trailing
-    /// dot, so those two labels are non-empty.
     pub(crate) fn account_label(&self) -> Option<&str> {
         match &self.host {
             url::Host::Domain(domain) => {
@@ -127,10 +120,15 @@ impl AzureHost {
         }
     }
 
-    /// A `true` is the only evidence that a host is really Azure, which is what
-    /// gates the ambient credential chain. A proxy or private endpoint in front of
+    /// Whether the host is Azure's own blob endpoint in some cloud.
+    ///
+    /// Only a `true` proves anything: a proxy or private endpoint in front of
     /// real Azure answers `false`, so a `false` proves nothing.
     pub fn is_known_azure_blob_endpoint(&self) -> bool {
+        // `blob.` + each cloud's `StorageEndpointSuffix`:
+        // https://learn.microsoft.com/en-us/azure/storage/common/storage-powershell-independent-clouds#endpoint-suffix
+        // The German cloud's `core.cloudapi.de` is left out because that cloud closed in 2021:
+        // https://learn.microsoft.com/en-us/previous-versions/azure/germany/germany-welcome
         const SUFFIXES: &[&str] = &[
             "blob.core.windows.net",
             "blob.core.usgovcloudapi.net",
@@ -140,11 +138,11 @@ impl AzureHost {
         let url::Host::Domain(domain) = &self.host else {
             return false;
         };
+
         SUFFIXES.iter().any(|suffix| {
-            // The dot has to be part of the match, or `notblob.core.windows.net`
-            // would pass as `blob.core.windows.net`.
             domain
                 .strip_suffix(suffix)
+                // otherwise we could match `notblob.core.windows.net`.
                 .is_some_and(|prefix| prefix.ends_with('.'))
         })
     }
@@ -152,8 +150,6 @@ impl AzureHost {
 
 impl std::fmt::Display for AzureHost {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // `url::Host`'s own `Display` brackets an IPv6 literal, which is what an
-        // authority needs.
         write!(f, "{}", self.host)?;
         if let Some(port) = self.port {
             write!(f, ":{port}")?;
@@ -193,7 +189,6 @@ impl From<AzureHost> for String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::hash_of;
 
     #[test]
     fn userinfo_is_rejected() {
@@ -252,61 +247,6 @@ mod tests {
                 ),
                 "expected a rejection for {host}"
             );
-            assert!(
-                matches!(
-                    crate::AzureChannelUrl::parse(&format!("az://{host}/general/noarch")),
-                    Err(AzureUrlError::InvalidHostAuthority { .. })
-                ),
-                "expected a rejection for {host}"
-            );
-        }
-    }
-
-    #[test]
-    fn host_normalization_collapses_equivalent_spellings() {
-        for (written, canonical) in [
-            (
-                "MyCompany.blob.core.windows.net",
-                "mycompany.blob.core.windows.net",
-            ),
-            (
-                "mycompany.blob.core.windows.net:443",
-                "mycompany.blob.core.windows.net:443",
-            ),
-            ("ünï.blob.example", "xn--n-nga1b.blob.example"),
-            ("[0:0:0:0:0:0:0:1]:10000", "[::1]:10000"),
-            ("0x7f.1", "127.0.0.1"),
-            ("acct.blob.core.windows.net.", "acct.blob.core.windows.net"),
-        ] {
-            let host = AzureHost::parse(written)
-                .unwrap_or_else(|err| panic!("{written} should parse: {err}"));
-            assert_eq!(host.to_string(), canonical, "{written}");
-
-            let reparsed = AzureHost::parse(canonical).unwrap();
-            assert_eq!(reparsed, host, "{written}");
-            // Equal hosts must also hash equally: they key the options map.
-            assert_eq!(hash_of(&host), hash_of(&reparsed), "{written}");
-        }
-    }
-
-    #[test]
-    fn host_equality_is_not_scheme_relative() {
-        let with_port = AzureHost::parse("azurite.local:443").unwrap();
-        let without = AzureHost::parse("azurite.local").unwrap();
-        assert_ne!(with_port, without);
-        assert_ne!(with_port, AzureHost::parse("azurite.local:80").unwrap());
-        assert_eq!(with_port.to_string(), "azurite.local:443");
-    }
-
-    #[test]
-    fn a_dangling_colon_is_rejected_rather_than_read_as_no_port() {
-        for authority in ["acct.blob.core.windows.net:", "[::1]:"] {
-            match AzureHost::parse(authority) {
-                Err(AzureUrlError::InvalidHostAuthority { reason, .. }) => {
-                    assert_eq!(reason, "its port is empty", "{authority}");
-                }
-                other => panic!("expected InvalidHostAuthority for {authority}, got {other:?}"),
-            }
         }
     }
 

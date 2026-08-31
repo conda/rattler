@@ -1,8 +1,7 @@
 use crate::AzureUrlError;
 
-/// The charset admits no `-`, so an account name cannot be option-shaped
-/// (`--as-user`, `-o`) in the `az` argv the SAS mint builds, which is why the mint
-/// takes this type rather than a `&str`.
+/// A name that satisfies Azure's storage-account rules: 3-24 characters,
+/// lowercase letters and digits only.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AccountName(String);
 
@@ -31,11 +30,8 @@ impl std::fmt::Display for AccountName {
     }
 }
 
-/// Exists for the same reason as [`AccountName`].
-///
-/// It is also the key of an `auth` table in `azure-options`, hence the hash and
-/// string serde bridge. Azure's rules make a container name lowercase by
-/// construction, so unlike a host there is only one spelling of one container.
+/// A name that satisfies Azure's container rules: 3-63 characters of
+/// lowercase letters, digits and non-consecutive interior hyphens.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "serde",

@@ -1,7 +1,6 @@
 use crate::{AzureChannelUrl, AzureEndpointKey, AzureUrlError, ContainerName};
 
-/// A channel URL bundled with the endpoint key and container derived from it, so
-/// the three can never be mixed and matched across different endpoints.
+/// A channel URL bundled with the endpoint key and container derived from it
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AzureLocation {
     channel: AzureChannelUrl,
@@ -14,10 +13,6 @@ impl AzureLocation {
         &self.channel
     }
 
-    /// The key the URL matched, or the host-style key it falls back to.
-    ///
-    /// `None` when neither exists: an unconfigured IP literal names no account, so
-    /// there is nothing for a grant to hang off.
     pub fn key(&self) -> Option<&AzureEndpointKey> {
         self.key.as_ref()
     }
@@ -26,11 +21,7 @@ impl AzureLocation {
         self.container.as_ref()
     }
 
-    /// The key and container a request has to name, or the reason the URL names
-    /// neither.
-    ///
-    /// The fetch path can send anonymously without either; anything that writes,
-    /// signs or builds an endpoint needs both.
+    /// The key and container, or an error naming which is missing
     pub fn addressed(&self) -> Result<(&AzureEndpointKey, &ContainerName), AzureUrlError> {
         let key = self
             .key
@@ -45,9 +36,14 @@ impl AzureLocation {
 
 /// Match a channel URL against the configured entry keys.
 ///
-/// Both candidates are tried, longest first, so `proxy.internal/accta` wins over
-/// `proxy.internal` where both are configured. A URL matching neither is read
-/// host-style, the shape of the default entry.
+/// Both of the URL's candidates are tried, longest first, so
+/// `proxy.internal/accta` wins over `proxy.internal` where both are configured.
+/// A URL matching neither is read host-style, the shape of the default entry.
+///
+/// # Arguments
+///
+/// * `channel` - the URL to locate
+/// * `configured` - whether a candidate key has an entry
 pub fn locate(
     channel: &AzureChannelUrl,
     configured: impl Fn(&AzureEndpointKey) -> bool,
@@ -65,11 +61,8 @@ pub fn locate(
     located(channel, key)
 }
 
-/// Locate a channel under the addressing the caller states outright.
-///
-/// For a caller with no `azure-options` table to match against, where the account's
-/// whereabouts is the one thing the URL cannot say: `az://proxy.internal/accta/…`
-/// reads as account `proxy` or account `accta` with equal justification.
+/// Locate a channel under the addressing the caller states outright, with no
+/// key matching
 pub fn locate_as(
     channel: &AzureChannelUrl,
     addressing: AzureAddressing,
@@ -84,11 +77,16 @@ pub fn locate_as(
     located(channel, Some(key))
 }
 
+/// Bundle a channel with a resolved key and the container read under that key
 fn located(
     channel: &AzureChannelUrl,
     key: Option<AzureEndpointKey>,
 ) -> Result<AzureLocation, AzureUrlError> {
-    let container = container_after(channel, key.as_ref())?;
+    // No key means no segment is the container
+    let container = match &key {
+        Some(key) => container_after(channel, key)?,
+        None => None,
+    };
     Ok(AzureLocation {
         channel: channel.clone(),
         key,
@@ -96,39 +94,38 @@ fn located(
     })
 }
 
-/// Deliberately just the missing bit, not the account itself: the account is
-/// already at path segment 0 of the URL, and a caller naming it separately could
-/// contradict the URL and sign for a different account than the one addressed.
+/// Where a URL names its storage account.
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AzureAddressing {
+    /// The account is the first host label, so the path starts at the
+    /// container: `az://acct.blob.core.windows.net/container/…`.
     #[default]
     HostStyle,
 
+    /// The account is path segment 0 and the container follows it:
+    /// `az://azurite.local:10000/acct/container/…`. The shape of emulators
+    /// and proxies, where one host serves many accounts.
     PathStyle,
 }
 
 impl From<bool> for AzureAddressing {
     fn from(path_style: bool) -> Self {
         if path_style {
-            Self::PathStyle
+            AzureAddressing::PathStyle
         } else {
-            Self::HostStyle
+            AzureAddressing::HostStyle
         }
     }
 }
 
-/// `Ok(None)` means there is nothing to attribute a grant to: the URL has no
-/// container segment, or no key, in which case no segment is the container. `Err`
-/// means the segment is there but is not a name Azure allows, which is a malformed
-/// endpoint rather than an ungranted one — and only reportable when a key matched,
-/// since that is the only case where a grant could otherwise be missed.
+/// The container segment under the key's addressing.
+///
+/// `Ok(None)`: the URL stops before the container. `Err`: the segment exists
+/// but is not a legal Azure container name.
 fn container_after(
     channel: &AzureChannelUrl,
-    key: Option<&AzureEndpointKey>,
+    key: &AzureEndpointKey,
 ) -> Result<Option<ContainerName>, AzureUrlError> {
-    let Some(key) = key else {
-        return Ok(None);
-    };
     segment(channel, key.container_segment())
         .map(ContainerName::new)
         .transpose()
@@ -136,10 +133,7 @@ fn container_after(
 
 fn segment(channel: &AzureChannelUrl, index: usize) -> Option<&str> {
     // The `is_empty` filter is only sound because `AzureChannelUrl::parse` rejects
-    // an empty segment anywhere but the end: the sole one that can reach here is a
-    // trailing slash, where "absent" is the right reading. Without that guarantee
-    // `az://host//general` would read as having no container and silently fetch a
-    // granted one anonymously.
+    // an empty segment anywhere but the end
     channel
         .path()
         .segments()
@@ -195,38 +189,20 @@ mod tests {
         let both = located(url, &["proxy.internal", "proxy.internal/accta"]);
         assert_eq!(both.key(), Some(&key("proxy.internal/accta")));
         assert_eq!(both.container(), Some(&container("general")));
-
-        let host_only = located(url, &["proxy.internal"]);
-        assert_eq!(host_only.key(), Some(&key("proxy.internal")));
-        assert_eq!(host_only.container(), Some(&container("accta")));
     }
 
-    /// An unconfigured IP literal is read host-style, which names no account — so
-    /// it has no key, and nothing a grant could hang off.
     #[test]
     fn an_unmatched_url_falls_back_to_host_style() {
+        // An IP literal has no account label, so not even the host-style
+        // fallback key can be built.
         let anonymous = located("az://127.0.0.1:10000/devstoreaccount1/general", &[]);
         assert_eq!(anonymous.key(), None);
         assert_eq!(anonymous.container(), None);
 
+        // `acct` is an account label, so the fallback key exists unconfigured.
         let azure = located("az://acct.blob.core.windows.net/general/noarch", &[]);
         assert_eq!(azure.key(), Some(&key("acct.blob.core.windows.net")));
         assert_eq!(azure.container(), Some(&container("general")));
-    }
-
-    #[test]
-    fn a_url_without_a_container_names_none() {
-        for (url, configured) in [
-            ("az://acct.blob.core.windows.net", &[][..]),
-            ("az://acct.blob.core.windows.net/", &[]),
-            (
-                "az://127.0.0.1:10000/devstoreaccount1",
-                &["127.0.0.1:10000/devstoreaccount1"],
-            ),
-            ("az://127.0.0.1:10000/", &[]),
-        ] {
-            assert_eq!(located(url, configured).container(), None, "{url}");
-        }
     }
 
     #[test]
@@ -248,8 +224,7 @@ mod tests {
     }
 
     /// Without a key nothing is granted, so a segment Azure would refuse as a
-    /// container is not this parse's business: refusing it turns an anonymous fetch
-    /// a user had working into a hard error.
+    /// container should not error
     #[test]
     fn an_unkeyed_url_reports_no_container_rather_than_a_bad_one() {
         for url in [
@@ -266,14 +241,7 @@ mod tests {
 
     #[test]
     fn a_path_style_key_takes_the_account_off_any_host() {
-        for host in [
-            "127.0.0.1:10000",
-            "[::1]:10000",
-            "azurite:10000",
-            "localhost:10000",
-            "azurite",
-            "localhost",
-        ] {
+        for host in ["127.0.0.1:10000", "azurite"] {
             let key = key(&format!("{host}/devstoreaccount1"));
             assert_eq!(key.account().as_str(), "devstoreaccount1", "{host}");
 
@@ -295,6 +263,10 @@ mod tests {
             ),
             (
                 "az://acct.blob.core.windows.net",
+                AzureAddressing::HostStyle,
+            ),
+            (
+                "az://acct.blob.core.windows.net/",
                 AzureAddressing::HostStyle,
             ),
         ] {

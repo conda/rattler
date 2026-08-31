@@ -4,6 +4,8 @@ use url::Url;
 
 use crate::{AzureHost, AzureScheme, AzureUrlError};
 
+/// `Display` and `Debug` mask any SAS signature, so the value is log-safe;
+/// only [`Self::wire`] reproduces the signed form.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct AzureChannelUrl {
     host: AzureHost,
@@ -59,10 +61,14 @@ impl AzureChannelUrl {
         })
     }
 
+    /// The `az://` spelling with any SAS signature masked: for display,
+    /// config and comparison, not for sending.
     pub fn canonical(&self) -> Url {
         self.spelled("az", Sas::Masked)
     }
 
+    /// The URL a request is sent to: `scheme://…` with the SAS signature
+    /// intact.
     pub fn wire(&self, scheme: AzureScheme) -> Url {
         self.spelled(scheme.as_str(), Sas::Exposed)
     }

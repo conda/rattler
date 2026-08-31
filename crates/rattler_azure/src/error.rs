@@ -4,9 +4,7 @@ pub enum AzureUrlError {
     NoHost,
 
     #[error(
-        "Azure blob URL must not contain userinfo (`user:pass@host`): the `user@host` form is a \
-         host-spoofing vector that can disguise the real target host, and userinfo is invalid in \
-         blob URLs"
+        "Azure blob URL must not contain userinfo (`user:pass@host`), userinfo is invalid in blob URLs"
     )]
     UserInfoNotAllowed,
 
@@ -15,15 +13,14 @@ pub enum AzureUrlError {
 
     #[error(
         "Azure blob URL host `{0}` is not a dotted domain of the form `<account>.blob.<suffix>`, \
-         so its first label cannot be a storage account; read the account from the first path \
-         segment instead — with an `azure-options` key spelled `{0}/<account>` when fetching or \
-         indexing, or `--path-style` when uploading"
+         so its first label cannot be a storage account; such a host can only be addressed \
+         path-style, with the account as the first path segment"
     )]
     InvalidHost(String),
 
     #[error(
-        "`{0}` is not an `azure-options` key: a key is a channel URL prefix up to the container, \
-         so it is spelled `<host>` or `<host>/<account>` and nothing more"
+        "`{0}` is not a valid Azure endpoint key: a key is a channel URL prefix up to the \
+         container, so it is spelled `<host>` or `<host>/<account>` and nothing more"
     )]
     InvalidKey(String),
 
@@ -81,8 +78,7 @@ pub enum AzureUrlError {
     },
 
     #[error(
-        "Azure blob channel URL must use the `az://` scheme, e.g. \
-         `az://<account>.blob.core.windows.net/<container>/...`: got `{0}`"
+        "Azure blob channel URL must use the `az://` scheme, got `{0}`"
     )]
     InvalidScheme(String),
 }

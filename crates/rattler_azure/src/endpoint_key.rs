@@ -61,8 +61,8 @@ impl std::fmt::Display for AccountPath {
     }
 }
 
-/// The key of an `azure-options` entry: a channel URL prefix that runs up to, but
-/// not including, the container.
+/// The key of an endpoint options entry: a channel URL prefix that runs up to,
+/// but not including, the container.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "serde",
@@ -84,8 +84,8 @@ impl AzureEndpointKey {
         let segments = channel
             .path()
             .segments()
-            // empty segments produced by standalone or trailing `/`, otherwise the channel
-            // parse above would have failed
+            // empty segments produced by standalone or trailing `/`, any others would fail
+            // the channel parse
             .filter(|segment| !segment.is_empty())
             .collect::<Vec<_>>();
 
@@ -190,6 +190,7 @@ mod tests {
                 "127.0.0.1:10000/devstoreaccount1",
                 "127.0.0.1:10000/devstoreaccount1",
             ),
+            ("0x7f.1/devstoreaccount1", "127.0.0.1/devstoreaccount1"),
         ] {
             let parsed = key(written);
             assert_eq!(parsed.to_string(), canonical, "{written}");
@@ -284,7 +285,6 @@ mod tests {
             let err = AzureEndpointKey::host_style(&AzureHost::parse(host).unwrap())
                 .expect_err("a host-style key must not accept an undottable host");
             assert!(matches!(err, AzureUrlError::InvalidHost(_)), "{err}");
-            assert!(err.to_string().contains("/<account>"), "{err}");
         }
     }
 }

@@ -1,6 +1,5 @@
-//! Custom endpoints and the Azurite emulator can be granted, but the ambient
-//! credential chain is gated on [`crate::AzureHost::is_known_azure_blob_endpoint`],
-//! so a grant on any other host resolves only `AZURE_STORAGE_*`.
+//! Per-endpoint options: which containers a credential may attach to, and the
+//! wire scheme.
 
 use crate::ContainerName;
 
@@ -12,16 +11,11 @@ use crate::ContainerName;
     serde(from = "bool", into = "bool")
 )]
 pub enum Auth {
-    /// Send requests unsigned. No credential is resolved, so nothing ambient can
-    /// leak to this host and nothing blocks on the managed-identity/IMDS probe.
+    /// Send requests unsigned
     #[default]
     Anonymous,
 
-    /// Resolve a credential and sign with it. The full ambient chain is only
-    /// reached for a known Azure blob endpoint over TLS; anywhere else the signer
-    /// reads `AZURE_STORAGE_*` and nothing else. Since this is an explicit grant,
-    /// an unusable credential is a hard error rather than a silent downgrade to
-    /// anonymous.
+    /// Resolve a credential and sign with it
     DefaultChain,
 }
 
@@ -48,9 +42,6 @@ impl Auth {
 }
 
 /// The wire scheme an `az://` channel URL is rewritten to when a request is sent.
-///
-/// Prefixed rather than spelled bare `Scheme`, because `opendal::Scheme` names a
-/// storage service and is one import away.
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(
     feature = "serde",
@@ -79,7 +70,7 @@ impl std::fmt::Display for AzureScheme {
     }
 }
 
-/// What the fetch middleware needs to send one request.
+/// What the fetch middleware needs to send a request.
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AzureFetchOptions {
     pub auth: Auth,
@@ -87,36 +78,16 @@ pub struct AzureFetchOptions {
     pub scheme: AzureScheme,
 }
 
-/// This is the serde surface. Each consumer takes the narrower view it can act
-/// on, via [`Self::scheme`] or [`Self::fetch`], and the fields are private so
-/// that view is the only way in. The default value is the no-entry behaviour, so
-/// callers can look an absent key up and fall back to `default()`.
-///
-/// There is no entry-level `auth` field at all. It is absent from the
-/// type rather than defaulted to false, so a grant always names a container — a
-/// container *under the key's reading of the URL*. A key whose shape does not
-/// match the endpoint reads the account segment as the container: on a host that
-/// really fronts its accounts path-style, a host-style key's `accta = true` grants
-/// every URL whose first segment is `accta`, which is the whole account.
+/// The options of one endpoint entry.
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(
     feature = "serde",
     derive(serde::Deserialize, serde::Serialize),
-    // `deny_unknown_fields`, because a silently-missed grant is the worst failure
-    // this table has: Azure answers an anonymous read of a private container with
-    // 404, not 403, so a misspelled `[Auth]` surfaces as "channel not found" with
-    // nothing pointing at the typo. Container names are already held to Azure's
-    // rules for the same reason — a key that can never match is a config error.
     serde(rename_all = "kebab-case", default, deny_unknown_fields)
 )]
 pub struct AzureEndpointOptions {
     scheme: AzureScheme,
 
-    /// An explicit `false` is legal and redundant with omission, so a
-    /// higher-precedence config file can revoke rather than only add.
-    ///
-    /// Declared last, because the TOML serializer must emit an entry's scalars
-    /// before its tables.
     #[cfg_attr(
         feature = "serde",
         serde(skip_serializing_if = "indexmap::IndexMap::is_empty")
@@ -136,8 +107,6 @@ impl AzureEndpointOptions {
         self.scheme
     }
 
-    /// `container` is an `Option` because a URL need not name one. That case is
-    /// answered here rather than at the call site, and can only mean anonymous.
     pub fn fetch(&self, container: Option<&ContainerName>) -> AzureFetchOptions {
         AzureFetchOptions {
             auth: container
@@ -148,8 +117,6 @@ impl AzureEndpointOptions {
         }
     }
 
-    /// Includes the explicit `false`s: a caller validating or listing the table
-    /// needs what the file says, not what it effectively means.
     pub fn grants(&self) -> impl Iterator<Item = (&ContainerName, Auth)> {
         self.auth.iter().map(|(container, auth)| (container, *auth))
     }
@@ -157,6 +124,8 @@ impl AzureEndpointOptions {
 
 #[cfg(all(test, feature = "serde"))]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
 
     fn container(name: &str) -> ContainerName {
@@ -164,32 +133,33 @@ mod tests {
     }
 
     #[test]
-    fn toml_bools_map_to_enums() {
-        let opts: AzureEndpointOptions = toml::from_str(
-            r#"
-            scheme = "http"
-
-            [auth]
-            releases = true
-            "#,
-        )
-        .unwrap();
-        assert_eq!(
-            opts,
-            AzureEndpointOptions::new(
-                [(container("releases"), Auth::DefaultChain)],
-                AzureScheme::Http,
-            )
+    fn enums_round_trip_as_toml_bools() {
+        let opts = AzureEndpointOptions::new(
+            [
+                (container("releases"), Auth::DefaultChain),
+                (container("public"), Auth::Anonymous),
+            ],
+            AzureScheme::Http,
         );
 
+        let written = toml::to_string(&opts).unwrap();
+        assert!(written.contains("releases = true"), "{written}");
+        assert!(written.contains("public = false"), "{written}");
+        assert!(written.contains(r#"scheme = "http""#), "{written}");
+        assert!(!written.contains("DefaultChain"), "{written}");
+
+        assert_eq!(toml::from_str::<AzureEndpointOptions>(&written), Ok(opts));
+
+        // The default writes no `auth` table, and an empty document reads back
+        // as the default, which grants no container.
+        let default = toml::to_string(&AzureEndpointOptions::default()).unwrap();
+        assert!(!default.contains("auth"), "{default}");
         let empty: AzureEndpointOptions = toml::from_str("").unwrap();
         assert_eq!(empty, AzureEndpointOptions::default());
         assert_eq!(
             empty.fetch(Some(&container("releases"))),
             AzureFetchOptions::default()
         );
-        assert!(!empty.fetch(Some(&container("releases"))).auth.is_granted());
-        assert_eq!(empty.scheme(), AzureScheme::default());
     }
 
     #[test]
@@ -209,15 +179,14 @@ mod tests {
 
         assert!(!opts.fetch(None).auth.is_granted());
 
-        // `grants` reports what the file says, explicit `false` included — in the
-        // order the document's table iterated (`toml::Table` is a `BTreeMap`, so
-        // that is byte order, not write order).
+        // `grants` reports what the file says, explicit `false` included.
+        let grants: HashMap<_, _> = opts.grants().collect();
         assert_eq!(
-            opts.grants().collect::<Vec<_>>(),
-            vec![
+            grants,
+            HashMap::from([
                 (&container("public"), Auth::Anonymous),
                 (&container("releases"), Auth::DefaultChain),
-            ]
+            ])
         );
     }
 
@@ -240,24 +209,5 @@ mod tests {
                 "silently ignored: {document}"
             );
         }
-    }
-
-    #[test]
-    fn enums_serialize_back_to_bools() {
-        let toml = toml::to_string(&AzureEndpointOptions::new(
-            [
-                (container("releases"), Auth::DefaultChain),
-                (container("public"), Auth::Anonymous),
-            ],
-            AzureScheme::Http,
-        ))
-        .unwrap();
-        assert!(toml.contains("releases = true"), "{toml}");
-        assert!(toml.contains("public = false"), "{toml}");
-        assert!(toml.contains(r#"scheme = "http""#), "{toml}");
-        assert!(!toml.contains("DefaultChain"), "{toml}");
-
-        let anonymous = toml::to_string(&AzureEndpointOptions::default()).unwrap();
-        assert!(!anonymous.contains("auth"), "{anonymous}");
     }
 }
