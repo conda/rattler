@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.12](https://github.com/conda/rattler/compare/rattler-bin-v0.2.11...rattler-bin-v0.2.12) - 2026-08-27
+
+### Added
+
+- add `rattler info` subcommand ([#2732](https://github.com/conda/rattler/pull/2732))
+
 ## [0.2.11](https://github.com/conda/rattler/compare/rattler-bin-v0.2.10...rattler-bin-v0.2.11) - 2026-08-26
 
 ### Other

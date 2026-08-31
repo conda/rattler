@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5](https://github.com/conda/rattler/compare/rattler_redaction-v0.2.4...rattler_redaction-v0.2.5) - 2026-08-27
+
+### Added
+
+- mask SAS signatures in rattler_redaction ([#2729](https://github.com/conda/rattler/pull/2729))
+
 ## [0.2.4](https://github.com/conda/rattler/compare/rattler_redaction-v0.2.3...rattler_redaction-v0.2.4) - 2026-08-26
 
 ### Other

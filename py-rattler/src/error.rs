@@ -12,6 +12,7 @@ use rattler_conda_types::{
 use rattler_lock::{ConversionError, ParseCondaLockError};
 use rattler_networking::authentication_storage::AuthenticationStorageError;
 use rattler_package_streaming::ExtractError;
+use rattler_package_streaming::fs::LocalPackageRecordError;
 use rattler_repodata_gateway::{GatewayError, fetch::FetchRepoDataError};
 use rattler_shell::activation::ActivationError;
 use rattler_solve::SolveError;
@@ -75,6 +76,8 @@ pub enum PyRattlerError {
     LockFileError(String),
     #[error(transparent)]
     ExtractError(#[from] ExtractError),
+    #[error(transparent)]
+    LocalPackageRecordError(#[from] LocalPackageRecordError),
     #[error(transparent)]
     ShellError(#[from] rattler_shell::shell::ShellError),
     #[error(transparent)]
@@ -186,6 +189,9 @@ impl From<PyRattlerError> for PyErr {
             }
             PyRattlerError::LockFileError(err) => crate::exceptions::LockFileError::new_err(err),
             PyRattlerError::ExtractError(err) => {
+                crate::exceptions::ExtractError::new_err(pretty_print_error(&err))
+            }
+            PyRattlerError::LocalPackageRecordError(err) => {
                 crate::exceptions::ExtractError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::GatewayError(err) => {
