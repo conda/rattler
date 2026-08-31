@@ -4981,6 +4981,7 @@ name = "rattler_azure"
 version = "0.1.0"
 dependencies = [
  "indexmap 2.14.0",
+ "insta",
  "percent-encoding",
  "secrecy",
  "serde",

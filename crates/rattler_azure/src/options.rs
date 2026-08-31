@@ -143,10 +143,7 @@ mod tests {
         );
 
         let written = toml::to_string(&opts).unwrap();
-        assert!(written.contains("releases = true"), "{written}");
-        assert!(written.contains("public = false"), "{written}");
-        assert!(written.contains(r#"scheme = "http""#), "{written}");
-        assert!(!written.contains("DefaultChain"), "{written}");
+        insta::assert_snapshot!(written);
 
         assert_eq!(toml::from_str::<AzureEndpointOptions>(&written), Ok(opts));
 

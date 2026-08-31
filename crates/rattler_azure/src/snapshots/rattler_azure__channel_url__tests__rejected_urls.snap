@@ -1,0 +1,22 @@
+---
+source: crates/rattler_azure/src/channel_url.rs
+expression: rejections
+---
+"https://acct.blob.core.windows.net/general": "Azure blob channel URL must use the `az://` scheme, got `https://acct.blob.core.windows.net/general`"
+"http://acct.blob.core.windows.net/general": "Azure blob channel URL must use the `az://` scheme, got `http://acct.blob.core.windows.net/general`"
+"ftp://acct.blob.core.windows.net/general": "Azure blob channel URL must use the `az://` scheme, got `ftp://acct.blob.core.windows.net/general`"
+acct.blob.core.windows.net/general: "Azure blob channel URL must use the `az://` scheme, got `acct.blob.core.windows.net/general`"
+"az://acct.blob.core.windows.net/general/%2e%2e/%2e%2e/othercontainer/x": "Azure blob channel URL segment `%2e%2e` is a relative path segment; a channel URL must name the container it addresses directly, so write the path without `.` or `..`"
+"az://127.0.0.1:10000/devstoreaccount1/general/%2e%2e/%2e%2e/otheraccount/othercontainer": "Azure blob channel URL segment `%2e%2e` is a relative path segment; a channel URL must name the container it addresses directly, so write the path without `.` or `..`"
+"az://acct.blob.core.windows.net/general/../../othercontainer": "Azure blob channel URL segment `..` is a relative path segment; a channel URL must name the container it addresses directly, so write the path without `.` or `..`"
+"az://acct.blob.core.windows.net/general/./noarch": "Azure blob channel URL segment `.` is a relative path segment; a channel URL must name the container it addresses directly, so write the path without `.` or `..`"
+"az://acct.blob.core.windows.net/general/%2E%2E/othercontainer": "Azure blob channel URL segment `%2E%2E` is a relative path segment; a channel URL must name the container it addresses directly, so write the path without `.` or `..`"
+"az://acct.blob.core.windows.net//general/noarch": "Azure blob channel URL path `//general/noarch` has an empty segment; a doubled `/` names nothing, so write the path with single separators"
+"az://acct.blob.core.windows.net/general//noarch": "Azure blob channel URL path `/general//noarch` has an empty segment; a doubled `/` names nothing, so write the path with single separators"
+"az://127.0.0.1:10000//devstoreaccount1/general": "Azure blob channel URL path `//devstoreaccount1/general` has an empty segment; a doubled `/` names nothing, so write the path with single separators"
+"az://acct.blob.core.windows.net/general/gen%eral": "Azure blob channel URL segment `gen%eral` contains `%er`, which is not a valid percent-escape; write a literal `%` as `%25`"
+"az://acct.blob.core.windows.net/general/100%": "Azure blob channel URL segment `100%` contains `%`, which is not a valid percent-escape; write a literal `%` as `%25`"
+"az://acct.blob.core.windows.net/general/%zz": "Azure blob channel URL segment `%zz` contains `%zz`, which is not a valid percent-escape; write a literal `%` as `%25`"
+"az://acct.blob.core.windows.net/general/%ff": "Azure blob channel URL segment `%ff` percent-decodes to bytes that are not UTF-8, so it cannot name a blob"
+"az://acct.blob.core.windows.net/general/caf%C3é": "Azure blob channel URL segment `caf%C3é` percent-decodes to bytes that are not UTF-8, so it cannot name a blob"
+"az://acct.blob.core.windows.net/general/%C3é": "Azure blob channel URL segment `%C3é` percent-decodes to bytes that are not UTF-8, so it cannot name a blob"
