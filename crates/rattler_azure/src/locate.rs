@@ -151,7 +151,7 @@ mod tests {
     #[test]
     fn located_outcomes() {
         let cases: &[(&str, &[&str])] = &[
-            // a configured or fallback host-style key grants the container
+            // a host-style key — configured or the fallback — reads the container
             ("az://acct.blob.core.windows.net/general/noarch", &[]),
             (
                 "az://acct.blob.core.windows.net/general/noarch",
@@ -174,7 +174,7 @@ mod tests {
             ),
             // an IP literal has no account label, so no host-style fallback
             ("az://127.0.0.1:10000/devstoreaccount1/general", &[]),
-            // an illegal container name errors once a key grants one
+            // under a key, an illegal container name is an error
             ("az://acct.blob.core.windows.net/General/noarch", &[]),
             ("az://acct.blob.core.windows.net/ab/noarch", &[]),
             ("az://acct.blob.core.windows.net/a--b/noarch", &[]),
