@@ -555,6 +555,7 @@ impl PyFetchRepoDataOptions {
                 zstd_enabled,
                 bz2_enabled,
                 retry_policy: None,
+                ..FetchRepoDataOptions::default()
             },
         }
     }
