@@ -151,7 +151,7 @@ mod tests {
     #[test]
     fn located_outcomes() {
         let cases: &[(&str, &[&str])] = &[
-            // a host-style key — configured or the fallback — reads the container
+            // a host-style key, configured or the fallback, reads the container
             ("az://acct.blob.core.windows.net/general/noarch", &[]),
             (
                 "az://acct.blob.core.windows.net/general/noarch",
