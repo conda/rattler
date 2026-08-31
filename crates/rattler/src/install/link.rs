@@ -159,38 +159,6 @@ pub fn link_file(
     allow_symbolic_links: bool,
     allow_hard_links: bool,
     allow_ref_links: bool,
-    target_platform: Platform,
-    apple_codesign_behavior: AppleCodeSignBehavior,
-    modification_time: filetime::FileTime,
-    external_symlink_policy: ExternalSymlinkPolicy,
-) -> Result<Option<LinkedFile>, LinkFileError> {
-    link_file_with_options(
-        path_json_entry,
-        destination_relative_path,
-        package_dir,
-        target_dir,
-        target_prefix,
-        allow_symbolic_links,
-        allow_hard_links,
-        allow_ref_links,
-        false,
-        target_platform,
-        apple_codesign_behavior,
-        modification_time,
-        external_symlink_policy,
-    )
-}
-
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-pub(crate) fn link_file_with_options(
-    path_json_entry: &PathsEntry,
-    destination_relative_path: PathBuf,
-    package_dir: &Path,
-    target_dir: &Prefix,
-    target_prefix: &str,
-    allow_symbolic_links: bool,
-    allow_hard_links: bool,
-    allow_ref_links: bool,
     force_symbolic_links: bool,
     target_platform: Platform,
     apple_codesign_behavior: AppleCodeSignBehavior,
@@ -1047,6 +1015,7 @@ mod test {
             true,
             true,
             true,
+            false,
             Platform::Linux64,
             AppleCodeSignBehavior::DoNothing,
             modification_time,
@@ -1108,6 +1077,7 @@ mod test {
             true,
             true,
             true,
+            false,
             Platform::Linux64,
             AppleCodeSignBehavior::DoNothing,
             modification_time,
@@ -1155,7 +1125,7 @@ mod test {
             size_in_bytes: None,
         };
 
-        let result = super::link_file_with_options(
+        let result = super::link_file(
             &entry,
             PathBuf::from("data.txt"),
             &package_dir,
@@ -1217,6 +1187,7 @@ mod test {
             true,
             true,
             true,
+            false,
             Platform::Linux64,
             AppleCodeSignBehavior::DoNothing,
             modification_time,

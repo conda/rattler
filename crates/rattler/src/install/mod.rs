@@ -451,7 +451,7 @@ pub async fn link_package(
             let cloned_entry = entry.clone();
             let is_clobber = link_path.clobber_path.is_some();
             let result = match tokio::task::spawn_blocking(move || {
-                link::link_file_with_options(
+                link_file(
                     &cloned_entry,
                     link_path.clobber_path.unwrap_or(link_path.computed_path),
                     &package_dir,
@@ -886,7 +886,7 @@ pub fn link_package_sync(
                 let entry = link_path.entry;
 
                 let is_clobber = link_path.clobber_path.is_some();
-                let link_result = link::link_file_with_options(
+                let link_result = link_file(
                     &entry,
                     link_path
                         .clobber_path
