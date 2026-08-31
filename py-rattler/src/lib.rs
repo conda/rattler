@@ -21,6 +21,7 @@ mod prefix_paths;
 mod pty;
 mod record;
 mod repo_data;
+mod repoquery;
 mod shell;
 mod solver;
 mod utils;
@@ -78,6 +79,7 @@ use repo_data::{
     patch_instructions::PyPatchInstructions,
     sparse::{PyPackageFormatSelection, PySparseRepoData},
 };
+use repoquery::{PyDependent, py_who_needs};
 use run_exports_json::PyRunExportsJson;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
 use solver::{py_solve, py_solve_with_sparse_repodata};
@@ -183,6 +185,8 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyFileMode>()?;
     m.add_class::<PyIndexJson>()?;
 
+    m.add_class::<PyDependent>()?;
+    m.add_function(wrap_pyfunction!(py_who_needs, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_solve, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_solve_with_sparse_repodata, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(get_rattler_version, &m).unwrap())?;
