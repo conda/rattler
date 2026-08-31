@@ -28,30 +28,47 @@ impl RemoteSubdirClient {
     ) -> Result<Self, GatewayError> {
         let subdir_url = channel.platform_url(platform);
 
-        // Fetch the repodata from the remote server
-        let repodata = fetch_repo_data(
-            subdir_url,
-            client,
-            cache_dir,
-            FetchRepoDataOptions {
-                cache_action: source_config.cache_action,
-                zstd_enabled: source_config.zstd_enabled,
-                bz2_enabled: source_config.bz2_enabled,
-                ..FetchRepoDataOptions::default()
-            },
-            reporter,
-        )
-        .await
-        .map_err(|e| match e {
-            FetchRepoDataError::NotFound(e) => {
-                GatewayError::SubdirNotFoundError(Box::new(SubdirNotFoundError {
-                    channel: channel.clone(),
-                    subdir: platform.to_string(),
-                    source: e.into(),
-                }))
+        // Fetch the first available configured repodata variant.
+        let variants = source_config
+            .repodata_variants
+            .filter(|variants| !variants.is_empty())
+            .unwrap_or_else(|| vec![Variant::default()]);
+        let variant_count = variants.len();
+        let mut repodata = None;
+        for (index, variant) in variants.into_iter().enumerate() {
+            match fetch_repo_data(
+                subdir_url.clone(),
+                client.clone(),
+                cache_dir.clone(),
+                FetchRepoDataOptions {
+                    cache_action: source_config.cache_action,
+                    variant,
+                    zstd_enabled: source_config.zstd_enabled,
+                    bz2_enabled: source_config.bz2_enabled,
+                    ..FetchRepoDataOptions::default()
+                },
+                reporter.clone(),
+            )
+            .await
+            {
+                Ok(value) => {
+                    repodata = Some(value);
+                    break;
+                }
+                Err(FetchRepoDataError::NotFound(_)) if index + 1 < variant_count => {}
+                Err(FetchRepoDataError::NotFound(error)) => {
+                    return Err(GatewayError::SubdirNotFoundError(Box::new(
+                        SubdirNotFoundError {
+                            channel: channel.clone(),
+                            subdir: platform.to_string(),
+                            source: error.into(),
+                        },
+                    )));
+                }
+                Err(error) => return Err(GatewayError::FetchRepoDataError(error)),
             }
-            e => GatewayError::FetchRepoDataError(e),
-        })?;
+        }
+        let repodata = repodata.expect("repodata variant lists are non-empty");
 
         // Create a new sparse repodata client that can be used to read records from the
         // repodata.
