@@ -41,10 +41,11 @@ impl<'g> SubdirBuilder<'g> {
 
     pub async fn build(self) -> Result<Subdir, GatewayError> {
         let url = self.channel.platform_url(self.platform);
+        let source_config = self.gateway.channel_config.get(&self.channel.base_url);
 
         let subdir_data = if url.scheme() == "file" {
             if let Some(path) = url_to_path(&url) {
-                self.build_local(&path).await
+                self.build_local(&path, source_config).await
             } else {
                 return Err(GatewayError::UnsupportedUrl(
                     "unsupported file based url".to_string(),
@@ -56,8 +57,6 @@ impl<'g> SubdirBuilder<'g> {
             || url.scheme() == "oci"
             || url.scheme() == "s3"
         {
-            let source_config = self.gateway.channel_config.get(&self.channel.base_url);
-
             // Use sharded repodata if enabled
             let subdir_data = if source_config.sharded_enabled
                 || gateway::force_sharded_repodata(&url)
@@ -152,6 +151,8 @@ impl<'g> SubdirBuilder<'g> {
             self.gateway.client.clone(),
             #[cfg(target_arch = "wasm32")]
             self.gateway.js_fetch.clone(),
+            #[cfg(target_arch = "wasm32")]
+            _source_config.package_format_selection,
             #[cfg(not(target_arch = "wasm32"))]
             self.gateway.cache.clone(),
             #[cfg(not(target_arch = "wasm32"))]
@@ -159,6 +160,8 @@ impl<'g> SubdirBuilder<'g> {
                 action: _source_config.cache_action,
                 missing_shards_are_empty: _source_config.missing_shards_are_empty,
             },
+            #[cfg(not(target_arch = "wasm32"))]
+            _source_config.package_format_selection,
             self.gateway.concurrent_requests_semaphore.clone(),
             #[cfg(not(target_arch = "wasm32"))]
             self.gateway.io_concurrency_semaphore.clone(),
@@ -169,12 +172,23 @@ impl<'g> SubdirBuilder<'g> {
         Ok(SubdirData::from_client(client))
     }
 
-    async fn build_local(&self, path: &Path) -> Result<SubdirData, GatewayError> {
+    async fn build_local(
+        &self,
+        path: &Path,
+        source_config: &SourceConfig,
+    ) -> Result<SubdirData, GatewayError> {
         let channel = self.channel.clone();
         let platform = self.platform;
         let path = path.join("repodata.json");
-        let build_client =
-            move || LocalSubdirClient::from_file(&path, channel.clone(), platform.as_str());
+        let package_format_selection = source_config.package_format_selection;
+        let build_client = move || {
+            LocalSubdirClient::from_file(&path, channel.clone(), platform.as_str()).map(|client| {
+                match package_format_selection {
+                    Some(selection) => client.with_package_format_selection(selection),
+                    None => client,
+                }
+            })
+        };
 
         #[cfg(target_arch = "wasm32")]
         let client = build_client()?;

@@ -19,6 +19,7 @@ use crate::{
         subdir::{PackageRecords, SubdirClient},
     },
     reporter::ResponseReporterExt,
+    sparse::PackageFormatSelection,
 };
 use fs_err::tokio as tokio_fs;
 use futures::future::OptionFuture;
@@ -63,6 +64,7 @@ pub struct ShardedSubdir {
     io_concurrency_semaphore: Option<Arc<tokio::sync::Semaphore>>,
     cache_dir: PathBuf,
     cache_policy: ShardCachePolicy,
+    package_format_selection: Option<PackageFormatSelection>,
 }
 
 impl ShardedSubdir {
@@ -73,6 +75,7 @@ impl ShardedSubdir {
         client: LazyClient,
         cache_dir: PathBuf,
         cache_policy: ShardCachePolicy,
+        package_format_selection: Option<PackageFormatSelection>,
         concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
         io_concurrency_semaphore: Option<Arc<tokio::sync::Semaphore>>,
         reporter: Option<&dyn Reporter>,
@@ -141,6 +144,7 @@ impl ShardedSubdir {
             sharded_repodata,
             cache_dir,
             cache_policy,
+            package_format_selection,
             concurrent_requests_semaphore,
             io_concurrency_semaphore,
         })
@@ -224,6 +228,7 @@ impl SubdirClient for ShardedSubdir {
                         cached_bytes,
                         self.channel.base_url.clone(),
                         self.package_base_url.clone(),
+                        self.package_format_selection,
                     )
                     .await;
                 }
@@ -302,6 +307,7 @@ impl SubdirClient for ShardedSubdir {
             shard_bytes,
             self.channel.base_url.clone(),
             self.package_base_url.clone(),
+            self.package_format_selection,
         );
 
         // Await both futures concurrently.

@@ -55,6 +55,10 @@ impl RemoteSubdirClient {
         // repodata.
         let sparse =
             LocalSubdirClient::from_bytes(repodata_bytes, channel.clone(), platform.as_str())?;
+        let sparse = match source_config.package_format_selection {
+            Some(selection) => sparse.with_package_format_selection(selection),
+            None => sparse,
+        };
 
         Ok(Self { sparse })
     }

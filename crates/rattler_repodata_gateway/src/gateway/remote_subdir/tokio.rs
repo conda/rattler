@@ -61,6 +61,10 @@ impl RemoteSubdirClient {
                 channel.clone(),
                 platform.as_str(),
             )
+            .map(|client| match source_config.package_format_selection {
+                Some(selection) => client.with_package_format_selection(selection),
+                None => client,
+            })
         })
         .await?;
 

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use cfg_if::cfg_if;
@@ -14,6 +15,7 @@ use crate::{
     GatewayError,
     fetch::FetchRepoDataError,
     gateway::subdir::{PackageRecords, extract_unique_deps_split},
+    sparse::PackageFormatSelection,
 };
 
 /// Returns `true` if the HTTP status indicates that the server does not expose
@@ -92,6 +94,7 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
     bytes: R,
     channel_base_url: ChannelUrl,
     base_url: Url,
+    package_format_selection: Option<PackageFormatSelection>,
 ) -> Result<PackageRecords, GatewayError> {
     let parse =
         move || {
@@ -154,6 +157,8 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
                 }));
             }
 
+            records = select_package_formats(records, package_format_selection);
+
             let (unique_base_deps, unique_extra_deps) =
                 extract_unique_deps_split(records.iter().map(|r| &**r));
             Ok(PackageRecords {
@@ -170,19 +175,84 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
     simple_spawn_blocking::tokio::run_blocking_task(parse).await
 }
 
+fn select_package_formats(
+    mut records: Vec<Arc<RepoDataRecord>>,
+    selection: Option<PackageFormatSelection>,
+) -> Vec<Arc<RepoDataRecord>> {
+    let Some(selection) = selection else {
+        return records;
+    };
+    match selection {
+        PackageFormatSelection::OnlyTarBz2 => {
+            records
+                .retain(|record| record.identifier.archive_type == CondaArchiveType::TarBz2.into());
+            records
+        }
+        PackageFormatSelection::OnlyConda => {
+            records
+                .retain(|record| record.identifier.archive_type == CondaArchiveType::Conda.into());
+            records
+        }
+        PackageFormatSelection::Both => {
+            records.retain(|record| {
+                matches!(
+                    record.identifier.archive_type,
+                    rattler_conda_types::package::DistArchiveType::Conda(_)
+                )
+            });
+            records
+        }
+        PackageFormatSelection::PreferConda => {
+            records.retain(|record| {
+                matches!(
+                    record.identifier.archive_type,
+                    rattler_conda_types::package::DistArchiveType::Conda(_)
+                )
+            });
+            prefer_package_formats(records)
+        }
+        PackageFormatSelection::PreferCondaWithWhl => prefer_package_formats(records),
+    }
+}
+
+fn prefer_package_formats(records: Vec<Arc<RepoDataRecord>>) -> Vec<Arc<RepoDataRecord>> {
+    let mut preferred = BTreeMap::new();
+    for record in records {
+        preferred
+            .entry(record.identifier.identifier.clone())
+            .and_modify(|existing: &mut Arc<RepoDataRecord>| {
+                if record
+                    .identifier
+                    .archive_type
+                    .cmp_preference(existing.identifier.archive_type)
+                    .is_gt()
+                {
+                    *existing = record.clone();
+                }
+            })
+            .or_insert(record);
+    }
+    preferred.into_values().collect()
+}
+
 // Tests are only run on non-wasm targets since they use tokio and axum
 #[cfg(test)]
 mod tests {
     use crate::fetch::CacheAction;
     use crate::gateway::error::GatewayError;
     use crate::gateway::subdir::SubdirClient;
+    use crate::sparse::PackageFormatSelection;
     use axum::{
         Router,
         body::Body,
         http::{Response, StatusCode},
         routing::get,
     };
-    use rattler_conda_types::{Channel, RepodataRevisions, ShardedRepodata, ShardedSubdirInfo};
+    use rattler_conda_types::{
+        Channel, PackageName, PackageRecord, RepoDataRecord, RepodataRevisions, ShardedRepodata,
+        ShardedSubdirInfo, Version,
+        package::{CondaArchiveType, DistArchiveIdentifier},
+    };
     use rattler_digest::{Sha256, parse_digest_from_hex};
     use std::future::IntoFuture;
     use std::net::SocketAddr;
@@ -195,6 +265,48 @@ mod tests {
     use url::Url;
 
     use super::{ShardCachePolicy, ShardedSubdir};
+
+    #[test]
+    fn package_format_selection_filters_shards_before_solving() {
+        let record = |archive_type| {
+            let identifier =
+                DistArchiveIdentifier::new("demo-1.0-0".parse().unwrap(), archive_type);
+            Arc::new(RepoDataRecord {
+                url: format!("https://example.invalid/{}", identifier.to_file_name())
+                    .parse()
+                    .unwrap(),
+                channel: Some("https://example.invalid".to_owned()),
+                package_record: PackageRecord::new(
+                    PackageName::new_unchecked("demo"),
+                    Version::major(1),
+                    "0".to_owned(),
+                ),
+                identifier,
+            })
+        };
+        let records = vec![
+            record(CondaArchiveType::TarBz2),
+            record(CondaArchiveType::Conda),
+        ];
+
+        let tar = super::select_package_formats(
+            records.clone(),
+            Some(PackageFormatSelection::OnlyTarBz2),
+        );
+        assert_eq!(tar.len(), 1);
+        assert_eq!(
+            tar[0].identifier.archive_type,
+            CondaArchiveType::TarBz2.into()
+        );
+
+        let preferred =
+            super::select_package_formats(records, Some(PackageFormatSelection::PreferConda));
+        assert_eq!(preferred.len(), 1);
+        assert_eq!(
+            preferred[0].identifier.archive_type,
+            CondaArchiveType::Conda.into()
+        );
+    }
 
     /// A mock server that serves a sharded repodata index but returns
     /// configurable responses for shard requests.
@@ -330,6 +442,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .await
         .unwrap();
@@ -399,6 +512,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .await
         .err()
@@ -438,6 +552,7 @@ mod tests {
                 action: CacheAction::NoCache,
                 missing_shards_are_empty: false,
             },
+            None,
             None,
             None,
             None,
@@ -484,6 +599,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .await
         .expect("the index is served, so it is cached now");
@@ -497,6 +613,7 @@ mod tests {
                 action: cache_only_action,
                 missing_shards_are_empty,
             },
+            None,
             None,
             None,
             None,
@@ -527,6 +644,7 @@ mod tests {
                 action: CacheAction::ForceCacheOnly,
                 missing_shards_are_empty: true,
             },
+            None,
             None,
             None,
             None,

@@ -22,6 +22,7 @@ use crate::{
         subdir::{PackageRecords, SubdirClient},
     },
     reporter::ResponseReporterExt,
+    sparse::PackageFormatSelection,
     utils::js_fetch::JsFetcher,
 };
 
@@ -33,6 +34,7 @@ pub struct ShardedSubdir {
     package_base_url: Url,
     sharded_repodata: ShardedRepodata,
     concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
+    package_format_selection: Option<PackageFormatSelection>,
 }
 
 impl ShardedSubdir {
@@ -41,6 +43,7 @@ impl ShardedSubdir {
         subdir: String,
         client: LazyClient,
         js_fetch: Option<JsFetcher>,
+        package_format_selection: Option<PackageFormatSelection>,
         concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
         reporter: Option<&dyn Reporter>,
     ) -> Result<Self, GatewayError> {
@@ -110,6 +113,7 @@ impl ShardedSubdir {
             package_base_url: add_trailing_slash(&package_base_url).into_owned(),
             sharded_repodata,
             concurrent_requests_semaphore,
+            package_format_selection,
         })
     }
 }
@@ -182,6 +186,7 @@ impl SubdirClient for ShardedSubdir {
             shard_bytes,
             self.channel.base_url.clone(),
             self.package_base_url.clone(),
+            self.package_format_selection,
         )
         .await
     }
