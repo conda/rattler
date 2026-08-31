@@ -11,20 +11,14 @@ readme.workspace = true
 
 [features]
 default = []
-# CLI credential options; resolving them may mint a short-lived user-delegation
-# SAS by shelling out to the Azure CLI (which needs `jiff` for the expiry and
-# `tokio` to run `az` without blocking the async runtime).
+# CLI credential options; resolving them can mint a SAS through the `az` CLI,
+# hence `jiff`, `which` and `tokio`.
 clap = ["dep:clap", "dep:jiff", "dep:which", "dep:tokio"]
 opendal = ["dep:opendal"]
-# Serde derives for the types of the `azure-options` config table. Pulls in
-# `serde` and `indexmap/serde` only, so config crates can depend on this crate
-# with default features off.
 serde = ["dep:serde", "indexmap/serde"]
 
 [dependencies]
 clap = { workspace = true, optional = true }
-# The per-container grant table. Order is kept for tables built in memory;
-# deserialized TOML arrives in byte order, since `toml::Table` is a `BTreeMap`.
 indexmap = { workspace = true }
 jiff = { workspace = true, optional = true }
 opendal = { workspace = true, default-features = false, features = [
