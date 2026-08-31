@@ -41,7 +41,6 @@ impl Auth {
     }
 }
 
-/// The wire scheme an `az://` channel URL is rewritten to when a request is sent.
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(
     feature = "serde",
@@ -70,7 +69,6 @@ impl std::fmt::Display for AzureScheme {
     }
 }
 
-/// What the fetch middleware needs to send a request.
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AzureFetchOptions {
     pub auth: Auth,
@@ -78,7 +76,6 @@ pub struct AzureFetchOptions {
     pub scheme: AzureScheme,
 }
 
-/// The options of one endpoint entry.
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(
     feature = "serde",
