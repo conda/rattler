@@ -4,7 +4,7 @@ use std::sync::Arc;
 use pyo3::{Bound, Py, PyAny, PyResult, Python, exceptions::PyTypeError, pyfunction};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler::{
-    install::{IndicatifReporter, Installer, Reporter, Transaction},
+    install::{IndicatifReporter, Installer, LinkOptions, Reporter, Transaction},
     package_cache::PackageCache,
 };
 use rattler_conda_types::{PackageName, PrefixRecord, RepoDataRecord};
@@ -214,7 +214,7 @@ impl Reporter for PyReporter {
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
-#[pyo3(signature = (records, target_prefix, execute_link_scripts=false, show_progress=false, platform=None, client=None, cache_dir=None, installed_packages=None, reinstall_packages=None, ignored_packages=None, requested_specs=None, reporter=None, alternative_target_prefix=None))]
+#[pyo3(signature = (records, target_prefix, execute_link_scripts=false, show_progress=false, platform=None, client=None, cache_dir=None, installed_packages=None, reinstall_packages=None, ignored_packages=None, requested_specs=None, reporter=None, alternative_target_prefix=None, force_symbolic_links=false))]
 pub fn py_install<'a>(
     py: Python<'a>,
     records: Vec<Bound<'a, PyAny>>,
@@ -230,6 +230,7 @@ pub fn py_install<'a>(
     requested_specs: Option<Vec<PyMatchSpec>>,
     reporter: Option<Py<PyAny>>,
     alternative_target_prefix: Option<PathBuf>,
+    force_symbolic_links: bool,
 ) -> PyResult<Bound<'a, PyAny>> {
     let dependencies = records
         .into_iter()
@@ -266,7 +267,12 @@ pub fn py_install<'a>(
     let client = client.map(|c| c.inner);
 
     future_into_py(py, async move {
-        let mut installer = Installer::new().with_execute_link_scripts(execute_link_scripts);
+        let mut installer = Installer::new()
+            .with_execute_link_scripts(execute_link_scripts)
+            .with_link_options(LinkOptions {
+                force_symbolic_links,
+                ..LinkOptions::default()
+            });
 
         if let Some(py_reporter) = reporter {
             installer.set_reporter(PyReporter {
