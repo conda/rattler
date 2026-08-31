@@ -1050,18 +1050,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
 
 [[package]]
-name = "bitvec"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddcec3d12c579d40898fe0a9a358a803c23e9c52ca3c425707f81c9436211837"
-dependencies = [
- "funty",
- "radium",
- "tap",
- "wyz",
-]
-
-[[package]]
 name = "blake2"
 version = "0.11.0-rc.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2368,12 +2356,6 @@ dependencies = [
  "libc",
  "winapi",
 ]
-
-[[package]]
-name = "funty"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 
 [[package]]
 name = "futures"
@@ -4860,12 +4842,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
-name = "radium"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
-
-[[package]]
 name = "rand"
 version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4961,7 +4937,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.48.5"
+version = "0.48.6"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -5027,7 +5003,7 @@ dependencies = [
 
 [[package]]
 name = "rattler-bin"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -5035,6 +5011,7 @@ dependencies = [
  "clap_complete",
  "clap_complete_nushell",
  "console",
+ "dirs",
  "dunce",
  "futures-util",
  "hex",
@@ -5058,6 +5035,7 @@ dependencies = [
  "rattler_virtual_packages",
  "regex",
  "reqwest",
+ "serde",
  "serde_json",
  "sha2 0.11.0",
  "tempfile",
@@ -5087,7 +5065,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.10.8"
+version = "0.10.9"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5128,7 +5106,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.52.0"
+version = "0.52.1"
 dependencies = [
  "ahash",
  "assert_matches",
@@ -5199,7 +5177,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.7.3"
+version = "0.7.4"
 dependencies = [
  "dirs",
  "fs-err",
@@ -5241,7 +5219,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_git"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "astral-reqwest-middleware",
  "dashmap",
@@ -5262,7 +5240,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.31.3"
+version = "0.31.4"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5315,7 +5293,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.32.4"
+version = "0.32.5"
 dependencies = [
  "ahash",
  "file_url",
@@ -5355,7 +5333,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.76"
+version = "0.2.77"
 dependencies = [
  "configparser",
  "dirs",
@@ -5385,7 +5363,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.30.7"
+version = "0.30.8"
 dependencies = [
  "ambient-id",
  "anyhow",
@@ -5432,7 +5410,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.27.3"
+version = "0.27.4"
 dependencies = [
  "assert_matches",
  "astral-reqwest-middleware",
@@ -5503,7 +5481,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_redaction"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "astral-reqwest-middleware",
  "reqwest",
@@ -5512,7 +5490,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.33.1"
+version = "0.33.2"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5591,7 +5569,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.2.13"
+version = "0.2.14"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -5607,7 +5585,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_sandbox"
-version = "0.2.28"
+version = "0.2.29"
 dependencies = [
  "birdcage",
  "clap",
@@ -5618,7 +5596,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.27.16"
+version = "0.27.17"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -5639,7 +5617,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "9.0.4"
+version = "9.0.5"
 dependencies = [
  "criterion",
  "futures",
@@ -5669,7 +5647,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_upload"
-version = "0.10.5"
+version = "0.10.6"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-reqwest-retry",
@@ -5707,7 +5685,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "5.1.1"
+version = "6.0.0"
 dependencies = [
  "archspec",
  "libloading 0.9.0",
@@ -5983,18 +5961,17 @@ dependencies = [
 
 [[package]]
 name = "resolvo"
-version = "0.12.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1560db4f7a060680c14a93a927e049677bcc9a5a01fc0a2a57170dbee81e33a"
+checksum = "a5d0149e99c7af5382e3da8bb05b23089cf0398e66509f724453ff903004541e"
 dependencies = [
  "ahash",
- "bitvec",
  "elsa",
  "event-listener",
  "futures",
  "human_bytes",
  "indexmap 2.14.0",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "petgraph",
  "serde",
  "tabwriter",
@@ -7198,12 +7175,6 @@ checksum = "fce91f2f0ec87dff7e6bcbbeb267439aa1188703003c6055193c821487400432"
 dependencies = [
  "unicode-width 0.2.2",
 ]
-
-[[package]]
-name = "tap"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "tar"
@@ -8466,15 +8437,6 @@ name = "writeable"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
-
-[[package]]
-name = "wyz"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
-dependencies = [
- "tap",
-]
 
 [[package]]
 name = "x509-cert"
