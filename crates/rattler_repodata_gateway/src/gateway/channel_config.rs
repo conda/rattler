@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use indexmap::IndexSet;
 use rattler_conda_types::ChannelUrl;
 use url::Url;
 
@@ -24,9 +25,8 @@ pub struct SourceConfig {
     /// caches.
     pub cache_action: CacheAction,
 
-    /// Ordered repodata variants to try. `None` preserves the existing
-    /// `repodata.json`-only behavior.
-    pub repodata_variants: Option<Vec<Variant>>,
+    /// Ordered repodata variants to try. `None` fetches only `repodata.json`.
+    pub repodata_variants: Option<IndexSet<Variant>>,
 
     /// When the gateway may only read from the cache, report a package whose
     /// shard is absent as having no records instead of failing the query.

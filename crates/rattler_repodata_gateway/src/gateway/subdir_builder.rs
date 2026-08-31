@@ -179,7 +179,7 @@ impl<'g> SubdirBuilder<'g> {
             .repodata_variants
             .clone()
             .filter(|variants| !variants.is_empty())
-            .unwrap_or_else(|| vec![crate::fetch::Variant::default()]);
+            .unwrap_or_else(|| indexmap::IndexSet::from([crate::fetch::Variant::default()]));
         let path = variants
             .iter()
             .map(|variant| path.join(variant.file_name()))

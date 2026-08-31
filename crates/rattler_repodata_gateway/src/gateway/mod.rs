@@ -548,7 +548,11 @@ mod test {
 
         let source_config = SourceConfig {
             sharded_enabled: false,
-            repodata_variants: Some(vec![Variant::Current, Variant::AfterPatches]),
+            repodata_variants: Some(
+                [Variant::Current, Variant::AfterPatches]
+                    .into_iter()
+                    .collect(),
+            ),
             ..SourceConfig::default()
         };
         let gateway_config = GatewayChannelConfig {

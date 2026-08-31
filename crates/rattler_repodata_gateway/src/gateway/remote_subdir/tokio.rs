@@ -32,7 +32,7 @@ impl RemoteSubdirClient {
         let variants = source_config
             .repodata_variants
             .filter(|variants| !variants.is_empty())
-            .unwrap_or_else(|| vec![Variant::default()]);
+            .unwrap_or_else(|| indexmap::IndexSet::from([Variant::default()]));
         let variant_count = variants.len();
         let mut repodata = None;
         for (index, variant) in variants.into_iter().enumerate() {
