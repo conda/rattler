@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use futures::{StreamExt, TryStreamExt};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyAnyMethods;
@@ -348,6 +349,14 @@ impl PyGateway {
     /// reverse dependencies of `target` entirely in Rust, converting only
     /// the matching records to Python. This avoids materializing a Python
     /// object for every record in the queried repodata.
+    ///
+    /// Platforms are queried independently with bounded concurrency: each
+    /// platform's repodata is scanned and released as soon as its query
+    /// completes, instead of retaining the records of every platform at
+    /// once. This keeps peak memory bounded and lets subdir loading run in
+    /// parallel; a combined multi-platform query would also spawn a fetch
+    /// for every package name on every subdir, which scales poorly with
+    /// the number of platforms.
     pub fn who_needs<'a>(
         &self,
         py: Python<'a>,
@@ -355,6 +364,11 @@ impl PyGateway {
         platforms: Vec<PyPlatform>,
         target: &Bound<'a, PyAny>,
     ) -> PyResult<Bound<'a, PyAny>> {
+        /// How many platforms are queried and scanned concurrently. Bounds
+        /// peak memory: at most this many platforms' repodata are alive at
+        /// the same time.
+        const PLATFORM_CONCURRENCY: usize = 4;
+
         let rust_sources: Vec<Source> = sources
             .into_iter()
             .map(py_object_to_source)
@@ -367,43 +381,77 @@ impl PyGateway {
         )
         .map_err(PyRattlerError::from)?;
 
+        // Deduplicate platforms while keeping the input order, so the
+        // result order stays deterministic and no subdir is scanned twice.
+        let mut seen_platforms = HashSet::new();
+        let platforms: Vec<rattler_conda_types::Platform> = platforms
+            .into_iter()
+            .map(|p| p.inner)
+            .filter(|p| seen_platforms.insert(*p))
+            .collect();
+
         let gateway = self.inner.clone();
         let show_progress = self.show_progress;
         future_into_py(py, async move {
-            let mut query = gateway
-                .query(
-                    rust_sources,
-                    platforms.into_iter().map(|p| p.inner),
-                    vec![wildcard],
-                )
-                .recursive(false);
+            let per_platform = futures::stream::iter(platforms.into_iter().map(|platform| {
+                let gateway = gateway.clone();
+                let sources = rust_sources.clone();
+                let target = target.clone();
+                let wildcard = wildcard.clone();
+                async move {
+                    let mut query = gateway
+                        .query(sources, [platform], vec![wildcard])
+                        .recursive(false);
 
-            if show_progress {
-                query = query
-                    .with_reporter(rattler_repodata_gateway::IndicatifReporter::builder().finish());
+                    if show_progress {
+                        query = query.with_reporter(
+                            rattler_repodata_gateway::IndicatifReporter::builder().finish(),
+                        );
+                    }
+
+                    let mut output = query.execute().await?;
+                    let warnings = std::mem::take(&mut output.warnings);
+
+                    // The dependents borrow records from `output`; look
+                    // their `Arc`s up by pointer identity so the conversion
+                    // shares the records instead of deep copying them. The
+                    // rest of the platform's repodata is dropped when
+                    // `output` goes out of scope here.
+                    let arc_by_ptr: HashMap<usize, &Arc<rattler_conda_types::RepoDataRecord>> =
+                        output
+                            .repodata
+                            .iter()
+                            .flat_map(rattler_repodata_gateway::RepoData::iter_arc)
+                            .map(|arc| (Arc::as_ptr(arc) as usize, arc))
+                            .collect();
+
+                    let dependents = output
+                        .who_needs(target)
+                        .iter()
+                        .map(|dependent| {
+                            let arc = arc_by_ptr[&(std::ptr::from_ref(dependent.record) as usize)]
+                                .clone();
+                            crate::repoquery::PyDependent::new(dependent, arc)
+                        })
+                        .collect::<Vec<_>>();
+                    Ok::<_, rattler_repodata_gateway::GatewayError>((warnings, dependents))
+                }
+            }))
+            // `buffered` (not `buffered_unordered`) yields results in input
+            // platform order, keeping the result deterministic.
+            .buffered(PLATFORM_CONCURRENCY)
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(PyRattlerError::from)?;
+
+            let mut warnings = Vec::new();
+            let mut dependents = Vec::new();
+            for (platform_warnings, platform_dependents) in per_platform {
+                warnings.extend(platform_warnings);
+                dependents.extend(platform_dependents);
             }
-
-            let mut output = query.execute().await.map_err(PyRattlerError::from)?;
-            emit_gateway_warnings(std::mem::take(&mut output.warnings))?;
-
-            // The dependents borrow records from `output`; look their `Arc`s
-            // up by pointer identity so the conversion shares the records
-            // instead of deep copying them.
-            let arc_by_ptr: HashMap<usize, &Arc<rattler_conda_types::RepoDataRecord>> = output
-                .repodata
-                .iter()
-                .flat_map(rattler_repodata_gateway::RepoData::iter_arc)
-                .map(|arc| (Arc::as_ptr(arc) as usize, arc))
-                .collect();
-
-            Ok(output
-                .who_needs(target)
-                .iter()
-                .map(|dependent| {
-                    let arc = arc_by_ptr[&(std::ptr::from_ref(dependent.record) as usize)].clone();
-                    crate::repoquery::PyDependent::new(dependent, arc)
-                })
-                .collect::<Vec<_>>())
+            emit_gateway_warnings(warnings)?;
+            Ok(dependents)
         })
     }
 

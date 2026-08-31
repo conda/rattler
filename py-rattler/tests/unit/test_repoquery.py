@@ -8,10 +8,12 @@ from rattler import (
     MatchSpec,
     PackageName,
     PackageRecord,
+    Platform,
     RepoDataRecord,
     Version,
     who_needs,
 )
+from rattler.repo_data import Dependent
 
 
 def record(
@@ -117,3 +119,30 @@ async def test_gateway_who_needs(gateway: Gateway, conda_forge_channel: Channel)
     all_records = [record for subdir_records in query_result for record in subdir_records]
     direct = who_needs(all_records, "python_abi")
     assert {d.record.name.normalized for d in dependents} == {d.record.name.normalized for d in direct}
+
+
+@pytest.mark.asyncio
+async def test_gateway_who_needs_multi_platform(gateway: Gateway, conda_forge_channel: Channel) -> None:
+    # A multi-platform call (with a duplicate platform thrown in) returns
+    # exactly the union of the single-platform calls. The order of records
+    # within a platform is not deterministic, so compare as multisets.
+    combined = await gateway.who_needs([conda_forge_channel], ["linux-64", "noarch", "linux-64"], "python_abi")
+
+    def key(dependent: Dependent) -> tuple[str, str, str, str, str, str]:
+        record = dependent.record
+        return (
+            record.name.normalized,
+            str(record.version),
+            record.build,
+            record.subdir,
+            dependent.dependency,
+            dependent.kind,
+        )
+
+    per_platform = [
+        key(dependent)
+        for platform in (Platform("linux-64"), Platform("noarch"))
+        for dependent in await gateway.who_needs([conda_forge_channel], [platform], "python_abi")
+    ]
+    assert per_platform  # the fixture channel must actually exercise this
+    assert sorted(key(dependent) for dependent in combined) == sorted(per_platform)
