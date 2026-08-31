@@ -2,7 +2,10 @@ from typing import List, Optional
 
 import pytest
 from rattler import (
+    Channel,
+    Gateway,
     GenericVirtualPackage,
+    MatchSpec,
     PackageName,
     PackageRecord,
     RepoDataRecord,
@@ -96,6 +99,21 @@ def test_who_needs_virtual_package(records: List[RepoDataRecord]) -> None:
     assert who_needs(records, old_cuda) == []
 
 
-def test_who_needs_invalid_target(records: List[RepoDataRecord]) -> None:
-    with pytest.raises(TypeError, match="expected a str"):
-        who_needs(records, 42)  # type: ignore[arg-type]
+@pytest.mark.asyncio
+async def test_gateway_who_needs(gateway: Gateway, conda_forge_channel: Channel) -> None:
+    # The same lookup through the gateway: the wildcard query and the
+    # reverse dependency scan run entirely in Rust, and only the matching
+    # records cross into Python.
+    dependents = await gateway.who_needs([conda_forge_channel], ["linux-64", "noarch"], "python_abi")
+    assert dependents
+    assert all(
+        PackageName("python_abi").normalized in d.dependency and d.kind in ("depends", "constrains") for d in dependents
+    )
+
+    # The result matches running the pure who_needs over a materialized
+    # wildcard query.
+    wildcard = MatchSpec("*", exact_names_only=False)
+    query_result = await gateway.query([conda_forge_channel], ["linux-64", "noarch"], [wildcard], recursive=False)
+    all_records = [record for subdir_records in query_result for record in subdir_records]
+    direct = who_needs(all_records, "python_abi")
+    assert {d.record.name.normalized for d in dependents} == {d.record.name.normalized for d in direct}

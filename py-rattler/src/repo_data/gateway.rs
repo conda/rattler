@@ -344,6 +344,69 @@ impl PyGateway {
         })
     }
 
+    /// Runs a wildcard query over `sources`/`platforms` and computes the
+    /// reverse dependencies of `target` entirely in Rust, converting only
+    /// the matching records to Python. This avoids materializing a Python
+    /// object for every record in the queried repodata.
+    pub fn who_needs<'a>(
+        &self,
+        py: Python<'a>,
+        sources: Vec<Bound<'a, PyAny>>,
+        platforms: Vec<PyPlatform>,
+        target: &Bound<'a, PyAny>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let rust_sources: Vec<Source> = sources
+            .into_iter()
+            .map(py_object_to_source)
+            .collect::<PyResult<_>>()?;
+        let target = crate::repoquery::extract_who_needs_target(target)?;
+
+        let wildcard = rattler_conda_types::MatchSpec::from_str(
+            "*",
+            rattler_conda_types::ParseMatchSpecOptions::strict().with_exact_names_only(false),
+        )
+        .map_err(PyRattlerError::from)?;
+
+        let gateway = self.inner.clone();
+        let show_progress = self.show_progress;
+        future_into_py(py, async move {
+            let mut query = gateway
+                .query(
+                    rust_sources,
+                    platforms.into_iter().map(|p| p.inner),
+                    vec![wildcard],
+                )
+                .recursive(false);
+
+            if show_progress {
+                query = query
+                    .with_reporter(rattler_repodata_gateway::IndicatifReporter::builder().finish());
+            }
+
+            let mut output = query.execute().await.map_err(PyRattlerError::from)?;
+            emit_gateway_warnings(std::mem::take(&mut output.warnings))?;
+
+            // The dependents borrow records from `output`; look their `Arc`s
+            // up by pointer identity so the conversion shares the records
+            // instead of deep copying them.
+            let arc_by_ptr: HashMap<usize, &Arc<rattler_conda_types::RepoDataRecord>> = output
+                .repodata
+                .iter()
+                .flat_map(rattler_repodata_gateway::RepoData::iter_arc)
+                .map(|arc| (Arc::as_ptr(arc) as usize, arc))
+                .collect();
+
+            Ok(output
+                .who_needs(target)
+                .iter()
+                .map(|dependent| {
+                    let arc = arc_by_ptr[&(std::ptr::from_ref(dependent.record) as usize)].clone();
+                    crate::repoquery::PyDependent::new(dependent, arc)
+                })
+                .collect::<Vec<_>>())
+        })
+    }
+
     #[pyo3(signature = (
         sources,
         platforms,

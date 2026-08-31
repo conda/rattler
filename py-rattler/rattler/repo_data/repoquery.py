@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Literal, Optional, Sequence, Union
+from typing import Any, List, Literal, Optional, Sequence, Union
 
 from rattler.package.package_name import PackageName
 from rattler.rattler import PyDependent, py_who_needs
@@ -75,8 +75,10 @@ def who_needs(
 
     Note that reverse dependency lookup requires the *complete* set of
     records of the queried channels and platforms - any record not passed
-    in here is invisible to the search. Use a wildcard `Gateway` query
-    (spec `*`) to obtain them.
+    in here is invisible to the search. When the records come from a
+    `Gateway` anyway, prefer `Gateway.who_needs` - it runs the wildcard
+    query and this lookup entirely in Rust and only converts the matching
+    records to Python.
 
     Examples
     --------
@@ -109,22 +111,26 @@ def who_needs(
     >>>
     ```
     """
+    return [
+        Dependent._from_py_dependent(py_dependent)
+        for py_dependent in py_who_needs([record._record for record in records], _target_to_py(target))
+    ]
+
+
+def _target_to_py(
+    target: Union[str, PackageName, PackageRecord, GenericVirtualPackage],
+) -> Any:
+    """Converts a who_needs target into its inner PyO3 object."""
     if isinstance(target, str):
         target = PackageName(target)
 
     if isinstance(target, PackageName):
-        py_target = target._name
-    elif isinstance(target, GenericVirtualPackage):
-        py_target = target._generic_virtual_package
-    elif isinstance(target, PackageRecord):
-        py_target = target._record
-    else:
-        raise TypeError(
-            "expected a str, PackageName, PackageRecord, or GenericVirtualPackage "
-            f"as the target, not {type(target).__name__}"
-        )
-
-    return [
-        Dependent._from_py_dependent(py_dependent)
-        for py_dependent in py_who_needs([record._record for record in records], py_target)
-    ]
+        return target._name
+    if isinstance(target, GenericVirtualPackage):
+        return target._generic_virtual_package
+    if isinstance(target, PackageRecord):
+        return target._record
+    raise TypeError(
+        "expected a str, PackageName, PackageRecord, or GenericVirtualPackage "
+        f"as the target, not {type(target).__name__}"
+    )

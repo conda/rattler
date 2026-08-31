@@ -1,10 +1,11 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use pyo3::prelude::PyAnyMethods;
 use pyo3::{Bound, PyAny, PyResult, exceptions::PyTypeError, pyclass, pyfunction, pymethods};
 use rattler_conda_types::RepoDataRecord;
 use rattler_repodata_gateway::repoquery::{
-    DependencyKind, RunExportKind, WhoNeedsTarget, who_needs,
+    DependencyKind, Dependent, RunExportKind, WhoNeedsTarget, who_needs,
 };
 
 use crate::{
@@ -47,6 +48,21 @@ impl PyDependent {
     }
 }
 
+impl PyDependent {
+    /// Builds a `PyDependent` from a borrowed `Dependent` and the record it
+    /// borrows from, passed as an `Arc` so the record is shared rather than
+    /// deep copied.
+    pub fn new(dependent: &Dependent<'_>, record: Arc<RepoDataRecord>) -> Self {
+        let (kind, run_export_kind) = split_kind(dependent.kind);
+        Self {
+            record: PyRecord::from(record),
+            dependency: dependent.dependency.to_string(),
+            kind: kind.to_string(),
+            run_export_kind: run_export_kind.map(String::from),
+        }
+    }
+}
+
 fn split_kind(kind: DependencyKind) -> (&'static str, Option<&'static str>) {
     match kind {
         DependencyKind::Depends => ("depends", None),
@@ -64,22 +80,28 @@ fn split_kind(kind: DependencyKind) -> (&'static str, Option<&'static str>) {
     }
 }
 
+/// Extracts a [`WhoNeedsTarget`] from a Python object that is either a
+/// `PyPackageName`, a `PyGenericVirtualPackage`, or a `PyRecord`.
+pub fn extract_who_needs_target(target: &Bound<'_, PyAny>) -> PyResult<WhoNeedsTarget> {
+    if let Ok(name) = target.extract::<PyPackageName>() {
+        Ok(name.inner.into())
+    } else if let Ok(virtual_package) = target.extract::<PyGenericVirtualPackage>() {
+        Ok(virtual_package.inner.into())
+    } else if let Ok(record) = target.extract::<PyRecord>() {
+        Ok(record.as_package_record().clone().into())
+    } else {
+        Err(PyTypeError::new_err(
+            "expected a PackageName, PackageRecord, or GenericVirtualPackage as the target",
+        ))
+    }
+}
+
 #[pyfunction]
 pub fn py_who_needs(
     records: Vec<PyRecord>,
     target: &Bound<'_, PyAny>,
 ) -> PyResult<Vec<PyDependent>> {
-    let target: WhoNeedsTarget = if let Ok(name) = target.extract::<PyPackageName>() {
-        name.inner.into()
-    } else if let Ok(virtual_package) = target.extract::<PyGenericVirtualPackage>() {
-        virtual_package.inner.into()
-    } else if let Ok(record) = target.extract::<PyRecord>() {
-        record.as_package_record().clone().into()
-    } else {
-        return Err(PyTypeError::new_err(
-            "expected a PackageName, PackageRecord, or GenericVirtualPackage as the target",
-        ));
-    };
+    let target = extract_who_needs_target(target)?;
 
     let repodata_records = records
         .iter()
