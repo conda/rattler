@@ -148,24 +148,22 @@ mod tests {
 
     /// One `url configured=[keys]` entry per case; the snapshot pins the
     /// matched key and container, or the error.
-    ///
-    /// Covers: the longest configured key winning, the host-style fallback
-    /// for unconfigured Azure hosts (and its absence for IP literals), an
-    /// illegal container name erroring only once a key grants one, and
-    /// unkeyed URLs reporting no container rather than a bad one.
     #[test]
     fn located_outcomes() {
         let cases: &[(&str, &[&str])] = &[
+            // a configured or fallback host-style key grants the container
             ("az://acct.blob.core.windows.net/general/noarch", &[]),
             (
                 "az://acct.blob.core.windows.net/general/noarch",
                 &["acct.blob.core.windows.net"],
             ),
+            // the configured key decides where the container sits
             (
                 "az://proxy.internal/accta/general/noarch",
                 &["proxy.internal/accta"],
             ),
             ("az://proxy.internal/accta/general", &["proxy.internal"]),
+            // the longest configured key wins
             (
                 "az://proxy.internal/accta/general/noarch",
                 &["proxy.internal", "proxy.internal/accta"],
@@ -174,12 +172,15 @@ mod tests {
                 "az://127.0.0.1:10000/devstoreaccount1/general",
                 &["127.0.0.1:10000/devstoreaccount1"],
             ),
+            // an IP literal has no account label, so no host-style fallback
             ("az://127.0.0.1:10000/devstoreaccount1/general", &[]),
+            // an illegal container name errors once a key grants one
             ("az://acct.blob.core.windows.net/General/noarch", &[]),
             ("az://acct.blob.core.windows.net/ab/noarch", &[]),
             ("az://acct.blob.core.windows.net/a--b/noarch", &[]),
             ("az://acct.blob.core.windows.net/general;evil/noarch", &[]),
             ("az://acct.blob.core.windows.net/-o/noarch", &[]),
+            // unkeyed URLs report no container rather than a bad one
             (
                 "az://127.0.0.1:10000/Conda_Channel/noarch/repodata.json",
                 &[],
