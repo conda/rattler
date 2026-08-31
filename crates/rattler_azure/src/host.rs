@@ -109,10 +109,10 @@ impl AzureHost {
         self.port
     }
 
-    /// Whether the host is Azure's own blob endpoint in some cloud.
+    /// Whether the host is one of Azure's own blob endpoints.
     ///
-    /// Only a `true` proves anything: a proxy or private endpoint in front of
-    /// real Azure answers `false`, so a `false` proves nothing.
+    /// A proxy or private endpoint in front of real Azure returns `false`,
+    /// so `false` does not mean the host is not Azure.
     pub fn is_known_azure_blob_endpoint(&self) -> bool {
         // `blob.` + each cloud's `StorageEndpointSuffix`:
         // https://learn.microsoft.com/en-us/azure/storage/common/storage-powershell-independent-clouds#endpoint-suffix

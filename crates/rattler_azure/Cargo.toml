@@ -11,14 +11,9 @@ readme.workspace = true
 
 [features]
 default = []
-# Serde derives for the types of the `azure-options` config table. Pulls in
-# `serde` and `indexmap/serde` only, so config crates can depend on this crate
-# with default features off.
 serde = ["dep:serde", "indexmap/serde"]
 
 [dependencies]
-# The per-container grant table. Order is kept for tables built in memory;
-# deserialized TOML arrives in byte order, since `toml::Table` is a `BTreeMap`.
 indexmap = { workspace = true }
 percent-encoding = { workspace = true }
 secrecy = { workspace = true }
