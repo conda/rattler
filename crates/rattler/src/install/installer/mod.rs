@@ -59,6 +59,10 @@ pub struct LinkOptions {
     /// If true, ref links (or copy-on-write links) will be allowed to install
     /// files to the disk. Defaults to `true` if `None`.
     pub allow_ref_links: Option<bool>,
+
+    /// If true, ordinary unmodified package files are symbolically linked to
+    /// the package cache instead of being reflinked, hardlinked, or copied.
+    pub force_symbolic_links: bool,
 }
 
 #[cfg(feature = "rattler_config")]
@@ -68,6 +72,7 @@ impl From<&rattler_config::config::CommonConfig> for LinkOptions {
             allow_symbolic_links: config.allow_symbolic_links,
             allow_hard_links: config.allow_hard_links,
             allow_ref_links: config.allow_ref_links,
+            force_symbolic_links: false,
         }
     }
 }
@@ -658,6 +663,7 @@ impl Installer {
             allow_symbolic_links: self.link_options.allow_symbolic_links,
             allow_hard_links: self.link_options.allow_hard_links,
             allow_ref_links: self.link_options.allow_ref_links,
+            force_symbolic_links: self.link_options.force_symbolic_links,
             external_symlink_policy: self.external_symlink_policy,
             ..InstallOptions::default()
         };
