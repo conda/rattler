@@ -181,6 +181,64 @@ fn dedup_by_preference(
     out
 }
 
+/// Deserializes raw shard bytes into a [`Shard`].
+fn load_shard<R: AsRef<[u8]>>(bytes: R) -> Result<Shard, GatewayError> {
+    rmp_serde::from_slice::<Shard>(bytes.as_ref())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
+        .map_err(FetchRepoDataError::IoError)
+        .map_err(GatewayError::from)
+}
+
+/// Converts a [`Shard`] into [`PackageRecords`], applying `variant_consolidation`
+/// to select and deduplicate the package format variants exposed to the solver.
+fn get_records(
+    shard: Shard,
+    channel_base_url: &ChannelUrl,
+    base_url: &Url,
+    variant_consolidation: PackageFormatSelection,
+) -> PackageRecords {
+    let channel_str = channel_base_url.url().clone().redact().to_string();
+    let base_url_str = base_url.as_str();
+    let records: Vec<Arc<RepoDataRecord>> = select_shard_records(shard, variant_consolidation)
+        .map(|(file_name, raw_record)| match raw_record {
+            RawShardRecord::Package(package_record) => {
+                let file_name_str = file_name.to_file_name();
+                Arc::new(RepoDataRecord {
+                    url: Url::parse(&format!("{base_url_str}{file_name_str}"))
+                        .expect("filename is not a valid url"),
+                    channel: Some(channel_str.clone()),
+                    package_record,
+                    identifier: file_name,
+                })
+            }
+            RawShardRecord::Whl(WhlPackageRecord {
+                url,
+                package_record,
+            }) => {
+                let url = match url {
+                    UrlOrPath::Path(path) => Url::parse(&format!("{base_url_str}{path}"))
+                        .expect("path is not a valid url"),
+                    UrlOrPath::Url(url) => url,
+                };
+                Arc::new(RepoDataRecord {
+                    url,
+                    channel: Some(channel_str.clone()),
+                    package_record,
+                    identifier: file_name,
+                })
+            }
+        })
+        .collect();
+
+    let (unique_base_deps, unique_extra_deps) =
+        extract_unique_deps_split(records.iter().map(|r| &**r));
+    PackageRecords {
+        records,
+        unique_base_deps,
+        unique_extra_deps,
+    }
+}
+
 async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
     bytes: R,
     channel_base_url: ChannelUrl,
@@ -188,50 +246,13 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
     variant_consolidation: PackageFormatSelection,
 ) -> Result<PackageRecords, GatewayError> {
     let parse = move || {
-        let shard = rmp_serde::from_slice::<Shard>(bytes.as_ref())
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
-            .map_err(FetchRepoDataError::IoError)?;
-
-        let channel_str = channel_base_url.url().clone().redact().to_string();
-        let base_url_str = base_url.as_str();
-        let records: Vec<Arc<RepoDataRecord>> = select_shard_records(shard, variant_consolidation)
-            .map(|(file_name, raw_record)| match raw_record {
-                RawShardRecord::Package(package_record) => {
-                    let file_name_str = file_name.to_file_name();
-                    Arc::new(RepoDataRecord {
-                        url: Url::parse(&format!("{base_url_str}{file_name_str}"))
-                            .expect("filename is not a valid url"),
-                        channel: Some(channel_str.clone()),
-                        package_record,
-                        identifier: file_name,
-                    })
-                }
-                RawShardRecord::Whl(WhlPackageRecord {
-                    url,
-                    package_record,
-                }) => {
-                    let url = match url {
-                        UrlOrPath::Path(path) => Url::parse(&format!("{base_url_str}{path}"))
-                            .expect("path is not a valid url"),
-                        UrlOrPath::Url(url) => url,
-                    };
-                    Arc::new(RepoDataRecord {
-                        url,
-                        channel: Some(channel_str.clone()),
-                        package_record,
-                        identifier: file_name,
-                    })
-                }
-            })
-            .collect();
-
-        let (unique_base_deps, unique_extra_deps) =
-            extract_unique_deps_split(records.iter().map(|r| &**r));
-        Ok(PackageRecords {
-            records,
-            unique_base_deps,
-            unique_extra_deps,
-        })
+        let shard = load_shard(bytes)?;
+        Ok(get_records(
+            shard,
+            &channel_base_url,
+            &base_url,
+            variant_consolidation,
+        ))
     };
 
     #[cfg(target_arch = "wasm32")]
