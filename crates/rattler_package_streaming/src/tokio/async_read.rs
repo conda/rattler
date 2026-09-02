@@ -1,231 +1,204 @@
 //! Functions that enable extracting or streaming a Conda package for objects
 //! that implement the [`tokio::io::AsyncRead`] trait.
+//!
+//! Extraction runs on a blocking worker thread. The async reader is pumped
+//! into a bounded channel of fixed-size chunks, so downloading continues while
+//! the worker decompresses and writes files with plain blocking I/O.
 
-use std::path::Path;
+use std::{
+    io::Read,
+    path::Path,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 
-use async_compression::tokio::bufread::BzDecoder;
-use async_spooled_tempfile::SpooledTempFile;
-use async_zip::base::read::stream::ZipFileReader;
 #[cfg(feature = "reqwest")]
 use futures_util::StreamExt;
-use tokio::io::{AsyncRead, AsyncSeekExt};
-use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
+use futures_util::future::{self, Either};
+use tokio::io::{AsyncRead, AsyncReadExt};
 
-use crate::{ExtractError, ExtractResult, read::SizeCountingReader};
+use crate::{ExtractError, ExtractResult};
 
-use super::shared::{DEFAULT_BUF_SIZE, extract_tar_zst_entry, unpack_tar_archive};
+use super::shared::DEFAULT_BUF_SIZE;
 
-/// Extracts the contents a `.tar.bz2` package archive using fully async implementation.
+/// Bytes per chunk handed to the extraction worker. Chunks are filled
+/// completely before they are sent, so the worker wakes up once per chunk
+/// rather than once per network read.
+const CHUNK_SIZE: usize = DEFAULT_BUF_SIZE;
+
+/// Chunks the download can run ahead of the extraction worker.
+const CHUNKS_IN_FLIGHT: usize = 4;
+
+/// Extracts the contents of a `.tar.bz2` package archive.
 pub async fn extract_tar_bz2(
-    reader: impl AsyncRead + Send + Unpin + 'static,
+    reader: impl AsyncRead + Unpin,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
-    // Ensure the destination directory exists
-    tokio::fs::create_dir_all(destination)
-        .await
-        .map_err(ExtractError::CouldNotCreateDestination)?;
-
-    // Clone destination for the async block
-    let destination = destination.to_owned();
-
-    // Wrap the reading in additional readers that will compute the hashes while extracting
-    let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
-    let mut md5_reader =
-        rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
-    let mut size_reader = SizeCountingReader::new(&mut md5_reader);
-
-    // Create a buffered reader for better performance
-    let buf_reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, &mut size_reader);
-
-    // Decompress bzip2 asynchronously
-    let decoder = BzDecoder::new(buf_reader);
-
-    // Build archive with optimized settings for faster extraction:
-    // - Skip automatic mtime preservation (we set mtimes manually with safe clamping)
-    // - Skip automatic permission handling (we'll set executable bits manually)
-    // - Skip extended attributes for better performance
-    let archive = tokio_tar::ArchiveBuilder::new(decoder)
-        .set_preserve_mtime(false)
-        .set_preserve_permissions(false)
-        .set_unpack_xattrs(false)
-        // We need this setting otherwise some packages in conda-forge will
-        // not extract. However, we are checking much better in rattler-build and hopefully
-        // one day can remove this.
-        .set_allow_external_symlinks(true)
-        .build();
-
-    // Unpack entries manually, preserving only executable bits on Unix
-    unpack_tar_archive(archive, &destination).await?;
-
-    // Read the file to the end to make sure the hash is properly computed
-    tokio::io::copy(&mut size_reader, &mut tokio::io::sink())
-        .await
-        .map_err(ExtractError::IoError)?;
-
-    // Get the size and hashes
-    let (_, total_size) = size_reader.finalize();
-    let (sha256_reader, md5) = md5_reader.finalize();
-    let (_, sha256) = sha256_reader.finalize();
-
-    // Validate that we actually read some data from the stream.
-    // If total_size is 0, it likely means the stream was truncated or the bzip2
-    // decompressor silently failed without detecting an incomplete stream.
-    if total_size == 0 {
-        return Err(ExtractError::IoError(std::io::Error::new(
-            std::io::ErrorKind::UnexpectedEof,
-            "no data was read from the package stream - the stream may have been truncated",
-        )));
-    }
-
-    Ok(ExtractResult {
-        sha256,
-        md5,
-        total_size,
+    extract_blocking(reader, destination, |reader, destination| {
+        crate::read::extract_tar_bz2(reader, destination)
     })
+    .await
 }
 
-/// Extracts the contents of a `.conda` package archive using fully async implementation.
-/// This will perform on-the-fly decompression by streaming the reader.
+/// Extracts the contents of a `.conda` package archive, decompressing the
+/// stream as it arrives.
 pub async fn extract_conda(
-    reader: impl AsyncRead + Send + Unpin + 'static,
+    reader: impl AsyncRead + Unpin,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
-    // Ensure the destination directory exists
-    tokio::fs::create_dir_all(destination)
-        .await
-        .map_err(ExtractError::CouldNotCreateDestination)?;
-
-    // Clone destination for the async block
-    let destination = destination.to_owned();
-
-    // Wrap the reading in additional readers that will compute the hashes while extracting
-    let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
-    let mut md5_reader =
-        rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
-    let mut size_reader = SizeCountingReader::new(&mut md5_reader);
-
-    // Convert to futures traits and create a buffered reader (async_zip uses futures traits)
-    let compat_reader = (&mut size_reader).compat();
-    let mut buf_reader = futures::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, compat_reader);
-
-    // Create a ZIP reader for streaming
-    let mut zip_reader = ZipFileReader::new(&mut buf_reader);
-
-    // Process each ZIP entry
-    while let Some(mut entry) = zip_reader
-        .next_with_entry()
-        .await
-        .map_err(|e| ExtractError::IoError(std::io::Error::other(e)))?
-    {
-        let filename = entry.reader().entry().filename().as_str().map_err(|e| {
-            ExtractError::IoError(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
-        })?;
-
-        // Only extract .tar.zst files
-        if filename.ends_with(".tar.zst") {
-            // Get a reader for the entry and convert from futures traits to tokio traits
-            let mut compat_entry = entry.reader_mut().compat();
-            extract_tar_zst_entry(&mut compat_entry, &destination).await?;
-        }
-
-        // Skip to the next entry (required by async_zip API)
-        (.., zip_reader) = entry
-            .skip()
-            .await
-            .map_err(|e| ExtractError::IoError(std::io::Error::other(e)))?;
-    }
-
-    // Read any remaining data to ensure hash is properly computed
-    // Use futures copy since we're already in futures ecosystem
-    futures::io::copy(&mut buf_reader, &mut futures::io::sink())
-        .await
-        .map_err(ExtractError::IoError)?;
-
-    // Get the size and hashes
-    let (_, total_size) = size_reader.finalize();
-    let (sha256_reader, md5) = md5_reader.finalize();
-    let (_, sha256) = sha256_reader.finalize();
-
-    // Validate that we actually read some data from the stream
-    if total_size == 0 {
-        return Err(ExtractError::IoError(std::io::Error::new(
-            std::io::ErrorKind::UnexpectedEof,
-            "no data was read from the package stream - the stream may have been truncated",
-        )));
-    }
-
-    Ok(ExtractResult {
-        sha256,
-        md5,
-        total_size,
+    extract_blocking(reader, destination, |reader, destination| {
+        crate::read::extract_conda_via_streaming(reader, destination)
     })
+    .await
 }
 
-/// Extracts the contents of a .conda package archive by fully reading the
-/// stream and then decompressing. This is a fallback method for when streaming fails.
-///
-/// This implementation uses a `SpooledTempFile` (5MB in-memory threshold) to buffer
-/// the package data, then uses the seek-based ZIP API for efficient extraction.
+/// Extracts the contents of a `.conda` package archive by fully reading the
+/// stream before decompressing. This is the fallback for archives that cannot
+/// be extracted while streaming, such as those using data descriptors.
 pub async fn extract_conda_via_buffering(
-    reader: impl AsyncRead + Send + Unpin + 'static,
+    reader: impl AsyncRead + Unpin,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
-    // Delete destination first if it exists, as this method is usually used as a fallback
-    if tokio::fs::try_exists(destination)
-        .await
-        .map_err(ExtractError::IoError)?
-    {
-        tokio::fs::remove_dir_all(destination)
-            .await
-            .map_err(ExtractError::CouldNotCreateDestination)?;
-    }
-
-    // Ensure the destination directory exists
-    tokio::fs::create_dir_all(destination)
-        .await
-        .map_err(ExtractError::CouldNotCreateDestination)?;
-
-    // Clone destination for the async block
-    let destination = destination.to_owned();
-
-    // Wrap the reading in additional readers that will compute the hashes while extracting
-    let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
-    let mut md5_reader =
-        rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
-    let mut size_reader = SizeCountingReader::new(&mut md5_reader);
-
-    // Create a SpooledTempFile (uses memory up to 5MB, then switches to disk)
-    let mut spooled_file = SpooledTempFile::new(5 * 1024 * 1024);
-
-    // Copy from reader to spooled file while computing hashes
-    tokio::io::copy(&mut size_reader, &mut spooled_file)
-        .await
-        .map_err(ExtractError::IoError)?;
-
-    // Get the size and hashes now that we've read everything
-    let (_, total_size) = size_reader.finalize();
-    let (sha256_reader, md5) = md5_reader.finalize();
-    let (_, sha256) = sha256_reader.finalize();
-
-    // Validate that we actually read some data from the stream
-    if total_size == 0 {
-        return Err(ExtractError::IoError(std::io::Error::new(
-            std::io::ErrorKind::UnexpectedEof,
-            "no data was read from the package stream - the stream may have been truncated",
-        )));
-    }
-
-    // Rewind the spooled file to the beginning
-    spooled_file.rewind().await.map_err(ExtractError::IoError)?;
-
-    // Use the seek-based extraction (doesn't recompute hashes, we already have them)
-    crate::tokio::async_seek::extract_conda(spooled_file, &destination).await?;
-
-    Ok(ExtractResult {
-        sha256,
-        md5,
-        total_size,
+    extract_blocking(reader, destination, |reader, destination| {
+        crate::read::extract_conda_via_buffering(reader, destination)
     })
+    .await
+}
+
+/// A blocking reader over chunks received from the async pump.
+struct ChunkReader {
+    receiver: tokio::sync::mpsc::Receiver<Vec<u8>>,
+    chunk: Vec<u8>,
+    position: usize,
+    cancelled: Arc<AtomicBool>,
+}
+
+impl Read for ChunkReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        // Stop at the next read once the extraction future is gone, instead
+        // of draining buffered chunks into the destination first. Not
+        // `Interrupted`: `io::copy` and `read_exact` retry on that kind.
+        if self.cancelled.load(Ordering::Relaxed) {
+            return Err(std::io::Error::other("extraction was cancelled"));
+        }
+        while self.position == self.chunk.len() {
+            // A closed channel means the pump finished or was dropped; either
+            // way there is no more data.
+            let Some(chunk) = self.receiver.blocking_recv() else {
+                return Ok(0);
+            };
+            self.chunk = chunk;
+            self.position = 0;
+        }
+        let available = &self.chunk[self.position..];
+        let len = available.len().min(buf.len());
+        buf[..len].copy_from_slice(&available[..len]);
+        self.position += len;
+        Ok(len)
+    }
+}
+
+/// Reads until `buf` is full or the reader reaches end-of-file. Returns the
+/// number of bytes read.
+async fn read_exact_or_eof<R: AsyncRead + Unpin>(
+    reader: &mut R,
+    buf: &mut [u8],
+) -> std::io::Result<usize> {
+    let mut filled = 0;
+    while filled < buf.len() {
+        let read = reader.read(&mut buf[filled..]).await?;
+        if read == 0 {
+            break;
+        }
+        filled += read;
+    }
+    Ok(filled)
+}
+
+/// Sets the cancellation flag when dropped, so a worker whose future went
+/// away stops at its next read.
+struct CancelOnDrop(Arc<AtomicBool>);
+
+impl Drop for CancelOnDrop {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+}
+
+/// Runs a blocking extractor on a worker thread while pumping `reader` into
+/// it through a bounded channel of chunks.
+///
+/// The worker reads to the end so that the archive hashes cover the whole
+/// stream. If the worker stops reading early, for example because the archive
+/// is invalid, the channel closes and the pump stops. If the reader fails, the
+/// worker is told to stop and awaited before the error is returned, so the
+/// destination is not written to after this function returns. Dropping the
+/// returned future tells the worker to stop at its next read; a write already
+/// in progress on the worker thread finishes first.
+///
+/// Must be called from within a tokio runtime.
+async fn extract_blocking<R: AsyncRead + Unpin>(
+    reader: R,
+    destination: &Path,
+    extract: fn(Box<dyn Read + Send>, &Path) -> Result<ExtractResult, ExtractError>,
+) -> Result<ExtractResult, ExtractError> {
+    let (sender, receiver) = tokio::sync::mpsc::channel(CHUNKS_IN_FLIGHT);
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let cancel_guard = CancelOnDrop(cancelled.clone());
+    let chunks = ChunkReader {
+        receiver,
+        chunk: Vec::new(),
+        position: 0,
+        cancelled,
+    };
+    let destination = destination.to_path_buf();
+    let mut worker = tokio::task::spawn_blocking(move || extract(Box::new(chunks), &destination));
+
+    let pump = async move {
+        let mut reader = reader;
+        loop {
+            let mut chunk = vec![0u8; CHUNK_SIZE];
+            let read = read_exact_or_eof(&mut reader, &mut chunk).await?;
+            if read == 0 {
+                break;
+            }
+            chunk.truncate(read);
+            // A closed channel means the worker stopped reading.
+            if sender.send(chunk).await.is_err() || read < CHUNK_SIZE {
+                break;
+            }
+        }
+        // Dropping the sender signals end-of-file to the worker.
+        Ok::<_, std::io::Error>(())
+    };
+
+    // The pump is polled first so a read error is reported instead of the
+    // truncated-archive error the worker produces when the channel closes
+    // early.
+    let pump = std::pin::pin!(pump);
+    let joined = match future::select(pump, &mut worker).await {
+        Either::Left((Ok(()), worker)) => worker.await,
+        Either::Left((Err(err), worker)) => {
+            // The pump and its sender are gone. Stop the worker and wait for
+            // it so nothing touches the destination after we return.
+            drop(cancel_guard);
+            let _ = worker.await;
+            return Err(ExtractError::IoError(err));
+        }
+        Either::Right((joined, _pump)) => joined,
+    };
+
+    match joined {
+        Ok(result) => result,
+        Err(err) => {
+            if let Ok(reason) = err.try_into_panic() {
+                std::panic::resume_unwind(reason);
+            }
+            Err(ExtractError::Cancelled)
+        }
+    }
 }
 
 /// Async equivalent of [`crate::seek::get_file_from_archive`].
