@@ -239,29 +239,6 @@ fn get_records(
     }
 }
 
-async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
-    bytes: R,
-    channel_base_url: ChannelUrl,
-    base_url: Url,
-    variant_consolidation: PackageFormatSelection,
-) -> Result<PackageRecords, GatewayError> {
-    let parse = move || {
-        let shard = load_shard(bytes)?;
-        Ok(get_records(
-            shard,
-            &channel_base_url,
-            &base_url,
-            variant_consolidation,
-        ))
-    };
-
-    #[cfg(target_arch = "wasm32")]
-    return parse();
-
-    #[cfg(not(target_arch = "wasm32"))]
-    simple_spawn_blocking::tokio::run_blocking_task(parse).await
-}
-
 // Tests are only run on non-wasm targets since they use tokio and axum
 #[cfg(test)]
 mod tests {
