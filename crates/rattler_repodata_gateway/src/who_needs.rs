@@ -5,6 +5,10 @@
 //! A record is a reverse dependency of a package when it references that
 //! package through its `depends`, `constrains`, `extra_depends`, or run
 //! exports.
+//!
+//! This module answers *what* counts as a reverse dependency and is free of
+//! I/O; the gateway's `who_needs_query` module answers *where* the records
+//! come from.
 
 use std::sync::Arc;
 
@@ -13,7 +17,8 @@ use rattler_conda_types::{
     RepoDataRecord, package::RunExportsJson,
 };
 
-/// The package to find reverse dependencies for with [`who_needs`].
+/// The package to find reverse dependencies for with
+/// [`Gateway::who_needs`](crate::Gateway::who_needs).
 ///
 /// The target determines how the dependency match specs of candidate
 /// records are evaluated:

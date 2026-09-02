@@ -19,7 +19,7 @@ mod source;
 mod subdir;
 mod subdir_builder;
 mod warning;
-mod who_needs;
+mod who_needs_query;
 
 use std::{collections::HashSet, sync::Arc};
 
@@ -49,7 +49,7 @@ use subdir::Subdir;
 use tracing::{Level, instrument};
 use url::Url;
 pub use warning::GatewayWarning;
-pub use who_needs::{WhoNeedsQuery, WhoNeedsQueryOutput};
+pub use who_needs_query::{WhoNeedsQuery, WhoNeedsQueryOutput};
 
 /// Central access point for high level queries about
 /// [`rattler_conda_types::RepoDataRecord`]s from different channels.
@@ -198,13 +198,13 @@ impl Gateway {
     /// lookup that scans every package of the given sources and platforms
     /// against `target` without retaining or caching the scanned records —
     /// only the matching records are kept. See [`WhoNeedsQuery`] for
-    /// details and [`crate::repoquery::WhoNeedsTarget`] for the matching
+    /// details and [`crate::who_needs::WhoNeedsTarget`] for the matching
     /// semantics of the different target variants.
     pub fn who_needs<AsSource, SourceIter, PlatformIter>(
         &self,
         sources: SourceIter,
         platforms: PlatformIter,
-        target: impl Into<crate::repoquery::WhoNeedsTarget>,
+        target: impl Into<crate::who_needs::WhoNeedsTarget>,
     ) -> WhoNeedsQuery
     where
         AsSource: Into<Source>,

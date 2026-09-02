@@ -131,7 +131,7 @@ nav:
           - RepoDataRecord: repo_data_record.md
           - WhlPackageRecord: whl_package_record.md
           - Repodata: repo_data.md
-          - Repoquery: repoquery.md
+          - WhoNeeds: who_needs.md
           - SparseRepoData: sparse_repo_data.md
       - version:
           - Version: version.md

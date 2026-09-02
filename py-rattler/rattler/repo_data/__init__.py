@@ -11,7 +11,7 @@ from rattler.repo_data.gateway import (
     GatewayQueryResult,
     SourceConfig,
 )
-from rattler.repo_data.repoquery import Dependent
+from rattler.repo_data.who_needs import Dependent
 from rattler.repo_data.source import RepoDataSource
 from rattler.repo_data.revisions import RepodataRevisionMetadata
 

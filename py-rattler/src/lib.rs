@@ -21,12 +21,12 @@ mod prefix_paths;
 mod pty;
 mod record;
 mod repo_data;
-mod repoquery;
 mod shell;
 mod solver;
 mod utils;
 mod version;
 mod virtual_package;
+mod who_needs;
 
 mod exceptions;
 mod index_json;
@@ -79,12 +79,12 @@ use repo_data::{
     patch_instructions::PyPatchInstructions,
     sparse::{PyPackageFormatSelection, PySparseRepoData},
 };
-use repoquery::PyDependent;
 use run_exports_json::PyRunExportsJson;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
 use solver::{py_solve, py_solve_with_sparse_repodata};
 use version::{PyVersion, PyVersionSpec};
 use virtual_package::{PyOverride, PyVirtualPackage, PyVirtualPackageOverrides};
+use who_needs::PyDependent;
 
 #[cfg(feature = "pty")]
 use pty::{PyPtyProcess, PyPtyProcessOptions, PyPtySession};

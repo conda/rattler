@@ -1,6 +1,6 @@
 use pyo3::prelude::PyAnyMethods;
 use pyo3::{Bound, PyAny, PyResult, exceptions::PyTypeError, pyclass, pymethods};
-use rattler_repodata_gateway::repoquery::{
+use rattler_repodata_gateway::who_needs::{
     DependencyKind, Dependent, RunExportKind, WhoNeedsTarget,
 };
 

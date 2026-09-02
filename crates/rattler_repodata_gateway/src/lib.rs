@@ -62,12 +62,12 @@
 //! ```
 
 pub mod fetch;
-#[cfg(feature = "repoquery")]
-pub mod repoquery;
 mod reporter;
 #[cfg(feature = "sparse")]
 pub mod sparse;
 mod utils;
+#[cfg(feature = "gateway")]
+pub mod who_needs;
 pub use reporter::{DownloadReporter, Reporter};
 #[cfg(feature = "sparse")]
 pub use reporter::{SUPPORTED_REPODATA_REVISION, UnsupportedRepodataRevision};

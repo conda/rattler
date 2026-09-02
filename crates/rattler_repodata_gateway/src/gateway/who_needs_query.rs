@@ -7,6 +7,9 @@
 //! gateway's long-lived per-name cache. Peak memory is therefore bounded
 //! by the in-flight package scans instead of the complete repodata of the
 //! queried platforms.
+//!
+//! This module answers *where* the scanned records come from; what counts
+//! as a reverse dependency is decided by [`crate::who_needs`].
 
 use std::{future::IntoFuture, sync::Arc};
 
@@ -22,7 +25,7 @@ use super::{
 };
 use crate::{
     Reporter,
-    repoquery::{Dependent, WhoNeedsTarget, who_needs},
+    who_needs::{Dependent, WhoNeedsTarget, who_needs},
 };
 
 /// How many package names one batch task fetches and scans sequentially.
@@ -293,7 +296,7 @@ mod tests {
     use rattler_conda_types::{Channel, PackageName, Platform};
 
     use super::super::Gateway;
-    use crate::repoquery::{DependencyKind, Dependent, WhoNeedsTarget};
+    use crate::who_needs::{DependencyKind, Dependent, WhoNeedsTarget};
 
     fn local_channel(name: &str) -> Channel {
         Channel::try_from_directory(

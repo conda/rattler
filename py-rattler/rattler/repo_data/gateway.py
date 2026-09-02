@@ -14,7 +14,7 @@ from rattler.platform.platform import Platform, PlatformLiteral
 from rattler.rattler import PyChannelNotice, PyGateway, PyMatchSpec, PySourceConfig
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.repo_data import ChannelRelations
-from rattler.repo_data.repoquery import Dependent, _target_to_py
+from rattler.repo_data.who_needs import Dependent, _target_to_py
 
 if TYPE_CHECKING:
     from rattler.repo_data.package_record import PackageRecord

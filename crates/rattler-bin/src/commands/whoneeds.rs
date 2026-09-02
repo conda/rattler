@@ -9,7 +9,7 @@ use rattler_conda_types::{
 };
 use rattler_repodata_gateway::{
     Gateway, SourceConfig,
-    repoquery::{DependencyKind, Dependent, RunExportKind, WhoNeedsTarget},
+    who_needs::{DependencyKind, Dependent, RunExportKind, WhoNeedsTarget},
 };
 use url::Url;
 

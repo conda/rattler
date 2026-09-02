@@ -361,7 +361,7 @@ impl PyGateway {
             .into_iter()
             .map(py_object_to_source)
             .collect::<PyResult<_>>()?;
-        let target = crate::repoquery::extract_who_needs_target(target)?;
+        let target = crate::who_needs::extract_who_needs_target(target)?;
 
         let mut query =
             self.inner
@@ -376,7 +376,7 @@ impl PyGateway {
             Ok(output
                 .dependents
                 .into_iter()
-                .map(crate::repoquery::PyDependent::from)
+                .map(crate::who_needs::PyDependent::from)
                 .collect::<Vec<_>>())
         })
     }
