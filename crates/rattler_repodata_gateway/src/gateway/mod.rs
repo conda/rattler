@@ -198,7 +198,7 @@ impl Gateway {
     /// lookup that scans every package of the given sources and platforms
     /// against `target` without retaining or caching the scanned records —
     /// only the matching records are kept. See [`WhoNeedsQuery`] for
-    /// details and [`crate::repoquery::who_needs`] for the matching
+    /// details and [`crate::repoquery::WhoNeedsTarget`] for the matching
     /// semantics of the different target variants.
     pub fn who_needs<AsSource, SourceIter, PlatformIter>(
         &self,

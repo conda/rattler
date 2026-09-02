@@ -159,8 +159,7 @@ impl SubdirData {
     }
 
     /// Fetches the records for `name` without inserting them into the
-    /// long-lived per-name cache and without computing the derived
-    /// unique-dependency data. A previously cached entry is still reused.
+    /// long-lived per-name cache. A previously cached entry is still reused.
     /// Used by streaming scans (e.g. the gateway's `who_needs` query) that
     /// visit every package of a subdir exactly once and would otherwise
     /// permanently fill the cache with millions of records.
@@ -172,9 +171,11 @@ impl SubdirData {
         if let Some(cached) = self.records.get(name) {
             return Ok(cached.records);
         }
-        self.client
-            .fetch_package_records_without_deps(name, reporter)
-            .await
+        Ok(self
+            .client
+            .fetch_package_records(name, reporter)
+            .await?
+            .records)
     }
 
     /// The number of package names currently held in the per-name record
@@ -211,19 +212,6 @@ pub trait SubdirClient: Send + Sync {
         name: &PackageName,
         reporter: Option<&dyn Reporter>,
     ) -> Result<PackageRecords, GatewayError>;
-
-    /// Fetches all repodata records for the package with the given name,
-    /// without computing the derived unique-dependency data of
-    /// [`PackageRecords`]. Streaming scans that only need the records
-    /// themselves use this to skip that work; implementations backed by a
-    /// cheap raw record source should override the default.
-    async fn fetch_package_records_without_deps(
-        &self,
-        name: &PackageName,
-        reporter: Option<&dyn Reporter>,
-    ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
-        Ok(self.fetch_package_records(name, reporter).await?.records)
-    }
 
     /// Returns the names of all packages in the subdirectory.
     fn package_names(&self) -> Vec<String>;

@@ -23,16 +23,6 @@ impl SubdirClient for RemoteSubdirClient {
         self.sparse.fetch_package_records(name, reporter).await
     }
 
-    async fn fetch_package_records_without_deps(
-        &self,
-        name: &PackageName,
-        reporter: Option<&dyn Reporter>,
-    ) -> Result<Vec<std::sync::Arc<rattler_conda_types::RepoDataRecord>>, GatewayError> {
-        self.sparse
-            .fetch_package_records_without_deps(name, reporter)
-            .await
-    }
-
     fn package_names(&self) -> Vec<String> {
         self.sparse.package_names()
     }

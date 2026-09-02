@@ -333,15 +333,14 @@ class Gateway:
     ) -> List[Dependent]:
         """Returns the reverse dependencies of `target` in the given sources.
 
-        Runs a wildcard query over all records of the queried sources and
-        platforms and computes the reverse dependencies entirely in Rust:
-        only the matching records are converted to Python objects. Prefer
-        this over `query` with a `*` spec followed by
-        `rattler.who_needs` - that materializes a Python object for every
-        record in the repodata, which for large channels is millions of
-        objects.
+        Scans every package of the queried sources and platforms entirely
+        in Rust and converts only the matching records to Python objects.
+        A record references `target` when one of its `depends`,
+        `constrains` or `extra_depends` entries, or one of its run
+        exports, matches it; the `kind` of each result tells which field
+        matched.
 
-        See `rattler.who_needs` for the matching semantics: a package name
+        How dependencies are matched depends on the target: a package name
         (or `str`) reports every record with a dependency entry on that
         name, while a concrete `PackageRecord` or `GenericVirtualPackage`
         only reports dependents whose dependency match spec matches it.

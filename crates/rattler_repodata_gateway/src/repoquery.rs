@@ -1,18 +1,16 @@
-//! Post-processing queries over repodata records.
+//! The input and output types of the reverse dependency lookup performed by
+//! [`Gateway::who_needs`](crate::Gateway::who_needs), plus the pure matcher
+//! it is built on.
 //!
-//! The functions in this module are pure: they operate on records that have
-//! already been fetched (e.g. through a `Gateway` query, or read from
-//! `SparseRepoData`) and perform no I/O themselves.
-//!
-//! Currently this module provides [`who_needs`], a reverse dependency
-//! lookup: given a package, find all records that reference it through
-//! their `depends`, `constrains`, or run exports.
+//! A record is a reverse dependency of a package when it references that
+//! package through its `depends`, `constrains`, `extra_depends`, or run
+//! exports.
 
 use std::sync::Arc;
 
 use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, Matches, PackageName, PackageRecord, ParseMatchSpecOptions,
-    RepoDataRecord,
+    RepoDataRecord, package::RunExportsJson,
 };
 
 /// The package to find reverse dependencies for with [`who_needs`].
@@ -51,28 +49,30 @@ impl WhoNeedsTarget {
         }
     }
 
-    /// Whether `spec` matches this target. Only called for dependencies
-    /// that already passed the name check.
-    fn matches(&self, spec: &MatchSpec) -> bool {
-        match self {
-            WhoNeedsTarget::Name(_) => true,
-            WhoNeedsTarget::Record(record) => spec.matches(record.as_ref()),
-            WhoNeedsTarget::VirtualPackage(virtual_package) => spec.matches(virtual_package),
-        }
-    }
-
     /// Whether the dependency string `dependency` references this target.
     /// `target_name` must be [`Self::name`], passed in so the caller can
     /// compute it once per scan instead of once per dependency.
     fn edge_matches(&self, target_name: &str, dependency: &str) -> bool {
+        // Compare the name with a cheap scan over the dependency string
+        // first. Every dependency of every record passes through here, and
+        // virtually none of them name the target, so parsing a full
+        // `MatchSpec` up front would dominate the scan.
         if PackageName::normalized_name_from_matchspec_str(dependency) != target_name {
             return false;
         }
-        if matches!(self, WhoNeedsTarget::Name(_)) {
-            return true;
-        }
+
+        // The dependency names the target. For a name target that is all
+        // that is asked; the other targets are concrete, so their version
+        // and build constraints have to hold as well.
+        let target: &dyn Fn(&MatchSpec) -> bool = match self {
+            WhoNeedsTarget::Name(_) => return true,
+            WhoNeedsTarget::Record(record) => &|spec| spec.matches(record.as_ref()),
+            WhoNeedsTarget::VirtualPackage(virtual_package) => {
+                &|spec| spec.matches(virtual_package)
+            }
+        };
         match MatchSpec::from_str(dependency, ParseMatchSpecOptions::lenient()) {
-            Ok(dependency_spec) => self.matches(&dependency_spec),
+            Ok(spec) => target(&spec),
             // A dependency string that names the package but fails to parse
             // is reported rather than silently dropped.
             Err(_) => true,
@@ -121,90 +121,29 @@ pub enum RunExportKind {
 }
 
 /// How a dependent record references the queried package.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DependencyKind {
     /// The package is referenced through the `depends` field.
     Depends,
     /// The package is referenced through the `constrains` field.
     Constrains,
+    /// The package is referenced through the dependencies of an optional
+    /// feature in `extra_depends`. The payload is the name of the extra, so
+    /// the reference only applies when that extra is enabled.
+    ExtraDepends(String),
     /// The package is referenced through a run export: using the record as
     /// a build/host dependency injects a dependency on the queried package.
     RunExport(RunExportKind),
 }
 
-/// A record that references the package queried through [`who_needs`].
+/// A record that references the package queried through
+/// [`Gateway::who_needs`](crate::Gateway::who_needs).
+///
+/// The record is shared through an [`Arc`] because the scan discards the
+/// records it visits as it goes and therefore cannot hand out borrows into
+/// them.
 #[derive(Debug, Clone)]
-pub struct Dependent<'r> {
-    /// The record that references the queried package.
-    pub record: &'r RepoDataRecord,
-
-    /// The dependency string through which [`Self::record`] references the
-    /// queried package.
-    pub dependency: &'r str,
-
-    /// The field of the record that [`Self::dependency`] comes from.
-    pub kind: DependencyKind,
-}
-
-/// Returns all records in `records` that reference the package described by
-/// `target` — its reverse dependencies.
-///
-/// A record references the target when one of its `depends` or `constrains`
-/// entries, or one of its run exports, matches the target; the
-/// [`Dependent::kind`] of each result tells which field matched, so callers
-/// interested in only some of the kinds can simply filter the result. Note
-/// that run exports can only be found on records that carry them (e.g.
-/// repodata patched with run export information, or records enriched
-/// through the gateway's run export extraction).
-///
-/// How dependencies are matched depends on the [`WhoNeedsTarget`] variant:
-/// a [`PackageName`] reports every record with a dependency entry on that
-/// name, while a concrete [`PackageRecord`] or [`GenericVirtualPackage`]
-/// only reports dependents whose dependency match spec matches it. For
-/// example, with a `python 3.13.1` record as the target, a record
-/// depending on `python >=3.9` is reported while a record depending on
-/// `python >=3.8,<3.10` is not.
-///
-/// Note that reverse dependency lookup requires the *complete* set of
-/// records of the queried channels and platforms — any record not passed in
-/// here is invisible to the search. Use a wildcard gateway query (spec `*`)
-/// or `SparseRepoData` to obtain them.
-///
-/// The result keeps the order of `records`. Every record is reported at
-/// most once per [`DependencyKind`], through the first dependency string of
-/// that field that matches.
-pub fn who_needs<'r>(
-    records: impl IntoIterator<Item = &'r RepoDataRecord>,
-    target: impl Into<WhoNeedsTarget>,
-) -> Vec<Dependent<'r>> {
-    let target = target.into();
-    let target_name = target.name();
-
-    let mut result = Vec::new();
-    for record in records {
-        for (dependencies, kind) in dependency_fields(record) {
-            let Some(dependency) = dependencies
-                .iter()
-                .find(|dependency| target.edge_matches(target_name, dependency))
-            else {
-                continue;
-            };
-            result.push(Dependent {
-                record,
-                dependency,
-                kind,
-            });
-        }
-    }
-    result
-}
-
-/// An owned counterpart of [`Dependent`], sharing the matching record
-/// through an [`Arc`] instead of borrowing it. Returned by streaming scans
-/// that discard the scanned records as they go (e.g. the gateway's
-/// `who_needs` query) and therefore cannot hand out borrows.
-#[derive(Debug, Clone)]
-pub struct OwnedDependent {
+pub struct Dependent {
     /// The record that references the queried package.
     pub record: Arc<RepoDataRecord>,
 
@@ -216,85 +155,101 @@ pub struct OwnedDependent {
     pub kind: DependencyKind,
 }
 
-/// The owned counterpart of [`who_needs`]: identical matching semantics,
-/// but the matching records are shared via [`Arc`] so the caller can drop
-/// `records` afterwards. See [`who_needs`] for the semantics.
-pub fn who_needs_owned(
+/// Returns all of `records` that reference the package described by `target`
+/// — its reverse dependencies.
+///
+/// A record references the target when one of its `depends`, `constrains`,
+/// or `extra_depends` entries, or one of its run exports, matches the
+/// target; the [`Dependent::kind`] of each result tells which field
+/// matched, so callers interested in only some of the kinds can simply
+/// filter the result. Note that run exports can only be found on records
+/// that carry them (e.g. repodata patched with run export information, or
+/// records enriched through the gateway's run export extraction).
+///
+/// How dependencies are matched depends on the [`WhoNeedsTarget`] variant:
+/// a [`PackageName`] reports every record with a dependency entry on that
+/// name, while a concrete [`PackageRecord`] or [`GenericVirtualPackage`]
+/// only reports dependents whose dependency match spec matches it. For
+/// example, with a `python 3.13.1` record as the target, a record
+/// depending on `python >=3.9` is reported while a record depending on
+/// `python >=3.8,<3.10` is not.
+///
+/// The result keeps the order of `records`. Every record is reported at
+/// most once per [`DependencyKind`], through the first dependency string of
+/// that field that matches — so a record referencing the target from two
+/// different extras yields one result per extra.
+///
+/// This is the per-batch core of the channel-wide scan performed by
+/// [`Gateway::who_needs`](crate::Gateway::who_needs). It is deliberately
+/// not public: a reverse dependency lookup is only correct over the
+/// *complete* set of records of the queried channels and platforms, and
+/// assembling those is exactly what the gateway query does.
+pub(crate) fn who_needs(
     records: &[Arc<RepoDataRecord>],
     target: &WhoNeedsTarget,
-) -> Vec<OwnedDependent> {
+) -> Vec<Dependent> {
     let target_name = target.name();
 
     let mut result = Vec::new();
     for record in records {
-        for (dependencies, kind) in dependency_fields(record) {
-            let Some(dependency) = dependencies
-                .iter()
-                .find(|dependency| target.edge_matches(target_name, dependency))
-            else {
-                continue;
-            };
-            result.push(OwnedDependent {
+        matching_edges(record, target, target_name, |dependency, kind| {
+            result.push(Dependent {
                 record: record.clone(),
-                dependency: dependency.clone(),
+                dependency: dependency.to_string(),
                 kind,
             });
-        }
+        });
     }
     result
 }
 
-/// Returns the dependency fields of `record` to consider.
-fn dependency_fields(record: &RepoDataRecord) -> [(&[String], DependencyKind); 7] {
-    const NO_DEPS: &[String] = &[];
-    let run_exports = record.package_record.run_exports.as_ref();
-    let run_export_field =
-        |field: fn(&rattler_conda_types::package::RunExportsJson) -> &Vec<String>| {
-            run_exports.map_or(NO_DEPS, |run_exports| field(run_exports).as_slice())
-        };
-    [
-        (
-            record.package_record.depends.as_slice(),
-            DependencyKind::Depends,
-        ),
-        (
-            record.package_record.constrains.as_slice(),
-            DependencyKind::Constrains,
-        ),
-        (
-            run_export_field(|re| &re.weak),
-            DependencyKind::RunExport(RunExportKind::Weak),
-        ),
-        (
-            run_export_field(|re| &re.strong),
-            DependencyKind::RunExport(RunExportKind::Strong),
-        ),
-        (
-            run_export_field(|re| &re.noarch),
-            DependencyKind::RunExport(RunExportKind::Noarch),
-        ),
-        (
-            run_export_field(|re| &re.weak_constrains),
-            DependencyKind::RunExport(RunExportKind::WeakConstrains),
-        ),
-        (
-            run_export_field(|re| &re.strong_constrains),
-            DependencyKind::RunExport(RunExportKind::StrongConstrains),
-        ),
-    ]
+/// Invokes `on_match` once per dependency field of `record` that
+/// references `target`, with the first matching dependency string of that
+/// field and the kind describing where it came from.
+fn matching_edges<'r>(
+    record: &'r RepoDataRecord,
+    target: &WhoNeedsTarget,
+    target_name: &str,
+    mut on_match: impl FnMut(&'r str, DependencyKind),
+) {
+    let package_record = &record.package_record;
+    let mut first_match = |dependencies: &'r [String], kind: DependencyKind| {
+        if let Some(dependency) = dependencies
+            .iter()
+            .find(|dependency| target.edge_matches(target_name, dependency))
+        {
+            on_match(dependency, kind);
+        }
+    };
+
+    first_match(&package_record.depends, DependencyKind::Depends);
+    first_match(&package_record.constrains, DependencyKind::Constrains);
+    for (extra, dependencies) in &package_record.extra_depends {
+        first_match(dependencies, DependencyKind::ExtraDepends(extra.clone()));
+    }
+    if let Some(run_exports) = package_record.run_exports.as_ref() {
+        for (field, kind) in run_export_fields(run_exports) {
+            first_match(field, DependencyKind::RunExport(kind));
+        }
+    }
 }
 
-#[cfg(feature = "gateway")]
-impl crate::RepoDataQueryOutput {
-    /// Returns all records in this query result that reference the package
-    /// described by `target`. See [`who_needs`] for the exact semantics.
-    ///
-    /// Reverse dependency lookup requires the complete set of records of
-    /// the queried channels and platforms, so the query this output came
-    /// from should have used a wildcard spec (`*`).
-    pub fn who_needs(&self, target: impl Into<WhoNeedsTarget>) -> Vec<Dependent<'_>> {
-        who_needs(self.repodata.iter().flat_map(crate::RepoData::iter), target)
-    }
+/// The run export fields of `run_exports` paired with the kind that
+/// identifies them.
+fn run_export_fields(run_exports: &RunExportsJson) -> [(&[String], RunExportKind); 5] {
+    [
+        (run_exports.weak.as_slice(), RunExportKind::Weak),
+        (run_exports.strong.as_slice(), RunExportKind::Strong),
+        (run_exports.noarch.as_slice(), RunExportKind::Noarch),
+        (
+            run_exports.weak_constrains.as_slice(),
+            RunExportKind::WeakConstrains,
+        ),
+        (
+            run_exports.strong_constrains.as_slice(),
+            RunExportKind::StrongConstrains,
+        ),
+    ]
 }
 
 #[cfg(test)]
@@ -306,6 +261,14 @@ mod tests {
     use url::Url;
 
     use super::*;
+
+    /// Runs [`who_needs`] over `records`, converting `target` for brevity.
+    fn dependents(
+        records: &[Arc<RepoDataRecord>],
+        target: impl Into<WhoNeedsTarget>,
+    ) -> Vec<Dependent> {
+        who_needs(records, &target.into())
+    }
 
     fn record(
         name: &str,
@@ -330,12 +293,21 @@ mod tests {
         }
     }
 
-    fn test_records() -> Vec<RepoDataRecord> {
+    fn test_records() -> Vec<Arc<RepoDataRecord>> {
         let mut zlib = record("zlib", "1.3.1", "0", vec!["libzlib 1.3.1 h0_1"], vec![]);
         zlib.package_record.run_exports = Some(RunExportsJson {
             weak: vec!["libzlib >=1.3.1,<2.0a0".to_string()],
             ..RunExportsJson::default()
         });
+        // References pandas only through optional features, and from two
+        // different extras with disjoint constraints.
+        let mut extras_tool = record("extras-tool", "1.0.0", "0", vec![], vec![]);
+        extras_tool.package_record.extra_depends = [
+            ("plot".to_string(), vec!["pandas >=2.2".to_string()]),
+            ("legacy".to_string(), vec!["pandas <2.0".to_string()]),
+        ]
+        .into_iter()
+        .collect();
         vec![
             record("python", "3.9.0", "0", vec![], vec![]),
             record("python", "3.13.0", "0", vec![], vec![]),
@@ -365,7 +337,11 @@ mod tests {
                 vec![],
             ),
             zlib,
+            extras_tool,
         ]
+        .into_iter()
+        .map(Arc::new)
+        .collect()
     }
 
     fn name(name: &str) -> PackageName {
@@ -380,7 +356,7 @@ mod tests {
         )
     }
 
-    fn names<'r>(dependents: &[Dependent<'r>]) -> Vec<&'r str> {
+    fn names(dependents: &[Dependent]) -> Vec<&str> {
         dependents
             .iter()
             .map(|d| d.record.package_record.name.as_normalized())
@@ -390,7 +366,7 @@ mod tests {
     #[test]
     fn test_by_name() {
         let records = test_records();
-        let result = who_needs(&records, name("python"));
+        let result = dependents(&records, name("python"));
         assert_eq!(
             names(&result),
             vec!["old-lib", "numpy", "scipy", "pandas", "cpython-lib"]
@@ -404,11 +380,11 @@ mod tests {
         let records = test_records();
         // Only old-lib's constraint (>=3.8,<3.10) admits python 3.9.5; the
         // other dependents require >=3.10 or 3.13.*.
-        let result = who_needs(&records, concrete("python", "3.9.5", "h123_0_cpython"));
+        let result = dependents(&records, concrete("python", "3.9.5", "h123_0_cpython"));
         assert_eq!(names(&result), vec!["old-lib"]);
 
         // Everything except old-lib can use this python 3.13.1 build.
-        let result = who_needs(&records, concrete("python", "3.13.1", "h123_0_cpython"));
+        let result = dependents(&records, concrete("python", "3.13.1", "h123_0_cpython"));
         assert_eq!(
             names(&result),
             vec!["numpy", "scipy", "pandas", "cpython-lib"]
@@ -416,16 +392,62 @@ mod tests {
 
         // cpython-lib requires build `*_cpython`, which excludes it for a
         // pypy build of python 3.13.
-        let result = who_needs(&records, concrete("python", "3.13.1", "h123_0_pypy"));
+        let result = dependents(&records, concrete("python", "3.13.1", "h123_0_pypy"));
         assert_eq!(names(&result), vec!["numpy", "scipy", "pandas"]);
     }
 
     #[test]
     fn test_constrains() {
         let records = test_records();
-        let result = who_needs(&records, name("pandas"));
-        assert_eq!(names(&result), vec!["pandas-stubs"]);
+        let result = dependents(&records, name("pandas"));
+        // extras-tool appears twice: it names pandas from two extras, see
+        // `test_extra_depends`.
+        assert_eq!(
+            names(&result),
+            vec!["pandas-stubs", "extras-tool", "extras-tool"]
+        );
         assert_eq!(result[0].kind, DependencyKind::Constrains);
+    }
+
+    #[test]
+    fn test_extra_depends() {
+        let records = test_records();
+        // extras-tool only references pandas from its optional features, so
+        // it is invisible unless `extra_depends` is scanned. Both extras
+        // name pandas, so both edges are reported (extras are visited in
+        // the record's sorted `extra_depends` order).
+        let result = dependents(&records, name("pandas"));
+        let extras: Vec<_> = result
+            .iter()
+            .filter(|d| d.record.package_record.name.as_normalized() == "extras-tool")
+            .map(|d| (d.kind.clone(), d.dependency.as_str()))
+            .collect();
+        assert_eq!(
+            extras,
+            vec![
+                (
+                    DependencyKind::ExtraDepends("legacy".to_string()),
+                    "pandas <2.0"
+                ),
+                (
+                    DependencyKind::ExtraDepends("plot".to_string()),
+                    "pandas >=2.2"
+                ),
+            ]
+        );
+
+        // A concrete target only matches the extras whose constraint admits
+        // it: pandas 2.2.0 satisfies `plot` but not `legacy`.
+        let result = dependents(&records, concrete("pandas", "2.2.0", "0"));
+        let extras: Vec<_> = result
+            .iter()
+            .filter(|d| d.record.package_record.name.as_normalized() == "extras-tool")
+            .map(|d| d.kind.clone())
+            .collect();
+        assert_eq!(
+            extras,
+            vec![DependencyKind::ExtraDepends("plot".to_string())]
+        );
     }
 
     #[test]
@@ -433,7 +455,7 @@ mod tests {
         let records = test_records();
         // zlib references libzlib both through `depends` and through its
         // weak run exports; both edges are reported.
-        let result = who_needs(&records, name("libzlib"));
+        let result = dependents(&records, name("libzlib"));
         assert_eq!(names(&result), vec!["zlib", "zlib"]);
         assert_eq!(result[0].kind, DependencyKind::Depends);
         assert_eq!(result[0].dependency, "libzlib 1.3.1 h0_1");
@@ -445,10 +467,10 @@ mod tests {
 
         // A record outside the run export range only matches the edges
         // whose constraint admits it.
-        let result = who_needs(&records, concrete("libzlib", "2.1", "h0_0"));
+        let result = dependents(&records, concrete("libzlib", "2.1", "h0_0"));
         assert!(result.is_empty());
 
-        let result = who_needs(&records, concrete("libzlib", "1.3.5", "h0_0"));
+        let result = dependents(&records, concrete("libzlib", "1.3.5", "h0_0"));
         assert_eq!(names(&result), vec!["zlib"]);
         assert_eq!(
             result[0].kind,
@@ -460,7 +482,7 @@ mod tests {
     fn test_virtual_package() {
         let records = test_records();
         // No record named __cuda exists; name-based matching still works.
-        let result = who_needs(&records, name("__cuda"));
+        let result = dependents(&records, name("__cuda"));
         assert_eq!(names(&result), vec!["cuda-tool"]);
 
         // A concrete virtual package matches against the dependency's
@@ -470,9 +492,9 @@ mod tests {
             version: version.parse().unwrap(),
             build_string: "0".to_string(),
         };
-        let result = who_needs(&records, cuda("12.4"));
+        let result = dependents(&records, cuda("12.4"));
         assert_eq!(names(&result), vec!["cuda-tool"]);
-        let result = who_needs(&records, cuda("11.8"));
+        let result = dependents(&records, cuda("11.8"));
         assert!(result.is_empty());
     }
 }

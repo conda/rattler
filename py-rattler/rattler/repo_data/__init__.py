@@ -11,7 +11,7 @@ from rattler.repo_data.gateway import (
     GatewayQueryResult,
     SourceConfig,
 )
-from rattler.repo_data.repoquery import Dependent, who_needs
+from rattler.repo_data.repoquery import Dependent
 from rattler.repo_data.source import RepoDataSource
 from rattler.repo_data.revisions import RepodataRevisionMetadata
 
@@ -32,6 +32,5 @@ __all__ = [
     "PackageFormatSelection",
     "RepoDataSource",
     "Dependent",
-    "who_needs",
     "RepodataRevisionMetadata",
 ]

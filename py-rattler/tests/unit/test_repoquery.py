@@ -1,132 +1,102 @@
-from typing import List, Optional
-
 import pytest
 from rattler import (
     Channel,
     Gateway,
     GenericVirtualPackage,
-    MatchSpec,
     PackageName,
-    PackageRecord,
     Platform,
-    RepoDataRecord,
     Version,
-    who_needs,
 )
 from rattler.repo_data import Dependent
 
 
-def record(
-    name: str,
-    version: str,
-    build: str,
-    depends: List[str],
-    constrains: Optional[List[str]] = None,
-) -> RepoDataRecord:
-    return RepoDataRecord(
-        PackageRecord(
-            name=name,
-            version=version,
-            build=build,
-            build_number=0,
-            subdir="linux-64",
-            depends=depends,
-            constrains=constrains or [],
-        ),
-        f"{name}-{version}-{build}.conda",
-        f"https://example.com/{name}-{version}-{build}.conda",
-        "https://example.com/test-channel",
-    )
+def summary(dependents: list[Dependent]) -> list[tuple[str, str, str]]:
+    """The dependents as sorted `(package, kind, dependency)` triples."""
+    return sorted((d.record.name.normalized, d.kind, d.dependency) for d in dependents)
 
 
-@pytest.fixture
-def records() -> List[RepoDataRecord]:
-    return [
-        record("python", "3.13.0", "0", []),
-        record("old-lib", "1.0.0", "0", ["python >=3.8,<3.10"]),
-        record("numpy", "2.1.0", "0", ["python >=3.10"]),
-        record("pandas-stubs", "2.2.0", "0", [], ["pandas >=2.2"]),
-        record("cuda-tool", "1.0.0", "0", ["__cuda >=12"]),
-        record("cpython-lib", "1.0.0", "0", ["python 3.13.* *_cpython"]),
+def extras(dependents: list[Dependent]) -> list[str]:
+    """The sorted names of the extras the dependents come from."""
+    return sorted(d.extra for d in dependents if d.extra is not None)
+
+
+@pytest.mark.asyncio
+async def test_who_needs_by_name(gateway: Gateway, dummy_channel: Channel) -> None:
+    # A name target reports every dependency naming the package,
+    # regardless of its version constraints, across `depends` and
+    # `constrains`.
+    dependents = await gateway.who_needs([dummy_channel], ["linux-64"], "bors")
+    assert summary(dependents) == [
+        ("foo", "constrains", "bors <2.0"),
+        # Both foobar builds in the subdir depend on bors.
+        ("foobar", "depends", "bors <2.0"),
+        ("foobar", "depends", "bors <2.0"),
     ]
-
-
-def test_who_needs_by_name(records: List[RepoDataRecord]) -> None:
-    dependents = who_needs(records, "python")
-    assert [d.record.name.normalized for d in dependents] == [
-        "old-lib",
-        "numpy",
-        "cpython-lib",
-    ]
-    assert dependents[0].dependency == "python >=3.8,<3.10"
-    assert dependents[0].kind == "depends"
-    assert dependents[0].run_export_kind is None
+    assert all(d.run_export_kind is None and d.extra is None for d in dependents)
 
     # A PackageName target behaves the same as a str.
-    assert [d.record.name.normalized for d in who_needs(records, PackageName("python"))] == [
-        "old-lib",
-        "numpy",
-        "cpython-lib",
-    ]
+    by_name = await gateway.who_needs([dummy_channel], ["linux-64"], PackageName("bors"))
+    assert summary(by_name) == summary(dependents)
 
 
-def test_who_needs_by_record(records: List[RepoDataRecord]) -> None:
+@pytest.mark.asyncio
+async def test_who_needs_by_record(gateway: Gateway, dummy_channel: Channel) -> None:
     # Only dependents whose match spec matches the concrete record are
-    # reported: old-lib requires <3.10 and cpython-lib a *_cpython build.
-    python = record("python", "3.13.1", "h123_0", [])
-    assert [d.record.name.normalized for d in who_needs(records, python)] == ["numpy"]
+    # reported: every edge on bors requires <2.0.
+    records = await gateway.query([dummy_channel], ["linux-64"], ["bors"], recursive=False)
+    by_version = {str(record.version): record for record in records[0]}
 
-    python_cpython = record("python", "3.13.1", "h123_0_cpython", [])
-    assert [d.record.name.normalized for d in who_needs(records, python_cpython)] == [
-        "numpy",
-        "cpython-lib",
-    ]
+    dependents = await gateway.who_needs([dummy_channel], ["linux-64"], by_version["1.1"])
+    assert {name for name, _, _ in summary(dependents)} == {"foo", "foobar"}
 
-
-def test_who_needs_constrains(records: List[RepoDataRecord]) -> None:
-    dependents = who_needs(records, "pandas")
-    assert [(d.record.name.normalized, d.kind) for d in dependents] == [("pandas-stubs", "constrains")]
+    assert await gateway.who_needs([dummy_channel], ["linux-64"], by_version["2.1"]) == []
 
 
-def test_who_needs_virtual_package(records: List[RepoDataRecord]) -> None:
+@pytest.mark.asyncio
+async def test_who_needs_virtual_package(gateway: Gateway, dummy_channel: Channel) -> None:
     # Name-based matching works for virtual packages, which have no
     # records of their own.
-    assert [d.record.name.normalized for d in who_needs(records, "__cuda")] == ["cuda-tool"]
+    dependents = await gateway.who_needs([dummy_channel], ["linux-64"], "__cuda")
+    assert summary(dependents) == [("cuda-version", "constrains", "__cuda >=12.1")]
 
     # A concrete virtual package matches against the dependency's version
     # constraint.
-    cuda = GenericVirtualPackage(PackageName("__cuda"), Version("12.4"), "0")
-    assert [d.record.name.normalized for d in who_needs(records, cuda)] == ["cuda-tool"]
+    cuda = GenericVirtualPackage(PackageName("__cuda"), Version("12.5"), "0")
+    assert summary(await gateway.who_needs([dummy_channel], ["linux-64"], cuda)) == summary(dependents)
     old_cuda = GenericVirtualPackage(PackageName("__cuda"), Version("11.8"), "0")
-    assert who_needs(records, old_cuda) == []
+    assert await gateway.who_needs([dummy_channel], ["linux-64"], old_cuda) == []
 
 
 @pytest.mark.asyncio
-async def test_gateway_who_needs(gateway: Gateway, conda_forge_channel: Channel) -> None:
-    # The same lookup through the gateway: the wildcard query and the
-    # reverse dependency scan run entirely in Rust, and only the matching
-    # records cross into Python.
-    dependents = await gateway.who_needs([conda_forge_channel], ["linux-64", "noarch"], "python_abi")
-    assert dependents
-    assert all(
-        PackageName("python_abi").normalized in d.dependency and d.kind in ("depends", "constrains") for d in dependents
-    )
+async def test_who_needs_extra_depends(gateway: Gateway, test_data_dir: str) -> None:
+    # Dependencies declared under an optional feature are reported with the
+    # name of the extra in `extra`.
+    channel = Channel(f"{test_data_dir}/channels/dummy-optional-dependencies")
+    dependents = await gateway.who_needs([channel], ["noarch"], "bar")
+    assert summary(dependents) == [
+        ("conflicting-extras", "extra_depends", "bar <2"),
+        ("conflicting-extras", "extra_depends", "bar >=2"),
+        ("foo", "extra_depends", "bar <2"),
+    ]
+    assert extras(dependents) == ["extra1", "extra2", "with-bar"]
 
-    # The result matches running the pure who_needs over a materialized
-    # wildcard query.
-    wildcard = MatchSpec("*", exact_names_only=False)
-    query_result = await gateway.query([conda_forge_channel], ["linux-64", "noarch"], [wildcard], recursive=False)
-    all_records = [record for subdir_records in query_result for record in subdir_records]
-    direct = who_needs(all_records, "python_abi")
-    assert {d.record.name.normalized for d in dependents} == {d.record.name.normalized for d in direct}
+    # A concrete target still has to satisfy the extra's constraints:
+    # bar 1 matches extra1's `bar <2` but not extra2's `bar >=2`.
+    records = await gateway.query([channel], ["noarch"], ["bar"], recursive=False)
+    bar_1 = next(record for record in records[0] if str(record.version) == "1")
+    assert extras(await gateway.who_needs([channel], ["noarch"], bar_1)) == ["extra1", "with-bar"]
 
 
 @pytest.mark.asyncio
-async def test_gateway_who_needs_multi_platform(gateway: Gateway, conda_forge_channel: Channel) -> None:
+async def test_who_needs_multi_platform(gateway: Gateway, conda_forge_channel: Channel) -> None:
     # A multi-platform call (with a duplicate platform thrown in) returns
     # exactly the union of the single-platform calls. The order of records
     # within a platform is not deterministic, so compare as multisets.
     combined = await gateway.who_needs([conda_forge_channel], ["linux-64", "noarch", "linux-64"], "python_abi")
+    assert combined
+    assert all(
+        PackageName("python_abi").normalized in d.dependency and d.kind in ("depends", "constrains") for d in combined
+    )
 
     def key(dependent: Dependent) -> tuple[str, str, str, str, str, str]:
         record = dependent.record

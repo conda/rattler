@@ -373,7 +373,6 @@ impl PyGateway {
 
         future_into_py(py, async move {
             let output = query.execute().await.map_err(PyRattlerError::from)?;
-            emit_gateway_warnings(output.warnings)?;
             Ok(output
                 .dependents
                 .into_iter()

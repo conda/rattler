@@ -18,7 +18,6 @@ from rattler.repo_data import (
     RepoDataSource,
     RepodataRevisionMetadata,
     Dependent,
-    who_needs,
 )
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
 from rattler.networking import Client, fetch_repo_data
@@ -118,7 +117,6 @@ __all__ = [
     "SourceConfig",
     "RepoDataSource",
     "Dependent",
-    "who_needs",
     "RepodataRevisionMetadata",
     "NoArchType",
     "NoArchLiteral",

@@ -106,32 +106,6 @@ impl SubdirClient for LocalSubdirClient {
         simple_spawn_blocking::tokio::run_blocking_task(load_records).await
     }
 
-    async fn fetch_package_records_without_deps(
-        &self,
-        name: &PackageName,
-        _reporter: Option<&dyn Reporter>,
-    ) -> Result<Vec<Arc<rattler_conda_types::RepoDataRecord>>, GatewayError> {
-        let sparse_repodata = self.sparse.clone();
-        let name = name.clone();
-
-        let load_records = move || {
-            sparse_repodata
-                .load_records(&name, PackageFormatSelection::PreferConda)
-                .map(|records| records.into_iter().map(Arc::new).collect())
-                .map_err(|err| {
-                    GatewayError::IoError(
-                        "failed to extract repodata records from sparse repodata".to_string(),
-                        err,
-                    )
-                })
-        };
-
-        #[cfg(target_arch = "wasm32")]
-        return load_records();
-        #[cfg(not(target_arch = "wasm32"))]
-        simple_spawn_blocking::tokio::run_blocking_task(load_records).await
-    }
-
     fn package_names(&self) -> Vec<String> {
         let sparse_repodata: Arc<SparseRepoData> = self.sparse.clone();
         sparse_repodata

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, path::Path, time::Instant};
+use std::{borrow::Cow, collections::HashMap, env, path::Path, time::Instant};
 
 use indexmap::IndexMap;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -9,7 +9,7 @@ use rattler_conda_types::{
 };
 use rattler_repodata_gateway::{
     Gateway, SourceConfig,
-    repoquery::{DependencyKind, OwnedDependent, RunExportKind, WhoNeedsTarget},
+    repoquery::{DependencyKind, Dependent, RunExportKind, WhoNeedsTarget},
 };
 use url::Url;
 
@@ -174,7 +174,7 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
                     "subdir": dependent.record.package_record.subdir,
                     "channel": dependent.record.channel,
                     "dependency": &dependent.dependency,
-                    "kind": kind_str(dependent.kind),
+                    "kind": kind_str(&dependent.kind),
                 })
             })
             .collect();
@@ -190,7 +190,7 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
 
     // Group by package name, keeping the record with the highest version
     // per package as the representative shown in the output.
-    let mut grouped: IndexMap<&str, (&OwnedDependent, usize)> = IndexMap::new();
+    let mut grouped: IndexMap<&str, (&Dependent, usize)> = IndexMap::new();
     for dependent in &dependents {
         let key = dependent.record.package_record.name.as_normalized();
         grouped
@@ -220,10 +220,11 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
     let limit = if opt.all { usize::MAX } else { opt.limit };
     for (&name, &(dependent, record_count)) in grouped.iter().take(limit) {
         let record = &dependent.record.package_record;
-        let kind = match dependent.kind {
-            DependencyKind::Depends => "via",
-            DependencyKind::Constrains => "via constraint",
-            DependencyKind::RunExport(_) => "via run export",
+        let kind = match &dependent.kind {
+            DependencyKind::Depends => "via".to_string(),
+            DependencyKind::Constrains => "via constraint".to_string(),
+            DependencyKind::ExtraDepends(extra) => format!("via extra '{extra}'"),
+            DependencyKind::RunExport(_) => "via run export".to_string(),
         };
         println!(
             "  {} {} {} ({} {}){}",
@@ -254,16 +255,19 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
 }
 
 /// Stable string form of a dependency kind for the JSON output.
-fn kind_str(kind: DependencyKind) -> &'static str {
+fn kind_str(kind: &DependencyKind) -> Cow<'static, str> {
     match kind {
-        DependencyKind::Depends => "depends",
-        DependencyKind::Constrains => "constrains",
-        DependencyKind::RunExport(RunExportKind::Weak) => "run_export/weak",
-        DependencyKind::RunExport(RunExportKind::Strong) => "run_export/strong",
-        DependencyKind::RunExport(RunExportKind::Noarch) => "run_export/noarch",
-        DependencyKind::RunExport(RunExportKind::WeakConstrains) => "run_export/weak_constrains",
+        DependencyKind::Depends => Cow::Borrowed("depends"),
+        DependencyKind::Constrains => Cow::Borrowed("constrains"),
+        DependencyKind::ExtraDepends(extra) => Cow::Owned(format!("extra_depends/{extra}")),
+        DependencyKind::RunExport(RunExportKind::Weak) => Cow::Borrowed("run_export/weak"),
+        DependencyKind::RunExport(RunExportKind::Strong) => Cow::Borrowed("run_export/strong"),
+        DependencyKind::RunExport(RunExportKind::Noarch) => Cow::Borrowed("run_export/noarch"),
+        DependencyKind::RunExport(RunExportKind::WeakConstrains) => {
+            Cow::Borrowed("run_export/weak_constrains")
+        }
         DependencyKind::RunExport(RunExportKind::StrongConstrains) => {
-            "run_export/strong_constrains"
+            Cow::Borrowed("run_export/strong_constrains")
         }
     }
 }

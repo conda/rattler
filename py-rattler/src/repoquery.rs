@@ -1,17 +1,15 @@
-use std::collections::HashMap;
-
 use pyo3::prelude::PyAnyMethods;
-use pyo3::{Bound, PyAny, PyResult, exceptions::PyTypeError, pyclass, pyfunction, pymethods};
-use rattler_conda_types::RepoDataRecord;
+use pyo3::{Bound, PyAny, PyResult, exceptions::PyTypeError, pyclass, pymethods};
 use rattler_repodata_gateway::repoquery::{
-    DependencyKind, OwnedDependent, RunExportKind, WhoNeedsTarget, who_needs,
+    DependencyKind, Dependent, RunExportKind, WhoNeedsTarget,
 };
 
 use crate::{
     generic_virtual_package::PyGenericVirtualPackage, package_name::PyPackageName, record::PyRecord,
 };
 
-/// A record that references the package queried through `py_who_needs`.
+/// A record that references the package queried through
+/// `PyGateway::who_needs`.
 #[pyclass(skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyDependent {
@@ -25,7 +23,7 @@ pub struct PyDependent {
     pub dependency: String,
 
     /// The field of the record the dependency comes from:
-    /// `depends`, `constrains`, or `run_export`.
+    /// `depends`, `constrains`, `extra_depends`, or `run_export`.
     #[pyo3(get)]
     pub kind: String,
 
@@ -33,6 +31,11 @@ pub struct PyDependent {
     /// `noarch`, `weak_constrains`, or `strong_constrains`.
     #[pyo3(get)]
     pub run_export_kind: Option<String>,
+
+    /// The name of the optional feature for `extra_depends` kinds; the
+    /// reference only applies when that extra is enabled.
+    #[pyo3(get)]
+    pub extra: Option<String>,
 }
 
 #[pymethods]
@@ -47,32 +50,50 @@ impl PyDependent {
     }
 }
 
-impl From<OwnedDependent> for PyDependent {
-    fn from(dependent: OwnedDependent) -> Self {
-        let (kind, run_export_kind) = split_kind(dependent.kind);
+impl From<Dependent> for PyDependent {
+    fn from(dependent: Dependent) -> Self {
+        let kind = SplitKind::from(dependent.kind);
         Self {
             record: PyRecord::from(dependent.record),
             dependency: dependent.dependency,
-            kind: kind.to_string(),
-            run_export_kind: run_export_kind.map(String::from),
+            kind: kind.kind.to_string(),
+            run_export_kind: kind.run_export_kind.map(String::from),
+            extra: kind.extra,
         }
     }
 }
 
-fn split_kind(kind: DependencyKind) -> (&'static str, Option<&'static str>) {
-    match kind {
-        DependencyKind::Depends => ("depends", None),
-        DependencyKind::Constrains => ("constrains", None),
-        DependencyKind::RunExport(run_export) => (
-            "run_export",
-            Some(match run_export {
-                RunExportKind::Weak => "weak",
-                RunExportKind::Strong => "strong",
-                RunExportKind::Noarch => "noarch",
-                RunExportKind::WeakConstrains => "weak_constrains",
-                RunExportKind::StrongConstrains => "strong_constrains",
-            }),
-        ),
+/// A [`DependencyKind`] flattened into the plain string fields exposed on
+/// [`PyDependent`].
+struct SplitKind {
+    kind: &'static str,
+    run_export_kind: Option<&'static str>,
+    extra: Option<String>,
+}
+
+impl From<DependencyKind> for SplitKind {
+    fn from(kind: DependencyKind) -> Self {
+        let (kind, run_export_kind, extra) = match kind {
+            DependencyKind::Depends => ("depends", None, None),
+            DependencyKind::Constrains => ("constrains", None, None),
+            DependencyKind::ExtraDepends(extra) => ("extra_depends", None, Some(extra)),
+            DependencyKind::RunExport(run_export) => (
+                "run_export",
+                Some(match run_export {
+                    RunExportKind::Weak => "weak",
+                    RunExportKind::Strong => "strong",
+                    RunExportKind::Noarch => "noarch",
+                    RunExportKind::WeakConstrains => "weak_constrains",
+                    RunExportKind::StrongConstrains => "strong_constrains",
+                }),
+                None,
+            ),
+        };
+        Self {
+            kind,
+            run_export_kind,
+            extra,
+        }
     }
 }
 
@@ -90,39 +111,4 @@ pub fn extract_who_needs_target(target: &Bound<'_, PyAny>) -> PyResult<WhoNeedsT
             "expected a PackageName, PackageRecord, or GenericVirtualPackage as the target",
         ))
     }
-}
-
-#[pyfunction]
-pub fn py_who_needs(
-    records: Vec<PyRecord>,
-    target: &Bound<'_, PyAny>,
-) -> PyResult<Vec<PyDependent>> {
-    let target = extract_who_needs_target(target)?;
-
-    let repodata_records = records
-        .iter()
-        .map(PyRecord::try_as_repodata_record)
-        .collect::<PyResult<Vec<&RepoDataRecord>>>()?;
-
-    // `who_needs` hands back references into `repodata_records`; map them
-    // back to the input `PyRecord`s by pointer identity so the results
-    // share the records passed in instead of deep copies.
-    let record_by_ptr: HashMap<*const RepoDataRecord, &PyRecord> = repodata_records
-        .iter()
-        .map(|record| std::ptr::from_ref(*record))
-        .zip(records.iter())
-        .collect();
-
-    Ok(who_needs(repodata_records.iter().copied(), target)
-        .into_iter()
-        .map(|dependent| {
-            let (kind, run_export_kind) = split_kind(dependent.kind);
-            PyDependent {
-                record: (*record_by_ptr[&std::ptr::from_ref(dependent.record)]).clone(),
-                dependency: dependent.dependency.to_string(),
-                kind: kind.to_string(),
-                run_export_kind: run_export_kind.map(String::from),
-            }
-        })
-        .collect())
 }
