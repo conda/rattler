@@ -3,7 +3,43 @@ from pathlib import Path
 
 import pytest
 
-from rattler import Gateway, Channel, SourceConfig
+from rattler import Gateway, Channel, SourceConfig, SparseRepoData
+
+
+@pytest.mark.asyncio
+async def test_removed_packages(tmp_path: Path) -> None:
+    noarch = tmp_path / "noarch"
+    noarch.mkdir()
+    record = {"name": "demo", "build": "0", "build_number": 0, "depends": [], "subdir": "noarch"}
+    (noarch / "repodata.json").write_text(
+        json.dumps(
+            {
+                "info": {"subdir": "noarch"},
+                "packages": {
+                    "demo-1.0-0.tar.bz2": {**record, "version": "1.0"},
+                    "demo-2.0-0.tar.bz2": {**record, "version": "2.0"},
+                },
+                "removed": ["demo-2.0-0.tar.bz2", "other-1.0-0.tar.bz2"],
+            }
+        )
+    )
+    channel = Channel(str(tmp_path))
+
+    # The gateway hides removed records and reports them for every fetched name.
+    result = await Gateway().query([channel], ["noarch"], ["demo"])
+    assert [record.file_name for record in result[0]] == ["demo-1.0-0.tar.bz2"]
+    assert len(result.removed) == 1
+    (removed,) = result.removed[0]
+    assert removed.file_name == "demo-2.0-0.tar.bz2"
+    assert (removed.name, removed.version, removed.build) == ("demo", "2.0", "0")
+    assert removed.url.endswith("/noarch/demo-2.0-0.tar.bz2")
+    assert removed.channel is not None
+
+    # Sparse repodata exposes the same information, for one name or all.
+    sparse = SparseRepoData(channel, "noarch", noarch / "repodata.json")
+    assert [record.file_name for record in sparse.load_records("demo")] == ["demo-1.0-0.tar.bz2"]
+    assert [removed.file_name for removed in sparse.load_removed()] == ["demo-2.0-0.tar.bz2", "other-1.0-0.tar.bz2"]
+    assert [removed.file_name for removed in sparse.load_removed("other")] == ["other-1.0-0.tar.bz2"]
 
 
 @pytest.mark.asyncio

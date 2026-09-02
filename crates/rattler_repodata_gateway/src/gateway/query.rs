@@ -671,6 +671,7 @@ impl QueryExecutor {
                     },
                     PackageRecords {
                         records,
+                        removed: Vec::new(),
                         unique_base_deps,
                         unique_extra_deps,
                     },
@@ -898,11 +899,13 @@ impl QueryExecutor {
         }
     }
 
-    /// Add matching records to the slot indicated by `target`.
+    /// Add matching records to the slot indicated by `target`. Removed
+    /// packages are added unfiltered: they describe the fetched name, not a
+    /// spec match.
     fn accumulate_records(
         &mut self,
         target: AccumulateTarget,
-        records: Vec<Arc<RepoDataRecord>>,
+        pkg: PackageRecords,
         request: &PendingRequest,
     ) {
         let result = match target {
@@ -912,6 +915,11 @@ impl QueryExecutor {
                 .expect("direct-url fetch spawned without a direct-url bucket"),
             AccumulateTarget::Subdir(idx) => &mut self.subdir_handles[idx].data,
         };
+
+        let PackageRecords {
+            records, removed, ..
+        } = pkg;
+        result.removed.extend(removed);
 
         match &request.specs {
             SourceSpecs::Transitive => {
@@ -1013,7 +1021,7 @@ impl QueryExecutor {
                         self.queue_dependencies(&pkg, &request);
                     }
 
-                    self.accumulate_records(target, pkg.records, &request);
+                    self.accumulate_records(target, pkg, &request);
                 }
 
                 // Handle any CEP-6 notices that were fetched

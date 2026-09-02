@@ -110,6 +110,7 @@ impl SubdirClient for CustomSourceClient {
             extract_unique_deps_split(records.iter().map(|r| &**r));
         Ok(PackageRecords {
             records,
+            removed: Vec::new(),
             unique_base_deps,
             unique_extra_deps,
         })

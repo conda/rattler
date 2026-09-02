@@ -11,6 +11,7 @@ from enum import Enum
 
 from rattler.rattler import PySparseRepoData, PyPackageFormatSelection
 from rattler.repo_data.record import RepoDataRecord
+from rattler.repo_data.removed_package import RemovedPackage
 from rattler.repo_data.revisions import RepodataRevisionMetadata, _repodata_revisions_from_py
 
 
@@ -228,6 +229,34 @@ class SparseRepoData:
             for record in self._sparse.load_matching_records(
                 [spec._match_spec for spec in specs], package_format_selection.value
             )
+        ]
+
+    def load_removed(self, package_name: Optional[str | PackageName] = None) -> List[RemovedPackage]:
+        """
+        Returns the packages listed under the ``removed`` key of the repodata,
+        for the specified package name or for the whole file when no name is
+        given. Removed packages are never returned by the ``load_*`` record
+        methods.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import Channel, ChannelConfig
+        >>> channel = Channel("dummy", ChannelConfig())
+        >>> path = "../test-data/channels/dummy/linux-64/repodata.json"
+        >>> sparse_data = SparseRepoData(channel, "linux-64", path)
+        >>> sparse_data.load_removed()
+        []
+        >>> sparse_data.load_removed("python")
+        []
+        >>>
+        ```
+        """
+        if package_name is not None and not isinstance(package_name, PackageName):
+            package_name = PackageName(package_name)
+        return [
+            RemovedPackage._from_py(removed)
+            for removed in self._sparse.load_removed(package_name._name if package_name is not None else None)
         ]
 
     @property
