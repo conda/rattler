@@ -181,7 +181,7 @@ fn dedup_by_preference(
     out
 }
 
-/// Deserializes raw shard bytes into a [`Shard`].
+/// Deserializes raw shard bytes into a `Shard`.
 fn load_shard<R: AsRef<[u8]>>(bytes: R) -> Result<Shard, GatewayError> {
     rmp_serde::from_slice::<Shard>(bytes.as_ref())
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
@@ -189,7 +189,7 @@ fn load_shard<R: AsRef<[u8]>>(bytes: R) -> Result<Shard, GatewayError> {
         .map_err(GatewayError::from)
 }
 
-/// Converts a [`Shard`] into [`PackageRecords`], applying `variant_consolidation`
+/// Converts a `Shard` into `PackageRecords`, applying `variant_consolidation`
 /// to select and deduplicate the package format variants exposed to the solver.
 fn get_records(
     shard: Shard,
