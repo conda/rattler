@@ -193,12 +193,6 @@ pub struct Dependent {
 /// entries (unrendered jinja like `pin_compatible('xtensor')` occurs on
 /// conda-forge), and a scan covers a whole channel, so one corrupt record
 /// must not fail the entire query.
-///
-/// This is the per-batch core of the channel-wide scan performed by
-/// [`Gateway::who_needs`](crate::Gateway::who_needs). It is deliberately
-/// not public: a reverse dependency lookup is only correct over the
-/// *complete* set of records of the queried channels and platforms, and
-/// assembling those is exactly what the gateway query does.
 pub(crate) fn who_needs(
     records: &[Arc<RepoDataRecord>],
     target: &WhoNeedsTarget,

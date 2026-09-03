@@ -19,7 +19,7 @@ use url::Url;
   rattler whoneeds numpy                      # packages that depend on numpy
   rattler whoneeds __cuda                     # packages that depend on a virtual package
   rattler whoneeds ./python-3.13.1-h123_0.conda   # packages that can use this exact package
-  rattler whoneeds https://conda.anaconda.org/conda-forge/linux-64/python-3.13.1-hc26e970_100_cp313.conda"#)]
+  rattler whoneeds https://conda.anaconda.org/conda-forge/noarch/polars-1.44.1-pyh8da0edf_0.conda"#)]
 pub struct Opt {
     /// The package to find reverse dependencies for.
     ///
