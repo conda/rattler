@@ -10,7 +10,10 @@
 //! I/O; the gateway's `who_needs_query` module answers *where* the records
 //! come from.
 
-use std::sync::Arc;
+use std::{
+    fmt::{self, Display, Formatter},
+    sync::Arc,
+};
 
 use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, Matches, PackageName, PackageRecord, ParseMatchSpecOptions,
@@ -45,42 +48,19 @@ pub enum WhoNeedsTarget {
 }
 
 impl WhoNeedsTarget {
-    /// The normalized name of the targeted package.
-    fn name(&self) -> &str {
+    /// Whether the dependency match spec `spec` references this target.
+    ///
+    /// Every variant checks the name: a [`Name`](Self::Name) target checks
+    /// only that, while the concrete variants additionally require the
+    /// version and build constraints of `spec` to hold. The name of `spec`
+    /// is always an exact [`PackageName`], because dependencies are parsed
+    /// with `exact_names_only` — a glob or regex name is a parse error, not
+    /// a spec that could match several packages.
+    fn matches(&self, spec: &MatchSpec) -> bool {
         match self {
-            WhoNeedsTarget::Name(name) => name.as_normalized(),
-            WhoNeedsTarget::Record(record) => record.name.as_normalized(),
-            WhoNeedsTarget::VirtualPackage(virtual_package) => virtual_package.name.as_normalized(),
-        }
-    }
-
-    /// Whether the dependency string `dependency` references this target.
-    /// `target_name` must be [`Self::name`], passed in so the caller can
-    /// compute it once per scan instead of once per dependency.
-    fn edge_matches(&self, target_name: &str, dependency: &str) -> bool {
-        // Compare the name with a cheap scan over the dependency string
-        // first. Every dependency of every record passes through here, and
-        // virtually none of them name the target, so parsing a full
-        // `MatchSpec` up front would dominate the scan.
-        if PackageName::normalized_name_from_matchspec_str(dependency) != target_name {
-            return false;
-        }
-
-        // The dependency names the target. For a name target that is all
-        // that is asked; the other targets are concrete, so their version
-        // and build constraints have to hold as well.
-        let target: &dyn Fn(&MatchSpec) -> bool = match self {
-            WhoNeedsTarget::Name(_) => return true,
-            WhoNeedsTarget::Record(record) => &|spec| spec.matches(record.as_ref()),
-            WhoNeedsTarget::VirtualPackage(virtual_package) => {
-                &|spec| spec.matches(virtual_package)
-            }
-        };
-        match MatchSpec::from_str(dependency, ParseMatchSpecOptions::lenient()) {
-            Ok(spec) => target(&spec),
-            // A dependency string that names the package but fails to parse
-            // is reported rather than silently dropped.
-            Err(_) => true,
+            WhoNeedsTarget::Name(name) => spec.name.matches(name),
+            WhoNeedsTarget::Record(record) => spec.matches(record.as_ref()),
+            WhoNeedsTarget::VirtualPackage(virtual_package) => spec.matches(virtual_package),
         }
     }
 }
@@ -141,6 +121,30 @@ pub enum DependencyKind {
     RunExport(RunExportKind),
 }
 
+impl Display for DependencyKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            DependencyKind::Depends => write!(f, "depends"),
+            DependencyKind::Constrains => write!(f, "constrains"),
+            DependencyKind::ExtraDepends(extra) => write!(f, "extra_depends[{extra}]"),
+            DependencyKind::RunExport(kind) => write!(f, "run_exports/{kind}"),
+        }
+    }
+}
+
+impl Display for RunExportKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            RunExportKind::Weak => "weak",
+            RunExportKind::Strong => "strong",
+            RunExportKind::Noarch => "noarch",
+            RunExportKind::WeakConstrains => "weak_constrains",
+            RunExportKind::StrongConstrains => "strong_constrains",
+        };
+        write!(f, "{name}")
+    }
+}
+
 /// A record that references the package queried through
 /// [`Gateway::who_needs`](crate::Gateway::who_needs).
 ///
@@ -184,6 +188,12 @@ pub struct Dependent {
 /// that field that matches — so a record referencing the target from two
 /// different extras yields one result per extra.
 ///
+/// A dependency string that is not a valid match spec is logged at warn
+/// level and treated as a non-match. Published repodata does contain such
+/// entries (unrendered jinja like `pin_compatible('xtensor')` occurs on
+/// conda-forge), and a scan covers a whole channel, so one corrupt record
+/// must not fail the entire query.
+///
 /// This is the per-batch core of the channel-wide scan performed by
 /// [`Gateway::who_needs`](crate::Gateway::who_needs). It is deliberately
 /// not public: a reverse dependency lookup is only correct over the
@@ -193,11 +203,9 @@ pub(crate) fn who_needs(
     records: &[Arc<RepoDataRecord>],
     target: &WhoNeedsTarget,
 ) -> Vec<Dependent> {
-    let target_name = target.name();
-
     let mut result = Vec::new();
     for record in records {
-        matching_edges(record, target, target_name, |dependency, kind| {
+        matching_edges(record, target, |dependency, kind| {
             result.push(Dependent {
                 record: record.clone(),
                 dependency: dependency.to_string(),
@@ -214,16 +222,38 @@ pub(crate) fn who_needs(
 fn matching_edges<'r>(
     record: &'r RepoDataRecord,
     target: &WhoNeedsTarget,
-    target_name: &str,
     mut on_match: impl FnMut(&'r str, DependencyKind),
 ) {
     let package_record = &record.package_record;
+    // Repodata carries the full matchspec syntax surface, including the
+    // extras, conditional (`pkg[when="__linux"]`) and flag forms that
+    // `lenient()` leaves off by default. Names must stay exact, though:
+    // `exact_names_only` keeps a glob or regex name a parse error rather
+    // than a spec that silently matches many packages.
+    let options = ParseMatchSpecOptions::lenient()
+        .with_extras(true)
+        .with_conditionals(true)
+        .with_flags(true);
     let mut first_match = |dependencies: &'r [String], kind: DependencyKind| {
-        if let Some(dependency) = dependencies
-            .iter()
-            .find(|dependency| target.edge_matches(target_name, dependency))
-        {
-            on_match(dependency, kind);
+        for dependency in dependencies {
+            let spec = match MatchSpec::from_str(dependency, options) {
+                Ok(spec) => spec,
+                // Published repodata does contain unparseable specs. Warn
+                // and move on: the entry cannot be shown to reference the
+                // target, and one bad record must not fail a whole-channel
+                // scan.
+                Err(error) => {
+                    tracing::warn!(
+                        "ignoring the {kind} entry '{dependency}' of '{}', which is not a valid match spec: {error}",
+                        record.identifier,
+                    );
+                    continue;
+                }
+            };
+            if target.matches(&spec) {
+                on_match(dependency, kind);
+                return;
+            }
         }
     };
 

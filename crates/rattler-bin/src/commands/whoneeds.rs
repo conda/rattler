@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, env, path::Path, time::Instant};
+use std::{collections::HashMap, env, path::Path, time::Instant};
 
 use indexmap::IndexMap;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -9,7 +9,7 @@ use rattler_conda_types::{
 };
 use rattler_repodata_gateway::{
     Gateway, SourceConfig,
-    who_needs::{DependencyKind, Dependent, RunExportKind, WhoNeedsTarget},
+    who_needs::{DependencyKind, Dependent, WhoNeedsTarget},
 };
 use url::Url;
 
@@ -174,7 +174,7 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
                     "subdir": dependent.record.package_record.subdir,
                     "channel": dependent.record.channel,
                     "dependency": &dependent.dependency,
-                    "kind": kind_str(&dependent.kind),
+                    "kind": dependent.kind.to_string(),
                 })
             })
             .collect();
@@ -184,7 +184,10 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
     }
 
     if dependents.is_empty() {
-        println!("No packages found that depend on '{target_display}'");
+        println!(
+            "No packages found that depend on '{target_display}' in {:?}",
+            start.elapsed()
+        );
         return Ok(());
     }
 
@@ -252,22 +255,4 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
     }
 
     Ok(())
-}
-
-/// Stable string form of a dependency kind for the JSON output.
-fn kind_str(kind: &DependencyKind) -> Cow<'static, str> {
-    match kind {
-        DependencyKind::Depends => Cow::Borrowed("depends"),
-        DependencyKind::Constrains => Cow::Borrowed("constrains"),
-        DependencyKind::ExtraDepends(extra) => Cow::Owned(format!("extra_depends/{extra}")),
-        DependencyKind::RunExport(RunExportKind::Weak) => Cow::Borrowed("run_export/weak"),
-        DependencyKind::RunExport(RunExportKind::Strong) => Cow::Borrowed("run_export/strong"),
-        DependencyKind::RunExport(RunExportKind::Noarch) => Cow::Borrowed("run_export/noarch"),
-        DependencyKind::RunExport(RunExportKind::WeakConstrains) => {
-            Cow::Borrowed("run_export/weak_constrains")
-        }
-        DependencyKind::RunExport(RunExportKind::StrongConstrains) => {
-            Cow::Borrowed("run_export/strong_constrains")
-        }
-    }
 }
