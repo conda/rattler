@@ -46,6 +46,7 @@ struct Opt {
 #[derive(Debug, clap::Subcommand)]
 enum Command {
     Auth(Box<commands::auth::Opt>),
+    ComparePackages(commands::compare_packages::Opt),
     Completion(commands::completion::Opt),
     Create(commands::create::Opt),
     Download(commands::download::Opt),
@@ -117,6 +118,9 @@ async fn async_main() -> miette::Result<()> {
     // Dispatch the selected comment
     match opt.command {
         Command::Auth(opts) => commands::auth::auth(*opts, offline).await,
+        Command::ComparePackages(opts) => {
+            commands::compare_packages::compare_packages(opts, offline).await
+        }
         Command::Completion(opts) => commands::completion::completion(opts),
         Command::Create(opts) => commands::create::create(opts, offline).await,
         Command::Download(opts) => commands::download::download(opts, offline).await,
