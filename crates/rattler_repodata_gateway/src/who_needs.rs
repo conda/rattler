@@ -48,6 +48,15 @@ pub enum WhoNeedsTarget {
 }
 
 impl WhoNeedsTarget {
+    /// The normalized name of the targeted package.
+    fn name(&self) -> &str {
+        match self {
+            WhoNeedsTarget::Name(name) => name.as_normalized(),
+            WhoNeedsTarget::Record(record) => record.name.as_normalized(),
+            WhoNeedsTarget::VirtualPackage(virtual_package) => virtual_package.name.as_normalized(),
+        }
+    }
+
     /// Whether the dependency match spec `spec` references this target.
     ///
     /// Every variant checks the name: a [`Name`](Self::Name) target checks
@@ -63,6 +72,36 @@ impl WhoNeedsTarget {
             WhoNeedsTarget::VirtualPackage(virtual_package) => spec.matches(virtual_package),
         }
     }
+}
+
+/// Whether `dependency` can be ruled out as a reference to `target_name`
+/// without parsing it as a match spec.
+///
+/// Parsing a `MatchSpec` costs orders of magnitude more than a scan over
+/// the bytes, and a channel-wide query parses every dependency of every
+/// record while virtually none of them name the target — so the cheap
+/// rejection is what makes the scan affordable.
+///
+/// The filter is one-sided on purpose. It may answer `false` for a
+/// dependency that turns out not to reference the target, which only costs
+/// a parse, but it must never answer `true` for one that does, which would
+/// drop a real dependent. So it only trusts the name extracted by
+/// [`PackageName::normalized_name_from_matchspec_str`] where that name is
+/// certain to be the spec's name:
+///
+/// * A `channel::name` or `channel/subdir::name` spec keeps the channel in
+///   the extracted name, so the scan yields `conda-forge::numpy` where the
+///   parsed name is `numpy`.
+/// * Leading whitespace makes the scan stop immediately and yield `""`.
+///
+/// Neither form occurs in the `depends` of published repodata, but a
+/// dependency string is not validated on publication, so correctness here
+/// cannot rest on that.
+fn cannot_reference(dependency: &str, target_name: &str) -> bool {
+    if dependency.contains(':') || dependency.starts_with(char::is_whitespace) {
+        return false;
+    }
+    PackageName::normalized_name_from_matchspec_str(dependency) != target_name
 }
 
 impl From<PackageName> for WhoNeedsTarget {
@@ -188,18 +227,21 @@ pub struct Dependent {
 /// that field that matches — so a record referencing the target from two
 /// different extras yields one result per extra.
 ///
-/// A dependency string that is not a valid match spec is logged at warn
-/// level and treated as a non-match. Published repodata does contain such
-/// entries (unrendered jinja like `pin_compatible('xtensor')` occurs on
-/// conda-forge), and a scan covers a whole channel, so one corrupt record
-/// must not fail the entire query.
+/// A dependency string that names the target but is not a valid match spec
+/// is logged at warn level and treated as a non-match. Published repodata
+/// does contain such entries (unrendered jinja like
+/// `pin_compatible('xtensor')` occurs on conda-forge), and a scan covers a
+/// whole channel, so one corrupt record must not fail the entire query.
 pub(crate) fn who_needs(
     records: &[Arc<RepoDataRecord>],
     target: &WhoNeedsTarget,
 ) -> Vec<Dependent> {
+    // Computed once per batch rather than once per dependency string.
+    let target_name = target.name();
+
     let mut result = Vec::new();
     for record in records {
-        matching_edges(record, target, |dependency, kind| {
+        matching_edges(record, target, target_name, |dependency, kind| {
             result.push(Dependent {
                 record: record.clone(),
                 dependency: dependency.to_string(),
@@ -216,6 +258,7 @@ pub(crate) fn who_needs(
 fn matching_edges<'r>(
     record: &'r RepoDataRecord,
     target: &WhoNeedsTarget,
+    target_name: &str,
     mut on_match: impl FnMut(&'r str, DependencyKind),
 ) {
     let package_record = &record.package_record;
@@ -230,12 +273,20 @@ fn matching_edges<'r>(
         .with_flags(true);
     let mut first_match = |dependencies: &'r [String], kind: DependencyKind| {
         for dependency in dependencies {
+            // Rule the dependency out with a byte scan before paying for a
+            // parse. Almost every dependency of almost every record in the
+            // channel is rejected here.
+            if cannot_reference(dependency, target_name) {
+                continue;
+            }
             let spec = match MatchSpec::from_str(dependency, options) {
                 Ok(spec) => spec,
                 // Published repodata does contain unparsable specs. Warn
                 // and move on: the entry cannot be shown to reference the
                 // target, and one bad record must not fail a whole-channel
-                // scan.
+                // scan. Only entries that survived the scan above are
+                // reported, so this does not warn about every broken spec
+                // in the channel, just the ones bearing on this query.
                 Err(error) => {
                     tracing::warn!(
                         "ignoring the {kind} entry '{dependency}' of '{}', which is not a valid match spec: {error}",
