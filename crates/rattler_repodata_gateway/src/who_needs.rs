@@ -281,12 +281,15 @@ fn matching_edges<'r>(
             }
             let spec = match MatchSpec::from_str(dependency, options) {
                 Ok(spec) => spec,
-                // Published repodata does contain unparsable specs. Warn
-                // and move on: the entry cannot be shown to reference the
-                // target, and one bad record must not fail a whole-channel
-                // scan. Only entries that survived the scan above are
-                // reported, so this does not warn about every broken spec
-                // in the channel, just the ones bearing on this query.
+                // Published repodata does contain unparsable specs (52
+                // entries in conda-forge as of
+                // https://github.com/conda-forge/admin-requests/pull/2321).
+                // Warn and move on: the entry cannot be shown to reference
+                // the target, and one bad record must not fail a
+                // whole-channel scan. Only entries that survived the scan
+                // above are reported, so this does not warn about every
+                // broken spec in the channel, just the ones bearing on this
+                // query.
                 Err(error) => {
                     tracing::warn!(
                         "ignoring the {kind} entry '{dependency}' of '{}', which is not a valid match spec: {error}",

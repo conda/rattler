@@ -1,10 +1,6 @@
-use std::{
-    collections::HashSet,
-    future::{Future, IntoFuture},
-    sync::Arc,
-};
+use std::{collections::HashSet, future::IntoFuture, sync::Arc};
 
-use futures::{FutureExt, StreamExt, select_biased, stream::FuturesUnordered};
+use futures::{StreamExt, select_biased, stream::FuturesUnordered};
 use rattler_conda_types::{
     Channel, ChannelUrl, MatchSpec, Matches, PackageName, PackageNameMatcher, Platform,
     RepoDataRecord,
@@ -13,6 +9,7 @@ use url::Url;
 
 use super::{
     BarrierCell, ChannelNoticeResult, GatewayError, GatewayInner, GatewayWarning, RepoData,
+    boxed::{BoxFuture, box_future},
     channel_expander::{ChannelExpander, ChannelRelationsMode, ChannelRelationsWarning},
     channel_relations::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
     local_subdir::LocalSubdirClient,
@@ -1321,45 +1318,6 @@ fn spawn_one_package_fetch(
             Subdir::NotFound => Ok((target, request, PackageRecords::default())),
         }
     }));
-}
-
-#[cfg(target_arch = "wasm32")]
-pub(super) type BoxFuture<T> = futures::future::LocalBoxFuture<'static, T>;
-
-#[cfg(target_arch = "wasm32")]
-pub(super) fn box_future<T, F: Future<Output = T> + 'static>(future: F) -> BoxFuture<T> {
-    future.boxed_local()
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub(super) type BoxFuture<T> = futures::future::BoxFuture<'static, T>;
-
-#[cfg(not(target_arch = "wasm32"))]
-pub(super) fn box_future<T, F: Future<Output = T> + Send + 'static>(future: F) -> BoxFuture<T> {
-    future.boxed()
-}
-
-/// A boxed stream returned from a gateway query, so callers can poll it
-/// without pinning it themselves. Not `Send` on wasm, where there are no
-/// threads to send it between.
-#[cfg(target_arch = "wasm32")]
-pub type BoxStream<T> = futures::stream::LocalBoxStream<'static, T>;
-
-#[cfg(target_arch = "wasm32")]
-pub(super) fn box_stream<T, S: futures::Stream<Item = T> + 'static>(stream: S) -> BoxStream<T> {
-    stream.boxed_local()
-}
-
-/// A boxed stream returned from a gateway query, so callers can poll it
-/// without pinning it themselves.
-#[cfg(not(target_arch = "wasm32"))]
-pub type BoxStream<T> = futures::stream::BoxStream<'static, T>;
-
-#[cfg(not(target_arch = "wasm32"))]
-pub(super) fn box_stream<T, S: futures::Stream<Item = T> + Send + 'static>(
-    stream: S,
-) -> BoxStream<T> {
-    stream.boxed()
 }
 
 /// Result type for pending record fetches.

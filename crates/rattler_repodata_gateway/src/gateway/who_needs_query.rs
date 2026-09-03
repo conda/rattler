@@ -26,8 +26,8 @@ use rattler_conda_types::{PackageName, Platform};
 
 use super::{
     GatewayError, GatewayInner,
+    boxed::{BoxFuture, BoxStream, box_future, box_stream},
     local_subdir::LocalSubdirClient,
-    query::{BoxFuture, BoxStream, box_future, box_stream},
     source::{CustomSourceClient, Source},
     subdir::{Subdir, SubdirData},
 };
