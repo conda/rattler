@@ -232,7 +232,7 @@ fn matching_edges<'r>(
         for dependency in dependencies {
             let spec = match MatchSpec::from_str(dependency, options) {
                 Ok(spec) => spec,
-                // Published repodata does contain unparseable specs. Warn
+                // Published repodata does contain unparsable specs. Warn
                 // and move on: the entry cannot be shown to reference the
                 // target, and one bad record must not fail a whole-channel
                 // scan.
