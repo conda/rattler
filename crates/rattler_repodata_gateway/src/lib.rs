@@ -80,7 +80,8 @@ pub use gateway::{
     CacheClearMode, ChannelConfig, ChannelNoticeResult, ChannelRelationsMode,
     ChannelRelationsWarning, DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH, Gateway, GatewayBuilder,
     GatewayError, GatewayWarning, MaxConcurrency, NamesQuery, NamesQueryOutput, RepoData,
-    RepoDataQuery, RepoDataQueryOutput, RepoDataSource, Source, SourceConfig, SubdirSelection,
+    RepoDataQuery, RepoDataQueryOutput, RepoDataQueryResult, RepoDataSource, ShardQuerySnapshot,
+    Source, SourceConfig, SubdirSelection,
 };
 #[cfg(feature = "indicatif")]
 pub use gateway::{IndicatifReporter, IndicatifReporterBuilder};
