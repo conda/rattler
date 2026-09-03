@@ -36,14 +36,22 @@ pub fn extract_tar_bz2(
     reader: impl Read,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
-    std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
-
     process_with_hashing(reader, |reader| {
-        let mut archive = stream_tar_bz2(reader);
-        unpack_tar_archive_sync(&mut archive, destination)?;
-        drain_decoder(archive.into_inner())?;
-        Ok(())
+        extract_tar_bz2_without_hashing(reader, destination)
     })
+}
+
+/// Extracts a `.tar.bz2` package without computing its package hashes.
+pub(crate) fn extract_tar_bz2_without_hashing(
+    mut reader: impl Read,
+    destination: &Path,
+) -> Result<(), ExtractError> {
+    std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
+    let mut archive = stream_tar_bz2(&mut reader);
+    unpack_tar_archive_sync(&mut archive, destination)?;
+    drain_decoder(archive.into_inner())?;
+    copy(&mut reader, &mut std::io::sink())?;
+    Ok(())
 }
 
 /// Reads a decompressor to its end after the tar reader stopped at the
@@ -59,15 +67,22 @@ pub fn extract_conda_via_streaming(
     reader: impl Read,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
-    // Construct the destination path if it doesn't exist yet
-    std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
-
     process_with_hashing(reader, |reader| {
-        while let Some(file) = read_zipfile_from_stream(reader)? {
-            extract_zipfile(file, destination)?;
-        }
-        Ok(())
+        extract_conda_via_streaming_without_hashing(reader, destination)
     })
+}
+
+/// Extracts a `.conda` package without computing its package hashes.
+pub(crate) fn extract_conda_via_streaming_without_hashing(
+    mut reader: impl Read,
+    destination: &Path,
+) -> Result<(), ExtractError> {
+    std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
+    while let Some(file) = read_zipfile_from_stream(&mut reader)? {
+        extract_zipfile(file, destination)?;
+    }
+    copy(&mut reader, &mut std::io::sink())?;
+    Ok(())
 }
 
 /// Extracts the contents of a .conda package archive by fully reading the stream and then decompressing
@@ -75,25 +90,33 @@ pub fn extract_conda_via_buffering(
     reader: impl Read,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
+    process_with_hashing(reader, |reader| {
+        extract_conda_via_buffering_without_hashing(reader, destination)
+    })
+}
+
+/// Extracts a buffered `.conda` package without computing its package hashes.
+pub(crate) fn extract_conda_via_buffering_without_hashing(
+    mut reader: impl Read,
+    destination: &Path,
+) -> Result<(), ExtractError> {
     // delete destination first, as this method is usually used as a fallback from a failed streaming decompression
     if destination.exists() {
         std::fs::remove_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
     }
     std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
 
-    process_with_hashing(reader, |reader| {
-        // Create a SpooledTempFile with a 5MB limit
-        let mut temp_file = SpooledTempFile::new(5 * 1024 * 1024);
-        copy(reader, &mut temp_file)?;
-        temp_file.seek(SeekFrom::Start(0))?;
-        let mut archive = ZipArchive::new(temp_file)?;
+    // Create a SpooledTempFile with a 5MB limit
+    let mut temp_file = SpooledTempFile::new(5 * 1024 * 1024);
+    copy(&mut reader, &mut temp_file)?;
+    temp_file.seek(SeekFrom::Start(0))?;
+    let mut archive = ZipArchive::new(temp_file)?;
 
-        for i in 0..archive.len() {
-            let file = archive.by_index(i)?;
-            extract_zipfile(file, destination)?;
-        }
-        Ok(())
-    })
+    for index in 0..archive.len() {
+        let file = archive.by_index(index)?;
+        extract_zipfile(file, destination)?;
+    }
+    Ok(())
 }
 
 fn extract_zipfile<R: std::io::Read>(
@@ -460,10 +483,9 @@ where
         rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
     let mut size_reader = SizeCountingReader::new(&mut md5_reader);
 
+    // Every extractor reads its input to the end, so the hashes cover the
+    // whole stream once it returns.
     processor(&mut size_reader)?;
-
-    // Read the file to the end to make sure the hash is properly computed
-    std::io::copy(&mut size_reader, &mut std::io::sink())?;
 
     // Get the size and hashes
     let (_, total_size) = size_reader.finalize();

@@ -971,6 +971,38 @@ fn file_entry_replaces_existing_symlink_without_following_it() {
     assert_eq!(std::fs::read(dest.join("victim")).unwrap(), b"new");
 }
 
+/// [`ExtractResult`] describes the complete input stream, including bytes
+/// after a `.conda` archive's zip central directory.
+#[tokio::test]
+async fn async_conda_hashes_trailing_input_after_central_directory() {
+    let mut tar = RawTar::default();
+    tar.file("payload.bin", b"complete");
+    let mut conda = build_conda("early-finish", &tar.finish());
+    assert!(conda.len() < CHUNK_SIZE);
+
+    // Exceed the bounded channel capacity so extraction must keep consuming
+    // after the archive contents are complete.
+    conda.resize(CHUNK_SIZE * 16, 0xa5);
+
+    let dest = fresh_dir("hash_after_early_worker_completion");
+    let result = tokio::time::timeout(
+        TEST_TIMEOUT,
+        rattler_package_streaming::tokio::async_read::extract_conda(conda.as_slice(), &dest),
+    )
+    .await
+    .expect("extraction hung while consuming trailing bytes")
+    .expect("trailing bytes after a complete conda archive were rejected");
+
+    assert_eq!(
+        digests(&result),
+        (sha256_hex(&conda), md5_hex(&conda), conda.len() as u64)
+    );
+    assert_eq!(
+        std::fs::read(dest.join("payload.bin")).unwrap(),
+        b"complete"
+    );
+}
+
 /// A cut that drops only trailing bytes of a `.conda` (the zip central
 /// directory) is not detected while streaming: the tar reader stops at the
 /// end-of-archive marker before the zip reader reaches its own end. Such a
