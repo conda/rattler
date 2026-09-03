@@ -19,7 +19,7 @@
 use std::{future::IntoFuture, sync::Arc};
 
 use futures::{
-    Stream, StreamExt, TryStreamExt,
+    StreamExt, TryStreamExt,
     stream::{self, FuturesUnordered},
 };
 use rattler_conda_types::{PackageName, Platform};
@@ -216,26 +216,28 @@ fn scan_platform(
     platform: Platform,
     target: WhoNeedsTarget,
     reporter: Option<Arc<dyn Reporter>>,
-) -> impl Stream<Item = Result<Dependent, GatewayError>> + Send {
+) -> BoxStream<Result<Dependent, GatewayError>> {
     // The subdirs of a platform are resolved when the platform is first
     // polled, not when the stream is built, so a consumer that stops early
     // never pays to resolve the platforms it did not reach.
-    stream::once(resolve_subdirs(
-        gateway,
-        sources,
-        platform,
-        reporter.clone(),
-    ))
-    .map_ok(move |subdirs| {
-        let target = target.clone();
-        let reporter = reporter.clone();
-        stream::iter(subdirs)
-            .map(move |(_, subdir)| scan_subdir(subdir, target.clone(), reporter.clone()))
-            // Subdirs are scanned one after another so the result order
-            // follows the caller's source order.
-            .flatten()
-    })
-    .try_flatten()
+    box_stream(
+        stream::once(resolve_subdirs(
+            gateway,
+            sources,
+            platform,
+            reporter.clone(),
+        ))
+        .map_ok(move |subdirs| {
+            let target = target.clone();
+            let reporter = reporter.clone();
+            stream::iter(subdirs)
+                .map(move |(_, subdir)| scan_subdir(subdir, target.clone(), reporter.clone()))
+                // Subdirs are scanned one after another so the result order
+                // follows the caller's source order.
+                .flatten()
+        })
+        .try_flatten(),
+    )
 }
 
 /// Resolves the subdirs of every source for `platform`, in the caller's
@@ -317,7 +319,7 @@ fn scan_subdir(
     subdir: Arc<Subdir>,
     target: WhoNeedsTarget,
     reporter: Option<Arc<dyn Reporter>>,
-) -> impl Stream<Item = Result<Dependent, GatewayError>> + Send {
+) -> BoxStream<Result<Dependent, GatewayError>> {
     let names: Vec<PackageName> = match subdir.as_ref() {
         Subdir::Found(subdir_data) => subdir_data
             .package_names()
@@ -331,35 +333,37 @@ fn scan_subdir(
         .map(<[PackageName]>::to_vec)
         .collect();
 
-    stream::iter(batches)
-        .map(move |batch| {
-            let subdir = subdir.clone();
-            let target = target.clone();
-            let reporter = reporter.clone();
-            spawn_scan(async move {
-                let Subdir::Found(subdir_data) = subdir.as_ref() else {
-                    return Ok(Vec::new());
-                };
-                let mut matches = Vec::new();
-                for name in batch {
-                    let records = subdir_data
-                        .fetch_package_records_uncached(&name, reporter.as_deref())
-                        .await?;
-                    matches.extend(who_needs(&records, &target));
-                    // The scanned records are dropped here; only the
-                    // matches survive.
-                }
-                Ok(matches)
+    box_stream(
+        stream::iter(batches)
+            .map(move |batch| {
+                let subdir = subdir.clone();
+                let target = target.clone();
+                let reporter = reporter.clone();
+                spawn_scan(async move {
+                    let Subdir::Found(subdir_data) = subdir.as_ref() else {
+                        return Ok(Vec::new());
+                    };
+                    let mut matches = Vec::new();
+                    for name in batch {
+                        let records = subdir_data
+                            .fetch_package_records_uncached(&name, reporter.as_deref())
+                            .await?;
+                        matches.extend(who_needs(&records, &target));
+                        // The scanned records are dropped here; only the
+                        // matches survive.
+                    }
+                    Ok(matches)
+                })
             })
-        })
-        // `buffered` keeps the batch order while running up to
-        // `BATCH_CONCURRENCY` of them at once, which is what caps how many
-        // matches are in memory ahead of the consumer.
-        .buffered(BATCH_CONCURRENCY)
-        // Flatten each batch's `Vec<Dependent>` into individual items so a
-        // consumer can drop each dependent as it goes.
-        .map_ok(|matches| stream::iter(matches.into_iter().map(Ok)))
-        .try_flatten()
+            // `buffered` keeps the batch order while running up to
+            // `BATCH_CONCURRENCY` of them at once, which is what caps how
+            // many matches are in memory ahead of the consumer.
+            .buffered(BATCH_CONCURRENCY)
+            // Flatten each batch's `Vec<Dependent>` into individual items so
+            // a consumer can drop each dependent as it goes.
+            .map_ok(|matches| stream::iter(matches.into_iter().map(Ok)))
+            .try_flatten(),
+    )
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
