@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, time::Instant};
+use std::{collections::HashMap, env, io::Write, time::Instant};
 
 use indexmap::IndexMap;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -14,7 +14,8 @@ use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
 #[clap(after_help = r#"Examples:
   rattler search 'python*'            # glob pattern
   rattler search '^numpy-.*$'         # regex pattern
-  rattler search openssl -c bioconda  # search in specific channel"#)]
+  rattler search openssl -c bioconda  # search in specific channel
+  rattler search xtensor --urls-only  # print only the package urls"#)]
 pub struct Opt {
     /// The matchspec pattern to search for.
     ///
@@ -50,6 +51,10 @@ pub struct Opt {
     /// Output in JSON format
     #[clap(long, conflicts_with_all = ["limit", "limit_packages", "all"])]
     json: bool,
+
+    /// Only print the URLs of the matching packages, one per line
+    #[clap(long, conflicts_with_all = ["json", "limit", "limit_packages", "all"])]
+    urls_only: bool,
 }
 
 pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
@@ -132,6 +137,36 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
         }
         let json_str = serde_json::to_string_pretty(&grouped).into_diagnostic()?;
         println!("{json_str}");
+        return Ok(());
+    }
+
+    if opt.urls_only {
+        // Only print the plain urls to stdout, sorted by name and then by
+        // version (newest first).
+        let mut records: Vec<&RepoDataRecord> = repo_data.iter().flat_map(RepoData::iter).collect();
+        records.sort_unstable_by(|a, b| {
+            a.package_record
+                .name
+                .cmp(&b.package_record.name)
+                .then_with(|| b.cmp(a))
+        });
+
+        // This output is meant to be piped (e.g. into `head`), so a closed
+        // stdout is a normal way to end instead of an error.
+        let mut stdout = std::io::stdout().lock();
+        for record in records {
+            if let Err(err) = writeln!(stdout, "{}", record.url) {
+                if err.kind() == std::io::ErrorKind::BrokenPipe {
+                    return Ok(());
+                }
+                return Err(err).into_diagnostic();
+            }
+        }
+        if let Err(err) = stdout.flush()
+            && err.kind() != std::io::ErrorKind::BrokenPipe
+        {
+            return Err(err).into_diagnostic();
+        }
         return Ok(());
     }
 
