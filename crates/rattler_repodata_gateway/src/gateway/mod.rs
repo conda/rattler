@@ -49,7 +49,7 @@ use subdir::Subdir;
 use tracing::{Level, instrument};
 use url::Url;
 pub use warning::GatewayWarning;
-pub use who_needs_query::{WhoNeedsQuery, WhoNeedsQueryOutput};
+pub use who_needs_query::WhoNeedsQuery;
 
 /// Central access point for high level queries about
 /// [`rattler_conda_types::RepoDataRecord`]s from different channels.

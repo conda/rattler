@@ -1339,6 +1339,29 @@ pub(super) fn box_future<T, F: Future<Output = T> + Send + 'static>(future: F) -
     future.boxed()
 }
 
+/// A boxed stream returned from a gateway query, so callers can poll it
+/// without pinning it themselves. Not `Send` on wasm, where there are no
+/// threads to send it between.
+#[cfg(target_arch = "wasm32")]
+pub type BoxStream<T> = futures::stream::LocalBoxStream<'static, T>;
+
+#[cfg(target_arch = "wasm32")]
+pub(super) fn box_stream<T, S: futures::Stream<Item = T> + 'static>(stream: S) -> BoxStream<T> {
+    stream.boxed_local()
+}
+
+/// A boxed stream returned from a gateway query, so callers can poll it
+/// without pinning it themselves.
+#[cfg(not(target_arch = "wasm32"))]
+pub type BoxStream<T> = futures::stream::BoxStream<'static, T>;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn box_stream<T, S: futures::Stream<Item = T> + Send + 'static>(
+    stream: S,
+) -> BoxStream<T> {
+    stream.boxed()
+}
+
 /// Result type for pending record fetches.
 type PendingSubdirResult = Result<PendingSubdirOk, GatewayError>;
 type PendingRecordsResult =

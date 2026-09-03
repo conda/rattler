@@ -372,9 +372,8 @@ impl PyGateway {
         }
 
         future_into_py(py, async move {
-            let output = query.execute().await.map_err(PyRattlerError::from)?;
-            Ok(output
-                .dependents
+            let dependents = query.execute().await.map_err(PyRattlerError::from)?;
+            Ok(dependents
                 .into_iter()
                 .map(crate::who_needs::PyDependent::from)
                 .collect::<Vec<_>>())

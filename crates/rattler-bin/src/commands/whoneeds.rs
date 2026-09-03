@@ -1,5 +1,6 @@
 use std::{collections::HashMap, env, path::Path, time::Instant};
 
+use futures_util::TryStreamExt;
 use indexmap::IndexMap;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
@@ -153,37 +154,65 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
     pb.set_message("Loading repodata...");
 
     let start = Instant::now();
-    let output = gateway
+    let mut stream = gateway
         .who_needs(channels, [opt.platform, Platform::NoArch], target)
-        .execute()
-        .await
-        .into_diagnostic()
-        .context("failed to compute reverse dependencies")?;
-    let dependents = output.dependents;
+        .stream();
 
-    pb.finish_and_clear();
-
+    // Both output modes reduce every dependent to something much smaller
+    // than the record it came from, so they consume the stream and drop
+    // each record as it arrives. A channel-wide query matches enough
+    // records that retaining them all would cost about a gigabyte.
     if opt.json {
-        let json_records: Vec<_> = dependents
-            .iter()
-            .map(|dependent| {
-                serde_json::json!({
-                    "name": dependent.record.package_record.name.as_normalized(),
-                    "version": dependent.record.package_record.version.to_string(),
-                    "build": dependent.record.package_record.build,
-                    "subdir": dependent.record.package_record.subdir,
-                    "channel": dependent.record.channel,
-                    "dependency": &dependent.dependency,
-                    "kind": dependent.kind.to_string(),
-                })
-            })
-            .collect();
+        let mut json_records = Vec::new();
+        while let Some(dependent) = stream
+            .try_next()
+            .await
+            .into_diagnostic()
+            .context("failed to compute reverse dependencies")?
+        {
+            json_records.push(serde_json::json!({
+                "name": dependent.record.package_record.name.as_normalized(),
+                "version": dependent.record.package_record.version.to_string(),
+                "build": dependent.record.package_record.build,
+                "subdir": dependent.record.package_record.subdir,
+                "channel": dependent.record.channel,
+                "dependency": &dependent.dependency,
+                "kind": dependent.kind.to_string(),
+            }));
+        }
+        pb.finish_and_clear();
         let json_str = serde_json::to_string_pretty(&json_records).into_diagnostic()?;
         println!("{json_str}");
         return Ok(());
     }
 
-    if dependents.is_empty() {
+    // Group by package name, keeping the record with the highest version
+    // per package as the representative shown in the output. Only one
+    // record per package name is kept, so the memory held here is bounded
+    // by the number of distinct packages rather than by matching records.
+    let mut record_count = 0usize;
+    let mut grouped: IndexMap<String, (Dependent, usize)> = IndexMap::new();
+    while let Some(dependent) = stream
+        .try_next()
+        .await
+        .into_diagnostic()
+        .context("failed to compute reverse dependencies")?
+    {
+        record_count += 1;
+        let key = dependent.record.package_record.name.as_normalized();
+        if let Some((best, count)) = grouped.get_mut(key) {
+            *count += 1;
+            if dependent.record.package_record.version > best.record.package_record.version {
+                *best = dependent;
+            }
+        } else {
+            grouped.insert(key.to_string(), (dependent, 1));
+        }
+    }
+
+    pb.finish_and_clear();
+
+    if grouped.is_empty() {
         println!(
             "No packages found that depend on '{target_display}' in {:?}",
             start.elapsed()
@@ -191,21 +220,6 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
         return Ok(());
     }
 
-    // Group by package name, keeping the record with the highest version
-    // per package as the representative shown in the output.
-    let mut grouped: IndexMap<&str, (&Dependent, usize)> = IndexMap::new();
-    for dependent in &dependents {
-        let key = dependent.record.package_record.name.as_normalized();
-        grouped
-            .entry(key)
-            .and_modify(|(best, count)| {
-                *count += 1;
-                if dependent.record.package_record.version > best.record.package_record.version {
-                    *best = dependent;
-                }
-            })
-            .or_insert((dependent, 1));
-    }
     grouped.sort_keys();
 
     let total_packages = grouped.len();
@@ -213,15 +227,15 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
         "Found {} package{} ({} record{}) that depend{} on '{}' in {:?}\n",
         total_packages,
         if total_packages == 1 { "" } else { "s" },
-        dependents.len(),
-        if dependents.len() == 1 { "" } else { "s" },
+        record_count,
+        if record_count == 1 { "" } else { "s" },
         if total_packages == 1 { "s" } else { "" },
         target_display,
         start.elapsed()
     );
 
     let limit = if opt.all { usize::MAX } else { opt.limit };
-    for (&name, &(dependent, record_count)) in grouped.iter().take(limit) {
+    for (name, (dependent, package_record_count)) in grouped.iter().take(limit) {
         let record = &dependent.record.package_record;
         let kind = match &dependent.kind {
             DependencyKind::Depends => "via".to_string(),
@@ -236,9 +250,9 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
             record.build,
             kind,
             console::style(&dependent.dependency).dim(),
-            if record_count > 1 {
-                format!(" and {} more record{}", record_count - 1, {
-                    if record_count == 2 { "" } else { "s" }
+            if *package_record_count > 1 {
+                format!(" and {} more record{}", package_record_count - 1, {
+                    if *package_record_count == 2 { "" } else { "s" }
                 })
             } else {
                 String::new()

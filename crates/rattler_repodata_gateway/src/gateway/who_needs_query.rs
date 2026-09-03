@@ -4,22 +4,30 @@
 //! wildcard [`RepoDataQuery`](super::RepoDataQuery) would), this query
 //! scans the records of every package name one name at a time, keeps only
 //! the matching records, and never inserts the scanned records into the
-//! gateway's long-lived per-name cache. Peak memory is therefore bounded
-//! by the in-flight package scans instead of the complete repodata of the
-//! queried platforms.
+//! gateway's long-lived per-name cache. The memory held by the scan is
+//! therefore bounded by the in-flight package scans instead of the complete
+//! repodata of the queried platforms.
+//!
+//! What the scan does not bound is the result set, which for a common
+//! package is the larger cost of the two. The query is therefore exposed as
+//! a stream so a consumer can reduce each match and drop the record it came
+//! from; [`WhoNeedsQuery::execute`] is the collecting convenience over it.
 //!
 //! This module answers *where* the scanned records come from; what counts
 //! as a reverse dependency is decided by [`crate::who_needs`].
 
 use std::{future::IntoFuture, sync::Arc};
 
-use futures::{StreamExt, stream::FuturesUnordered};
+use futures::{
+    Stream, StreamExt, TryStreamExt,
+    stream::{self, FuturesUnordered},
+};
 use rattler_conda_types::{PackageName, Platform};
 
 use super::{
     GatewayError, GatewayInner,
     local_subdir::LocalSubdirClient,
-    query::{BoxFuture, box_future},
+    query::{BoxFuture, BoxStream, box_future, box_stream},
     source::{CustomSourceClient, Source},
     subdir::{Subdir, SubdirData},
 };
@@ -31,15 +39,13 @@ use crate::{
 /// How many package names one batch task fetches and scans sequentially.
 /// Batching amortizes the per-task overhead over many cheap per-name
 /// fetches.
-const NAME_BATCH_SIZE: usize = 500;
-
-/// Result of a successful [`WhoNeedsQuery::execute`].
-#[derive(Debug, Default)]
-pub struct WhoNeedsQueryOutput {
-    /// The records that reference the queried package, grouped by the input
-    /// platform order. Within a platform the order is unspecified.
-    pub dependents: Vec<Dependent>,
-}
+///
+/// A batch collects its matches before yielding them, so together with
+/// [`BATCH_CONCURRENCY`] this sets how many matches a stream buffers ahead
+/// of its consumer. Scanning conda-forge for the dependents of `python`
+/// (~490k matching records) holds ~190 MB at 100 names and 16 batches,
+/// against ~500 MB at 500 names; larger batches do not scan faster.
+const NAME_BATCH_SIZE: usize = 100;
 
 /// A reverse-dependency query created through
 /// [`Gateway::who_needs`](super::Gateway::who_needs).
@@ -52,9 +58,15 @@ pub struct WhoNeedsQueryOutput {
 /// gateway's memory footprint. Only the matching records are retained,
 /// shared via `Arc` in the returned [`Dependent`]s.
 ///
-/// Platforms are scanned independently and concurrently; the result keeps
-/// the input platform order (duplicate platforms are scanned once). See
-/// [`WhoNeedsTarget`] for the matching semantics of its variants.
+/// The matches themselves can still be numerous enough to dominate memory —
+/// half a million records depend on `python` in conda-forge. Use
+/// [`stream`](Self::stream) to fold them as they arrive;
+/// [`execute`](Self::execute) keeps every one of them.
+///
+/// Platforms are scanned one after another in the order they were passed in
+/// (duplicate platforms are scanned once), and the name batches within a
+/// subdir are scanned concurrently. See [`WhoNeedsTarget`] for the matching
+/// semantics of its variants.
 ///
 /// Unlike the other gateway queries, this one does not follow CEP-42
 /// `channel_relations`: only the subdirs of the sources passed in are
@@ -94,8 +106,52 @@ impl WhoNeedsQuery {
         }
     }
 
-    /// Execute the query and return the reverse dependencies of the target.
-    pub async fn execute(self) -> Result<WhoNeedsQueryOutput, GatewayError> {
+    /// Execute the query and return all reverse dependencies of the target,
+    /// in the order described by [`Self::stream`].
+    ///
+    /// This collects the entire result set into memory. A channel-wide
+    /// query can match a lot of records — every record depending on
+    /// `python` in conda-forge is roughly half a million, about a gigabyte
+    /// once each is retained — so prefer [`Self::stream`] when the results
+    /// can be folded into something smaller as they arrive.
+    pub async fn execute(self) -> Result<Vec<Dependent>, GatewayError> {
+        self.stream().try_collect().await
+    }
+
+    /// Execute the query as a stream of reverse dependencies.
+    ///
+    /// Records are fetched, scanned and dropped as the stream is polled, so
+    /// a consumer that aggregates each [`Dependent`] and drops it keeps only
+    /// its own aggregate in memory rather than the whole result set. Nothing
+    /// is fetched until the stream is first polled, and dropping the stream
+    /// stops the scan.
+    ///
+    /// Items arrive in the same order as [`Self::execute`] returns them:
+    /// grouped by the platform order passed to
+    /// [`Gateway::who_needs`](super::Gateway::who_needs), then by source
+    /// order, with the order within a subdir unspecified.
+    ///
+    /// The stream is boxed so it can be polled without pinning it first.
+    ///
+    /// ```no_run
+    /// # use futures::TryStreamExt;
+    /// # use rattler_conda_types::{Channel, PackageName, Platform};
+    /// # use rattler_repodata_gateway::Gateway;
+    /// # async fn example(gateway: Gateway, channel: Channel, name: PackageName) -> anyhow::Result<()> {
+    /// let mut stream = gateway
+    ///     .who_needs(vec![channel], vec![Platform::Linux64], name)
+    ///     .stream();
+    ///
+    /// // Count the dependents while holding only one record at a time.
+    /// let mut count = 0;
+    /// while let Some(dependent) = stream.try_next().await? {
+    ///     count += 1;
+    ///     drop(dependent);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn stream(self) -> BoxStream<Result<Dependent, GatewayError>> {
         // Deduplicate platforms while keeping the input order, so the
         // result order stays deterministic and no subdir is scanned twice.
         let mut seen_platforms = std::collections::HashSet::new();
@@ -106,41 +162,25 @@ impl WhoNeedsQuery {
             .filter(|p| seen_platforms.insert(*p))
             .collect();
 
-        // Scan every platform concurrently. Results carry the input
-        // platform index and are re-sorted afterwards so the output order
-        // stays deterministic regardless of completion order.
-        let mut per_platform = platforms
-            .into_iter()
-            .enumerate()
-            .map(|(platform_index, platform)| {
-                let scan = scan_platform(
-                    self.gateway.clone(),
-                    self.sources.clone(),
-                    platform,
-                    self.target.clone(),
-                    self.reporter.clone(),
-                );
-                async move { spawn_scan(scan).await.map(|ok| (platform_index, ok)) }
-            })
-            .collect::<FuturesUnordered<_>>()
-            .collect::<Vec<_>>()
-            .await
-            .into_iter()
-            .collect::<Result<Vec<_>, GatewayError>>()?;
-
-        // Restore the input platform order.
-        per_platform.sort_unstable_by_key(|(platform_index, _)| *platform_index);
-
-        let mut output = WhoNeedsQueryOutput::default();
-        for (_, dependents) in per_platform {
-            output.dependents.extend(dependents);
-        }
-        Ok(output)
+        // Platforms are scanned in sequence rather than concurrently. That
+        // is what makes the output order match the input platform order
+        // without buffering a whole platform's results to re-sort them, and
+        // it bounds the number of in-flight scans; the concurrency that
+        // matters is between the name batches of a subdir.
+        box_stream(stream::iter(platforms).flat_map(move |platform| {
+            scan_platform(
+                self.gateway.clone(),
+                self.sources.clone(),
+                platform,
+                self.target.clone(),
+                self.reporter.clone(),
+            )
+        }))
     }
 }
 
 impl IntoFuture for WhoNeedsQuery {
-    type Output = Result<WhoNeedsQueryOutput, GatewayError>;
+    type Output = Result<Vec<Dependent>, GatewayError>;
     type IntoFuture = BoxFuture<Self::Output>;
 
     fn into_future(self) -> Self::IntoFuture {
@@ -148,16 +188,13 @@ impl IntoFuture for WhoNeedsQuery {
     }
 }
 
-/// Runs a platform scan on its own tokio task so scans of different
-/// platforms run in parallel on the runtime's worker threads instead of
-/// interleaving on the task driving the query.
+/// Runs a scan on its own tokio task so scans run on the runtime's worker
+/// threads instead of interleaving on the task driving the query.
 #[cfg(not(target_arch = "wasm32"))]
 async fn spawn_scan<T: Send + 'static>(
     scan: impl Future<Output = Result<T, GatewayError>> + Send + 'static,
 ) -> Result<T, GatewayError> {
-    tokio::spawn(scan)
-        .await
-        .expect("the platform scan task panicked")
+    tokio::spawn(scan).await.expect("the scan task panicked")
 }
 
 /// On wasm there are no threads to parallelize over; run the scan in place.
@@ -171,15 +208,44 @@ async fn spawn_scan<T>(
 /// A resolved subdir tagged with the index of the source it came from.
 type IndexedSubdir = (usize, Arc<Subdir>);
 
-/// Resolves the subdirs of every source for `platform` and scans them
-/// package by package, in the caller's source order.
-async fn scan_platform(
+/// Streams the dependents of `target` found on `platform`, across the
+/// subdirs of every source, in the caller's source order.
+fn scan_platform(
     gateway: Arc<GatewayInner>,
     sources: Vec<Source>,
     platform: Platform,
     target: WhoNeedsTarget,
     reporter: Option<Arc<dyn Reporter>>,
-) -> Result<Vec<Dependent>, GatewayError> {
+) -> impl Stream<Item = Result<Dependent, GatewayError>> + Send {
+    // The subdirs of a platform are resolved when the platform is first
+    // polled, not when the stream is built, so a consumer that stops early
+    // never pays to resolve the platforms it did not reach.
+    stream::once(resolve_subdirs(
+        gateway,
+        sources,
+        platform,
+        reporter.clone(),
+    ))
+    .map_ok(move |subdirs| {
+        let target = target.clone();
+        let reporter = reporter.clone();
+        stream::iter(subdirs)
+            .map(move |(_, subdir)| scan_subdir(subdir, target.clone(), reporter.clone()))
+            // Subdirs are scanned one after another so the result order
+            // follows the caller's source order.
+            .flatten()
+    })
+    .try_flatten()
+}
+
+/// Resolves the subdirs of every source for `platform`, in the caller's
+/// source order.
+async fn resolve_subdirs(
+    gateway: Arc<GatewayInner>,
+    sources: Vec<Source>,
+    platform: Platform,
+    reporter: Option<Arc<dyn Reporter>>,
+) -> Result<Vec<IndexedSubdir>, GatewayError> {
     // Kick off the subdir fetch of every channel source; custom and sparse
     // sources resolve immediately. Each subdir is tagged with the index of
     // the source it came from so the scan order follows the caller's
@@ -226,42 +292,47 @@ async fn scan_platform(
         subdirs.push(result?);
     }
     subdirs.sort_by_key(|(source_index, _)| *source_index);
-
-    let mut dependents = Vec::new();
-    for (_, subdir) in &subdirs {
-        scan_subdir(subdir.clone(), &target, reporter.clone(), &mut dependents).await?;
-    }
-    Ok(dependents)
+    Ok(subdirs)
 }
 
-/// Scans every package of `subdir` against `target` in batches of
-/// [`NAME_BATCH_SIZE`] names. Each batch runs as its own task (see
-/// [`spawn_scan`]) that fetches one package at a time, keeps the matches,
-/// and drops the scanned records before fetching the next package. The
-/// scanned records are never inserted into the subdir's per-name record
-/// cache.
-async fn scan_subdir(
+/// How many name batches of one subdir are scanned concurrently.
+///
+/// This is what bounds the memory of a stream: at most this many batches'
+/// worth of matches are buffered before the consumer sees them, so a
+/// consumer that folds results as they arrive never holds the whole result
+/// set. Concurrency is per subdir and subdirs are scanned in sequence, so
+/// the in-flight batch count of a whole query stays bounded by this.
+const BATCH_CONCURRENCY: usize = 16;
+
+/// Streams the dependents found in `subdir`, scanning it in batches of
+/// [`NAME_BATCH_SIZE`] names.
+///
+/// Each batch runs as its own task (see [`spawn_scan`]) that fetches one
+/// package at a time, keeps the matches, and drops the scanned records
+/// before fetching the next package. The scanned records are never inserted
+/// into the subdir's per-name record cache. Batches are polled in order and
+/// at most [`BATCH_CONCURRENCY`] run at once, so matches reach the consumer
+/// while the rest of the subdir is still being scanned.
+fn scan_subdir(
     subdir: Arc<Subdir>,
-    target: &WhoNeedsTarget,
+    target: WhoNeedsTarget,
     reporter: Option<Arc<dyn Reporter>>,
-    dependents: &mut Vec<Dependent>,
-) -> Result<(), GatewayError> {
-    let Subdir::Found(subdir_data) = subdir.as_ref() else {
-        return Ok(());
+) -> impl Stream<Item = Result<Dependent, GatewayError>> + Send {
+    let names: Vec<PackageName> = match subdir.as_ref() {
+        Subdir::Found(subdir_data) => subdir_data
+            .package_names()
+            .into_iter()
+            .filter_map(|name| PackageName::try_from(name).ok())
+            .collect(),
+        Subdir::NotFound => Vec::new(),
     };
-    let names: Vec<PackageName> = subdir_data
-        .package_names()
-        .into_iter()
-        .filter_map(|name| PackageName::try_from(name).ok())
-        .collect();
     let batches: Vec<Vec<PackageName>> = names
         .chunks(NAME_BATCH_SIZE)
         .map(<[PackageName]>::to_vec)
         .collect();
 
-    let mut batch_results = batches
-        .into_iter()
-        .map(|batch| {
+    stream::iter(batches)
+        .map(move |batch| {
             let subdir = subdir.clone();
             let target = target.clone();
             let reporter = reporter.clone();
@@ -281,12 +352,14 @@ async fn scan_subdir(
                 Ok(matches)
             })
         })
-        .collect::<FuturesUnordered<_>>();
-
-    while let Some(matches) = batch_results.next().await {
-        dependents.extend(matches?);
-    }
-    Ok(())
+        // `buffered` keeps the batch order while running up to
+        // `BATCH_CONCURRENCY` of them at once, which is what caps how many
+        // matches are in memory ahead of the consumer.
+        .buffered(BATCH_CONCURRENCY)
+        // Flatten each batch's `Vec<Dependent>` into individual items so a
+        // consumer can drop each dependent as it goes.
+        .map_ok(|matches| stream::iter(matches.into_iter().map(Ok)))
+        .try_flatten()
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -343,12 +416,12 @@ mod tests {
 
     /// The dependents of `target` in the `dummy` channel, rendered.
     async fn who_needs_dummy(channel: &str, platform: Platform, target: WhoNeedsTarget) -> String {
-        let output = Gateway::new()
+        let dependents = Gateway::new()
             .who_needs(vec![local_channel(channel)], vec![platform], target)
             .execute()
             .await
             .unwrap();
-        render(&output.dependents)
+        render(&dependents)
     }
 
     /// A name target reports every dependency naming the package,
@@ -470,7 +543,7 @@ mod tests {
         let gateway = Gateway::new();
         let target = WhoNeedsTarget::from(PackageName::from_str("python_abi").unwrap());
 
-        let output = gateway
+        let dependents = gateway
             .who_needs(
                 vec![channel.clone()],
                 // The duplicate platform must be scanned only once.
@@ -483,8 +556,7 @@ mod tests {
 
         // Results are grouped by input platform order: all linux-64
         // dependents come before all noarch dependents.
-        let subdirs: Vec<&str> = output
-            .dependents
+        let subdirs: Vec<&str> = dependents
             .iter()
             .map(|dependent| dependent.record.package_record.subdir.as_str())
             .collect();
@@ -508,7 +580,7 @@ mod tests {
             .execute()
             .await
             .unwrap();
-        assert_eq!(output.dependents.len(), deduplicated.dependents.len());
+        assert_eq!(dependents.len(), deduplicated.len());
     }
 
     #[tokio::test]
@@ -541,7 +613,7 @@ mod tests {
 
         // The reverse dependency scan must reuse the cached entry without
         // inserting the thousands of other scanned packages.
-        let output = gateway
+        let dependents = gateway
             .who_needs(
                 vec![channel.clone()],
                 vec![Platform::Linux64, Platform::NoArch],
@@ -550,7 +622,7 @@ mod tests {
             .execute()
             .await
             .unwrap();
-        assert!(!output.dependents.is_empty());
+        assert!(!dependents.is_empty());
 
         assert_eq!(linux_data.cached_package_count(), 1);
         let noarch_subdir = gateway
