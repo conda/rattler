@@ -43,6 +43,15 @@ pub struct Opt {
     #[clap(required = true)]
     specs: Vec<String>,
 
+    /// Additional constraint that the solution must satisfy.
+    ///
+    /// A constrained package is not necessarily part of the solution, but if
+    /// it is, it must match the constraint.
+    ///
+    /// Example: --constraint "numpy<2" --constraint "openssl=3.*"
+    #[clap(long = "constraint", value_name = "SPEC")]
+    constraints: Vec<String>,
+
     /// The platform to solve the environment for.
     #[clap(long, default_value_t = Platform::current())]
     platform: Platform,
@@ -133,6 +142,13 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
         .collect::<Result<Vec<_>, _>>()
         .into_diagnostic()?;
 
+    let constraints = opt
+        .constraints
+        .iter()
+        .map(|spec| MatchSpec::from_str(spec, match_spec_options))
+        .collect::<Result<Vec<_>, _>>()
+        .into_diagnostic()?;
+
     let cache_dir = default_cache_dir()
         .map_err(|e| miette::miette!("could not determine default cache directory: {}", e))?;
     rattler_cache::ensure_cache_dir(&cache_dir)
@@ -206,6 +222,7 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
     let solver_task = SolverTask {
         virtual_packages,
         specs: specs.clone(),
+        constraints,
         timeout: opt.timeout.map(Duration::from_millis),
         strategy: opt.strategy.map_or_else(Default::default, Into::into),
         exclude_newer: opt.exclude_newer.map(Into::into),
