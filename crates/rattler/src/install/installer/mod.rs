@@ -32,8 +32,8 @@ use simple_spawn_blocking::tokio::run_blocking_task;
 use tokio::{sync::Semaphore, task::JoinError};
 
 use super::{
-    AppleCodeSignBehavior, ExternalSymlinkPolicy, InstallDriver, InstallOptions, Prefix,
-    Transaction, unlink_package,
+    AppleCodeSignBehavior, ExternalSymlinkPolicy, InstallDriver, InstallOptions, LinkingContext,
+    Prefix, Transaction, unlink_package,
 };
 use crate::{
     default_cache_dir,
@@ -648,6 +648,7 @@ impl Installer {
                     .chain(transaction.removed_packages()),
             )
             .finish();
+        let linking_context = Arc::new(LinkingContext::new(prefix.path()));
 
         // Determine base installer options.
         let base_install_options = InstallOptions {
@@ -726,6 +727,7 @@ impl Installer {
             let base_install_options = &base_install_options;
             let driver = &driver;
             let prefix = &prefix;
+            let linking_context = linking_context.clone();
             let concurrent_requests_semaphore = &concurrent_requests_semaphore;
             let spec_mapping_ref = spec_mapping.clone();
             let operation_future = async move {
@@ -797,6 +799,7 @@ impl Installer {
                         install_options,
                         driver,
                         requested_spec,
+                        linking_context,
                     )
                     .await?;
                     if let Some((reporter, index)) = reporter {
@@ -861,6 +864,7 @@ async fn link_package(
     install_options: InstallOptions,
     driver: &InstallDriver,
     requested_specs: Vec<String>,
+    linking_context: Arc<LinkingContext>,
 ) -> Result<(), InstallerError> {
     let record = record.clone();
     let target_prefix = target_prefix.clone();
@@ -875,10 +879,11 @@ async fn link_package(
     rayon::spawn_fifo(move || {
         let inner = move || {
             // Link the contents of the package into the prefix.
-            let (paths, link_type) = crate::install::link_package_sync(
+            let (paths, link_type) = crate::install::link_package_sync_with_context(
                 &cached_package_dir,
                 &target_prefix,
                 clobber_registry,
+                &linking_context,
                 install_options,
             )
             .map_err(|e| InstallerError::LinkError(record.identifier.to_string(), e))?;

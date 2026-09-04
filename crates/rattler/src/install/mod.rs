@@ -56,6 +56,7 @@ pub use installer::{
 };
 use itertools::Itertools;
 pub use link::{LinkFileError, LinkMethod, link_file};
+use parking_lot::Mutex as ParkingLotMutex;
 pub use python::PythonInfo;
 use rattler_conda_types::{
     Platform,
@@ -63,6 +64,7 @@ use rattler_conda_types::{
     prefix::Prefix,
     prefix_record::{self, LinkType},
 };
+use rattler_package_streaming::file_store::should_overlap_directory_creation;
 use rayon::{
     iter::Either,
     prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator},
@@ -277,6 +279,113 @@ struct LinkPath {
     entry: PathsEntry,
     computed_path: PathBuf,
     clobber_path: Option<PathBuf>,
+}
+
+pub(crate) struct LinkingContext {
+    overlap_directory_creation: bool,
+    created_directories: ParkingLotMutex<HashSet<PathBuf>>,
+}
+
+impl LinkingContext {
+    fn new(target_dir: &Path) -> Self {
+        Self {
+            overlap_directory_creation: !cfg!(target_os = "macos")
+                && should_overlap_directory_creation(target_dir),
+            created_directories: ParkingLotMutex::new(HashSet::new()),
+        }
+    }
+
+    fn create_directory_all(&self, directory: &Path) -> std::io::Result<()> {
+        let mut created_directories = self.created_directories.lock();
+        if created_directories.contains(directory) {
+            return Ok(());
+        }
+
+        fs::create_dir_all(directory)?;
+        created_directories.insert(directory.to_path_buf());
+        Ok(())
+    }
+}
+
+struct PackageLinker<'a> {
+    package_dir: &'a Path,
+    target_dir: &'a Prefix,
+    target_prefix: &'a str,
+    allow_symbolic_links: bool,
+    allow_hard_links: bool,
+    allow_ref_links: bool,
+    platform: Platform,
+    apple_codesign_behavior: AppleCodeSignBehavior,
+    modification_time: filetime::FileTime,
+    external_symlink_policy: ExternalSymlinkPolicy,
+}
+
+impl PackageLinker<'_> {
+    fn link_paths(
+        &self,
+        link_paths: Vec<LinkPath>,
+    ) -> Vec<Result<prefix_record::PathsEntry, InstallError>> {
+        let mut path_entries = Vec::with_capacity(link_paths.len());
+        for link_path in link_paths {
+            let entry = link_path.entry;
+            let is_clobber = link_path.clobber_path.is_some();
+            let link_result = link_file(
+                &entry,
+                link_path
+                    .clobber_path
+                    .unwrap_or(link_path.computed_path.clone()),
+                self.package_dir,
+                self.target_dir,
+                self.target_prefix,
+                self.allow_symbolic_links && !entry.no_link,
+                self.allow_hard_links && !entry.no_link,
+                self.allow_ref_links && !entry.no_link,
+                self.platform,
+                self.apple_codesign_behavior,
+                self.modification_time,
+                self.external_symlink_policy,
+            );
+
+            let result = match link_result {
+                Ok(Some(linked_file)) => linked_file,
+                Ok(None) => continue,
+                Err(error) => {
+                    return vec![Err(InstallError::FailedToLink(
+                        entry.relative_path.clone(),
+                        error,
+                    ))];
+                }
+            };
+
+            path_entries.push(Ok(prefix_record::PathsEntry {
+                relative_path: result.relative_path,
+                original_path: if is_clobber {
+                    Some(link_path.computed_path)
+                } else {
+                    None
+                },
+                path_type: entry.path_type.into(),
+                no_link: entry.no_link,
+                sha256: entry.sha256,
+                sha256_in_prefix: if Some(result.sha256) == entry.sha256 {
+                    None
+                } else {
+                    Some(result.sha256)
+                },
+                size_in_bytes: Some(result.file_size),
+                file_mode: match result.method {
+                    LinkMethod::Patched(file_mode) => Some(file_mode),
+                    _ => None,
+                },
+                prefix_placeholder: entry
+                    .prefix_placeholder
+                    .as_ref()
+                    .map(|placeholder| placeholder.placeholder.clone()),
+            }));
+        }
+
+        path_entries
+    }
 }
 
 /// Find a timestamp to put on all files we modify. Use `info/about.json`, as a base. This
@@ -626,11 +735,28 @@ pub async fn link_package(
 /// Returns a [`PathsEntry`] for every file that was linked into the target
 /// directory. The entries are ordered in the same order as they appear in the
 /// `paths.json` file of the package.
-#[instrument(skip_all, fields(package_dir = % package_dir.display()))]
 pub fn link_package_sync(
     package_dir: &Path,
     target_dir: &Prefix,
     clobber_registry: Arc<Mutex<ClobberRegistry>>,
+    options: InstallOptions,
+) -> Result<(Vec<prefix_record::PathsEntry>, LinkType), InstallError> {
+    let linking_context = LinkingContext::new(target_dir.path());
+    link_package_sync_with_context(
+        package_dir,
+        target_dir,
+        clobber_registry,
+        &linking_context,
+        options,
+    )
+}
+
+#[instrument(skip_all, fields(package_dir = % package_dir.display()))]
+pub(crate) fn link_package_sync_with_context(
+    package_dir: &Path,
+    target_dir: &Prefix,
+    clobber_registry: Arc<Mutex<ClobberRegistry>>,
+    linking_context: &LinkingContext,
     options: InstallOptions,
 ) -> Result<(Vec<prefix_record::PathsEntry>, LinkType), InstallError> {
     // Determine the target prefix for linking
@@ -730,7 +856,6 @@ pub fn link_package_sync(
         }
     });
 
-    // Figure out all the directories that we are going to need
     let mut directories_to_construct = HashSet::new();
     let mut paths_by_directory = HashMap::new();
     for link_path in final_paths {
@@ -738,210 +863,220 @@ pub fn link_package_sync(
             continue;
         };
 
-        // Iterate over all parent directories and create them if they do not exist.
-        let mut current_path = Some(entry_parent);
-        while let Some(path) = current_path {
-            if !path.as_os_str().is_empty() && directories_to_construct.insert(path.to_path_buf()) {
-                current_path = path.parent();
-            } else {
-                break;
+        if !linking_context.overlap_directory_creation {
+            let mut current_path = Some(entry_parent);
+            while let Some(path) = current_path {
+                if !path.as_os_str().is_empty()
+                    && directories_to_construct.insert(path.to_path_buf())
+                {
+                    current_path = path.parent();
+                } else {
+                    break;
+                }
+            }
+
+            // Clobbered files are stored under `__clobbers__`, so their
+            // destination parents must also exist before the barrier opens.
+            let mut current_path = link_path
+                .clobber_path
+                .as_ref()
+                .and_then(|path| path.parent());
+            while let Some(path) = current_path {
+                if !path.as_os_str().is_empty()
+                    && directories_to_construct.insert(path.to_path_buf())
+                {
+                    current_path = path.parent();
+                } else {
+                    break;
+                }
             }
         }
 
-        // Since we store clobbers in the separate directory
-        // (`__clobbers__`) now we have to create all necessary
-        // directories for it as well.
-        let clobber_path = link_path.clobber_path.as_ref();
-        let mut current_path = clobber_path.and_then(|p| p.parent());
-        while let Some(path) = current_path {
-            if !path.as_os_str().is_empty() && directories_to_construct.insert(path.to_path_buf()) {
-                current_path = path.parent();
-            } else {
-                break;
-            }
-        }
-
-        // Store the path by directory so we can create them in parallel
+        let destination_parent = if linking_context.overlap_directory_creation {
+            link_path
+                .clobber_path
+                .as_ref()
+                .unwrap_or(&link_path.computed_path)
+                .parent()
+        } else {
+            Some(entry_parent)
+        };
+        let Some(destination_parent) = destination_parent else {
+            continue;
+        };
         paths_by_directory
-            .entry(entry_parent.to_path_buf())
+            .entry(destination_parent.to_path_buf())
             .or_insert_with(Vec::new)
             .push(link_path);
     }
 
-    let mut created_directories = HashSet::new();
-    let mut reflinked_files = HashMap::new();
-    for directory in directories_to_construct
-        .into_iter()
-        .sorted_by(|a, b| a.components().count().cmp(&b.components().count()))
-    {
-        let full_path = target_dir.path().join(&directory);
+    let mut paths = if linking_context.overlap_directory_creation {
+        let mut link_groups = paths_by_directory
+            .into_iter()
+            .map(|(directory, link_paths)| (directory, link_paths, Vec::new()))
+            .collect_vec();
+        link_groups.sort_unstable_by(|left, right| {
+            left.0
+                .components()
+                .count()
+                .cmp(&right.0.components().count())
+                .then_with(|| right.1.len().cmp(&left.1.len()))
+        });
 
-        // if we already (recursively) created the parent directory we can skip this
-        if created_directories
-            .iter()
-            .any(|dir| directory.starts_with(dir))
-        {
-            continue;
-        }
-
-        // can we lock this directory?
-        if full_path.exists() {
-            continue;
-        }
-
-        if allow_ref_links
-            && cfg!(target_os = "macos")
-            && !directory.starts_with(CLOBBERS_DIR_NAME)
-            && !index_json.noarch.is_python()
-        {
-            // reflink the whole directory if possible
-            // currently this does not handle noarch packages
-            match reflink_copy::reflink(package_dir.join(&directory), &full_path) {
-                Ok(_) => {
-                    created_directories.insert(directory.clone());
-                    // remove paths that we just reflinked (everything that starts with the directory)
-                    let (matching, non_matching): (HashMap<_, _>, HashMap<_, _>) =
-                        paths_by_directory
-                            .drain()
-                            .partition(|(k, _)| k.starts_with(&directory));
-
-                    // Store matching paths in reflinked_files
-                    reflinked_files.extend(matching);
-                    // Keep non-matching paths in paths_by_directory
-                    paths_by_directory = non_matching;
+        let package_linker = PackageLinker {
+            package_dir,
+            target_dir,
+            target_prefix: &target_prefix,
+            allow_symbolic_links,
+            allow_hard_links,
+            allow_ref_links,
+            platform,
+            apple_codesign_behavior: options.apple_codesign_behavior,
+            modification_time,
+            external_symlink_policy: options.external_symlink_policy,
+        };
+        let mut directory_error = None;
+        rayon::in_place_scope(|scope| {
+            for (directory, link_paths, path_entries) in &mut link_groups {
+                let full_path = target_dir.path().join(directory);
+                if let Err(error) = linking_context.create_directory_all(&full_path) {
+                    directory_error = Some(InstallError::FailedToCreateDirectory(full_path, error));
+                    break;
                 }
-                Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
-                Err(_) => {
-                    allow_ref_links = false;
-                    match fs::create_dir(&full_path) {
-                        Ok(_) => (),
-                        Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
-                        Err(e) => return Err(InstallError::FailedToCreateDirectory(full_path, e)),
-                    }
-                }
-            }
-        } else {
-            match fs::create_dir(&full_path) {
-                Ok(_) => (),
-                Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
-                Err(e) => return Err(InstallError::FailedToCreateDirectory(full_path, e)),
-            }
-        }
-    }
 
-    // Take care of all the reflinked files (macos only)
-    //  - Add them to the paths.json
-    //  - Fix any occurrences of the prefix in the files
-    //  - Rename files that need clobber-renames
-    let mut reflinked_paths_entries = Vec::new();
-    for (parent_dir, files) in reflinked_files {
-        // files that are either in the clobber map or contain a placeholder,
-        // we defer to the regular linking that comes after this block
-        // and re-add them to the paths_by_directory map
-        for link_path in files {
-            if link_path.clobber_path.is_some() || link_path.entry.prefix_placeholder.is_some() {
-                paths_by_directory
-                    .entry(parent_dir.clone())
-                    .or_insert_with(Vec::new)
-                    .push(link_path);
-            } else {
-                let entry = link_path.entry;
-                reflinked_paths_entries.push(prefix_record::PathsEntry {
-                    relative_path: entry.relative_path,
-                    path_type: entry.path_type.into(),
-                    no_link: entry.no_link,
-                    sha256: entry.sha256,
-                    size_in_bytes: entry.size_in_bytes,
-                    // No placeholder, no clobbering, so these are none for sure
-                    original_path: None,
-                    sha256_in_prefix: None,
-                    file_mode: None,
-                    prefix_placeholder: None,
+                let link_paths = std::mem::take(link_paths);
+                let package_linker = &package_linker;
+                scope.spawn(move |_| {
+                    *path_entries = package_linker.link_paths(link_paths);
                 });
             }
+        });
+        if let Some(error) = directory_error {
+            return Err(error);
         }
-    }
 
-    // Wrap the python info in an `Arc` so we can more easily share it with async
-    // tasks.
-    let python_info = options.python_info;
+        link_groups
+            .into_iter()
+            .flat_map(|(_, _, path_entries)| path_entries)
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        let mut created_directories = HashSet::new();
+        let mut reflinked_files = HashMap::new();
+        for directory in directories_to_construct
+            .into_iter()
+            .sorted_by(|left, right| left.components().count().cmp(&right.components().count()))
+        {
+            let full_path = target_dir.path().join(&directory);
 
-    // Link the individual files in parallel
-    let link_target_prefix = target_prefix.clone();
-    let package_dir = package_dir.to_path_buf();
-    let mut paths = paths_by_directory
-        .into_values()
-        .collect_vec()
-        .into_par_iter()
-        .with_min_len(100)
-        .flat_map(move |entries_in_subdir| {
-            let mut path_entries = Vec::with_capacity(entries_in_subdir.len());
-            for link_path in entries_in_subdir {
-                let entry = link_path.entry;
-
-                let is_clobber = link_path.clobber_path.is_some();
-                let link_result = link_file(
-                    &entry,
-                    link_path
-                        .clobber_path
-                        .unwrap_or(link_path.computed_path.clone()),
-                    &package_dir,
-                    target_dir,
-                    &link_target_prefix,
-                    allow_symbolic_links && !entry.no_link,
-                    allow_hard_links && !entry.no_link,
-                    allow_ref_links && !entry.no_link,
-                    platform,
-                    options.apple_codesign_behavior,
-                    modification_time,
-                    options.external_symlink_policy,
-                );
-
-                let result = match link_result {
-                    Ok(Some(linked_file)) => linked_file,
-                    Ok(None) => continue,
-                    Err(e) => {
-                        return vec![Err(InstallError::FailedToLink(
-                            entry.relative_path.clone(),
-                            e,
-                        ))];
-                    }
-                };
-
-                // Construct a `PathsEntry` from the result of the linking operation
-                path_entries.push(Ok(prefix_record::PathsEntry {
-                    relative_path: result.relative_path,
-                    original_path: if is_clobber {
-                        Some(link_path.computed_path)
-                    } else {
-                        None
-                    },
-                    path_type: entry.path_type.into(),
-                    no_link: entry.no_link,
-                    sha256: entry.sha256,
-                    // Only set sha256_in_prefix if it differs from the original sha256
-                    sha256_in_prefix: if Some(result.sha256) == entry.sha256 {
-                        None
-                    } else {
-                        Some(result.sha256)
-                    },
-                    size_in_bytes: Some(result.file_size),
-                    file_mode: match result.method {
-                        LinkMethod::Patched(file_mode) => Some(file_mode),
-                        _ => None,
-                    },
-                    prefix_placeholder: entry
-                        .prefix_placeholder
-                        .as_ref()
-                        .map(|p| p.placeholder.clone()),
-                }));
+            // If we already recursively created the parent directory, we can skip this.
+            if created_directories
+                .iter()
+                .any(|created| directory.starts_with(created))
+            {
+                continue;
             }
 
-            path_entries
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+            if full_path.exists() {
+                continue;
+            }
 
-    paths.extend(reflinked_paths_entries);
+            if allow_ref_links
+                && cfg!(target_os = "macos")
+                && !directory.starts_with(CLOBBERS_DIR_NAME)
+                && !index_json.noarch.is_python()
+            {
+                // Reflink the whole directory if possible. This currently does not
+                // handle noarch packages.
+                match reflink_copy::reflink(package_dir.join(&directory), &full_path) {
+                    Ok(_) => {
+                        created_directories.insert(directory.clone());
+                        let (matching, non_matching): (HashMap<_, _>, HashMap<_, _>) =
+                            paths_by_directory
+                                .drain()
+                                .partition(|(path, _)| path.starts_with(&directory));
+                        reflinked_files.extend(matching);
+                        paths_by_directory = non_matching;
+                    }
+                    Err(error) if error.kind() == ErrorKind::AlreadyExists => (),
+                    Err(_) => {
+                        allow_ref_links = false;
+                        match fs::create_dir(&full_path) {
+                            Ok(()) => {}
+                            Err(error) if error.kind() == ErrorKind::AlreadyExists => {}
+                            Err(error) => {
+                                return Err(InstallError::FailedToCreateDirectory(
+                                    full_path, error,
+                                ));
+                            }
+                        }
+                    }
+                }
+            } else {
+                match fs::create_dir(&full_path) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == ErrorKind::AlreadyExists => {}
+                    Err(error) => {
+                        return Err(InstallError::FailedToCreateDirectory(full_path, error));
+                    }
+                }
+            }
+        }
+
+        // Take care of all the reflinked files (macOS only):
+        // - add them to paths.json;
+        // - fix occurrences of the prefix;
+        // - rename files that need clobber renames.
+        let mut reflinked_paths_entries = Vec::new();
+        for (parent_dir, files) in reflinked_files {
+            for link_path in files {
+                if link_path.clobber_path.is_some() || link_path.entry.prefix_placeholder.is_some()
+                {
+                    paths_by_directory
+                        .entry(parent_dir.clone())
+                        .or_insert_with(Vec::new)
+                        .push(link_path);
+                } else {
+                    let entry = link_path.entry;
+                    reflinked_paths_entries.push(prefix_record::PathsEntry {
+                        relative_path: entry.relative_path,
+                        path_type: entry.path_type.into(),
+                        no_link: entry.no_link,
+                        sha256: entry.sha256,
+                        size_in_bytes: entry.size_in_bytes,
+                        original_path: None,
+                        sha256_in_prefix: None,
+                        file_mode: None,
+                        prefix_placeholder: None,
+                    });
+                }
+            }
+        }
+
+        let package_linker = PackageLinker {
+            package_dir,
+            target_dir,
+            target_prefix: &target_prefix,
+            allow_symbolic_links,
+            allow_hard_links,
+            allow_ref_links,
+            platform,
+            apple_codesign_behavior: options.apple_codesign_behavior,
+            modification_time,
+            external_symlink_policy: options.external_symlink_policy,
+        };
+        let mut paths = paths_by_directory
+            .into_values()
+            .collect_vec()
+            .into_par_iter()
+            .with_min_len(100)
+            .flat_map(|link_paths| package_linker.link_paths(link_paths))
+            .collect::<Result<Vec<_>, _>>()?;
+        paths.extend(reflinked_paths_entries);
+        paths
+    };
+
+    // Wrap the Python info in an Arc so it can be shared with entry-point tasks.
+    let python_info = options.python_info;
 
     // If this package is a noarch python package we also have to create entry
     // points.
@@ -1323,7 +1458,13 @@ fn paths_have_same_filesystem_sync(a: &Path, b: &Path) -> bool {
 
 #[cfg(test)]
 mod test {
-    use std::{collections::HashSet, env::temp_dir, path::Path, process::Command, str::FromStr};
+    use std::{
+        collections::HashSet,
+        env::temp_dir,
+        path::{Path, PathBuf},
+        process::Command,
+        str::FromStr,
+    };
 
     use crate::{
         get_test_data_dir,
