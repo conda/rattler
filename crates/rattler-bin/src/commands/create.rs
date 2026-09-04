@@ -8,6 +8,7 @@ use rattler::{
     package_cache::PackageCache,
 };
 use rattler_conda_types::{ChannelConfig, PackageName, Platform, PrefixRecord, RepoDataRecord};
+use rattler_config::{ConfigBase, NoExtension};
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
 use rattler_solve::SolverTask;
 
@@ -45,6 +46,9 @@ pub struct Opt {
 }
 
 pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
+    let config = ConfigBase::<NoExtension>::load_from_default_locations("rattler")
+        .into_diagnostic()
+        .context("failed to load configuration")?;
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
     // Make the target prefix absolute
@@ -89,6 +93,7 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
             cache_dir.join(rattler_cache::PACKAGE_CACHE_DIR),
         ))
         .with_client(download_client.clone())
+        .with_max_concurrent_requests(config.concurrency.downloads)
         .with_channel_config(rattler_repodata_gateway::ChannelConfig {
             default: SourceConfig {
                 sharded_enabled: true,
@@ -203,6 +208,7 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     let install_start = Instant::now();
     let result = Installer::new()
         .with_download_client(download_client)
+        .with_max_concurrent_requests(config.concurrency.downloads)
         .with_target_platform(install_platform)
         .with_installed_packages(installed_packages)
         .with_execute_link_scripts(true)
