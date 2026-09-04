@@ -223,6 +223,8 @@ mod tests {
                     created_at: Some(jiff::Timestamp::now()),
                     repodata_revisions: RepodataRevisions::default(),
                     channel_relations: None,
+                    #[cfg(feature = "experimental-virtual-package-plugins")]
+                    virtual_package_plugins: rattler_conda_types::VirtualPackagePlugins::default(),
                 },
                 shards,
             };
