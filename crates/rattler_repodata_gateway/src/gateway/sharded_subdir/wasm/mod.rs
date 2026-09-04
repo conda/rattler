@@ -1,13 +1,15 @@
 use std::sync::Arc;
 
+use coalesced_map::{CoalescedGetError, CoalescedMap};
 use futures::future::OptionFuture;
 use rattler_conda_types::{
-    Channel, ChannelRelations, PackageName, RepodataRevisions, ShardedRepodata,
+    Channel, ChannelRelations, PackageName, RepodataRevisions, Shard, ShardedRepodata,
 };
+use rattler_digest::Sha256Hash;
 use rattler_networking::LazyClient;
 use url::Url;
 
-use super::add_trailing_slash;
+use super::{add_trailing_slash, get_records, load_shard};
 
 mod index;
 
@@ -17,7 +19,7 @@ use crate::{
     gateway::{
         error::SubdirNotFoundError,
         sharded_subdir::{
-            decode_zst_bytes_async, is_missing_sharded_repodata_status, parse_records,
+            PackageFormatSelection, decode_zst_bytes_async, is_missing_sharded_repodata_status,
         },
         subdir::{PackageRecords, SubdirClient},
     },
@@ -33,6 +35,7 @@ pub struct ShardedSubdir {
     package_base_url: Url,
     sharded_repodata: ShardedRepodata,
     concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
+    shard_cache: CoalescedMap<Sha256Hash, Arc<Shard>>,
 }
 
 impl ShardedSubdir {
@@ -110,26 +113,40 @@ impl ShardedSubdir {
             package_base_url: add_trailing_slash(&package_base_url).into_owned(),
             sharded_repodata,
             concurrent_requests_semaphore,
+            shard_cache: CoalescedMap::new(),
         })
     }
 }
 
-#[async_trait::async_trait(?Send)]
-impl SubdirClient for ShardedSubdir {
-    async fn fetch_package_records(
+impl ShardedSubdir {
+    async fn get_or_fetch_shard(
         &self,
-        name: &PackageName,
+        shard_hash: Sha256Hash,
         reporter: Option<&dyn Reporter>,
-    ) -> Result<PackageRecords, GatewayError> {
-        // Find the shard that contains the package
-        let Some(shard) = self.sharded_repodata.shards.get(name.as_normalized()) else {
-            return Ok(PackageRecords::default());
-        };
+    ) -> Result<Arc<Shard>, GatewayError> {
+        self.shard_cache
+            .get_or_try_init(shard_hash, || {
+                self.fetch_and_parse_shard(shard_hash, reporter)
+            })
+            .await
+            .map_err(|e| match e {
+                CoalescedGetError::Init(gateway_err) => gateway_err,
+                CoalescedGetError::CoalescedRequestFailed => GatewayError::IoError(
+                    "a coalesced request failed".to_string(),
+                    std::io::ErrorKind::Other.into(),
+                ),
+            })
+    }
 
+    async fn fetch_and_parse_shard(
+        &self,
+        shard_hash: Sha256Hash,
+        reporter: Option<&dyn Reporter>,
+    ) -> Result<Arc<Shard>, GatewayError> {
         // Download the shard
         let shard_url = self
             .shards_base_url
-            .join(&format!("{}.msgpack.zst", hex::encode(shard)))
+            .join(&format!("{}.msgpack.zst", hex::encode(shard_hash)))
             .expect("invalid shard url");
 
         let shard_bytes = {
@@ -176,14 +193,32 @@ impl SubdirClient for ShardedSubdir {
         };
 
         let shard_bytes = decode_zst_bytes_async(shard_bytes, shard_url).await?;
+        let shard = load_shard(shard_bytes)?;
+        Ok(Arc::new(shard))
+    }
+}
 
-        // Parse the records from the shard (includes dep extraction)
-        parse_records(
-            shard_bytes,
-            self.channel.base_url.clone(),
-            self.package_base_url.clone(),
-        )
-        .await
+#[async_trait::async_trait(?Send)]
+impl SubdirClient for ShardedSubdir {
+    async fn fetch_package_records(
+        &self,
+        name: &PackageName,
+        reporter: Option<&dyn Reporter>,
+        package_format_selection: PackageFormatSelection,
+    ) -> Result<PackageRecords, GatewayError> {
+        // Find the shard that contains the package
+        let Some(&shard_hash) = self.sharded_repodata.shards.get(name.as_normalized()) else {
+            return Ok(PackageRecords::default());
+        };
+
+        let shard = self.get_or_fetch_shard(shard_hash, reporter).await?;
+
+        Ok(get_records(
+            (*shard).clone(),
+            &self.channel.base_url,
+            &self.package_base_url,
+            package_format_selection,
+        ))
     }
 
     fn package_names(&self) -> Vec<String> {

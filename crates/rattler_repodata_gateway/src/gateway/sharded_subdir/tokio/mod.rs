@@ -9,7 +9,8 @@ use std::{
 use rattler_conda_types::Platform;
 
 use super::{
-    add_trailing_slash, decode_zst_bytes_async, is_missing_sharded_repodata_status, parse_records,
+    add_trailing_slash, decode_zst_bytes_async, get_records, is_missing_sharded_repodata_status,
+    load_shard,
 };
 use crate::{
     GatewayError, Reporter,
@@ -19,13 +20,16 @@ use crate::{
         subdir::{PackageRecords, SubdirClient},
     },
     reporter::ResponseReporterExt,
+    sparse::PackageFormatSelection,
 };
+use coalesced_map::{CoalescedGetError, CoalescedMap};
 use fs_err::tokio as tokio_fs;
 use futures::future::OptionFuture;
 use http::{HeaderValue, header::CACHE_CONTROL};
 use rattler_conda_types::{
-    Channel, ChannelRelations, PackageName, RepodataRevisions, ShardedRepodata,
+    Channel, ChannelRelations, PackageName, RepodataRevisions, Shard, ShardedRepodata,
 };
+use rattler_digest::Sha256Hash;
 use rattler_networking::LazyClient;
 use simple_spawn_blocking::tokio::run_blocking_task;
 use url::Url;
@@ -63,6 +67,7 @@ pub struct ShardedSubdir {
     io_concurrency_semaphore: Option<Arc<tokio::sync::Semaphore>>,
     cache_dir: PathBuf,
     cache_policy: ShardCachePolicy,
+    shard_cache: CoalescedMap<Sha256Hash, Arc<Shard>>,
 }
 
 impl ShardedSubdir {
@@ -143,6 +148,7 @@ impl ShardedSubdir {
             cache_policy,
             concurrent_requests_semaphore,
             io_concurrency_semaphore,
+            shard_cache: CoalescedMap::new(),
         })
     }
 
@@ -187,24 +193,37 @@ impl ShardedSubdir {
         }
         Ok(())
     }
-}
 
-#[async_trait::async_trait]
-impl SubdirClient for ShardedSubdir {
-    async fn fetch_package_records(
+    async fn get_or_fetch_shard(
         &self,
+        shard_hash: Sha256Hash,
         name: &PackageName,
         reporter: Option<&dyn Reporter>,
-    ) -> Result<PackageRecords, GatewayError> {
-        // Find the shard that contains the package
-        let Some(shard) = self.sharded_repodata.shards.get(name.as_normalized()) else {
-            return Ok(PackageRecords::default());
-        };
+    ) -> Result<Arc<Shard>, GatewayError> {
+        self.shard_cache
+            .get_or_try_init(shard_hash, || {
+                self.fetch_and_parse_shard(shard_hash, name, reporter)
+            })
+            .await
+            .map_err(|e| match e {
+                CoalescedGetError::Init(gateway_err) => gateway_err,
+                CoalescedGetError::CoalescedRequestFailed => GatewayError::IoError(
+                    "a coalesced request failed".to_string(),
+                    std::io::ErrorKind::Other.into(),
+                ),
+            })
+    }
 
+    async fn fetch_and_parse_shard(
+        &self,
+        shard_hash: Sha256Hash,
+        name: &PackageName,
+        reporter: Option<&dyn Reporter>,
+    ) -> Result<Arc<Shard>, GatewayError> {
         // Check if we already have the shard in the cache.
         let shard_cache_path = self
             .cache_dir
-            .join(format!("{}.msgpack", hex::encode(shard)));
+            .join(format!("{}.msgpack", hex::encode(shard_hash)));
 
         // Read the cached shard.
         // Acquire the IO semaphore permit before opening the file to avoid
@@ -220,12 +239,7 @@ impl SubdirClient for ShardedSubdir {
             match tokio_fs::read(&shard_cache_path).await {
                 Ok(cached_bytes) => {
                     // Decode the cached shard
-                    return parse_records(
-                        cached_bytes,
-                        self.channel.base_url.clone(),
-                        self.package_base_url.clone(),
-                    )
-                    .await;
+                    return parse_shard_blocking(cached_bytes).await.map(Arc::new);
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                     // The file is missing from the cache, we need to download
@@ -243,7 +257,7 @@ impl SubdirClient for ShardedSubdir {
             // shard *index* is a different matter and stays an error either
             // way: without it nothing is known about the subdir at all.
             if self.cache_policy.missing_shards_are_empty {
-                return Ok(PackageRecords::default());
+                return Ok(Arc::new(Shard::default()));
             }
             return Err(GatewayError::ShardNotCached(name.as_source().to_string()));
         }
@@ -251,7 +265,7 @@ impl SubdirClient for ShardedSubdir {
         // Download the shard
         let shard_url = self
             .shards_base_url
-            .join(&format!("{}.msgpack.zst", hex::encode(shard)))
+            .join(&format!("{}.msgpack.zst", hex::encode(shard_hash)))
             .expect("invalid shard url");
 
         let shard_request = self
@@ -297,17 +311,37 @@ impl SubdirClient for ShardedSubdir {
         // Create a future to write the cached bytes to disk
         let write_to_cache_fut = write_shard_to_cache(shard_cache_path, shard_bytes.clone());
 
-        // Create a future to parse the records from the shard
-        let parse_records_fut = parse_records(
-            shard_bytes,
-            self.channel.base_url.clone(),
-            self.package_base_url.clone(),
-        );
+        // Create a future to parse the shard
+        let parse_shard_fut = parse_shard_blocking(shard_bytes);
 
         // Await both futures concurrently.
-        let (_, records) = tokio::try_join!(write_to_cache_fut, parse_records_fut)?;
+        let (_, shard) = tokio::try_join!(write_to_cache_fut, parse_shard_fut)?;
 
-        Ok(records)
+        Ok(Arc::new(shard))
+    }
+}
+
+#[async_trait::async_trait]
+impl SubdirClient for ShardedSubdir {
+    async fn fetch_package_records(
+        &self,
+        name: &PackageName,
+        reporter: Option<&dyn Reporter>,
+        package_format_selection: PackageFormatSelection,
+    ) -> Result<PackageRecords, GatewayError> {
+        // Find the shard that contains the package
+        let Some(&shard_hash) = self.sharded_repodata.shards.get(name.as_normalized()) else {
+            return Ok(PackageRecords::default());
+        };
+
+        let shard = self.get_or_fetch_shard(shard_hash, name, reporter).await?;
+
+        Ok(get_records(
+            (*shard).clone(),
+            &self.channel.base_url,
+            &self.package_base_url,
+            package_format_selection,
+        ))
     }
 
     fn package_names(&self) -> Vec<String> {
@@ -321,6 +355,12 @@ impl SubdirClient for ShardedSubdir {
     fn channel_relations(&self) -> Option<&ChannelRelations> {
         self.sharded_repodata.info.channel_relations.as_ref()
     }
+}
+
+/// Deserializes shard bytes into a [`Shard`] on a blocking task, off the
+/// async runtime's worker threads.
+async fn parse_shard_blocking(shard_bytes: Vec<u8>) -> Result<Shard, GatewayError> {
+    run_blocking_task(move || load_shard(shard_bytes)).await
 }
 
 /// Atomically writes the shard bytes to the cache.

@@ -4,8 +4,8 @@ use ahash::HashMap;
 use rattler_conda_types::{ChannelRelations, PackageName, RepoDataRecord, RepodataRevisions};
 
 use super::GatewayError;
-use crate::Reporter;
 use crate::sparse::empty_repodata_revisions;
+use crate::{Reporter, sparse::PackageFormatSelection};
 use coalesced_map::{CoalescedGetError, CoalescedMap};
 
 /// Records for a single package, with precomputed unique dependency strings
@@ -138,6 +138,7 @@ impl SubdirData {
         &self,
         name: &PackageName,
         reporter: Option<Arc<dyn Reporter>>,
+        package_format_selection: PackageFormatSelection,
     ) -> Result<PackageRecords, GatewayError> {
         let client = self.client.clone();
         let name_clone = name.clone();
@@ -145,7 +146,11 @@ impl SubdirData {
         self.records
             .get_or_try_init(name.clone(), || async move {
                 client
-                    .fetch_package_records(&name_clone, reporter.as_deref())
+                    .fetch_package_records(
+                        &name_clone,
+                        reporter.as_deref(),
+                        package_format_selection,
+                    )
                     .await
             })
             .await
@@ -184,6 +189,7 @@ pub trait SubdirClient: Send + Sync {
         &self,
         name: &PackageName,
         reporter: Option<&dyn Reporter>,
+        package_format_selection: PackageFormatSelection,
     ) -> Result<PackageRecords, GatewayError>;
 
     /// Returns the names of all packages in the subdirectory.

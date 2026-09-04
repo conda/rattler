@@ -8,7 +8,10 @@ use super::{
     GatewayError,
     subdir::{PackageRecords, SubdirClient, extract_unique_deps_split},
 };
-use crate::{Reporter, sparse::SparseRepoData};
+use crate::{
+    Reporter,
+    sparse::{PackageFormatSelection, SparseRepoData},
+};
 
 /// A source of repodata records for a specific subdirectory.
 ///
@@ -27,6 +30,7 @@ pub trait RepoDataSource: Send + Sync {
         &self,
         platform: Platform,
         name: &PackageName,
+        package_format_selection: PackageFormatSelection,
     ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError>;
 
     /// Return all available package names for the given platform.
@@ -101,10 +105,11 @@ impl SubdirClient for CustomSourceClient {
         &self,
         name: &PackageName,
         _reporter: Option<&dyn Reporter>,
+        package_format_selection: PackageFormatSelection,
     ) -> Result<PackageRecords, GatewayError> {
         let records = self
             .source
-            .fetch_package_records(self.platform, name)
+            .fetch_package_records(self.platform, name, package_format_selection)
             .await?;
         let (unique_base_deps, unique_extra_deps) =
             extract_unique_deps_split(records.iter().map(|r| &**r));
