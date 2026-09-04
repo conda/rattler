@@ -2,232 +2,232 @@
 
 </head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">rattler_package_streaming/tokio/</div>async_read.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Functions that enable extracting or streaming a Conda package for objects
 <a href=#2 id=2 data-nosnippet>2</a>//! that implement the [`tokio::io::AsyncRead`] trait.
-<a href=#3 id=3 data-nosnippet>3</a>
-<a href=#4 id=4 data-nosnippet>4</a></span><span class="kw">use </span>std::path::Path;
-<a href=#5 id=5 data-nosnippet>5</a>
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>async_compression::tokio::bufread::BzDecoder;
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>async_spooled_tempfile::SpooledTempFile;
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>async_zip::base::read::stream::ZipFileReader;
-<a href=#9 id=9 data-nosnippet>9</a><span class="attr">#[cfg(feature = <span class="string">"reqwest"</span>)]
-<a href=#10 id=10 data-nosnippet>10</a></span><span class="kw">use </span>futures_util::StreamExt;
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>tokio::io::{AsyncRead, AsyncSeekExt};
-<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
-<a href=#13 id=13 data-nosnippet>13</a>
-<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>crate::{ExtractError, ExtractResult, read::SizeCountingReader};
-<a href=#15 id=15 data-nosnippet>15</a>
-<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span><span class="kw">super</span>::shared::{DEFAULT_BUF_SIZE, extract_tar_zst_entry, unpack_tar_archive};
-<a href=#17 id=17 data-nosnippet>17</a>
-<a href=#18 id=18 data-nosnippet>18</a><span class="doccomment">/// Extracts the contents a `.tar.bz2` package archive using fully async implementation.
-<a href=#19 id=19 data-nosnippet>19</a></span><span class="kw">pub async fn </span>extract_tar_bz2(
-<a href=#20 id=20 data-nosnippet>20</a>    reader: <span class="kw">impl </span>AsyncRead + Send + Unpin + <span class="lifetime">'static</span>,
-<a href=#21 id=21 data-nosnippet>21</a>    destination: <span class="kw-2">&amp;</span>Path,
-<a href=#22 id=22 data-nosnippet>22</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ExtractResult, ExtractError&gt; {
-<a href=#23 id=23 data-nosnippet>23</a>    <span class="comment">// Ensure the destination directory exists
-<a href=#24 id=24 data-nosnippet>24</a>    </span>tokio::fs::create_dir_all(destination)
-<a href=#25 id=25 data-nosnippet>25</a>        .<span class="kw">await
-<a href=#26 id=26 data-nosnippet>26</a>        </span>.map_err(ExtractError::CouldNotCreateDestination)<span class="question-mark">?</span>;
-<a href=#27 id=27 data-nosnippet>27</a>
-<a href=#28 id=28 data-nosnippet>28</a>    <span class="comment">// Clone destination for the async block
-<a href=#29 id=29 data-nosnippet>29</a>    </span><span class="kw">let </span>destination = destination.to_owned();
-<a href=#30 id=30 data-nosnippet>30</a>
-<a href=#31 id=31 data-nosnippet>31</a>    <span class="comment">// Wrap the reading in additional readers that will compute the hashes while extracting
-<a href=#32 id=32 data-nosnippet>32</a>    </span><span class="kw">let </span>sha256_reader = rattler_digest::HashingReader::&lt;<span class="kw">_</span>, rattler_digest::Sha256&gt;::new(reader);
-<a href=#33 id=33 data-nosnippet>33</a>    <span class="kw">let </span><span class="kw-2">mut </span>md5_reader =
-<a href=#34 id=34 data-nosnippet>34</a>        rattler_digest::HashingReader::&lt;<span class="kw">_</span>, rattler_digest::Md5&gt;::new(sha256_reader);
-<a href=#35 id=35 data-nosnippet>35</a>    <span class="kw">let </span><span class="kw-2">mut </span>size_reader = SizeCountingReader::new(<span class="kw-2">&amp;mut </span>md5_reader);
-<a href=#36 id=36 data-nosnippet>36</a>
-<a href=#37 id=37 data-nosnippet>37</a>    <span class="comment">// Create a buffered reader for better performance
-<a href=#38 id=38 data-nosnippet>38</a>    </span><span class="kw">let </span>buf_reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, <span class="kw-2">&amp;mut </span>size_reader);
-<a href=#39 id=39 data-nosnippet>39</a>
-<a href=#40 id=40 data-nosnippet>40</a>    <span class="comment">// Decompress bzip2 asynchronously
-<a href=#41 id=41 data-nosnippet>41</a>    </span><span class="kw">let </span>decoder = BzDecoder::new(buf_reader);
-<a href=#42 id=42 data-nosnippet>42</a>
-<a href=#43 id=43 data-nosnippet>43</a>    <span class="comment">// Build archive with optimized settings for faster extraction:
-<a href=#44 id=44 data-nosnippet>44</a>    // - Skip automatic mtime preservation (we set mtimes manually with safe clamping)
-<a href=#45 id=45 data-nosnippet>45</a>    // - Skip automatic permission handling (we'll set executable bits manually)
-<a href=#46 id=46 data-nosnippet>46</a>    // - Skip extended attributes for better performance
-<a href=#47 id=47 data-nosnippet>47</a>    </span><span class="kw">let </span>archive = tokio_tar::ArchiveBuilder::new(decoder)
-<a href=#48 id=48 data-nosnippet>48</a>        .set_preserve_mtime(<span class="bool-val">false</span>)
-<a href=#49 id=49 data-nosnippet>49</a>        .set_preserve_permissions(<span class="bool-val">false</span>)
-<a href=#50 id=50 data-nosnippet>50</a>        .set_unpack_xattrs(<span class="bool-val">false</span>)
-<a href=#51 id=51 data-nosnippet>51</a>        <span class="comment">// We need this setting otherwise some packages in conda-forge will
-<a href=#52 id=52 data-nosnippet>52</a>        // not extract. However, we are checking much better in rattler-build and hopefully
-<a href=#53 id=53 data-nosnippet>53</a>        // one day can remove this.
-<a href=#54 id=54 data-nosnippet>54</a>        </span>.set_allow_external_symlinks(<span class="bool-val">true</span>)
-<a href=#55 id=55 data-nosnippet>55</a>        .build();
-<a href=#56 id=56 data-nosnippet>56</a>
-<a href=#57 id=57 data-nosnippet>57</a>    <span class="comment">// Unpack entries manually, preserving only executable bits on Unix
-<a href=#58 id=58 data-nosnippet>58</a>    </span>unpack_tar_archive(archive, <span class="kw-2">&amp;</span>destination).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#59 id=59 data-nosnippet>59</a>
-<a href=#60 id=60 data-nosnippet>60</a>    <span class="comment">// Read the file to the end to make sure the hash is properly computed
-<a href=#61 id=61 data-nosnippet>61</a>    </span>tokio::io::copy(<span class="kw-2">&amp;mut </span>size_reader, <span class="kw-2">&amp;mut </span>tokio::io::sink())
-<a href=#62 id=62 data-nosnippet>62</a>        .<span class="kw">await
-<a href=#63 id=63 data-nosnippet>63</a>        </span>.map_err(ExtractError::IoError)<span class="question-mark">?</span>;
-<a href=#64 id=64 data-nosnippet>64</a>
-<a href=#65 id=65 data-nosnippet>65</a>    <span class="comment">// Get the size and hashes
-<a href=#66 id=66 data-nosnippet>66</a>    </span><span class="kw">let </span>(<span class="kw">_</span>, total_size) = size_reader.finalize();
-<a href=#67 id=67 data-nosnippet>67</a>    <span class="kw">let </span>(sha256_reader, md5) = md5_reader.finalize();
-<a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">let </span>(<span class="kw">_</span>, sha256) = sha256_reader.finalize();
-<a href=#69 id=69 data-nosnippet>69</a>
-<a href=#70 id=70 data-nosnippet>70</a>    <span class="comment">// Validate that we actually read some data from the stream.
-<a href=#71 id=71 data-nosnippet>71</a>    // If total_size is 0, it likely means the stream was truncated or the bzip2
-<a href=#72 id=72 data-nosnippet>72</a>    // decompressor silently failed without detecting an incomplete stream.
-<a href=#73 id=73 data-nosnippet>73</a>    </span><span class="kw">if </span>total_size == <span class="number">0 </span>{
-<a href=#74 id=74 data-nosnippet>74</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ExtractError::IoError(std::io::Error::new(
-<a href=#75 id=75 data-nosnippet>75</a>            std::io::ErrorKind::UnexpectedEof,
-<a href=#76 id=76 data-nosnippet>76</a>            <span class="string">"no data was read from the package stream - the stream may have been truncated"</span>,
-<a href=#77 id=77 data-nosnippet>77</a>        )));
-<a href=#78 id=78 data-nosnippet>78</a>    }
-<a href=#79 id=79 data-nosnippet>79</a>
-<a href=#80 id=80 data-nosnippet>80</a>    <span class="prelude-val">Ok</span>(ExtractResult {
-<a href=#81 id=81 data-nosnippet>81</a>        sha256,
-<a href=#82 id=82 data-nosnippet>82</a>        md5,
-<a href=#83 id=83 data-nosnippet>83</a>        total_size,
-<a href=#84 id=84 data-nosnippet>84</a>    })
-<a href=#85 id=85 data-nosnippet>85</a>}
-<a href=#86 id=86 data-nosnippet>86</a>
-<a href=#87 id=87 data-nosnippet>87</a><span class="doccomment">/// Extracts the contents of a `.conda` package archive using fully async implementation.
-<a href=#88 id=88 data-nosnippet>88</a>/// This will perform on-the-fly decompression by streaming the reader.
-<a href=#89 id=89 data-nosnippet>89</a></span><span class="kw">pub async fn </span>extract_conda(
-<a href=#90 id=90 data-nosnippet>90</a>    reader: <span class="kw">impl </span>AsyncRead + Send + Unpin + <span class="lifetime">'static</span>,
-<a href=#91 id=91 data-nosnippet>91</a>    destination: <span class="kw-2">&amp;</span>Path,
-<a href=#92 id=92 data-nosnippet>92</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ExtractResult, ExtractError&gt; {
-<a href=#93 id=93 data-nosnippet>93</a>    <span class="comment">// Ensure the destination directory exists
-<a href=#94 id=94 data-nosnippet>94</a>    </span>tokio::fs::create_dir_all(destination)
-<a href=#95 id=95 data-nosnippet>95</a>        .<span class="kw">await
-<a href=#96 id=96 data-nosnippet>96</a>        </span>.map_err(ExtractError::CouldNotCreateDestination)<span class="question-mark">?</span>;
-<a href=#97 id=97 data-nosnippet>97</a>
-<a href=#98 id=98 data-nosnippet>98</a>    <span class="comment">// Clone destination for the async block
-<a href=#99 id=99 data-nosnippet>99</a>    </span><span class="kw">let </span>destination = destination.to_owned();
-<a href=#100 id=100 data-nosnippet>100</a>
-<a href=#101 id=101 data-nosnippet>101</a>    <span class="comment">// Wrap the reading in additional readers that will compute the hashes while extracting
-<a href=#102 id=102 data-nosnippet>102</a>    </span><span class="kw">let </span>sha256_reader = rattler_digest::HashingReader::&lt;<span class="kw">_</span>, rattler_digest::Sha256&gt;::new(reader);
-<a href=#103 id=103 data-nosnippet>103</a>    <span class="kw">let </span><span class="kw-2">mut </span>md5_reader =
-<a href=#104 id=104 data-nosnippet>104</a>        rattler_digest::HashingReader::&lt;<span class="kw">_</span>, rattler_digest::Md5&gt;::new(sha256_reader);
-<a href=#105 id=105 data-nosnippet>105</a>    <span class="kw">let </span><span class="kw-2">mut </span>size_reader = SizeCountingReader::new(<span class="kw-2">&amp;mut </span>md5_reader);
-<a href=#106 id=106 data-nosnippet>106</a>
-<a href=#107 id=107 data-nosnippet>107</a>    <span class="comment">// Convert to futures traits and create a buffered reader (async_zip uses futures traits)
-<a href=#108 id=108 data-nosnippet>108</a>    </span><span class="kw">let </span>compat_reader = (<span class="kw-2">&amp;mut </span>size_reader).compat();
-<a href=#109 id=109 data-nosnippet>109</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf_reader = futures::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, compat_reader);
-<a href=#110 id=110 data-nosnippet>110</a>
-<a href=#111 id=111 data-nosnippet>111</a>    <span class="comment">// Create a ZIP reader for streaming
-<a href=#112 id=112 data-nosnippet>112</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>zip_reader = ZipFileReader::new(<span class="kw-2">&amp;mut </span>buf_reader);
-<a href=#113 id=113 data-nosnippet>113</a>
-<a href=#114 id=114 data-nosnippet>114</a>    <span class="comment">// Process each ZIP entry
-<a href=#115 id=115 data-nosnippet>115</a>    </span><span class="kw">while let </span><span class="prelude-val">Some</span>(<span class="kw-2">mut </span>entry) = zip_reader
-<a href=#116 id=116 data-nosnippet>116</a>        .next_with_entry()
-<a href=#117 id=117 data-nosnippet>117</a>        .<span class="kw">await
-<a href=#118 id=118 data-nosnippet>118</a>        </span>.map_err(|e| ExtractError::IoError(std::io::Error::other(e)))<span class="question-mark">?
-<a href=#119 id=119 data-nosnippet>119</a>    </span>{
-<a href=#120 id=120 data-nosnippet>120</a>        <span class="kw">let </span>filename = entry.reader().entry().filename().as_str().map_err(|e| {
-<a href=#121 id=121 data-nosnippet>121</a>            ExtractError::IoError(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
-<a href=#122 id=122 data-nosnippet>122</a>        })<span class="question-mark">?</span>;
-<a href=#123 id=123 data-nosnippet>123</a>
-<a href=#124 id=124 data-nosnippet>124</a>        <span class="comment">// Only extract .tar.zst files
-<a href=#125 id=125 data-nosnippet>125</a>        </span><span class="kw">if </span>filename.ends_with(<span class="string">".tar.zst"</span>) {
-<a href=#126 id=126 data-nosnippet>126</a>            <span class="comment">// Get a reader for the entry and convert from futures traits to tokio traits
-<a href=#127 id=127 data-nosnippet>127</a>            </span><span class="kw">let </span><span class="kw-2">mut </span>compat_entry = entry.reader_mut().compat();
-<a href=#128 id=128 data-nosnippet>128</a>            extract_tar_zst_entry(<span class="kw-2">&amp;mut </span>compat_entry, <span class="kw-2">&amp;</span>destination).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#129 id=129 data-nosnippet>129</a>        }
+<a href=#3 id=3 data-nosnippet>3</a>//!
+<a href=#4 id=4 data-nosnippet>4</a>//! Extraction runs on a blocking worker thread. The async reader is pumped
+<a href=#5 id=5 data-nosnippet>5</a>//! into a bounded channel of fixed-size chunks, so downloading continues while
+<a href=#6 id=6 data-nosnippet>6</a>//! the worker decompresses and writes files with plain blocking I/O.
+<a href=#7 id=7 data-nosnippet>7</a>
+<a href=#8 id=8 data-nosnippet>8</a></span><span class="kw">use </span>std::{
+<a href=#9 id=9 data-nosnippet>9</a>    io::Read,
+<a href=#10 id=10 data-nosnippet>10</a>    path::Path,
+<a href=#11 id=11 data-nosnippet>11</a>    sync::{
+<a href=#12 id=12 data-nosnippet>12</a>        Arc,
+<a href=#13 id=13 data-nosnippet>13</a>        atomic::{AtomicBool, Ordering},
+<a href=#14 id=14 data-nosnippet>14</a>    },
+<a href=#15 id=15 data-nosnippet>15</a>};
+<a href=#16 id=16 data-nosnippet>16</a>
+<a href=#17 id=17 data-nosnippet>17</a><span class="attr">#[cfg(feature = <span class="string">"reqwest"</span>)]
+<a href=#18 id=18 data-nosnippet>18</a></span><span class="kw">use </span>futures_util::StreamExt;
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>futures_util::future::{<span class="self">self</span>, Either};
+<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>rattler_digest::{Md5, Sha256, digest::Digest};
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>tokio::io::{AsyncRead, AsyncReadExt};
+<a href=#22 id=22 data-nosnippet>22</a>
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>crate::{ExtractError, ExtractResult};
+<a href=#24 id=24 data-nosnippet>24</a>
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span><span class="kw">super</span>::shared::DEFAULT_BUF_SIZE;
+<a href=#26 id=26 data-nosnippet>26</a>
+<a href=#27 id=27 data-nosnippet>27</a><span class="doccomment">/// Bytes per chunk handed to the extraction worker. Chunks are filled
+<a href=#28 id=28 data-nosnippet>28</a>/// completely before they are sent, so the worker wakes up once per chunk
+<a href=#29 id=29 data-nosnippet>29</a>/// rather than once per network read.
+<a href=#30 id=30 data-nosnippet>30</a></span><span class="kw">const </span>CHUNK_SIZE: usize = DEFAULT_BUF_SIZE;
+<a href=#31 id=31 data-nosnippet>31</a>
+<a href=#32 id=32 data-nosnippet>32</a><span class="doccomment">/// Chunks the download can run ahead of the extraction worker.
+<a href=#33 id=33 data-nosnippet>33</a></span><span class="kw">const </span>CHUNKS_IN_FLIGHT: usize = <span class="number">4</span>;
+<a href=#34 id=34 data-nosnippet>34</a>
+<a href=#35 id=35 data-nosnippet>35</a><span class="doccomment">/// Extracts the contents of a `.tar.bz2` package archive.
+<a href=#36 id=36 data-nosnippet>36</a></span><span class="kw">pub async fn </span>extract_tar_bz2(
+<a href=#37 id=37 data-nosnippet>37</a>    reader: <span class="kw">impl </span>AsyncRead + Unpin,
+<a href=#38 id=38 data-nosnippet>38</a>    destination: <span class="kw-2">&amp;</span>Path,
+<a href=#39 id=39 data-nosnippet>39</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ExtractResult, ExtractError&gt; {
+<a href=#40 id=40 data-nosnippet>40</a>    extract_blocking(reader, destination, |reader, destination| {
+<a href=#41 id=41 data-nosnippet>41</a>        <span class="kw">crate</span>::read::extract_tar_bz2_without_hashing(reader, destination)
+<a href=#42 id=42 data-nosnippet>42</a>    })
+<a href=#43 id=43 data-nosnippet>43</a>    .<span class="kw">await
+<a href=#44 id=44 data-nosnippet>44</a></span>}
+<a href=#45 id=45 data-nosnippet>45</a>
+<a href=#46 id=46 data-nosnippet>46</a><span class="doccomment">/// Extracts the contents of a `.conda` package archive, decompressing the
+<a href=#47 id=47 data-nosnippet>47</a>/// stream as it arrives.
+<a href=#48 id=48 data-nosnippet>48</a></span><span class="kw">pub async fn </span>extract_conda(
+<a href=#49 id=49 data-nosnippet>49</a>    reader: <span class="kw">impl </span>AsyncRead + Unpin,
+<a href=#50 id=50 data-nosnippet>50</a>    destination: <span class="kw-2">&amp;</span>Path,
+<a href=#51 id=51 data-nosnippet>51</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ExtractResult, ExtractError&gt; {
+<a href=#52 id=52 data-nosnippet>52</a>    extract_blocking(reader, destination, |reader, destination| {
+<a href=#53 id=53 data-nosnippet>53</a>        <span class="kw">crate</span>::read::extract_conda_via_streaming_without_hashing(reader, destination)
+<a href=#54 id=54 data-nosnippet>54</a>    })
+<a href=#55 id=55 data-nosnippet>55</a>    .<span class="kw">await
+<a href=#56 id=56 data-nosnippet>56</a></span>}
+<a href=#57 id=57 data-nosnippet>57</a>
+<a href=#58 id=58 data-nosnippet>58</a><span class="doccomment">/// Extracts the contents of a `.conda` package archive by fully reading the
+<a href=#59 id=59 data-nosnippet>59</a>/// stream before decompressing. This is the fallback for archives that cannot
+<a href=#60 id=60 data-nosnippet>60</a>/// be extracted while streaming, such as those using data descriptors.
+<a href=#61 id=61 data-nosnippet>61</a></span><span class="kw">pub async fn </span>extract_conda_via_buffering(
+<a href=#62 id=62 data-nosnippet>62</a>    reader: <span class="kw">impl </span>AsyncRead + Unpin,
+<a href=#63 id=63 data-nosnippet>63</a>    destination: <span class="kw-2">&amp;</span>Path,
+<a href=#64 id=64 data-nosnippet>64</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ExtractResult, ExtractError&gt; {
+<a href=#65 id=65 data-nosnippet>65</a>    extract_blocking(reader, destination, |reader, destination| {
+<a href=#66 id=66 data-nosnippet>66</a>        <span class="kw">crate</span>::read::extract_conda_via_buffering_without_hashing(reader, destination)
+<a href=#67 id=67 data-nosnippet>67</a>    })
+<a href=#68 id=68 data-nosnippet>68</a>    .<span class="kw">await
+<a href=#69 id=69 data-nosnippet>69</a></span>}
+<a href=#70 id=70 data-nosnippet>70</a>
+<a href=#71 id=71 data-nosnippet>71</a><span class="doccomment">/// A blocking reader over chunks received from the async pump.
+<a href=#72 id=72 data-nosnippet>72</a></span><span class="kw">struct </span>ChunkReader {
+<a href=#73 id=73 data-nosnippet>73</a>    receiver: tokio::sync::mpsc::Receiver&lt;Vec&lt;u8&gt;&gt;,
+<a href=#74 id=74 data-nosnippet>74</a>    chunk: Vec&lt;u8&gt;,
+<a href=#75 id=75 data-nosnippet>75</a>    position: usize,
+<a href=#76 id=76 data-nosnippet>76</a>    cancelled: Arc&lt;AtomicBool&gt;,
+<a href=#77 id=77 data-nosnippet>77</a>}
+<a href=#78 id=78 data-nosnippet>78</a>
+<a href=#79 id=79 data-nosnippet>79</a><span class="kw">impl </span>Read <span class="kw">for </span>ChunkReader {
+<a href=#80 id=80 data-nosnippet>80</a>    <span class="kw">fn </span>read(<span class="kw-2">&amp;mut </span><span class="self">self</span>, buf: <span class="kw-2">&amp;mut </span>[u8]) -&gt; std::io::Result&lt;usize&gt; {
+<a href=#81 id=81 data-nosnippet>81</a>        <span class="comment">// Stop at the next read once the extraction future is gone, instead
+<a href=#82 id=82 data-nosnippet>82</a>        // of draining buffered chunks into the destination first. Not
+<a href=#83 id=83 data-nosnippet>83</a>        // `Interrupted`: `io::copy` and `read_exact` retry on that kind.
+<a href=#84 id=84 data-nosnippet>84</a>        </span><span class="kw">if </span><span class="self">self</span>.cancelled.load(Ordering::Relaxed) {
+<a href=#85 id=85 data-nosnippet>85</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(std::io::Error::other(<span class="string">"extraction was cancelled"</span>));
+<a href=#86 id=86 data-nosnippet>86</a>        }
+<a href=#87 id=87 data-nosnippet>87</a>        <span class="kw">while </span><span class="self">self</span>.position == <span class="self">self</span>.chunk.len() {
+<a href=#88 id=88 data-nosnippet>88</a>            <span class="comment">// A closed channel means the pump finished or was dropped; either
+<a href=#89 id=89 data-nosnippet>89</a>            // way there is no more data.
+<a href=#90 id=90 data-nosnippet>90</a>            </span><span class="kw">let </span><span class="prelude-val">Some</span>(chunk) = <span class="self">self</span>.receiver.blocking_recv() <span class="kw">else </span>{
+<a href=#91 id=91 data-nosnippet>91</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="number">0</span>);
+<a href=#92 id=92 data-nosnippet>92</a>            };
+<a href=#93 id=93 data-nosnippet>93</a>            <span class="self">self</span>.chunk = chunk;
+<a href=#94 id=94 data-nosnippet>94</a>            <span class="self">self</span>.position = <span class="number">0</span>;
+<a href=#95 id=95 data-nosnippet>95</a>        }
+<a href=#96 id=96 data-nosnippet>96</a>        <span class="kw">let </span>available = <span class="kw-2">&amp;</span><span class="self">self</span>.chunk[<span class="self">self</span>.position..];
+<a href=#97 id=97 data-nosnippet>97</a>        <span class="kw">let </span>len = available.len().min(buf.len());
+<a href=#98 id=98 data-nosnippet>98</a>        buf[..len].copy_from_slice(<span class="kw-2">&amp;</span>available[..len]);
+<a href=#99 id=99 data-nosnippet>99</a>        <span class="self">self</span>.position += len;
+<a href=#100 id=100 data-nosnippet>100</a>        <span class="prelude-val">Ok</span>(len)
+<a href=#101 id=101 data-nosnippet>101</a>    }
+<a href=#102 id=102 data-nosnippet>102</a>}
+<a href=#103 id=103 data-nosnippet>103</a>
+<a href=#104 id=104 data-nosnippet>104</a><span class="doccomment">/// Reads until `buf` is full or the reader reaches end-of-file. Returns the
+<a href=#105 id=105 data-nosnippet>105</a>/// number of bytes read.
+<a href=#106 id=106 data-nosnippet>106</a></span><span class="kw">async fn </span>read_exact_or_eof&lt;R: AsyncRead + Unpin&gt;(
+<a href=#107 id=107 data-nosnippet>107</a>    reader: <span class="kw-2">&amp;mut </span>R,
+<a href=#108 id=108 data-nosnippet>108</a>    buf: <span class="kw-2">&amp;mut </span>[u8],
+<a href=#109 id=109 data-nosnippet>109</a>) -&gt; std::io::Result&lt;usize&gt; {
+<a href=#110 id=110 data-nosnippet>110</a>    <span class="kw">let </span><span class="kw-2">mut </span>filled = <span class="number">0</span>;
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">while </span>filled &lt; buf.len() {
+<a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">let </span>read = reader.read(<span class="kw-2">&amp;mut </span>buf[filled..]).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#113 id=113 data-nosnippet>113</a>        <span class="kw">if </span>read == <span class="number">0 </span>{
+<a href=#114 id=114 data-nosnippet>114</a>            <span class="kw">break</span>;
+<a href=#115 id=115 data-nosnippet>115</a>        }
+<a href=#116 id=116 data-nosnippet>116</a>        filled += read;
+<a href=#117 id=117 data-nosnippet>117</a>    }
+<a href=#118 id=118 data-nosnippet>118</a>    <span class="prelude-val">Ok</span>(filled)
+<a href=#119 id=119 data-nosnippet>119</a>}
+<a href=#120 id=120 data-nosnippet>120</a>
+<a href=#121 id=121 data-nosnippet>121</a><span class="doccomment">/// Sets the cancellation flag when dropped, so a worker whose future went
+<a href=#122 id=122 data-nosnippet>122</a>/// away stops at its next read.
+<a href=#123 id=123 data-nosnippet>123</a></span><span class="kw">struct </span>CancelOnDrop(Arc&lt;AtomicBool&gt;);
+<a href=#124 id=124 data-nosnippet>124</a>
+<a href=#125 id=125 data-nosnippet>125</a><span class="kw">impl </span>Drop <span class="kw">for </span>CancelOnDrop {
+<a href=#126 id=126 data-nosnippet>126</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#127 id=127 data-nosnippet>127</a>        <span class="self">self</span>.<span class="number">0</span>.store(<span class="bool-val">true</span>, Ordering::Relaxed);
+<a href=#128 id=128 data-nosnippet>128</a>    }
+<a href=#129 id=129 data-nosnippet>129</a>}
 <a href=#130 id=130 data-nosnippet>130</a>
-<a href=#131 id=131 data-nosnippet>131</a>        <span class="comment">// Skip to the next entry (required by async_zip API)
-<a href=#132 id=132 data-nosnippet>132</a>        </span>(.., zip_reader) = entry
-<a href=#133 id=133 data-nosnippet>133</a>            .skip()
-<a href=#134 id=134 data-nosnippet>134</a>            .<span class="kw">await
-<a href=#135 id=135 data-nosnippet>135</a>            </span>.map_err(|e| ExtractError::IoError(std::io::Error::other(e)))<span class="question-mark">?</span>;
-<a href=#136 id=136 data-nosnippet>136</a>    }
-<a href=#137 id=137 data-nosnippet>137</a>
-<a href=#138 id=138 data-nosnippet>138</a>    <span class="comment">// Read any remaining data to ensure hash is properly computed
-<a href=#139 id=139 data-nosnippet>139</a>    // Use futures copy since we're already in futures ecosystem
-<a href=#140 id=140 data-nosnippet>140</a>    </span>futures::io::copy(<span class="kw-2">&amp;mut </span>buf_reader, <span class="kw-2">&amp;mut </span>futures::io::sink())
-<a href=#141 id=141 data-nosnippet>141</a>        .<span class="kw">await
-<a href=#142 id=142 data-nosnippet>142</a>        </span>.map_err(ExtractError::IoError)<span class="question-mark">?</span>;
-<a href=#143 id=143 data-nosnippet>143</a>
-<a href=#144 id=144 data-nosnippet>144</a>    <span class="comment">// Get the size and hashes
-<a href=#145 id=145 data-nosnippet>145</a>    </span><span class="kw">let </span>(<span class="kw">_</span>, total_size) = size_reader.finalize();
-<a href=#146 id=146 data-nosnippet>146</a>    <span class="kw">let </span>(sha256_reader, md5) = md5_reader.finalize();
-<a href=#147 id=147 data-nosnippet>147</a>    <span class="kw">let </span>(<span class="kw">_</span>, sha256) = sha256_reader.finalize();
-<a href=#148 id=148 data-nosnippet>148</a>
-<a href=#149 id=149 data-nosnippet>149</a>    <span class="comment">// Validate that we actually read some data from the stream
-<a href=#150 id=150 data-nosnippet>150</a>    </span><span class="kw">if </span>total_size == <span class="number">0 </span>{
-<a href=#151 id=151 data-nosnippet>151</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ExtractError::IoError(std::io::Error::new(
-<a href=#152 id=152 data-nosnippet>152</a>            std::io::ErrorKind::UnexpectedEof,
-<a href=#153 id=153 data-nosnippet>153</a>            <span class="string">"no data was read from the package stream - the stream may have been truncated"</span>,
-<a href=#154 id=154 data-nosnippet>154</a>        )));
-<a href=#155 id=155 data-nosnippet>155</a>    }
-<a href=#156 id=156 data-nosnippet>156</a>
-<a href=#157 id=157 data-nosnippet>157</a>    <span class="prelude-val">Ok</span>(ExtractResult {
-<a href=#158 id=158 data-nosnippet>158</a>        sha256,
-<a href=#159 id=159 data-nosnippet>159</a>        md5,
-<a href=#160 id=160 data-nosnippet>160</a>        total_size,
-<a href=#161 id=161 data-nosnippet>161</a>    })
-<a href=#162 id=162 data-nosnippet>162</a>}
-<a href=#163 id=163 data-nosnippet>163</a>
-<a href=#164 id=164 data-nosnippet>164</a><span class="doccomment">/// Extracts the contents of a .conda package archive by fully reading the
-<a href=#165 id=165 data-nosnippet>165</a>/// stream and then decompressing. This is a fallback method for when streaming fails.
-<a href=#166 id=166 data-nosnippet>166</a>///
-<a href=#167 id=167 data-nosnippet>167</a>/// This implementation uses a `SpooledTempFile` (5MB in-memory threshold) to buffer
-<a href=#168 id=168 data-nosnippet>168</a>/// the package data, then uses the seek-based ZIP API for efficient extraction.
-<a href=#169 id=169 data-nosnippet>169</a></span><span class="kw">pub async fn </span>extract_conda_via_buffering(
-<a href=#170 id=170 data-nosnippet>170</a>    reader: <span class="kw">impl </span>AsyncRead + Send + Unpin + <span class="lifetime">'static</span>,
-<a href=#171 id=171 data-nosnippet>171</a>    destination: <span class="kw-2">&amp;</span>Path,
-<a href=#172 id=172 data-nosnippet>172</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ExtractResult, ExtractError&gt; {
-<a href=#173 id=173 data-nosnippet>173</a>    <span class="comment">// Delete destination first if it exists, as this method is usually used as a fallback
-<a href=#174 id=174 data-nosnippet>174</a>    </span><span class="kw">if </span>tokio::fs::try_exists(destination)
-<a href=#175 id=175 data-nosnippet>175</a>        .<span class="kw">await
-<a href=#176 id=176 data-nosnippet>176</a>        </span>.map_err(ExtractError::IoError)<span class="question-mark">?
-<a href=#177 id=177 data-nosnippet>177</a>    </span>{
-<a href=#178 id=178 data-nosnippet>178</a>        tokio::fs::remove_dir_all(destination)
-<a href=#179 id=179 data-nosnippet>179</a>            .<span class="kw">await
-<a href=#180 id=180 data-nosnippet>180</a>            </span>.map_err(ExtractError::CouldNotCreateDestination)<span class="question-mark">?</span>;
-<a href=#181 id=181 data-nosnippet>181</a>    }
-<a href=#182 id=182 data-nosnippet>182</a>
-<a href=#183 id=183 data-nosnippet>183</a>    <span class="comment">// Ensure the destination directory exists
-<a href=#184 id=184 data-nosnippet>184</a>    </span>tokio::fs::create_dir_all(destination)
-<a href=#185 id=185 data-nosnippet>185</a>        .<span class="kw">await
-<a href=#186 id=186 data-nosnippet>186</a>        </span>.map_err(ExtractError::CouldNotCreateDestination)<span class="question-mark">?</span>;
-<a href=#187 id=187 data-nosnippet>187</a>
-<a href=#188 id=188 data-nosnippet>188</a>    <span class="comment">// Clone destination for the async block
-<a href=#189 id=189 data-nosnippet>189</a>    </span><span class="kw">let </span>destination = destination.to_owned();
-<a href=#190 id=190 data-nosnippet>190</a>
-<a href=#191 id=191 data-nosnippet>191</a>    <span class="comment">// Wrap the reading in additional readers that will compute the hashes while extracting
-<a href=#192 id=192 data-nosnippet>192</a>    </span><span class="kw">let </span>sha256_reader = rattler_digest::HashingReader::&lt;<span class="kw">_</span>, rattler_digest::Sha256&gt;::new(reader);
-<a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">let </span><span class="kw-2">mut </span>md5_reader =
-<a href=#194 id=194 data-nosnippet>194</a>        rattler_digest::HashingReader::&lt;<span class="kw">_</span>, rattler_digest::Md5&gt;::new(sha256_reader);
-<a href=#195 id=195 data-nosnippet>195</a>    <span class="kw">let </span><span class="kw-2">mut </span>size_reader = SizeCountingReader::new(<span class="kw-2">&amp;mut </span>md5_reader);
-<a href=#196 id=196 data-nosnippet>196</a>
-<a href=#197 id=197 data-nosnippet>197</a>    <span class="comment">// Create a SpooledTempFile (uses memory up to 5MB, then switches to disk)
-<a href=#198 id=198 data-nosnippet>198</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>spooled_file = SpooledTempFile::new(<span class="number">5 </span>* <span class="number">1024 </span>* <span class="number">1024</span>);
-<a href=#199 id=199 data-nosnippet>199</a>
-<a href=#200 id=200 data-nosnippet>200</a>    <span class="comment">// Copy from reader to spooled file while computing hashes
-<a href=#201 id=201 data-nosnippet>201</a>    </span>tokio::io::copy(<span class="kw-2">&amp;mut </span>size_reader, <span class="kw-2">&amp;mut </span>spooled_file)
-<a href=#202 id=202 data-nosnippet>202</a>        .<span class="kw">await
-<a href=#203 id=203 data-nosnippet>203</a>        </span>.map_err(ExtractError::IoError)<span class="question-mark">?</span>;
-<a href=#204 id=204 data-nosnippet>204</a>
-<a href=#205 id=205 data-nosnippet>205</a>    <span class="comment">// Get the size and hashes now that we've read everything
-<a href=#206 id=206 data-nosnippet>206</a>    </span><span class="kw">let </span>(<span class="kw">_</span>, total_size) = size_reader.finalize();
-<a href=#207 id=207 data-nosnippet>207</a>    <span class="kw">let </span>(sha256_reader, md5) = md5_reader.finalize();
-<a href=#208 id=208 data-nosnippet>208</a>    <span class="kw">let </span>(<span class="kw">_</span>, sha256) = sha256_reader.finalize();
-<a href=#209 id=209 data-nosnippet>209</a>
-<a href=#210 id=210 data-nosnippet>210</a>    <span class="comment">// Validate that we actually read some data from the stream
-<a href=#211 id=211 data-nosnippet>211</a>    </span><span class="kw">if </span>total_size == <span class="number">0 </span>{
-<a href=#212 id=212 data-nosnippet>212</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ExtractError::IoError(std::io::Error::new(
-<a href=#213 id=213 data-nosnippet>213</a>            std::io::ErrorKind::UnexpectedEof,
-<a href=#214 id=214 data-nosnippet>214</a>            <span class="string">"no data was read from the package stream - the stream may have been truncated"</span>,
-<a href=#215 id=215 data-nosnippet>215</a>        )));
-<a href=#216 id=216 data-nosnippet>216</a>    }
-<a href=#217 id=217 data-nosnippet>217</a>
-<a href=#218 id=218 data-nosnippet>218</a>    <span class="comment">// Rewind the spooled file to the beginning
-<a href=#219 id=219 data-nosnippet>219</a>    </span>spooled_file.rewind().<span class="kw">await</span>.map_err(ExtractError::IoError)<span class="question-mark">?</span>;
-<a href=#220 id=220 data-nosnippet>220</a>
-<a href=#221 id=221 data-nosnippet>221</a>    <span class="comment">// Use the seek-based extraction (doesn't recompute hashes, we already have them)
-<a href=#222 id=222 data-nosnippet>222</a>    </span><span class="kw">crate</span>::tokio::async_seek::extract_conda(spooled_file, <span class="kw-2">&amp;</span>destination).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#223 id=223 data-nosnippet>223</a>
-<a href=#224 id=224 data-nosnippet>224</a>    <span class="prelude-val">Ok</span>(ExtractResult {
-<a href=#225 id=225 data-nosnippet>225</a>        sha256,
-<a href=#226 id=226 data-nosnippet>226</a>        md5,
-<a href=#227 id=227 data-nosnippet>227</a>        total_size,
-<a href=#228 id=228 data-nosnippet>228</a>    })
+<a href=#131 id=131 data-nosnippet>131</a><span class="kw">fn </span>flatten_worker_result(
+<a href=#132 id=132 data-nosnippet>132</a>    joined: <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Result</span>&lt;(), ExtractError&gt;, tokio::task::JoinError&gt;,
+<a href=#133 id=133 data-nosnippet>133</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), ExtractError&gt; {
+<a href=#134 id=134 data-nosnippet>134</a>    <span class="kw">match </span>joined {
+<a href=#135 id=135 data-nosnippet>135</a>        <span class="prelude-val">Ok</span>(result) =&gt; result,
+<a href=#136 id=136 data-nosnippet>136</a>        <span class="prelude-val">Err</span>(err) =&gt; {
+<a href=#137 id=137 data-nosnippet>137</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(reason) = err.try_into_panic() {
+<a href=#138 id=138 data-nosnippet>138</a>                std::panic::resume_unwind(reason);
+<a href=#139 id=139 data-nosnippet>139</a>            }
+<a href=#140 id=140 data-nosnippet>140</a>            <span class="prelude-val">Err</span>(ExtractError::Cancelled)
+<a href=#141 id=141 data-nosnippet>141</a>        }
+<a href=#142 id=142 data-nosnippet>142</a>    }
+<a href=#143 id=143 data-nosnippet>143</a>}
+<a href=#144 id=144 data-nosnippet>144</a>
+<a href=#145 id=145 data-nosnippet>145</a><span class="doccomment">/// Runs a blocking extractor on a worker thread while pumping and hashing
+<a href=#146 id=146 data-nosnippet>146</a>/// `reader` on the async runtime.
+<a href=#147 id=147 data-nosnippet>147</a>///
+<a href=#148 id=148 data-nosnippet>148</a>/// The worker reads to the end so the pump hashes the whole stream. If the
+<a href=#149 id=149 data-nosnippet>149</a>/// worker stops reading early, for example because the archive is invalid, the
+<a href=#150 id=150 data-nosnippet>150</a>/// channel closes and the pump stops. If the reader fails, the worker is told
+<a href=#151 id=151 data-nosnippet>151</a>/// to stop and awaited before the error is returned, so the destination is not
+<a href=#152 id=152 data-nosnippet>152</a>/// written to after this function returns. Dropping the returned future tells
+<a href=#153 id=153 data-nosnippet>153</a>/// the worker to stop at its next read; a write already in progress on the
+<a href=#154 id=154 data-nosnippet>154</a>/// worker thread finishes first.
+<a href=#155 id=155 data-nosnippet>155</a>///
+<a href=#156 id=156 data-nosnippet>156</a>/// Must be called from within a tokio runtime.
+<a href=#157 id=157 data-nosnippet>157</a></span><span class="kw">async fn </span>extract_blocking&lt;R: AsyncRead + Unpin&gt;(
+<a href=#158 id=158 data-nosnippet>158</a>    reader: R,
+<a href=#159 id=159 data-nosnippet>159</a>    destination: <span class="kw-2">&amp;</span>Path,
+<a href=#160 id=160 data-nosnippet>160</a>    extract: <span class="kw">fn</span>(Box&lt;<span class="kw">dyn </span>Read + Send&gt;, <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;(), ExtractError&gt;,
+<a href=#161 id=161 data-nosnippet>161</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ExtractResult, ExtractError&gt; {
+<a href=#162 id=162 data-nosnippet>162</a>    <span class="kw">let </span>(sender, receiver) = tokio::sync::mpsc::channel(CHUNKS_IN_FLIGHT);
+<a href=#163 id=163 data-nosnippet>163</a>    <span class="kw">let </span>cancelled = Arc::new(AtomicBool::new(<span class="bool-val">false</span>));
+<a href=#164 id=164 data-nosnippet>164</a>    <span class="kw">let </span>cancel_guard = CancelOnDrop(cancelled.clone());
+<a href=#165 id=165 data-nosnippet>165</a>    <span class="kw">let </span>chunks = ChunkReader {
+<a href=#166 id=166 data-nosnippet>166</a>        receiver,
+<a href=#167 id=167 data-nosnippet>167</a>        chunk: Vec::new(),
+<a href=#168 id=168 data-nosnippet>168</a>        position: <span class="number">0</span>,
+<a href=#169 id=169 data-nosnippet>169</a>        cancelled,
+<a href=#170 id=170 data-nosnippet>170</a>    };
+<a href=#171 id=171 data-nosnippet>171</a>    <span class="kw">let </span>destination = destination.to_path_buf();
+<a href=#172 id=172 data-nosnippet>172</a>    <span class="kw">let </span><span class="kw-2">mut </span>worker = tokio::task::spawn_blocking(<span class="kw">move </span>|| extract(Box::new(chunks), <span class="kw-2">&amp;</span>destination));
+<a href=#173 id=173 data-nosnippet>173</a>
+<a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">let </span>pump = <span class="kw">async move </span>{
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="kw">let </span><span class="kw-2">mut </span>reader = reader;
+<a href=#176 id=176 data-nosnippet>176</a>        <span class="kw">let </span><span class="kw-2">mut </span>sha256 = Sha256::new();
+<a href=#177 id=177 data-nosnippet>177</a>        <span class="kw">let </span><span class="kw-2">mut </span>md5 = Md5::new();
+<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw">let </span><span class="kw-2">mut </span>total_size = <span class="number">0</span>;
+<a href=#179 id=179 data-nosnippet>179</a>        <span class="kw">loop </span>{
+<a href=#180 id=180 data-nosnippet>180</a>            <span class="kw">let </span><span class="kw-2">mut </span>chunk = <span class="macro">vec!</span>[<span class="number">0u8</span>; CHUNK_SIZE];
+<a href=#181 id=181 data-nosnippet>181</a>            <span class="kw">let </span>read = read_exact_or_eof(<span class="kw-2">&amp;mut </span>reader, <span class="kw-2">&amp;mut </span>chunk).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#182 id=182 data-nosnippet>182</a>            <span class="kw">if </span>read == <span class="number">0 </span>{
+<a href=#183 id=183 data-nosnippet>183</a>                <span class="kw">break</span>;
+<a href=#184 id=184 data-nosnippet>184</a>            }
+<a href=#185 id=185 data-nosnippet>185</a>            sha256.update(<span class="kw-2">&amp;</span>chunk[..read]);
+<a href=#186 id=186 data-nosnippet>186</a>            md5.update(<span class="kw-2">&amp;</span>chunk[..read]);
+<a href=#187 id=187 data-nosnippet>187</a>            total_size += read <span class="kw">as </span>u64;
+<a href=#188 id=188 data-nosnippet>188</a>            chunk.truncate(read);
+<a href=#189 id=189 data-nosnippet>189</a>            <span class="comment">// A closed channel means the worker stopped reading.
+<a href=#190 id=190 data-nosnippet>190</a>            </span><span class="kw">if </span>sender.send(chunk).<span class="kw">await</span>.is_err() || read &lt; CHUNK_SIZE {
+<a href=#191 id=191 data-nosnippet>191</a>                <span class="kw">break</span>;
+<a href=#192 id=192 data-nosnippet>192</a>            }
+<a href=#193 id=193 data-nosnippet>193</a>        }
+<a href=#194 id=194 data-nosnippet>194</a>        <span class="comment">// Dropping the sender signals end-of-file to the worker.
+<a href=#195 id=195 data-nosnippet>195</a>        </span><span class="kw">if </span>total_size == <span class="number">0 </span>{
+<a href=#196 id=196 data-nosnippet>196</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(std::io::Error::new(
+<a href=#197 id=197 data-nosnippet>197</a>                std::io::ErrorKind::UnexpectedEof,
+<a href=#198 id=198 data-nosnippet>198</a>                <span class="string">"no data was read from the package stream - the stream may have been truncated"</span>,
+<a href=#199 id=199 data-nosnippet>199</a>            ));
+<a href=#200 id=200 data-nosnippet>200</a>        }
+<a href=#201 id=201 data-nosnippet>201</a>        Ok::&lt;<span class="kw">_</span>, std::io::Error&gt;(ExtractResult {
+<a href=#202 id=202 data-nosnippet>202</a>            sha256: sha256.finalize(),
+<a href=#203 id=203 data-nosnippet>203</a>            md5: md5.finalize(),
+<a href=#204 id=204 data-nosnippet>204</a>            total_size,
+<a href=#205 id=205 data-nosnippet>205</a>        })
+<a href=#206 id=206 data-nosnippet>206</a>    };
+<a href=#207 id=207 data-nosnippet>207</a>
+<a href=#208 id=208 data-nosnippet>208</a>    <span class="comment">// The pump is polled first so a read error is reported instead of the
+<a href=#209 id=209 data-nosnippet>209</a>    // truncated-archive error the worker produces when the channel closes
+<a href=#210 id=210 data-nosnippet>210</a>    // early.
+<a href=#211 id=211 data-nosnippet>211</a>    </span><span class="kw">let </span>pump = <span class="macro">std::pin::pin!</span>(pump);
+<a href=#212 id=212 data-nosnippet>212</a>    <span class="kw">match </span>future::select(pump, <span class="kw-2">&amp;mut </span>worker).<span class="kw">await </span>{
+<a href=#213 id=213 data-nosnippet>213</a>        Either::Left((<span class="prelude-val">Ok</span>(result), worker)) =&gt; {
+<a href=#214 id=214 data-nosnippet>214</a>            flatten_worker_result(worker.<span class="kw">await</span>)<span class="question-mark">?</span>;
+<a href=#215 id=215 data-nosnippet>215</a>            <span class="prelude-val">Ok</span>(result)
+<a href=#216 id=216 data-nosnippet>216</a>        }
+<a href=#217 id=217 data-nosnippet>217</a>        Either::Left((<span class="prelude-val">Err</span>(err), worker)) =&gt; {
+<a href=#218 id=218 data-nosnippet>218</a>            <span class="comment">// The pump and its sender are gone. Stop the worker and wait for
+<a href=#219 id=219 data-nosnippet>219</a>            // it so nothing touches the destination after we return.
+<a href=#220 id=220 data-nosnippet>220</a>            </span>drop(cancel_guard);
+<a href=#221 id=221 data-nosnippet>221</a>            <span class="kw">let _ </span>= worker.<span class="kw">await</span>;
+<a href=#222 id=222 data-nosnippet>222</a>            <span class="prelude-val">Err</span>(ExtractError::IoError(err))
+<a href=#223 id=223 data-nosnippet>223</a>        }
+<a href=#224 id=224 data-nosnippet>224</a>        Either::Right((joined, pump)) =&gt; {
+<a href=#225 id=225 data-nosnippet>225</a>            flatten_worker_result(joined)<span class="question-mark">?</span>;
+<a href=#226 id=226 data-nosnippet>226</a>            pump.<span class="kw">await</span>.map_err(ExtractError::IoError)
+<a href=#227 id=227 data-nosnippet>227</a>        }
+<a href=#228 id=228 data-nosnippet>228</a>    }
 <a href=#229 id=229 data-nosnippet>229</a>}
 <a href=#230 id=230 data-nosnippet>230</a>
 <a href=#231 id=231 data-nosnippet>231</a><span class="doccomment">/// Async equivalent of [`crate::seek::get_file_from_archive`].
