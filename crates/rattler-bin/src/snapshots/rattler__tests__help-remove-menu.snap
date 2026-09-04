@@ -1,0 +1,27 @@
+---
+source: crates/rattler-bin/src/main.rs
+expression: redact(subcommand.render_long_help().to_string())
+---
+Remove installed menu items for a package
+
+Usage: rattler remove-menu [OPTIONS] <PACKAGE_NAME>
+
+Arguments:
+  <PACKAGE_NAME>
+          Name of the package for which to remove menu items
+
+Options:
+  -p, --prefix <TARGET_PREFIX>
+          Target prefix (environment path) to look for the package
+          
+          [default: .prefix]
+          [alias: --target-prefix]
+
+  -v, --verbose
+          Log verbose
+
+      --offline
+          Disable network access and use only locally cached data
+
+  -h, --help
+          Print help

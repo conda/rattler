@@ -1,0 +1,28 @@
+---
+source: crates/rattler-bin/src/main.rs
+expression: redact(subcommand.render_long_help().to_string())
+---
+Generates a completion script for a shell
+
+Usage: rattler completion [OPTIONS] --shell <SHELL>
+
+Options:
+  -s, --shell <SHELL>
+          The shell to generate a completion script for
+
+          Possible values:
+          - bash:       Bash shell
+          - elvish:     Elvish shell
+          - fish:       Fish shell
+          - nushell:    Nushell
+          - powershell: `PowerShell` shell
+          - zsh:        Zsh shell
+
+  -v, --verbose
+          Log verbose
+
+      --offline
+          Disable network access and use only locally cached data
+
+  -h, --help
+          Print help (see a summary with '-h')

@@ -1,0 +1,29 @@
+---
+source: crates/rattler-bin/src/main.rs
+expression: redact(subcommand.render_long_help().to_string())
+---
+Add one or more conda package archives to a prefix without solving
+
+Usage: rattler inject-into-prefix [OPTIONS] <PACKAGES>...
+
+Arguments:
+  <PACKAGES>...
+          Local paths to conda package archives (.conda or .tar.bz2)
+
+Options:
+  -p, --prefix <TARGET_PREFIX>
+          Target prefix to inject the package into
+          
+          [default: .prefix]
+
+      --skip-compatibility-checks
+          Skip platform and dependency compatibility checks
+
+  -v, --verbose
+          Log verbose
+
+      --offline
+          Disable network access and use only locally cached data
+
+  -h, --help
+          Print help

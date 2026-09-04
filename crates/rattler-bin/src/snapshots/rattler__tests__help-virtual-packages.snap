@@ -1,0 +1,17 @@
+---
+source: crates/rattler-bin/src/main.rs
+expression: redact(subcommand.render_long_help().to_string())
+---
+Print detected virtual packages
+
+Usage: rattler virtual-packages [OPTIONS]
+
+Options:
+  -v, --verbose
+          Log verbose
+
+      --offline
+          Disable network access and use only locally cached data
+
+  -h, --help
+          Print help

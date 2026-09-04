@@ -1,0 +1,38 @@
+---
+source: crates/rattler-bin/src/main.rs
+expression: redact(subcommand.render_long_help().to_string())
+---
+Extract one or more local or remote conda packages
+
+Usage: rattler extract [OPTIONS] <PACKAGES>...
+
+Arguments:
+  <PACKAGES>...
+          Paths or URLs to conda package archives (.tar.bz2 or .conda)
+
+Options:
+  -d, --destination <DESTINATION>
+          Destination directory. With a single package this is the directory the package is extracted into. With multiple packages each package is extracted into a subdirectory of this directory named after the package. Defaults to the current directory
+
+      --mode <MODE>
+          How local files are read. Remote packages always stream
+
+          Possible values:
+          - sync:  Read the file directly on the extraction thread, like the package cache does for local files
+          - async: Stream the file through the same path downloads take: an async reader feeding an extraction worker
+          
+          [default: sync]
+
+      --concurrency <CONCURRENCY>
+          Number of packages to extract concurrently
+          
+          [default: 1]
+
+  -v, --verbose
+          Log verbose
+
+      --offline
+          Disable network access and use only locally cached data
+
+  -h, --help
+          Print help (see a summary with '-h')

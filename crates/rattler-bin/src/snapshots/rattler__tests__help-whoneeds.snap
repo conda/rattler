@@ -1,0 +1,50 @@
+---
+source: crates/rattler-bin/src/main.rs
+expression: redact(subcommand.render_long_help().to_string())
+---
+Show packages that depend on the given package (reverse dependencies)
+
+Usage: rattler whoneeds [OPTIONS] <PACKAGE>
+
+Arguments:
+  <PACKAGE>
+          The package to find reverse dependencies for.
+          
+          Either a package name (numpy, __cuda), matching every dependency that names the package; or a path or URL to a .conda/.tar.bz2 package, matching only dependents whose match spec matches the package.
+
+Options:
+  -c, --channels <CHANNELS>
+          Channels to search in
+          
+          [default: conda-forge]
+
+  -p, --platform <PLATFORM>
+          Platform to search for
+          
+          [default: [PLATFORM]]
+
+      --limit <LIMIT>
+          Maximum number of packages to display
+          
+          [default: 100]
+
+      --all
+          Show all packages (no limit)
+
+      --json
+          Output in JSON format
+
+  -v, --verbose
+          Log verbose
+
+      --offline
+          Disable network access and use only locally cached data
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  rattler whoneeds numpy                      # packages that depend on numpy
+  rattler whoneeds __cuda                     # packages that depend on a virtual package
+  rattler whoneeds ./python-3.13.1-h123_0.conda   # packages that can use this exact package
+  rattler whoneeds https://conda.anaconda.org/conda-forge/noarch/polars-1.44.1-pyh8da0edf_0.conda

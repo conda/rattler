@@ -1,0 +1,24 @@
+---
+source: crates/rattler-bin/src/main.rs
+expression: redact(subcommand.render_long_help().to_string())
+---
+Show information about this `rattler` build and the host system
+
+Usage: rattler info [OPTIONS]
+
+Options:
+      --json
+          Output in JSON format
+
+  -v, --verbose
+          Log verbose
+
+      --offline
+          Disable network access and use only locally cached data
+
+  -h, --help
+          Print help
+
+Examples:
+  rattler info
+  rattler info --json
