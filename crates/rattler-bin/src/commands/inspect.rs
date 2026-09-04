@@ -4,9 +4,7 @@ use std::path::PathBuf;
 use indicatif::HumanBytes;
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::NoArchKind;
-use rattler_conda_types::package::{
-    AboutJson, Files, IndexJson, PackageFile, PathsJson, RunExportsJson,
-};
+use rattler_conda_types::package::{AboutJson, IndexJson, PackageFile, PathsJson, RunExportsJson};
 use rattler_package_streaming::archive::PackageArchive;
 use serde::Serialize;
 use url::Url;
@@ -37,10 +35,6 @@ struct Metadata {
     run_exports: Option<RunExportsJson>,
     #[serde(skip_serializing_if = "Option::is_none")]
     paths: Option<PathsJson>,
-    /// Fallback file listing from `info/files` for old packages that do not
-    /// contain a `paths.json`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    files: Option<Vec<PathBuf>>,
 }
 
 pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
@@ -60,7 +54,6 @@ pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
             AboutJson::package_path(),
             RunExportsJson::package_path(),
             PathsJson::package_path(),
-            Files::package_path(),
         ])
         .await
         .into_diagnostic()
@@ -71,18 +64,12 @@ pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
     let about: Option<AboutJson> = parse_from_batch(&mut files)?;
     let run_exports: Option<RunExportsJson> = parse_from_batch(&mut files)?;
     let paths: Option<PathsJson> = parse_from_batch(&mut files)?;
-    let legacy_files: Option<Files> = if paths.is_none() {
-        parse_from_batch(&mut files)?
-    } else {
-        None
-    };
 
     let metadata = Metadata {
         index,
         about,
         run_exports: run_exports.filter(|run_exports| !run_exports.is_empty()),
         paths,
-        files: legacy_files.map(|files| files.files),
     };
 
     if opt.json {
@@ -234,16 +221,6 @@ fn print_paths(metadata: &Metadata, limit: usize) {
                 ),
                 None => println!("  - {}", entry.relative_path.display()),
             }
-        }
-        if total > limit {
-            println!("  ... and {} more", total - limit);
-        }
-    } else if let Some(files) = &metadata.files {
-        let total = files.len();
-        println!("paths: ({total} total, from info/files)");
-        let limit = if limit == 0 { total } else { limit };
-        for path in files.iter().take(limit) {
-            println!("  - {}", path.display());
         }
         if total > limit {
             println!("  ... and {} more", total - limit);
