@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.5](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.4...rattler_package_streaming-v0.27.5) - 2026-09-04
+
+### Added
+
+- *(rattler-bin)* extend inspect with about, run exports, sizes and --json ([#2760](https://github.com/conda/rattler/pull/2760))
+
+### Other
+
+- extract packages on a blocking worker ([#2748](https://github.com/conda/rattler/pull/2748))
+
 ## [0.27.4](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.3...rattler_package_streaming-v0.27.4) - 2026-08-27
 
 ### Added
