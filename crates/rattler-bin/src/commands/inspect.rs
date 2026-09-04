@@ -16,9 +16,9 @@ pub struct Opt {
     #[clap(required = true)]
     url: Url,
 
-    /// Number of files to print (0 prints all files)
-    #[clap(long, default_value_t = 10)]
-    limit: usize,
+    /// Number of files to print (a negative value prints all files)
+    #[clap(long, default_value_t = 10, allow_hyphen_values = true)]
+    limit: i64,
 
     /// Print the package metadata as JSON
     #[clap(long)]
@@ -33,8 +33,7 @@ struct Metadata {
     about: Option<AboutJson>,
     #[serde(skip_serializing_if = "Option::is_none")]
     run_exports: Option<RunExportsJson>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    paths: Option<PathsJson>,
+    paths: PathsJson,
 }
 
 pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
@@ -63,7 +62,8 @@ pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
         .ok_or_else(|| miette::miette!("package does not contain an info/index.json"))?;
     let about: Option<AboutJson> = parse_from_batch(&mut files)?;
     let run_exports: Option<RunExportsJson> = parse_from_batch(&mut files)?;
-    let paths: Option<PathsJson> = parse_from_batch(&mut files)?;
+    let paths: PathsJson = parse_from_batch(&mut files)?
+        .ok_or_else(|| miette::miette!("package does not contain an info/paths.json"))?;
 
     let metadata = Metadata {
         index,
@@ -99,7 +99,7 @@ fn parse_from_batch<P: PackageFile>(
         .transpose()
 }
 
-fn print_human(metadata: &Metadata, limit: usize) {
+fn print_human(metadata: &Metadata, limit: i64) {
     print_index(&metadata.index);
     if let Some(about) = &metadata.about {
         print_about(about);
@@ -107,7 +107,7 @@ fn print_human(metadata: &Metadata, limit: usize) {
     if let Some(run_exports) = &metadata.run_exports {
         print_run_exports(run_exports);
     }
-    print_paths(metadata, limit);
+    print_paths(&metadata.paths, limit);
 }
 
 fn print_index(index: &IndexJson) {
@@ -127,9 +127,6 @@ fn print_index(index: &IndexJson) {
     }
     if let Some(license) = &index.license {
         println!("license: {license}");
-    }
-    if let Some(license_family) = &index.license_family {
-        println!("license family: {license_family}");
     }
     if let Some(timestamp) = &index.timestamp {
         println!("timestamp: {}", timestamp.jiff_timestamp());
@@ -174,7 +171,7 @@ fn print_about(about: &AboutJson) {
     }
     print_urls("homepage", &about.home);
     print_urls("documentation", &about.doc_url);
-    print_urls("development", &about.dev_url);
+    print_urls("repository", &about.dev_url);
     if let Some(source_url) = &about.source_url {
         println!("source: {source_url}");
     }
@@ -190,43 +187,39 @@ fn print_run_exports(run_exports: &RunExportsJson) {
     print_indented_list("strong constrains", &run_exports.strong_constrains);
 }
 
-fn print_paths(metadata: &Metadata, limit: usize) {
+fn print_paths(paths: &PathsJson, limit: i64) {
     println!();
-    if let Some(paths) = &metadata.paths {
-        let total = paths.paths.len();
-        if paths
+    let total = paths.paths.len();
+    if paths
+        .paths
+        .iter()
+        .any(|entry| entry.size_in_bytes.is_some())
+    {
+        let total_size: u64 = paths
             .paths
             .iter()
-            .any(|entry| entry.size_in_bytes.is_some())
-        {
-            let total_size: u64 = paths
-                .paths
-                .iter()
-                .filter_map(|entry| entry.size_in_bytes)
-                .sum();
-            println!(
-                "paths: ({total} total, {} installed)",
-                HumanBytes(total_size)
-            );
-        } else {
-            println!("paths: ({total} total)");
-        }
-        let limit = if limit == 0 { total } else { limit };
-        for entry in paths.paths.iter().take(limit) {
-            match entry.size_in_bytes {
-                Some(size) => println!(
-                    "  - {} ({})",
-                    entry.relative_path.display(),
-                    HumanBytes(size)
-                ),
-                None => println!("  - {}", entry.relative_path.display()),
-            }
-        }
-        if total > limit {
-            println!("  ... and {} more", total - limit);
-        }
+            .filter_map(|entry| entry.size_in_bytes)
+            .sum();
+        println!(
+            "paths: ({total} total, {} installed)",
+            HumanBytes(total_size)
+        );
     } else {
-        println!("paths: (package lists no files)");
+        println!("paths: ({total} total)");
+    }
+    let limit = usize::try_from(limit).unwrap_or(total);
+    for entry in paths.paths.iter().take(limit) {
+        match entry.size_in_bytes {
+            Some(size) => println!(
+                "  - {} ({})",
+                entry.relative_path.display(),
+                HumanBytes(size)
+            ),
+            None => println!("  - {}", entry.relative_path.display()),
+        }
+    }
+    if total > limit {
+        println!("  ... and {} more", total - limit);
     }
 }
 
