@@ -226,6 +226,8 @@ enum CondaSource {
 #[derive(Clone)]
 pub struct PackageArchive {
     backend: Arc<Backend>,
+    /// Size in bytes of the whole archive, captured at open time.
+    size: u64,
 }
 
 /// A boxed reader used for the section decompression pipelines.
@@ -357,6 +359,12 @@ impl PackageArchive {
         let archive_type =
             CondaArchiveType::try_from(path).ok_or(ExtractError::UnsupportedArchiveType)?;
         Self::open_local(path.to_owned(), archive_type, None).await
+    }
+
+    /// Returns the size in bytes of the whole package archive (the `.conda`
+    /// or `.tar.bz2` file itself, not its extracted contents).
+    pub fn size(&self) -> u64 {
+        self.size
     }
 
     /// Returns how this handle accesses the archive.
@@ -648,6 +656,7 @@ impl PackageArchive {
                 },
                 members,
             }),
+            size,
         })
     }
 
@@ -698,10 +707,10 @@ impl PackageArchive {
         archive_type: CondaArchiveType,
         temp: Option<tempfile::TempPath>,
     ) -> Result<Self, ExtractError> {
+        let size = tokio::fs::metadata(&path).await?.len();
         let backend = match archive_type {
             CondaArchiveType::Conda => {
                 let file = tokio::fs::File::open(&path).await?;
-                let size = file.metadata().await?.len();
                 let buf_reader =
                     futures::io::BufReader::new(tokio::io::BufReader::new(file).compat());
                 let zip = ZipFileReader::new(buf_reader).await?;
@@ -715,6 +724,7 @@ impl PackageArchive {
         };
         Ok(Self {
             backend: Arc::new(backend),
+            size,
         })
     }
 
@@ -1099,6 +1109,10 @@ mod tests {
         let archive = PackageArchive::from_url(client, url).await.unwrap();
         assert_eq!(archive.access(), ArchiveAccess::Sparse);
         assert_eq!(requests.load(Ordering::Relaxed), 1, "open = 1 request");
+        assert_eq!(
+            archive.size(),
+            std::fs::metadata(conda_test_file()).unwrap().len()
+        );
 
         // Typed metadata reads: the test package is tiny, so everything is
         // served from the cached tail without further requests.
@@ -1151,6 +1165,10 @@ mod tests {
         let archive = PackageArchive::from_url(client, url).await.unwrap();
         assert_eq!(archive.access(), ArchiveAccess::Spooled);
         assert_eq!(requests.load(Ordering::Relaxed), 1, "one full download");
+        assert_eq!(
+            archive.size(),
+            std::fs::metadata(tar_bz2_test_file()).unwrap().len()
+        );
 
         let files = archive
             .read_files(["info/index.json", "clobber.txt"])
@@ -1535,6 +1553,10 @@ mod tests {
     async fn test_local_conda() {
         let archive = PackageArchive::from_path(conda_test_file()).await.unwrap();
         assert_eq!(archive.access(), ArchiveAccess::Local);
+        assert_eq!(
+            archive.size(),
+            std::fs::metadata(conda_test_file()).unwrap().len()
+        );
         let index: IndexJson = archive.read_package_file().await.unwrap();
         assert_eq!(index.name.as_normalized(), "clobber-fd-1");
         let content = archive.read_file("clobber").await.unwrap().unwrap();

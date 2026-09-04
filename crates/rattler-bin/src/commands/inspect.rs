@@ -28,6 +28,8 @@ pub struct Opt {
 /// All metadata read from the package; serialized as-is by `--json`.
 #[derive(Serialize)]
 struct Metadata {
+    /// Size in bytes of the package archive itself.
+    size: u64,
     index: IndexJson,
     #[serde(skip_serializing_if = "Option::is_none")]
     about: Option<AboutJson>,
@@ -66,6 +68,7 @@ pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
         .ok_or_else(|| miette::miette!("package does not contain an info/paths.json"))?;
 
     let metadata = Metadata {
+        size: archive.size(),
         index,
         about,
         run_exports: run_exports.filter(|run_exports| !run_exports.is_empty()),
@@ -100,7 +103,7 @@ fn parse_from_batch<P: PackageFile>(
 }
 
 fn print_human(metadata: &Metadata, limit: i64) {
-    print_index(&metadata.index);
+    print_index(&metadata.index, metadata.size);
     if let Some(about) = &metadata.about {
         print_about(about);
     }
@@ -110,7 +113,7 @@ fn print_human(metadata: &Metadata, limit: i64) {
     print_paths(&metadata.paths, limit);
 }
 
-fn print_index(index: &IndexJson) {
+fn print_index(index: &IndexJson, size: u64) {
     println!("name: {}", index.name.as_normalized());
     println!("version: {}", index.version);
     println!("build: {}", index.build);
@@ -131,6 +134,7 @@ fn print_index(index: &IndexJson) {
     if let Some(timestamp) = &index.timestamp {
         println!("timestamp: {}", timestamp.jiff_timestamp());
     }
+    println!("size: {}", HumanBytes(size));
     print_list("depends", &index.depends);
     print_list("constrains", &index.constrains);
     if !index.extra_depends.is_empty() {
