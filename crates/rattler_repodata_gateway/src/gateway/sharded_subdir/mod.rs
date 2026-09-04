@@ -183,6 +183,8 @@ mod tests {
         routing::get,
     };
     use rattler_conda_types::{Channel, RepodataRevisions, ShardedRepodata, ShardedSubdirInfo};
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    use rattler_conda_types::{PackageName, VirtualPackagePlugins};
     use rattler_digest::{Sha256, parse_digest_from_hex};
     use std::future::IntoFuture;
     use std::net::SocketAddr;
@@ -224,7 +226,7 @@ mod tests {
                     repodata_revisions: RepodataRevisions::default(),
                     channel_relations: None,
                     #[cfg(feature = "experimental-virtual-package-plugins")]
-                    virtual_package_plugins: rattler_conda_types::VirtualPackagePlugins::default(),
+                    virtual_package_plugins: mock_virtual_package_plugins(),
                 },
                 shards,
             };
@@ -310,6 +312,47 @@ mod tests {
     enum MockShardResponse {
         Empty,
         Truncated,
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    fn mock_virtual_package_plugins() -> VirtualPackagePlugins {
+        [(
+            PackageName::new_unchecked("cuda-detect"),
+            vec![
+                PackageName::new_unchecked("__cuda"),
+                PackageName::new_unchecked("__cuda_arch"),
+            ],
+        )]
+        .into_iter()
+        .collect()
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_sharded_index_reports_virtual_package_plugins() {
+        let server = MockShardedServer::new(MockShardResponse::Empty).await;
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        let subdir = ShardedSubdir::new(
+            server.channel(),
+            "linux-64".to_string(),
+            rattler_networking::LazyClient::default(),
+            cache_dir.path().to_path_buf(),
+            ShardCachePolicy {
+                action: CacheAction::NoCache,
+                missing_shards_are_empty: false,
+            },
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            subdir.virtual_package_plugins(),
+            &mock_virtual_package_plugins()
+        );
     }
 
     #[tokio::test]
@@ -511,10 +554,6 @@ mod tests {
     const CACHE_ONLY_ACTIONS: [CacheAction; 2] =
         [CacheAction::UseCacheOnly, CacheAction::ForceCacheOnly];
 
-    /// A cache-only build with no index cached must report
-    /// [`GatewayError::ShardedIndexNotCached`] and nothing else: that is the
-    /// variant `SubdirBuilder` matches on to fall back to `repodata.json`,
-    /// which may well be cached even when the sharded index is not.
     #[tokio::test]
     async fn uncached_index_is_reported_as_such_in_cache_only_mode() {
         let server = MockShardedServer::new(MockShardResponse::Empty).await;
@@ -543,10 +582,6 @@ mod tests {
         );
     }
 
-    /// Without the opt-in, a cold shard fails a cache-only query with a
-    /// distinct error: nothing is known about the package, which is not the
-    /// same as the package having no records. Neither mode may touch the
-    /// network to find out.
     #[tokio::test]
     async fn cold_shard_is_an_error_by_default() {
         for action in CACHE_ONLY_ACTIONS {
@@ -573,10 +608,6 @@ mod tests {
         }
     }
 
-    /// With `missing_shards_are_empty` the same query reports the package as
-    /// having no records, which lets a caller that restricts a solve to
-    /// locally available packages fail on the restriction instead of on the
-    /// cache. Neither mode may touch the network to find out.
     #[tokio::test]
     async fn cold_shard_is_empty_when_opted_in() {
         for action in CACHE_ONLY_ACTIONS {

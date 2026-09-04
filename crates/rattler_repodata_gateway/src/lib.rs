@@ -84,5 +84,7 @@ pub use gateway::{
 };
 #[cfg(feature = "indicatif")]
 pub use gateway::{IndicatifReporter, IndicatifReporterBuilder};
+#[cfg(all(feature = "gateway", feature = "experimental-virtual-package-plugins"))]
+pub use gateway::{ResolvedChannels, SubdirVirtualPackagePlugins};
 #[cfg(all(not(target_arch = "wasm32"), feature = "gateway"))]
 pub use gateway::{RunExportExtractorError, RunExportsReporter};
