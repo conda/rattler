@@ -1,7 +1,8 @@
+use std::sync::LazyLock;
+
 use clap::Parser;
 use indicatif::{MultiProgress, ProgressDrawTarget};
 use miette::IntoDiagnostic;
-use once_cell::sync::Lazy;
 use tracing_subscriber::{EnvFilter, filter::LevelFilter, util::SubscriberInitExt};
 
 use crate::{commands::exec, writer::IndicatifWriter};
@@ -18,7 +19,7 @@ mod writer;
 /// configured in such a way to it will not interfere if you use the
 /// [`indicatif::MultiProgress`] returning by this function.
 pub fn global_multi_progress() -> MultiProgress {
-    static GLOBAL_MP: Lazy<MultiProgress> = Lazy::new(|| {
+    static GLOBAL_MP: LazyLock<MultiProgress> = LazyLock::new(|| {
         let mp = MultiProgress::new();
         mp.set_draw_target(ProgressDrawTarget::stderr_with_hz(20));
         mp
@@ -150,5 +151,50 @@ async fn async_main() -> miette::Result<()> {
             rattler_upload::upload_from_args(*opts).await
         }
         Command::Exec(opts) => exec::exec(opts, offline).await,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::CommandFactory;
+
+    use super::Opt;
+
+    /// Runs clap's internal validation of the whole command tree (duplicate
+    /// flags, broken group references, invalid defaults, ...), which otherwise
+    /// only panics the first time the offending subcommand is actually used.
+    #[test]
+    fn test_cli_is_valid() {
+        Opt::command().debug_assert();
+    }
+
+    /// Pins the `--help` output of the top-level command and of every
+    /// subcommand so that unintended changes to the CLI surface show up as a
+    /// snapshot diff in review.
+    #[test]
+    fn test_help_snapshots() {
+        // The help output embeds values that differ between machines: the
+        // current platform is the default of every `--platform` flag, and clap
+        // renders the live value of `env = "..."` flags. Redact both so the
+        // snapshots are identical on every machine.
+        let platform = rattler_conda_types::Platform::current().to_string();
+        let env_value = regex::Regex::new(r"\[env: ([A-Za-z0-9_]+)=[^\]]*\]").unwrap();
+        let redact = |help: String| {
+            env_value
+                .replace_all(&help.replace(&platform, "[PLATFORM]"), "[env: $1=]")
+                .into_owned()
+        };
+
+        let mut cmd = Opt::command().name("rattler");
+        cmd.build();
+
+        insta::assert_snapshot!("help", redact(cmd.render_long_help().to_string()));
+        for subcommand in cmd.get_subcommands_mut() {
+            let name = subcommand.get_name().to_string();
+            insta::assert_snapshot!(
+                format!("help-{name}"),
+                redact(subcommand.render_long_help().to_string())
+            );
+        }
     }
 }

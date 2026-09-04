@@ -593,6 +593,51 @@ mod tests {
         assert_eq!(spec_name("numpy 1.24.*"), "numpy");
     }
 
+    fn test_data_dir() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
+    }
+
+    /// Compares a local package with itself end-to-end through the command
+    /// entry point; identical packages must never produce an error.
+    #[tokio::test]
+    async fn test_compare_identical_packages() {
+        let package = test_data_dir()
+            .join("packages/empty-0.1.0-h4616a5c_0.conda")
+            .to_string_lossy()
+            .into_owned();
+
+        compare_packages(
+            Opt {
+                left: package.clone(),
+                right: package,
+            },
+            true,
+        )
+        .await
+        .unwrap();
+    }
+
+    /// Compares two different local packages (one .conda, one .tar.bz2)
+    /// end-to-end; a difference is reported on stdout, not as an error.
+    #[tokio::test]
+    async fn test_compare_different_packages() {
+        compare_packages(
+            Opt {
+                left: test_data_dir()
+                    .join("packages/empty-0.1.0-h4616a5c_0.conda")
+                    .to_string_lossy()
+                    .into_owned(),
+                right: test_data_dir()
+                    .join("clobber/clobber-1-0.2.0-h4616a5c_0.tar.bz2")
+                    .to_string_lossy()
+                    .into_owned(),
+            },
+            true,
+        )
+        .await
+        .unwrap();
+    }
+
     #[test]
     fn test_parse_source() {
         assert!(matches!(

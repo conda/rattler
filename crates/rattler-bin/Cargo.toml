@@ -36,7 +36,6 @@ gcs = ["rattler_networking/gcs"]
 oauth = ["rattler/oauth"]
 
 [dependencies]
-anyhow = { workspace = true }
 jiff = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 clap_complete = { workspace = true }
@@ -48,7 +47,6 @@ hex = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }
 indicatif = { workspace = true }
 miette = { workspace = true }
-once_cell = { workspace = true }
 rattler = { workspace = true, features = ["indicatif", "cli-tools", "auth-interactive"] }
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_config = { workspace = true, default-features = false }
@@ -76,7 +74,6 @@ reqwest = { workspace = true, features = ["stream", "query"] }
 reqwest-middleware = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-tempfile = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 itertools = { workspace = true }
@@ -85,3 +82,7 @@ sha2 = { workspace = true }
 tracing = { workspace = true }
 dunce = { workspace = true }
 regex = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+tempfile = { workspace = true }

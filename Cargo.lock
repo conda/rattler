@@ -4936,7 +4936,6 @@ dependencies = [
 name = "rattler-bin"
 version = "0.2.13"
 dependencies = [
- "anyhow",
  "astral-reqwest-middleware",
  "clap",
  "clap_complete",
@@ -4948,10 +4947,10 @@ dependencies = [
  "hex",
  "indexmap 2.14.1",
  "indicatif",
+ "insta",
  "itertools 0.15.0",
  "jiff",
  "miette",
- "once_cell",
  "rattler",
  "rattler_cache",
  "rattler_conda_types",
