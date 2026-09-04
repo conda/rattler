@@ -1,0 +1,28 @@
+[package]
+name = "rattler_azure"
+version = "0.1.0"
+description = "A crate to streamline interaction with Azure Blob storage for rattler"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+readme.workspace = true
+
+[features]
+default = []
+serde = ["dep:serde", "indexmap/serde"]
+
+[dependencies]
+indexmap = { workspace = true }
+percent-encoding = { workspace = true }
+secrecy = { workspace = true }
+serde = { workspace = true, features = ["derive"], optional = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+indexmap = { workspace = true, features = ["serde"] }
+insta = { workspace = true, features = ["yaml"] }
+tokio = { workspace = true, features = ["macros", "rt"] }
+toml = { workspace = true }

@@ -1051,9 +1051,9 @@ checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
 
 [[package]]
 name = "blake2"
-version = "0.11.0"
+version = "0.11.0-rc.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b5d4d889834ee8ecfc0f8426ad30faf7cdcb10f741a8e6d7224d95325479f6f"
+checksum = "061f1a09225e328e1ffbb378d2d49923c0ca5fee19fb5ac1cc9c1e9d52b93690"
 dependencies = [
  "digest 0.11.3",
 ]
@@ -2554,18 +2554,18 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-auth"
-version = "1.16.0"
+version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff461519b1a948200f163574be072753bcfb462a323f0eb426629d89872dd685"
+checksum = "f54aab44c16b8463ae11b165a87c3d484780231f157bb1ed65843d591beb5abd"
 dependencies = [
  "async-trait",
- "base64 0.23.1",
+ "base64 0.22.1",
  "bytes",
+ "chrono",
  "google-cloud-gax",
  "hex",
  "hmac 0.13.0",
  "http 1.5.0",
- "jiff",
  "reqwest",
  "rustc_version",
  "rustls",
@@ -2581,9 +2581,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-gax"
-version = "1.14.0"
+version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5615cff28ee59cfe52fbb4c11b8b1e77f650296e2ea4f4c2b7757ac6b19e752"
+checksum = "b9a46dd0fd026bbc4a5d84e6ab0c941cee6e3b057976a0bb107fdb5238ce598f"
 dependencies = [
  "bytes",
  "futures",
@@ -2596,7 +2596,6 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.20",
  "tokio",
- "tokio-stream",
 ]
 
 [[package]]
@@ -4974,6 +4973,21 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "url",
+]
+
+[[package]]
+name = "rattler_azure"
+version = "0.1.0"
+dependencies = [
+ "indexmap 2.14.0",
+ "insta",
+ "percent-encoding",
+ "secrecy",
+ "serde",
+ "thiserror 2.0.20",
+ "tokio",
+ "toml",
  "url",
 ]
 
@@ -7727,9 +7741,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.26.0"
+version = "1.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5772d71c9be8a8a6ac2117d949c5b224c1b72241bb611d9a3012edcf8af7812"
+checksum = "f053576934f05a761a402421fbbe3d425d9366f75f978806a037b3ca481abecc"
 dependencies = [
  "getrandom 0.4.3",
  "js-sys",
@@ -7948,9 +7962,9 @@ dependencies = [
 
 [[package]]
 name = "which"
-version = "8.0.6"
+version = "8.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bae2f2b2b816647a1cab1acc91f5bd20812d53cb344382635ec2181940c8034f"
+checksum = "8f3ef584124b911bcc3875c2f1472e80f24361ceb789bd1c62b3e9a3df9ff43c"
 dependencies = [
  "libc",
 ]
