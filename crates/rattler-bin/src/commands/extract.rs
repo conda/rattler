@@ -1,115 +1,194 @@
-use std::path::PathBuf;
+use std::{
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 
+use futures_util::{StreamExt, stream};
 use miette::{Context, IntoDiagnostic};
+use rattler_conda_types::package::{CondaArchiveIdentifier, CondaArchiveType};
+use rattler_package_streaming::ExtractResult;
+use reqwest_middleware::ClientWithMiddleware;
 use url::Url;
 
-/// Extract a local or remote conda package.
+/// Extract one or more local or remote conda packages.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
-    /// Path or URL to the conda package archive (.tar.bz2 or .conda)
+    /// Paths or URLs to conda package archives (.tar.bz2 or .conda)
     #[clap(required = true)]
-    package: String,
+    packages: Vec<String>,
 
-    /// Destination directory where the package will be extracted
-    /// If not specified, extracts to a directory with the same name as the package
+    /// Destination directory. With a single package this is the directory the
+    /// package is extracted into. With multiple packages each package is
+    /// extracted into a subdirectory of this directory named after the package.
+    /// Defaults to the current directory.
     #[clap(short, long)]
     destination: Option<PathBuf>,
+
+    /// How local files are read. Remote packages always stream.
+    #[clap(long, value_enum, default_value_t = Mode::Sync)]
+    mode: Mode,
+
+    /// Number of packages to extract concurrently.
+    #[clap(long, default_value_t = 1)]
+    concurrency: usize,
 }
 
-/// Strips package extensions (.tar.bz2 or .conda) from a filename
-fn strip_package_extension(filename: &str) -> String {
-    if let Some(stripped) = filename.strip_suffix(".tar.bz2") {
-        stripped.to_string()
-    } else if let Some(stripped) = filename.strip_suffix(".conda") {
-        stripped.to_string()
-    } else {
-        filename.to_string()
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum Mode {
+    /// Read the file directly on the extraction thread, like the package
+    /// cache does for local files.
+    Sync,
+    /// Stream the file through the same path downloads take: an async reader
+    /// feeding an extraction worker.
+    Async,
+}
+
+/// A package to extract, either a local file or a remote URL.
+#[derive(Debug, Clone)]
+enum Source {
+    Url(Url),
+    Path(PathBuf),
+}
+
+impl Source {
+    fn parse(package: &str) -> Self {
+        match Url::parse(package) {
+            Ok(url) if url.scheme().len() > 1 => Self::Url(url),
+            _ => Self::Path(PathBuf::from(package)),
+        }
+    }
+
+    /// The directory name to extract into when no explicit destination is
+    /// given: the archive identifier (`name-version-build`).
+    fn package_name(&self) -> miette::Result<String> {
+        let identifier = match self {
+            Self::Url(url) => CondaArchiveIdentifier::try_from_url(url),
+            Self::Path(path) => CondaArchiveIdentifier::try_from_path(path),
+        };
+        identifier
+            .map(|identifier| identifier.identifier.to_string())
+            .ok_or_else(|| miette::miette!("{self} is not a conda package archive name"))
     }
 }
 
-/// Determines the destination directory from a URL
-fn determine_destination_from_url(url: &Url) -> miette::Result<PathBuf> {
-    // Extract filename from URL path
-    let filename = url
-        .path_segments()
-        .and_then(Iterator::last)
-        .ok_or_else(|| miette::miette!("Could not extract package name from URL"))?;
-
-    let package_name = strip_package_extension(filename);
-    Ok(PathBuf::from(package_name))
+impl std::fmt::Display for Source {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Url(url) => write!(f, "{url}"),
+            Self::Path(path) => write!(f, "{}", path.display()),
+        }
+    }
 }
 
-/// Extracts a conda package from a URL
-async fn extract_from_url(
-    url: Url,
-    destination: Option<PathBuf>,
-    package_display: &str,
-    offline: bool,
-) -> miette::Result<(PathBuf, rattler_package_streaming::ExtractResult)> {
-    let destination = destination.map_or_else(|| determine_destination_from_url(&url), Ok)?;
-
-    println!(
-        "Extracting {} to {}",
-        package_display,
-        destination.display()
-    );
-
-    let client = super::client::create_client_with_middleware(offline)?;
-
-    let result =
-        rattler_package_streaming::reqwest::tokio::extract(client, url, &destination, None, None)
+async fn extract_one(
+    source: Source,
+    destination: PathBuf,
+    mode: Mode,
+    client: &ClientWithMiddleware,
+) -> miette::Result<(Source, PathBuf, ExtractResult, Duration)> {
+    let start = Instant::now();
+    let result = match (&source, mode) {
+        (Source::Url(url), _) => {
+            rattler_package_streaming::reqwest::tokio::extract(
+                client.clone(),
+                url.clone(),
+                &destination,
+                None,
+                None,
+            )
             .await
-            .into_diagnostic()
-            .with_context(|| format!("Failed to extract package from URL: {package_display}"))?;
+        }
+        (Source::Path(path), Mode::Async) => {
+            use rattler_package_streaming::tokio::async_read;
+            let archive_type = CondaArchiveType::try_from(path.as_path())
+                .ok_or(rattler_package_streaming::ExtractError::UnsupportedArchiveType);
+            match archive_type {
+                Err(err) => Err(err),
+                Ok(archive_type) => match tokio::fs::File::open(path).await {
+                    Err(err) => Err(rattler_package_streaming::ExtractError::IoError(err)),
+                    Ok(file) => match archive_type {
+                        CondaArchiveType::TarBz2 => {
+                            async_read::extract_tar_bz2(file, &destination).await
+                        }
+                        CondaArchiveType::Conda => {
+                            async_read::extract_conda(file, &destination).await
+                        }
+                    },
+                },
+            }
+        }
+        (Source::Path(path), Mode::Sync) => {
+            let path = path.clone();
+            let destination = destination.clone();
+            tokio::task::spawn_blocking(move || {
+                rattler_package_streaming::fs::extract(&path, &destination)
+            })
+            .await
+            .into_diagnostic()?
+        }
+    }
+    .into_diagnostic()
+    .with_context(|| format!("Failed to extract package: {source}"))?;
 
-    Ok((destination, result))
-}
-
-/// Determines the destination directory from a file path
-fn determine_destination_from_path(package_path: &str) -> miette::Result<PathBuf> {
-    let path = PathBuf::from(package_path);
-    let package_name = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or_else(|| miette::miette!("Invalid package filename"))?
-        .to_string();
-
-    Ok(PathBuf::from(package_name))
-}
-
-/// Extracts a conda package from a local file path
-fn extract_from_path(
-    package_path: &str,
-    destination: Option<PathBuf>,
-) -> miette::Result<(PathBuf, rattler_package_streaming::ExtractResult)> {
-    let destination =
-        destination.map_or_else(|| determine_destination_from_path(package_path), Ok)?;
-
-    println!("Extracting {} to {}", package_path, destination.display());
-
-    let result = rattler_package_streaming::fs::extract(&PathBuf::from(package_path), &destination)
-        .into_diagnostic()
-        .with_context(|| format!("Failed to extract package: {package_path}"))?;
-
-    Ok((destination, result))
+    Ok((source, destination, result, start.elapsed()))
 }
 
 pub async fn extract(opt: Opt, offline: bool) -> miette::Result<()> {
-    // Try to parse as URL, otherwise treat as file path
-    let (destination, result) = if let Ok(url) = Url::parse(&opt.package) {
-        extract_from_url(url, opt.destination, &opt.package, offline).await?
+    let sources: Vec<Source> = opt.packages.iter().map(|p| Source::parse(p)).collect();
+
+    let jobs = if let [source] = sources.as_slice() {
+        let destination = match opt.destination {
+            Some(destination) => destination,
+            None => PathBuf::from(source.package_name()?),
+        };
+        vec![(source.clone(), destination)]
     } else {
-        extract_from_path(&opt.package, opt.destination)?
+        let base = opt.destination.unwrap_or_else(|| PathBuf::from("."));
+        sources
+            .iter()
+            .map(|source| Ok((source.clone(), base.join(source.package_name()?))))
+            .collect::<miette::Result<Vec<_>>>()?
     };
 
-    println!(
-        "{} Successfully extracted package",
-        console::style("✓").green(),
-    );
-    println!("  Destination: {}", destination.display());
-    println!("  SHA256: {}", hex::encode(result.sha256));
-    println!("  MD5: {}", hex::encode(result.md5));
-    println!("  Size: {} bytes", result.total_size);
+    let concurrency = opt.concurrency.max(1);
+    let mode = opt.mode;
+    let total = jobs.len();
+    let client = super::client::create_client_with_middleware(offline)?;
+    let mut results = stream::iter(jobs)
+        .map(|(source, destination)| extract_one(source, destination, mode, &client))
+        .buffer_unordered(concurrency);
 
-    Ok(())
+    // Report each package as it finishes; a failure does not hide the others.
+    let mut extracted = 0;
+    let mut first_error = None;
+    while let Some(result) = results.next().await {
+        match result {
+            Ok((source, destination, result, elapsed)) => {
+                extracted += 1;
+                println!(
+                    "{} {} -> {} ({:.1?})",
+                    console::style("✓").green(),
+                    source,
+                    destination.display(),
+                    elapsed
+                );
+                println!("  SHA256: {}", hex::encode(result.sha256));
+                println!("  MD5: {}", hex::encode(result.md5));
+                println!("  Size: {} bytes", result.total_size);
+            }
+            Err(err) => {
+                eprintln!("{} {err:?}", console::style("✗").red());
+                first_error.get_or_insert(err);
+            }
+        }
+    }
+
+    if total > 1 {
+        println!("Extracted {extracted} of {total} packages");
+    }
+
+    match first_error {
+        Some(err) => Err(err),
+        None => Ok(()),
+    }
 }
