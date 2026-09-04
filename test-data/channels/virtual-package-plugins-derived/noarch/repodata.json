@@ -1,0 +1,39 @@
+{
+  "info": {
+    "subdir": "noarch",
+    "base_url": "../noarch",
+    "channel_relations": {
+      "base": "../virtual-package-plugins-base"
+    },
+    "virtual_package_plugins": {
+      "rocm-detect": [
+        "__rocm"
+      ],
+      "vendor-cuda-detect": [
+        "__cuda"
+      ],
+      "vendor-glibc-detect": [
+        "__glibc"
+      ]
+    }
+  },
+  "packages.conda": {},
+  "repodata_version": 2,
+  "packages": {
+    "vendor-cuda-detect-1.0.0-h0000000_0.tar.bz2": {
+      "build": "h0000000_0",
+      "build_number": 0,
+      "depends": [
+        "vendor-lib"
+      ],
+      "name": "vendor-cuda-detect",
+      "noarch": "generic",
+      "subdir": "noarch",
+      "timestamp": 1700000000000,
+      "version": "1.0.0",
+      "md5": "4968fb7a73b54e223cfaad3a38e78360",
+      "sha256": "4b072cee0b8ab7ff223ec6f11db2f7d1d69558d8ad4fd5ac45bfddb1afc67001",
+      "size": 726
+    }
+  }
+}

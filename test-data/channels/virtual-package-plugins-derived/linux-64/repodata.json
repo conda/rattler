@@ -1,0 +1,16 @@
+{
+  "info": {
+    "subdir": "linux-64",
+    "base_url": "../linux-64",
+    "channel_relations": {
+      "base": "../virtual-package-plugins-base"
+    },
+    "virtual_package_plugins": {
+      "rocm-detect": ["__rocm"],
+      "vendor-cuda-detect": ["__cuda"],
+      "vendor-glibc-detect": ["__glibc"]
+    }
+  },
+  "packages.conda": {},
+  "repodata_version": 2
+}

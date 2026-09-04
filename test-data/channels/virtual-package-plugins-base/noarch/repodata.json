@@ -1,0 +1,29 @@
+{
+  "info": {
+    "subdir": "noarch",
+    "base_url": "../noarch",
+    "virtual_package_plugins": {
+      "cuda-detect": [
+        "__cuda",
+        "__cuda_arch"
+      ]
+    }
+  },
+  "packages.conda": {},
+  "repodata_version": 2,
+  "packages": {
+    "vendor-lib-1.0.0-h0000000_0.tar.bz2": {
+      "build": "h0000000_0",
+      "build_number": 0,
+      "depends": [],
+      "name": "vendor-lib",
+      "noarch": "generic",
+      "subdir": "noarch",
+      "timestamp": 1700000000000,
+      "version": "1.0.0",
+      "md5": "435c387eec54cf6299591e35c10af32d",
+      "sha256": "173d8a7b5b84dc01ffaa7657473a1a5ffa5204bbe5e5b8dc90fcec5a40aff0bd",
+      "size": 422
+    }
+  }
+}
