@@ -1940,6 +1940,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#rattler.repo_data.gateway.Gateway.who_needs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        who_needs
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2175,6 +2186,34 @@
     
   
     Repodata
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../who_needs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WhoNeeds
   
 
     
@@ -3307,6 +3346,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#rattler.repo_data.gateway.Gateway.who_needs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        who_needs
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -4419,6 +4469,141 @@ is needed for custom sources, it must be implemented within the source itself.</
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">records</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="rattler.repo_data.gateway.Gateway.who_needs" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">who_needs</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#rattler.repo_data.gateway.Gateway.who_needs" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">who_needs</span><span class="p">(</span><span class="n">sources</span><span class="p">,</span> <span class="n">platforms</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Returns the reverse dependencies of <code>target</code> in the given sources.</p>
+<p>Scans every package of the queried sources and platforms entirely
+in Rust and converts only the matching records to Python objects.
+A record references <code>target</code> when one of its <code>depends</code>,
+<code>constrains</code> or <code>extra_depends</code> entries, or one of its run
+exports, matches it; the <code>kind</code> of each result tells which field
+matched.</p>
+<p>How dependencies are matched depends on the target: a package name
+(or <code>str</code>) reports every record with a dependency entry on that
+name, while a concrete <code>PackageRecord</code> or <code>GenericVirtualPackage</code>
+only reports dependents whose dependency match spec matches it.</p>
+<p>Note that against sharded repodata this fetches one shard per
+package name in the channel; a gateway configured with
+<code>sharded_enabled=False</code> fetches the full repodata in a single
+request instead, which is usually much faster for this query.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>sources</code>
+            </td>
+            <td>
+                  <code><span title="typing.Iterable">Iterable</span>[<span title="typing.Union">Union</span>[<a class="autorefs autorefs-internal" title="Channel (rattler.channel.channel.Channel)" href="../channel/#rattler.channel.channel.Channel">Channel</a>, <span title="str">str</span>, <span title="rattler.repo_data.source.RepoDataSource">RepoDataSource</span>]]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The sources to query. Can be channels (by name, URL, or Channel object)
+     or custom RepoDataSource implementations.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>platforms</code>
+            </td>
+            <td>
+                  <code><span title="typing.Iterable">Iterable</span>[<a class="autorefs autorefs-internal" title="Platform (rattler.platform.platform.Platform)" href="../platform/#rattler.platform.platform.Platform">Platform</a> | <span title="rattler.platform.platform.PlatformLiteral">PlatformLiteral</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The platforms to query.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>target</code>
+            </td>
+            <td>
+                  <code><span title="typing.Union">Union</span>[<span title="str">str</span>, <a class="autorefs autorefs-internal" title="PackageName (rattler.package.package_name.PackageName)" href="../package_name/#rattler.package.package_name.PackageName">PackageName</a>, &#39;PackageRecord&#39;, &#39;GenericVirtualPackage&#39;]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The package to find reverse dependencies for.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="Dependent (rattler.repo_data.who_needs.Dependent)" href="../who_needs/#rattler.repo_data.who_needs.Dependent">Dependent</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The records that reference <code>target</code>, together with the</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="Dependent (rattler.repo_data.who_needs.Dependent)" href="../who_needs/#rattler.repo_data.who_needs.Dependent">Dependent</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>dependency string and kind through which they reference it.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
     </div>
