@@ -1,0 +1,17 @@
+---
+source: crates/rattler_azure/src/host.rs
+expression: rejections
+---
+acct.blob.core.windows.net/general: "`acct.blob.core.windows.net/general` is not a valid Azure host: it carries a path, query or fragment; expected `host` or `host:port`"
+acct.blob.core.windows.net?sv=token: "`acct.blob.core.windows.net?sv=token` is not a valid Azure host: it carries a path, query or fragment; expected `host` or `host:port`"
+"acct.blob.core.windows.net#frag": "`acct.blob.core.windows.net#frag` is not a valid Azure host: it carries a path, query or fragment; expected `host` or `host:port`"
+"https://acct.blob.core.windows.net": "`https://acct.blob.core.windows.net` is not a valid Azure host: it carries a path, query or fragment; expected `host` or `host:port`"
+"": "`` is not a valid Azure host: empty host; expected `host` or `host:port`"
+"acct.blob.core.windows.net:notaport": "`acct.blob.core.windows.net:notaport` is not a valid Azure host: invalid port number; expected `host` or `host:port`"
+"acct.blob.core.windows.net:": "`acct.blob.core.windows.net:` is not a valid Azure host: its port is empty; expected `host` or `host:port`"
+"acct.blob.core.windows.net:0": "`acct.blob.core.windows.net:0` is not a valid Azure host: port 0 cannot be connected to; expected `host` or `host:port`"
+"[::1]:": "`[::1]:` is not a valid Azure host: its port is empty; expected `host` or `host:port`"
+"[::1]:0": "`[::1]:0` is not a valid Azure host: port 0 cannot be connected to; expected `host` or `host:port`"
+acct..blob.core.windows.net: "`acct..blob.core.windows.net` is not a valid Azure host: one of its labels is empty; expected `host` or `host:port`"
+acct.blob.example..: "`acct.blob.example..` is not a valid Azure host: one of its labels is empty; expected `host` or `host:port`"
+".example": "`.example` is not a valid Azure host: one of its labels is empty; expected `host` or `host:port`"

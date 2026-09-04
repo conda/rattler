@@ -1,0 +1,40 @@
+[package]
+name = "rattler_azure"
+version = "0.1.0"
+description = "A crate to streamline interaction with Azure Blob storage for rattler"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+readme.workspace = true
+
+[features]
+default = []
+# CLI credential options; resolving them can mint a SAS through the `az` CLI,
+# hence `jiff`, `which` and `tokio`.
+clap = ["dep:clap", "dep:jiff", "dep:which", "dep:tokio"]
+opendal = ["dep:opendal"]
+serde = ["dep:serde", "indexmap/serde"]
+
+[dependencies]
+clap = { workspace = true, optional = true }
+indexmap = { workspace = true }
+jiff = { workspace = true, optional = true }
+opendal = { workspace = true, default-features = false, features = [
+  "services-azblob",
+], optional = true }
+percent-encoding = { workspace = true }
+secrecy = { workspace = true }
+serde = { workspace = true, features = ["derive"], optional = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["process"], optional = true }
+url = { workspace = true }
+which = { workspace = true, optional = true }
+
+[dev-dependencies]
+indexmap = { workspace = true, features = ["serde"] }
+insta = { workspace = true, features = ["yaml"] }
+rstest = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }
+toml = { workspace = true }
