@@ -1,63 +1,307 @@
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+use indicatif::HumanBytes;
 use miette::{Context, IntoDiagnostic};
-use rattler_conda_types::package::{IndexJson, PathsJson};
-use rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url;
+use rattler_conda_types::NoArchKind;
+use rattler_conda_types::package::{
+    AboutJson, Files, IndexJson, PackageFile, PathsJson, RunExportsJson,
+};
+use rattler_package_streaming::archive::PackageArchive;
+use serde::Serialize;
 use url::Url;
 
 /// Inspect package metadata from a remote conda package.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
-    /// URL of the conda package to inspect (must be a .conda archive)
+    /// URL of the conda package to inspect (.conda or .tar.bz2 archive)
     #[clap(required = true)]
     url: Url,
 
-    /// Number of files to print
+    /// Number of files to print (0 prints all files)
     #[clap(long, default_value_t = 10)]
     limit: usize,
+
+    /// Print the package metadata as JSON
+    #[clap(long)]
+    json: bool,
+}
+
+/// All metadata read from the package; serialized as-is by `--json`.
+#[derive(Serialize)]
+struct Metadata {
+    index: IndexJson,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    about: Option<AboutJson>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    run_exports: Option<RunExportsJson>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    paths: Option<PathsJson>,
+    /// Fallback file listing from `info/files` for old packages that do not
+    /// contain a `paths.json`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    files: Option<Vec<PathBuf>>,
 }
 
 pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
     let client = super::client::create_client_with_middleware(offline)?;
 
-    let index_json: IndexJson = fetch_package_file_from_remote_url(client.clone(), opt.url.clone())
+    let archive = PackageArchive::from_url(client, opt.url.clone())
         .await
         .into_diagnostic()
-        .context("failed to read index.json")?;
+        .with_context(|| format!("failed to open package archive at {}", opt.url))?;
 
-    println!("name: {}", index_json.name.as_normalized());
-    println!("version: {}", index_json.version);
-    println!("build: {}", index_json.build);
-    if let Some(ref license) = index_json.license {
-        println!("license: {license}");
+    // All metadata lives in the info section; a single batched call reads it
+    // in one pass (for sparse `.conda` archives usually straight from the
+    // cached archive tail).
+    let mut files = archive
+        .read_files([
+            IndexJson::package_path(),
+            AboutJson::package_path(),
+            RunExportsJson::package_path(),
+            PathsJson::package_path(),
+            Files::package_path(),
+        ])
+        .await
+        .into_diagnostic()
+        .context("failed to read package metadata")?;
+
+    let index: IndexJson = parse_from_batch(&mut files)?
+        .ok_or_else(|| miette::miette!("package does not contain an info/index.json"))?;
+    let about: Option<AboutJson> = parse_from_batch(&mut files)?;
+    let run_exports: Option<RunExportsJson> = parse_from_batch(&mut files)?;
+    let paths: Option<PathsJson> = parse_from_batch(&mut files)?;
+    let legacy_files: Option<Files> = if paths.is_none() {
+        parse_from_batch(&mut files)?
+    } else {
+        None
+    };
+
+    let metadata = Metadata {
+        index,
+        about,
+        run_exports: run_exports.filter(|run_exports| !run_exports.is_empty()),
+        paths,
+        files: legacy_files.map(|files| files.files),
+    };
+
+    if opt.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&metadata).into_diagnostic()?
+        );
+    } else {
+        print_human(&metadata, opt.limit);
     }
-    if let Some(ref subdir) = index_json.subdir {
+    Ok(())
+}
+
+/// Takes a file out of a batched `read_files` result and parses it, or `None`
+/// when the package does not contain it.
+fn parse_from_batch<P: PackageFile>(
+    files: &mut HashMap<PathBuf, Option<Vec<u8>>>,
+) -> miette::Result<Option<P>> {
+    files
+        .remove(P::package_path())
+        .flatten()
+        .map(|bytes| {
+            P::from_slice(&bytes)
+                .into_diagnostic()
+                .with_context(|| format!("failed to parse {}", P::package_path().display()))
+        })
+        .transpose()
+}
+
+fn print_human(metadata: &Metadata, limit: usize) {
+    print_index(&metadata.index);
+    if let Some(about) = &metadata.about {
+        print_about(about);
+    }
+    if let Some(run_exports) = &metadata.run_exports {
+        print_run_exports(run_exports);
+    }
+    print_paths(metadata, limit);
+}
+
+fn print_index(index: &IndexJson) {
+    println!("name: {}", index.name.as_normalized());
+    println!("version: {}", index.version);
+    println!("build: {}", index.build);
+    println!("build number: {}", index.build_number);
+    if let Some(subdir) = &index.subdir {
         println!("subdir: {subdir}");
     }
-    if !index_json.depends.is_empty() {
-        println!("depends:");
-        for dep in &index_json.depends {
-            println!("  - {dep}");
+    if let Some(noarch) = index.noarch.kind() {
+        let noarch = match noarch {
+            NoArchKind::Python => "python",
+            NoArchKind::Generic => "generic",
+        };
+        println!("noarch: {noarch}");
+    }
+    if let Some(license) = &index.license {
+        println!("license: {license}");
+    }
+    if let Some(license_family) = &index.license_family {
+        println!("license family: {license_family}");
+    }
+    if let Some(timestamp) = &index.timestamp {
+        println!("timestamp: {}", timestamp.jiff_timestamp());
+    }
+    print_list("depends", &index.depends);
+    print_list("constrains", &index.constrains);
+    if !index.extra_depends.is_empty() {
+        println!("extra depends:");
+        for (extra, depends) in &index.extra_depends {
+            println!("  {extra}:");
+            for dep in depends {
+                println!("    - {dep}");
+            }
         }
     }
-    if !index_json.constrains.is_empty() {
-        println!("constrains:");
-        for c in &index_json.constrains {
-            println!("  - {c}");
+    print_list("track features", &index.track_features);
+    if let Some(purls) = &index.purls {
+        print_list("purls", purls);
+    }
+    if let Some(site_packages_path) = &index.python_site_packages_path {
+        println!("python site-packages path: {site_packages_path}");
+    }
+}
+
+fn print_about(about: &AboutJson) {
+    let has_content = about.summary.is_some()
+        || about.description.is_some()
+        || !about.home.is_empty()
+        || !about.doc_url.is_empty()
+        || !about.dev_url.is_empty()
+        || about.source_url.is_some();
+    if !has_content {
+        return;
+    }
+
+    println!();
+    if let Some(summary) = &about.summary {
+        print_text("summary", summary);
+    }
+    if let Some(description) = &about.description {
+        print_text("description", description);
+    }
+    print_urls("homepage", &about.home);
+    print_urls("documentation", &about.doc_url);
+    print_urls("development", &about.dev_url);
+    if let Some(source_url) = &about.source_url {
+        println!("source: {source_url}");
+    }
+}
+
+fn print_run_exports(run_exports: &RunExportsJson) {
+    println!();
+    println!("run exports:");
+    print_indented_list("weak", &run_exports.weak);
+    print_indented_list("strong", &run_exports.strong);
+    print_indented_list("noarch", &run_exports.noarch);
+    print_indented_list("weak constrains", &run_exports.weak_constrains);
+    print_indented_list("strong constrains", &run_exports.strong_constrains);
+}
+
+fn print_paths(metadata: &Metadata, limit: usize) {
+    println!();
+    if let Some(paths) = &metadata.paths {
+        let total = paths.paths.len();
+        if paths
+            .paths
+            .iter()
+            .any(|entry| entry.size_in_bytes.is_some())
+        {
+            let total_size: u64 = paths
+                .paths
+                .iter()
+                .filter_map(|entry| entry.size_in_bytes)
+                .sum();
+            println!(
+                "paths: ({total} total, {} installed)",
+                HumanBytes(total_size)
+            );
+        } else {
+            println!("paths: ({total} total)");
+        }
+        let limit = if limit == 0 { total } else { limit };
+        for entry in paths.paths.iter().take(limit) {
+            match entry.size_in_bytes {
+                Some(size) => println!(
+                    "  - {} ({})",
+                    entry.relative_path.display(),
+                    HumanBytes(size)
+                ),
+                None => println!("  - {}", entry.relative_path.display()),
+            }
+        }
+        if total > limit {
+            println!("  ... and {} more", total - limit);
+        }
+    } else if let Some(files) = &metadata.files {
+        let total = files.len();
+        println!("paths: ({total} total, from info/files)");
+        let limit = if limit == 0 { total } else { limit };
+        for path in files.iter().take(limit) {
+            println!("  - {}", path.display());
+        }
+        if total > limit {
+            println!("  ... and {} more", total - limit);
+        }
+    } else {
+        println!("paths: (package lists no files)");
+    }
+}
+
+/// Prints a `label:` line followed by one `  - item` line per item, or
+/// nothing when there are no items.
+fn print_list(label: &str, items: impl IntoIterator<Item = impl std::fmt::Display>) {
+    let mut items = items.into_iter().peekable();
+    if items.peek().is_none() {
+        return;
+    }
+    println!("{label}:");
+    for item in items {
+        println!("  - {item}");
+    }
+}
+
+/// Like [`print_list`] but indented one level, for the run exports section.
+fn print_indented_list(label: &str, items: &[String]) {
+    if items.is_empty() {
+        return;
+    }
+    println!("  {label}:");
+    for item in items {
+        println!("    - {item}");
+    }
+}
+
+/// Prints a single-line value inline and a multi-line value as an indented
+/// block.
+fn print_text(label: &str, text: &str) {
+    let text = text.trim_end();
+    if text.contains('\n') {
+        println!("{label}:");
+        for line in text.lines() {
+            println!("  {line}");
+        }
+    } else {
+        println!("{label}: {text}");
+    }
+}
+
+/// Prints a single URL inline and multiple URLs as a list, or nothing when
+/// there are none.
+fn print_urls(label: &str, urls: &[Url]) {
+    match urls {
+        [] => {}
+        [url] => println!("{label}: {url}"),
+        urls => {
+            println!("{label}:");
+            for url in urls {
+                println!("  - {url}");
+            }
         }
     }
-
-    let paths_json: PathsJson = fetch_package_file_from_remote_url(client, opt.url)
-        .await
-        .into_diagnostic()
-        .context("failed to read paths.json")?;
-
-    let total = paths_json.paths.len();
-    println!("paths: ({total} total)");
-    for entry in paths_json.paths.iter().take(opt.limit) {
-        println!("  - {}", entry.relative_path.display());
-    }
-    if total > opt.limit {
-        println!("  ... and {} more", total - opt.limit);
-    }
-
-    Ok(())
 }
