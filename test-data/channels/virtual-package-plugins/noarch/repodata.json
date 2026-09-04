@@ -1,0 +1,106 @@
+{
+  "info": {
+    "subdir": "noarch",
+    "base_url": "../noarch",
+    "virtual_package_plugins": {
+      "foobar-detect": [
+        "__foobar",
+        "__foobar_arch"
+      ],
+      "rocm-detect": [
+        "__rocm"
+      ],
+      "change-me-detect": [
+        "__change_me"
+      ]
+    }
+  },
+  "packages.conda": {},
+  "repodata_version": 2,
+  "packages": {
+    "change-me-detect-1.0.0-h0000000_0.tar.bz2": {
+      "build": "h0000000_0",
+      "build_number": 0,
+      "depends": [],
+      "name": "change-me-detect",
+      "noarch": "generic",
+      "subdir": "noarch",
+      "timestamp": 1700000000000,
+      "version": "1.0.0",
+      "md5": "c47d1b23928efd2c30ed2096c75864d6",
+      "sha256": "403e3391ee6008b7756aaa7a4315c5200ac33100bd1951fa3fdd80885905f286",
+      "size": 1033
+    },
+    "change-me-probe-1.0.0-even.tar.bz2": {
+      "build": "even",
+      "build_number": 0,
+      "depends": [
+        "__change_me ==0"
+      ],
+      "name": "change-me-probe",
+      "noarch": "generic",
+      "subdir": "noarch",
+      "timestamp": 1700000000000,
+      "version": "1.0.0",
+      "md5": "889bebbfdd4dbf06c832b8f199b3da67",
+      "sha256": "fe01d7999dc221d89cc14e2ca54a01b94caa8d13fb009db1da0ff0fef54d5bc6",
+      "size": 675
+    },
+    "change-me-probe-1.0.0-odd.tar.bz2": {
+      "build": "odd",
+      "build_number": 0,
+      "depends": [
+        "__change_me ==1"
+      ],
+      "name": "change-me-probe",
+      "noarch": "generic",
+      "subdir": "noarch",
+      "timestamp": 1700000000000,
+      "version": "1.0.0",
+      "md5": "ab279128587dfa8a3de18a8e03f891a4",
+      "sha256": "538f7631f761cbc2e4c7ebbdb442b3e3841a7877846746f2ca55c0b6a7d81f7d",
+      "size": 666
+    },
+    "foobar-detect-1.0.0-h0000000_0.tar.bz2": {
+      "build": "h0000000_0",
+      "build_number": 0,
+      "depends": [],
+      "name": "foobar-detect",
+      "noarch": "generic",
+      "subdir": "noarch",
+      "timestamp": 1700000000000,
+      "version": "1.0.0",
+      "md5": "ddf06d4dfde841ad34abd875b9ed3983",
+      "sha256": "6c7880afbc1de2759189be0c8c2fad811e7aa0c27fa33ea2ad29f7c3fe37eea6",
+      "size": 853
+    },
+    "foobar-probe-1.0.0-with_foobar.tar.bz2": {
+      "build": "with_foobar",
+      "build_number": 1,
+      "depends": [
+        "__foobar >=1.0"
+      ],
+      "name": "foobar-probe",
+      "noarch": "generic",
+      "subdir": "noarch",
+      "timestamp": 1700000000000,
+      "version": "1.0.0",
+      "md5": "55e76135d6be028b4a5fa7a6a402e558",
+      "sha256": "91aab736d7feb04c89157433e063ffe435e9b182bf29f19add27ca2c8500b34b",
+      "size": 754
+    },
+    "foobar-probe-1.0.0-without_foobar.tar.bz2": {
+      "build": "without_foobar",
+      "build_number": 0,
+      "depends": [],
+      "name": "foobar-probe",
+      "noarch": "generic",
+      "subdir": "noarch",
+      "timestamp": 1700000000000,
+      "version": "1.0.0",
+      "md5": "641b99bbd4dc13be9684a0f1391982e8",
+      "sha256": "0663aede035b468e2f2bc7e6059921c0f675d950d3128555a935e314d05283d6",
+      "size": 754
+    }
+  }
+}
