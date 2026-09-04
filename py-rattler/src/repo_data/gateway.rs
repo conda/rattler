@@ -344,6 +344,42 @@ impl PyGateway {
         })
     }
 
+    /// Computes the reverse dependencies of `target` in the given sources
+    /// and platforms entirely in Rust, converting only the matching records
+    /// to Python. The scan streams over the repodata package by package:
+    /// scanned records are neither materialized as Python objects nor
+    /// inserted into the gateway's long-lived record cache, so peak memory
+    /// is bounded by the in-flight scans instead of the complete repodata.
+    pub fn who_needs<'a>(
+        &self,
+        py: Python<'a>,
+        sources: Vec<Bound<'a, PyAny>>,
+        platforms: Vec<PyPlatform>,
+        target: &Bound<'a, PyAny>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let rust_sources: Vec<Source> = sources
+            .into_iter()
+            .map(py_object_to_source)
+            .collect::<PyResult<_>>()?;
+        let target = crate::who_needs::extract_who_needs_target(target)?;
+
+        let mut query =
+            self.inner
+                .who_needs(rust_sources, platforms.into_iter().map(|p| p.inner), target);
+        if self.show_progress {
+            query = query
+                .with_reporter(rattler_repodata_gateway::IndicatifReporter::builder().finish());
+        }
+
+        future_into_py(py, async move {
+            let dependents = query.execute().await.map_err(PyRattlerError::from)?;
+            Ok(dependents
+                .into_iter()
+                .map(crate::who_needs::PyDependent::from)
+                .collect::<Vec<_>>())
+        })
+    }
+
     #[pyo3(signature = (
         sources,
         platforms,

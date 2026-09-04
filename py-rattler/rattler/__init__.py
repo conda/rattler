@@ -17,6 +17,7 @@ from rattler.repo_data import (
     PackageFormatSelection,
     RepoDataSource,
     RepodataRevisionMetadata,
+    Dependent,
 )
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
 from rattler.networking import Client, fetch_repo_data
@@ -115,6 +116,7 @@ __all__ = [
     "GatewayQueryResult",
     "SourceConfig",
     "RepoDataSource",
+    "Dependent",
     "RepodataRevisionMetadata",
     "NoArchType",
     "NoArchLiteral",

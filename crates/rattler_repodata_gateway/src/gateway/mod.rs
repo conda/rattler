@@ -1,4 +1,5 @@
 mod barrier_cell;
+mod boxed;
 mod builder;
 mod channel_config;
 mod channel_expander;
@@ -19,11 +20,12 @@ mod source;
 mod subdir;
 mod subdir_builder;
 mod warning;
+mod who_needs_query;
 
 use std::{collections::HashSet, sync::Arc};
 
 use crate::reporter::report_unsupported_repodata_revisions;
-use crate::{Reporter, gateway::subdir_builder::SubdirBuilder};
+use crate::{Reporter, gateway::subdir_builder::SubdirBuilder, who_needs::WhoNeedsTarget};
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
@@ -48,6 +50,7 @@ use subdir::Subdir;
 use tracing::{Level, instrument};
 use url::Url;
 pub use warning::GatewayWarning;
+pub use who_needs_query::WhoNeedsQuery;
 
 /// Central access point for high level queries about
 /// [`rattler_conda_types::RepoDataRecord`]s from different channels.
@@ -189,6 +192,73 @@ impl Gateway {
             self.inner.clone(),
             channels.into_iter().map(Into::into).collect(),
             platforms.into_iter().collect(),
+        )
+    }
+
+    /// Finds the packages that depend on `target` — its reverse
+    /// dependencies — in the given sources and platforms.
+    ///
+    /// A package is reported when one of its `depends`, `constrains`,
+    /// `extra_depends`, or run export entries references the target; each
+    /// result records which of those it was. What counts as a reference
+    /// depends on the target: a [`PackageName`] matches every dependency on
+    /// that name, while a concrete [`PackageRecord`] or
+    /// [`GenericVirtualPackage`] only matches dependencies whose match spec
+    /// accepts it. See [`WhoNeedsTarget`].
+    ///
+    /// Answering this needs every record of the queried platforms, not just
+    /// the records of one package name, so this query reads far more
+    /// repodata than [`Gateway::query`] does. It is built to keep that
+    /// affordable: records are scanned in batches and dropped again right
+    /// away instead of being kept in the gateway's cache, so only the
+    /// matches are retained. Prefer [`WhoNeedsQuery::stream`] over awaiting
+    /// the query if you can reduce the matches as they arrive, since for a
+    /// widely used package the results are the larger cost.
+    ///
+    /// ```no_run
+    /// # use rattler_conda_types::{Channel, PackageName, Platform};
+    /// # use rattler_repodata_gateway::Gateway;
+    /// # async fn example(gateway: Gateway, channel: Channel) -> anyhow::Result<()> {
+    /// // Which packages of the channel depend on `polars`?
+    /// let dependents = gateway
+    ///     .who_needs(
+    ///         vec![channel],
+    ///         vec![Platform::Linux64, Platform::NoArch],
+    ///         PackageName::new_unchecked("polars"),
+    ///     )
+    ///     .await?;
+    ///
+    /// for dependent in dependents {
+    ///     println!(
+    ///         "{} references polars through the {} entry '{}'",
+    ///         dependent.record.package_record.name.as_normalized(),
+    ///         dependent.kind,
+    ///         dependent.dependency,
+    ///     );
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`PackageName`]: rattler_conda_types::PackageName
+    /// [`PackageRecord`]: rattler_conda_types::PackageRecord
+    /// [`GenericVirtualPackage`]: rattler_conda_types::GenericVirtualPackage
+    pub fn who_needs<AsSource, SourceIter, PlatformIter>(
+        &self,
+        sources: SourceIter,
+        platforms: PlatformIter,
+        target: impl Into<WhoNeedsTarget>,
+    ) -> WhoNeedsQuery
+    where
+        AsSource: Into<Source>,
+        SourceIter: IntoIterator<Item = AsSource>,
+        PlatformIter: IntoIterator<Item = Platform>,
+    {
+        WhoNeedsQuery::new(
+            self.inner.clone(),
+            sources.into_iter().map(Into::into).collect(),
+            platforms.into_iter().collect(),
+            target.into(),
         )
     }
 

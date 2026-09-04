@@ -26,6 +26,7 @@ mod solver;
 mod utils;
 mod version;
 mod virtual_package;
+mod who_needs;
 
 mod exceptions;
 mod index_json;
@@ -83,6 +84,7 @@ use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum}
 use solver::{py_solve, py_solve_with_sparse_repodata};
 use version::{PyVersion, PyVersionSpec};
 use virtual_package::{PyOverride, PyVirtualPackage, PyVirtualPackageOverrides};
+use who_needs::PyDependent;
 
 #[cfg(feature = "pty")]
 use pty::{PyPtyProcess, PyPtyProcessOptions, PyPtySession};
@@ -183,6 +185,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyFileMode>()?;
     m.add_class::<PyIndexJson>()?;
 
+    m.add_class::<PyDependent>()?;
     m.add_function(wrap_pyfunction!(py_solve, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_solve_with_sparse_repodata, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(get_rattler_version, &m).unwrap())?;

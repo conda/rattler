@@ -66,6 +66,8 @@ mod reporter;
 #[cfg(feature = "sparse")]
 pub mod sparse;
 mod utils;
+#[cfg(feature = "gateway")]
+pub mod who_needs;
 pub use reporter::{DownloadReporter, Reporter};
 #[cfg(feature = "sparse")]
 pub use reporter::{SUPPORTED_REPODATA_REVISION, UnsupportedRepodataRevision};
@@ -81,6 +83,7 @@ pub use gateway::{
     ChannelRelationsWarning, DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH, Gateway, GatewayBuilder,
     GatewayError, GatewayWarning, MaxConcurrency, NamesQuery, NamesQueryOutput, RepoData,
     RepoDataQuery, RepoDataQueryOutput, RepoDataSource, Source, SourceConfig, SubdirSelection,
+    WhoNeedsQuery,
 };
 #[cfg(feature = "indicatif")]
 pub use gateway::{IndicatifReporter, IndicatifReporterBuilder};
