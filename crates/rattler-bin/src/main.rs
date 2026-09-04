@@ -8,6 +8,7 @@ use crate::{commands::exec, writer::IndicatifWriter};
 
 mod commands;
 mod exclude_newer;
+mod solver_args;
 mod writer;
 
 /// Returns a global instance of [`indicatif::MultiProgress`].
