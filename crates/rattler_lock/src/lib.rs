@@ -81,6 +81,9 @@ use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
 mod builder;
 mod channel;
 mod conda;
+mod export;
+#[cfg(test)]
+mod export_tests;
 mod file_format_version;
 mod hash;
 pub mod options;
@@ -100,6 +103,7 @@ pub use conda::{
     CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, GitShallowSpec, InputHash,
     PackageBuildSource, PartialSourceMetadata, SourceMetadata, VariantValue,
 };
+pub use export::UrlExportError;
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
 pub use options::{PypiPrereleaseMode, SolveOptions};
@@ -604,13 +608,19 @@ impl LockFile {
         parse::from_str_with_base_directory(source, base_dir)
     }
 
-    /// Writes the conda lock to a file
+    /// Writes the conda lock to a file.
+    ///
+    /// URLs are preserved. Call [`Self::validate_urls_for_export`] first when
+    /// publishing a lockfile that must not contain URL credentials.
     pub fn to_path(&self, path: &Path) -> Result<(), std::io::Error> {
         let file = std::fs::File::create(path)?;
         serde_yaml::to_writer(file, self).map_err(std::io::Error::other)
     }
 
-    /// Writes the conda lock to a string
+    /// Writes the conda lock to a string.
+    ///
+    /// URLs are preserved. Call [`Self::validate_urls_for_export`] first when
+    /// publishing a lockfile that must not contain URL credentials.
     pub fn render_to_string(&self) -> Result<String, std::io::Error> {
         serde_yaml::to_string(self).map_err(std::io::Error::other)
     }
