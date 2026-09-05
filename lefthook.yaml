@@ -25,7 +25,7 @@ pre-commit:
     - name: zizmor
       glob: "*.{yml,yaml}"
       stage_fixed: true
-      run: pixi {run} zizmor
+      run: pixi {run} zizmor-check
     - name: cargo-fmt
       glob: "*.rs"
       stage_fixed: true

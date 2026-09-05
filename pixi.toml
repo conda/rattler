@@ -71,7 +71,7 @@ vouch = "*"
 
 [feature.lint.tasks]
 actionlint = { cmd = "actionlint", env = { SHELLCHECK_OPTS = "-e SC2086 -e SC2046 -e SC2028" } }
-zizmor = { cmd = "zizmor --no-progress --min-severity high --fix --offline .", description = "Audit GitHub Actions workflows with zizmor" }
+zizmor-check = { cmd = "zizmor --no-progress --min-severity high --fix --offline .", description = "Audit GitHub Actions workflows with zizmor" }
 dprint-check = { cmd = "dprint check --log-level=silent", description = "Check formatting with dprint" }
 dprint-fmt = { cmd = "dprint fmt --incremental=false", description = "Format with dprint" }
 lefthook = { cmd = "lefthook", description = "Run lefthook" }
