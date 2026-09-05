@@ -5,16 +5,17 @@ use indicatif::HumanBytes;
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::NoArchKind;
 use rattler_conda_types::package::{AboutJson, IndexJson, PackageFile, PathsJson, RunExportsJson};
-use rattler_package_streaming::archive::PackageArchive;
 use serde::Serialize;
 use url::Url;
 
-/// Inspect package metadata from a remote conda package.
+use super::package_source::{PackageSource, client_for};
+
+/// Inspect package metadata from a local or remote conda package.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
-    /// URL of the conda package to inspect (.conda or .tar.bz2 archive)
+    /// Path or URL of the conda package to inspect (.conda or .tar.bz2 archive)
     #[clap(required = true)]
-    url: Url,
+    package: String,
 
     /// Number of files to print (a negative value prints all files)
     #[clap(long, default_value_t = 10, allow_hyphen_values = true)]
@@ -39,12 +40,9 @@ struct Metadata {
 }
 
 pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
-    let client = super::client::create_client_with_middleware(offline)?;
-
-    let archive = PackageArchive::from_url(client, opt.url.clone())
-        .await
-        .into_diagnostic()
-        .with_context(|| format!("failed to open package archive at {}", opt.url))?;
+    let source = PackageSource::parse(&opt.package);
+    let client = client_for([&source], offline)?;
+    let archive = source.open(client.as_ref()).await?;
 
     // All metadata lives in the info section; a single batched call reads it
     // in one pass (for sparse `.conda` archives usually straight from the
