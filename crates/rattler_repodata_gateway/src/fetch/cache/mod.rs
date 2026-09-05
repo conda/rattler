@@ -29,6 +29,16 @@ pub struct RepoDataState {
     )]
     pub cache_last_modified: SystemTime,
 
+    /// When the cached response was last downloaded or successfully revalidated.
+    #[serde(
+        default,
+        deserialize_with = "option_duration_from_nanos",
+        serialize_with = "option_duration_to_nanos",
+        rename = "refresh_ns",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub cache_last_validated: Option<SystemTime>,
+
     /// The size of the repodata.json file on disk.
     #[serde(rename = "size")]
     pub cache_size: u64,
@@ -116,6 +126,34 @@ fn duration_to_nanos<S: Serializer>(time: &SystemTime, s: S) -> Result<S::Ok, S:
         .map_err(|_err| S::Error::custom("duration cannot be computed for file time"))?
         .as_nanos()
         .serialize(s)
+}
+
+fn option_duration_from_nanos<'de, D>(deserializer: D) -> Result<Option<SystemTime>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+    Option::<u64>::deserialize(deserializer)?
+        .map(|nanos| {
+            SystemTime::UNIX_EPOCH
+                .checked_add(std::time::Duration::from_nanos(nanos))
+                .ok_or_else(|| D::Error::custom("the time cannot be represented internally"))
+        })
+        .transpose()
+}
+
+fn option_duration_to_nanos<S: Serializer>(
+    time: &Option<SystemTime>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    use serde::ser::Error;
+    time.map(|time| {
+        time.duration_since(SystemTime::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .map_err(|_error| S::Error::custom("duration cannot be computed for validation time"))
+    })
+    .transpose()?
+    .serialize(serializer)
 }
 
 fn deserialize_blake2_hash<'de, D>(
