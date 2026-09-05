@@ -220,6 +220,11 @@ pub struct InstallOptions {
     /// instead (if allowed).
     pub allow_ref_links: Option<bool>,
 
+    /// Force ordinary unmodified package files to use symbolic links to the
+    /// package cache. Files marked `no_link` or requiring prefix replacement
+    /// are still copied.
+    pub force_symbolic_links: bool,
+
     /// The platform for which the package is installed. Some operations like
     /// signing require different behavior depending on the platform. If the
     /// field is set to `None` the current platform is used.
@@ -455,6 +460,7 @@ pub async fn link_package(
                     allow_symbolic_links && !cloned_entry.no_link,
                     allow_hard_links && !cloned_entry.no_link,
                     allow_ref_links && !cloned_entry.no_link,
+                    options.force_symbolic_links && !cloned_entry.no_link,
                     platform,
                     options.apple_codesign_behavior,
                     modification_time,
@@ -891,6 +897,7 @@ pub fn link_package_sync(
                     allow_symbolic_links && !entry.no_link,
                     allow_hard_links && !entry.no_link,
                     allow_ref_links && !entry.no_link,
+                    options.force_symbolic_links && !entry.no_link,
                     platform,
                     options.apple_codesign_behavior,
                     modification_time,
