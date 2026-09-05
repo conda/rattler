@@ -16,7 +16,7 @@ use rattler_package_streaming::{
 };
 use sha2::{Digest, Sha256};
 
-use crate::commands::source::{PackageSource, open_package};
+use super::package_source::{PackageSource, client_for};
 
 /// Compare two conda packages and report the differences.
 ///
@@ -37,17 +37,11 @@ pub struct Opt {
 pub async fn compare_packages(opt: Opt, offline: bool) -> miette::Result<()> {
     let left_source = PackageSource::parse(&opt.left);
     let right_source = PackageSource::parse(&opt.right);
-
-    // Only create an HTTP client when at least one of the packages is remote.
-    let client = if left_source.is_remote() || right_source.is_remote() {
-        Some(super::client::create_client_with_middleware(offline)?)
-    } else {
-        None
-    };
+    let client = client_for([&left_source, &right_source], offline)?;
 
     let (left, right) = tokio::try_join!(
-        open_package(&left_source, client.clone(), &opt.left),
-        open_package(&right_source, client, &opt.right),
+        left_source.open(client.as_ref()),
+        right_source.open(client.as_ref()),
     )?;
 
     println!("comparing");

@@ -8,13 +8,12 @@ use rattler_conda_types::package::{AboutJson, IndexJson, PackageFile, PathsJson,
 use serde::Serialize;
 use url::Url;
 
-use crate::commands::source::{PackageSource, open_package};
+use super::package_source::{PackageSource, client_for};
 
 /// Inspect package metadata from a local or remote conda package.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
-    /// Path or URL of the conda package to inspect (.conda or .tar.bz2
-    /// archive)
+    /// Path or URL of the conda package to inspect (.conda or .tar.bz2 archive)
     #[clap(required = true)]
     package: String,
 
@@ -42,15 +41,8 @@ struct Metadata {
 
 pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
     let source = PackageSource::parse(&opt.package);
-
-    // Only create an HTTP client when the package is remote.
-    let client = if source.is_remote() {
-        Some(super::client::create_client_with_middleware(offline)?)
-    } else {
-        None
-    };
-
-    let archive = open_package(&source, client, &opt.package).await?;
+    let client = client_for([&source], offline)?;
+    let archive = source.open(client.as_ref()).await?;
 
     // All metadata lives in the info section; a single batched call reads it
     // in one pass (for sparse `.conda` archives usually straight from the

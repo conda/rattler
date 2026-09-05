@@ -74,6 +74,7 @@ reqwest = { workspace = true, features = ["stream", "query"] }
 reqwest-middleware = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 itertools = { workspace = true }
@@ -85,4 +86,3 @@ regex = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
-tempfile = { workspace = true }
