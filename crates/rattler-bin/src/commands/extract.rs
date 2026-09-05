@@ -192,3 +192,54 @@ pub async fn extract(opt: Opt, offline: bool) -> miette::Result<()> {
         None => Ok(()),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_package() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/packages/empty-0.1.0-h4616a5c_0.conda")
+    }
+
+    /// Extracts a local package end-to-end through the command entry point,
+    /// once per read mode.
+    #[tokio::test]
+    async fn test_extract_local_package() {
+        for mode in [Mode::Sync, Mode::Async] {
+            let destination = tempfile::tempdir().unwrap();
+            let target = destination.path().join("extracted");
+
+            extract(
+                Opt {
+                    packages: vec![test_package().to_string_lossy().into_owned()],
+                    destination: Some(target.clone()),
+                    mode,
+                    concurrency: 1,
+                },
+                true,
+            )
+            .await
+            .unwrap();
+
+            assert!(
+                target.join("info/index.json").is_file(),
+                "expected info/index.json after extracting with mode {mode:?}"
+            );
+        }
+    }
+
+    /// Without an explicit destination a single package is extracted into a
+    /// directory named after the archive identifier.
+    #[test]
+    fn test_default_destination_is_package_name() {
+        let source = Source::parse(&test_package().to_string_lossy());
+        assert_eq!(source.package_name().unwrap(), "empty-0.1.0-h4616a5c_0");
+    }
+
+    #[test]
+    fn test_package_name_of_non_archive_fails() {
+        let source = Source::parse("not-a-package.txt");
+        assert!(source.package_name().is_err());
+    }
+}

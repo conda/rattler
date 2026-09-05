@@ -1,7 +1,8 @@
+use std::sync::LazyLock;
+
 use clap::Parser;
 use indicatif::{MultiProgress, ProgressDrawTarget};
 use miette::IntoDiagnostic;
-use once_cell::sync::Lazy;
 use tracing_subscriber::{EnvFilter, filter::LevelFilter, util::SubscriberInitExt};
 
 use crate::{commands::exec, writer::IndicatifWriter};
@@ -18,7 +19,7 @@ mod writer;
 /// configured in such a way to it will not interfere if you use the
 /// [`indicatif::MultiProgress`] returning by this function.
 pub fn global_multi_progress() -> MultiProgress {
-    static GLOBAL_MP: Lazy<MultiProgress> = Lazy::new(|| {
+    static GLOBAL_MP: LazyLock<MultiProgress> = LazyLock::new(|| {
         let mp = MultiProgress::new();
         mp.set_draw_target(ProgressDrawTarget::stderr_with_hz(20));
         mp
@@ -150,5 +151,20 @@ async fn async_main() -> miette::Result<()> {
             rattler_upload::upload_from_args(*opts).await
         }
         Command::Exec(opts) => exec::exec(opts, offline).await,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::CommandFactory;
+
+    use super::Opt;
+
+    /// Runs clap's internal validation of the whole command tree (duplicate
+    /// flags, broken group references, invalid defaults, ...), which otherwise
+    /// only panics the first time the offending subcommand is actually used.
+    #[test]
+    fn test_cli_is_valid() {
+        Opt::command().debug_assert();
     }
 }

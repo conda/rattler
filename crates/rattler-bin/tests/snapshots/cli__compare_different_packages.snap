@@ -1,0 +1,34 @@
+---
+source: crates/rattler-bin/tests/cli.rs
+expression: "run_rattler(&[\"compare-packages\", EMPTY_PACKAGE, CLOBBER_PACKAGE])"
+---
+comparing
+  left:  test-data/packages/empty-0.1.0-h4616a5c_0.conda
+  right: test-data/clobber/clobber-1-0.2.0-h4616a5c_0.tar.bz2
+
+metadata
+  ~ name: empty -> clobber-1
+  ~ version: 0.1.0 -> 0.2.0
+  ~ timestamp: 2025-08-11T20:16:43.111Z -> 2024-01-24T12:41:52.243Z
+
+dependencies
+  no changes
+
+package files (paths.json)
+  + clobber.txt (13 B)
+  0 changed, 1 added, 0 removed, 0 unchanged
+
+info files
+  ~ info/about.json (69 B -> 41 B)
+  ~ info/hash_input.json (29 B -> 33 B)
+  ~ info/index.json (164 B -> 168 B)
+  ~ info/paths.json (39 B -> 225 B)
+  + info/recipe/meta.yaml (789 B)
+  + info/recipe/recipe-nested.yaml (833 B)
+  + info/recipe/recipe-version-2.yaml (476 B)
+  ~ info/recipe/recipe.yaml (70 B -> 530 B)
+  ~ info/recipe/rendered_recipe.yaml (1.38 KiB -> 1.39 KiB)
+  - info/tests/tests.yaml (3 B)
+  6 changed, 3 added, 1 removed, 1 unchanged
+
+the packages differ
