@@ -121,6 +121,32 @@ pub async fn fetch_index(
         Ok(sharded_index)
     }
 
+    async fn update_cached_index(
+        cache_reader: &mut BufReader<RwLockWriteGuard<File>>,
+        cache_path: &Path,
+        policy: CachePolicy,
+    ) -> Result<Option<ShardedRepodata>, GatewayError> {
+        let (shard_index, bytes) = match read_shard_index_with_bytes(cache_reader).await {
+            Ok(cached_index) => cached_index,
+            Err(error) => {
+                tracing::warn!("the cached shard index has been corrupted: {error}");
+                return Ok(None);
+            }
+        };
+        write_shard_index_cache(cache_reader.get_mut().inner_mut(), policy, bytes)
+            .await
+            .map_err(|error| {
+                GatewayError::IoError(
+                    format!(
+                        "failed to update shard index cache at {}",
+                        cache_path.display()
+                    ),
+                    error,
+                )
+            })?;
+        Ok(Some(shard_index))
+    }
+
     // Fetch the sharded repodata from the remote server
     let canonical_shards_url = channel_base_url
         .join(REPODATA_SHARDS_FILENAME)
@@ -272,26 +298,20 @@ pub async fn fetch_index(
                         &response,
                         SystemTime::now(),
                     ) {
-                        AfterResponse::NotModified(_policy, _) => {
-                            // The cached file is still valid
-                            match read_shard_index_from_reader(&mut cache_reader).await {
-                                Ok(shard_index) => {
-                                    tracing::debug!("shard index cache was not modified");
-                                    if let Some((reporter, index)) = download_reporter {
-                                        reporter.on_download_complete(response.url(), index);
-                                    }
-                                    // If reading the file failed for some reason we'll just
-                                    // fetch it again.
-                                    return Ok(shard_index);
-                                }
-                                Err(e) => {
-                                    tracing::warn!(
-                                        "the cached shard index has been corrupted: {e}"
-                                    );
-                                    if let Some((reporter, index)) = download_reporter {
-                                        reporter.on_download_complete(response.url(), index);
-                                    }
-                                }
+                        AfterResponse::NotModified(policy, _) => {
+                            // Preserve the body while updating its cache policy. Without this,
+                            // a 304 leaves the old policy in place and the next process
+                            // immediately revalidates the same index again.
+                            let shard_index =
+                                update_cached_index(&mut cache_reader, &cache_path, policy).await?;
+
+                            if let Some((reporter, index)) = download_reporter {
+                                reporter.on_download_complete(response.url(), index);
+                            }
+
+                            if let Some(shard_index) = shard_index {
+                                tracing::debug!("shard index cache was not modified");
+                                return Ok(shard_index);
                             }
                         }
                         AfterResponse::Modified(policy, _) => {
@@ -467,14 +487,22 @@ async fn write_not_found_cache(cache_file: &mut File, policy: CachePolicy) -> st
 pub async fn read_shard_index_from_reader<R: AsyncRead + Unpin>(
     reader: &mut BufReader<R>,
 ) -> Result<ShardedRepodata, GatewayError> {
-    // Read the file to memory
+    Ok(read_shard_index_with_bytes(reader).await?.0)
+}
+
+async fn read_shard_index_with_bytes<R: AsyncRead + Unpin>(
+    reader: &mut BufReader<R>,
+) -> Result<(ShardedRepodata, Bytes), GatewayError> {
     let mut bytes = Vec::new();
     reader
         .read_to_end(&mut bytes)
         .await
         .map_err(|e| GatewayError::IoError("failed to read shard index buffer".to_string(), e))?;
+    let bytes = Bytes::from(bytes);
+    Ok((parse_shard_index(bytes.clone()).await?, bytes))
+}
 
-    // Deserialize the bytes
+async fn parse_shard_index(bytes: Bytes) -> Result<ShardedRepodata, GatewayError> {
     run_blocking_task(move || {
         rmp_serde::from_slice(&bytes)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
