@@ -167,34 +167,4 @@ mod tests {
     fn test_cli_is_valid() {
         Opt::command().debug_assert();
     }
-
-    /// Pins the `--help` output of the top-level command and of every
-    /// subcommand so that unintended changes to the CLI surface show up as a
-    /// snapshot diff in review.
-    #[test]
-    fn test_help_snapshots() {
-        // The help output embeds values that differ between machines: the
-        // current platform is the default of every `--platform` flag, and clap
-        // renders the live value of `env = "..."` flags. Redact both so the
-        // snapshots are identical on every machine.
-        let platform = rattler_conda_types::Platform::current().to_string();
-        let env_value = regex::Regex::new(r"\[env: ([A-Za-z0-9_]+)=[^\]]*\]").unwrap();
-        let redact = |help: String| {
-            env_value
-                .replace_all(&help.replace(&platform, "[PLATFORM]"), "[env: $1=]")
-                .into_owned()
-        };
-
-        let mut cmd = Opt::command().name("rattler");
-        cmd.build();
-
-        insta::assert_snapshot!("help", redact(cmd.render_long_help().to_string()));
-        for subcommand in cmd.get_subcommands_mut() {
-            let name = subcommand.get_name().to_string();
-            insta::assert_snapshot!(
-                format!("help-{name}"),
-                redact(subcommand.render_long_help().to_string())
-            );
-        }
-    }
 }

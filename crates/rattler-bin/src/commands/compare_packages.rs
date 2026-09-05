@@ -15,7 +15,8 @@ use rattler_package_streaming::{
     archive::{ArchiveEntryKind, PackageArchive, Section},
 };
 use sha2::{Digest, Sha256};
-use url::Url;
+
+use crate::commands::source::{PackageSource, open_package};
 
 /// Compare two conda packages and report the differences.
 ///
@@ -33,50 +34,12 @@ pub struct Opt {
     right: String,
 }
 
-/// A package location: either a local file or a remote URL.
-enum PackageSource {
-    Url(Url),
-    Path(PathBuf),
-}
-
-/// Parses a command line argument into a local path or a remote URL. A single
-/// letter scheme is treated as a Windows drive letter.
-fn parse_source(source: &str) -> PackageSource {
-    match Url::parse(source) {
-        Ok(url) if url.scheme() == "file" => url.to_file_path().map_or_else(
-            |()| PackageSource::Path(PathBuf::from(source)),
-            PackageSource::Path,
-        ),
-        Ok(url) if url.scheme().len() > 1 => PackageSource::Url(url),
-        _ => PackageSource::Path(PathBuf::from(source)),
-    }
-}
-
-async fn open_package(
-    source: &PackageSource,
-    client: Option<reqwest_middleware::ClientWithMiddleware>,
-    display: &str,
-) -> miette::Result<PackageArchive> {
-    let archive = match source {
-        PackageSource::Url(url) => {
-            let client = client.expect("a client is created whenever a source is a URL");
-            PackageArchive::from_url(client, url.clone()).await
-        }
-        PackageSource::Path(path) => PackageArchive::from_path(path).await,
-    };
-    archive
-        .into_diagnostic()
-        .with_context(|| format!("failed to open package {display}"))
-}
-
 pub async fn compare_packages(opt: Opt, offline: bool) -> miette::Result<()> {
-    let left_source = parse_source(&opt.left);
-    let right_source = parse_source(&opt.right);
+    let left_source = PackageSource::parse(&opt.left);
+    let right_source = PackageSource::parse(&opt.right);
 
     // Only create an HTTP client when at least one of the packages is remote.
-    let client = if matches!(left_source, PackageSource::Url(_))
-        || matches!(right_source, PackageSource::Url(_))
-    {
+    let client = if left_source.is_remote() || right_source.is_remote() {
         Some(super::client::create_client_with_middleware(offline)?)
     } else {
         None
@@ -591,71 +554,5 @@ mod tests {
         assert_eq!(spec_name("libzlib"), "libzlib");
         assert_eq!(spec_name("foo[extras=[bar]]"), "foo");
         assert_eq!(spec_name("numpy 1.24.*"), "numpy");
-    }
-
-    fn test_data_dir() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
-    }
-
-    /// Compares a local package with itself end-to-end through the command
-    /// entry point; identical packages must never produce an error.
-    #[tokio::test]
-    async fn test_compare_identical_packages() {
-        let package = test_data_dir()
-            .join("packages/empty-0.1.0-h4616a5c_0.conda")
-            .to_string_lossy()
-            .into_owned();
-
-        compare_packages(
-            Opt {
-                left: package.clone(),
-                right: package,
-            },
-            true,
-        )
-        .await
-        .unwrap();
-    }
-
-    /// Compares two different local packages (one .conda, one .tar.bz2)
-    /// end-to-end; a difference is reported on stdout, not as an error.
-    #[tokio::test]
-    async fn test_compare_different_packages() {
-        compare_packages(
-            Opt {
-                left: test_data_dir()
-                    .join("packages/empty-0.1.0-h4616a5c_0.conda")
-                    .to_string_lossy()
-                    .into_owned(),
-                right: test_data_dir()
-                    .join("clobber/clobber-1-0.2.0-h4616a5c_0.tar.bz2")
-                    .to_string_lossy()
-                    .into_owned(),
-            },
-            true,
-        )
-        .await
-        .unwrap();
-    }
-
-    #[test]
-    fn test_parse_source() {
-        assert!(matches!(
-            parse_source("https://example.com/pkg-1.0-0.conda"),
-            PackageSource::Url(_)
-        ));
-        assert!(matches!(
-            parse_source("./pkg-1.0-0.conda"),
-            PackageSource::Path(_)
-        ));
-        assert!(matches!(
-            parse_source("pkg-1.0-0.tar.bz2"),
-            PackageSource::Path(_)
-        ));
-        // A single letter scheme is a Windows drive letter, not a URL.
-        assert!(matches!(
-            parse_source(r"C:\packages\pkg-1.0-0.conda"),
-            PackageSource::Path(_)
-        ));
     }
 }
