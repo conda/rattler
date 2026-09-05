@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.14](https://github.com/conda/rattler/compare/rattler-bin-v0.2.13...rattler-bin-v0.2.14) - 2026-09-05
+
+### Added
+
+- Support remote URLs in inject, fetch-file, and inspect commands ([#2538](https://github.com/conda/rattler/pull/2538))
+
 ## [0.2.13](https://github.com/conda/rattler/compare/rattler-bin-v0.2.12...rattler-bin-v0.2.13) - 2026-09-04
 
 ### Added
