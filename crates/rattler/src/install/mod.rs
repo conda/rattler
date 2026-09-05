@@ -218,6 +218,11 @@ pub struct InstallOptions {
     /// Ref links are only support by a small number of OSes and filesystems. If
     /// reflinking fails for whatever reason the files are hardlinked
     /// instead (if allowed).
+    ///
+    /// On macOS, executables and native libraries are hard linked instead of
+    /// reflinked when hard links are allowed, so that every prefix shares one
+    /// inode and the code signature is validated once rather than on the
+    /// first run in each prefix.
     pub allow_ref_links: Option<bool>,
 
     /// The platform for which the package is installed. Some operations like
