@@ -466,21 +466,26 @@ jobs:
           ref: main # We checkout the main branch to check for the commit
       - name: Check main branch
         if: ${{ inputs.sha }}
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
         run: |
           # Fetch the main branch since a shallow checkout is used by default
           git fetch origin main --unshallow
-          if ! git branch --contains ${{ inputs.sha }} | grep -E '(^|\s)main$'; then
+          if ! git branch --contains "$INPUT_SHA" | grep -E '(^|\s)main$'; then
             echo "The specified sha is not on the main branch" >&2
             exit 1
           fi
       - name: Check tag consistency
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          # Switch to the commit we want to release
-          git checkout ${{ inputs.sha }}
+          # Switch to the commit we want to release (stay on the current commit if no sha was given)
+          git checkout "${INPUT_SHA:-HEAD}"
           version=$(grep -m 1 "version = " py-rattler/Cargo.toml | sed -e 's/version = "\(.*\)"/\1/g')
-          if [ "${{ inputs.tag }}" != "${version}" ]; then
+          if [ "$INPUT_TAG" != "${version}" ]; then
             echo "The input tag does not match the version from Cargo.toml:" >&2
-            echo "${{ inputs.tag }}" >&2
+            echo "$INPUT_TAG" >&2
             echo "${version}" >&2
             exit 1
           else
@@ -561,11 +566,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_NOTES: ${{ needs.extract-changelog.outputs.release_notes }}
+          INPUT_TAG: ${{ inputs.tag }}
+          TARGET_SHA: ${{ inputs.sha || github.sha }}
         run: |
-          gh release create "py-rattler-v${{ inputs.tag }}" \
+          gh release create "py-rattler-v$INPUT_TAG" \
             --repo "${{ github.repository }}" \
-            --target "${{ inputs.sha || github.sha }}" \
-            --title "py-rattler v${{ inputs.tag }}" \
+            --target "$TARGET_SHA" \
+            --title "py-rattler v$INPUT_TAG" \
             --notes "$RELEASE_NOTES"
 
   deploy-release-docs:

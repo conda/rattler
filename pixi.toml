@@ -64,12 +64,14 @@ typos = ">=1.23.1,<2"
 dprint = ">=0.50.0,<0.51"
 lefthook = ">=2.0.11,<3"
 actionlint = ">=1.7.7,<2"
+zizmor = ">=1.29.0,<2"
 shellcheck = ">=0.10.0,<0.11"
 [feature.lint.target.unix.dependencies]
 vouch = "*"
 
 [feature.lint.tasks]
 actionlint = { cmd = "actionlint", env = { SHELLCHECK_OPTS = "-e SC2086 -e SC2046 -e SC2028" } }
+zizmor = { cmd = "zizmor --no-progress --min-severity high --fix --offline .", description = "Audit GitHub Actions workflows with zizmor" }
 dprint-check = { cmd = "dprint check --log-level=silent", description = "Check formatting with dprint" }
 dprint-fmt = { cmd = "dprint fmt --incremental=false", description = "Format with dprint" }
 lefthook = { cmd = "lefthook", description = "Run lefthook" }
