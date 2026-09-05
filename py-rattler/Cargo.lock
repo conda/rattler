@@ -4336,6 +4336,7 @@ dependencies = [
  "http-cache-semantics",
  "humansize",
  "humantime",
+ "indexmap 2.14.0",
  "indicatif",
  "itertools 0.15.0",
  "jiff",

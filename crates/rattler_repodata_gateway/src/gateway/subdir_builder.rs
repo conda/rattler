@@ -41,10 +41,11 @@ impl<'g> SubdirBuilder<'g> {
 
     pub async fn build(self) -> Result<Subdir, GatewayError> {
         let url = self.channel.platform_url(self.platform);
+        let source_config = self.gateway.channel_config.get(&self.channel.base_url);
 
         let subdir_data = if url.scheme() == "file" {
             if let Some(path) = url_to_path(&url) {
-                self.build_local(&path).await
+                self.build_local(&path, source_config).await
             } else {
                 return Err(GatewayError::UnsupportedUrl(
                     "unsupported file based url".to_string(),
@@ -56,8 +57,6 @@ impl<'g> SubdirBuilder<'g> {
             || url.scheme() == "oci"
             || url.scheme() == "s3"
         {
-            let source_config = self.gateway.channel_config.get(&self.channel.base_url);
-
             // Use sharded repodata if enabled
             let subdir_data = if source_config.sharded_enabled
                 || gateway::force_sharded_repodata(&url)
@@ -169,10 +168,23 @@ impl<'g> SubdirBuilder<'g> {
         Ok(SubdirData::from_client(client))
     }
 
-    async fn build_local(&self, path: &Path) -> Result<SubdirData, GatewayError> {
+    async fn build_local(
+        &self,
+        path: &Path,
+        source_config: &SourceConfig,
+    ) -> Result<SubdirData, GatewayError> {
         let channel = self.channel.clone();
         let platform = self.platform;
-        let path = path.join("repodata.json");
+        let variants = source_config
+            .repodata_variants
+            .clone()
+            .filter(|variants| !variants.is_empty())
+            .unwrap_or_else(|| indexmap::IndexSet::from([crate::fetch::Variant::default()]));
+        let path = variants
+            .iter()
+            .map(|variant| path.join(variant.file_name()))
+            .find(|candidate| candidate.is_file())
+            .unwrap_or_else(|| path.join(variants[0].file_name()));
         let build_client =
             move || LocalSubdirClient::from_file(&path, channel.clone(), platform.as_str());
 
