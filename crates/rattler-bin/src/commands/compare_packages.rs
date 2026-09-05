@@ -15,7 +15,8 @@ use rattler_package_streaming::{
     archive::{ArchiveEntryKind, PackageArchive, Section},
 };
 use sha2::{Digest, Sha256};
-use url::Url;
+
+use super::package_source::{PackageSource, client_for};
 
 /// Compare two conda packages and report the differences.
 ///
@@ -33,58 +34,14 @@ pub struct Opt {
     right: String,
 }
 
-/// A package location: either a local file or a remote URL.
-enum PackageSource {
-    Url(Url),
-    Path(PathBuf),
-}
-
-/// Parses a command line argument into a local path or a remote URL. A single
-/// letter scheme is treated as a Windows drive letter.
-fn parse_source(source: &str) -> PackageSource {
-    match Url::parse(source) {
-        Ok(url) if url.scheme() == "file" => url.to_file_path().map_or_else(
-            |()| PackageSource::Path(PathBuf::from(source)),
-            PackageSource::Path,
-        ),
-        Ok(url) if url.scheme().len() > 1 => PackageSource::Url(url),
-        _ => PackageSource::Path(PathBuf::from(source)),
-    }
-}
-
-async fn open_package(
-    source: &PackageSource,
-    client: Option<reqwest_middleware::ClientWithMiddleware>,
-    display: &str,
-) -> miette::Result<PackageArchive> {
-    let archive = match source {
-        PackageSource::Url(url) => {
-            let client = client.expect("a client is created whenever a source is a URL");
-            PackageArchive::from_url(client, url.clone()).await
-        }
-        PackageSource::Path(path) => PackageArchive::from_path(path).await,
-    };
-    archive
-        .into_diagnostic()
-        .with_context(|| format!("failed to open package {display}"))
-}
-
 pub async fn compare_packages(opt: Opt, offline: bool) -> miette::Result<()> {
-    let left_source = parse_source(&opt.left);
-    let right_source = parse_source(&opt.right);
-
-    // Only create an HTTP client when at least one of the packages is remote.
-    let client = if matches!(left_source, PackageSource::Url(_))
-        || matches!(right_source, PackageSource::Url(_))
-    {
-        Some(super::client::create_client_with_middleware(offline)?)
-    } else {
-        None
-    };
+    let left_source = PackageSource::parse(&opt.left);
+    let right_source = PackageSource::parse(&opt.right);
+    let client = client_for([&left_source, &right_source], offline)?;
 
     let (left, right) = tokio::try_join!(
-        open_package(&left_source, client.clone(), &opt.left),
-        open_package(&right_source, client, &opt.right),
+        left_source.open(client.as_ref()),
+        right_source.open(client.as_ref()),
     )?;
 
     println!("comparing");
@@ -591,26 +548,5 @@ mod tests {
         assert_eq!(spec_name("libzlib"), "libzlib");
         assert_eq!(spec_name("foo[extras=[bar]]"), "foo");
         assert_eq!(spec_name("numpy 1.24.*"), "numpy");
-    }
-
-    #[test]
-    fn test_parse_source() {
-        assert!(matches!(
-            parse_source("https://example.com/pkg-1.0-0.conda"),
-            PackageSource::Url(_)
-        ));
-        assert!(matches!(
-            parse_source("./pkg-1.0-0.conda"),
-            PackageSource::Path(_)
-        ));
-        assert!(matches!(
-            parse_source("pkg-1.0-0.tar.bz2"),
-            PackageSource::Path(_)
-        ));
-        // A single letter scheme is a Windows drive letter, not a URL.
-        assert!(matches!(
-            parse_source(r"C:\packages\pkg-1.0-0.conda"),
-            PackageSource::Path(_)
-        ));
     }
 }

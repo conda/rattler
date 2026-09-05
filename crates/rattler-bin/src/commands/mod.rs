@@ -12,6 +12,7 @@ pub mod inspect;
 pub mod link;
 pub mod list;
 pub mod menu;
+pub mod package_source;
 pub mod prefix;
 pub mod progress;
 pub mod run;
