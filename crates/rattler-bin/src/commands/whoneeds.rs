@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, path::Path, time::Instant};
+use std::{collections::HashMap, env, io::Write, path::Path, time::Instant};
 
 use futures_util::TryStreamExt;
 use indexmap::IndexMap;
@@ -6,7 +6,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::{
-    Channel, ChannelConfig, PackageName, PackageRecord, Platform, package::IndexJson,
+    Channel, ChannelConfig, PackageName, PackageRecord, Platform, Version, package::IndexJson,
 };
 use rattler_repodata_gateway::{
     Gateway, SourceConfig,
@@ -20,7 +20,8 @@ use url::Url;
   rattler whoneeds numpy                      # packages that depend on numpy
   rattler whoneeds __cuda                     # packages that depend on a virtual package
   rattler whoneeds ./python-3.13.1-h123_0.conda   # packages that can use this exact package
-  rattler whoneeds https://conda.anaconda.org/conda-forge/noarch/polars-1.44.1-pyh8da0edf_0.conda"#)]
+  rattler whoneeds https://conda.anaconda.org/conda-forge/noarch/polars-1.44.1-pyh8da0edf_0.conda
+  rattler whoneeds numpy --urls-only          # print only the urls of the dependent packages"#)]
 pub struct Opt {
     /// The package to find reverse dependencies for.
     ///
@@ -50,6 +51,10 @@ pub struct Opt {
     /// Output in JSON format
     #[clap(long, conflicts_with_all = ["limit", "all"])]
     json: bool,
+
+    /// Only print the URLs of the dependent packages, one per line
+    #[clap(long, conflicts_with_all = ["json", "limit", "all"])]
+    urls_only: bool,
 }
 
 /// Interprets the package argument as a package archive URL or path, or as
@@ -158,10 +163,60 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
         .who_needs(channels, [opt.platform, Platform::NoArch], target)
         .stream();
 
-    // Both output modes reduce every dependent to something much smaller
+    // All output modes reduce every dependent to something much smaller
     // than the record it came from, so they consume the stream and drop
     // each record as it arrives. A channel-wide query matches enough
     // records that retaining them all would cost about a gigabyte.
+    if opt.urls_only {
+        // The stream reports a record once per dependency kind through
+        // which it references the target, so the same url can arrive more
+        // than once. Only what is needed to sort and print is retained.
+        let mut records: Vec<(PackageName, Version, u64, Url)> = Vec::new();
+        while let Some(dependent) = stream
+            .try_next()
+            .await
+            .into_diagnostic()
+            .context("failed to compute reverse dependencies")?
+        {
+            let record = &dependent.record.package_record;
+            records.push((
+                record.name.clone(),
+                record.version.version().clone(),
+                record.build_number,
+                dependent.record.url.clone(),
+            ));
+        }
+        pb.finish_and_clear();
+
+        // Sort by name and then by version (newest first), like
+        // `rattler search --urls-only`.
+        records.sort_unstable_by(|a, b| {
+            a.0.cmp(&b.0)
+                .then_with(|| b.1.cmp(&a.1))
+                .then_with(|| b.2.cmp(&a.2))
+                .then_with(|| a.3.cmp(&b.3))
+        });
+        records.dedup_by(|a, b| a.3 == b.3);
+
+        // This output is meant to be piped (e.g. into `head`), so a closed
+        // stdout is a normal way to end instead of an error.
+        let mut stdout = std::io::stdout().lock();
+        for (_, _, _, url) in records {
+            if let Err(err) = writeln!(stdout, "{url}") {
+                if err.kind() == std::io::ErrorKind::BrokenPipe {
+                    return Ok(());
+                }
+                return Err(err).into_diagnostic();
+            }
+        }
+        if let Err(err) = stdout.flush()
+            && err.kind() != std::io::ErrorKind::BrokenPipe
+        {
+            return Err(err).into_diagnostic();
+        }
+        return Ok(());
+    }
+
     if opt.json {
         let mut json_records = Vec::new();
         while let Some(dependent) = stream
