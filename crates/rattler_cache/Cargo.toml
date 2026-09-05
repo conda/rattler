@@ -48,14 +48,17 @@ digest = { workspace = true }
 hex = { workspace = true }
 simple_spawn_blocking = { workspace = true, features = ["tokio"] }
 rayon = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
 axum = { workspace = true }
 bytes = { workspace = true }
+filetime = { workspace = true }
 futures = { workspace = true }
 rstest = { workspace = true }
+temp-env = { workspace = true }
 tokio-stream = { workspace = true }
 tower-http = { workspace = true, features = ["fs"] }
 tools = { path = "../tools" }
