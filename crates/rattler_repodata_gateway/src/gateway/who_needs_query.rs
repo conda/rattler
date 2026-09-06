@@ -702,8 +702,8 @@ mod tests {
         use assert_matches::assert_matches;
         use rattler_conda_types::{
             Channel, ChannelInfo, PackageName, PackageRecord, Platform, RepoData, RepoDataRecord,
-            RepodataRevisions, Shard, ShardedRepodata, ShardedSubdirInfo, VersionWithSource,
-            package::DistArchiveIdentifier,
+            RepodataRevisions, Shard, ShardedRepodata, ShardedSubdirInfo, V3Packages,
+            VersionWithSource, package::DistArchiveIdentifier,
         };
         use rattler_digest::{Sha256, compute_bytes_digest};
         use url::Url;
@@ -766,13 +766,13 @@ mod tests {
                     repodata_revisions: RepodataRevisions::default(),
                     channel_relations: None,
                 }),
-                packages: Default::default(),
+                packages: std::iter::empty().collect(),
                 conda_packages: records()
                     .into_iter()
                     .map(|record| (identifier(&record), record))
                     .collect(),
-                v3: Default::default(),
-                removed: Default::default(),
+                v3: V3Packages::default(),
+                removed: ahash::HashSet::default(),
                 version: Some(2),
             };
             serde_json::to_string(&repodata).unwrap()
@@ -928,8 +928,8 @@ mod tests {
                 .with_cache_dir(cache_dir)
                 .with_channel_config(ChannelConfig {
                     default: SourceConfig {
-                        cache_action,
                         sharded_enabled,
+                        cache_action,
                         ..SourceConfig::default()
                     },
                     ..ChannelConfig::default()
@@ -975,7 +975,14 @@ mod tests {
                 .execute()
                 .await
                 .unwrap();
-            assert_eq!(result.repodata.iter().map(|r| r.len()).sum::<usize>(), 1);
+            assert_eq!(
+                result
+                    .repodata
+                    .iter()
+                    .map(crate::gateway::RepoData::len)
+                    .sum::<usize>(),
+                1
+            );
         }
 
         /// The number of package names held in the per-name record cache of
