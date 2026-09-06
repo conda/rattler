@@ -70,9 +70,10 @@ async def main() -> None:
     print("Channel: conda-forge")
     print("Platforms: " + ", ".join(str(platform) for platform in CONDA_FORGE_PLATFORMS))
 
+    # `who_needs` reads the full repodata.json of each subdir on its own, so
+    # the gateway does not need sharded repodata disabled for it.
     gateway = Gateway(
         default_config=SourceConfig(
-            sharded_enabled=False,
             cache_action="cache-or-fetch",
         ),
         client=Client.default_client(user_agent="pixi-browse-whoneeds-reproducer"),

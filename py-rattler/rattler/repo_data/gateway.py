@@ -345,10 +345,13 @@ class Gateway:
         name, while a concrete `PackageRecord` or `GenericVirtualPackage`
         only reports dependents whose dependency match spec matches it.
 
-        Note that against sharded repodata this fetches one shard per
-        package name in the channel; a gateway configured with
-        `sharded_enabled=False` fetches the full repodata in a single
-        request instead, which is usually much faster for this query.
+        Channels are read through their full `repodata.json` (one request
+        per subdir) rather than through sharded repodata (one request per
+        package name) regardless of the gateway's `sharded_enabled`
+        setting, falling back to shards only for channels without usable
+        full repodata. The subdirs read this way are kept apart from the
+        ones `query` and `names` use, so a gateway configured with
+        `sharded_enabled=False` is not needed for this query.
 
         Arguments:
             sources: The sources to query. Can be channels (by name, URL, or Channel object)

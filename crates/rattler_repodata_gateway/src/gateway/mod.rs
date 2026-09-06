@@ -25,7 +25,11 @@ mod who_needs_query;
 use std::{collections::HashSet, sync::Arc};
 
 use crate::reporter::report_unsupported_repodata_revisions;
-use crate::{Reporter, gateway::subdir_builder::SubdirBuilder, who_needs::WhoNeedsTarget};
+use crate::{
+    Reporter,
+    gateway::subdir_builder::{RepodataPreference, SubdirBuilder},
+    who_needs::WhoNeedsTarget,
+};
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
@@ -215,6 +219,16 @@ impl Gateway {
     /// the query if you can reduce the matches as they arrive, since for a
     /// widely used package the results are the larger cost.
     ///
+    /// For the same reason the query reads channels through their full
+    /// `repodata.json` (one request per subdir) rather than through sharded
+    /// repodata (one request per package), regardless of the gateway's
+    /// [`SourceConfig::sharded_enabled`] setting, and only falls back to
+    /// shards for channels that offer no usable full repodata. The subdirs
+    /// it builds this way are kept apart from the ones [`Gateway::query`]
+    /// and the other queries share, so running the two kinds of query on
+    /// one gateway does not change what either reads. There is no need to
+    /// configure a separate gateway with sharding disabled for this query.
+    ///
     /// ```no_run
     /// # use rattler_conda_types::{Channel, PackageName, Platform};
     /// # use rattler_repodata_gateway::Gateway;
@@ -356,9 +370,11 @@ impl Gateway {
         subdirs: SubdirSelection,
         mode: CacheClearMode,
     ) -> Result<(), std::io::Error> {
-        self.inner.subdirs.retain(|key, _| {
+        let keep = |key: &(Channel, Platform)| {
             key.0.base_url != channel.base_url || !subdirs.contains(key.1.as_str())
-        });
+        };
+        self.inner.subdirs.retain(|key, _| keep(key));
+        self.inner.scan_subdirs.retain(|key, _| keep(key));
         self.inner.notices.remove(&channel.base_url);
         self.inner.notice_fetch_locks.remove(&channel.base_url);
 
@@ -404,6 +420,17 @@ impl Gateway {
 struct GatewayInner {
     /// A map of subdirectories for each channel and platform.
     subdirs: CoalescedMap<(Channel, Platform), Arc<Subdir>>,
+
+    /// The subdirectories used by scans that read every package of a subdir
+    /// (see [`Gateway::who_needs`]), keyed like `subdirs`.
+    ///
+    /// A scan prefers the full `repodata.json` over sharded repodata
+    /// whatever the channel's [`SourceConfig`] says, so for channels where
+    /// that makes a difference its subdirs are kept apart from the ones in
+    /// `subdirs`: a sharded subdir cached by an earlier query must not serve
+    /// a scan, and a full-repodata subdir built for a scan must not serve
+    /// later queries. See [`GatewayInner::get_or_create_scan_subdir`].
+    scan_subdirs: CoalescedMap<(Channel, Platform), Arc<Subdir>>,
 
     /// The client to use to fetch repodata.
     client: LazyClient,
@@ -459,15 +486,82 @@ impl GatewayInner {
         platform: Platform,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Arc<Subdir>, GatewayError> {
+        self.get_or_create_subdir_in(
+            &self.subdirs,
+            RepodataPreference::Configured,
+            channel,
+            platform,
+            reporter,
+        )
+        .await
+    }
+
+    /// Returns the [`Subdir`] for the given channel and platform for a scan
+    /// that reads every package of the subdir, such as
+    /// [`Gateway::who_needs`].
+    ///
+    /// Such a scan is a single request against the full `repodata.json` but
+    /// one request per package against sharded repodata, so the subdir is
+    /// built with [`RepodataPreference::PreferFull`] regardless of the
+    /// channel's [`SourceConfig`]. Everything else about the fetch (client,
+    /// cache directory, cache action, compression variants, concurrency
+    /// limits) follows the gateway's configuration as usual.
+    ///
+    /// For channels where that preference cannot make a difference (local
+    /// channels, channels whose configuration disables sharding, hosts that
+    /// only serve shards) this shares the subdir of
+    /// [`Self::get_or_create_subdir`], so the repodata is not held twice and
+    /// records cached by earlier queries are reused. For the other channels
+    /// the subdir comes from the separate `scan_subdirs` cache: it is never
+    /// the sharded subdir an earlier query may have cached, and later
+    /// queries never pick up the full-repodata subdir built here.
+    ///
+    /// Concurrent requests for the same subdir are coalesced like
+    /// [`Self::get_or_create_subdir`] does.
+    #[instrument(skip(self, reporter, channel), fields(channel = %channel.base_url), err(level = Level::INFO))]
+    async fn get_or_create_scan_subdir(
+        &self,
+        channel: &Channel,
+        platform: Platform,
+        reporter: Option<Arc<dyn Reporter>>,
+    ) -> Result<Arc<Subdir>, GatewayError> {
+        if !SubdirBuilder::prefer_full_repodata_differs(self, channel, platform) {
+            return self.get_or_create_subdir(channel, platform, reporter).await;
+        }
+        self.get_or_create_subdir_in(
+            &self.scan_subdirs,
+            RepodataPreference::PreferFull,
+            channel,
+            platform,
+            reporter,
+        )
+        .await
+    }
+
+    /// Returns the [`Subdir`] for the given channel and platform from
+    /// `subdirs`, creating it with `repodata_preference` if it does not
+    /// exist yet. Concurrent requests for the same key are coalesced.
+    async fn get_or_create_subdir_in(
+        &self,
+        subdirs: &CoalescedMap<(Channel, Platform), Arc<Subdir>>,
+        repodata_preference: RepodataPreference,
+        channel: &Channel,
+        platform: Platform,
+        reporter: Option<Arc<dyn Reporter>>,
+    ) -> Result<Arc<Subdir>, GatewayError> {
         let key = (channel.clone(), platform);
         let channel_for_create = channel.clone();
         let reporter_for_create = reporter.clone();
 
-        let subdir = self
-            .subdirs
+        let subdir = subdirs
             .get_or_try_init(key, || async move {
                 let subdir = self
-                    .create_subdir(&channel_for_create, platform, reporter_for_create)
+                    .create_subdir(
+                        &channel_for_create,
+                        platform,
+                        repodata_preference,
+                        reporter_for_create,
+                    )
                     .await?;
                 Ok(Arc::new(subdir))
             })
@@ -494,9 +588,11 @@ impl GatewayInner {
         &self,
         channel: &Channel,
         platform: Platform,
+        repodata_preference: RepodataPreference,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Subdir, GatewayError> {
         SubdirBuilder::new(self, channel.clone(), platform, reporter)
+            .with_repodata_preference(repodata_preference)
             .build()
             .await
     }

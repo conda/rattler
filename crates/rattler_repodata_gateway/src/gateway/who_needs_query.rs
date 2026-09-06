@@ -13,6 +13,16 @@
 //! a stream so a consumer can reduce each match and drop the record it came
 //! from; [`WhoNeedsQuery::execute`] is the collecting convenience over it.
 //!
+//! The records of a channel source come from the full `repodata.json` of
+//! each scanned subdir rather than from sharded repodata, whatever the
+//! gateway's [`SourceConfig`](super::SourceConfig) prefers: reading every
+//! package is one request against full repodata but one request per
+//! package against shards. Only channels without usable full repodata are
+//! read through their shards. See
+//! [`GatewayInner::get_or_create_scan_subdir`](super::GatewayInner::get_or_create_scan_subdir)
+//! for how those subdirs are kept apart from the ones ordinary queries
+//! share.
+//!
 //! This module answers *where* the scanned records come from; what counts
 //! as a reverse dependency is decided by [`crate::who_needs`].
 
@@ -71,6 +81,11 @@ const NAME_BATCH_SIZE: usize = 100;
 /// Unlike the other gateway queries, this one does not follow CEP-42
 /// `channel_relations`: only the subdirs of the sources passed in are
 /// scanned.
+///
+/// Channel sources are read through their full `repodata.json` (falling
+/// back to sharded repodata only when a channel offers no usable full
+/// repodata) regardless of the gateway's sharding preference; custom and
+/// sparse sources are scanned as they are.
 #[derive(Clone)]
 pub struct WhoNeedsQuery {
     gateway: Arc<GatewayInner>,
@@ -262,8 +277,12 @@ async fn resolve_subdirs(
                 let gateway = gateway.clone();
                 let reporter = reporter.clone();
                 pending.push(box_future(async move {
+                    // A scan reads every package of the subdir, which is one
+                    // request against full repodata but one per package
+                    // against shards, so the subdir is built to prefer full
+                    // repodata whatever the gateway's sharding preference.
                     let subdir = gateway
-                        .get_or_create_subdir(&channel, platform, reporter)
+                        .get_or_create_scan_subdir(&channel, platform, reporter)
                         .await?;
                     Ok((source_index, subdir))
                 }));
@@ -666,5 +685,670 @@ mod tests {
             .execute()
             .await;
         assert!(result.is_err());
+    }
+
+    /// Tests of how `who_needs` reads remote channels: it prefers the full
+    /// `repodata.json` of a subdir over sharded repodata regardless of the
+    /// gateway's `SourceConfig`, keeps the subdirs it builds apart from the
+    /// ones ordinary queries share, and falls back to shards when a channel
+    /// offers no usable full repodata.
+    mod remote_channel {
+        use std::{
+            path::Path,
+            str::FromStr,
+            sync::{Arc, Mutex},
+        };
+
+        use assert_matches::assert_matches;
+        use rattler_conda_types::{
+            Channel, ChannelInfo, PackageName, PackageRecord, Platform, RepoData, RepoDataRecord,
+            RepodataRevisions, Shard, ShardedRepodata, ShardedSubdirInfo, VersionWithSource,
+            package::DistArchiveIdentifier,
+        };
+        use rattler_digest::{Sha256, compute_bytes_digest};
+        use url::Url;
+
+        use super::render;
+        use crate::{
+            ChannelConfig, DownloadReporter, GatewayError, Reporter, SourceConfig,
+            fetch::{CacheAction, FetchRepoDataError},
+            gateway::{CacheClearMode, Gateway, RepoDataSource, Source, SubdirSelection},
+            utils::simple_channel_server::SimpleChannelServer,
+        };
+
+        const SUBDIR: &str = "linux-64";
+
+        /// The dependents of `bors` in [`records`], as [`render`] shows them.
+        const BORS_DEPENDENTS: &str =
+            "constrains | bar-1.0-0 | bors <2\ndepends | foo-1.0-0 | bors >=1";
+
+        /// A `linux-64` record for the test channel.
+        fn record(name: &str, depends: &[&str], constrains: &[&str]) -> PackageRecord {
+            let mut record = PackageRecord::new(
+                PackageName::from_str(name).unwrap(),
+                VersionWithSource::from_str("1.0").unwrap(),
+                "0".to_string(),
+            );
+            record.subdir = SUBDIR.to_string();
+            record.depends = depends.iter().map(ToString::to_string).collect();
+            record.constrains = constrains.iter().map(ToString::to_string).collect();
+            record
+        }
+
+        /// The records of the test channel: `foo` depends on `bors`, `bar`
+        /// constrains it, and `baz` and `bors` itself do not reference it.
+        fn records() -> Vec<PackageRecord> {
+            vec![
+                record("bors", &[], &[]),
+                record("foo", &["bors >=1"], &[]),
+                record("bar", &[], &["bors <2"]),
+                record("baz", &["foo"], &[]),
+            ]
+        }
+
+        fn identifier(record: &PackageRecord) -> DistArchiveIdentifier {
+            format!(
+                "{}-{}-{}.conda",
+                record.name.as_normalized(),
+                record.version,
+                record.build
+            )
+            .parse()
+            .unwrap()
+        }
+
+        /// The full `repodata.json` of the test channel's subdir.
+        fn full_repodata() -> String {
+            let repodata = RepoData {
+                info: Some(ChannelInfo {
+                    subdir: Some(SUBDIR.to_string()),
+                    base_url: None,
+                    repodata_revisions: RepodataRevisions::default(),
+                    channel_relations: None,
+                }),
+                packages: Default::default(),
+                conda_packages: records()
+                    .into_iter()
+                    .map(|record| (identifier(&record), record))
+                    .collect(),
+                v3: Default::default(),
+                removed: Default::default(),
+                version: Some(2),
+            };
+            serde_json::to_string(&repodata).unwrap()
+        }
+
+        /// Which repodata artifacts a test channel serves for its subdir.
+        #[derive(Clone, Copy)]
+        struct Artifacts {
+            /// The full `repodata.json`.
+            full: bool,
+            /// A sharded index with one shard per package.
+            sharded: bool,
+        }
+
+        const FULL_AND_SHARDED: Artifacts = Artifacts {
+            full: true,
+            sharded: true,
+        };
+        const FULL_ONLY: Artifacts = Artifacts {
+            full: true,
+            sharded: false,
+        };
+        const SHARDED_ONLY: Artifacts = Artifacts {
+            full: false,
+            sharded: true,
+        };
+
+        /// Writes the `linux-64` subdir of the test channel to `root` with
+        /// the requested artifacts, so a [`SimpleChannelServer`] can serve it.
+        fn write_channel(root: &Path, artifacts: Artifacts) {
+            let subdir = root.join(SUBDIR);
+            std::fs::create_dir_all(subdir.join("shards")).unwrap();
+
+            if artifacts.full {
+                std::fs::write(subdir.join("repodata.json"), full_repodata()).unwrap();
+            }
+
+            if artifacts.sharded {
+                let mut shards = ahash::HashMap::default();
+                for record in records() {
+                    let mut shard = Shard::default();
+                    let name = record.name.as_normalized().to_string();
+                    shard.conda_packages.insert(identifier(&record), record);
+                    let bytes = rmp_serde::to_vec_named(&shard).unwrap();
+                    let hash = compute_bytes_digest::<Sha256>(&bytes);
+                    std::fs::write(
+                        subdir.join(format!("shards/{}.msgpack.zst", hex::encode(hash))),
+                        zstd::encode_all(bytes.as_slice(), 3).unwrap(),
+                    )
+                    .unwrap();
+                    shards.insert(name, hash);
+                }
+                let index = ShardedRepodata {
+                    info: ShardedSubdirInfo {
+                        subdir: SUBDIR.to_string(),
+                        base_url: "./".to_string(),
+                        shards_base_url: "./shards/".to_string(),
+                        created_at: None,
+                        repodata_revisions: RepodataRevisions::default(),
+                        channel_relations: None,
+                    },
+                    shards,
+                };
+                let bytes = rmp_serde::to_vec_named(&index).unwrap();
+                std::fs::write(
+                    subdir.join("repodata_shards.msgpack.zst"),
+                    zstd::encode_all(bytes.as_slice(), 3).unwrap(),
+                )
+                .unwrap();
+            }
+        }
+
+        /// A served copy of the test channel. The directory must outlive the
+        /// server, so both are kept together.
+        struct TestChannel {
+            server: SimpleChannelServer,
+            _dir: tempfile::TempDir,
+        }
+
+        impl TestChannel {
+            async fn serve(artifacts: Artifacts) -> Self {
+                let dir = tempfile::tempdir().unwrap();
+                write_channel(dir.path(), artifacts);
+                Self {
+                    server: SimpleChannelServer::new(dir.path()).await,
+                    _dir: dir,
+                }
+            }
+
+            fn channel(&self) -> Channel {
+                self.server.channel()
+            }
+        }
+
+        /// Counts the repodata artifacts the gateway downloaded, by kind.
+        #[derive(Default)]
+        struct Downloads {
+            urls: Mutex<Vec<Url>>,
+        }
+
+        impl Downloads {
+            fn count(&self, kind: fn(&Url) -> bool) -> usize {
+                self.urls
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .filter(|url| kind(url))
+                    .count()
+            }
+
+            /// Downloads of the full `repodata.json` or one of its
+            /// compressed variants.
+            fn full(&self) -> usize {
+                self.count(|url| {
+                    url.path()
+                        .rsplit('/')
+                        .next()
+                        .is_some_and(|file| file.starts_with("repodata.json"))
+                })
+            }
+
+            /// Downloads of the sharded repodata index.
+            fn indexes(&self) -> usize {
+                self.count(|url| url.path().ends_with("repodata_shards.msgpack.zst"))
+            }
+
+            /// Downloads of individual shards.
+            fn shards(&self) -> usize {
+                self.count(|url| url.path().contains("/shards/"))
+            }
+
+            fn clear(&self) {
+                self.urls.lock().unwrap().clear();
+            }
+        }
+
+        impl DownloadReporter for Arc<Downloads> {
+            fn on_download_complete(&self, url: &Url, _index: usize) {
+                self.urls.lock().unwrap().push(url.clone());
+            }
+        }
+
+        impl Reporter for Arc<Downloads> {
+            fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
+                Some(self)
+            }
+        }
+
+        /// A gateway with the given cache behavior and sharding preference,
+        /// caching on disk under `cache_dir`.
+        fn gateway(cache_action: CacheAction, sharded_enabled: bool, cache_dir: &Path) -> Gateway {
+            Gateway::builder()
+                .with_cache_dir(cache_dir)
+                .with_channel_config(ChannelConfig {
+                    default: SourceConfig {
+                        cache_action,
+                        sharded_enabled,
+                        ..SourceConfig::default()
+                    },
+                    ..ChannelConfig::default()
+                })
+                .finish()
+        }
+
+        /// A gateway with the default (sharding enabled) configuration that
+        /// never reads the on-disk cache, so every subdir it builds shows up
+        /// as downloads. Only the in-memory subdir caches dedupe requests.
+        fn uncached_gateway(cache_dir: &Path) -> Gateway {
+            gateway(CacheAction::NoCache, true, cache_dir)
+        }
+
+        /// Runs `who_needs` for `bors` on `channel` and renders the result.
+        async fn who_needs_bors(
+            gateway: &Gateway,
+            source: impl Into<Source>,
+            reporter: &Arc<Downloads>,
+        ) -> Result<String, GatewayError> {
+            let dependents = gateway
+                .who_needs(
+                    vec![source.into()],
+                    vec![Platform::Linux64],
+                    PackageName::from_str("bors").unwrap(),
+                )
+                .with_reporter(reporter.clone())
+                .execute()
+                .await?;
+            Ok(render(&dependents))
+        }
+
+        /// Runs an ordinary, non-recursive query for `foo` on `channel`.
+        async fn query_foo(gateway: &Gateway, channel: &Channel, reporter: &Arc<Downloads>) {
+            let result = gateway
+                .query(
+                    vec![channel.clone()],
+                    vec![Platform::Linux64],
+                    vec![PackageName::from_str("foo").unwrap()],
+                )
+                .recursive(false)
+                .with_reporter(reporter.clone())
+                .execute()
+                .await
+                .unwrap();
+            assert_eq!(result.repodata.iter().map(|r| r.len()).sum::<usize>(), 1);
+        }
+
+        /// The number of package names held in the per-name record cache of
+        /// the scan subdir of `channel`, if one was built.
+        fn scan_subdir_cached_packages(gateway: &Gateway, channel: &Channel) -> Option<usize> {
+            let subdir = gateway
+                .inner
+                .scan_subdirs
+                .get(&(channel.clone(), Platform::Linux64))?;
+            let super::super::Subdir::Found(data) = subdir.as_ref() else {
+                panic!("expected the scan subdir to exist");
+            };
+            Some(data.cached_package_count())
+        }
+
+        /// A default, sharding-enabled gateway reads the full repodata for
+        /// `who_needs` when the channel offers both, and keeps the subdir it
+        /// builds out of the cache ordinary queries use.
+        #[tokio::test]
+        async fn test_who_needs_prefers_full_repodata() {
+            let channel = TestChannel::serve(FULL_AND_SHARDED).await;
+            let cache_dir = tempfile::tempdir().unwrap();
+            let gateway = uncached_gateway(cache_dir.path());
+            let downloads = Arc::new(Downloads::default());
+
+            let dependents = who_needs_bors(&gateway, channel.channel(), &downloads)
+                .await
+                .unwrap();
+            assert_eq!(dependents, BORS_DEPENDENTS);
+
+            assert_eq!(downloads.full(), 1, "one full repodata download");
+            assert_eq!(downloads.indexes(), 0, "no shard index download");
+            assert_eq!(downloads.shards(), 0, "no shard downloads");
+
+            // The subdir lives in the scan cache only, and the scan did not
+            // fill its per-name record cache.
+            assert_eq!(gateway.inner.subdirs.len(), 0);
+            assert_eq!(gateway.inner.scan_subdirs.len(), 1);
+            assert_eq!(
+                scan_subdir_cached_packages(&gateway, &channel.channel()),
+                Some(0)
+            );
+        }
+
+        /// A sharded subdir cached by an earlier ordinary query does not
+        /// serve `who_needs`; the scan still reads the full repodata.
+        #[tokio::test]
+        async fn test_query_then_who_needs_uses_sharded_then_full() {
+            let channel = TestChannel::serve(FULL_AND_SHARDED).await;
+            let cache_dir = tempfile::tempdir().unwrap();
+            let gateway = uncached_gateway(cache_dir.path());
+            let downloads = Arc::new(Downloads::default());
+
+            query_foo(&gateway, &channel.channel(), &downloads).await;
+            assert_eq!(downloads.indexes(), 1, "the query reads the shard index");
+            assert_eq!(downloads.shards(), 1, "the query reads foo's shard");
+            assert_eq!(downloads.full(), 0);
+            downloads.clear();
+
+            let dependents = who_needs_bors(&gateway, channel.channel(), &downloads)
+                .await
+                .unwrap();
+            assert_eq!(dependents, BORS_DEPENDENTS);
+            assert_eq!(downloads.full(), 1, "the scan reads the full repodata");
+            assert_eq!(downloads.indexes(), 0);
+            assert_eq!(
+                downloads.shards(),
+                0,
+                "the scan does not reuse the sharded subdir"
+            );
+
+            assert_eq!(gateway.inner.subdirs.len(), 1);
+            assert_eq!(gateway.inner.scan_subdirs.len(), 1);
+        }
+
+        /// A full-repodata subdir built for `who_needs` does not serve later
+        /// ordinary queries; they still read sharded repodata.
+        #[tokio::test]
+        async fn test_who_needs_then_query_uses_full_then_sharded() {
+            let channel = TestChannel::serve(FULL_AND_SHARDED).await;
+            let cache_dir = tempfile::tempdir().unwrap();
+            let gateway = uncached_gateway(cache_dir.path());
+            let downloads = Arc::new(Downloads::default());
+
+            let dependents = who_needs_bors(&gateway, channel.channel(), &downloads)
+                .await
+                .unwrap();
+            assert_eq!(dependents, BORS_DEPENDENTS);
+            assert_eq!(downloads.full(), 1);
+            assert_eq!(downloads.indexes(), 0);
+            downloads.clear();
+
+            query_foo(&gateway, &channel.channel(), &downloads).await;
+            assert_eq!(downloads.indexes(), 1, "the query reads the shard index");
+            assert_eq!(downloads.shards(), 1, "the query reads foo's shard");
+            assert_eq!(
+                downloads.full(),
+                0,
+                "the query does not reuse the scan subdir"
+            );
+
+            assert_eq!(gateway.inner.subdirs.len(), 1);
+            assert_eq!(gateway.inner.scan_subdirs.len(), 1);
+        }
+
+        /// Without a full repodata the scan falls back to sharded repodata:
+        /// the index plus one shard per package.
+        #[tokio::test]
+        async fn test_who_needs_falls_back_to_shards() {
+            let channel = TestChannel::serve(SHARDED_ONLY).await;
+            let cache_dir = tempfile::tempdir().unwrap();
+            let gateway = uncached_gateway(cache_dir.path());
+            let downloads = Arc::new(Downloads::default());
+
+            let dependents = who_needs_bors(&gateway, channel.channel(), &downloads)
+                .await
+                .unwrap();
+            assert_eq!(dependents, BORS_DEPENDENTS);
+            assert_eq!(downloads.indexes(), 1);
+            assert_eq!(downloads.shards(), records().len());
+
+            // The sharded fallback still does not fill the record cache.
+            assert_eq!(
+                scan_subdir_cached_packages(&gateway, &channel.channel()),
+                Some(0)
+            );
+        }
+
+        /// A channel that only serves full repodata works for both kinds of
+        /// query, and the ordinary query's failed probe for a shard index
+        /// does not disturb the scan.
+        #[tokio::test]
+        async fn test_who_needs_full_only_channel() {
+            let channel = TestChannel::serve(FULL_ONLY).await;
+            let cache_dir = tempfile::tempdir().unwrap();
+            let gateway = uncached_gateway(cache_dir.path());
+            let downloads = Arc::new(Downloads::default());
+
+            let dependents = who_needs_bors(&gateway, channel.channel(), &downloads)
+                .await
+                .unwrap();
+            assert_eq!(dependents, BORS_DEPENDENTS);
+            assert_eq!(downloads.full(), 1);
+            assert_eq!(downloads.indexes(), 0, "the scan never probes for shards");
+            downloads.clear();
+
+            query_foo(&gateway, &channel.channel(), &downloads).await;
+            assert_eq!(downloads.full(), 1, "the query falls back to full repodata");
+        }
+
+        /// When the gateway disables sharding, `who_needs` shares the
+        /// ordinary subdir instead of building one of its own, so the
+        /// repodata is read once for both kinds of query.
+        #[tokio::test]
+        async fn test_who_needs_shares_subdir_when_sharding_disabled() {
+            let channel = TestChannel::serve(FULL_AND_SHARDED).await;
+            let cache_dir = tempfile::tempdir().unwrap();
+            let gateway = gateway(CacheAction::NoCache, false, cache_dir.path());
+            let downloads = Arc::new(Downloads::default());
+
+            let dependents = who_needs_bors(&gateway, channel.channel(), &downloads)
+                .await
+                .unwrap();
+            assert_eq!(dependents, BORS_DEPENDENTS);
+            assert_eq!(downloads.full(), 1);
+            assert_eq!(gateway.inner.subdirs.len(), 1);
+            assert_eq!(gateway.inner.scan_subdirs.len(), 0);
+
+            query_foo(&gateway, &channel.channel(), &downloads).await;
+            assert_eq!(downloads.full(), 1, "the query reuses the shared subdir");
+            assert_eq!(downloads.indexes(), 0);
+        }
+
+        /// Concurrent scans of the same subdir are coalesced into a single
+        /// fetch of the full repodata.
+        #[tokio::test]
+        async fn test_concurrent_who_needs_are_coalesced() {
+            let channel = TestChannel::serve(FULL_AND_SHARDED).await;
+            let cache_dir = tempfile::tempdir().unwrap();
+            let gateway = uncached_gateway(cache_dir.path());
+            let downloads = Arc::new(Downloads::default());
+
+            let (first, second) = tokio::join!(
+                who_needs_bors(&gateway, channel.channel(), &downloads),
+                who_needs_bors(&gateway, channel.channel(), &downloads),
+            );
+            assert_eq!(first.unwrap(), BORS_DEPENDENTS);
+            assert_eq!(second.unwrap(), BORS_DEPENDENTS);
+            assert_eq!(downloads.full(), 1, "the concurrent scans share one fetch");
+            assert_eq!(gateway.inner.scan_subdirs.len(), 1);
+        }
+
+        /// Clearing the repodata cache drops the scan subdirs too, so the
+        /// next scan fetches the repodata again.
+        #[tokio::test]
+        async fn test_clear_repodata_cache_clears_scan_subdirs() {
+            let channel = TestChannel::serve(FULL_AND_SHARDED).await;
+            let cache_dir = tempfile::tempdir().unwrap();
+            let gateway = uncached_gateway(cache_dir.path());
+            let downloads = Arc::new(Downloads::default());
+
+            who_needs_bors(&gateway, channel.channel(), &downloads)
+                .await
+                .unwrap();
+            who_needs_bors(&gateway, channel.channel(), &downloads)
+                .await
+                .unwrap();
+            assert_eq!(downloads.full(), 1, "the second scan reuses the subdir");
+            assert_eq!(gateway.inner.scan_subdirs.len(), 1);
+
+            gateway
+                .clear_repodata_cache(
+                    &channel.channel(),
+                    SubdirSelection::default(),
+                    CacheClearMode::InMemoryOnly,
+                )
+                .unwrap();
+            assert_eq!(gateway.inner.scan_subdirs.len(), 0);
+
+            let dependents = who_needs_bors(&gateway, channel.channel(), &downloads)
+                .await
+                .unwrap();
+            assert_eq!(dependents, BORS_DEPENDENTS);
+            assert_eq!(downloads.full(), 2, "the scan after clearing fetches again");
+        }
+
+        /// A cache-only gateway serves `who_needs` from a cached full
+        /// repodata without touching the network.
+        #[tokio::test]
+        async fn test_who_needs_cache_only_uses_cached_full_repodata() {
+            let channel = TestChannel::serve(FULL_AND_SHARDED).await;
+            let cache_dir = tempfile::tempdir().unwrap();
+
+            // Warm the cache with an online gateway.
+            let online = gateway(CacheAction::CacheOrFetch, true, cache_dir.path());
+            let downloads = Arc::new(Downloads::default());
+            who_needs_bors(&online, channel.channel(), &downloads)
+                .await
+                .unwrap();
+            assert_eq!(downloads.full(), 1);
+
+            let offline = gateway(CacheAction::ForceCacheOnly, true, cache_dir.path());
+            let downloads = Arc::new(Downloads::default());
+            let dependents = who_needs_bors(&offline, channel.channel(), &downloads)
+                .await
+                .unwrap();
+            assert_eq!(dependents, BORS_DEPENDENTS);
+            assert_eq!(
+                downloads.full() + downloads.indexes() + downloads.shards(),
+                0
+            );
+        }
+
+        /// A cache-only gateway without a cached full repodata falls back to
+        /// the cached shards of the channel.
+        #[tokio::test]
+        async fn test_who_needs_cache_only_falls_back_to_cached_shards() {
+            let channel = TestChannel::serve(SHARDED_ONLY).await;
+            let cache_dir = tempfile::tempdir().unwrap();
+
+            // Warm the cache with an online gateway; the scan fetches the
+            // index and every shard.
+            let online = gateway(CacheAction::CacheOrFetch, true, cache_dir.path());
+            let downloads = Arc::new(Downloads::default());
+            who_needs_bors(&online, channel.channel(), &downloads)
+                .await
+                .unwrap();
+            assert_eq!(downloads.shards(), records().len());
+
+            let offline = gateway(CacheAction::ForceCacheOnly, true, cache_dir.path());
+            let downloads = Arc::new(Downloads::default());
+            let dependents = who_needs_bors(&offline, channel.channel(), &downloads)
+                .await
+                .unwrap();
+            assert_eq!(dependents, BORS_DEPENDENTS);
+            assert_eq!(
+                downloads.full() + downloads.indexes() + downloads.shards(),
+                0
+            );
+        }
+
+        /// A cache-only gateway with nothing cached reports the missing full
+        /// repodata, as an unsharded gateway would, rather than the missing
+        /// shard index it fell back to.
+        #[tokio::test]
+        async fn test_who_needs_cache_only_without_cache_fails() {
+            let channel = TestChannel::serve(FULL_AND_SHARDED).await;
+            let cache_dir = tempfile::tempdir().unwrap();
+            let offline = gateway(CacheAction::ForceCacheOnly, true, cache_dir.path());
+            let downloads = Arc::new(Downloads::default());
+
+            let err = who_needs_bors(&offline, channel.channel(), &downloads)
+                .await
+                .unwrap_err();
+            assert_matches!(
+                err,
+                GatewayError::FetchRepoDataError(FetchRepoDataError::NoCacheAvailable(_))
+            );
+        }
+
+        /// A custom source serving the test records.
+        struct TestSource;
+
+        #[async_trait::async_trait]
+        impl RepoDataSource for TestSource {
+            async fn fetch_package_records(
+                &self,
+                platform: Platform,
+                name: &PackageName,
+            ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
+                assert_eq!(platform, Platform::Linux64);
+                Ok(records()
+                    .into_iter()
+                    .filter(|record| &record.name == name)
+                    .map(|record| {
+                        Arc::new(RepoDataRecord {
+                            url: Url::parse("https://example.com/")
+                                .unwrap()
+                                .join(&identifier(&record).to_file_name())
+                                .unwrap(),
+                            channel: None,
+                            identifier: identifier(&record),
+                            package_record: record,
+                        })
+                    })
+                    .collect())
+            }
+
+            fn package_names(&self, platform: Platform) -> Vec<String> {
+                assert_eq!(platform, Platform::Linux64);
+                records()
+                    .iter()
+                    .map(|record| record.name.as_source().to_string())
+                    .collect()
+            }
+        }
+
+        /// Custom and sparse sources are scanned as they are: no subdir is
+        /// built for them and nothing is downloaded.
+        #[tokio::test]
+        async fn test_custom_and_sparse_sources_are_unchanged() {
+            let cache_dir = tempfile::tempdir().unwrap();
+            let gateway = uncached_gateway(cache_dir.path());
+            let downloads = Arc::new(Downloads::default());
+
+            let custom: Arc<dyn RepoDataSource> = Arc::new(TestSource);
+            let dependents = who_needs_bors(&gateway, Source::Custom(custom), &downloads)
+                .await
+                .unwrap();
+            assert_eq!(dependents, BORS_DEPENDENTS);
+
+            let sparse = crate::sparse::SparseRepoData::from_bytes(
+                Channel::from_url(Url::parse("https://example.com/channel/").unwrap()),
+                SUBDIR,
+                full_repodata().into_bytes().into(),
+                None,
+            )
+            .unwrap();
+            let dependents = who_needs_bors(
+                &gateway,
+                Source::SparseRepoData(vec![Arc::new(sparse)]),
+                &downloads,
+            )
+            .await
+            .unwrap();
+            assert_eq!(dependents, BORS_DEPENDENTS);
+
+            assert_eq!(gateway.inner.subdirs.len(), 0);
+            assert_eq!(gateway.inner.scan_subdirs.len(), 0);
+            assert_eq!(
+                downloads.full() + downloads.indexes() + downloads.shards(),
+                0
+            );
+        }
     }
 }

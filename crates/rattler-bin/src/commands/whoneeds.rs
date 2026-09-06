@@ -131,15 +131,13 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
         channels.iter().map(Channel::canonical_name).join(", ")
     );
 
-    // Create gateway. Sharded repodata is disabled because a reverse
-    // dependency lookup needs the records of every package in the channel,
-    // which is one request per package with shards but a single request
-    // with a full repodata.json.
+    // Create gateway. The reverse dependency lookup itself prefers the full
+    // repodata.json over sharded repodata (one request per subdir instead
+    // of one per package), so the gateway keeps its default configuration.
     let gateway = Gateway::builder()
         .with_client(download_client)
         .with_channel_config(rattler_repodata_gateway::ChannelConfig {
             default: SourceConfig {
-                sharded_enabled: false,
                 cache_action: super::client::repodata_cache_action(offline),
                 ..SourceConfig::default()
             },

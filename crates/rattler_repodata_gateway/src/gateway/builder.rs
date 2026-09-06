@@ -243,6 +243,7 @@ impl GatewayBuilder {
         Gateway {
             inner: Arc::new(GatewayInner {
                 subdirs: CoalescedMap::new(),
+                scan_subdirs: CoalescedMap::new(),
                 client,
                 #[cfg(target_arch = "wasm32")]
                 js_fetch: self.js_fetch,
