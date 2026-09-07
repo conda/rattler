@@ -13,8 +13,8 @@ use rattler_package_streaming::seek::read_package_file;
 use url::Url;
 
 use crate::{
-    error::PyRattlerError, networking::client::PyClientWithMiddleware, package_name::PyPackageName,
-    version::PyVersion,
+    error::PyRattlerError, networking::client::PyClientWithMiddleware, no_arch_type::PyNoArchType,
+    package_name::PyPackageName, version::PyVersion,
 };
 
 #[pyclass(from_py_object)]
@@ -226,6 +226,17 @@ impl PyIndexJson {
     #[setter]
     pub fn set_name(&mut self, name: PyPackageName) {
         self.inner.name = name.into();
+    }
+
+    /// If this package is independent of architecture this field specifies in what way.
+    #[getter]
+    pub fn noarch(&self) -> PyNoArchType {
+        self.inner.noarch.into()
+    }
+
+    #[setter]
+    pub fn set_noarch(&mut self, noarch: PyNoArchType) {
+        self.inner.noarch = noarch.into();
     }
 
     /// Optionally, the OS the package is build for.

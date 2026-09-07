@@ -4,6 +4,7 @@ import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional
 
+from rattler.package.no_arch_type import NoArchLiteral, NoArchType
 from rattler.package.package_name import PackageName
 from rattler.rattler import PyIndexJson
 from rattler.version.version import Version
@@ -329,6 +330,39 @@ class IndexJson:
     @name.setter
     def name(self, value: PackageName) -> None:
         self._inner.name = value._name
+
+    @property
+    def noarch(self) -> NoArchType:
+        """
+        If this package is independent of architecture this field specifies in what way.
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
+        ... )
+        >>> idx_json.noarch
+        NoArchType(None)
+        >>> idx_json.noarch = NoArchType("python")
+        >>> idx_json.noarch
+        NoArchType("python")
+        >>> idx_json.noarch = "generic"
+        >>> idx_json.noarch
+        NoArchType("generic")
+        >>> idx_json.noarch = None
+        >>> idx_json.noarch.none
+        True
+        >>>
+        ```
+        """
+        return NoArchType._from_py_no_arch_type(self._inner.noarch)
+
+    @noarch.setter
+    def noarch(self, value: NoArchType | NoArchLiteral) -> None:
+        if not isinstance(value, NoArchType):
+            value = NoArchType(value)
+        self._inner.noarch = value._noarch
 
     @property
     def platform(self) -> Optional[str]:
