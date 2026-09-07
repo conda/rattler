@@ -5,13 +5,11 @@ use std::sync::Arc;
 use pyo3::prelude::*;
 use pyo3_async_runtimes::tokio::into_future;
 use rattler_conda_types::{PackageName, Platform, RepoDataRecord};
-use rattler_repodata_gateway::sparse::PackageFormatSelection;
 use rattler_repodata_gateway::{GatewayError, RepoDataSource};
 
 use crate::package_name::PyPackageName;
 use crate::platform::PyPlatform;
 use crate::record::PyRecord;
-use crate::repo_data::sparse::PyPackageFormatSelection;
 
 /// Wraps a Python object implementing the `RepoDataSource` protocol.
 ///
@@ -68,11 +66,7 @@ impl RepoDataSource for PyRepoDataSource {
             // Call the async method - this returns a coroutine object
             let coro = self
                 .inner
-                .call_method1(
-                    py,
-                    "fetch_package_records",
-                    (py_platform, py_name),
-                )
+                .call_method1(py, "fetch_package_records", (py_platform, py_name))
                 .map_err(|e| GatewayError::Generic(e.to_string()))?;
 
             // Convert Python coroutine to Rust future
