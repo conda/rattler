@@ -107,9 +107,9 @@ class Config:
         Examples
         --------
         ```python
-        >>> config, unused = Config.from_toml_with_unused_keys("tls-no-verifi = true")
+        >>> config, unused = Config.from_toml_with_unused_keys("tool-specific-key = true")
         >>> unused
-        ['tls-no-verifi']
+        ['tool-specific-key']
         >>>
         ```
         """
