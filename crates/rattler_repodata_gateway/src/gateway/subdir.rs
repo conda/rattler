@@ -94,8 +94,11 @@ fn filter_records_by_package_format(
     records: Vec<Arc<RepoDataRecord>>,
     selection: PackageFormatSelection,
 ) -> Vec<Arc<RepoDataRecord>> {
-    match selection {
-        PackageFormatSelection::Both => records,
+   match selection {
+        PackageFormatSelection::Both | PackageFormatSelection::PreferConda => records
+            .into_iter()
+            .filter(|r| !matches!(r.identifier.archive_type, DistArchiveType::Wheel(_)))
+            .collect(),
         PackageFormatSelection::OnlyTarBz2 => records
             .into_iter()
             .filter(|r| {
@@ -114,7 +117,6 @@ fn filter_records_by_package_format(
                 )
             })
             .collect(),
-        PackageFormatSelection::PreferConda => dedup_records_by_preference(records, false),
         PackageFormatSelection::PreferCondaWithWhl => dedup_records_by_preference(records, true),
     }
 }

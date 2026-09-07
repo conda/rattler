@@ -56,7 +56,6 @@ impl RepoDataSource for PyRepoDataSource {
         &self,
         platform: Platform,
         name: &PackageName,
-        package_format_selection: PackageFormatSelection,
     ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
         // Clone what we need before the async block
         let name_clone = name.clone();
@@ -65,8 +64,6 @@ impl RepoDataSource for PyRepoDataSource {
         let future = Python::attach(|py| {
             let py_platform = PyPlatform::from(platform);
             let py_name = PyPackageName::from(name_clone);
-            let py_package_format_selection =
-                PyPackageFormatSelection::from(package_format_selection);
 
             // Call the async method - this returns a coroutine object
             let coro = self
@@ -74,7 +71,7 @@ impl RepoDataSource for PyRepoDataSource {
                 .call_method1(
                     py,
                     "fetch_package_records",
-                    (py_platform, py_name, py_package_format_selection),
+                    (py_platform, py_name),
                 )
                 .map_err(|e| GatewayError::Generic(e.to_string()))?;
 
