@@ -233,9 +233,8 @@ async fn test_index_attestation_sidecar() {
     let sidecar = br#"[{"mediaType":"application/vnd.dev.sigstore.bundle.v0.3+json"}]"#;
     let sidecar_path = subdir_path.join(format!("{package_name}.sigs"));
     fs::write(&sidecar_path, sidecar).unwrap();
-    let expected_hash = hex::encode(rattler_digest::compute_bytes_digest::<
-        rattler_digest::Sha256,
-    >(sidecar));
+    let expected_hash =
+        hex::encode(rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(sidecar));
 
     index_fs(noarch_index_config(temp_dir.path()))
         .await
