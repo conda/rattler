@@ -1,15 +1,11 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    path::PathBuf,
-    str::FromStr,
-};
+use std::{collections::BTreeMap, path::PathBuf, str::FromStr};
 
 use pyo3::{
     Bound, Py, PyAny, PyErr, PyResult, Python, exceptions::PyValueError, pyclass, pymethods,
 };
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::{
-    Flag, PackageUrl, RepodataRevision, VersionWithSource,
+    Flag, RepodataRevision, VersionWithSource,
     package::{IndexJson, PackageFile},
     utils::TimestampMs,
 };
@@ -264,33 +260,6 @@ impl PyIndexJson {
     #[setter]
     pub fn set_platform(&mut self, platform: Option<String>) {
         self.inner.platform = platform;
-    }
-
-    /// A list of Package URLs identifying this package.
-    /// See this CEP: <https://github.com/conda/ceps/pull/63>
-    #[getter]
-    pub fn purls(&self) -> Option<Vec<String>> {
-        self.inner
-            .purls
-            .as_ref()
-            .map(|purls| purls.iter().map(ToString::to_string).collect())
-    }
-
-    #[setter]
-    pub fn set_purls(&mut self, purls: Option<Vec<String>>) -> PyResult<()> {
-        self.inner.purls = purls
-            .map(|purls| {
-                purls
-                    .iter()
-                    .map(|purl| {
-                        PackageUrl::from_str(purl).map_err(|err| {
-                            PyValueError::new_err(format!("Invalid package URL '{purl}': {err}"))
-                        })
-                    })
-                    .collect::<PyResult<BTreeSet<_>>>()
-            })
-            .transpose()?;
-        Ok(())
     }
 
     /// Optionally a path within the environment of the site-packages directory.

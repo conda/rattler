@@ -444,35 +444,6 @@ class IndexJson:
         self._inner.set_platform(value)
 
     @property
-    def purls(self) -> Optional[List[str]]:
-        """
-        A list of Package URLs identifying this package.
-        See this CEP: <https://github.com/conda/ceps/pull/63>
-
-        Examples
-        --------
-        ```python
-        >>> idx_json = IndexJson.from_path(
-        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
-        ... )
-        >>> idx_json.purls is None
-        True
-        >>> idx_json.purls = ["pkg:pypi/conda@22.11.1"]
-        >>> idx_json.purls
-        ['pkg:pypi/conda@22.11.1']
-        >>> idx_json.purls = None
-        >>> idx_json.purls is None
-        True
-        >>>
-        ```
-        """
-        return self._inner.purls
-
-    @purls.setter
-    def purls(self, value: Optional[List[str]]) -> None:
-        self._inner.purls = value
-
-    @property
     def python_site_packages_path(self) -> Optional[str]:
         """
         Optionally a path within the environment of the site-packages directory. This field is only
