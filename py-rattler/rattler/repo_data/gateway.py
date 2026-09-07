@@ -61,15 +61,14 @@ class _RepoDataSourceAdapter:
     def __init__(self, source: RepoDataSource) -> None:
         self._source = source
 
-    async def fetch_package_records(self, py_platform: Any, py_name: Any, py_format: Any) -> list[RepoDataRecord]:
+    async def fetch_package_records(self, py_platform: Any, py_name: Any) -> list[RepoDataRecord]:
         """Convert FFI types and delegate to the wrapped source."""
         # Wrap raw FFI types in Python wrapper classes
         platform = Platform._from_py_platform(py_platform)
         name = PackageName._from_py_package_name(py_name)
-        package_format_selection = PackageFormatSelection(py_format)
 
         # Call the user's implementation with proper Python types
-        return await self._source.fetch_package_records(platform, name, package_format_selection)
+        return await self._source.fetch_package_records(platform, name)
 
     def package_names(self, py_platform: Any) -> list[str]:
         """Convert FFI types and delegate to the wrapped source."""
