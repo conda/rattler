@@ -14,6 +14,8 @@ from rattler.platform.platform import Platform, PlatformLiteral
 from rattler.rattler import PyChannelNotice, PyGateway, PyMatchSpec, PySourceConfig
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.repo_data import ChannelRelations
+from rattler.repo_data.revisions import RepodataRevisionMetadata, _repodata_revisions_from_py
+from rattler.repo_data.sparse import PackageFormatSelection
 from rattler.repo_data.who_needs import Dependent, _target_to_py
 
 if TYPE_CHECKING:
@@ -102,6 +104,19 @@ class SourceConfig:
     * `'no-cache'`: Do not use the cache even if there is an up to date entry
     """
 
+    package_format_selection: Optional[PackageFormatSelection] = None
+    """Which package formats the gateway returns records for.
+
+    `None` (default) keeps each backend's established behavior: `repodata.json`
+    sources apply `PackageFormatSelection.PREFER_CONDA`, while sharded repodata
+    returns every record of a shard, including CEP 48 `.whl` records, without
+    consolidating `.tar.bz2` and `.conda` twins. Set an explicit selection to
+    apply the same rule to both, for example
+    `PackageFormatSelection.PREFER_CONDA_WITH_WHL` to also receive wheel records
+    from `repodata.json`, or `PackageFormatSelection.PREFER_CONDA` to drop them
+    from sharded repodata too.
+    """
+
     def __post_init__(self) -> None:
         if self.jlap_enabled is not None:
             warnings.warn(
@@ -127,6 +142,9 @@ class SourceConfig:
             bz2_enabled=self.bz2_enabled,
             sharded_enabled=self.sharded_enabled,
             cache_action=self.cache_action,
+            package_format_selection=(
+                self.package_format_selection.value if self.package_format_selection is not None else None
+            ),
         )
 
 
@@ -435,6 +453,44 @@ class Gateway:
             [channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for channel in channels]
         )
         return [ChannelNotice._from_py(notice) for notice in py_notices]
+
+    async def repodata_revisions(
+        self,
+        channel: Channel | str,
+        platform: Platform | PlatformLiteral,
+    ) -> dict[str, RepodataRevisionMetadata]:
+        """Returns the repodata revisions advertised by the given
+        ``(channel, platform)`` subdirectory under ``info.repodata_revisions``,
+        keyed by ``vN``. The mapping is empty if the subdirectory advertises no
+        revisions or doesn't exist.
+
+        Reuses the gateway's internal subdir cache, so if the pair has
+        already been fetched by a `query` this is free.
+
+        Revisions newer than the ones this version of rattler understands are
+        included as well, so callers can tell users when a channel publishes
+        records that cannot be read.
+
+        Arguments:
+            channel: The channel to read revisions from.
+            platform: The platform whose subdir to inspect.
+
+        Examples
+        --------
+        ```python
+        >>> import asyncio
+        >>> gateway = Gateway()
+        >>> revisions = asyncio.run(gateway.repodata_revisions("conda-forge", "noarch"))
+        >>> isinstance(revisions, dict)
+        True
+        >>>
+        ```
+        """
+        py_revisions = await self._gateway.repodata_revisions(
+            channel._channel if isinstance(channel, Channel) else Channel(channel)._channel,
+            platform._inner if isinstance(platform, Platform) else Platform(platform)._inner,
+        )
+        return _repodata_revisions_from_py(py_revisions)
 
     async def channel_relations(
         self,

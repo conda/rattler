@@ -40,7 +40,9 @@ pub use indicatif::{IndicatifReporter, IndicatifReporterBuilder};
 pub use query::{NamesQuery, NamesQueryOutput, RepoDataQuery, RepoDataQueryOutput};
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
-use rattler_conda_types::{Channel, ChannelRelations, MatchSpec, Platform, RepoDataRecord};
+use rattler_conda_types::{
+    Channel, ChannelRelations, MatchSpec, Platform, RepoDataRecord, RepodataRevisions,
+};
 use rattler_networking::LazyClient;
 pub use repo_data::RepoData;
 use run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
@@ -301,6 +303,37 @@ impl Gateway {
         }
     }
 
+    /// Returns the repodata revisions advertised by the given
+    /// `(channel, platform)` subdirectory under `info.repodata_revisions`,
+    /// keyed by revision. The map is empty if the subdirectory advertises no
+    /// revisions or doesn't exist.
+    ///
+    /// Reuses the internal subdir cache: if the pair has already been
+    /// fetched by a [`Gateway::query`] this is free.
+    ///
+    /// Revisions newer than [`crate::SUPPORTED_REPODATA_REVISION`] are
+    /// included as [`RepodataRevision::Unknown`]; callers can use this to
+    /// tell users that a channel publishes records this client cannot read.
+    ///
+    /// [`RepodataRevision::Unknown`]: rattler_conda_types::RepodataRevision::Unknown
+    pub async fn repodata_revisions(
+        &self,
+        channel: &Channel,
+        platform: Platform,
+    ) -> Result<RepodataRevisions, GatewayError> {
+        match self
+            .inner
+            .get_or_create_subdir(channel, platform, None)
+            .await
+        {
+            Ok(subdir) => Ok(subdir.repodata_revisions().clone()),
+            // See `channel_relations`: a missing noarch subdir surfaces as an
+            // error rather than `Subdir::NotFound`.
+            Err(GatewayError::SubdirNotFoundError(_)) => Ok(RepodataRevisions::default()),
+            Err(err) => Err(err),
+        }
+    }
+
     /// Ensure that given repodata records contain `RunExportsJson`.
     pub async fn ensure_run_exports(
         &self,
@@ -530,9 +563,12 @@ mod test {
     use crate::{
         DownloadReporter, GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
         UnsupportedRepodataRevision, fetch::CacheAction, gateway::Gateway,
-        utils::simple_channel_server::SimpleChannelServer,
+        sparse::PackageFormatSelection, utils::simple_channel_server::SimpleChannelServer,
     };
-    use rattler_conda_types::RepodataRevision;
+    use rattler_conda_types::{
+        RepodataRevision,
+        package::{DistArchiveType, WheelArchiveType},
+    };
 
     async fn local_conda_forge() -> Channel {
         tokio::try_join!(
@@ -3274,6 +3310,163 @@ mod test {
                 .unwrap_or_else(|e| panic!("{platform} must return None, not error: {e}"));
             assert!(relations.is_none());
         }
+    }
+
+    /// Writes a `noarch` subdir that advertises the CEP 48 v3 revision and
+    /// carries one legacy `.conda` record and one v3 `.whl` record.
+    fn write_v3_repodata_with_wheel(root: &Path) {
+        let noarch = root.join("noarch");
+        fs_err::create_dir_all(&noarch).unwrap();
+        fs_err::write(
+            noarch.join("repodata.json"),
+            r#"{
+                "repodata_version": 2,
+                "info": {
+                    "subdir": "noarch",
+                    "repodata_revisions": {
+                        "v3": {
+                            "message": "wheels ahead",
+                            "n_packages": 1,
+                            "oldest": 1768249989851,
+                            "newest": 1773851561010
+                        }
+                    }
+                },
+                "packages": {},
+                "packages.conda": {
+                    "demo-1.0-0.conda": {
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "name": "demo",
+                        "noarch": "generic",
+                        "sha256": "eb65e866067865793b981c2ba74485f75bef441842b5998badc4ec66717685c7",
+                        "size": 1234,
+                        "subdir": "noarch",
+                        "timestamp": 1689209309623,
+                        "version": "1.0"
+                    }
+                },
+                "v3": {
+                    "whl": {
+                        "six-1.9.0-py3_none_any_0": {
+                            "build": "py3_none_any_0",
+                            "build_number": 0,
+                            "depends": [],
+                            "name": "six",
+                            "noarch": "python",
+                            "sha256": "e66d4bb9b165af63ba9efa967d9ab61a7a3c8349788353da711889a53b750d6d",
+                            "size": 9897,
+                            "subdir": "noarch",
+                            "timestamp": 1765457000,
+                            "url": "https://files.pythonhosted.org/packages/six-1.9.0-py2.py3-none-any.whl",
+                            "version": "1.9.0"
+                        }
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+    }
+
+    /// `Gateway::repodata_revisions` returns the advertised revisions of a
+    /// subdir and an empty map for subdirs that don't exist.
+    #[tokio::test]
+    async fn test_gateway_repodata_revisions() {
+        let tempdir = tempfile::tempdir().unwrap();
+        write_v3_repodata_with_wheel(tempdir.path());
+        let channel = Channel::try_from_directory(tempdir.path()).unwrap();
+
+        let gateway = Gateway::new();
+        let revisions = gateway
+            .repodata_revisions(&channel, Platform::NoArch)
+            .await
+            .unwrap();
+        assert_eq!(revisions.len(), 1);
+        let v3 = &revisions[&RepodataRevision::V3];
+        assert_eq!(v3.message.as_deref(), Some("wheels ahead"));
+        assert_eq!(v3.n_packages, Some(1));
+
+        // A platform the channel does not publish is simply empty, for noarch
+        // as well even though the subdir builder reports that one as an error.
+        assert!(
+            gateway
+                .repodata_revisions(&channel, Platform::Linux64)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        let empty_channel = tempfile::tempdir().unwrap();
+        let empty_channel = Channel::try_from_directory(empty_channel.path()).unwrap();
+        assert!(
+            gateway
+                .repodata_revisions(&empty_channel, Platform::NoArch)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    /// The default gateway keeps yielding conda records only; an explicit
+    /// `SourceConfig::package_format_selection` surfaces `.whl` records.
+    #[tokio::test]
+    async fn test_gateway_package_format_selection() {
+        let tempdir = tempfile::tempdir().unwrap();
+        write_v3_repodata_with_wheel(tempdir.path());
+        let channel = Channel::try_from_directory(tempdir.path()).unwrap();
+        let specs = || {
+            vec![
+                PackageName::from_str("demo").unwrap(),
+                PackageName::from_str("six").unwrap(),
+            ]
+        };
+
+        let gateway = Gateway::new();
+        let records = gateway
+            .query(vec![channel.clone()], vec![Platform::NoArch], specs())
+            .recursive(false)
+            .await
+            .unwrap();
+        let records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].package_record.name.as_normalized(), "demo");
+        let names = gateway
+            .names(vec![channel.clone()], vec![Platform::NoArch])
+            .await
+            .unwrap();
+        assert!(!names.contains(&PackageName::from_str("six").unwrap()));
+
+        let gateway = Gateway::builder()
+            .with_channel_config(super::ChannelConfig {
+                default: SourceConfig {
+                    package_format_selection: Some(PackageFormatSelection::PreferCondaWithWhl),
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+            .finish();
+        let records = gateway
+            .query(vec![channel.clone()], vec![Platform::NoArch], specs())
+            .recursive(false)
+            .await
+            .unwrap();
+        let mut records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        records.sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[1].package_record.name.as_normalized(), "six");
+        assert_eq!(
+            records[1].identifier.archive_type,
+            DistArchiveType::Wheel(WheelArchiveType::Whl)
+        );
+        assert_eq!(
+            records[1].url.as_str(),
+            "https://files.pythonhosted.org/packages/six-1.9.0-py2.py3-none-any.whl"
+        );
+        let names = gateway
+            .names(vec![channel], vec![Platform::NoArch])
+            .await
+            .unwrap();
+        assert!(names.contains(&PackageName::from_str("six").unwrap()));
     }
 
     // ----------------------------------------------------------------------

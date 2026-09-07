@@ -19,13 +19,24 @@ use crate::{
 /// instance of this client.
 pub struct LocalSubdirClient {
     sparse: Arc<SparseRepoData>,
+    package_format_selection: PackageFormatSelection,
 }
 
 impl LocalSubdirClient {
     /// Create a client directly from an already-loaded [`SparseRepoData`],
     /// without parsing anything from disk.
     pub fn new(sparse: Arc<SparseRepoData>) -> Self {
-        Self { sparse }
+        Self {
+            sparse,
+            package_format_selection: PackageFormatSelection::PreferConda,
+        }
+    }
+
+    /// Sets which package formats this client yields records for. Defaults
+    /// to [`PackageFormatSelection::PreferConda`].
+    pub fn with_package_format_selection(mut self, selection: PackageFormatSelection) -> Self {
+        self.package_format_selection = selection;
+        self
     }
 
     pub fn from_file(
@@ -49,9 +60,7 @@ impl LocalSubdirClient {
                     }
                 })?;
 
-        Ok(Self {
-            sparse: Arc::new(sparse),
-        })
+        Ok(Self::new(Arc::new(sparse)))
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -66,9 +75,7 @@ impl LocalSubdirClient {
                 GatewayError::IoError("failed to parse repodata.json".to_string(), err.into())
             })?;
 
-        Ok(Self {
-            sparse: Arc::new(sparse),
-        })
+        Ok(Self::new(Arc::new(sparse)))
     }
 }
 
@@ -82,23 +89,23 @@ impl SubdirClient for LocalSubdirClient {
     ) -> Result<PackageRecords, GatewayError> {
         let sparse_repodata = self.sparse.clone();
         let name = name.clone();
+        let package_format_selection = self.package_format_selection;
 
-        let load_records = move || match sparse_repodata
-            .load_records(&name, PackageFormatSelection::PreferConda)
-        {
-            Ok(records) => {
-                let (unique_base_deps, unique_extra_deps) = extract_unique_deps_split(&records);
-                Ok(PackageRecords {
-                    records: records.into_iter().map(Arc::new).collect(),
-                    unique_base_deps,
-                    unique_extra_deps,
-                })
-            }
-            Err(err) => Err(GatewayError::IoError(
-                "failed to extract repodata records from sparse repodata".to_string(),
-                err,
-            )),
-        };
+        let load_records =
+            move || match sparse_repodata.load_records(&name, package_format_selection) {
+                Ok(records) => {
+                    let (unique_base_deps, unique_extra_deps) = extract_unique_deps_split(&records);
+                    Ok(PackageRecords {
+                        records: records.into_iter().map(Arc::new).collect(),
+                        unique_base_deps,
+                        unique_extra_deps,
+                    })
+                }
+                Err(err) => Err(GatewayError::IoError(
+                    "failed to extract repodata records from sparse repodata".to_string(),
+                    err,
+                )),
+            };
 
         #[cfg(target_arch = "wasm32")]
         return load_records();
@@ -109,7 +116,7 @@ impl SubdirClient for LocalSubdirClient {
     fn package_names(&self) -> Vec<String> {
         let sparse_repodata: Arc<SparseRepoData> = self.sparse.clone();
         sparse_repodata
-            .package_names(PackageFormatSelection::PreferConda)
+            .package_names(self.package_format_selection)
             .map(std::convert::Into::into)
             .collect()
     }

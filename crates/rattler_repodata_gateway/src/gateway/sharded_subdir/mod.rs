@@ -4,8 +4,8 @@ use std::sync::Arc;
 use cfg_if::cfg_if;
 use http::StatusCode;
 use rattler_conda_types::{
-    ChannelUrl, RepoDataRecord, Shard, UrlOrPath, WhlPackageRecord,
-    package::{CondaArchiveType, DistArchiveIdentifier, WheelArchiveType},
+    ChannelUrl, RepoDataRecord, Shard, UrlOrPath, V3Packages, WhlPackageRecord,
+    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, WheelArchiveType},
 };
 use rattler_redaction::Redact;
 use url::Url;
@@ -14,6 +14,7 @@ use crate::{
     GatewayError,
     fetch::FetchRepoDataError,
     gateway::subdir::{PackageRecords, extract_unique_deps_split},
+    sparse::PackageFormatSelection,
 };
 
 /// Returns `true` if the HTTP status indicates that the server does not expose
@@ -92,76 +93,27 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
     bytes: R,
     channel_base_url: ChannelUrl,
     base_url: Url,
+    package_format_selection: Option<PackageFormatSelection>,
 ) -> Result<PackageRecords, GatewayError> {
-    let parse =
-        move || {
-            let shard = rmp_serde::from_slice::<Shard>(bytes.as_ref())
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
-                .map_err(FetchRepoDataError::IoError)?;
+    let parse = move || {
+        let shard = rmp_serde::from_slice::<Shard>(bytes.as_ref())
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
+            .map_err(FetchRepoDataError::IoError)?;
 
-            // Chain v3 tar.bz2/conda packages into the main iteration
-            let v3_tar_bz2 = shard.v3.tar_bz2.into_iter().map(|(id, rec)| {
-                (
-                    DistArchiveIdentifier::new(id, CondaArchiveType::TarBz2),
-                    rec,
-                )
-            });
-            let v3_conda =
-                shard.v3.conda.into_iter().map(|(id, rec)| {
-                    (DistArchiveIdentifier::new(id, CondaArchiveType::Conda), rec)
-                });
-
-            let packages = itertools::chain(shard.packages, shard.conda_packages)
-                .chain(v3_tar_bz2)
-                .chain(v3_conda)
-                .filter(|(name, _record)| !shard.removed.contains(name));
-
-            let channel_str = channel_base_url.url().clone().redact().to_string();
-            let base_url_str = base_url.as_str();
-            let mut records: Vec<Arc<RepoDataRecord>> = packages
-                .map(|(file_name, package_record)| {
-                    let file_name_str = file_name.to_file_name();
-                    Arc::new(RepoDataRecord {
-                        url: Url::parse(&format!("{base_url_str}{file_name_str}"))
-                            .expect("filename is not a valid url"),
-                        channel: Some(channel_str.clone()),
-                        package_record,
-                        identifier: file_name,
-                    })
-                })
-                .collect();
-
-            // Handle v3 whl packages separately (different URL resolution)
-            for (
-                id,
-                WhlPackageRecord {
-                    url,
-                    package_record,
-                },
-            ) in shard.v3.whl
-            {
-                let dist_id = DistArchiveIdentifier::new(id, WheelArchiveType::Whl);
-                let url = match url {
-                    UrlOrPath::Path(path) => Url::parse(&format!("{base_url_str}{path}"))
-                        .expect("path is not a valid url"),
-                    UrlOrPath::Url(url) => url,
-                };
-                records.push(Arc::new(RepoDataRecord {
-                    url,
-                    channel: Some(channel_str.clone()),
-                    package_record,
-                    identifier: dist_id,
-                }));
-            }
-
-            let (unique_base_deps, unique_extra_deps) =
-                extract_unique_deps_split(records.iter().map(|r| &**r));
-            Ok(PackageRecords {
-                records,
-                unique_base_deps,
-                unique_extra_deps,
-            })
-        };
+        let records = shard_records(
+            shard,
+            &channel_base_url,
+            &base_url,
+            package_format_selection,
+        );
+        let (unique_base_deps, unique_extra_deps) =
+            extract_unique_deps_split(records.iter().map(|r| &**r));
+        Ok(PackageRecords {
+            records,
+            unique_base_deps,
+            unique_extra_deps,
+        })
+    };
 
     #[cfg(target_arch = "wasm32")]
     return parse();
@@ -170,23 +122,151 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
     simple_spawn_blocking::tokio::run_blocking_task(parse).await
 }
 
+/// Converts the records of a shard into [`RepoDataRecord`]s.
+///
+/// Without an explicit `package_format_selection` every record of the shard
+/// is returned, including CEP 48 `.whl` records. With a selection the same
+/// rules as for `repodata.json` apply: only the selected archive types are
+/// returned, and the `Prefer*` variants drop `.tar.bz2` and `.whl` records
+/// that have a `.conda` twin with the same name, version and build string.
+fn shard_records(
+    shard: Shard,
+    channel_base_url: &ChannelUrl,
+    base_url: &Url,
+    package_format_selection: Option<PackageFormatSelection>,
+) -> Vec<Arc<RepoDataRecord>> {
+    let (include_tar_bz2, include_conda, include_whl, prefer_conda) = match package_format_selection
+    {
+        None => (true, true, true, false),
+        Some(PackageFormatSelection::OnlyTarBz2) => (true, false, false, false),
+        Some(PackageFormatSelection::OnlyConda) => (false, true, false, false),
+        Some(PackageFormatSelection::PreferConda) => (true, true, false, true),
+        Some(PackageFormatSelection::PreferCondaWithWhl) => (true, true, true, true),
+        Some(PackageFormatSelection::Both) => (true, true, false, false),
+    };
+
+    let Shard {
+        packages,
+        conda_packages,
+        v3,
+        removed,
+    } = shard;
+    let V3Packages {
+        tar_bz2: v3_tar_bz2,
+        conda: v3_conda,
+        whl: v3_whl,
+        ..
+    } = v3;
+
+    // With a `Prefer*` selection, a `.tar.bz2` or `.whl` record is dropped when
+    // a `.conda` record with the same identifier exists.
+    let conda_identifiers: ahash::HashSet<ArchiveIdentifier> = if prefer_conda {
+        conda_packages
+            .keys()
+            .map(|id| id.identifier.clone())
+            .chain(v3_conda.keys().cloned())
+            .collect()
+    } else {
+        ahash::HashSet::default()
+    };
+    let has_conda_twin = |identifier: &ArchiveIdentifier| conda_identifiers.contains(identifier);
+
+    let legacy_tar_bz2 = packages
+        .into_iter()
+        .filter(|(id, _)| include_tar_bz2 && !has_conda_twin(&id.identifier));
+    let legacy_conda = conda_packages.into_iter().filter(|_| include_conda);
+    let v3_tar_bz2 = v3_tar_bz2
+        .into_iter()
+        .filter(|(id, _)| include_tar_bz2 && !has_conda_twin(id))
+        .map(|(id, rec)| {
+            (
+                DistArchiveIdentifier::new(id, CondaArchiveType::TarBz2),
+                rec,
+            )
+        });
+    let v3_conda = v3_conda
+        .into_iter()
+        .filter(|_| include_conda)
+        .map(|(id, rec)| (DistArchiveIdentifier::new(id, CondaArchiveType::Conda), rec));
+
+    let packages = legacy_tar_bz2
+        .chain(legacy_conda)
+        .chain(v3_tar_bz2)
+        .chain(v3_conda)
+        .filter(|(name, _record)| !removed.contains(name));
+
+    let channel_str = channel_base_url.url().clone().redact().to_string();
+    let base_url_str = base_url.as_str();
+    let mut records: Vec<Arc<RepoDataRecord>> = packages
+        .map(|(file_name, package_record)| {
+            let file_name_str = file_name.to_file_name();
+            Arc::new(RepoDataRecord {
+                url: Url::parse(&format!("{base_url_str}{file_name_str}"))
+                    .expect("filename is not a valid url"),
+                channel: Some(channel_str.clone()),
+                package_record,
+                identifier: file_name,
+            })
+        })
+        .collect();
+
+    // Handle v3 whl packages separately (different URL resolution)
+    if include_whl {
+        for (
+            id,
+            WhlPackageRecord {
+                url,
+                package_record,
+            },
+        ) in v3_whl
+        {
+            if has_conda_twin(&id) {
+                continue;
+            }
+            let dist_id = DistArchiveIdentifier::new(id, WheelArchiveType::Whl);
+            if removed.contains(&dist_id) {
+                continue;
+            }
+            let url = match url {
+                UrlOrPath::Path(path) => {
+                    Url::parse(&format!("{base_url_str}{path}")).expect("path is not a valid url")
+                }
+                UrlOrPath::Url(url) => url,
+            };
+            records.push(Arc::new(RepoDataRecord {
+                url,
+                channel: Some(channel_str.clone()),
+                package_record,
+                identifier: dist_id,
+            }));
+        }
+    }
+
+    records
+}
+
 // Tests are only run on non-wasm targets since they use tokio and axum
 #[cfg(test)]
 mod tests {
     use crate::fetch::CacheAction;
     use crate::gateway::error::GatewayError;
     use crate::gateway::subdir::SubdirClient;
+    use crate::sparse::PackageFormatSelection;
     use axum::{
         Router,
         body::Body,
         http::{Response, StatusCode},
         routing::get,
     };
-    use rattler_conda_types::{Channel, RepodataRevisions, ShardedRepodata, ShardedSubdirInfo};
+    use rattler_conda_types::{
+        Channel, ChannelUrl, PackageName, PackageRecord, RepodataRevisions, Shard, ShardedRepodata,
+        ShardedSubdirInfo, UrlOrPath, VersionWithSource, WhlPackageRecord,
+    };
     use rattler_digest::{Sha256, parse_digest_from_hex};
     use std::future::IntoFuture;
     use std::net::SocketAddr;
     use std::path::Path;
+    use std::str::FromStr;
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -194,7 +274,158 @@ mod tests {
     use tokio::sync::oneshot;
     use url::Url;
 
-    use super::{ShardCachePolicy, ShardedSubdir};
+    use super::{ShardCachePolicy, ShardedSubdir, shard_records};
+
+    fn record(name: &str, version: &str, build: &str) -> PackageRecord {
+        PackageRecord::new(
+            PackageName::new_unchecked(name),
+            VersionWithSource::from_str(version).unwrap(),
+            build.to_string(),
+        )
+    }
+
+    /// A shard with every archive kind: a `.tar.bz2`/`.conda` pair and a lone
+    /// `.tar.bz2` in the legacy maps, a `.tar.bz2`/`.conda` pair in the v3
+    /// maps, and two wheels (one with an absolute URL, one channel-relative).
+    fn mixed_shard() -> Shard {
+        let mut shard = Shard::default();
+        shard.packages.insert(
+            "foo-1.0-0.tar.bz2".parse().unwrap(),
+            record("foo", "1.0", "0"),
+        );
+        shard.packages.insert(
+            "bar-1.0-0.tar.bz2".parse().unwrap(),
+            record("bar", "1.0", "0"),
+        );
+        shard.conda_packages.insert(
+            "foo-1.0-0.conda".parse().unwrap(),
+            record("foo", "1.0", "0"),
+        );
+        shard
+            .v3
+            .tar_bz2
+            .insert("baz-1.0-0".parse().unwrap(), record("baz", "1.0", "0"));
+        shard
+            .v3
+            .conda
+            .insert("baz-1.0-0".parse().unwrap(), record("baz", "1.0", "0"));
+        shard.v3.whl.insert(
+            "six-1.9.0-py3_none_any_0".parse().unwrap(),
+            WhlPackageRecord {
+                package_record: record("six", "1.9.0", "py3_none_any_0"),
+                url: UrlOrPath::Url(
+                    Url::parse("https://files.pythonhosted.org/six-1.9.0-py2.py3-none-any.whl")
+                        .unwrap(),
+                ),
+            },
+        );
+        shard.v3.whl.insert(
+            "local-2.0-py3_none_any_0".parse().unwrap(),
+            WhlPackageRecord {
+                package_record: record("local", "2.0", "py3_none_any_0"),
+                url: UrlOrPath::Path("local-2.0-py3-none-any.whl".to_string()),
+            },
+        );
+        shard
+    }
+
+    fn file_names(
+        package_format_selection: Option<PackageFormatSelection>,
+    ) -> std::collections::BTreeSet<String> {
+        let channel_url = ChannelUrl::from(Url::parse("https://example.com/channel/").unwrap());
+        let base_url = Url::parse("https://example.com/channel/noarch/").unwrap();
+        shard_records(
+            mixed_shard(),
+            &channel_url,
+            &base_url,
+            package_format_selection,
+        )
+        .into_iter()
+        .map(|record| record.identifier.to_file_name())
+        .collect()
+    }
+
+    fn names(names: &[&str]) -> std::collections::BTreeSet<String> {
+        names.iter().map(ToString::to_string).collect()
+    }
+
+    /// Without a selection a shard yields every record; a selection applies
+    /// the `repodata.json` rules to sharded repodata as well.
+    #[test]
+    fn shard_records_honor_package_format_selection() {
+        assert_eq!(
+            file_names(None),
+            names(&[
+                "foo-1.0-0.tar.bz2",
+                "bar-1.0-0.tar.bz2",
+                "foo-1.0-0.conda",
+                "baz-1.0-0.tar.bz2",
+                "baz-1.0-0.conda",
+                "six-1.9.0-py3_none_any_0.whl",
+                "local-2.0-py3_none_any_0.whl",
+            ])
+        );
+        assert_eq!(
+            file_names(Some(PackageFormatSelection::PreferConda)),
+            names(&["bar-1.0-0.tar.bz2", "foo-1.0-0.conda", "baz-1.0-0.conda"])
+        );
+        assert_eq!(
+            file_names(Some(PackageFormatSelection::PreferCondaWithWhl)),
+            names(&[
+                "bar-1.0-0.tar.bz2",
+                "foo-1.0-0.conda",
+                "baz-1.0-0.conda",
+                "six-1.9.0-py3_none_any_0.whl",
+                "local-2.0-py3_none_any_0.whl",
+            ])
+        );
+        assert_eq!(
+            file_names(Some(PackageFormatSelection::OnlyConda)),
+            names(&["foo-1.0-0.conda", "baz-1.0-0.conda"])
+        );
+        assert_eq!(
+            file_names(Some(PackageFormatSelection::OnlyTarBz2)),
+            names(&[
+                "foo-1.0-0.tar.bz2",
+                "bar-1.0-0.tar.bz2",
+                "baz-1.0-0.tar.bz2"
+            ])
+        );
+        assert_eq!(
+            file_names(Some(PackageFormatSelection::Both)),
+            names(&[
+                "foo-1.0-0.tar.bz2",
+                "bar-1.0-0.tar.bz2",
+                "foo-1.0-0.conda",
+                "baz-1.0-0.tar.bz2",
+                "baz-1.0-0.conda",
+            ])
+        );
+    }
+
+    /// Wheel URLs are kept when absolute and resolved against the package
+    /// base URL when channel-relative.
+    #[test]
+    fn shard_records_resolve_wheel_urls() {
+        let channel_url = ChannelUrl::from(Url::parse("https://example.com/channel/").unwrap());
+        let base_url = Url::parse("https://example.com/channel/noarch/").unwrap();
+        let records = shard_records(mixed_shard(), &channel_url, &base_url, None);
+        let url_of = |name: &str| {
+            records
+                .iter()
+                .find(|record| record.package_record.name.as_normalized() == name)
+                .map(|record| record.url.to_string())
+                .unwrap()
+        };
+        assert_eq!(
+            url_of("six"),
+            "https://files.pythonhosted.org/six-1.9.0-py2.py3-none-any.whl"
+        );
+        assert_eq!(
+            url_of("local"),
+            "https://example.com/channel/noarch/local-2.0-py3-none-any.whl"
+        );
+    }
 
     /// A mock server that serves a sharded repodata index but returns
     /// configurable responses for shard requests.
@@ -330,6 +561,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .await
         .unwrap();
@@ -399,6 +631,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .await
         .err()
@@ -438,6 +671,7 @@ mod tests {
                 action: CacheAction::NoCache,
                 missing_shards_are_empty: false,
             },
+            None,
             None,
             None,
             None,
@@ -484,6 +718,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .await
         .expect("the index is served, so it is cached now");
@@ -497,6 +732,7 @@ mod tests {
                 action: cache_only_action,
                 missing_shards_are_empty,
             },
+            None,
             None,
             None,
             None,
@@ -527,6 +763,7 @@ mod tests {
                 action: CacheAction::ForceCacheOnly,
                 missing_shards_are_empty: true,
             },
+            None,
             None,
             None,
             None,

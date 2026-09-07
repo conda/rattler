@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use rattler_conda_types::ChannelUrl;
 use url::Url;
 
-use crate::fetch::CacheAction;
+use crate::{fetch::CacheAction, sparse::PackageFormatSelection};
 
 /// Describes additional properties that influence how the gateway fetches
 /// repodata for a specific channel.
@@ -38,6 +38,19 @@ pub struct SourceConfig {
     /// A missing shard *index* remains an error either way: without it nothing
     /// is known about the subdir at all.
     pub missing_shards_are_empty: bool,
+
+    /// Which package formats a subdirectory yields records for.
+    ///
+    /// `None` (the default) keeps each backend's established behavior:
+    /// `repodata.json` sources apply [`PackageFormatSelection::PreferConda`],
+    /// while sharded repodata returns every record of a shard, including
+    /// CEP 48 `.whl` records, without consolidating `.tar.bz2` and `.conda`
+    /// twins. Set an explicit selection to apply the same rule to both, for
+    /// example [`PackageFormatSelection::PreferCondaWithWhl`] to receive
+    /// wheel records from `repodata.json` as well, or
+    /// [`PackageFormatSelection::PreferConda`] to drop them from sharded
+    /// repodata too.
+    pub package_format_selection: Option<PackageFormatSelection>,
 }
 
 impl Default for SourceConfig {
@@ -48,6 +61,7 @@ impl Default for SourceConfig {
             sharded_enabled: true,
             cache_action: CacheAction::default(),
             missing_shards_are_empty: false,
+            package_format_selection: None,
         }
     }
 }
@@ -61,6 +75,7 @@ impl From<rattler_config::config::repodata_config::RepodataChannelConfig> for So
             sharded_enabled: !value.disable_sharded.unwrap_or(false),
             cache_action: CacheAction::default(),
             missing_shards_are_empty: false,
+            package_format_selection: None,
         }
     }
 }

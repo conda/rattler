@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `Gateway.repodata_revisions(channel, platform)` returning the `info.repodata_revisions` advertised by a subdirectory, keyed by `vN`
+- Add `SourceConfig.package_format_selection` to choose which package formats the `Gateway` returns records for, e.g. `PackageFormatSelection.PREFER_CONDA_WITH_WHL` to receive CEP 48 `.whl` records from both `repodata.json` and sharded repodata
+
 ## [0.25.0] - 2026-06-09
 
 ### Changed

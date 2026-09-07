@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from rattler import Gateway, Channel, SourceConfig
+from rattler import Gateway, Channel, PackageFormatSelection, SourceConfig
 
 
 @pytest.mark.asyncio
@@ -83,3 +83,93 @@ def test_init_per_channel_config_key() -> None:
     right_config = {"http://test-config-key.com": test_source_config}
     test_gateway = Gateway(per_channel_config=right_config)
     assert test_gateway is not None
+
+
+def _write_v3_repodata_with_wheel(root: Path) -> None:
+    """A noarch subdir advertising the CEP 48 v3 revision with one `.conda` and one `.whl` record."""
+    noarch = root / "noarch"
+    noarch.mkdir()
+    (noarch / "repodata.json").write_text(
+        json.dumps(
+            {
+                "repodata_version": 2,
+                "info": {
+                    "subdir": "noarch",
+                    "repodata_revisions": {
+                        "v3": {
+                            "message": "wheels ahead",
+                            "n_packages": 1,
+                            "oldest": 1768249989851,
+                            "newest": 1773851561010,
+                        }
+                    },
+                },
+                "packages": {},
+                "packages.conda": {
+                    "demo-1.0-0.conda": {
+                        "name": "demo",
+                        "version": "1.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "subdir": "noarch",
+                        "noarch": "generic",
+                    }
+                },
+                "v3": {
+                    "whl": {
+                        "six-1.9.0-py3_none_any_0": {
+                            "name": "six",
+                            "version": "1.9.0",
+                            "build": "py3_none_any_0",
+                            "build_number": 0,
+                            "depends": [],
+                            "subdir": "noarch",
+                            "noarch": "python",
+                            "url": "https://files.pythonhosted.org/packages/six-1.9.0-py2.py3-none-any.whl",
+                        }
+                    }
+                },
+            }
+        )
+    )
+
+
+@pytest.mark.asyncio
+async def test_repodata_revisions(tmp_path: Path) -> None:
+    _write_v3_repodata_with_wheel(tmp_path)
+    gateway = Gateway()
+    channel = Channel(str(tmp_path))
+
+    revisions = await gateway.repodata_revisions(channel, "noarch")
+    assert list(revisions) == ["v3"]
+    assert revisions["v3"]["message"] == "wheels ahead"
+    assert revisions["v3"]["n_packages"] == 1
+    assert revisions["v3"]["oldest"].year == 2026
+
+    # Subdirs the channel does not publish are empty, not an error.
+    assert await gateway.repodata_revisions(channel, "linux-64") == {}
+
+
+@pytest.mark.asyncio
+async def test_package_format_selection(tmp_path: Path) -> None:
+    _write_v3_repodata_with_wheel(tmp_path)
+    channel = Channel(str(tmp_path))
+
+    # By default only conda records are returned.
+    records = await Gateway().query([channel], ["noarch"], ["demo", "six"], recursive=False)
+    assert sorted(record.file_name for record in records[0]) == ["demo-1.0-0.conda"]
+
+    gateway = Gateway(
+        default_config=SourceConfig(package_format_selection=PackageFormatSelection.PREFER_CONDA_WITH_WHL)
+    )
+    records = await gateway.query([channel], ["noarch"], ["demo", "six"], recursive=False)
+    assert sorted(record.file_name for record in records[0]) == [
+        "demo-1.0-0.conda",
+        "six-1.9.0-py3_none_any_0.whl",
+    ]
+    wheel = next(record for record in records[0] if record.file_name.endswith(".whl"))
+    assert wheel.url == "https://files.pythonhosted.org/packages/six-1.9.0-py2.py3-none-any.whl"
+
+    names = await gateway.names([channel], ["noarch"])
+    assert sorted(name.normalized for name in names) == ["demo", "six"]

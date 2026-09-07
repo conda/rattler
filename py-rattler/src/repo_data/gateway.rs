@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -22,9 +22,11 @@ use crate::networking::client::PyClientWithMiddleware;
 use crate::package_name::PyPackageName;
 use crate::platform::PyPlatform;
 use crate::record::PyRecord;
-use crate::repo_data::PyChannelRelations;
 use crate::repo_data::source::PyRepoDataSource;
-use crate::repo_data::sparse::PySparseRepoData;
+use crate::repo_data::sparse::{PyPackageFormatSelection, PySparseRepoData};
+use crate::repo_data::{
+    PyChannelRelations, PyRepodataRevisionMetadata, repodata_revisions_to_python,
+};
 use crate::{PyChannel, Wrap};
 
 #[pyclass(from_py_object)]
@@ -255,6 +257,27 @@ impl PyGateway {
             .clear_repodata_cache(&channel.inner, subdirs.0, mode)
             .map_err(PyRattlerError::from)?;
         Ok(())
+    }
+
+    /// Returns the repodata revisions advertised by the given
+    /// `(channel, platform)` subdirectory as a `vN`-keyed mapping. Empty if
+    /// none are advertised or the subdirectory does not exist.
+    pub fn repodata_revisions<'a>(
+        &self,
+        py: Python<'a>,
+        channel: PyChannel,
+        platform: PyPlatform,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let gateway = self.inner.clone();
+        future_into_py(py, async move {
+            let revisions = gateway
+                .repodata_revisions(&channel.inner, platform.inner)
+                .await
+                .map_err(PyRattlerError::from)?;
+            Ok::<BTreeMap<String, PyRepodataRevisionMetadata>, PyErr>(repodata_revisions_to_python(
+                &revisions,
+            ))
+        })
     }
 
     /// Returns the CEP-42 `channel_relations` declared by the given
@@ -516,12 +539,14 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Wrap<CacheAction> {
 #[pymethods]
 impl PySourceConfig {
     #[new]
+    #[pyo3(signature = (zstd_enabled, bz2_enabled, sharded_enabled, cache_action, package_format_selection=None))]
     #[allow(clippy::fn_params_excessive_bools)]
     pub fn new(
         zstd_enabled: bool,
         bz2_enabled: bool,
         sharded_enabled: bool,
         cache_action: Wrap<CacheAction>,
+        package_format_selection: Option<PyPackageFormatSelection>,
     ) -> Self {
         // Spread the rest, so a new `SourceConfig` field does not break this
         // binding; the ones not listed here are simply not exposed to Python.
@@ -531,6 +556,7 @@ impl PySourceConfig {
                 bz2_enabled,
                 sharded_enabled,
                 cache_action: cache_action.0,
+                package_format_selection: package_format_selection.map(Into::into),
                 ..SourceConfig::default()
             },
         }

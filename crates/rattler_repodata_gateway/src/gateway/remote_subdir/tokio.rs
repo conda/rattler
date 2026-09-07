@@ -9,6 +9,7 @@ use crate::{
     gateway::{
         GatewayError, SourceConfig, error::SubdirNotFoundError, local_subdir::LocalSubdirClient,
     },
+    sparse::PackageFormatSelection,
 };
 use rattler_conda_types::{Channel, Platform};
 use rattler_networking::LazyClient;
@@ -55,12 +56,16 @@ impl RemoteSubdirClient {
 
         // Create a new sparse repodata client that can be used to read records from the
         // repodata.
+        let package_format_selection = source_config
+            .package_format_selection
+            .unwrap_or(PackageFormatSelection::PreferConda);
         let sparse = simple_spawn_blocking::tokio::run_blocking_task(move || {
             LocalSubdirClient::from_file(
                 &repodata.repo_data_json_path,
                 channel.clone(),
                 platform.as_str(),
             )
+            .map(|client| client.with_package_format_selection(package_format_selection))
         })
         .await?;
 
