@@ -94,7 +94,7 @@ fn filter_records_by_package_format(
     records: Vec<Arc<RepoDataRecord>>,
     selection: PackageFormatSelection,
 ) -> Vec<Arc<RepoDataRecord>> {
-   match selection {
+    match selection {
         PackageFormatSelection::Both | PackageFormatSelection::PreferConda => records
             .into_iter()
             .filter(|r| !matches!(r.identifier.archive_type, DistArchiveType::Wheel(_)))
