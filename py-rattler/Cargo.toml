@@ -32,11 +32,13 @@ parking_lot = { version = "0.12", features = ["arc_lock", "send_guard"] }
 rattler_s3 = { path = "../crates/rattler_s3", features = ["serde"] }
 rattler = { path = "../crates/rattler", default-features = false, features = [
   "indicatif",
+  "rattler_config",
 ] }
 rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", default-features = false, features = [
   "sparse",
   "gateway",
   "indicatif",
+  "rattler_config",
 ] }
 rattler_conda_types = { path = "../crates/rattler_conda_types", default-features = false }
 rattler_config = { path = "../crates/rattler_config", default-features = false, features = [
@@ -45,6 +47,7 @@ rattler_config = { path = "../crates/rattler_config", default-features = false, 
 rattler_digest = { path = "../crates/rattler_digest" }
 rattler_networking = { path = "../crates/rattler_networking", default-features = false, features = [
   "gcs",
+  "rattler_config",
   "s3",
   "system-integration",
 ] }

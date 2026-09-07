@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from rattler import Config
-from rattler.exceptions import ConfigError
+from rattler import Client, Config, Gateway
+from rattler.exceptions import AuthenticationStorageError, ConfigError
 
 
 def test_default_config_is_empty():
@@ -17,6 +17,31 @@ def test_default_config_is_empty():
     assert config.loaded_from == []
     assert config.concurrency_downloads == 50
     assert config.concurrency_solves >= 1
+
+
+def test_config_constructs_networking_consumers():
+    config = Config.from_toml("""
+        tls-no-verify = true
+
+        [concurrency]
+        downloads = 8
+
+        [repodata-config]
+        disable-sharded = true
+    """)
+
+    assert isinstance(Client.from_config(config), Client)
+    assert isinstance(Gateway.from_config(config), Gateway)
+
+
+def test_configured_authentication_override_is_used(tmp_path):
+    auth_file = tmp_path / "auth.json"
+    auth_file.write_text("not json")
+    config = Config()
+    config.set("authentication-override-file", str(auth_file))
+
+    with pytest.raises(AuthenticationStorageError):
+        Client.from_config(config)
 
 
 def test_from_toml_reads_common_keys():

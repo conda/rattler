@@ -2,6 +2,7 @@ from __future__ import annotations
 import os
 from typing import List, Optional, Protocol, runtime_checkable
 
+from rattler.config import Config
 from rattler.match_spec import MatchSpec
 from rattler.networking.client import Client
 from rattler.platform.platform import Platform
@@ -283,12 +284,13 @@ async def install(
     reinstall_packages: Optional[set[str]] = None,
     ignored_packages: Optional[set[str]] = None,
     platform: Optional[Platform] = None,
-    execute_link_scripts: bool = False,
+    execute_link_scripts: Optional[bool] = None,
     show_progress: bool = True,
     client: Optional[Client] = None,
     requested_specs: Optional[List[MatchSpec]] = None,
     reporter: Optional[InstallerReporter] = None,
     alternative_target_prefix: Optional[str | os.PathLike[str]] = None,
+    config: Optional[Config] = None,
 ) -> None:
     """
     Create an environment by downloading and linking the `dependencies` in
@@ -338,7 +340,9 @@ async def install(
         platform: Target platform to create and link the
                 environment. Defaults to current platform.
         execute_link_scripts: whether to execute the post-link and pre-unlink scripts
-                that may be part of a package. Defaults to False.
+                that may be part of a package. When omitted, uses
+                ``config.run_post_link_scripts`` if a config is supplied and otherwise
+                defaults to False. An explicit value takes precedence over config.
         show_progress: If set to `True` a progress bar will be shown on the CLI.
                 Ignored when `reporter` is provided.
         client: An authenticated client to use for downloading packages. If not specified a default
@@ -354,7 +358,13 @@ async def install(
                 `target_prefix`; only the prefix written into the linked files differs. This is
                 only needed in exceptional cases, for example when the environment will later be
                 relocated to or used from a different path.
+        config: Shared rattler configuration. Applies link-type preferences,
+                download concurrency, link-script execution, and—when ``client``
+                is omitted—the networking settings used for package downloads.
     """
+
+    if config is not None and client is None:
+        client = Client.from_config(config)
 
     await py_install(
         records=records,
@@ -370,4 +380,5 @@ async def install(
         requested_specs=requested_specs,
         reporter=reporter,
         alternative_target_prefix=str(alternative_target_prefix) if alternative_target_prefix is not None else None,
+        config=config._inner if config is not None else None,
     )

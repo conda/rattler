@@ -1,9 +1,11 @@
 import json
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import pytest
 
-from rattler import Gateway, Channel, SourceConfig
+from rattler import Channel, Config, Gateway, SourceConfig
 
 
 @pytest.mark.asyncio
@@ -83,3 +85,48 @@ def test_init_per_channel_config_key() -> None:
     right_config = {"http://test-config-key.com": test_source_config}
     test_gateway = Gateway(per_channel_config=right_config)
     assert test_gateway is not None
+
+
+@pytest.mark.asyncio
+async def test_gateway_from_config_applies_mirrors_and_repodata_config() -> None:
+    requested_paths: list[str] = []
+
+    class RepodataHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            requested_paths.append(self.path)
+            if self.path == "/mirror/noarch/repodata.json":
+                body = json.dumps({"packages": {}}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), RepodataHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        config = Config.from_toml(f"""\
+            [mirrors]
+            "https://upstream.invalid/channel" = ["http://127.0.0.1:{server.server_port}/mirror"]
+
+            [repodata-config]
+            disable-zstd = true
+            disable-bzip2 = true
+            disable-sharded = true
+        """)
+        gateway = Gateway.from_config(config)
+
+        records = await gateway.query([Channel("https://upstream.invalid/channel")], ["noarch"], ["demo"])
+
+        assert records == [[]]
+        assert requested_paths == ["/mirror/noarch/repodata.json"]
+    finally:
+        server.shutdown()
+        thread.join()
