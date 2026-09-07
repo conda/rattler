@@ -9,6 +9,8 @@ use rattler_conda_types::{
 };
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
 
+mod sort;
+
 /// Search for packages in conda channels using glob or regex patterns.
 #[derive(Debug, clap::Parser)]
 #[clap(after_help = r#"Examples:
@@ -112,7 +114,7 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
     let start = Instant::now();
     let repo_data = gateway
         .query(
-            channels,
+            channels.clone(),
             [opt.platform, Platform::NoArch],
             vec![matchspec.clone()],
         )
@@ -121,19 +123,52 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
         .into_diagnostic()
         .context("failed to query repodata")?;
 
+    // Order the records like the solver would rank them (best candidate
+    // first). Variants of the same build (e.g. `py310…_5` vs `py314…_5`) are
+    // ordered by the versions of the dependencies they select, which needs the
+    // repodata of those dependencies.
+    let mut records: Vec<&RepoDataRecord> = repo_data.iter().flat_map(RepoData::iter).collect();
+    let dependency_names = sort::tiebreak_dependency_names(&records);
+    let dependency_repo_data = if dependency_names.is_empty() {
+        None
+    } else {
+        pb.set_message("Loading repodata of dependencies...");
+        let result = gateway
+            .query(
+                channels,
+                [opt.platform, Platform::NoArch],
+                dependency_names.into_iter().map(MatchSpec::from),
+            )
+            .recursive(false)
+            .await;
+        match result {
+            Ok(repo_data) => Some(repo_data),
+            Err(err) => {
+                eprintln!(
+                    "Warning: failed to fetch repodata of dependencies, ordering variants by timestamp instead: {err}"
+                );
+                None
+            }
+        }
+    };
     pb.finish_and_clear();
+
+    let mut dependency_index = sort::DependencyIndex::new(
+        dependency_repo_data
+            .iter()
+            .flat_map(|repo_data| repo_data.iter())
+            .flat_map(RepoData::iter),
+    );
+    sort::sort_records(&mut records, &mut dependency_index);
 
     if opt.json {
         // Group records by platform (subdir), same format as `pixi search --json`
         let mut grouped: IndexMap<&str, Vec<&RepoDataRecord>> = IndexMap::new();
-        for record in repo_data.iter().flat_map(RepoData::iter) {
+        for record in &records {
             grouped
                 .entry(record.package_record.subdir.as_str())
                 .or_default()
                 .push(record);
-        }
-        for records in grouped.values_mut() {
-            records.sort_unstable_by(|a, b| b.cmp(a));
         }
         let json_str = serde_json::to_string_pretty(&grouped).into_diagnostic()?;
         println!("{json_str}");
@@ -141,16 +176,9 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
     }
 
     if opt.urls_only {
-        // Only print the plain urls to stdout, sorted by name and then by
-        // version (newest first).
-        let mut records: Vec<&RepoDataRecord> = repo_data.iter().flat_map(RepoData::iter).collect();
-        records.sort_unstable_by(|a, b| {
-            a.package_record
-                .name
-                .cmp(&b.package_record.name)
-                .then_with(|| b.cmp(a))
-        });
-
+        // Only print the plain urls to stdout, sorted by name and then with
+        // the best (newest) record first.
+        //
         // This output is meant to be piped (e.g. into `head`), so a closed
         // stdout is a normal way to end instead of an error.
         let mut stdout = std::io::stdout().lock();
@@ -170,8 +198,8 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
         return Ok(());
     }
 
-    // Collect all records
-    let total_records: usize = repo_data.iter().map(RepoData::len).sum();
+    // Print the results grouped by package name
+    let total_records = records.len();
     println!(
         "Found {} matching records in {:?}\n",
         total_records,
@@ -185,11 +213,11 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
 
     // Group records by package name
     let mut packages: HashMap<String, Vec<_>> = HashMap::new();
-    for record in repo_data.iter().flat_map(RepoData::iter) {
+    for record in &records {
         packages
             .entry(record.package_record.name.as_normalized().to_string())
             .or_default()
-            .push(record);
+            .push(*record);
     }
 
     // Sort package names alphabetically
@@ -208,10 +236,8 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
 
     // Print results
     for name in package_names.into_iter().take(limit_packages) {
-        let mut records = packages.remove(&name).unwrap();
-        // Sort by version descending
-        records.sort_unstable();
-        records.reverse();
+        // The records are already ordered with the best candidate first.
+        let records = packages.remove(&name).unwrap();
 
         let total = records.len();
         let shown = records.len().min(limit_versions);
