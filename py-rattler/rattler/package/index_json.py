@@ -2,7 +2,7 @@ from __future__ import annotations
 import os
 import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 from rattler.package.no_arch_type import NoArchLiteral, NoArchType
 from rattler.package.package_name import PackageName
@@ -232,6 +232,32 @@ class IndexJson:
         self._inner.set_depends(value)
 
     @property
+    def extra_depends(self) -> Dict[str, List[str]]:
+        """
+        Extra dependency groups that can be selected using `foobar[extras=["scientific"]]`.
+        The implementation is specified in this CEP: <https://github.com/conda/ceps/pull/111>
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
+        ... )
+        >>> idx_json.extra_depends
+        {}
+        >>> idx_json.extra_depends = {"security": ["cryptography >=3.0"]}
+        >>> idx_json.extra_depends
+        {'security': ['cryptography >=3.0']}
+        >>>
+        ```
+        """
+        return self._inner.extra_depends
+
+    @extra_depends.setter
+    def extra_depends(self, value: Dict[str, List[str]]) -> None:
+        self._inner.extra_depends = value
+
+    @property
     def features(self) -> Optional[str]:
         """
         Features are a deprecated way to specify different feature sets for the conda solver. This is not
@@ -256,6 +282,34 @@ class IndexJson:
     @features.setter
     def features(self, value: Optional[str]) -> None:
         self._inner.set_features(value)
+
+    @property
+    def flags(self) -> List[str]:
+        """
+        Plain string flags used to select package variants.
+
+        Rattler preserves unrecognized flags so applications can round-trip
+        flags introduced by newer repodata revisions.
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
+        ... )
+        >>> idx_json.flags
+        []
+        >>> idx_json.flags = ["optional", "future-flag"]
+        >>> idx_json.flags
+        ['optional', 'future-flag']
+        >>>
+        ```
+        """
+        return self._inner.flags
+
+    @flags.setter
+    def flags(self, value: List[str]) -> None:
+        self._inner.flags = value
 
     @property
     def license(self) -> Optional[str]:
@@ -388,6 +442,97 @@ class IndexJson:
     @platform.setter
     def platform(self, value: Optional[str]) -> None:
         self._inner.set_platform(value)
+
+    @property
+    def purls(self) -> Optional[List[str]]:
+        """
+        A list of Package URLs identifying this package.
+        See this CEP: <https://github.com/conda/ceps/pull/63>
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
+        ... )
+        >>> idx_json.purls is None
+        True
+        >>> idx_json.purls = ["pkg:pypi/conda@22.11.1"]
+        >>> idx_json.purls
+        ['pkg:pypi/conda@22.11.1']
+        >>> idx_json.purls = None
+        >>> idx_json.purls is None
+        True
+        >>>
+        ```
+        """
+        return self._inner.purls
+
+    @purls.setter
+    def purls(self, value: Optional[List[str]]) -> None:
+        self._inner.purls = value
+
+    @property
+    def python_site_packages_path(self) -> Optional[str]:
+        """
+        Optionally a path within the environment of the site-packages directory. This field is only
+        present for python interpreter packages.
+        This field was introduced with <https://github.com/conda/ceps/blob/main/cep-17.md>.
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
+        ... )
+        >>> idx_json.python_site_packages_path is None
+        True
+        >>> idx_json.python_site_packages_path = "lib/python3.11/site-packages"
+        >>> idx_json.python_site_packages_path
+        'lib/python3.11/site-packages'
+        >>>
+        ```
+        """
+        return self._inner.python_site_packages_path
+
+    @python_site_packages_path.setter
+    def python_site_packages_path(self, value: Optional[str]) -> None:
+        self._inner.python_site_packages_path = value
+
+    @property
+    def repodata_revision(self) -> Optional[str]:
+        """
+        The repodata revision required by this package, formatted as `vN` (e.g. `"v3"`).
+
+        Indexers use this field to decide whether the record can be written to the legacy
+        `packages` / `packages.conda` maps or must be written to a newer top-level `vN` map.
+        The setter accepts either a `vN` string or the integer revision number.
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
+        ... )
+        >>> idx_json.repodata_revision is None
+        True
+        >>> idx_json.repodata_revision = "v3"
+        >>> idx_json.repodata_revision
+        'v3'
+        >>> idx_json.repodata_revision = 3
+        >>> idx_json.repodata_revision
+        'v3'
+        >>> idx_json.repodata_revision = None
+        >>> idx_json.repodata_revision is None
+        True
+        >>>
+        ```
+        """
+        return self._inner.repodata_revision
+
+    @repodata_revision.setter
+    def repodata_revision(self, value: Optional[Union[str, int]]) -> None:
+        self._inner.repodata_revision = None if value is None else str(value)
 
     @property
     def subdir(self) -> Optional[str]:

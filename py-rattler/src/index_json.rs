@@ -1,11 +1,15 @@
-use std::path::PathBuf;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
+    str::FromStr,
+};
 
 use pyo3::{
     Bound, Py, PyAny, PyErr, PyResult, Python, exceptions::PyValueError, pyclass, pymethods,
 };
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::{
-    Flag, VersionWithSource,
+    Flag, PackageUrl, RepodataRevision, VersionWithSource,
     package::{IndexJson, PackageFile},
     utils::TimestampMs,
 };
@@ -171,6 +175,18 @@ impl PyIndexJson {
         self.inner.depends = depends;
     }
 
+    /// Extra dependency groups that can be selected using `foobar[extras=["scientific"]]`.
+    /// The implementation is specified in this CEP: <https://github.com/conda/ceps/pull/111>
+    #[getter]
+    pub fn extra_depends(&self) -> BTreeMap<String, Vec<String>> {
+        self.inner.extra_depends.clone()
+    }
+
+    #[setter]
+    pub fn set_extra_depends(&mut self, extra_depends: BTreeMap<String, Vec<String>>) {
+        self.inner.extra_depends = extra_depends;
+    }
+
     /// Features are a deprecated way to specify different feature sets for the conda solver. This is not
     /// supported anymore and should not be used. Instead, `mutex` packages should be used to specify
     /// mutually exclusive features.
@@ -248,6 +264,66 @@ impl PyIndexJson {
     #[setter]
     pub fn set_platform(&mut self, platform: Option<String>) {
         self.inner.platform = platform;
+    }
+
+    /// A list of Package URLs identifying this package.
+    /// See this CEP: <https://github.com/conda/ceps/pull/63>
+    #[getter]
+    pub fn purls(&self) -> Option<Vec<String>> {
+        self.inner
+            .purls
+            .as_ref()
+            .map(|purls| purls.iter().map(ToString::to_string).collect())
+    }
+
+    #[setter]
+    pub fn set_purls(&mut self, purls: Option<Vec<String>>) -> PyResult<()> {
+        self.inner.purls = purls
+            .map(|purls| {
+                purls
+                    .iter()
+                    .map(|purl| {
+                        PackageUrl::from_str(purl).map_err(|err| {
+                            PyValueError::new_err(format!("Invalid package URL '{purl}': {err}"))
+                        })
+                    })
+                    .collect::<PyResult<BTreeSet<_>>>()
+            })
+            .transpose()?;
+        Ok(())
+    }
+
+    /// Optionally a path within the environment of the site-packages directory.
+    /// This field is only present for python interpreter packages.
+    /// This field was introduced with <https://github.com/conda/ceps/blob/main/cep-17.md>.
+    #[getter]
+    pub fn python_site_packages_path(&self) -> Option<String> {
+        self.inner.python_site_packages_path.clone()
+    }
+
+    #[setter]
+    pub fn set_python_site_packages_path(&mut self, python_site_packages_path: Option<String>) {
+        self.inner.python_site_packages_path = python_site_packages_path;
+    }
+
+    /// The repodata revision required by this package record, formatted as `vN`.
+    #[getter]
+    pub fn repodata_revision(&self) -> Option<String> {
+        self.inner
+            .repodata_revision
+            .map(|revision| revision.to_string())
+    }
+
+    #[setter]
+    pub fn set_repodata_revision(&mut self, repodata_revision: Option<String>) -> PyResult<()> {
+        self.inner.repodata_revision = repodata_revision
+            .map(|revision| {
+                RepodataRevision::from_str(&revision).map_err(|err| {
+                    PyValueError::new_err(format!("Invalid repodata revision '{revision}': {err}"))
+                })
+            })
+            .transpose()?;
+        Ok(())
     }
 
     /// The subdirectory that contains this package
