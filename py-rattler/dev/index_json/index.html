@@ -1303,10 +1303,32 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rattler.package.index_json.IndexJson.extra_depends" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extra_depends
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rattler.package.index_json.IndexJson.features" class="md-nav__link">
     <span class="md-ellipsis">
       
         features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.package.index_json.IndexJson.flags" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        flags
       
     </span>
   </a>
@@ -1347,10 +1369,54 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rattler.package.index_json.IndexJson.noarch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        noarch
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rattler.package.index_json.IndexJson.platform" class="md-nav__link">
     <span class="md-ellipsis">
       
         platform
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.package.index_json.IndexJson.purls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        purls
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.package.index_json.IndexJson.python_site_packages_path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        python_site_packages_path
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.package.index_json.IndexJson.repodata_revision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        repodata_revision
       
     </span>
   </a>
@@ -3330,10 +3396,32 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rattler.package.index_json.IndexJson.extra_depends" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extra_depends
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rattler.package.index_json.IndexJson.features" class="md-nav__link">
     <span class="md-ellipsis">
       
         features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.package.index_json.IndexJson.flags" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        flags
       
     </span>
   </a>
@@ -3374,10 +3462,54 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rattler.package.index_json.IndexJson.noarch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        noarch
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rattler.package.index_json.IndexJson.platform" class="md-nav__link">
     <span class="md-ellipsis">
       
         platform
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.package.index_json.IndexJson.purls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        purls
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.package.index_json.IndexJson.python_site_packages_path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        python_site_packages_path
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.package.index_json.IndexJson.repodata_revision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        repodata_revision
       
     </span>
   </a>
@@ -3767,6 +3899,43 @@ This is also included in the build string.</p>
 
 
 
+<h3 id="rattler.package.index_json.IndexJson.extra_depends" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">extra_depends</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+      <small class="doc doc-label doc-label-writable"><code>writable</code></small>
+  </span>
+
+<a href="#rattler.package.index_json.IndexJson.extra_depends" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">extra_depends</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Extra dependency groups that can be selected using <code>foobar[extras=["scientific"]]</code>.
+The implementation is specified in this CEP: <a href="https://github.com/conda/ceps/pull/111">https://github.com/conda/ceps/pull/111</a></p>
+<h5 id="rattler.package.index_json.IndexJson.extra_depends--examples">Examples<a class="headerlink" href="#rattler.package.index_json.IndexJson.extra_depends--examples" title="Permanent link">#</a></h5>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span> <span class="o">=</span> <span class="n">IndexJson</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">...</span>     <span class="s2">&quot;../test-data/conda-22.11.1-py38haa244fe_1-index.json&quot;</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">...</span> <span class="p">)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">extra_depends</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="p">{}</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">extra_depends</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;security&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;cryptography &gt;=3.0&quot;</span><span class="p">]}</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">extra_depends</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">{</span><span class="s1">&#39;security&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;cryptography &gt;=3.0&#39;</span><span class="p">]}</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="o">&gt;&gt;&gt;</span>
+</span></code></pre></div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
 <h3 id="rattler.package.index_json.IndexJson.features" class="doc doc-heading">
             <span class="doc doc-object-name doc-attribute-name">features</span>
 
@@ -3791,6 +3960,44 @@ mutually exclusive features.</p>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">...</span> <span class="p">)</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">features</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span>
+</span></code></pre></div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rattler.package.index_json.IndexJson.flags" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">flags</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+      <small class="doc doc-label doc-label-writable"><code>writable</code></small>
+  </span>
+
+<a href="#rattler.package.index_json.IndexJson.flags" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">flags</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Plain string flags used to select package variants.</p>
+<p>Rattler preserves unrecognized flags so applications can round-trip
+flags introduced by newer repodata revisions.</p>
+<h5 id="rattler.package.index_json.IndexJson.flags--examples">Examples<a class="headerlink" href="#rattler.package.index_json.IndexJson.flags--examples" title="Permanent link">#</a></h5>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span> <span class="o">=</span> <span class="n">IndexJson</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">...</span>     <span class="s2">&quot;../test-data/conda-22.11.1-py38haa244fe_1-index.json&quot;</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">...</span> <span class="p">)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">flags</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="p">[]</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">flags</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;optional&quot;</span><span class="p">,</span> <span class="s2">&quot;future-flag&quot;</span><span class="p">]</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">flags</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">[</span><span class="s1">&#39;optional&#39;</span><span class="p">,</span> <span class="s1">&#39;future-flag&#39;</span><span class="p">]</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
     </div>
@@ -3902,6 +4109,48 @@ mutually exclusive features.</p>
 
 
 
+<h3 id="rattler.package.index_json.IndexJson.noarch" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">noarch</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+      <small class="doc doc-label doc-label-writable"><code>writable</code></small>
+  </span>
+
+<a href="#rattler.package.index_json.IndexJson.noarch" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">noarch</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>If this package is independent of architecture this field specifies in what way.</p>
+<h5 id="rattler.package.index_json.IndexJson.noarch--examples">Examples<a class="headerlink" href="#rattler.package.index_json.IndexJson.noarch--examples" title="Permanent link">#</a></h5>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span> <span class="o">=</span> <span class="n">IndexJson</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">...</span>     <span class="s2">&quot;../test-data/conda-22.11.1-py38haa244fe_1-index.json&quot;</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">...</span> <span class="p">)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">noarch</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">NoArchType</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">noarch</span> <span class="o">=</span> <span class="n">NoArchType</span><span class="p">(</span><span class="s2">&quot;python&quot;</span><span class="p">)</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">noarch</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">NoArchType</span><span class="p">(</span><span class="s2">&quot;python&quot;</span><span class="p">)</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">noarch</span> <span class="o">=</span> <span class="s2">&quot;generic&quot;</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">noarch</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="n">NoArchType</span><span class="p">(</span><span class="s2">&quot;generic&quot;</span><span class="p">)</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">noarch</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">noarch</span><span class="o">.</span><span class="n">none</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="kc">True</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="o">&gt;&gt;&gt;</span>
+</span></code></pre></div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
 <h3 id="rattler.package.index_json.IndexJson.platform" class="doc doc-heading">
             <span class="doc doc-object-name doc-attribute-name">platform</span>
 
@@ -3925,6 +4174,129 @@ mutually exclusive features.</p>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">platform</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="s1">&#39;win&#39;</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span>
+</span></code></pre></div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rattler.package.index_json.IndexJson.purls" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">purls</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+      <small class="doc doc-label doc-label-writable"><code>writable</code></small>
+  </span>
+
+<a href="#rattler.package.index_json.IndexJson.purls" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">purls</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>A list of Package URLs identifying this package.
+See this CEP: <a href="https://github.com/conda/ceps/pull/63">https://github.com/conda/ceps/pull/63</a></p>
+<h5 id="rattler.package.index_json.IndexJson.purls--examples">Examples<a class="headerlink" href="#rattler.package.index_json.IndexJson.purls--examples" title="Permanent link">#</a></h5>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span> <span class="o">=</span> <span class="n">IndexJson</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">...</span>     <span class="s2">&quot;../test-data/conda-22.11.1-py38haa244fe_1-index.json&quot;</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">...</span> <span class="p">)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">purls</span> <span class="ow">is</span> <span class="kc">None</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="kc">True</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">purls</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;pkg:pypi/conda@22.11.1&quot;</span><span class="p">]</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">purls</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">[</span><span class="s1">&#39;pkg:pypi/conda@22.11.1&#39;</span><span class="p">]</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">purls</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">purls</span> <span class="ow">is</span> <span class="kc">None</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="kc">True</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="o">&gt;&gt;&gt;</span>
+</span></code></pre></div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rattler.package.index_json.IndexJson.python_site_packages_path" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">python_site_packages_path</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+      <small class="doc doc-label doc-label-writable"><code>writable</code></small>
+  </span>
+
+<a href="#rattler.package.index_json.IndexJson.python_site_packages_path" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">python_site_packages_path</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Optionally a path within the environment of the site-packages directory. This field is only
+present for python interpreter packages.
+This field was introduced with <a href="https://github.com/conda/ceps/blob/main/cep-17.md">https://github.com/conda/ceps/blob/main/cep-17.md</a>.</p>
+<h5 id="rattler.package.index_json.IndexJson.python_site_packages_path--examples">Examples<a class="headerlink" href="#rattler.package.index_json.IndexJson.python_site_packages_path--examples" title="Permanent link">#</a></h5>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span> <span class="o">=</span> <span class="n">IndexJson</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">...</span>     <span class="s2">&quot;../test-data/conda-22.11.1-py38haa244fe_1-index.json&quot;</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">...</span> <span class="p">)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">python_site_packages_path</span> <span class="ow">is</span> <span class="kc">None</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="kc">True</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">python_site_packages_path</span> <span class="o">=</span> <span class="s2">&quot;lib/python3.11/site-packages&quot;</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">python_site_packages_path</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="s1">&#39;lib/python3.11/site-packages&#39;</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="o">&gt;&gt;&gt;</span>
+</span></code></pre></div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rattler.package.index_json.IndexJson.repodata_revision" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">repodata_revision</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+      <small class="doc doc-label doc-label-writable"><code>writable</code></small>
+  </span>
+
+<a href="#rattler.package.index_json.IndexJson.repodata_revision" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">repodata_revision</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The repodata revision required by this package, formatted as <code>vN</code> (e.g. <code>"v3"</code>).</p>
+<p>Indexers use this field to decide whether the record can be written to the legacy
+<code>packages</code> / <code>packages.conda</code> maps or must be written to a newer top-level <code>vN</code> map.
+The setter accepts either a <code>vN</code> string or the integer revision number.</p>
+<h5 id="rattler.package.index_json.IndexJson.repodata_revision--examples">Examples<a class="headerlink" href="#rattler.package.index_json.IndexJson.repodata_revision--examples" title="Permanent link">#</a></h5>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span> <span class="o">=</span> <span class="n">IndexJson</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">...</span>     <span class="s2">&quot;../test-data/conda-22.11.1-py38haa244fe_1-index.json&quot;</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">...</span> <span class="p">)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">repodata_revision</span> <span class="ow">is</span> <span class="kc">None</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="kc">True</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">repodata_revision</span> <span class="o">=</span> <span class="s2">&quot;v3&quot;</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">repodata_revision</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="s1">&#39;v3&#39;</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">repodata_revision</span> <span class="o">=</span> <span class="mi">3</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">repodata_revision</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="s1">&#39;v3&#39;</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">repodata_revision</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">repodata_revision</span> <span class="ow">is</span> <span class="kc">None</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="kc">True</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
     </div>
