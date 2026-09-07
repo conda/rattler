@@ -2292,6 +2292,47 @@ mod test {
         assert_eq!(all_records.len(), expected_count);
     }
 
+    #[rstest]
+    #[case::default_prefers_conda(PackageFormatSelection::PreferConda, 2)]
+    #[case::only_conda(PackageFormatSelection::OnlyConda, 2)]
+    #[case::only_tar_bz2(PackageFormatSelection::OnlyTarBz2, 0)]
+    #[case::both(PackageFormatSelection::Both, 2)]
+    #[tokio::test]
+    async fn test_package_format_selection_custom_source(
+        #[case] selection: PackageFormatSelection,
+        #[case] expected_count: usize,
+    ) {
+        let gateway = Gateway::new();
+
+        // Create a mock source with some records
+        let mut mock_source = MockRepoDataSource::new();
+        mock_source.add_record(
+            Platform::Linux64,
+            make_test_record("testpkg", "1.0.0", "linux-64"),
+        );
+        mock_source.add_record(
+            Platform::Linux64,
+            make_test_record("testpkg", "2.0.0", "linux-64"),
+        );
+
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(mock_source);
+
+        // Query using the custom source
+        let records = gateway
+            .query(
+                vec![super::Source::Custom(source.clone())],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .package_format_selection(selection)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(all_records.len(), expected_count);
+    }
+
     #[tokio::test]
     async fn test_mixed_channel_and_custom_source() {
         let gateway = Gateway::new();
