@@ -357,8 +357,13 @@ fn apply_policy(
             });
         }
         reasons.push(format!(
-            "bundle {}: valid signature by {:?} (issuer {:?}) does not match any trusted publisher",
-            attestation.index, attestation.identity, attestation.issuer
+            "bundle {}: valid signature by {} (issuer {}) does not match any trusted publisher",
+            attestation.index,
+            attestation
+                .identity
+                .as_deref()
+                .unwrap_or("<unknown identity>"),
+            attestation.issuer.as_deref().unwrap_or("<unknown issuer>"),
         ));
     }
 
@@ -374,7 +379,7 @@ fn lenient(policy: &VerificationPolicy, err: SigstoreError) -> SigstoreResult<Ve
     if policy.is_required() {
         Err(err)
     } else {
-        tracing::warn!("{err}");
+        tracing::debug!("attestation verification problem downgraded to a warning: {err}");
         Ok(VerificationOutcome::warning(err.to_string()))
     }
 }

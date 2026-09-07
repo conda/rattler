@@ -19,6 +19,8 @@ use std::path::PathBuf;
 pub mod cli;
 pub mod install;
 pub use rattler_cache::{package_cache, validation};
+#[cfg(feature = "sigstore")]
+pub use rattler_sigstore as sigstore;
 
 /// A helper function that returns a [`Channel`] instance that points to an
 /// empty channel on disk that is bundled with this repository.

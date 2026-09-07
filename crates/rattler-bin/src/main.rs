@@ -6,6 +6,8 @@ use tracing_subscriber::{EnvFilter, filter::LevelFilter, util::SubscriberInitExt
 
 use crate::{commands::exec, writer::IndicatifWriter};
 
+#[cfg(feature = "sigstore")]
+mod attestation_args;
 mod commands;
 mod exclude_newer;
 mod solver_args;

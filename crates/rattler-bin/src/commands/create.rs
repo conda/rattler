@@ -35,6 +35,10 @@ pub struct Opt {
     #[clap(long)]
     dry_run: bool,
 
+    #[cfg(feature = "sigstore")]
+    #[clap(flatten)]
+    attestations: crate::attestation_args::AttestationArgs,
+
     /// Target prefix (environment path) for package installation
     #[clap(
         short = 'p',
@@ -206,7 +210,10 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     }
 
     let install_start = Instant::now();
-    let result = Installer::new()
+    let installer = Installer::new();
+    #[cfg(feature = "sigstore")]
+    let installer = installer.with_attestation_policy(opt.attestations.policy());
+    let result = installer
         .with_download_client(download_client)
         .with_max_concurrent_requests(config.concurrency.downloads)
         .with_target_platform(install_platform)
