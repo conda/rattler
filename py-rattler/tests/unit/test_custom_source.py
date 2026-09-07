@@ -7,7 +7,6 @@ import pytest
 from rattler import (
     Channel,
     Gateway,
-    PackageFormatSelection,
     PackageName,
     PackageRecord,
     Platform,
@@ -25,7 +24,9 @@ class MockRepoDataSource(RepoDataSource):
         self._records = records_by_platform
 
     async def fetch_package_records(
-        self, platform: Platform, name: PackageName,
+        self,
+        platform: Platform,
+        name: PackageName,
     ) -> List[RepoDataRecord]:
         """Fetch records for a specific package name and platform."""
         platform_str = str(platform)
@@ -258,7 +259,9 @@ async def test_custom_source_backed_by_sparse_repodata() -> None:
             self._repodata = repodata_by_platform
 
         async def fetch_package_records(
-            self, platform: Platform, name: PackageName,
+            self,
+            platform: Platform,
+            name: PackageName,
         ) -> List[RepoDataRecord]:
             platform_str = str(platform)
             if platform_str in self._repodata:

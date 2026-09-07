@@ -1,5 +1,4 @@
 use crate::gateway::subdir::{PackageRecords, SubdirClient};
-use crate::sparse::PackageFormatSelection;
 use crate::{GatewayError, Reporter};
 use rattler_conda_types::{ChannelRelations, PackageName, RepodataRevisions};
 
