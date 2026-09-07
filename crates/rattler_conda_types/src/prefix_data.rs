@@ -21,12 +21,14 @@ impl From<std::io::Error> for PrefixDataError {
 }
 
 /// Internal state for a lazily loaded package record
+#[derive(Debug, Clone)]
 struct LazyRecordEntry {
     path: PathBuf,
     record: OnceLock<Result<PrefixRecord, PrefixDataError>>,
 }
 
 /// A lazily populated view of the `conda-meta` directory in a prefix.
+#[derive(Debug, Clone)]
 pub struct PrefixData {
     /// The path to the environment prefix
     prefix_path: PathBuf,
