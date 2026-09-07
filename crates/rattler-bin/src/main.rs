@@ -8,6 +8,7 @@ use crate::{commands::exec, writer::IndicatifWriter};
 
 mod commands;
 mod exclude_newer;
+mod solver_args;
 mod writer;
 
 /// Returns a global instance of [`indicatif::MultiProgress`].
@@ -46,6 +47,7 @@ struct Opt {
 #[derive(Debug, clap::Subcommand)]
 enum Command {
     Auth(Box<commands::auth::Opt>),
+    ComparePackages(commands::compare_packages::Opt),
     Completion(commands::completion::Opt),
     Create(commands::create::Opt),
     Download(commands::download::Opt),
@@ -54,6 +56,7 @@ enum Command {
     Inspect(commands::inspect::Opt),
     Search(commands::search::Opt),
     Solve(commands::solve::Opt),
+    Whoneeds(commands::whoneeds::Opt),
     ShellHook(commands::shell_hook::Opt),
     VirtualPackages(commands::virtual_packages::Opt),
     InstallMenu(commands::menu::InstallOpt),
@@ -116,6 +119,9 @@ async fn async_main() -> miette::Result<()> {
     // Dispatch the selected comment
     match opt.command {
         Command::Auth(opts) => commands::auth::auth(*opts, offline).await,
+        Command::ComparePackages(opts) => {
+            commands::compare_packages::compare_packages(opts, offline).await
+        }
         Command::Completion(opts) => commands::completion::completion(opts),
         Command::Create(opts) => commands::create::create(opts, offline).await,
         Command::Download(opts) => commands::download::download(opts, offline).await,
@@ -124,6 +130,7 @@ async fn async_main() -> miette::Result<()> {
         Command::Inspect(opts) => commands::inspect::inspect(opts, offline).await,
         Command::Search(opts) => commands::search::search(opts, offline).await,
         Command::Solve(opts) => commands::solve::solve(opts, offline).await,
+        Command::Whoneeds(opts) => commands::whoneeds::whoneeds(opts, offline).await,
         Command::List(opts) => commands::list::list(opts).await,
         Command::ShellHook(opts) => commands::shell_hook::shell_hook(opts).await,
         Command::VirtualPackages(opts) => commands::virtual_packages::virtual_packages(opts),
@@ -132,7 +139,7 @@ async fn async_main() -> miette::Result<()> {
         Command::Run(opts) => commands::run::run(opts).await,
         Command::Extract(opts) => commands::extract::extract(opts, offline).await,
         Command::Link(opts) => commands::link::link(opts).await,
-        Command::InjectIntoPrefix(opts) => commands::prefix::inject(opts).await,
+        Command::InjectIntoPrefix(opts) => commands::prefix::inject(opts, offline).await,
         Command::RemoveFromPrefix(opts) => commands::prefix::remove_from_prefix(opts).await,
         Command::Upload(opts) => {
             if offline {

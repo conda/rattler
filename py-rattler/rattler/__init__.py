@@ -17,6 +17,7 @@ from rattler.repo_data import (
     PackageFormatSelection,
     RepoDataSource,
     RepodataRevisionMetadata,
+    Dependent,
 )
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
 from rattler.config import Config, RunPostLinkScripts, TlsRootCerts
@@ -119,6 +120,7 @@ __all__ = [
     "GatewayQueryResult",
     "SourceConfig",
     "RepoDataSource",
+    "Dependent",
     "RepodataRevisionMetadata",
     "NoArchType",
     "NoArchLiteral",

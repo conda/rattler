@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.13](https://github.com/conda/rattler/compare/rattler-bin-v0.2.12...rattler-bin-v0.2.13) - 2026-09-04
+
+### Added
+
+- add repodata whoneeds for reverse dependency lookup ([#2738](https://github.com/conda/rattler/pull/2738))
+- *(rattler-bin)* extend inspect with about, run exports, sizes and --json ([#2760](https://github.com/conda/rattler/pull/2760))
+- *(rattler-bin)* add --constraint flag to rattler solve ([#2761](https://github.com/conda/rattler/pull/2761))
+- *(rattler-bin)* add `compare-packages`, `search --urls-only` ([#2752](https://github.com/conda/rattler/pull/2752))
+
+### Other
+
+- *(rattler-bin)* honor configured download concurrency ([#2762](https://github.com/conda/rattler/pull/2762))
+- extract packages on a blocking worker ([#2748](https://github.com/conda/rattler/pull/2748))
+
 ## [0.2.12](https://github.com/conda/rattler/compare/rattler-bin-v0.2.11...rattler-bin-v0.2.12) - 2026-08-27
 
 ### Added

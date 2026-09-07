@@ -14,9 +14,12 @@ from rattler.platform.platform import Platform, PlatformLiteral
 from rattler.rattler import PyChannelNotice, PyGateway, PyMatchSpec, PySourceConfig
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.repo_data import ChannelRelations
+from rattler.repo_data.who_needs import Dependent, _target_to_py
 
 if TYPE_CHECKING:
+    from rattler.repo_data.package_record import PackageRecord
     from rattler.repo_data.source import RepoDataSource
+    from rattler.virtual_package.generic import GenericVirtualPackage
 
 
 ChannelRelationsMode = Literal["disabled", "warn", "strict"]
@@ -321,6 +324,51 @@ class Gateway:
             [[RepoDataRecord._from_py_record(record) for record in records] for records in py_records],
             [ChannelNotice._from_py(notice) for notice in py_notices],
         )
+
+    async def who_needs(
+        self,
+        sources: Iterable[Union[Channel, str, RepoDataSource]],
+        platforms: Iterable[Platform | PlatformLiteral],
+        target: Union[str, PackageName, "PackageRecord", "GenericVirtualPackage"],
+    ) -> List[Dependent]:
+        """Returns the reverse dependencies of `target` in the given sources.
+
+        Scans every package of the queried sources and platforms entirely
+        in Rust and converts only the matching records to Python objects.
+        A record references `target` when one of its `depends`,
+        `constrains` or `extra_depends` entries, or one of its run
+        exports, matches it; the `kind` of each result tells which field
+        matched.
+
+        How dependencies are matched depends on the target: a package name
+        (or `str`) reports every record with a dependency entry on that
+        name, while a concrete `PackageRecord` or `GenericVirtualPackage`
+        only reports dependents whose dependency match spec matches it.
+
+        Note that against sharded repodata this fetches one shard per
+        package name in the channel; a gateway configured with
+        `sharded_enabled=False` fetches the full repodata in a single
+        request instead, which is usually much faster for this query.
+
+        Arguments:
+            sources: The sources to query. Can be channels (by name, URL, or Channel object)
+                     or custom RepoDataSource implementations.
+            platforms: The platforms to query.
+            target: The package to find reverse dependencies for.
+
+        Returns:
+            The records that reference `target`, together with the
+            dependency string and kind through which they reference it.
+        """
+        py_dependents = await self._gateway.who_needs(
+            sources=_convert_sources(sources),
+            platforms=[
+                platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
+                for platform in platforms
+            ],
+            target=_target_to_py(target),
+        )
+        return [Dependent._from_py_dependent(py_dependent) for py_dependent in py_dependents]
 
     async def names(
         self,

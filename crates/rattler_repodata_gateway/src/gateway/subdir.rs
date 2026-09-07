@@ -158,6 +158,33 @@ impl SubdirData {
             })
     }
 
+    /// Fetches the records for `name` without inserting them into the
+    /// long-lived per-name cache. A previously cached entry is still reused.
+    /// Used by streaming scans (e.g. the gateway's `who_needs` query) that
+    /// visit every package of a subdir exactly once and would otherwise
+    /// permanently fill the cache with millions of records.
+    pub async fn fetch_package_records_uncached(
+        &self,
+        name: &PackageName,
+        reporter: Option<&dyn Reporter>,
+    ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
+        if let Some(cached) = self.records.get(name) {
+            return Ok(cached.records);
+        }
+        Ok(self
+            .client
+            .fetch_package_records(name, reporter)
+            .await?
+            .records)
+    }
+
+    /// The number of package names currently held in the per-name record
+    /// cache.
+    #[cfg(test)]
+    pub(crate) fn cached_package_count(&self) -> usize {
+        self.records.len()
+    }
+
     pub fn package_names(&self) -> Vec<String> {
         self.client.package_names()
     }
