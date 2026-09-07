@@ -1982,6 +1982,7 @@ mod test {
         }
 
         let package_record = PackageRecord {
+            attestations_sha256: None,
             name: PackageName::from_str(name).unwrap(),
             version: VersionWithSource::from_str(version).unwrap(),
             build: "0".to_string(),

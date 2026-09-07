@@ -196,6 +196,7 @@ impl PyRecord {
         Self {
             inner: RecordInner::Package(Arc::new(PackageRecord {
                 name: name.into(),
+                attestations_sha256: None,
                 version: VersionWithSource::new(version.0.inner.clone(), version.1),
                 build,
                 build_number,

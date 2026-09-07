@@ -253,6 +253,7 @@ mod tests {
         }
 
         let package_record = PackageRecord {
+            attestations_sha256: None,
             arch: None,
             build: "0".to_string(),
             build_number: 0,

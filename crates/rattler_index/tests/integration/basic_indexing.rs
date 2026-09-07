@@ -198,6 +198,113 @@ async fn test_empty_channel_rejects_unsupported_configured_revision() {
     assert!(!temp_dir.path().join("noarch/repodata.json").exists());
 }
 
+fn noarch_index_config(channel: &Path) -> IndexFsConfig {
+    IndexFsConfig {
+        channel: channel.into(),
+        target_platform: Some(Platform::NoArch),
+        repodata_patch: None,
+        write_zst: false,
+        write_shards: false,
+        repodata_revisions: Vec::new(),
+        package_revision_assignment: PackageRevisionAssignment::default(),
+        force: false,
+        max_parallel: 1,
+        multi_progress: None,
+    }
+}
+
+/// Validates that an attestation sidecar (`<package>.sigs`) next to a package
+/// is advertised through `attestations_sha256` and copied to its
+/// content-addressed location, and that removing it clears the field again.
+#[tokio::test]
+async fn test_index_attestation_sidecar() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let subdir_path = temp_dir.path().join("noarch");
+    let package_name = "empty-0.1.0-h4616a5c_0.conda";
+    fs::create_dir(&subdir_path).unwrap();
+    fs::copy(
+        test_data_dir().join("packages").join(package_name),
+        subdir_path.join(package_name),
+    )
+    .unwrap();
+
+    // Not a real bundle, but structurally a non-empty JSON array which is all
+    // the indexer validates.
+    let sidecar = br#"[{"mediaType":"application/vnd.dev.sigstore.bundle.v0.3+json"}]"#;
+    let sidecar_path = subdir_path.join(format!("{package_name}.sigs"));
+    fs::write(&sidecar_path, sidecar).unwrap();
+    let expected_hash = hex::encode(rattler_digest::compute_bytes_digest::<
+        rattler_digest::Sha256,
+    >(sidecar));
+
+    index_fs(noarch_index_config(temp_dir.path()))
+        .await
+        .unwrap();
+
+    let repodata_path = subdir_path.join("repodata.json");
+    let repodata_json: Value =
+        serde_json::from_reader(File::open(&repodata_path).unwrap()).unwrap();
+    let record = &repodata_json["packages.conda"][package_name];
+    assert_eq!(record["attestations_sha256"], expected_hash);
+
+    let content_addressed = subdir_path.join(format!("{package_name}.sigs.{expected_hash}"));
+    assert_eq!(fs::read(&content_addressed).unwrap(), sidecar);
+
+    // A second run must not choke on the content-addressed copy and must keep
+    // the field (the package record itself is read from the previous
+    // repodata, not re-extracted).
+    index_fs(noarch_index_config(temp_dir.path()))
+        .await
+        .unwrap();
+    let repodata_json: Value =
+        serde_json::from_reader(File::open(&repodata_path).unwrap()).unwrap();
+    assert_eq!(
+        repodata_json["packages.conda"][package_name]["attestations_sha256"],
+        expected_hash
+    );
+
+    // Removing the sidecar clears the field.
+    fs::remove_file(&sidecar_path).unwrap();
+    index_fs(noarch_index_config(temp_dir.path()))
+        .await
+        .unwrap();
+    let repodata_json: Value =
+        serde_json::from_reader(File::open(&repodata_path).unwrap()).unwrap();
+    assert!(
+        repodata_json["packages.conda"][package_name]
+            .get("attestations_sha256")
+            .is_none()
+    );
+}
+
+/// A sidecar that is not a JSON array of bundles fails indexing instead of
+/// being silently advertised.
+#[tokio::test]
+async fn test_index_rejects_malformed_attestation_sidecar() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let subdir_path = temp_dir.path().join("noarch");
+    let package_name = "empty-0.1.0-h4616a5c_0.conda";
+    fs::create_dir(&subdir_path).unwrap();
+    fs::copy(
+        test_data_dir().join("packages").join(package_name),
+        subdir_path.join(package_name),
+    )
+    .unwrap();
+    fs::write(
+        subdir_path.join(format!("{package_name}.sigs")),
+        br#"{"not": "an array"}"#,
+    )
+    .unwrap();
+
+    let err = index_fs(noarch_index_config(temp_dir.path()))
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("non-empty JSON array"),
+        "unexpected error: {err}"
+    );
+}
+
 #[tokio::test]
 async fn test_reindex_removes_deleted_conda_package() {
     let temp_dir = tempfile::tempdir().unwrap();

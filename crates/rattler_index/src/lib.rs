@@ -221,6 +221,7 @@ fn indexed_package_record_from_index_json<T: Read>(
         legacy_bz2_size: None,
         purls: index.purls,
         run_exports: None,
+        attestations_sha256: None,
     };
 
     Ok(IndexedPackageRecord {
@@ -782,21 +783,24 @@ async fn index_subdir_inner(
         existing_repodata
     };
 
-    // List all the packages in the subdirectory.
-    let uploaded_packages: HashSet<DistArchiveIdentifier> = op
-        .list_with(&format!("{}/", subdir.as_str()))
-        .await?
-        .iter()
-        .filter_map(|entry| {
-            if entry.metadata().mode().is_file() {
-                let filename = entry.name().to_string();
-                // Check if the file is an archive package file.
-                DistArchiveIdentifier::try_from_filename(&filename)
-            } else {
-                None
+    // List all the packages in the subdirectory. Attestation sidecars
+    // (`<package>.sigs`) are collected alongside so that the corresponding
+    // package records can advertise them.
+    let mut uploaded_packages: HashSet<DistArchiveIdentifier> = HashSet::new();
+    let mut attestation_sidecars: HashSet<DistArchiveIdentifier> = HashSet::new();
+    for entry in op.list_with(&format!("{}/", subdir.as_str())).await? {
+        if !entry.metadata().mode().is_file() {
+            continue;
+        }
+        let filename = entry.name();
+        if let Some(package_filename) = filename.strip_suffix(ATTESTATION_SIDECAR_SUFFIX) {
+            if let Some(identifier) = DistArchiveIdentifier::try_from_filename(package_filename) {
+                attestation_sidecars.insert(identifier);
             }
-        })
-        .collect();
+        } else if let Some(identifier) = DistArchiveIdentifier::try_from_filename(filename) {
+            uploaded_packages.insert(identifier);
+        }
+    }
 
     tracing::debug!(
         "Found {} already uploaded packages in subdir {}.",
@@ -920,6 +924,9 @@ async fn index_subdir_inner(
         registered_packages.insert(filename, record);
     }
 
+    apply_attestation_sidecars(&op, subdir, &attestation_sidecars, &mut registered_packages)
+        .await?;
+
     let mut packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState> =
         IndexMap::default();
     let mut conda_packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState> =
@@ -977,6 +984,58 @@ async fn index_subdir_inner(
         packages_removed: packages_to_delete.len(),
         retries: 0, // Will be set by index_subdir
     })
+}
+
+/// The suffix of an attestation sidecar file that lives next to a package in a
+/// channel: `<package_filename>.sigs`.
+pub const ATTESTATION_SIDECAR_SUFFIX: &str = ".sigs";
+
+/// Reads the attestation sidecar (`<package>.sigs`) for every registered
+/// package that has one, records its SHA256 in the package record and makes
+/// sure the content-addressed copy (`<package>.sigs.<sha256>`) exists.
+///
+/// Packages without a sidecar have `attestations_sha256` cleared so that a
+/// removed sidecar is no longer advertised.
+async fn apply_attestation_sidecars(
+    op: &Operator,
+    subdir: Platform,
+    sidecars: &HashSet<DistArchiveIdentifier>,
+    registered_packages: &mut ahash::HashMap<DistArchiveIdentifier, IndexedPackageRecord>,
+) -> Result<(), RepodataError> {
+    for (identifier, indexed) in registered_packages.iter_mut() {
+        if !sidecars.contains(identifier) {
+            indexed.record.attestations_sha256 = None;
+            continue;
+        }
+
+        let package_filename = identifier.to_file_name();
+        let sidecar_path = format!("{subdir}/{package_filename}{ATTESTATION_SIDECAR_SUFFIX}");
+        let bytes = op.read(&sidecar_path).await?.to_bytes();
+
+        // The sidecar must be a JSON array of Sigstore bundles.
+        match serde_json::from_slice::<serde_json::Value>(&bytes) {
+            Ok(serde_json::Value::Array(bundles)) if !bundles.is_empty() => {}
+            Ok(_) => {
+                return Err(RepodataError::Other(anyhow::anyhow!(
+                    "attestation sidecar {sidecar_path} must be a non-empty JSON array of Sigstore bundles"
+                )));
+            }
+            Err(err) => {
+                return Err(RepodataError::Other(anyhow::anyhow!(
+                    "attestation sidecar {sidecar_path} is not valid JSON: {err}"
+                )));
+            }
+        }
+
+        let sha256 = rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(&bytes);
+        let content_addressed_path = format!("{sidecar_path}.{}", hex::encode(sha256));
+        if !op.exists(&content_addressed_path).await? {
+            op.write(&content_addressed_path, bytes).await?;
+        }
+
+        indexed.record.attestations_sha256 = Some(sha256);
+    }
+    Ok(())
 }
 
 fn serialize_msgpack_zst<T>(val: &T) -> Result<Vec<u8>, RepodataError>

@@ -158,6 +158,7 @@ impl<'a> SourcePackageDataModel<'a> {
                 md5: None,
                 purls: self.purls.into_owned(),
                 sha256: None,
+                attestations_sha256: None,
                 size: self.size.into_owned(),
                 timestamp: None,
                 track_features: self.track_features.into_owned(),
