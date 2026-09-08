@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Iterable, List, Literal, Optional, Union
 
 from rattler.channel.channel import Channel
+from rattler.config import Config
 from rattler.match_spec.match_spec import MatchSpec
 from rattler.networking.client import Client
 from rattler.networking.fetch_repo_data import CacheAction
@@ -13,6 +14,7 @@ from rattler.package.package_name import PackageName
 from rattler.platform.platform import Platform, PlatformLiteral
 from rattler.rattler import PyChannelNotice, PyGateway, PyMatchSpec, PySourceConfig
 from rattler.repo_data.record import RepoDataRecord
+from rattler.repo_data.removed_package import RemovedPackage
 from rattler.repo_data.repo_data import ChannelRelations
 from rattler.repo_data.who_needs import Dependent, _target_to_py
 
@@ -156,15 +158,27 @@ class ChannelNotice:
 
 
 class GatewayQueryResult(list[List[RepoDataRecord]]):
-    """Repodata and CEP-6 notices returned by :meth:`Gateway.query`.
+    """Repodata, removed packages, and CEP-6 notices returned by :meth:`Gateway.query`.
 
     This remains a list for compatibility with earlier releases.
     """
 
-    def __init__(self, repodata: List[List[RepoDataRecord]], notices: List[ChannelNotice]) -> None:
+    def __init__(
+        self,
+        repodata: List[List[RepoDataRecord]],
+        notices: List[ChannelNotice],
+        removed: Optional[List[List[RemovedPackage]]] = None,
+    ) -> None:
         super().__init__(repodata)
         self.repodata = self
         self.notices = notices
+        self.removed: List[List[RemovedPackage]] = removed if removed is not None else [[] for _ in repodata]
+        """Packages the sources list as removed, one list per entry in ``repodata``.
+
+        Every removed entry of a package name the query fetched is included; the
+        match specs of the query do not filter this list. Removed packages never
+        appear in ``repodata``.
+        """
 
 
 class GatewayNamesResult(list[PackageName]):
@@ -238,6 +252,44 @@ class Gateway:
             show_progress=show_progress,
         )
 
+    @classmethod
+    def from_config(
+        cls,
+        config: Config,
+        cache_dir: Optional[os.PathLike[str]] = None,
+        client: Optional[Client] = None,
+        show_progress: bool = False,
+    ) -> Gateway:
+        """Create a gateway using repodata and networking settings from ``config``.
+
+        ``repodata-config`` controls the enabled repodata formats and its
+        per-channel overrides, while ``concurrency.downloads`` controls the
+        request limit. If ``client`` is omitted, a config-aware standard
+        client is created, applying mirrors, S3, proxies, TLS, and
+        authentication settings too.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import Config
+        >>> gateway = Gateway.from_config(Config.from_toml('''
+        ...     [repodata-config]
+        ...     disable-sharded = true
+        ... '''))
+        >>> gateway
+        Gateway()
+        >>>
+        ```
+        """
+        gateway = cls.__new__(cls)
+        gateway._gateway = PyGateway.from_config(
+            config._inner,
+            cache_dir=cache_dir,
+            client=client._client if client is not None else None,
+            show_progress=show_progress,
+        )
+        return gateway
+
     async def query(
         self,
         sources: Iterable[Union[Channel, str, RepoDataSource]],
@@ -293,6 +345,10 @@ class Gateway:
             ``channel_relations_max_depth=0``) to guarantee a strict one-to-one,
             positional correspondence with `sources`.
 
+            The result also carries ``removed``: for every entry in the list, the
+            packages the source lists as removed for the fetched package names.
+            Use it to detect that a previously locked package was yanked.
+
         Examples
         --------
         ```python
@@ -303,7 +359,7 @@ class Gateway:
         >>>
         ```
         """
-        py_records, py_notices = await self._gateway.query(
+        py_records, py_removed, py_notices = await self._gateway.query(
             sources=_convert_sources(sources),
             platforms=[
                 platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
@@ -319,10 +375,11 @@ class Gateway:
             channel_relations_max_depth=channel_relations_max_depth,
         )
 
-        # Convert the records and notices into Python objects.
+        # Convert the records, removed packages, and notices into Python objects.
         return GatewayQueryResult(
             [[RepoDataRecord._from_py_record(record) for record in records] for records in py_records],
             [ChannelNotice._from_py(notice) for notice in py_notices],
+            [[RemovedPackage._from_py(removed) for removed in removed_packages] for removed_packages in py_removed],
         )
 
     async def who_needs(

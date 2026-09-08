@@ -30,6 +30,7 @@ use serde::{
 use serde_json::value::RawValue;
 use superslice::Ext;
 use thiserror::Error;
+use url::Url;
 
 /// Shared empty revisions, returned by accessors when none are advertised.
 pub(crate) fn empty_repodata_revisions() -> &'static RepodataRevisions {
@@ -71,6 +72,24 @@ pub enum PackageFormatSelection {
 
     /// Both .tar.bz2 and .conda packages are used
     Both,
+}
+
+/// A package that a repodata index lists under its `removed` key. The archive
+/// may still be downloadable, but the channel no longer offers it for
+/// installation.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct RemovedPackage {
+    /// The URL the archive was served from. Derived the same way as
+    /// [`RepoDataRecord::url`], so it compares directly against the URL of a
+    /// previously fetched record or a lock file entry.
+    pub url: Url,
+
+    /// The identifier parsed from the removed file name.
+    pub identifier: DistArchiveIdentifier,
+
+    /// The channel the package was removed from, see
+    /// [`RepoDataRecord::channel`].
+    pub channel: Option<String>,
 }
 
 /// A struct to enable loading records from a `repodata.json` file on demand.
@@ -391,6 +410,7 @@ impl SparseRepoData {
                 &repo_data.packages,
                 &repo_data.conda_packages,
                 &repo_data.v3,
+                &repo_data.removed,
                 variant_consolidation,
                 base_url,
                 &self.channel,
@@ -421,6 +441,7 @@ impl SparseRepoData {
             &repo_data.packages,
             &repo_data.conda_packages,
             &repo_data.v3,
+            &repo_data.removed,
             variant_consolidation,
             base_url,
             &self.channel,
@@ -428,6 +449,42 @@ impl SparseRepoData {
             self.patch_record_fn,
             |_| true, // Dont filter anything out
         )
+    }
+
+    /// Returns the packages listed under the `removed` key of the repodata for
+    /// the specified package name, or for every package when `None` is passed.
+    ///
+    /// Removed packages are never returned by the `load_*` record functions.
+    pub fn load_removed(
+        &self,
+        package_name: Option<&PackageName>,
+    ) -> io::Result<Vec<RemovedPackage>> {
+        let repo_data = self.inner.borrow_repo_data();
+        let base_url = repo_data.info.as_ref().and_then(|i| i.base_url.as_deref());
+        let channel_name = self.channel.base_url.url().clone().redact().to_string();
+        let subdir_url = self
+            .channel
+            .base_url
+            .url()
+            .join(&format!("{}/", self.subdir))
+            .expect("failed determine repo_base_url");
+
+        find_removed_in_slice(&repo_data.removed, package_name)
+            .iter()
+            .map(|filename| {
+                let identifier: DistArchiveIdentifier = filename.filename.parse().map_err(|e| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("invalid archive identifier '{}': {}", filename.filename, e),
+                    )
+                })?;
+                Ok(RemovedPackage {
+                    url: compute_package_url(&subdir_url, base_url, filename.filename),
+                    identifier,
+                    channel: Some(channel_name.clone()),
+                })
+            })
+            .collect()
     }
 
     /// Returns all the records for the specified package format(s).
@@ -442,6 +499,7 @@ impl SparseRepoData {
             &repo_data.packages,
             &repo_data.conda_packages,
             &repo_data.v3,
+            &repo_data.removed,
             variant_consolidation,
             base_url,
             &self.channel,
@@ -490,6 +548,7 @@ impl SparseRepoData {
                     &repo_data_packages.packages,
                     &repo_data_packages.conda_packages,
                     &repo_data_packages.v3,
+                    &repo_data_packages.removed,
                     variant_consolidation,
                     base_url,
                     &repo_data.channel,
@@ -568,6 +627,10 @@ struct LazyRepoData<'i> {
     /// Packages stored under the `v3` top-level key.
     #[serde(borrow, default)]
     v3: LazyV3Packages<'i>,
+
+    /// File names listed under the `removed` key, sorted by package name.
+    #[serde(borrow, default, deserialize_with = "deserialize_sorted_filenames")]
+    removed: Vec<PackageFilename<'i>>,
 }
 
 /// Lazily parsed `v3` section of repodata containing sub-maps for each archive
@@ -632,6 +695,34 @@ fn find_package_in_slice<'a, 'i: 'a>(
         .map(move |(filename, raw_json)| (*filename, *raw_json, record_kind))
 }
 
+/// Returns the removed file names that belong to the given package name, or
+/// all of them when no name is given.
+fn find_removed_in_slice<'a, 'i>(
+    slice: &'a [PackageFilename<'i>],
+    package_name: Option<&PackageName>,
+) -> &'a [PackageFilename<'i>] {
+    let range = match package_name {
+        None => 0..slice.len(),
+        Some(package_name) => {
+            slice.equal_range_by(|filename| filename.package.cmp(package_name.as_normalized()))
+        }
+    };
+    &slice[range]
+}
+
+/// Returns true if the file name of the record is part of the `removed` set.
+/// Keys in the `v3` maps lack an extension, so it is appended before the
+/// lookup.
+fn is_removed(removed: &HashSet<&str>, filename: PackageFilename<'_>, kind: RecordKind) -> bool {
+    let extension = match kind {
+        RecordKind::CondaOrTarBz2 => return removed.contains(filename.filename),
+        RecordKind::V3TarBz2 => DistArchiveType::from(CondaArchiveType::TarBz2).extension(),
+        RecordKind::V3Conda => DistArchiveType::from(CondaArchiveType::Conda).extension(),
+        RecordKind::V3Whl => DistArchiveType::from(WheelArchiveType::Whl).extension(),
+    };
+    removed.contains(format!("{}{extension}", filename.filename).as_str())
+}
+
 /// Takes an iterator over package filenames and raw json values and returns an
 /// iterator that also includes the filename without an extension.
 fn add_stripped_filename<'i>(
@@ -658,6 +749,7 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
     tar_bz2_packages: &[(PackageFilename<'i>, &'i RawValue)],
     conda_packages: &[(PackageFilename<'i>, &'i RawValue)],
     v3: &LazyV3Packages<'i>,
+    removed: &[PackageFilename<'i>],
     variant_consolidation: PackageFormatSelection,
     base_url: Option<&str>,
     channel: &Channel,
@@ -665,6 +757,7 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
     patch_function: Option<fn(&mut PackageRecord)>,
     filter_function: F,
 ) -> io::Result<Vec<RepoDataRecord>> {
+    let removed = find_removed_in_slice(removed, package_name);
     match variant_consolidation {
         PackageFormatSelection::PreferConda => {
             let tar_bz2 = add_stripped_filename(
@@ -699,6 +792,7 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
                 .map(|(filename, raw_json, record_kind, _)| (filename, raw_json, record_kind));
             parse_records_raw(
                 deduplicated_packages,
+                removed,
                 base_url,
                 channel,
                 subdir,
@@ -745,6 +839,7 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
                 .map(|(filename, raw_json, kind, _)| (filename, raw_json, kind));
             parse_records_raw(
                 deduplicated_packages,
+                removed,
                 base_url,
                 channel,
                 subdir,
@@ -773,6 +868,7 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
             if variant_consolidation == PackageFormatSelection::OnlyTarBz2 {
                 return parse_records_raw(
                     tar_bz2.map(|(filename, raw_json, kind, _)| (filename, raw_json, kind)),
+                    removed,
                     base_url,
                     channel,
                     subdir,
@@ -802,6 +898,7 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
                 tar_bz2
                     .chain(conda)
                     .map(|(filename, raw_json, kind, _)| (filename, raw_json, kind)),
+                removed,
                 base_url,
                 channel,
                 subdir,
@@ -828,6 +925,7 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
                 });
             parse_records_raw(
                 conda.map(|(filename, raw_json, kind, _)| (filename, raw_json, kind)),
+                removed,
                 base_url,
                 channel,
                 subdir,
@@ -1004,14 +1102,17 @@ fn parse_record_raw<'i>(
 
 fn parse_records_raw<'i, F: Fn(&RepoDataRecord) -> bool>(
     packages: impl Iterator<Item = (PackageFilename<'i>, &'i RawValue, RecordKind)>,
+    removed: &[PackageFilename<'i>],
     base_url: Option<&str>,
     channel: &Channel,
     subdir: &str,
     patch_function: Option<fn(&mut PackageRecord)>,
     filter_function: F,
 ) -> io::Result<Vec<RepoDataRecord>> {
+    let removed: HashSet<&str> = removed.iter().map(|filename| filename.filename).collect();
     let channel_name = channel.base_url.url().clone().redact().to_string();
     packages
+        .filter(|(filename, _, kind)| removed.is_empty() || !is_removed(&removed, *filename, *kind))
         .map(move |record| {
             parse_record_raw(
                 record,
@@ -1136,6 +1237,20 @@ fn deserialize_filename_and_raw_record<'d, D: Deserializer<'d>>(
     Ok(entries)
 }
 
+/// Deserializes a list of file names and sorts it by package name so entries
+/// for a single package can be found with a binary search.
+fn deserialize_sorted_filenames<'d, D: Deserializer<'d>>(
+    deserializer: D,
+) -> Result<Vec<PackageFilename<'d>>, D::Error> {
+    let mut entries: Vec<PackageFilename<'d>> = Vec::deserialize(deserializer)?;
+    entries.sort_unstable_by(|a, b| {
+        a.package
+            .cmp(b.package)
+            .then_with(|| a.filename.cmp(b.filename))
+    });
+    Ok(entries)
+}
+
 /// A struct that holds both a filename and the part of the filename that is just
 /// the package name.
 #[derive(Copy, Clone)]
@@ -1190,6 +1305,7 @@ mod test {
         RepodataRevision,
     };
     use rstest::rstest;
+    use url::Url;
 
     use super::{
         PackageFilename, PackageFormatSelection, SparseRepoData, load_repo_data_recursively,
@@ -1460,6 +1576,72 @@ mod test {
                 .unwrap(),
             0
         );
+    }
+
+    /// Packages listed under `removed` are hidden from the record loaders and
+    /// reported by `load_removed` instead. Keys in the `v3` maps have no
+    /// extension, so removal must match on the full file name.
+    #[test]
+    fn test_removed_packages() {
+        let json = r#"{
+            "info": {"subdir": "noarch"},
+            "packages": {
+                "foo-1.0-0.tar.bz2": {
+                    "name": "foo", "version": "1.0", "build": "0", "build_number": 0,
+                    "subdir": "noarch"
+                }
+            },
+            "packages.conda": {
+                "foo-2.0-0.conda": {
+                    "name": "foo", "version": "2.0", "build": "0", "build_number": 0,
+                    "subdir": "noarch"
+                }
+            },
+            "v3": {
+                "conda": {
+                    "foo-3.0-0": {
+                        "name": "foo", "version": "3.0", "build": "0", "build_number": 0,
+                        "subdir": "noarch"
+                    }
+                }
+            },
+            "removed": ["foo-3.0-0.conda", "foo-2.0-0.conda", "bar-1.0-0.tar.bz2"]
+        }"#;
+        let channel = Channel::from_url(Url::parse("https://example.com/channel/").unwrap());
+        let sparse =
+            SparseRepoData::from_bytes(channel, "noarch", Bytes::from(json), None).unwrap();
+        let foo = PackageName::try_from("foo").unwrap();
+
+        let records = sparse
+            .load_records(&foo, PackageFormatSelection::Both)
+            .unwrap()
+            .into_iter()
+            .map(|record| record.identifier.to_file_name())
+            .collect::<Vec<_>>();
+        insta::assert_snapshot!(records.join("\n"), @"foo-1.0-0.tar.bz2");
+
+        let describe = |removed: Vec<super::RemovedPackage>| {
+            removed
+                .into_iter()
+                .map(|removed| {
+                    format!(
+                        "{} {} {}",
+                        removed.url,
+                        removed.identifier,
+                        removed.channel.as_deref().unwrap_or("-")
+                    )
+                })
+                .join("\n")
+        };
+        insta::assert_snapshot!(describe(sparse.load_removed(Some(&foo)).unwrap()), @r"
+        https://example.com/channel/noarch/foo-2.0-0.conda foo-2.0-0.conda https://example.com/channel/
+        https://example.com/channel/noarch/foo-3.0-0.conda foo-3.0-0.conda https://example.com/channel/
+        ");
+        insta::assert_snapshot!(describe(sparse.load_removed(None).unwrap()), @r"
+        https://example.com/channel/noarch/bar-1.0-0.tar.bz2 bar-1.0-0.tar.bz2 https://example.com/channel/
+        https://example.com/channel/noarch/foo-2.0-0.conda foo-2.0-0.conda https://example.com/channel/
+        https://example.com/channel/noarch/foo-3.0-0.conda foo-3.0-0.conda https://example.com/channel/
+        ");
     }
 
     #[rstest]

@@ -5,6 +5,7 @@ try:
         AuthenticationStorageError,
         CacheDirError,
         CanonicalMatchSpecError,
+        ConfigError,
         ConversionError,
         ConvertSubdirError,
         DetectVirtualPackageError,
@@ -55,6 +56,9 @@ except ImportError:
 
     class CanonicalMatchSpecError(Exception):  # type: ignore[no-redef]
         """Error that can occur when a MatchSpec cannot be represented canonically"""
+
+    class ConfigError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when loading a configuration file"""
 
     class ConversionError(Exception):  # type: ignore[no-redef]
         """An error that can occur during conversion"""
@@ -157,6 +161,7 @@ __all__ = [
     "AuthenticationStorageError",
     "CacheDirError",
     "CanonicalMatchSpecError",
+    "ConfigError",
     "ConversionError",
     "ConvertSubdirError",
     "DetectVirtualPackageError",
