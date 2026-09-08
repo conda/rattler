@@ -23,3 +23,12 @@ pub mod solve;
 pub mod table;
 pub mod virtual_packages;
 pub mod whoneeds;
+
+/// Machine-readable output formats for package queries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum QueryOutputFormat {
+    /// Output all matching records as JSON.
+    Json,
+    /// Output package URLs, one per line.
+    Urls,
+}
