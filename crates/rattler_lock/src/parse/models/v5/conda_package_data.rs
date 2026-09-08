@@ -138,6 +138,7 @@ impl<'a> From<CondaPackageDataModel<'a>> for LegacyCondaPackageData {
 
         Self::Binary(LegacyCondaBinaryData {
             package_record: PackageRecord {
+                attestations_sha256: None,
                 build,
                 build_number,
                 constrains: value.constrains.into_owned(),

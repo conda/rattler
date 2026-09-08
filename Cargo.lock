@@ -4909,6 +4909,7 @@ dependencies = [
  "rattler_networking",
  "rattler_package_streaming",
  "rattler_shell",
+ "rattler_sigstore",
  "rayon",
  "reflink-copy",
  "regex",
@@ -4962,6 +4963,7 @@ dependencies = [
  "rattler_package_streaming",
  "rattler_repodata_gateway",
  "rattler_shell",
+ "rattler_sigstore",
  "rattler_solve",
  "rattler_upload",
  "rattler_virtual_packages",
@@ -5527,6 +5529,30 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "rattler_sigstore"
+version = "0.1.0"
+dependencies = [
+ "astral-reqwest-middleware",
+ "axum",
+ "futures",
+ "hex",
+ "jiff",
+ "rattler_conda_types",
+ "rattler_digest",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sigstore-types",
+ "sigstore-verify",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "tower-http 0.7.1",
+ "tracing",
+ "url",
 ]
 
 [[package]]
@@ -6138,6 +6164,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
+name = "ryu-js"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04d056b875a9d2e6cb9a61d127afee9ac5999b9f87bcb32079d1318e505be714"
+
+[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6342,6 +6374,17 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
+]
+
+[[package]]
+name = "serde_json_canonicalizer"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe52319a927259afbfa5180c5157cd8167edfd3e8c254f9558c7fef44c5649f2"
+dependencies = [
+ "ryu-js",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -6751,6 +6794,36 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.20",
+]
+
+[[package]]
+name = "sigstore-verify"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "558f71aad0e1c5925d29ae2024f55f0f8898a7ad450c93668f99086624c421e0"
+dependencies = [
+ "base64 0.22.1",
+ "cms",
+ "const-oid 0.9.6",
+ "hex",
+ "jiff",
+ "pem",
+ "rustls-pki-types",
+ "rustls-webpki",
+ "serde",
+ "serde_json",
+ "serde_json_canonicalizer",
+ "sigstore-bundle",
+ "sigstore-crypto",
+ "sigstore-merkle",
+ "sigstore-rekor",
+ "sigstore-trust-root",
+ "sigstore-tsa",
+ "sigstore-types",
+ "thiserror 2.0.20",
+ "tls_codec",
+ "tracing",
+ "x509-cert",
 ]
 
 [[package]]
