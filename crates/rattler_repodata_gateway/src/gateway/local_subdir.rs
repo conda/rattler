@@ -91,7 +91,7 @@ impl SubdirClient for LocalSubdirClient {
                 )
             };
             let records = sparse_repodata
-                .load_records(&name, PackageFormatSelection::PreferConda)
+                .load_all_records_by_name(&name)
                 .map_err(io_error)?;
             let removed = sparse_repodata
                 .load_removed(Some(&name))
