@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Iterable, List, Literal, Optional, Union
 
 from rattler.channel.channel import Channel
+from rattler.config import Config
 from rattler.match_spec.match_spec import MatchSpec
 from rattler.networking.client import Client
 from rattler.networking.fetch_repo_data import CacheAction
@@ -250,6 +251,44 @@ class Gateway:
             client=client._client if client is not None else None,
             show_progress=show_progress,
         )
+
+    @classmethod
+    def from_config(
+        cls,
+        config: Config,
+        cache_dir: Optional[os.PathLike[str]] = None,
+        client: Optional[Client] = None,
+        show_progress: bool = False,
+    ) -> Gateway:
+        """Create a gateway using repodata and networking settings from ``config``.
+
+        ``repodata-config`` controls the enabled repodata formats and its
+        per-channel overrides, while ``concurrency.downloads`` controls the
+        request limit. If ``client`` is omitted, a config-aware standard
+        client is created, applying mirrors, S3, proxies, TLS, and
+        authentication settings too.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import Config
+        >>> gateway = Gateway.from_config(Config.from_toml('''
+        ...     [repodata-config]
+        ...     disable-sharded = true
+        ... '''))
+        >>> gateway
+        Gateway()
+        >>>
+        ```
+        """
+        gateway = cls.__new__(cls)
+        gateway._gateway = PyGateway.from_config(
+            config._inner,
+            cache_dir=cache_dir,
+            client=client._client if client is not None else None,
+            show_progress=show_progress,
+        )
+        return gateway
 
     async def query(
         self,

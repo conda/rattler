@@ -93,6 +93,8 @@ nav:
       - channel:
           - ChannelConfig: channel_config.md
           - Channel: channel.md
+      - config:
+          - Config: config.md
       - lock:
           - LockFile: lock_file.md
           - Environment: environment.md

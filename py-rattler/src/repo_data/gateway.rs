@@ -16,6 +16,7 @@ use rattler_repodata_gateway::{
 };
 use url::Url;
 
+use crate::config::PyConfig;
 use crate::error::PyRattlerError;
 use crate::match_spec::PyMatchSpec;
 use crate::networking::client::PyClientWithMiddleware;
@@ -241,6 +242,35 @@ impl PyGateway {
             // Set a default client if no client is provided to
             // make sure a default user-agent is set.
             gateway.set_client(PyClientWithMiddleware::new(None, None, None, None)?);
+        }
+
+        Ok(Self {
+            inner: gateway.finish(),
+            show_progress,
+        })
+    }
+
+    /// Build a gateway using repodata and concurrency settings from a shared
+    /// rattler configuration. If no client is supplied, a config-aware
+    /// standard client is constructed as well.
+    #[staticmethod]
+    #[pyo3(signature = (config, cache_dir=None, client=None, show_progress=false))]
+    pub fn from_config(
+        config: &PyConfig,
+        cache_dir: Option<PathBuf>,
+        client: Option<PyClientWithMiddleware>,
+        show_progress: bool,
+    ) -> PyResult<Self> {
+        let client = match client {
+            Some(client) => client,
+            None => PyClientWithMiddleware::from_config(config, 3, None, None, None)?,
+        };
+        let mut gateway = Gateway::builder()
+            .with_config(&config.inner)
+            .with_client(client);
+
+        if let Some(cache_dir) = cache_dir {
+            gateway.set_cache_dir(cache_dir);
         }
 
         Ok(Self {

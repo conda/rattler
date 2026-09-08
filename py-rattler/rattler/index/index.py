@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     else:
         from typing_extensions import TypeAlias
 
+from rattler.config import Config
 from rattler.platform import Platform
 from rattler.rattler import py_index_fs, py_index_s3
 
@@ -133,12 +134,13 @@ async def index_fs(
     channel_directory: os.PathLike[str],
     target_platform: Optional[Platform] = None,
     repodata_patch: Optional[str] = None,
-    write_zst: bool = True,
-    write_shards: bool = True,
+    write_zst: Optional[bool] = None,
+    write_shards: Optional[bool] = None,
     repodata_revisions: Optional[RepodataRevisions] = None,
-    package_revision_assignment: Literal["from-index-json", "latest"] = "from-index-json",
+    package_revision_assignment: Optional[Literal["from-index-json", "latest"]] = None,
     force: bool = False,
     max_parallel: int | None = None,
+    config: Optional[Config] = None,
 ) -> None:
     """
     Indexes dependencies in the `channel_directory` for one or more subdirectories within said directory.
@@ -152,15 +154,23 @@ async def index_fs(
                            of dependencies to index.
         target_platform: A `Platform` to index dependencies for.
         repodata_patch: The name of the conda package (expected to be in the `noarch` subdir) that should be used for repodata patching.
-        write_zst: Whether to write repodata.json.zst.
-        write_shards: Whether to write sharded repodata.
+        write_zst: Whether to write repodata.json.zst. When omitted, uses the
+                   matching ``index-config`` value or defaults to True.
+        write_shards: Whether to write sharded repodata. When omitted, uses
+                      the matching ``index-config`` value or defaults to True.
         repodata_revisions: Revisions to advertise. Pass revision strings or mappings with
                             `revision` and optional `message`, for example
                             `[{"revision": "v3", "message": "v3 packages"}]`. The legacy layout is implicit.
                             Package counts and timestamps are computed by the indexer.
-        package_revision_assignment: Whether to assign packages to the revision required by their `index.json`, or to the latest advertised revision.
+        package_revision_assignment: Whether to assign packages to the revision required by their
+                                     `index.json`, or to the latest advertised revision. When
+                                     omitted, uses ``index-config`` or defaults to
+                                     ``"from-index-json"``.
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
+        config: Shared rattler configuration. ``index-config`` is resolved for
+                ``channel_directory`` and ``concurrency.downloads`` supplies
+                ``max_parallel`` when that argument is omitted.
 
     Examples
     --------
@@ -179,6 +189,7 @@ async def index_fs(
         package_revision_assignment,
         force,
         max_parallel,
+        config._inner if config is not None else None,
     )
 
 
@@ -187,13 +198,14 @@ async def index_s3(
     credentials: Optional[S3Credentials] = None,
     target_platform: Optional[Platform] = None,
     repodata_patch: Optional[str] = None,
-    write_zst: bool = True,
-    write_shards: bool = True,
+    write_zst: Optional[bool] = None,
+    write_shards: Optional[bool] = None,
     repodata_revisions: Optional[RepodataRevisions] = None,
-    package_revision_assignment: Literal["from-index-json", "latest"] = "from-index-json",
+    package_revision_assignment: Optional[Literal["from-index-json", "latest"]] = None,
     force: bool = False,
     max_parallel: int | None = None,
     precondition_checks: bool = True,
+    config: Optional[Config] = None,
 ) -> None:
     """
     Indexes dependencies in the `channel_url` for one or more subdirectories in the S3 directory.
@@ -209,16 +221,24 @@ async def index_s3(
                      credentials from the environment.
         target_platform: A `Platform` to index dependencies for.
         repodata_patch: The name of the conda package (expected to be in the `noarch` subdir) that should be used for repodata patching.
-        write_zst: Whether to write repodata.json.zst.
-        write_shards: Whether to write sharded repodata.
+        write_zst: Whether to write repodata.json.zst. When omitted, uses the
+                   matching ``index-config`` value or defaults to True.
+        write_shards: Whether to write sharded repodata. When omitted, uses
+                      the matching ``index-config`` value or defaults to True.
         repodata_revisions: Revisions to advertise. Pass revision strings or mappings with
                             `revision` and optional `message`, for example
                             `[{"revision": "v3", "message": "v3 packages"}]`. The legacy layout is implicit.
                             Package counts and timestamps are computed by the indexer.
-        package_revision_assignment: Whether to assign packages to the revision required by their `index.json`, or to the latest advertised revision.
+        package_revision_assignment: Whether to assign packages to the revision required by their
+                                     `index.json`, or to the latest advertised revision. When
+                                     omitted, uses ``index-config`` or defaults to
+                                     ``"from-index-json"``.
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
         precondition_checks: Whether to perform precondition checks before indexing on S3 buckets which helps to prevent data corruption when indexing with multiple processes at the same time.  Defaults to True.
+        config: Shared rattler configuration. Applies the matching
+                ``index-config``, S3 bucket settings, authentication override,
+                and download concurrency. Explicit arguments take precedence.
 
     Examples
     --------
@@ -239,4 +259,5 @@ async def index_s3(
         force,
         max_parallel,
         precondition_checks,
+        config._inner if config is not None else None,
     )

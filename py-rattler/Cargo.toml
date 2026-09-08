@@ -32,17 +32,22 @@ parking_lot = { version = "0.12", features = ["arc_lock", "send_guard"] }
 rattler_s3 = { path = "../crates/rattler_s3", features = ["serde"] }
 rattler = { path = "../crates/rattler", default-features = false, features = [
   "indicatif",
+  "rattler_config",
 ] }
 rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", default-features = false, features = [
   "sparse",
   "gateway",
   "indicatif",
+  "rattler_config",
 ] }
 rattler_conda_types = { path = "../crates/rattler_conda_types", default-features = false }
-rattler_config = { path = "../crates/rattler_config", default-features = false }
+rattler_config = { path = "../crates/rattler_config", default-features = false, features = [
+  "edit",
+] }
 rattler_digest = { path = "../crates/rattler_digest" }
 rattler_networking = { path = "../crates/rattler_networking", default-features = false, features = [
   "gcs",
+  "rattler_config",
   "s3",
   "system-integration",
 ] }
@@ -77,6 +82,7 @@ url = "2"
 openssl = { version = "0.10", optional = true }
 pep440_rs = "0.7"
 pep508_rs = "0.9"
+serde = "1"
 serde_json = "1"
 pyo3-file = "0.17"
 nix = { version = "0.31", features = ["process"], optional = true }
