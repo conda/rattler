@@ -132,12 +132,8 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
         channels.iter().map(Channel::canonical_name).join(", ")
     );
 
-    // Create gateway. Sharded repodata is disabled because a reverse
-    // dependency lookup needs the records of every package in the channel,
-    // which is one request per package with shards but a single request
-    // with a full repodata.json.
     let config = load_config()?;
-    let gateway = build_gateway(download_client, &config, offline, false)?;
+    let gateway = build_gateway(download_client, &config, offline, true)?;
 
     // Show progress while loading repodata
     let pb = ProgressBar::new_spinner();

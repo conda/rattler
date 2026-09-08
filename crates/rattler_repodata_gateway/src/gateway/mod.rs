@@ -48,7 +48,6 @@ pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
 pub use source::{RepoDataSource, Source};
 use subdir::Subdir;
 use tracing::{Level, instrument};
-use url::Url;
 pub use warning::GatewayWarning;
 pub use who_needs_query::WhoNeedsQuery;
 
@@ -215,6 +214,9 @@ impl Gateway {
     /// the query if you can reduce the matches as they arrive, since for a
     /// widely used package the results are the larger cost.
     ///
+    /// Channel sources always use full repodata, regardless of the gateway's
+    /// sharding configuration, to avoid fetching a shard for every package.
+    ///
     /// ```no_run
     /// # use rattler_conda_types::{Channel, PackageName, Platform};
     /// # use rattler_repodata_gateway::Gateway;
@@ -289,7 +291,7 @@ impl Gateway {
     ) -> Result<Option<ChannelRelations>, GatewayError> {
         match self
             .inner
-            .get_or_create_subdir(channel, platform, None)
+            .get_or_create_subdir(channel, platform, None, true)
             .await
         {
             Ok(subdir) => Ok(subdir.channel_relations().cloned()),
@@ -402,8 +404,9 @@ impl Gateway {
 }
 
 struct GatewayInner {
-    /// A map of subdirectories for each channel and platform.
-    subdirs: CoalescedMap<(Channel, Platform), Arc<Subdir>>,
+    /// Subdirectories keyed by channel, platform and whether sharding is enabled.
+    /// Full repodata scans must not reuse a sharded subdir from an ordinary query.
+    subdirs: CoalescedMap<(Channel, Platform, bool), Arc<Subdir>>,
 
     /// The client to use to fetch repodata.
     client: LazyClient,
@@ -452,23 +455,36 @@ impl GatewayInner {
     /// coalesced, and they will all receive the same subdir. If an error
     /// occurs while creating the subdir all waiting tasks will also return an
     /// error.
+    ///
+    /// Set `allow_sharded` to false to force full repodata scans.
     #[instrument(skip(self, reporter, channel), fields(channel = %channel.base_url), err(level = Level::INFO))]
     async fn get_or_create_subdir(
         &self,
         channel: &Channel,
         platform: Platform,
         reporter: Option<Arc<dyn Reporter>>,
+        allow_sharded: bool,
     ) -> Result<Arc<Subdir>, GatewayError> {
-        let key = (channel.clone(), platform);
+        let url = channel.platform_url(platform);
+        let sharded_enabled = allow_sharded
+            && url.scheme() != "file"
+            && self.channel_config.get(&channel.base_url).sharded_enabled;
+        let key = (channel.clone(), platform, sharded_enabled);
         let channel_for_create = channel.clone();
         let reporter_for_create = reporter.clone();
 
         let subdir = self
             .subdirs
             .get_or_try_init(key, || async move {
-                let subdir = self
-                    .create_subdir(&channel_for_create, platform, reporter_for_create)
-                    .await?;
+                let subdir = SubdirBuilder::new(
+                    self,
+                    channel_for_create,
+                    platform,
+                    reporter_for_create,
+                    sharded_enabled,
+                )
+                .build()
+                .await?;
                 Ok(Arc::new(subdir))
             })
             .await
@@ -489,22 +505,6 @@ impl GatewayInner {
 
         Ok(subdir)
     }
-
-    async fn create_subdir(
-        &self,
-        channel: &Channel,
-        platform: Platform,
-        reporter: Option<Arc<dyn Reporter>>,
-    ) -> Result<Subdir, GatewayError> {
-        SubdirBuilder::new(self, channel.clone(), platform, reporter)
-            .build()
-            .await
-    }
-}
-
-fn force_sharded_repodata(url: &Url) -> bool {
-    matches!(url.scheme(), "http" | "https")
-        && matches!(url.host_str(), Some("fast.prefiks.dev" | "fast.prefix.dev"))
 }
 
 #[cfg(test)]

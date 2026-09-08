@@ -58,6 +58,9 @@ const NAME_BATCH_SIZE: usize = 100;
 /// gateway's memory footprint. Only the matching records are retained,
 /// shared via `Arc` in the returned [`Dependent`]s.
 ///
+/// Channel sources always use full repodata, even if sharding is enabled
+/// or a previous query has already loaded a sharded subdir.
+///
 /// The matches themselves can still be numerous enough to dominate memory —
 /// half a million records depend on `python` in conda-forge. Use
 /// [`stream`](Self::stream) to fold them as they arrive;
@@ -263,7 +266,7 @@ async fn resolve_subdirs(
                 let reporter = reporter.clone();
                 pending.push(box_future(async move {
                     let subdir = gateway
-                        .get_or_create_subdir(&channel, platform, reporter)
+                        .get_or_create_subdir(&channel, platform, reporter, false)
                         .await?;
                     Ok((source_index, subdir))
                 }));
@@ -607,7 +610,7 @@ mod tests {
 
         let linux_subdir = gateway
             .inner
-            .get_or_create_subdir(&channel, Platform::Linux64, None)
+            .get_or_create_subdir(&channel, Platform::Linux64, None, true)
             .await
             .unwrap();
         let super::Subdir::Found(linux_data) = linux_subdir.as_ref() else {
@@ -631,7 +634,7 @@ mod tests {
         assert_eq!(linux_data.cached_package_count(), 1);
         let noarch_subdir = gateway
             .inner
-            .get_or_create_subdir(&channel, Platform::NoArch, None)
+            .get_or_create_subdir(&channel, Platform::NoArch, None, true)
             .await
             .unwrap();
         let super::Subdir::Found(noarch_data) = noarch_subdir.as_ref() else {
@@ -666,5 +669,108 @@ mod tests {
             .execute()
             .await;
         assert!(result.is_err());
+    }
+
+    #[rstest::rstest]
+    #[tokio::test]
+    async fn test_who_needs_uses_full_repodata(
+        #[values(false, true)] prime_cache: bool,
+        #[values(false, true)] sharded_enabled: bool,
+    ) {
+        use rattler_conda_types::{RepodataRevisions, ShardedRepodata, ShardedSubdirInfo};
+
+        use crate::{
+            ChannelConfig, SourceConfig, utils::simple_channel_server::SimpleChannelServer,
+        };
+
+        let channel_dir = tempfile::tempdir().unwrap();
+        let subdir = channel_dir.path().join("linux-64");
+        std::fs::create_dir(&subdir).unwrap();
+        std::fs::write(
+            subdir.join("repodata.json"),
+            include_str!("../../../../test-data/channels/dummy/linux-64/repodata.json"),
+        )
+        .unwrap();
+
+        // Advertise a shard that cannot be fetched. The scan must use full
+        // repodata even when an earlier names query has cached this index.
+        let index = ShardedRepodata {
+            info: ShardedSubdirInfo {
+                subdir: "linux-64".into(),
+                base_url: "./".into(),
+                shards_base_url: "./shards/".into(),
+                created_at: None,
+                repodata_revisions: RepodataRevisions::default(),
+                channel_relations: None,
+            },
+            shards: [("missing-shard".into(), [0u8; 32].into())]
+                .into_iter()
+                .collect(),
+        };
+        let index_bytes = rmp_serde::to_vec_named(&index).unwrap();
+        std::fs::write(
+            subdir.join("repodata_shards.msgpack.zst"),
+            zstd::encode_all(index_bytes.as_slice(), 0).unwrap(),
+        )
+        .unwrap();
+
+        let server = SimpleChannelServer::new(channel_dir.path()).await;
+        let url = server.url();
+        let channel = Channel::from_url(url.clone());
+        let cache_dir = tempfile::tempdir().unwrap();
+        let gateway = Gateway::builder()
+            .with_client(reqwest::Client::builder().no_proxy().build().unwrap())
+            .with_cache_dir(cache_dir.path())
+            .with_channel_config(ChannelConfig {
+                default: SourceConfig {
+                    sharded_enabled: false,
+                    ..SourceConfig::default()
+                },
+                // Exercise the per-channel sharding configuration.
+                per_channel: [(
+                    url,
+                    SourceConfig {
+                        sharded_enabled,
+                        ..SourceConfig::default()
+                    },
+                )]
+                .into_iter()
+                .collect(),
+            })
+            .finish();
+
+        if prime_cache {
+            gateway
+                .names([channel.clone()], [Platform::Linux64])
+                .await
+                .unwrap();
+        }
+
+        let dependents = gateway
+            .who_needs(
+                [channel.clone()],
+                [Platform::Linux64],
+                PackageName::new_unchecked("bors"),
+            )
+            .await
+            .unwrap();
+        assert_eq!(dependents.len(), 3);
+
+        // Ordinary queries must still follow the sharding configuration,
+        // including when who_needs was the first query on this gateway.
+        let names = gateway.names([channel], [Platform::Linux64]).await.unwrap();
+        if sharded_enabled {
+            assert_eq!(
+                names.names,
+                vec![PackageName::new_unchecked("missing-shard")]
+            );
+        } else {
+            assert!(names.names.contains(&PackageName::new_unchecked("bors")));
+            assert!(
+                !names
+                    .names
+                    .contains(&PackageName::new_unchecked("missing-shard"))
+            );
+        }
     }
 }
