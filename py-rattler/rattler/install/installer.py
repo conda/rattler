@@ -289,6 +289,7 @@ async def install(
     requested_specs: Optional[List[MatchSpec]] = None,
     reporter: Optional[InstallerReporter] = None,
     alternative_target_prefix: Optional[str | os.PathLike[str]] = None,
+    force_symbolic_links: bool = False,
 ) -> None:
     """
     Create an environment by downloading and linking the `dependencies` in
@@ -354,6 +355,9 @@ async def install(
                 `target_prefix`; only the prefix written into the linked files differs. This is
                 only needed in exceptional cases, for example when the environment will later be
                 relocated to or used from a different path.
+        force_symbolic_links: Install ordinary unmodified package files as symbolic links to
+                their package-cache sources. Files requiring prefix replacement or marked
+                `no_link` remain copies.
     """
 
     await py_install(
@@ -370,4 +374,5 @@ async def install(
         requested_specs=requested_specs,
         reporter=reporter,
         alternative_target_prefix=str(alternative_target_prefix) if alternative_target_prefix is not None else None,
+        force_symbolic_links=force_symbolic_links,
     )

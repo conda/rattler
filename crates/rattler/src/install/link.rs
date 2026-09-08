@@ -159,6 +159,7 @@ pub fn link_file(
     allow_symbolic_links: bool,
     allow_hard_links: bool,
     allow_ref_links: bool,
+    force_symbolic_links: bool,
     target_platform: Platform,
     apple_codesign_behavior: AppleCodeSignBehavior,
     modification_time: filetime::FileTime,
@@ -286,6 +287,8 @@ pub fn link_file(
             .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
 
         LinkMethod::Patched(*file_mode)
+    } else if path_json_entry.path_type == PathType::HardLink && force_symbolic_links {
+        softlink_file_to_destination(&source_path, &destination_path)?
     } else if path_json_entry.path_type == PathType::HardLink && allow_ref_links {
         reflink_to_destination(&source_path, &destination_path, allow_hard_links)?
     } else if path_json_entry.path_type == PathType::HardLink && allow_hard_links {
@@ -566,6 +569,33 @@ fn symlink_to_destination(
                     destination_path.display()
                 );
                 return copy_symlink_target_to_destination(source_path, destination_path);
+            }
+        }
+    }
+}
+
+/// Symbolically link a regular package file to its cache source, falling back
+/// to a copy when the platform does not permit creating the link.
+fn softlink_file_to_destination(
+    source_path: &Path,
+    destination_path: &Path,
+) -> Result<LinkMethod, LinkFileError> {
+    let source_path =
+        fs::canonicalize(source_path).map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+    loop {
+        match symlink(&source_path, destination_path) {
+            Ok(()) => return Ok(LinkMethod::Softlink),
+            Err(error) if error.kind() == ErrorKind::AlreadyExists => {
+                fs::remove_file(destination_path).map_err(|err| {
+                    LinkFileError::IoError(String::from("removing clobbered file"), err)
+                })?;
+            }
+            Err(error) => {
+                tracing::debug!(
+                    "failed to symlink {}: {error}, falling back to copying.",
+                    destination_path.display()
+                );
+                return copy_to_destination(&source_path, destination_path);
             }
         }
     }
@@ -985,6 +1015,7 @@ mod test {
             true,
             true,
             true,
+            false,
             Platform::Linux64,
             AppleCodeSignBehavior::DoNothing,
             modification_time,
@@ -1046,6 +1077,7 @@ mod test {
             true,
             true,
             true,
+            false,
             Platform::Linux64,
             AppleCodeSignBehavior::DoNothing,
             modification_time,
@@ -1068,6 +1100,53 @@ mod test {
         assert_eq!(
             dest_mtime, source_time,
             "unpatched file should keep source mtime ({source_time}), not modification_time ({modification_time})",
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_force_symbolic_links_links_regular_files_to_cache() {
+        use super::AppleCodeSignBehavior;
+        use rattler_conda_types::package::{PathType, PathsEntry};
+        use rattler_conda_types::prefix::Prefix;
+        use std::path::PathBuf;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let package_dir = temp_dir.path().join("package");
+        fs::create_dir_all(&package_dir).unwrap();
+        fs::write(package_dir.join("data.txt"), "from cache\n").unwrap();
+        let target_dir = Prefix::create(temp_dir.path().join("target")).unwrap();
+        let entry = PathsEntry {
+            relative_path: PathBuf::from("data.txt"),
+            no_link: false,
+            path_type: PathType::HardLink,
+            prefix_placeholder: None,
+            sha256: None,
+            size_in_bytes: None,
+        };
+
+        let result = super::link_file(
+            &entry,
+            PathBuf::from("data.txt"),
+            &package_dir,
+            &target_dir,
+            target_dir.path().to_str().unwrap(),
+            true,
+            true,
+            true,
+            true,
+            Platform::Linux64,
+            AppleCodeSignBehavior::DoNothing,
+            filetime::FileTime::now(),
+            ExternalSymlinkPolicy::Deny,
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(result.method, super::LinkMethod::Softlink);
+        assert_eq!(
+            fs::read_link(target_dir.path().join("data.txt")).unwrap(),
+            fs::canonicalize(package_dir.join("data.txt")).unwrap()
         );
     }
 
@@ -1108,6 +1187,7 @@ mod test {
             true,
             true,
             true,
+            false,
             Platform::Linux64,
             AppleCodeSignBehavior::DoNothing,
             modification_time,
