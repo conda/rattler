@@ -91,21 +91,27 @@ impl SubdirClient for LocalSubdirClient {
         let name = name.clone();
         let package_format_selection = self.package_format_selection;
 
-        let load_records =
-            move || match sparse_repodata.load_records(&name, package_format_selection) {
-                Ok(records) => {
-                    let (unique_base_deps, unique_extra_deps) = extract_unique_deps_split(&records);
-                    Ok(PackageRecords {
-                        records: records.into_iter().map(Arc::new).collect(),
-                        unique_base_deps,
-                        unique_extra_deps,
-                    })
-                }
-                Err(err) => Err(GatewayError::IoError(
+        let load_records = move || {
+            let io_error = |err: std::io::Error| {
+                GatewayError::IoError(
                     "failed to extract repodata records from sparse repodata".to_string(),
                     err,
-                )),
+                )
             };
+            let records = sparse_repodata
+                .load_records(&name, package_format_selection)
+                .map_err(io_error)?;
+            let removed = sparse_repodata
+                .load_removed(Some(&name))
+                .map_err(io_error)?;
+            let (unique_base_deps, unique_extra_deps) = extract_unique_deps_split(&records);
+            Ok(PackageRecords {
+                records: records.into_iter().map(Arc::new).collect(),
+                removed,
+                unique_base_deps,
+                unique_extra_deps,
+            })
+        };
 
         #[cfg(target_arch = "wasm32")]
         return load_records();

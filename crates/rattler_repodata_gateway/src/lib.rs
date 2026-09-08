@@ -71,6 +71,8 @@ pub mod who_needs;
 pub use reporter::{DownloadReporter, Reporter};
 #[cfg(feature = "sparse")]
 pub use reporter::{SUPPORTED_REPODATA_REVISION, UnsupportedRepodataRevision};
+#[cfg(feature = "sparse")]
+pub use sparse::RemovedPackage;
 #[cfg(target_arch = "wasm32")]
 pub use utils::js_fetch::{JsFetchError, JsFetchResponse, JsFetcher};
 
@@ -81,9 +83,9 @@ mod gateway;
 pub use gateway::{
     CacheClearMode, ChannelConfig, ChannelNoticeResult, ChannelRelationsMode,
     ChannelRelationsWarning, DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH, Gateway, GatewayBuilder,
-    GatewayError, GatewayWarning, MaxConcurrency, NamesQuery, NamesQueryOutput, RepoData,
-    RepoDataQuery, RepoDataQueryOutput, RepoDataSource, Source, SourceConfig, SubdirSelection,
-    WhoNeedsQuery,
+    GatewayError, GatewayWarning, MaxConcurrency, NamesQuery, NamesQueryOutput, RemovedPackages,
+    RepoData, RepoDataQuery, RepoDataQueryOutput, RepoDataSource, Source, SourceConfig,
+    SubdirSelection, WhoNeedsQuery,
 };
 #[cfg(feature = "indicatif")]
 pub use gateway::{IndicatifReporter, IndicatifReporterBuilder};
