@@ -8,7 +8,10 @@ use rattler_repodata_gateway::RepoData;
 use rattler_solve::SolverTask;
 
 use crate::{
-    commands::progress::{wrap_in_async_progress, wrap_in_progress},
+    commands::{
+        gateway::{build_gateway, load_config},
+        progress::{wrap_in_async_progress, wrap_in_progress},
+    },
     global_multi_progress,
     solver_args::SolverArgs,
 };
@@ -41,7 +44,7 @@ pub struct Opt {
 }
 
 pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
-    let config = super::gateway::load_config()?;
+    let config = load_config()?;
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
     // Make the target prefix absolute
@@ -74,7 +77,7 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
 
     // Get the package names from the matchspecs so we can only load the package
     // records that we need.
-    let gateway = super::gateway::build_gateway(download_client.clone(), &config, offline, true)?;
+    let gateway = build_gateway(download_client.clone(), &config, offline, true)?;
 
     let start_load_repo_data = Instant::now();
     let repo_data = wrap_in_async_progress(

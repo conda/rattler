@@ -15,6 +15,7 @@ use url::Url;
 
 use crate::{
     commands::{
+        gateway::{build_gateway, load_config},
         progress::{wrap_in_async_progress, wrap_in_progress},
         table::{Cell, Table},
     },
@@ -55,8 +56,8 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
 
     let download_client = super::client::create_client_with_middleware(offline)?;
 
-    let config = super::gateway::load_config()?;
-    let gateway = super::gateway::build_gateway(download_client, &config, offline, true)?;
+    let config = load_config()?;
+    let gateway = build_gateway(download_client, &config, offline, true)?;
 
     let start_load_repo_data = Instant::now();
     let repo_data = wrap_in_async_progress(

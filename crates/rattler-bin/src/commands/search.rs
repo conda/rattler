@@ -9,6 +9,8 @@ use rattler_conda_types::{
 };
 use rattler_repodata_gateway::RepoData;
 
+use crate::commands::gateway::{build_gateway, load_config};
+
 /// Search for packages in conda channels using glob or regex patterns.
 #[derive(Debug, clap::Parser)]
 #[clap(after_help = r#"Examples:
@@ -91,8 +93,8 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
     let download_client = super::client::create_client_with_middleware(offline)?;
 
     // Create gateway
-    let config = super::gateway::load_config()?;
-    let gateway = super::gateway::build_gateway(download_client, &config, offline, opt.sharded)?;
+    let config = load_config()?;
+    let gateway = build_gateway(download_client, &config, offline, opt.sharded)?;
 
     // Show progress while loading repodata
     let pb = ProgressBar::new_spinner();

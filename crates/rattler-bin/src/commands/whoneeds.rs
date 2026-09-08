@@ -11,6 +11,8 @@ use rattler_conda_types::{
 use rattler_repodata_gateway::who_needs::{DependencyKind, Dependent, WhoNeedsTarget};
 use url::Url;
 
+use crate::commands::gateway::{build_gateway, load_config};
+
 /// Show packages that depend on the given package (reverse dependencies).
 #[derive(Debug, clap::Parser)]
 #[clap(after_help = r#"Examples:
@@ -132,8 +134,8 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
     // dependency lookup needs the records of every package in the channel,
     // which is one request per package with shards but a single request
     // with a full repodata.json.
-    let config = super::gateway::load_config()?;
-    let gateway = super::gateway::build_gateway(download_client, &config, offline, false)?;
+    let config = load_config()?;
+    let gateway = build_gateway(download_client, &config, offline, false)?;
 
     // Show progress while loading repodata
     let pb = ProgressBar::new_spinner();
