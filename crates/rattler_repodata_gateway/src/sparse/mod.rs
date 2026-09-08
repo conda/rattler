@@ -487,6 +487,43 @@ impl SparseRepoData {
             .collect()
     }
 
+    /// Returns all the records for the specified package name, in every archive
+    /// format the repodata offers, without applying a package format selection.
+    pub fn load_all_records_by_name(
+        &self,
+        package_name: &PackageName,
+    ) -> io::Result<Vec<RepoDataRecord>> {
+        let repo_data = self.inner.borrow_repo_data();
+        let base_url = repo_data.info.as_ref().and_then(|i| i.base_url.as_deref());
+
+        let mut records = parse_records(
+            Some(package_name),
+            &repo_data.packages,
+            &repo_data.conda_packages,
+            &repo_data.v3,
+            &repo_data.removed,
+            PackageFormatSelection::Both,
+            base_url,
+            &self.channel,
+            &self.subdir,
+            self.patch_record_fn,
+            |_| true, // Dont filter anything out
+        )?;
+
+        let whl = find_package_in_slice(&repo_data.v3.whl, Some(package_name), RecordKind::V3Whl);
+        records.extend(parse_records_raw(
+            whl,
+            &repo_data.removed,
+            base_url,
+            &self.channel,
+            &self.subdir,
+            self.patch_record_fn,
+            |_| true,
+        )?);
+
+        Ok(records)
+    }
+
     /// Returns all the records for the specified package format(s).
     pub fn load_all_records(
         &self,

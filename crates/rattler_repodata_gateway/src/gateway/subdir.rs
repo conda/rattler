@@ -7,8 +7,8 @@ use rattler_conda_types::{
 };
 
 use super::GatewayError;
-use crate::{Reporter, sparse::PackageFormatSelection};
-use crate::sparse::{RemovedPackage, empty_repodata_revisions};
+use crate::Reporter;
+use crate::sparse::{PackageFormatSelection, RemovedPackage, empty_repodata_revisions};
 use coalesced_map::{CoalescedGetError, CoalescedMap};
 
 /// Records for a single package, with precomputed unique dependency strings
@@ -95,7 +95,7 @@ fn filter_records_by_package_format(
     selection: PackageFormatSelection,
 ) -> Vec<Arc<RepoDataRecord>> {
     match selection {
-        PackageFormatSelection::Both | PackageFormatSelection::PreferConda => records
+        PackageFormatSelection::Both => records
             .into_iter()
             .filter(|r| !matches!(r.identifier.archive_type, DistArchiveType::Wheel(_)))
             .collect(),
@@ -117,6 +117,7 @@ fn filter_records_by_package_format(
                 )
             })
             .collect(),
+        PackageFormatSelection::PreferConda => dedup_records_by_preference(records, false),
         PackageFormatSelection::PreferCondaWithWhl => dedup_records_by_preference(records, true),
     }
 }
@@ -257,14 +258,18 @@ impl SubdirData {
         name: &PackageName,
         reporter: Option<&dyn Reporter>,
     ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
-        if let Some(cached) = self.records.get(name) {
-            return Ok(cached.records);
-        }
-        Ok(self
-            .client
-            .fetch_package_records(name, reporter)
-            .await?
-            .records)
+        let records = if let Some(cached) = self.records.get(name) {
+            cached.records
+        } else {
+            self.client
+                .fetch_package_records(name, reporter)
+                .await?
+                .records
+        };
+        Ok(filter_records_by_package_format(
+            records,
+            PackageFormatSelection::PreferCondaWithWhl,
+        ))
     }
 
     /// The number of package names currently held in the per-name record
