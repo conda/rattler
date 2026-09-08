@@ -131,7 +131,6 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
         channels.iter().map(Channel::canonical_name).join(", ")
     );
 
-    // Create gateway.
     let gateway = Gateway::builder()
         .with_client(download_client)
         .with_channel_config(rattler_repodata_gateway::ChannelConfig {
