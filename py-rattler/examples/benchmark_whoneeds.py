@@ -72,7 +72,6 @@ async def main() -> None:
 
     gateway = Gateway(
         default_config=SourceConfig(
-            sharded_enabled=False,
             cache_action="cache-or-fetch",
         ),
         client=Client.default_client(user_agent="pixi-browse-whoneeds-reproducer"),
