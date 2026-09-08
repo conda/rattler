@@ -14,6 +14,8 @@ use rattler_repodata_gateway::{
 };
 use url::Url;
 
+use super::QueryOutputFormat;
+
 /// Show packages that depend on the given package (reverse dependencies).
 #[derive(Debug, clap::Parser)]
 #[clap(after_help = r#"Examples:
@@ -21,7 +23,7 @@ use url::Url;
   rattler whoneeds __cuda                     # packages that depend on a virtual package
   rattler whoneeds ./python-3.13.1-h123_0.conda   # packages that can use this exact package
   rattler whoneeds https://conda.anaconda.org/conda-forge/noarch/polars-1.44.1-pyh8da0edf_0.conda
-  rattler whoneeds numpy --urls-only          # print only the urls of the dependent packages"#)]
+  rattler whoneeds numpy --format urls        # print only the urls of the dependent packages"#)]
 pub struct Opt {
     /// The package to find reverse dependencies for.
     ///
@@ -48,13 +50,13 @@ pub struct Opt {
     #[clap(long)]
     all: bool,
 
-    /// Output in JSON format
+    /// Output in JSON format (equivalent to --format json)
     #[clap(long, conflicts_with_all = ["limit", "all"])]
     json: bool,
 
-    /// Only print the URLs of the dependent packages, one per line
+    /// Output format (defaults to human-readable output)
     #[clap(long, conflicts_with_all = ["json", "limit", "all"])]
-    urls_only: bool,
+    format: Option<QueryOutputFormat>,
 }
 
 /// Interprets the package argument as a package archive URL or path, or as
@@ -167,7 +169,7 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
     // than the record it came from, so they consume the stream and drop
     // each record as it arrives. A channel-wide query matches enough
     // records that retaining them all would cost about a gigabyte.
-    if opt.urls_only {
+    if opt.format == Some(QueryOutputFormat::Urls) {
         // The stream reports a record once per dependency kind through
         // which it references the target, so the same url can arrive more
         // than once. Only what is needed to sort and print is retained.
@@ -189,7 +191,7 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
         pb.finish_and_clear();
 
         // Sort by name and then by version (newest first), like
-        // `rattler search --urls-only`.
+        // `rattler search --format urls`.
         records.sort_unstable_by(|a, b| {
             a.0.cmp(&b.0)
                 .then_with(|| b.1.cmp(&a.1))
@@ -217,7 +219,7 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
         return Ok(());
     }
 
-    if opt.json {
+    if opt.json || opt.format == Some(QueryOutputFormat::Json) {
         let mut json_records = Vec::new();
         while let Some(dependent) = stream
             .try_next()

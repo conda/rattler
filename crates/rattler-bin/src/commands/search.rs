@@ -9,13 +9,15 @@ use rattler_conda_types::{
 };
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
 
+use super::QueryOutputFormat;
+
 /// Search for packages in conda channels using glob or regex patterns.
 #[derive(Debug, clap::Parser)]
 #[clap(after_help = r#"Examples:
-  rattler search 'python*'            # glob pattern
-  rattler search '^numpy-.*$'         # regex pattern
-  rattler search openssl -c bioconda  # search in specific channel
-  rattler search xtensor --urls-only  # print only the package urls"#)]
+  rattler search 'python*'              # glob pattern
+  rattler search '^numpy-.*$'           # regex pattern
+  rattler search openssl -c bioconda    # search in specific channel
+  rattler search xtensor --format urls  # print only the package urls"#)]
 pub struct Opt {
     /// The matchspec pattern to search for.
     ///
@@ -48,13 +50,13 @@ pub struct Opt {
     #[clap(long, default_value = "true", action = clap::ArgAction::Set)]
     sharded: bool,
 
-    /// Output in JSON format
+    /// Output in JSON format (equivalent to --format json)
     #[clap(long, conflicts_with_all = ["limit", "limit_packages", "all"])]
     json: bool,
 
-    /// Only print the URLs of the matching packages, one per line
+    /// Output format (defaults to human-readable output)
     #[clap(long, conflicts_with_all = ["json", "limit", "limit_packages", "all"])]
-    urls_only: bool,
+    format: Option<QueryOutputFormat>,
 }
 
 pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
@@ -123,7 +125,7 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
 
     pb.finish_and_clear();
 
-    if opt.json {
+    if opt.json || opt.format == Some(QueryOutputFormat::Json) {
         // Group records by platform (subdir), same format as `pixi search --json`
         let mut grouped: IndexMap<&str, Vec<&RepoDataRecord>> = IndexMap::new();
         for record in repo_data.iter().flat_map(RepoData::iter) {
@@ -140,7 +142,7 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
         return Ok(());
     }
 
-    if opt.urls_only {
+    if opt.format == Some(QueryOutputFormat::Urls) {
         // Only print the plain urls to stdout, sorted by name and then by
         // version (newest first).
         let mut records: Vec<&RepoDataRecord> = repo_data.iter().flat_map(RepoData::iter).collect();
