@@ -266,7 +266,7 @@ async fn resolve_subdirs(
                 let reporter = reporter.clone();
                 pending.push(box_future(async move {
                     let subdir = gateway
-                        .get_or_create_subdir_with_sharding(&channel, platform, reporter, false)
+                        .get_or_create_subdir(&channel, platform, reporter, false)
                         .await?;
                     Ok((source_index, subdir))
                 }));
@@ -610,7 +610,7 @@ mod tests {
 
         let linux_subdir = gateway
             .inner
-            .get_or_create_subdir(&channel, Platform::Linux64, None)
+            .get_or_create_subdir(&channel, Platform::Linux64, None, true)
             .await
             .unwrap();
         let super::Subdir::Found(linux_data) = linux_subdir.as_ref() else {
@@ -634,7 +634,7 @@ mod tests {
         assert_eq!(linux_data.cached_package_count(), 1);
         let noarch_subdir = gateway
             .inner
-            .get_or_create_subdir(&channel, Platform::NoArch, None)
+            .get_or_create_subdir(&channel, Platform::NoArch, None, true)
             .await
             .unwrap();
         let super::Subdir::Found(noarch_data) = noarch_subdir.as_ref() else {

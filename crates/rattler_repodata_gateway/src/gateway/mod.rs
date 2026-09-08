@@ -291,7 +291,7 @@ impl Gateway {
     ) -> Result<Option<ChannelRelations>, GatewayError> {
         match self
             .inner
-            .get_or_create_subdir(channel, platform, None)
+            .get_or_create_subdir(channel, platform, None, true)
             .await
         {
             Ok(subdir) => Ok(subdir.channel_relations().cloned()),
@@ -455,19 +455,10 @@ impl GatewayInner {
     /// coalesced, and they will all receive the same subdir. If an error
     /// occurs while creating the subdir all waiting tasks will also return an
     /// error.
+    ///
+    /// Set `allow_sharded` to false to force full repodata scans.
     #[instrument(skip(self, reporter, channel), fields(channel = %channel.base_url), err(level = Level::INFO))]
     async fn get_or_create_subdir(
-        &self,
-        channel: &Channel,
-        platform: Platform,
-        reporter: Option<Arc<dyn Reporter>>,
-    ) -> Result<Arc<Subdir>, GatewayError> {
-        self.get_or_create_subdir_with_sharding(channel, platform, reporter, true)
-            .await
-    }
-
-    /// Resolves a subdir, optionally overriding sharding for full repodata scans.
-    async fn get_or_create_subdir_with_sharding(
         &self,
         channel: &Channel,
         platform: Platform,

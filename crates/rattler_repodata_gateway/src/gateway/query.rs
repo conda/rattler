@@ -1250,7 +1250,7 @@ async fn fetch_subdir_with_policy(
     policy: FetchErrorPolicy,
 ) -> Result<(Arc<Subdir>, Option<ChannelRelationsWarning>), GatewayError> {
     match gateway
-        .get_or_create_subdir(channel, platform, reporter)
+        .get_or_create_subdir(channel, platform, reporter, true)
         .await
     {
         Ok(subdir) => Ok((subdir, None)),
