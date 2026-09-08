@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Replace `InstallDriver` with `TransactionLinkContext` for shared linking state and `PreparedTransaction` for transaction preparation and finalization. Both package linkers now take a shared context.
+
 ## [0.48.6](https://github.com/conda/rattler/compare/rattler-v0.48.5...rattler-v0.48.6) - 2026-08-27
 
 ### Other

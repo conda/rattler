@@ -385,23 +385,23 @@ impl WindowsMenu {
         }
 
         // install quicklaunch shortcut
-        if let Some(quick_launch_dir) = self.directories.quick_launch.as_ref() {
-            if self.item.quicklaunch.unwrap_or(false) {
-                let quicklaunch_link_path = quick_launch_dir.join(link_name);
-                let shortcut = Shortcut {
-                    path: command,
-                    description: &self.command.description.resolve(&self.placeholders),
-                    filename: &quicklaunch_link_path,
-                    arguments: Some(&args),
-                    workdir: Some(&workdir),
-                    iconpath: icon.as_deref(),
-                    iconindex: Some(0),
-                    app_id: Some(&app_id),
-                };
+        if let Some(quick_launch_dir) = self.directories.quick_launch.as_ref()
+            && self.item.quicklaunch.unwrap_or(false)
+        {
+            let quicklaunch_link_path = quick_launch_dir.join(link_name);
+            let shortcut = Shortcut {
+                path: command,
+                description: &self.command.description.resolve(&self.placeholders),
+                filename: &quicklaunch_link_path,
+                arguments: Some(&args),
+                workdir: Some(&workdir),
+                iconpath: icon.as_deref(),
+                iconindex: Some(0),
+                app_id: Some(&app_id),
+            };
 
-                create_shortcut::create_shortcut(shortcut)?;
-                tracker.shortcuts.push(quicklaunch_link_path.clone());
-            }
+            create_shortcut::create_shortcut(shortcut)?;
+            tracker.shortcuts.push(quicklaunch_link_path.clone());
         }
         Ok(())
     }

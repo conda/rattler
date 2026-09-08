@@ -1,6 +1,7 @@
 //! Unlinking packages from an environment.
 
 use std::{
+    borrow::Borrow,
     collections::HashSet,
     ffi::OsString,
     io::ErrorKind,
@@ -8,8 +9,15 @@ use std::{
 };
 
 use fs_err::tokio as tokio_fs;
-use rattler_conda_types::{prefix::Prefix, prefix_record::PrefixRecord};
+use indexmap::IndexSet;
+use itertools::Itertools;
+use rattler_conda_types::{
+    prefix::Prefix,
+    prefix_record::{PathType, PrefixRecord},
+};
 use uuid::Uuid;
+
+use super::transaction::TransactionOperation;
 
 /// Error that can occur while unlinking a package.
 #[derive(Debug, thiserror::Error)]
@@ -37,6 +45,68 @@ pub enum UnlinkError {
     /// Failed to move a file to the trash
     #[error("failed to move file: {0} to {1}")]
     FailedToMoveFile(String, String, std::io::Error),
+}
+
+/// Remove all empty directories that are not part of the new prefix records.
+pub fn remove_empty_directories<Old: Borrow<PrefixRecord>, New>(
+    operations: &[TransactionOperation<Old, New>],
+    new_prefix_records: &[PrefixRecord],
+    target_prefix: &Path,
+) -> Result<(), UnlinkError> {
+    let mut keep_directories = HashSet::new();
+
+    // find all forced directories in the prefix records
+    for record in new_prefix_records {
+        for paths in record.paths_data.paths.iter() {
+            if paths.path_type == PathType::Directory {
+                let path = target_prefix.join(&paths.relative_path);
+                keep_directories.insert(path);
+            }
+        }
+    }
+
+    // find all removed directories
+    for record in operations
+        .iter()
+        .filter_map(|op| op.record_to_remove().map(Borrow::borrow))
+    {
+        let mut removed_directories = HashSet::new();
+
+        for paths in record.paths_data.paths.iter() {
+            if paths.path_type != PathType::Directory
+                && let Some(parent) = paths.relative_path.parent()
+            {
+                removed_directories.insert(parent);
+            }
+        }
+
+        let is_python_noarch = record.repodata_record.package_record.noarch.is_python();
+
+        // Sort the directories by length, so that we delete the deepest directories
+        // first.
+        let mut directories: IndexSet<&Path> = removed_directories.into_iter().sorted().collect();
+
+        while let Some(directory) = directories.pop() {
+            let directory_path = target_prefix.join(directory);
+            let removed_until = recursively_remove_empty_directories(
+                &directory_path,
+                target_prefix,
+                is_python_noarch,
+                &keep_directories,
+            )?;
+
+            // The directory is not empty which means our parent directory is also not
+            // empty, recursively remove the parent directory from the set
+            // as well.
+            while let Some(parent) = removed_until.parent() {
+                if !directories.shift_remove(parent) {
+                    break;
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 pub(crate) fn recursively_remove_empty_directories(
@@ -236,8 +306,11 @@ mod tests {
 
     use rattler_conda_types::{Platform, RepoDataRecord, prefix::Prefix};
 
+    use super::remove_empty_directories;
+    #[cfg(windows)]
+    use crate::install::TransactionLinkContext;
     use crate::install::test_utils::download_and_get_prefix_record;
-    use crate::install::{InstallDriver, Transaction, empty_trash, unlink_package};
+    use crate::install::{Transaction, empty_trash, unlink_package};
 
     #[tokio::test]
     async fn test_unlink_package() {
@@ -264,9 +337,6 @@ mod tests {
         // Check if the conda-meta file is gone
         assert!(!pkg_meta_path.exists());
 
-        // Set up install driver to run post-processing steps ...
-        let install_driver = InstallDriver::default();
-
         let transaction = Transaction::from_current_and_desired(
             vec![prefix_record.clone()],
             Vec::<RepoDataRecord>::new().into_iter(),
@@ -276,9 +346,7 @@ mod tests {
         )
         .unwrap();
 
-        install_driver
-            .remove_empty_directories(&transaction.operations, &[], environment_dir.path())
-            .unwrap();
+        remove_empty_directories(&transaction.operations, &[], environment_dir.path()).unwrap();
 
         // check that the environment is completely empty except for the conda-meta
         // folder and CACHEDIR.TAG (created by Prefix::create for backup exclusion)
@@ -332,7 +400,6 @@ mod tests {
 
         // Check if the conda-meta file is gone
         assert!(!pkg_meta_path.exists());
-        let install_driver = InstallDriver::default();
 
         let transaction = Transaction::from_current_and_desired(
             vec![prefix_record.clone()],
@@ -343,9 +410,7 @@ mod tests {
         )
         .unwrap();
 
-        install_driver
-            .remove_empty_directories(&transaction.operations, &[], target_prefix.path())
-            .unwrap();
+        remove_empty_directories(&transaction.operations, &[], target_prefix.path()).unwrap();
 
         // check that the environment is completely empty except for the conda-meta
         // folder and CACHEDIR.TAG (created by Prefix::create for backup exclusion)
@@ -411,7 +476,7 @@ mod tests {
         ];
         let conda_meta_path = target_prefix.join("conda-meta");
         std::fs::create_dir_all(&conda_meta_path).unwrap();
-        let install_driver = InstallDriver::default();
+        let link_context = TransactionLinkContext::default();
         let mut prefix_records = Vec::new();
         for (package_url, expected_sha256) in files {
             let package_path =
@@ -428,7 +493,7 @@ mod tests {
             let paths = link_package(
                 package_dir.path(),
                 &prefix,
-                &install_driver,
+                &link_context,
                 InstallOptions::default(),
             )
             .await

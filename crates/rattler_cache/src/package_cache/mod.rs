@@ -1034,7 +1034,7 @@ where
 #[cfg(windows)]
 fn is_transient_rename_error(err: &std::io::Error) -> bool {
     // 5 = ERROR_ACCESS_DENIED, 32 = ERROR_SHARING_VIOLATION.
-    matches!(err.raw_os_error(), Some(5) | Some(32))
+    matches!(err.raw_os_error(), Some(5 | 32))
 }
 
 /// Shared logic for validating a package.
