@@ -42,7 +42,7 @@ pub use query::{NamesQuery, NamesQueryOutput, RepoDataQuery, RepoDataQueryOutput
 use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, ChannelRelations, MatchSpec, Platform, RepoDataRecord};
 use rattler_networking::LazyClient;
-pub use repo_data::RepoData;
+pub use repo_data::{RemovedPackages, RepoData};
 use run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
 pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
 pub use source::{RepoDataSource, Source};
@@ -1612,6 +1612,80 @@ mod test {
             .find(|record| record.package_record.name.as_normalized() == "python")
             .unwrap();
         assert!(python.package_record.depends.is_empty());
+    }
+
+    /// Packages listed under `removed` are hidden from the records of a query
+    /// and reported through `RepoData::removed` for every fetched name.
+    #[tokio::test]
+    async fn test_removed_packages_are_reported() {
+        let channel_dir = tempfile::tempdir().unwrap();
+        let subdir = channel_dir.path().join("linux-64");
+        fs_err::create_dir_all(&subdir).unwrap();
+        fs_err::write(
+            subdir.join("repodata.json"),
+            serde_json::json!({
+                "info": {"subdir": "linux-64"},
+                "packages.conda": {
+                    "foo-1.0-0.conda": {
+                        "name": "foo",
+                        "version": "1.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "subdir": "linux-64"
+                    },
+                    "foo-2.0-0.conda": {
+                        "name": "foo",
+                        "version": "2.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "subdir": "linux-64"
+                    }
+                },
+                "removed": ["foo-2.0-0.conda", "foo-0.1-0.tar.bz2", "bar-1.0-0.conda"]
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let gateway = Gateway::new();
+        let channel = Channel::try_from_directory(channel_dir.path()).unwrap();
+        let output = gateway
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("foo", Lenient).unwrap()],
+            )
+            .await
+            .unwrap();
+        let repodata = &output[0];
+
+        let records: Vec<_> = repodata
+            .iter()
+            .map(|record| record.identifier.to_file_name())
+            .collect();
+        assert_eq!(records, ["foo-1.0-0.conda"]);
+
+        let removed_url = channel
+            .base_url
+            .url()
+            .join("linux-64/foo-2.0-0.conda")
+            .unwrap();
+        assert!(repodata.removed().contains(&removed_url));
+        assert_eq!(
+            repodata.removed().get(&removed_url).unwrap().identifier,
+            "foo-2.0-0.conda".parse().unwrap()
+        );
+
+        // Only names touched by the query are reported, so `bar` is absent.
+        let mut removed: Vec<_> = repodata
+            .removed()
+            .iter()
+            .map(|removed| removed.identifier.to_file_name())
+            .collect();
+        removed.sort();
+        assert_eq!(removed, ["foo-0.1-0.tar.bz2", "foo-2.0-0.conda"]);
     }
 
     /// Integration test that verifies cache clearing actually works end-to-end.
