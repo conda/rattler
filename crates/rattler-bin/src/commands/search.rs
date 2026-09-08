@@ -50,12 +50,8 @@ pub struct Opt {
     #[clap(long, default_value = "true", action = clap::ArgAction::Set)]
     sharded: bool,
 
-    /// Output in JSON format (equivalent to --format json)
-    #[clap(long, conflicts_with_all = ["limit", "limit_packages", "all"])]
-    json: bool,
-
     /// Output format (defaults to human-readable output)
-    #[clap(long, conflicts_with_all = ["json", "limit", "limit_packages", "all"])]
+    #[clap(long, conflicts_with_all = ["limit", "limit_packages", "all"])]
     format: Option<QueryOutputFormat>,
 }
 
@@ -125,7 +121,7 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
 
     pb.finish_and_clear();
 
-    if opt.json || opt.format == Some(QueryOutputFormat::Json) {
+    if opt.format == Some(QueryOutputFormat::Json) {
         // Group records by platform (subdir), same format as `pixi search --json`
         let mut grouped: IndexMap<&str, Vec<&RepoDataRecord>> = IndexMap::new();
         for record in repo_data.iter().flat_map(RepoData::iter) {

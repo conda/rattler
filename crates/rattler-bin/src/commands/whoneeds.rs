@@ -50,12 +50,8 @@ pub struct Opt {
     #[clap(long)]
     all: bool,
 
-    /// Output in JSON format (equivalent to --format json)
-    #[clap(long, conflicts_with_all = ["limit", "all"])]
-    json: bool,
-
     /// Output format (defaults to human-readable output)
-    #[clap(long, conflicts_with_all = ["json", "limit", "all"])]
+    #[clap(long, conflicts_with_all = ["limit", "all"])]
     format: Option<QueryOutputFormat>,
 }
 
@@ -219,7 +215,7 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
         return Ok(());
     }
 
-    if opt.json || opt.format == Some(QueryOutputFormat::Json) {
+    if opt.format == Some(QueryOutputFormat::Json) {
         let mut json_records = Vec::new();
         while let Some(dependent) = stream
             .try_next()
