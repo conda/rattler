@@ -12,7 +12,7 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::{CacheAction, FetchRepoDataOptions, Variant};
 use rattler_repodata_gateway::{
     CacheClearMode, ChannelConfig, ChannelNoticeResult, ChannelRelationsMode, Gateway,
-    GatewayWarning, Source, SourceConfig, SubdirSelection,
+    GatewayWarning, RemovedPackage, Source, SourceConfig, SubdirSelection,
 };
 use url::Url;
 
@@ -63,6 +63,33 @@ impl From<ChannelNoticeResult> for PyChannelNotice {
             created_at: notice.created_at.map(|timestamp| timestamp.to_string()),
             expires_at: notice.expires_at.map(|timestamp| timestamp.to_string()),
             interval: notice.interval,
+        }
+    }
+}
+
+/// A package that a channel lists as removed, see [`RemovedPackage`].
+#[pyclass(get_all, from_py_object)]
+#[derive(Clone)]
+pub struct PyRemovedPackage {
+    url: String,
+    file_name: String,
+    name: String,
+    version: String,
+    build: String,
+    channel: Option<String>,
+}
+
+impl From<RemovedPackage> for PyRemovedPackage {
+    fn from(value: RemovedPackage) -> Self {
+        let file_name = value.identifier.to_file_name();
+        let identifier = value.identifier.identifier;
+        Self {
+            url: value.url.to_string(),
+            file_name,
+            name: identifier.name,
+            version: identifier.version,
+            build: identifier.build_string,
+            channel: value.channel,
         }
     }
 }
@@ -326,21 +353,31 @@ impl PyGateway {
             emit_gateway_warnings(output.warnings)?;
 
             // Convert the records into a list of lists (Arc clone, not deep copy)
-            let records = output
+            // and the removed packages into a parallel list of lists.
+            let (records, removed): (Vec<Vec<PyRecord>>, Vec<Vec<PyRemovedPackage>>) = output
                 .repodata
                 .into_iter()
                 .map(|r| {
-                    r.iter_arc()
+                    let records = r
+                        .iter_arc()
                         .map(|arc| PyRecord::from(arc.clone()))
-                        .collect::<Vec<_>>()
+                        .collect::<Vec<_>>();
+                    let mut removed = r
+                        .removed()
+                        .iter()
+                        .cloned()
+                        .map(PyRemovedPackage::from)
+                        .collect::<Vec<_>>();
+                    removed.sort_by(|a, b| a.file_name.cmp(&b.file_name));
+                    (records, removed)
                 })
-                .collect::<Vec<_>>();
+                .unzip();
             let notices = output
                 .notices
                 .into_iter()
                 .map(PyChannelNotice::from)
                 .collect::<Vec<_>>();
-            Ok((records, notices))
+            Ok((records, removed, notices))
         })
     }
 

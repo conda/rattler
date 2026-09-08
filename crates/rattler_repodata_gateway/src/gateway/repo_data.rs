@@ -1,6 +1,10 @@
 use std::sync::Arc;
 
+use ahash::HashMap;
 use rattler_conda_types::RepoDataRecord;
+use url::Url;
+
+use crate::sparse::RemovedPackage;
 
 /// A container for [`RepoDataRecord`]s that are returned from the [`super::Gateway`].
 ///
@@ -12,9 +16,22 @@ use rattler_conda_types::RepoDataRecord;
 #[derive(Debug, Default, Clone)]
 pub struct RepoData {
     pub(crate) records: Vec<Arc<RepoDataRecord>>,
+    pub(crate) removed: RemovedPackages,
 }
 
 impl RepoData {
+    /// Returns the packages that the source lists as removed for the package
+    /// names the query fetched.
+    ///
+    /// Removed packages are never part of [`Self::iter`]. The match specs of
+    /// the query do not filter this collection: every removed entry of a
+    /// fetched package name is included, so callers look up the URL they are
+    /// interested in with [`RemovedPackages::contains`] or
+    /// [`RemovedPackages::get`].
+    pub fn removed(&self) -> &RemovedPackages {
+        &self.removed
+    }
+
     /// Returns an iterator over all the records in this instance.
     pub fn iter(&self) -> RepoDataIterator<'_> {
         RepoDataIterator {
@@ -61,6 +78,58 @@ impl<'r> IntoIterator for &'r RepoData {
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
+    }
+}
+
+/// The [`RemovedPackage`]s of a [`RepoData`] instance, indexed by their URL so
+/// that a lock file entry or a previously fetched record can be checked in
+/// constant time.
+#[derive(Debug, Default, Clone)]
+pub struct RemovedPackages {
+    by_url: HashMap<Url, RemovedPackage>,
+}
+
+impl RemovedPackages {
+    /// Returns true if the package served from `url` is listed as removed.
+    pub fn contains(&self, url: &Url) -> bool {
+        self.by_url.contains_key(url)
+    }
+
+    /// Returns the removed package that was served from `url`, if any.
+    pub fn get(&self, url: &Url) -> Option<&RemovedPackage> {
+        self.by_url.get(url)
+    }
+
+    /// Returns an iterator over all removed packages in no particular order.
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = &RemovedPackage> {
+        self.by_url.values()
+    }
+
+    /// Returns the number of removed packages.
+    pub fn len(&self) -> usize {
+        self.by_url.len()
+    }
+
+    /// Returns true if no packages are listed as removed.
+    pub fn is_empty(&self) -> bool {
+        self.by_url.is_empty()
+    }
+
+    pub(crate) fn extend(&mut self, removed: impl IntoIterator<Item = RemovedPackage>) {
+        self.by_url.extend(
+            removed
+                .into_iter()
+                .map(|package| (package.url.clone(), package)),
+        );
+    }
+}
+
+impl<'r> IntoIterator for &'r RemovedPackages {
+    type Item = &'r RemovedPackage;
+    type IntoIter = std::collections::hash_map::Values<'r, Url, RemovedPackage>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.by_url.values()
     }
 }
 

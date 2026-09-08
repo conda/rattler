@@ -5,7 +5,7 @@ use rattler_conda_types::{ChannelRelations, PackageName, RepoDataRecord, Repodat
 
 use super::GatewayError;
 use crate::Reporter;
-use crate::sparse::empty_repodata_revisions;
+use crate::sparse::{RemovedPackage, empty_repodata_revisions};
 use coalesced_map::{CoalescedGetError, CoalescedMap};
 
 /// Records for a single package, with precomputed unique dependency strings
@@ -19,6 +19,10 @@ use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub struct PackageRecords {
     /// All repodata records for this package.
     pub records: Vec<Arc<RepoDataRecord>>,
+
+    /// Packages of this name that the subdirectory lists as removed. These
+    /// never appear in `records`.
+    pub removed: Vec<RemovedPackage>,
 
     /// Unique base dependency strings across all records.
     pub unique_base_deps: Arc<[String]>,
