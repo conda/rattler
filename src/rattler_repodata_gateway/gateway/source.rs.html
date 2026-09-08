@@ -112,13 +112,14 @@
 <a href=#110 id=110 data-nosnippet>110</a>            extract_unique_deps_split(records.iter().map(|r| <span class="kw-2">&amp;**</span>r));
 <a href=#111 id=111 data-nosnippet>111</a>        <span class="prelude-val">Ok</span>(PackageRecords {
 <a href=#112 id=112 data-nosnippet>112</a>            records,
-<a href=#113 id=113 data-nosnippet>113</a>            unique_base_deps,
-<a href=#114 id=114 data-nosnippet>114</a>            unique_extra_deps,
-<a href=#115 id=115 data-nosnippet>115</a>        })
-<a href=#116 id=116 data-nosnippet>116</a>    }
-<a href=#117 id=117 data-nosnippet>117</a>
-<a href=#118 id=118 data-nosnippet>118</a>    <span class="kw">fn </span>package_names(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;String&gt; {
-<a href=#119 id=119 data-nosnippet>119</a>        <span class="self">self</span>.source.package_names(<span class="self">self</span>.platform)
-<a href=#120 id=120 data-nosnippet>120</a>    }
-<a href=#121 id=121 data-nosnippet>121</a>}
+<a href=#113 id=113 data-nosnippet>113</a>            removed: Vec::new(),
+<a href=#114 id=114 data-nosnippet>114</a>            unique_base_deps,
+<a href=#115 id=115 data-nosnippet>115</a>            unique_extra_deps,
+<a href=#116 id=116 data-nosnippet>116</a>        })
+<a href=#117 id=117 data-nosnippet>117</a>    }
+<a href=#118 id=118 data-nosnippet>118</a>
+<a href=#119 id=119 data-nosnippet>119</a>    <span class="kw">fn </span>package_names(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;String&gt; {
+<a href=#120 id=120 data-nosnippet>120</a>        <span class="self">self</span>.source.package_names(<span class="self">self</span>.platform)
+<a href=#121 id=121 data-nosnippet>121</a>    }
+<a href=#122 id=122 data-nosnippet>122</a>}
 </code></pre></div></section></main></body></html>
