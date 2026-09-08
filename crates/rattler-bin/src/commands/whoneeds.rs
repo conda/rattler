@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, path::Path, time::Instant};
+use std::{env, path::Path, time::Instant};
 
 use futures_util::TryStreamExt;
 use indexmap::IndexMap;
@@ -8,10 +8,7 @@ use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::{
     Channel, ChannelConfig, PackageName, PackageRecord, Platform, package::IndexJson,
 };
-use rattler_repodata_gateway::{
-    Gateway, SourceConfig,
-    who_needs::{DependencyKind, Dependent, WhoNeedsTarget},
-};
+use rattler_repodata_gateway::who_needs::{DependencyKind, Dependent, WhoNeedsTarget};
 use url::Url;
 
 /// Show packages that depend on the given package (reverse dependencies).
@@ -135,17 +132,8 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
     // dependency lookup needs the records of every package in the channel,
     // which is one request per package with shards but a single request
     // with a full repodata.json.
-    let gateway = Gateway::builder()
-        .with_client(download_client)
-        .with_channel_config(rattler_repodata_gateway::ChannelConfig {
-            default: SourceConfig {
-                sharded_enabled: false,
-                cache_action: super::client::repodata_cache_action(offline),
-                ..SourceConfig::default()
-            },
-            per_channel: HashMap::new(),
-        })
-        .finish();
+    let config = super::gateway::load_config()?;
+    let gateway = super::gateway::build_gateway(download_client, &config, offline, false)?;
 
     // Show progress while loading repodata
     let pb = ProgressBar::new_spinner();
