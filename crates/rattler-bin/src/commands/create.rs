@@ -2,18 +2,16 @@ use std::{collections::HashMap, env, path::PathBuf, time::Instant};
 
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
-use rattler::{
-    default_cache_dir,
-    install::{IndicatifReporter, Installer, Transaction, TransactionOperation},
-    package_cache::PackageCache,
-};
+use rattler::install::{IndicatifReporter, Installer, Transaction, TransactionOperation};
 use rattler_conda_types::{ChannelConfig, PackageName, Platform, PrefixRecord, RepoDataRecord};
-use rattler_config::{ConfigBase, NoExtension};
-use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
+use rattler_repodata_gateway::RepoData;
 use rattler_solve::SolverTask;
 
 use crate::{
-    commands::progress::{wrap_in_async_progress, wrap_in_progress},
+    commands::{
+        gateway::{build_gateway, load_config},
+        progress::{wrap_in_async_progress, wrap_in_progress},
+    },
     global_multi_progress,
     solver_args::SolverArgs,
 };
@@ -46,9 +44,7 @@ pub struct Opt {
 }
 
 pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
-    let config = ConfigBase::<NoExtension>::load_from_default_locations("rattler")
-        .into_diagnostic()
-        .context("failed to load configuration")?;
+    let config = load_config()?;
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
     // Make the target prefix absolute
@@ -63,12 +59,6 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     // parsing matchspecs.
     let specs = SolverArgs::parse_specs(&opt.specs)?;
     let constraints = opt.solver.constraints()?;
-
-    // Find the default cache directory. Create it if it doesn't exist yet.
-    let cache_dir = default_cache_dir()
-        .map_err(|e| miette::miette!("could not determine default cache directory: {}", e))?;
-    rattler_cache::ensure_cache_dir(&cache_dir)
-        .map_err(|e| miette::miette!("could not create cache directory: {}", e))?;
 
     // Determine the channels to use from the command line or select the default.
     // Like matchspecs this also requires the use of the `channel_config` so we
@@ -87,22 +77,7 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
 
     // Get the package names from the matchspecs so we can only load the package
     // records that we need.
-    let gateway = Gateway::builder()
-        .with_cache_dir(cache_dir.join(rattler_cache::REPODATA_CACHE_DIR))
-        .with_package_cache(PackageCache::new(
-            cache_dir.join(rattler_cache::PACKAGE_CACHE_DIR),
-        ))
-        .with_client(download_client.clone())
-        .with_max_concurrent_requests(config.concurrency.downloads)
-        .with_channel_config(rattler_repodata_gateway::ChannelConfig {
-            default: SourceConfig {
-                sharded_enabled: true,
-                cache_action: super::client::repodata_cache_action(offline),
-                ..SourceConfig::default()
-            },
-            per_channel: HashMap::new(),
-        })
-        .finish();
+    let gateway = build_gateway(download_client.clone(), &config, offline, true)?;
 
     let start_load_repo_data = Instant::now();
     let repo_data = wrap_in_async_progress(

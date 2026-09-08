@@ -7,6 +7,7 @@ pub mod download;
 pub mod exec;
 pub mod extract;
 pub mod fetch_file;
+pub mod gateway;
 pub mod info;
 pub mod inspect;
 pub mod link;
@@ -19,6 +20,7 @@ pub mod run;
 pub mod search;
 pub mod shell_hook;
 pub mod solve;
+pub mod table;
 pub mod virtual_packages;
 pub mod whoneeds;
 
