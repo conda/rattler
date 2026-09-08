@@ -457,7 +457,7 @@ jobs:
 
   validate-tag:
     name: Validate tag
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     # If you don't set an input tag, it's a dry run (no uploads).
     if: ${{ inputs.tag }}
     steps:
@@ -494,7 +494,7 @@ jobs:
 
   extract-changelog:
     name: Extract changelog
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     if: ${{ inputs.tag }}
     outputs:
       release_notes: ${{ steps.release_notes.outputs.release_notes }}
@@ -552,7 +552,7 @@ jobs:
 
   tag-release:
     name: Tag release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     needs:
       - upload-release
       - extract-changelog
@@ -577,7 +577,7 @@ jobs:
 
   deploy-release-docs:
     name: Deploy release docs
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     needs: tag-release
     if: ${{ inputs.tag }}
     permissions:

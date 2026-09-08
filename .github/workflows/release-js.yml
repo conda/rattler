@@ -29,7 +29,7 @@ env:
 jobs:
   validate-tag:
     name: Validate tag
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     # If you don't set an input tag, it's a dry run (no uploads).
     if: ${{ inputs.tag }}
     steps:
@@ -97,7 +97,7 @@ jobs:
 
   upload-release:
     name: Upload to NPM
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     environment: release
     if: ${{ inputs.tag }}
     needs:
@@ -121,7 +121,7 @@ jobs:
 
   tag-release:
     name: Tag release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     needs: upload-release
     # If you don't set an input tag, it's a dry run (no uploads).
     if: ${{ inputs.tag }}
