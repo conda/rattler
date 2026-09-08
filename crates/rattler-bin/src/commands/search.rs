@@ -7,7 +7,9 @@ use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::{
     Channel, ChannelConfig, MatchSpec, ParseMatchSpecOptions, Platform, RepoDataRecord,
 };
-use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
+use rattler_repodata_gateway::RepoData;
+
+use crate::commands::gateway::{build_gateway, load_config};
 
 use super::QueryOutputFormat;
 
@@ -89,17 +91,8 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
     let download_client = super::client::create_client_with_middleware(offline)?;
 
     // Create gateway
-    let gateway = Gateway::builder()
-        .with_client(download_client)
-        .with_channel_config(rattler_repodata_gateway::ChannelConfig {
-            default: SourceConfig {
-                sharded_enabled: opt.sharded,
-                cache_action: super::client::repodata_cache_action(offline),
-                ..SourceConfig::default()
-            },
-            per_channel: HashMap::new(),
-        })
-        .finish();
+    let config = load_config()?;
+    let gateway = build_gateway(download_client, &config, offline, opt.sharded)?;
 
     // Show progress while loading repodata
     let pb = ProgressBar::new_spinner();

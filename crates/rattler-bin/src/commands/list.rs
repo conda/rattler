@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use miette::IntoDiagnostic;
 use rattler_conda_types::{HasArtifactIdentificationRefs, PackageName, PrefixData};
 
+use crate::commands::table::{Cell, Table};
+
 /// Search for packages in conda channels using glob or regex patterns.
 #[derive(Debug, clap::Parser)]
 #[clap(after_help = r#"Examples:
@@ -32,14 +34,6 @@ pub async fn list(opt: Opt) -> miette::Result<()> {
     let prefix = std::path::absolute(&prefix).into_diagnostic()?;
 
     let prefix_data = PrefixData::new(&prefix).into_diagnostic()?;
-    let header = [[
-        "# Name".to_string(),
-        "Version".to_string(),
-        "Build".to_string(),
-        "Channel".to_string(),
-    ]];
-    // These initial widths match the header columns length
-    let mut widths: [usize; 4] = header[0].clone().map(|x| x.len());
     let mut lines = vec![];
     for record in prefix_data.iter() {
         if let Some(Ok(record)) = record {
@@ -55,19 +49,12 @@ pub async fn list(opt: Opt) -> miette::Result<()> {
                 }
             };
 
-            let fields = [
+            lines.push([
                 name.to_string(),
                 record.version().as_str().to_string(),
                 record.build().to_string(),
                 record.repodata_record.channel.clone().unwrap_or_default(),
-            ];
-            for (i, (field, width)) in fields.iter().zip(widths).enumerate() {
-                let field_len = field.len();
-                if field_len > width {
-                    widths[i] = field_len;
-                };
-            }
-            lines.push(fields);
+            ]);
         }
     }
 
@@ -84,14 +71,13 @@ pub async fn list(opt: Opt) -> miette::Result<()> {
 
     lines.sort();
 
-    println!("# packages in environment at {}", prefix.to_string_lossy());
-    for line in header.iter().chain(lines.iter()) {
-        for (i, field) in line.iter().enumerate() {
-            // Two spaces ----vv as inter-column padding
-            print!("{:<width$}  ", field, width = widths[i]);
-        }
-        println!();
+    let mut table = Table::with_header(["# Name", "Version", "Build", "Channel"]);
+    for fields in lines {
+        table.add_row(fields.map(Cell::plain));
     }
+
+    println!("# packages in environment at {}", prefix.to_string_lossy());
+    table.print();
 
     Ok(())
 }
