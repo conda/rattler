@@ -1252,7 +1252,7 @@
 <a href=#1250 id=1250 data-nosnippet>1250</a>    policy: FetchErrorPolicy,
 <a href=#1251 id=1251 data-nosnippet>1251</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(Arc&lt;Subdir&gt;, <span class="prelude-ty">Option</span>&lt;ChannelRelationsWarning&gt;), GatewayError&gt; {
 <a href=#1252 id=1252 data-nosnippet>1252</a>    <span class="kw">match </span>gateway
-<a href=#1253 id=1253 data-nosnippet>1253</a>        .get_or_create_subdir(channel, platform, reporter)
+<a href=#1253 id=1253 data-nosnippet>1253</a>        .get_or_create_subdir(channel, platform, reporter, <span class="bool-val">true</span>)
 <a href=#1254 id=1254 data-nosnippet>1254</a>        .<span class="kw">await
 <a href=#1255 id=1255 data-nosnippet>1255</a>    </span>{
 <a href=#1256 id=1256 data-nosnippet>1256</a>        <span class="prelude-val">Ok</span>(subdir) =&gt; <span class="prelude-val">Ok</span>((subdir, <span class="prelude-val">None</span>)),
