@@ -4152,7 +4152,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.32.6"
+version = "0.32.7"
 dependencies = [
  "ahash",
  "file_url",
@@ -4314,7 +4314,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.33.3"
+version = "0.33.4"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4417,7 +4417,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "9.0.6"
+version = "9.0.7"
 dependencies = [
  "futures",
  "hex",

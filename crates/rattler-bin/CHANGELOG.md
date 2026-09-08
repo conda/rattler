@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/conda/rattler/compare/rattler-bin-v0.2.13...rattler-bin-v0.3.0) - 2026-09-08
+
+### Added
+
+- *(rattler-bin)* [**breaking**] add output formats to search and whoneeds ([#2767](https://github.com/conda/rattler/pull/2767))
+- Support remote URLs in inject, fetch-file, and inspect commands ([#2538](https://github.com/conda/rattler/pull/2538))
+
+### Fixed
+
+- Automatically disable sharded in whoneeds queries ([#2776](https://github.com/conda/rattler/pull/2776))
+
+### Other
+
+- *(rattler-bin)* share gateway construction and table rendering ([#2775](https://github.com/conda/rattler/pull/2775))
+- *(rattler-bin)* CLI output snapshot tests, dependency cleanup, solve warnings ([#2766](https://github.com/conda/rattler/pull/2766))
+
 ## [0.2.13](https://github.com/conda/rattler/compare/rattler-bin-v0.2.12...rattler-bin-v0.2.13) - 2026-09-04
 
 ### Added

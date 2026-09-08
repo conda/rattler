@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2](https://github.com/conda/rattler/compare/rattler_libsolv_c-v1.4.1...rattler_libsolv_c-v1.4.2) - 2026-09-08
+
+### Other
+
+- add zizmor to lefthook pre-commit and fix high-severity findings ([#2769](https://github.com/conda/rattler/pull/2769))
+
 ## [1.4.1](https://github.com/conda/rattler/compare/rattler_libsolv_c-v1.4.0...rattler_libsolv_c-v1.4.1) - 2026-07-14
 
 ### Other
