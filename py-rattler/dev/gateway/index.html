@@ -1976,6 +1976,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="GatewayQueryResult">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rattler.repo_data.gateway.GatewayQueryResult.removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2102,6 +2119,34 @@
     
   
     PatchInstructions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../removed_package/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    RemovedPackage
   
 
     
@@ -3382,6 +3427,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="GatewayQueryResult">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rattler.repo_data.gateway.GatewayQueryResult.removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -4460,6 +4522,36 @@ is needed for custom sources, it must be implemented within the source itself.</
               </div>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="GatewayQueryResult (rattler.repo_data.gateway.GatewayQueryResult)" href="#rattler.repo_data.gateway.GatewayQueryResult">GatewayQueryResult</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The result also carries <code>removed</code>: for every entry in the list, the</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="GatewayQueryResult (rattler.repo_data.gateway.GatewayQueryResult)" href="#rattler.repo_data.gateway.GatewayQueryResult">GatewayQueryResult</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>packages the source lists as removed for the fetched package names.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="GatewayQueryResult (rattler.repo_data.gateway.GatewayQueryResult)" href="#rattler.repo_data.gateway.GatewayQueryResult">GatewayQueryResult</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Use it to detect that a previously locked package was yanked.</p>
+              </div>
+            </td>
+          </tr>
       </tbody>
     </table>
         <h5 id="rattler.repo_data.gateway.Gateway.query--examples">Examples<a class="headerlink" href="#rattler.repo_data.gateway.Gateway.query--examples" title="Permanent link">#</a></h5>
@@ -4684,7 +4776,7 @@ request instead, which is usually much faster for this query.</p>
 
 
 
-        <p>Repodata and CEP-6 notices returned by :meth:<code>Gateway.query</code>.</p>
+        <p>Repodata, removed packages, and CEP-6 notices returned by :meth:<code>Gateway.query</code>.</p>
 <p>This remains a list for compatibility with earlier releases.</p>
 
 
@@ -4704,6 +4796,37 @@ request instead, which is usually much faster for this query.</p>
 
 
 
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rattler.repo_data.gateway.GatewayQueryResult.removed" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">removed</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#rattler.repo_data.gateway.GatewayQueryResult.removed" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">removed</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">removed</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="k">if</span> <span class="n">removed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="k">else</span> <span class="p">[[]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">repodata</span><span class="p">]</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Packages the sources list as removed, one list per entry in <code>repodata</code>.</p>
+<p>Every removed entry of a package name the query fetched is included; the
+match specs of the query do not filter this list. Removed packages never
+appear in <code>repodata</code>.</p>
+
+    </div>
+
+</div>
 
 
 
