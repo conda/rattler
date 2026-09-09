@@ -53,12 +53,9 @@ fn test_compare_different_packages() {
     ]));
 }
 
-/// A prefix fixture with one record per package name, so the listing is
-/// stable. `test-data/conda-meta` cannot be used for this: it holds several
-/// records for the same package (`libsqlite`, `tk`, `xz`), and `PrefixData`
-/// keys its records by package name, so which of them survives depends on the
-/// order the filesystem hands back the directory entries.
-const FIXTURE_PREFIX: &str = "test-data/prefixes/simple";
+/// `test-data` doubles as a prefix here: its `conda-meta` directory holds a
+/// fixed set of prefix records, so the listing is stable.
+const FIXTURE_PREFIX: &str = "test-data";
 
 #[test]
 fn test_list_urls() {
