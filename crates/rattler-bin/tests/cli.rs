@@ -52,3 +52,35 @@ fn test_compare_different_packages() {
         CLOBBER_PACKAGE
     ]));
 }
+
+/// `test-data` doubles as a prefix here: its `conda-meta` directory holds a
+/// fixed set of prefix records. It carries more than one record for a few
+/// package names, of which `PrefixData` keeps the last one by file name, so the
+/// listing is the same on every platform.
+const FIXTURE_PREFIX: &str = "test-data";
+
+#[test]
+fn test_list_urls() {
+    insta::assert_snapshot!(run_rattler(&[
+        "list",
+        "-p",
+        FIXTURE_PREFIX,
+        "--format",
+        "urls"
+    ]));
+}
+
+#[test]
+fn test_list_json() {
+    // A single record keeps the snapshot readable; the format is the same for
+    // the whole listing.
+    insta::assert_snapshot!(run_rattler(&[
+        "list",
+        "-p",
+        FIXTURE_PREFIX,
+        "--full-name",
+        "bzip2",
+        "--format",
+        "json"
+    ]));
+}

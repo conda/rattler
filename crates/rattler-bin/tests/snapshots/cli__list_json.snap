@@ -1,0 +1,23 @@
+---
+source: crates/rattler-bin/tests/cli.rs
+expression: "run_rattler(&[\"list\", \"-p\", FIXTURE_PREFIX, \"--full-name\", \"bzip2\",\n\"--format\", \"json\"])"
+---
+[
+  {
+    "build": "h93a5062_5",
+    "build_number": 5,
+    "depends": [],
+    "license": "bzip2-1.0.6",
+    "license_family": "BSD",
+    "md5": "1bbc659ca658bfd49a481b5ef7a0f40f",
+    "name": "bzip2",
+    "sha256": "bfa84296a638bea78a8bb29abc493ee95f2a0218775642474a840411b950fe5f",
+    "size": 122325,
+    "subdir": "osx-arm64",
+    "timestamp": 1699280294368,
+    "version": "1.0.8",
+    "fn": "bzip2-1.0.8-h93a5062_5.conda",
+    "url": "https://conda.anaconda.org/conda-forge/osx-arm64/bzip2-1.0.8-h93a5062_5.conda",
+    "channel": "https://conda.anaconda.org/conda-forge/"
+  }
+]

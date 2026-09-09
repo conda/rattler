@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, io::Write, time::Instant};
+use std::{collections::HashMap, env, time::Instant};
 
 use indexmap::IndexMap;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -11,7 +11,7 @@ use rattler_repodata_gateway::RepoData;
 
 use crate::commands::gateway::{build_gateway, load_config};
 
-use super::QueryOutputFormat;
+use super::{QueryOutputFormat, print_url_lines};
 
 /// Search for packages in conda channels using glob or regex patterns.
 #[derive(Debug, clap::Parser)]
@@ -142,23 +142,7 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
                 .then_with(|| b.cmp(a))
         });
 
-        // This output is meant to be piped (e.g. into `head`), so a closed
-        // stdout is a normal way to end instead of an error.
-        let mut stdout = std::io::stdout().lock();
-        for record in records {
-            if let Err(err) = writeln!(stdout, "{}", record.url) {
-                if err.kind() == std::io::ErrorKind::BrokenPipe {
-                    return Ok(());
-                }
-                return Err(err).into_diagnostic();
-            }
-        }
-        if let Err(err) = stdout.flush()
-            && err.kind() != std::io::ErrorKind::BrokenPipe
-        {
-            return Err(err).into_diagnostic();
-        }
-        return Ok(());
+        return print_url_lines(records.iter().map(|record| &record.url));
     }
 
     // Collect all records

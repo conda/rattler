@@ -1,4 +1,4 @@
-use std::{env, io::Write, path::Path, time::Instant};
+use std::{env, path::Path, time::Instant};
 
 use futures_util::TryStreamExt;
 use indexmap::IndexMap;
@@ -11,7 +11,7 @@ use rattler_conda_types::{
 use rattler_repodata_gateway::who_needs::{DependencyKind, Dependent, WhoNeedsTarget};
 use url::Url;
 
-use super::QueryOutputFormat;
+use super::{QueryOutputFormat, print_url_lines};
 use crate::commands::gateway::{build_gateway, load_config};
 
 /// Show packages that depend on the given package (reverse dependencies).
@@ -181,23 +181,7 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
         });
         records.dedup_by(|a, b| a.3 == b.3);
 
-        // This output is meant to be piped (e.g. into `head`), so a closed
-        // stdout is a normal way to end instead of an error.
-        let mut stdout = std::io::stdout().lock();
-        for (_, _, _, url) in records {
-            if let Err(err) = writeln!(stdout, "{url}") {
-                if err.kind() == std::io::ErrorKind::BrokenPipe {
-                    return Ok(());
-                }
-                return Err(err).into_diagnostic();
-            }
-        }
-        if let Err(err) = stdout.flush()
-            && err.kind() != std::io::ErrorKind::BrokenPipe
-        {
-            return Err(err).into_diagnostic();
-        }
-        return Ok(());
+        return print_url_lines(records.into_iter().map(|(_, _, _, url)| url));
     }
 
     if opt.format == Some(QueryOutputFormat::Json) {
