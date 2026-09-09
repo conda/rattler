@@ -31,7 +31,11 @@ rustls = [
   "rattler_networking/rustls",
   "rattler_cache/rustls",
 ]
-s3 = ["rattler_networking/s3", "rattler_upload/s3"]
+s3 = [
+  "rattler_networking/s3",
+  "rattler_networking/rattler_config",
+  "rattler_upload/s3",
+]
 gcs = ["rattler_networking/gcs"]
 oauth = ["rattler/oauth"]
 
@@ -72,6 +76,7 @@ rattler_upload = { workspace = true }
 rattler_shell = { workspace = true, default-features = false }
 reqwest = { workspace = true, features = ["stream", "query"] }
 reqwest-middleware = { workspace = true }
+reqwest-retry = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tempfile = { workspace = true }

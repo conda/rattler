@@ -66,10 +66,16 @@ impl PrefixData {
             return Err(PrefixDataError(Arc::new(io_err)));
         };
 
-        for entry in fs::read_dir(meta_dir)? {
-            let entry = entry?;
-            let path = entry.path();
+        // The entries are sorted before they are inserted: records are keyed by
+        // package name, so if a prefix holds more than one record for the same
+        // name the last entry wins. Walking the directory in `fs::read_dir`
+        // order would make that choice depend on the filesystem.
+        let mut paths = fs::read_dir(meta_dir)?
+            .map(|entry| entry.map(|entry| entry.path()))
+            .collect::<Result<Vec<_>, _>>()?;
+        paths.sort_unstable();
 
+        for path in paths {
             if path.extension().and_then(|s| s.to_str()) != Some("json") {
                 continue;
             }
@@ -189,6 +195,34 @@ mod tests {
         assert!(
             prefix_data.get(&does_not_exist_name).is_none(),
             "Expected None because the package is not in the directory at all"
+        );
+    }
+
+    #[test]
+    fn test_prefix_data_picks_last_record_by_file_name() {
+        let dir = tempdir().unwrap();
+        let meta_dir = dir.path().join("conda-meta");
+        fs::create_dir_all(&meta_dir).unwrap();
+
+        // A prefix should never hold two records for the same package, but if it
+        // does the choice has to be the same everywhere instead of following the
+        // order the filesystem hands the entries out in.
+        fs::write(meta_dir.join("numpy-1.24.3-py311h_0.json"), "{}").unwrap();
+        fs::write(meta_dir.join("numpy-1.26.4-py311h_0.json"), "{}").unwrap();
+
+        let prefix_data = PrefixData::new(dir.path()).unwrap();
+        let numpy_name = PackageName::try_from("numpy").unwrap();
+
+        assert_eq!(prefix_data.records.len(), 1);
+        assert_eq!(
+            prefix_data
+                .records
+                .get(&numpy_name)
+                .unwrap()
+                .path
+                .file_name()
+                .unwrap(),
+            "numpy-1.26.4-py311h_0.json"
         );
     }
 }

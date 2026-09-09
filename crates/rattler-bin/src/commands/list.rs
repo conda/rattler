@@ -10,7 +10,7 @@ use crate::commands::{
     table::{Cell, Table},
 };
 
-/// List the packages installed in an environment.
+/// List the packages installed in a conda prefix.
 #[derive(Debug, clap::Parser)]
 #[clap(after_help = r#"Examples:
   rattler list -p /path/to/environment
@@ -26,8 +26,8 @@ pub struct Opt {
     )]
     target_prefix: Option<PathBuf>,
 
-    /// The name (or glob) of the packages to list
-    name: Option<PackageName>, // maybe this could be a full MatchSpec?
+    /// Only list packages whose name contains this string
+    name: Option<PackageName>,
 
     /// Match full names only
     #[clap(short, long)]
@@ -47,21 +47,31 @@ pub async fn list(opt: Opt) -> miette::Result<()> {
     let prefix_data = PrefixData::new(&prefix).into_diagnostic()?;
     let mut records: Vec<&PrefixRecord> = vec![];
     for record in prefix_data.iter() {
-        if let Some(Ok(record)) = record {
-            let name = record.name().as_normalized();
-            if let Some(query) = &opt.name {
-                let normalized_query = query.as_normalized();
-                if opt.full_name {
-                    if normalized_query != name {
-                        continue;
-                    }
-                } else if !name.contains(normalized_query) {
+        let record = match record {
+            Some(Ok(record)) => record,
+            // A record that cannot be read makes the listing incomplete,
+            // which should not go unnoticed, but it is no reason to withhold
+            // the records that can be read.
+            Some(Err(err)) => {
+                tracing::warn!("skipping a conda-meta record that could not be read: {err}");
+                continue;
+            }
+            None => continue,
+        };
+
+        let name = record.name().as_normalized();
+        if let Some(query) = &opt.name {
+            let normalized_query = query.as_normalized();
+            if opt.full_name {
+                if normalized_query != name {
                     continue;
                 }
-            };
+            } else if !name.contains(normalized_query) {
+                continue;
+            }
+        };
 
-            records.push(record);
-        }
+        records.push(record);
     }
 
     if let Some(query) = &opt.name
