@@ -117,7 +117,7 @@ async def test_channel_notices(tmp_path: Path) -> None:
         (PackageFormatSelection.PREFER_CONDA, 4),
         (PackageFormatSelection.ONLY_CONDA, 3),
         (PackageFormatSelection.PREFER_CONDA_WITH_WHL, 19),
-        (None, 4), # same as PREFER_CONDA
+        (None, 4),  # same as PREFER_CONDA
     ],
 )
 async def test_query_package_format_selection(package_format: PackageFormatSelection, expected_results: int) -> None:

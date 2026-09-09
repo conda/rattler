@@ -95,6 +95,7 @@ fn filter_records_by_package_format(
     selection: PackageFormatSelection,
 ) -> Vec<Arc<RepoDataRecord>> {
     match selection {
+        PackageFormatSelection::All => records,
         PackageFormatSelection::Both => records
             .into_iter()
             .filter(|r| !matches!(r.identifier.archive_type, DistArchiveType::Wheel(_)))
@@ -257,6 +258,7 @@ impl SubdirData {
         &self,
         name: &PackageName,
         reporter: Option<&dyn Reporter>,
+        package_format_selection: PackageFormatSelection,
     ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
         let records = if let Some(cached) = self.records.get(name) {
             cached.records
@@ -268,7 +270,7 @@ impl SubdirData {
         };
         Ok(filter_records_by_package_format(
             records,
-            PackageFormatSelection::PreferCondaWithWhl,
+            package_format_selection,
         ))
     }
 

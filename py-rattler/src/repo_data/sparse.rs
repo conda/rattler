@@ -68,6 +68,7 @@ pub enum PyPackageFormatSelection {
     PreferConda,
     PreferCondaWithWhl,
     Both,
+    All,
 }
 
 impl Default for PyPackageFormatSelection {
@@ -86,6 +87,7 @@ impl From<PackageFormatSelection> for PyPackageFormatSelection {
                 PyPackageFormatSelection::PreferCondaWithWhl
             }
             PackageFormatSelection::Both => PyPackageFormatSelection::Both,
+            PackageFormatSelection::All => PyPackageFormatSelection::All,
         }
     }
 }
@@ -100,6 +102,7 @@ impl From<PyPackageFormatSelection> for PackageFormatSelection {
                 PackageFormatSelection::PreferCondaWithWhl
             }
             PyPackageFormatSelection::Both => PackageFormatSelection::Both,
+            PyPackageFormatSelection::All => PackageFormatSelection::All,
         }
     }
 }

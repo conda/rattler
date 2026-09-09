@@ -72,6 +72,9 @@ pub enum PackageFormatSelection {
 
     /// Both .tar.bz2 and .conda packages are used
     Both,
+
+    /// All packages are included
+    All,
 }
 
 /// A package that a repodata index lists under its `removed` key. The archive
@@ -270,7 +273,7 @@ impl SparseRepoData {
                         .dedup(),
                 ))
             }
-            PackageFormatSelection::PreferCondaWithWhl => {
+            PackageFormatSelection::PreferCondaWithWhl | PackageFormatSelection::All => {
                 itertools::Either::Left(itertools::Either::Right(
                     tar_bz2_packages
                         .merge(v3_tar)
@@ -292,6 +295,40 @@ impl SparseRepoData {
     pub fn record_count(&self, package_format_selection: PackageFormatSelection) -> usize {
         let repo_data = self.inner.borrow_repo_data();
         match package_format_selection {
+            PackageFormatSelection::All => {
+                let tar_bz2 = repo_data.packages.iter().map(|(filename, _)| {
+                    filename
+                        .filename
+                        .strip_suffix(CondaArchiveType::TarBz2.extension())
+                        .unwrap_or(filename.filename)
+                });
+                let v3_tar = repo_data
+                    .v3
+                    .tar_bz2
+                    .iter()
+                    .map(|(filename, _)| filename.filename);
+                let conda = repo_data.conda_packages.iter().map(|(filename, _)| {
+                    filename
+                        .filename
+                        .strip_suffix(CondaArchiveType::Conda.extension())
+                        .unwrap_or(filename.filename)
+                });
+                let v3_conda = repo_data
+                    .v3
+                    .conda
+                    .iter()
+                    .map(|(filename, _)| filename.filename);
+
+                let v3_whl = repo_data
+                    .v3
+                    .whl
+                    .iter()
+                    .map(|(filename, _)| filename.filename);
+
+                tar_bz2.merge(v3_tar).dedup().count()
+                    + conda.merge(v3_conda).dedup().count()
+                    + v3_whl.count()
+            }
             PackageFormatSelection::PreferConda | PackageFormatSelection::PreferCondaWithWhl => {
                 let tar_bz2_packages = repo_data.packages.iter().map(|(filename, _)| {
                     filename
@@ -962,6 +999,59 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
                 });
             parse_records_raw(
                 conda.map(|(filename, raw_json, kind, _)| (filename, raw_json, kind)),
+                removed,
+                base_url,
+                channel,
+                subdir,
+                patch_function,
+                filter_function,
+            )
+        }
+        PackageFormatSelection::All => {
+            let tar_bz2 = add_stripped_filename(
+                find_package_in_slice(tar_bz2_packages, package_name, RecordKind::CondaOrTarBz2),
+                DistArchiveType::from(CondaArchiveType::TarBz2),
+            );
+            let v3_tar = add_stripped_filename(
+                find_package_in_slice(&v3.tar_bz2, package_name, RecordKind::V3TarBz2),
+                DistArchiveType::from(CondaArchiveType::TarBz2),
+            );
+            let tar_bz2 = tar_bz2
+                .merge_by(
+                    v3_tar,
+                    |(_, _, _, legacy_archive), (_, _, _, v3_archive)| legacy_archive < v3_archive,
+                )
+                .dedup_by(|(_, _, _, previous_archive), (_, _, _, next_archive)| {
+                    previous_archive == next_archive
+                });
+
+            let conda = add_stripped_filename(
+                find_package_in_slice(conda_packages, package_name, RecordKind::CondaOrTarBz2),
+                DistArchiveType::from(CondaArchiveType::Conda),
+            );
+            let v3_conda = add_stripped_filename(
+                find_package_in_slice(&v3.conda, package_name, RecordKind::V3Conda),
+                DistArchiveType::from(CondaArchiveType::Conda),
+            );
+            let conda = conda
+                .merge_by(
+                    v3_conda,
+                    |(_, _, _, legacy_archive), (_, _, _, v3_archive)| legacy_archive < v3_archive,
+                )
+                .dedup_by(|(_, _, _, previous_archive), (_, _, _, next_archive)| {
+                    previous_archive == next_archive
+                });
+
+            let whl = add_stripped_filename(
+                find_package_in_slice(&v3.whl, package_name, RecordKind::V3Whl),
+                DistArchiveType::from(WheelArchiveType::Whl),
+            );
+
+            parse_records_raw(
+                tar_bz2
+                    .chain(conda)
+                    .chain(whl)
+                    .map(|(filename, raw_json, kind, _)| (filename, raw_json, kind)),
                 removed,
                 base_url,
                 channel,
@@ -1819,6 +1909,7 @@ mod test {
     #[case::prefer_conda_with_whl(PackageFormatSelection::PreferCondaWithWhl, 25)]
     #[case::only_tar_bz2(PackageFormatSelection::OnlyTarBz2, 24)]
     #[case::only_conda(PackageFormatSelection::OnlyConda, 5)]
+    #[case::both(PackageFormatSelection::All, 29)]
     fn test_record_count(#[case] variant: PackageFormatSelection, #[case] expected_count: usize) {
         let (channel, platform, path) = dummy_repo_data();
         let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
@@ -1832,6 +1923,7 @@ mod test {
     #[case::prefer_conda_with_whl(PackageFormatSelection::PreferCondaWithWhl, 51)]
     #[case::only_tar_bz2(PackageFormatSelection::OnlyTarBz2, 3)]
     #[case::only_conda(PackageFormatSelection::OnlyConda, 3)]
+    #[case::only_conda(PackageFormatSelection::All, 51)]
     fn test_record_count_with_wheels(
         #[case] variant: PackageFormatSelection,
         #[case] expected_count: usize,
