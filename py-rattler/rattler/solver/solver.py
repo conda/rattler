@@ -43,7 +43,7 @@ async def solve(
     channel_relations_max_depth: int | None = None,
     add_pip_as_python_dependency: bool = False,
     timestamp_policy: TimestampPolicy = "require-timestamp",
-    package_format_selection: PackageFormatSelection | None = None,
+    package_format_selection: PackageFormatSelection | None = PackageFormatSelection.ALL,
 ) -> list[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s

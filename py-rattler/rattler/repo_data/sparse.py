@@ -47,6 +47,12 @@ class PackageFormatSelection(Enum):
     Use both the `.tar.bz2` and the `.conda` packages.
     """
 
+    ALL = PyPackageFormatSelection.All
+    """
+    Use every available package, including `.tar.bz2`, `.conda` and `.whl` packages,
+    without any deduplication between formats.
+    """
+
 
 class SparseRepoData:
     """

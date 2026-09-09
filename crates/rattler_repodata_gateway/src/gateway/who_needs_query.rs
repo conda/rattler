@@ -33,6 +33,7 @@ use super::{
 };
 use crate::{
     Reporter,
+    sparse::PackageFormatSelection,
     who_needs::{Dependent, WhoNeedsTarget, who_needs},
 };
 
@@ -349,7 +350,11 @@ fn scan_subdir(
                     let mut matches = Vec::new();
                     for name in batch {
                         let records = subdir_data
-                            .fetch_package_records_uncached(&name, reporter.as_deref())
+                            .fetch_package_records_uncached(
+                                &name,
+                                reporter.as_deref(),
+                                PackageFormatSelection::default(),
+                            )
                             .await?;
                         matches.extend(who_needs(&records, &target));
                         // The scanned records are dropped here; only the
