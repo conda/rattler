@@ -54,7 +54,9 @@ fn test_compare_different_packages() {
 }
 
 /// `test-data` doubles as a prefix here: its `conda-meta` directory holds a
-/// fixed set of prefix records, so the listing is stable.
+/// fixed set of prefix records. It carries more than one record for a few
+/// package names, of which `PrefixData` keeps the last one by file name, so the
+/// listing is the same on every platform.
 const FIXTURE_PREFIX: &str = "test-data";
 
 #[test]
