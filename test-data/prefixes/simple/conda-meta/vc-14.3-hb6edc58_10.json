@@ -1,0 +1,35 @@
+{
+  "arch": "x86_64",
+  "build": "hb6edc58_10",
+  "build_number": 10,
+  "channel": "https://conda.anaconda.org/conda-forge/win-64",
+  "constrains": [],
+  "depends": [
+    "vs2015_runtime >=14.34.31931"
+  ],
+  "extracted_package_dir": "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\vc-14.3-hb6edc58_10",
+  "files": [],
+  "fn": "vc-14.3-hb6edc58_10.conda",
+  "license": "BSD-3-Clause",
+  "license_family": "BSD",
+  "link": {
+    "source": "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\vc-14.3-hb6edc58_10",
+    "type": 1
+  },
+  "md5": "52d246d8d14b83c516229be5bb03a163",
+  "name": "vc",
+  "package_tarball_full_path": "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\vc-14.3-hb6edc58_10.conda",
+  "paths_data": {
+    "paths": [],
+    "paths_version": 1
+  },
+  "platform": "win32",
+  "requested_spec": "conda-forge/win-64::vc==14.3=hb6edc58_10[md5=52d246d8d14b83c516229be5bb03a163]",
+  "sha256": "05d5ae5859e8d097559f5445ffbaeac638c9875e4d2a0c5fd8c4bb1c010d35c1",
+  "size": 15650,
+  "subdir": "win-64",
+  "timestamp": 1673513671518,
+  "track_features": "vc14",
+  "url": "https://conda.anaconda.org/conda-forge/win-64/vc-14.3-hb6edc58_10.conda",
+  "version": "14.3"
+}
