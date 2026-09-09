@@ -3,7 +3,7 @@ use std::{path::Path, str::FromStr, sync::Arc, time::SystemTime};
 use super::{REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX, ShardedRepodata};
 use crate::{
     GatewayError, Reporter,
-    fetch::CacheAction,
+    fetch::{CacheAction, CacheFreshness},
     gateway::{
         error::SubdirNotFoundError,
         sharded_subdir::{decode_zst_bytes_async, is_missing_sharded_repodata_status},
@@ -49,6 +49,7 @@ pub async fn fetch_index(
     channel_base_url: &Url,
     cache_dir: &Path,
     cache_action: CacheAction,
+    cache_freshness: CacheFreshness,
     concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
     reporter: Option<&dyn Reporter>,
 ) -> Result<ShardedRepodata, GatewayError> {
@@ -167,36 +168,57 @@ pub async fn fetch_index(
     if cache_action != CacheAction::NoCache
         && let Ok(cache_header) = read_cached_index(&mut cache_reader).await
     {
-        // Check if the cache indicates the resource was unavailable
-        // (404 or 501)
-        if cache_header.not_found {
-            tracing::debug!(
-                "cached not-available response for sharded index at {channel_base_url}"
-            );
-            return Err(create_subdir_not_found_error(channel_base_url));
-        }
-
         // If we are in cache-only mode we can't fetch the index from the server
         if cache_action == CacheAction::ForceCacheOnly {
+            if cache_header.not_found {
+                return Err(create_subdir_not_found_error(channel_base_url));
+            }
             if let Ok(shard_index) = read_shard_index_from_reader(&mut cache_reader).await {
                 tracing::debug!("using locally cached shard index for {channel_base_url}");
                 return Ok(shard_index);
             }
         } else {
-            match cache_header
-                .policy
-                .before_request(&canonical_request, SystemTime::now())
-            {
-                BeforeRequest::Fresh(_) => {
+            let now = SystemTime::now();
+            let override_is_fresh = match cache_freshness {
+                CacheFreshness::Override(max_age) => cache_header.policy.age(now) < max_age,
+                CacheFreshness::AlwaysRevalidate | CacheFreshness::HttpCacheControl => false,
+            };
+            let mut revalidation_request = SimpleRequest::get(&canonical_shards_url);
+            if matches!(
+                cache_freshness,
+                CacheFreshness::AlwaysRevalidate | CacheFreshness::Override(_)
+            ) {
+                revalidation_request.headers.insert(
+                    http::header::CACHE_CONTROL,
+                    http::HeaderValue::from_static("no-cache"),
+                );
+            }
+            let before_request = if override_is_fresh {
+                None
+            } else {
+                Some(
+                    cache_header
+                        .policy
+                        .before_request(&revalidation_request, now),
+                )
+            };
+            match before_request {
+                None | Some(BeforeRequest::Fresh(_)) => {
+                    if cache_header.not_found {
+                        tracing::debug!(
+                            "cached not-available response for sharded index at {channel_base_url}"
+                        );
+                        return Err(create_subdir_not_found_error(channel_base_url));
+                    }
                     if let Ok(shard_index) = read_shard_index_from_reader(&mut cache_reader).await {
                         tracing::debug!("shard index cache hit");
                         return Ok(shard_index);
                     }
                 }
-                BeforeRequest::Stale {
+                Some(BeforeRequest::Stale {
                     request: state_request,
                     ..
-                } => {
+                }) => {
                     if cache_action == CacheAction::UseCacheOnly {
                         // Cache-only and what we have may not be used, so this
                         // subdir has no sharded index we can read. The caller
@@ -272,26 +294,62 @@ pub async fn fetch_index(
                         &response,
                         SystemTime::now(),
                     ) {
-                        AfterResponse::NotModified(_policy, _) => {
-                            // The cached file is still valid
-                            match read_shard_index_from_reader(&mut cache_reader).await {
-                                Ok(shard_index) => {
-                                    tracing::debug!("shard index cache was not modified");
-                                    if let Some((reporter, index)) = download_reporter {
-                                        reporter.on_download_complete(response.url(), index);
+                        AfterResponse::NotModified(policy, _) => {
+                            // Persist the refreshed policy so a TTL starts again after a 304.
+                            if cache_header.not_found {
+                                write_not_found_cache(
+                                    cache_reader.into_inner().inner_mut(),
+                                    policy,
+                                )
+                                .await
+                                .map_err(|e| {
+                                    GatewayError::IoError(
+                                        format!(
+                                            "failed to refresh not-found cache for shard index at {}",
+                                            cache_path.display()
+                                        ),
+                                        e,
+                                    )
+                                })?;
+                                return Err(create_subdir_not_found_error(channel_base_url));
+                            }
+                            let mut bytes = Vec::new();
+                            match cache_reader.read_to_end(&mut bytes).await {
+                                Ok(_) => match parse_shard_index(bytes.clone()).await {
+                                    Ok(shard_index) => {
+                                        write_shard_index_cache(
+                                            cache_reader.into_inner().inner_mut(),
+                                            policy,
+                                            Bytes::from(bytes),
+                                        )
+                                        .await
+                                        .map_err(|e| {
+                                            GatewayError::IoError(
+                                                format!(
+                                                    "failed to refresh shard index cache at {}",
+                                                    cache_path.display()
+                                                ),
+                                                e,
+                                            )
+                                        })?;
+                                        tracing::debug!("shard index cache was not modified");
+                                        if let Some((reporter, index)) = download_reporter {
+                                            reporter.on_download_complete(response.url(), index);
+                                        }
+                                        return Ok(shard_index);
                                     }
-                                    // If reading the file failed for some reason we'll just
-                                    // fetch it again.
-                                    return Ok(shard_index);
-                                }
+                                    Err(e) => {
+                                        tracing::warn!(
+                                            "the cached shard index has been corrupted: {e}"
+                                        );
+                                    }
+                                },
                                 Err(e) => {
-                                    tracing::warn!(
-                                        "the cached shard index has been corrupted: {e}"
-                                    );
-                                    if let Some((reporter, index)) = download_reporter {
-                                        reporter.on_download_complete(response.url(), index);
-                                    }
+                                    tracing::warn!("failed to read the cached shard index: {e}");
                                 }
+                            }
+                            if let Some((reporter, index)) = download_reporter {
+                                reporter.on_download_complete(response.url(), index);
                             }
                         }
                         AfterResponse::Modified(policy, _) => {
@@ -467,14 +525,15 @@ async fn write_not_found_cache(cache_file: &mut File, policy: CachePolicy) -> st
 pub async fn read_shard_index_from_reader<R: AsyncRead + Unpin>(
     reader: &mut BufReader<R>,
 ) -> Result<ShardedRepodata, GatewayError> {
-    // Read the file to memory
     let mut bytes = Vec::new();
     reader
         .read_to_end(&mut bytes)
         .await
         .map_err(|e| GatewayError::IoError("failed to read shard index buffer".to_string(), e))?;
+    parse_shard_index(bytes).await
+}
 
-    // Deserialize the bytes
+async fn parse_shard_index(bytes: Vec<u8>) -> Result<ShardedRepodata, GatewayError> {
     run_blocking_task(move || {
         rmp_serde::from_slice(&bytes)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))

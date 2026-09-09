@@ -13,7 +13,7 @@ use super::{
 };
 use crate::{
     GatewayError, Reporter,
-    fetch::{CacheAction, FetchRepoDataError},
+    fetch::{CacheAction, CacheFreshness, FetchRepoDataError},
     gateway::{
         error::SubdirNotFoundError,
         subdir::{PackageRecords, SubdirClient},
@@ -38,6 +38,9 @@ pub(crate) const SHARDS_CACHE_SUFFIX: &str = ".shards-cache-v1";
 pub struct ShardCachePolicy {
     /// How fetching shards should interact with the cache.
     pub action: CacheAction,
+
+    /// Controls how long the cached shard index is considered fresh.
+    pub freshness: CacheFreshness,
 
     /// See [`crate::SourceConfig::missing_shards_are_empty`].
     pub missing_shards_are_empty: bool,
@@ -90,6 +93,7 @@ impl ShardedSubdir {
             &index_base_url,
             &cache_dir,
             cache_policy.action,
+            cache_policy.freshness,
             concurrent_requests_semaphore.clone(),
             reporter,
         )

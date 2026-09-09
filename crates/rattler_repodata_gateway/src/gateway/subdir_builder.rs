@@ -157,6 +157,7 @@ impl<'g> SubdirBuilder<'g> {
             #[cfg(not(target_arch = "wasm32"))]
             sharded_subdir::ShardCachePolicy {
                 action: _source_config.cache_action,
+                freshness: _source_config.cache_freshness,
                 missing_shards_are_empty: _source_config.missing_shards_are_empty,
             },
             self.gateway.concurrent_requests_semaphore.clone(),
