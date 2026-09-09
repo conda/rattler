@@ -286,7 +286,10 @@ pub fn link_file(
             .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
 
         LinkMethod::Patched(*file_mode)
-    } else if path_json_entry.path_type == PathType::HardLink && allow_ref_links {
+    } else if path_json_entry.path_type == PathType::HardLink
+        && allow_ref_links
+        && !(allow_hard_links && shares_inode_across_prefixes(&source_path))
+    {
         reflink_to_destination(&source_path, &destination_path, allow_hard_links)?
     } else if path_json_entry.path_type == PathType::HardLink && allow_hard_links {
         hardlink_to_destination(&source_path, &destination_path)?
@@ -420,6 +423,40 @@ fn map_or_read_source_file(source_path: &Path) -> Result<MmapOrBytes, LinkFileEr
             MmapOrBytes::Bytes(bytes)
         }
     })
+}
+
+/// Whether a file is hard linked into the prefix even when a reflink is
+/// possible, so that every prefix shares the cached file's inode.
+///
+/// On macOS, a clone is a new inode, and the kernel validates the code
+/// signature of an executable or library per inode the first time it is
+/// loaded. With one inode per prefix that validation repeats for every
+/// prefix, which makes the first run of a freshly created environment
+/// noticeably slower than the second. Hard links keep the inode that was
+/// already validated when the file was first used from any prefix.
+///
+/// Native libraries are recognised by extension, executables by their mode.
+fn shares_inode_across_prefixes(source_path: &Path) -> bool {
+    if !cfg!(target_os = "macos") {
+        return false;
+    }
+    if is_native_library(source_path) {
+        return true;
+    }
+    fs::symlink_metadata(source_path)
+        .is_ok_and(|metadata| has_executable_permissions(&metadata.permissions()))
+}
+
+/// Whether the file name looks like a shared library (`.dylib`, `.so`, `.so.1.2`).
+fn is_native_library(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    name.ends_with(".dylib")
+        || name.ends_with(".so")
+        || name.rsplit_once(".so.").is_some_and(|(_, version)| {
+            !version.is_empty() && version.bytes().all(|b| b.is_ascii_digit() || b == b'.')
+        })
 }
 
 /// Reflink (Copy-On-Write) the specified file from the source (or cached) directory. If the file
@@ -1333,6 +1370,31 @@ mod test {
     }
 
     #[test]
+    fn test_is_native_library() {
+        use super::is_native_library;
+        use std::path::Path;
+
+        for name in [
+            "lib/libfoo.dylib",
+            "lib/libfoo.so",
+            "lib/libfoo.so.1",
+            "lib/libfoo.so.1.2.3",
+            "lib/python3.12/site-packages/numpy/_core/_multiarray_umath.cpython-312-darwin.so",
+        ] {
+            assert!(is_native_library(Path::new(name)), "{name}");
+        }
+        for name in [
+            "bin/python",
+            "lib/libfoo.so.txt",
+            "lib/libfoo.so.",
+            "share/doc/README.dylib.md",
+            "lib/foo.a",
+        ] {
+            assert!(!is_native_library(Path::new(name)), "{name}");
+        }
+    }
+
+    #[test]
     fn test_detect_file_type() {
         use super::FileType;
 
@@ -1373,6 +1435,10 @@ mod test {
         assert_eq!(FileType::detect(&empty), None);
     }
 
+    #[cfg_attr(
+        windows,
+        ignore = "creating symlinks on Windows requires elevated privileges"
+    )]
     #[test]
     fn test_symlink_escape_rejected() {
         use super::{LinkFileError, symlink_to_destination};
@@ -1405,6 +1471,10 @@ mod test {
         ));
     }
 
+    #[cfg_attr(
+        windows,
+        ignore = "creating symlinks on Windows requires elevated privileges"
+    )]
     #[test]
     fn test_symlink_within_prefix_allowed() {
         let tmp = tempfile::tempdir().unwrap();
