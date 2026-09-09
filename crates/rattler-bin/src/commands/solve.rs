@@ -15,7 +15,9 @@ use url::Url;
 
 use crate::{
     commands::{
+        QueryOutputFormat,
         gateway::{build_gateway, load_config},
+        print_url_lines,
         progress::{wrap_in_async_progress, wrap_in_progress},
         table::{Cell, Table},
     },
@@ -27,6 +29,10 @@ use crate::{
 /// Resolves the specified package specs for a target platform and prints the
 /// resulting package set.
 #[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler solve python numpy                 # print the solved environment as a table
+  rattler solve python --format json         # print the solved records as JSON
+  rattler solve python --format urls         # print only the urls of the solved packages"#)]
 pub struct Opt {
     /// Package specs to solve.
     #[clap(required = true)]
@@ -35,9 +41,9 @@ pub struct Opt {
     #[clap(flatten)]
     solver: SolverArgs,
 
-    /// Output in JSON format
+    /// Output format (defaults to human-readable output)
     #[clap(long)]
-    json: bool,
+    format: Option<QueryOutputFormat>,
 }
 
 pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
@@ -133,31 +139,37 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
 
     if solved_packages.is_empty() {
         eprintln!("No packages solved");
-        if opt.json {
+        if opt.format == Some(QueryOutputFormat::Json) {
             println!("[]");
         }
         return Ok(());
     }
 
-    if opt.json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&solved_packages).into_diagnostic()?
-        );
-    } else {
-        eprintln!(
-            "Solved {} package{} in {}:",
-            solved_packages.len(),
-            if solved_packages.len() == 1 { "" } else { "s" },
-            format_elapsed(solve_duration)
-        );
-        print_records(
-            &solved_packages,
-            &solver_result.extras,
-            &specs,
-            &constraints,
-            &channel_config,
-        );
+    match opt.format {
+        Some(QueryOutputFormat::Json) => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&solved_packages).into_diagnostic()?
+            );
+        }
+        Some(QueryOutputFormat::Urls) => {
+            print_url_lines(solved_packages.iter().map(|record| &record.url))?;
+        }
+        None => {
+            eprintln!(
+                "Solved {} package{} in {}:",
+                solved_packages.len(),
+                if solved_packages.len() == 1 { "" } else { "s" },
+                format_elapsed(solve_duration)
+            );
+            print_records(
+                &solved_packages,
+                &solver_result.extras,
+                &specs,
+                &constraints,
+                &channel_config,
+            );
+        }
     }
 
     Ok(())
