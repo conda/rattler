@@ -1,0 +1,66 @@
+version: 1
+metadata:
+  content_hash:
+    linux-64: af8caa5bbfb00f2641c82d05c7258a316df062d8fadc022a7f47dfd3a25ab331
+    osx-arm64: c42e37e577b97bb1e4aafd415a42d1f7cf3e2e579df9250afcf87f8816c32393
+    osx-64: a2df6aa6d2047b27fae27db33b1a91895832d43ff9f36c6975d416fe8ca75ac3
+    win-64: 0330a1a7629629d74acdf2d60b6a18e7691b47b25e14fa6b1f65fc31cc302951
+  channels:
+  - url: conda-forge
+    used_env_vars: []
+  platforms:
+  - linux-64
+  - osx-arm64
+  - osx-64
+  - win-64
+  sources:
+  - environment.yml
+package:
+- name: ca-certificates
+  version: 2025.10.5
+  manager: conda
+  platform: linux-64
+  dependencies:
+    __unix: ''
+  url: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2025.10.5-hbd8a1cb_0.conda
+  hash:
+    md5: f9e5fbc24009179e8b0409624691758a
+    sha256: 3b5ad78b8bb61b6cdc0978a6a99f8dfb2cc789a451378d054698441005ecbdb6
+  category: main
+  optional: false
+- name: ca-certificates
+  version: 2025.10.5
+  manager: conda
+  platform: osx-64
+  dependencies:
+    __unix: ''
+  url: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2025.10.5-hbd8a1cb_0.conda
+  hash:
+    md5: f9e5fbc24009179e8b0409624691758a
+    sha256: 3b5ad78b8bb61b6cdc0978a6a99f8dfb2cc789a451378d054698441005ecbdb6
+  category: main
+  optional: false
+- name: ca-certificates
+  version: 2025.10.5
+  manager: conda
+  platform: osx-arm64
+  dependencies:
+    __unix: ''
+  url: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2025.10.5-hbd8a1cb_0.conda
+  hash:
+    md5: f9e5fbc24009179e8b0409624691758a
+    sha256: 3b5ad78b8bb61b6cdc0978a6a99f8dfb2cc789a451378d054698441005ecbdb6
+  category: main
+  optional: false
+- name: ca-certificates
+  version: 2025.10.5
+  manager: conda
+  platform: win-64
+  dependencies:
+    __win: ''
+  url: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2025.10.5-h4c7d964_0.conda
+  hash:
+    md5: e54200a1cd1fe33d61c9df8d3b00b743
+    sha256: bfb7f9f242f441fdcd80f1199edd2ecf09acea0f2bcef6f07d7cbb1a8131a345
+  category: main
+  optional: false

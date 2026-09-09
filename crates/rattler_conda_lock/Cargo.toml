@@ -1,0 +1,37 @@
+[package]
+name = "rattler_conda_lock"
+version = "0.1.0"
+edition.workspace = true
+authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
+description = "Read and write CEP-37 conda lockfiles with source-aware diagnostics"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+
+[features]
+default = []
+miette = ["dep:miette"]
+
+[dependencies]
+hex = { workspace = true }
+jiff = { workspace = true }
+miette = { workspace = true, optional = true }
+pep440_rs = { workspace = true }
+pep508_rs = { workspace = true }
+rattler_conda_types = { workspace = true, default-features = false }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde-json-python-formatter = { workspace = true }
+serde-saphyr = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true }
+rstest = { workspace = true }
+serde_yaml = { workspace = true }
+sha2 = { workspace = true }
+tempfile = { workspace = true }
