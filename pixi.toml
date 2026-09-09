@@ -63,7 +63,8 @@ ruff = ">=0.14.1,<0.15"
 typos = ">=1.23.1,<2"
 dprint = ">=0.50.0,<0.51"
 lefthook = ">=2.0.11,<3"
-actionlint = ">=1.7.7,<2"
+# 1.7.9 is the first release that knows the `ubuntu-slim` runner label.
+actionlint = ">=1.7.9,<2"
 zizmor = ">=1.29.0,<2"
 shellcheck = ">=0.10.0,<0.11"
 [feature.lint.target.unix.dependencies]

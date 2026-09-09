@@ -256,7 +256,7 @@ environments:
       linux-64:
       - conda: https://prefix.dev/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2
       - conda: https://prefix.dev/conda-forge/linux-64/_openmp_mutex-4.5-2_gnu.tar.bz2
-      - conda: https://prefix.dev/conda-forge/linux-64/actionlint-1.7.8-h965158b_0.conda
+      - conda: https://prefix.dev/conda-forge/linux-64/actionlint-1.7.12-h8bc977c_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/binutils-2.44-h4852527_5.conda
       - conda: https://prefix.dev/conda-forge/linux-64/binutils_impl_linux-64-2.44-h9d8b0ac_5.conda
       - conda: https://prefix.dev/conda-forge/linux-64/binutils_linux-64-2.44-h4852527_5.conda
@@ -356,7 +356,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/noarch/tzdata-2025b-h78e105d_0.conda
       - conda: https://prefix.dev/conda-forge/noarch/vouch-1.4.2-h1760d83_0.conda
       - conda: https://prefix.dev/conda-forge/noarch/vouch-lib-1.4.2-hc364b38_0.conda
-      - conda: https://prefix.dev/conda-forge/osx-64/actionlint-1.7.8-h8080635_0.conda
+      - conda: https://prefix.dev/conda-forge/osx-64/actionlint-1.7.12-h5220d24_0.conda
       - conda: https://prefix.dev/conda-forge/osx-64/bzip2-1.0.8-h500dc9f_8.conda
       - conda: https://prefix.dev/conda-forge/osx-64/c-ares-1.34.5-hf13058a_0.conda
       - conda: https://prefix.dev/conda-forge/osx-64/c-compiler-1.11.0-h7a00415_0.conda
@@ -435,7 +435,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/noarch/tzdata-2025b-h78e105d_0.conda
       - conda: https://prefix.dev/conda-forge/noarch/vouch-1.4.2-h1760d83_0.conda
       - conda: https://prefix.dev/conda-forge/noarch/vouch-lib-1.4.2-hc364b38_0.conda
-      - conda: https://prefix.dev/conda-forge/osx-arm64/actionlint-1.7.8-h43f6c71_0.conda
+      - conda: https://prefix.dev/conda-forge/osx-arm64/actionlint-1.7.12-h7969508_0.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/bzip2-1.0.8-hd037594_8.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/c-ares-1.34.5-h5505292_0.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/c-compiler-1.11.0-h61f9b84_0.conda
@@ -515,7 +515,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/noarch/tzdata-2025b-h78e105d_0.conda
       - conda: https://prefix.dev/conda-forge/noarch/vswhere-3.1.7-h40126e0_1.conda
       - conda: https://prefix.dev/conda-forge/win-64/_openmp_mutex-4.5-2_gnu.conda
-      - conda: https://prefix.dev/conda-forge/win-64/actionlint-1.7.8-he477eed_0.conda
+      - conda: https://prefix.dev/conda-forge/win-64/actionlint-1.7.12-h11b0a5a_0.conda
       - conda: https://prefix.dev/conda-forge/win-64/bzip2-1.0.8-h0ad9c76_8.conda
       - conda: https://prefix.dev/conda-forge/win-64/cargo-nextest-0.9.106-h18a1a76_0.conda
       - conda: https://prefix.dev/conda-forge/win-64/cmake-3.26.4-h1537add_0.conda
@@ -879,17 +879,18 @@ packages:
   license_family: BSD
   size: 23621
   timestamp: 1650670423406
-- conda: https://prefix.dev/conda-forge/linux-64/actionlint-1.7.8-h965158b_0.conda
-  sha256: a7245cb879a5d2e3c3a76617b55aa1b740d1fd0c8e5d23469c2e6ec69c8c7c26
-  md5: 90f1e02ab112937f37a2322d6e6ebbd0
+- conda: https://prefix.dev/conda-forge/linux-64/actionlint-1.7.12-h8bc977c_0.conda
+  sha256: 1fff5ee0d83045ef90104ca83f52b4c44feb4ab2036fc7903fe9733f50721209
+  md5: bab393750db08f50eebaf96f50d18734
   depends:
-  - __glibc >=2.17,<3.0.a0
   - libgcc >=14
   - __glibc >=2.17
+  - __glibc >=2.17,<3.0.a0
   license: MIT
   license_family: MIT
-  size: 1984203
-  timestamp: 1760199609591
+  run_exports: {}
+  size: 2131192
+  timestamp: 1774975766537
 - conda: https://prefix.dev/conda-forge/linux-64/aws-c-auth-0.9.1-h0b8d109_6.conda
   sha256: e1b228d5e49a39ebf38e060545e571781b76201036f55fd14b4afa48f783dfd9
   md5: 4116c76889466aa66f195e450dce876f
@@ -3038,17 +3039,18 @@ packages:
   license: LicenseRef-Public-Domain
   size: 9555
   timestamp: 1733130678956
-- conda: https://prefix.dev/conda-forge/osx-64/actionlint-1.7.8-h8080635_0.conda
-  sha256: bb860c0c282fb6953d7e374d145d8cb1e4aaf81cc730ac8f26abcd343daae102
-  md5: 32aeac533e5bc51ea04fa87de864c021
+- conda: https://prefix.dev/conda-forge/osx-64/actionlint-1.7.12-h5220d24_0.conda
+  sha256: 0a3f0f673f7a1c3dcc5bd04f759b977676e3d680ec50346e9013a0c067426d3c
+  md5: 7a360d28a2a40006bc138f05b93188d1
   depends:
-  - __osx >=12.3
+  - __osx >=11.0
   constrains:
   - __osx >=10.12
   license: MIT
   license_family: MIT
-  size: 1942329
-  timestamp: 1760199648994
+  run_exports: {}
+  size: 2079880
+  timestamp: 1774975813961
 - conda: https://prefix.dev/conda-forge/osx-64/aws-c-auth-0.9.1-hcf31db4_6.conda
   sha256: 24e35edaeaee774ac1fb7dae25df7ec15fac5ccc79c6816d95948f557c08b914
   md5: 5e18481e742c35e85c93a87e5c48cb5c
@@ -4478,15 +4480,16 @@ packages:
   license_family: BSD
   size: 485754
   timestamp: 1742433356230
-- conda: https://prefix.dev/conda-forge/osx-arm64/actionlint-1.7.8-h43f6c71_0.conda
-  sha256: d225bef2c199d83c1e365f483715964372348f639259d7a1fb105da771c6cf81
-  md5: 659328c73b0d41b1dd4d064bc1188fd9
+- conda: https://prefix.dev/conda-forge/osx-arm64/actionlint-1.7.12-h7969508_0.conda
+  sha256: 94a8c69857d5365990f8231a901ea102736694546497cc674962e97b3e8d8d96
+  md5: 87084addab359d538cbf8493726cf3f8
   depends:
   - __osx >=11.0
   license: MIT
   license_family: MIT
-  size: 1752491
-  timestamp: 1760199640655
+  run_exports: {}
+  size: 1855795
+  timestamp: 1774975876774
 - conda: https://prefix.dev/conda-forge/osx-arm64/aws-c-auth-0.9.1-h041523c_6.conda
   sha256: bd63de07b71e0a988f50baed52f936089b42b57b5996b6fcd5a24903a3afabac
   md5: 4e58e29f904d3d3ec7ca2f1facb2ca65
@@ -5975,20 +5978,18 @@ packages:
   license_family: BSD
   size: 49468
   timestamp: 1718213032772
-- conda: https://prefix.dev/conda-forge/win-64/actionlint-1.7.8-he477eed_0.conda
-  sha256: 76f90c393903f33564826bbd54055384747b0a6f38e0ff317ada4bbaec69ce0a
-  md5: 3abfff0c12bb43be26bed854d01226f8
+- conda: https://prefix.dev/conda-forge/win-64/actionlint-1.7.12-h11b0a5a_0.conda
+  sha256: c06ad63dd652546687ec28c131975c183a240cd7b281d14403ef3bb5c6858f76
+  md5: 78b9e566476a9df08fa5840ba9e2aeae
   depends:
-  - vc >=14.3,<15
-  - vc14_runtime >=14.44.35208
-  - ucrt >=10.0.20348.0
   - vc >=14.3,<15
   - vc14_runtime >=14.44.35208
   - ucrt >=10.0.20348.0
   license: MIT
   license_family: MIT
-  size: 2053082
-  timestamp: 1760199668776
+  run_exports: {}
+  size: 2152519
+  timestamp: 1774975834444
 - conda: https://prefix.dev/conda-forge/win-64/aws-c-auth-0.9.1-h29f1512_6.conda
   sha256: 7f25bbfe20e6ff76caaa02b5f5fdd3332adc87d4e3ca0187288328286d81d2a2
   md5: 17dae8400cc30f5f716cdebf1b7b0070

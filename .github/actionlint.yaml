@@ -1,6 +1,0 @@
-# `ubuntu-slim` is a GitHub-hosted runner label that actionlint 1.7.8 does not
-# know about yet. Listing it here keeps the runner-label rule from failing.
-# Remove this once actionlint ships the label in its built-in list.
-self-hosted-runner:
-  labels:
-    - ubuntu-slim
