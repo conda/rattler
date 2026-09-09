@@ -3,10 +3,8 @@ use std::{collections::HashMap, path::PathBuf};
 
 use crate::{
     install::{
-        InstallError, TransactionError,
+        FinalizeTransactionError, InstallError, TransactionError,
         clobber_registry::{ClobberError, ClobberedPath},
-        driver::PostProcessingError,
-        link_script::PrePostLinkError,
         unlink::UnlinkError,
     },
     package_cache::PackageCacheError,
@@ -43,14 +41,6 @@ pub enum InstallerError {
     #[error("{0}")]
     IoError(String, #[source] std::io::Error),
 
-    /// Failed to run a pre-link script
-    #[error("pre-processing failed")]
-    PreProcessingFailed(#[source] PrePostLinkError),
-
-    /// Failed to run a post-link script
-    #[error("post-processing failed")]
-    PostProcessingFailed(#[source] PrePostLinkError),
-
     /// A clobbering error occurred
     #[error("failed to unclobber clobbered files")]
     ClobberError(#[from] ClobberError),
@@ -82,14 +72,14 @@ impl From<Cancelled> for InstallerError {
     }
 }
 
-impl From<PostProcessingError> for InstallerError {
-    fn from(value: PostProcessingError) -> Self {
+impl From<FinalizeTransactionError> for InstallerError {
+    fn from(value: FinalizeTransactionError) -> Self {
         match value {
-            PostProcessingError::ClobberError(err) => InstallerError::ClobberError(err),
-            PostProcessingError::FailedToDetectInstalledPackages(err) => {
+            FinalizeTransactionError::ClobberError(err) => InstallerError::ClobberError(err),
+            FinalizeTransactionError::FailedToDetectInstalledPackages(err) => {
                 InstallerError::FailedToDetectInstalledPackages(err)
             }
-            PostProcessingError::ClobberingDetected(paths) => {
+            FinalizeTransactionError::ClobberingDetected(paths) => {
                 InstallerError::ClobberingDetected(paths)
             }
         }

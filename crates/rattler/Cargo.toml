@@ -75,6 +75,13 @@ oauth2-reqwest = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Diagnostics_Debug",
+] }
+
 [dev-dependencies]
 assert_matches = { workspace = true }
 rand = { workspace = true }

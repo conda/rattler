@@ -34,6 +34,7 @@ pub enum ClobberMode {
     Error,
 }
 
+/// The selected owner and other providers of a path shared by multiple packages.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClobberedPath {
     /// The name of the package from which the final file is taken.
@@ -43,8 +44,10 @@ pub struct ClobberedPath {
     pub other_packages: Vec<PackageName>,
 }
 
+/// An error while restoring clobbered files and updating their prefix records.
 #[derive(Debug, thiserror::Error)]
 pub enum ClobberError {
+    /// A filesystem operation failed while resolving a clobbered path.
     #[error("{0}")]
     IoError(String, #[source] std::io::Error),
 }
@@ -106,8 +109,9 @@ impl ClobberRegistry {
     /// order to determine which files may clobber other files (clobbering files
     /// are those that are present in multiple packages).
     ///
-    /// This function has to run sequentially, and a `post_process` step
-    /// will "unclobber" the files after all packages have been installed.
+    /// Registration is serialized by [`super::TransactionLinkContext`].
+    /// [`super::PreparedTransaction::finalize`] resolves the final file owners
+    /// after all packages have been installed.
     pub fn register_paths(
         &mut self,
         index_json: &IndexJson,
@@ -308,6 +312,8 @@ mod tests {
         ffi::OsStr,
         path::{Path, PathBuf},
         str::FromStr,
+        sync::Barrier,
+        thread,
     };
 
     use fs_err as fs;
@@ -319,7 +325,10 @@ mod tests {
 
     use crate::{
         get_repodata_record, get_test_data_dir,
-        install::{InstallDriver, InstallOptions, PythonInfo, test_utils::*, transaction},
+        install::{
+            InstallOptions, PreparedTransaction, PythonInfo, TransactionLinkContext,
+            TransactionOptions, test_utils::*, transaction,
+        },
         package_cache::PackageCache,
     };
 
@@ -463,7 +472,7 @@ mod tests {
             &prefix_path,
             &LazyClient::default(),
             &cache,
-            &InstallDriver::default(),
+            TransactionLinkContext::default(),
             &InstallOptions::default(),
         )
         .await;
@@ -506,18 +515,21 @@ mod tests {
             unchanged: vec![],
         };
 
-        let install_driver = InstallDriver::builder()
-            .with_prefix_records(&prefix_records)
-            .execute_link_scripts(true)
-            .finish();
+        let link_context = TransactionLinkContext::new()
+            .without_io_concurrency_limit()
+            .with_prefix_records(&prefix_records);
 
-        execute_transaction(
+        execute_transaction_with_options(
             transaction,
             &prefix_path,
             &LazyClient::default(),
             &cache,
-            &install_driver,
+            link_context,
             &InstallOptions::default(),
+            TransactionOptions {
+                execute_link_scripts: true,
+                ..TransactionOptions::default()
+            },
         )
         .await;
 
@@ -587,7 +599,7 @@ mod tests {
                 &prefix_path,
                 &LazyClient::default(),
                 &cache,
-                &InstallDriver::default(),
+                TransactionLinkContext::default(),
                 &InstallOptions::default(),
             )
             .await;
@@ -646,6 +658,138 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_concurrent_nested_clobber_finalization() {
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations: test_operations_nested(),
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+            unchanged: vec![],
+        };
+        let target_prefix = tempfile::tempdir().unwrap();
+        let prefix = Prefix::create(target_prefix.path()).unwrap();
+        let link_context = TransactionLinkContext::default();
+        let install_options = InstallOptions::default();
+        let mut packages = transaction
+            .operations
+            .iter()
+            .map(|operation| {
+                let record = operation.record_to_install().unwrap().clone();
+                let package_dir = tempfile::tempdir().unwrap();
+                rattler_package_streaming::fs::extract(
+                    &record.url.to_file_path().unwrap(),
+                    package_dir.path(),
+                )
+                .unwrap();
+                (record, package_dir)
+            })
+            .collect::<Vec<_>>();
+
+        let prepared = PreparedTransaction::prepare(
+            &transaction,
+            &prefix,
+            link_context,
+            TransactionOptions::default(),
+            None,
+        );
+        let link_context = prepared.link_context();
+
+        // Race the two eventual losers into an empty prefix. Install the winner
+        // last so finalization must move files and rewrite records regardless
+        // of which concurrent package initially owns the shared path.
+        packages.swap(1, 2);
+        let ((winner, winner_dir), contenders) = packages.split_last().unwrap();
+        let barrier = Barrier::new(contenders.len());
+        let runtime = tokio::runtime::Handle::current();
+        thread::scope(|scope| {
+            let (barrier, runtime) = (&barrier, &runtime);
+            let (prefix, link_context, install_options) =
+                (&prefix, &link_context, &install_options);
+            let handles = contenders
+                .iter()
+                .map(|(record, package_dir)| {
+                    scope.spawn(move || {
+                        barrier.wait();
+                        runtime
+                            .block_on(install_package_to_environment(
+                                prefix,
+                                package_dir.path().to_path_buf(),
+                                record.clone(),
+                                link_context,
+                                install_options,
+                            ))
+                            .unwrap();
+                    })
+                })
+                .collect::<Vec<_>>();
+            for handle in handles {
+                handle.join().unwrap();
+            }
+        });
+        install_package_to_environment(
+            &prefix,
+            winner_dir.path().to_path_buf(),
+            winner.clone(),
+            &link_context,
+            &install_options,
+        )
+        .await
+        .unwrap();
+
+        prepared.finalize().unwrap();
+
+        assert_check_files!(
+            target_prefix.path(),
+            &[
+                "clobber/bobber/clobber.txt",
+                "__clobbers__/clobber-nested-1/clobber/bobber/clobber.txt",
+                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt",
+            ],
+        );
+        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        assert_eq!(prefix_records.len(), 3);
+        for (name, relative_path, contents, original_path) in [
+            (
+                "clobber-nested-1",
+                "__clobbers__/clobber-nested-1/clobber/bobber/clobber.txt",
+                "clobber-1\n",
+                Some(Path::new("clobber/bobber/clobber.txt")),
+            ),
+            (
+                "clobber-nested-2",
+                "clobber/bobber/clobber.txt",
+                "clobber-2\n",
+                None,
+            ),
+            (
+                "clobber-nested-3",
+                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt",
+                "clobber-3\n",
+                Some(Path::new("clobber/bobber/clobber.txt")),
+            ),
+        ] {
+            assert_eq!(
+                fs::read_to_string(target_prefix.path().join(relative_path)).unwrap(),
+                contents,
+            );
+            let record = find_prefix_record(&prefix_records, name).unwrap();
+            assert_eq!(record.files, vec![PathBuf::from(relative_path)]);
+            assert_eq!(
+                record
+                    .paths_data
+                    .paths
+                    .iter()
+                    .map(|entry| (
+                        entry.relative_path.as_path(),
+                        entry.original_path.as_deref()
+                    ))
+                    .collect::<Vec<_>>(),
+                vec![(Path::new(relative_path), original_path)],
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn test_all_possible_orders_clobber_nested() {
         let test_operations = test_operations_nested();
         let len = test_operations.len();
@@ -672,7 +816,7 @@ mod tests {
                 &prefix_path,
                 &LazyClient::default(),
                 &cache,
-                &InstallDriver::default(),
+                TransactionLinkContext::default(),
                 &InstallOptions::default(),
             )
             .await;
@@ -717,16 +861,16 @@ mod tests {
                 unchanged: vec![],
             };
 
-            let install_driver = InstallDriver::builder()
-                .with_prefix_records(&prefix_records)
-                .finish();
+            let link_context = TransactionLinkContext::new()
+                .without_io_concurrency_limit()
+                .with_prefix_records(&prefix_records);
 
             execute_transaction(
                 transaction,
                 &prefix_path,
                 &LazyClient::default(),
                 &cache,
-                &install_driver,
+                link_context,
                 &InstallOptions::default(),
             )
             .await;
@@ -781,7 +925,7 @@ mod tests {
             &prefix_path,
             &LazyClient::default(),
             &cache,
-            &InstallDriver::default(),
+            TransactionLinkContext::default(),
             &InstallOptions::default(),
         )
         .await;
@@ -825,16 +969,16 @@ mod tests {
             unchanged: vec![],
         };
 
-        let install_driver = InstallDriver::builder()
-            .with_prefix_records(&prefix_records)
-            .finish();
+        let link_context = TransactionLinkContext::new()
+            .without_io_concurrency_limit()
+            .with_prefix_records(&prefix_records);
 
         let result = execute_transaction(
             transaction,
             &prefix_path,
             &LazyClient::default(),
             &cache,
-            &install_driver,
+            link_context,
             &InstallOptions::default(),
         )
         .await;
@@ -890,7 +1034,7 @@ mod tests {
             &prefix_path,
             &LazyClient::default(),
             &cache,
-            &InstallDriver::default(),
+            TransactionLinkContext::default(),
             &InstallOptions::default(),
         )
         .await;
@@ -923,20 +1067,25 @@ mod tests {
             unchanged: vec![],
         };
 
-        let install_driver = InstallDriver::builder()
-            .with_prefix_records(&prefix_records)
-            .finish();
+        let link_context = TransactionLinkContext::new()
+            .without_io_concurrency_limit()
+            .with_prefix_records(&prefix_records);
 
-        install_driver
-            .pre_process(&transaction, target_prefix.path(), None)
-            .unwrap();
+        let prepared = PreparedTransaction::prepare(
+            &transaction,
+            &prefix_path,
+            link_context,
+            TransactionOptions::default(),
+            None,
+        );
+        let link_context = prepared.link_context();
         let dl_client = LazyClient::default();
         for op in &transaction.operations {
             execute_operation(
                 &prefix_path,
                 &dl_client,
                 &cache,
-                &install_driver,
+                &link_context,
                 op.clone(),
                 &InstallOptions::default(),
             )
@@ -976,7 +1125,7 @@ mod tests {
             &prefix_path,
             &LazyClient::default(),
             &cache,
-            &InstallDriver::default(),
+            TransactionLinkContext::default(),
             &InstallOptions::default(),
         )
         .await;
@@ -1023,16 +1172,16 @@ mod tests {
         };
 
         let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
-        let install_driver = InstallDriver::builder()
-            .with_prefix_records(&prefix_records)
-            .finish();
+        let link_context = TransactionLinkContext::new()
+            .without_io_concurrency_limit()
+            .with_prefix_records(&prefix_records);
 
         execute_transaction(
             transaction,
             &prefix_path,
             &LazyClient::default(),
             &cache,
-            &install_driver,
+            link_context,
             &InstallOptions::default(),
         )
         .await;
@@ -1057,16 +1206,16 @@ mod tests {
         };
 
         let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
-        let install_driver = InstallDriver::builder()
-            .with_prefix_records(&prefix_records)
-            .finish();
+        let link_context = TransactionLinkContext::new()
+            .without_io_concurrency_limit()
+            .with_prefix_records(&prefix_records);
 
         execute_transaction(
             transaction,
             &prefix_path,
             &LazyClient::default(),
             &cache,
-            &install_driver,
+            link_context,
             &InstallOptions::default(),
         )
         .await;
@@ -1119,7 +1268,7 @@ mod tests {
             &prefix_path,
             &LazyClient::default(),
             &cache,
-            &InstallDriver::default(),
+            TransactionLinkContext::default(),
             &install_options,
         )
         .await;
@@ -1169,7 +1318,7 @@ mod tests {
             &prefix_path,
             &LazyClient::default(),
             &cache,
-            &InstallDriver::default(),
+            TransactionLinkContext::default(),
             &InstallOptions::default(),
         )
         .await;
@@ -1189,16 +1338,16 @@ mod tests {
             unchanged: vec![],
         };
 
-        let install_driver = InstallDriver::builder()
-            .with_prefix_records(&prefix_records)
-            .finish();
+        let link_context = TransactionLinkContext::new()
+            .without_io_concurrency_limit()
+            .with_prefix_records(&prefix_records);
 
         execute_transaction(
             transaction,
             &prefix_path,
             &LazyClient::default(),
             &cache,
-            &install_driver,
+            link_context,
             &InstallOptions::default(),
         )
         .await;
@@ -1240,7 +1389,7 @@ mod tests {
             &prefix_path,
             &LazyClient::default(),
             &cache,
-            &InstallDriver::default(),
+            TransactionLinkContext::default(),
             &InstallOptions::default(),
         )
         .await;
@@ -1263,13 +1412,18 @@ mod tests {
             unchanged: vec![],
         };
 
-        let install_driver = InstallDriver::builder()
-            .with_prefix_records(&prefix_records)
-            .finish();
+        let link_context = TransactionLinkContext::new()
+            .without_io_concurrency_limit()
+            .with_prefix_records(&prefix_records);
 
-        install_driver
-            .pre_process(&transaction, &prefix_path, None)
-            .unwrap();
+        let prepared = PreparedTransaction::prepare(
+            &transaction,
+            &prefix_path,
+            link_context,
+            TransactionOptions::default(),
+            None,
+        );
+        let link_context = prepared.link_context();
 
         let client = LazyClient::default();
         for op in &transaction.operations {
@@ -1277,7 +1431,7 @@ mod tests {
                 &prefix_path,
                 &client,
                 &cache,
-                &install_driver,
+                &link_context,
                 op.clone(),
                 &InstallOptions::default(),
             )
@@ -1292,9 +1446,7 @@ mod tests {
             &["bin/python"], // "__clobbers__/clobber-pypy/bin/python"
         );
 
-        install_driver
-            .post_process(&transaction, &prefix_path, None)
-            .unwrap();
+        prepared.finalize().unwrap();
 
         assert_check_files!(&target_prefix.path(), &["bin/python"]);
     }
@@ -1328,7 +1480,7 @@ mod tests {
             &prefix_path,
             &LazyClient::default(),
             &cache,
-            &InstallDriver::default(),
+            TransactionLinkContext::default(),
             &InstallOptions::default(),
         )
         .await;
@@ -1349,16 +1501,16 @@ mod tests {
             unchanged: vec![],
         };
 
-        let install_driver = InstallDriver::builder()
-            .with_prefix_records(&prefix_records)
-            .finish();
+        let link_context = TransactionLinkContext::new()
+            .without_io_concurrency_limit()
+            .with_prefix_records(&prefix_records);
 
         execute_transaction(
             transaction,
             &prefix_path,
             &LazyClient::default(),
             &cache,
-            &install_driver,
+            link_context,
             &InstallOptions::default(),
         )
         .await;
@@ -1396,14 +1548,14 @@ mod tests {
             unchanged: vec![],
         };
 
-        let install_driver = InstallDriver::builder().with_prefix_records(&[]).finish();
+        let link_context = TransactionLinkContext::new().without_io_concurrency_limit();
 
         execute_transaction(
             transaction,
             &prefix_path,
             &LazyClient::default(),
             &cache,
-            &install_driver,
+            link_context,
             &InstallOptions::default(),
         )
         .await;
@@ -1447,14 +1599,14 @@ mod tests {
             unchanged: vec![],
         };
 
-        let install_driver = InstallDriver::builder().with_prefix_records(&[]).finish();
+        let link_context = TransactionLinkContext::new().without_io_concurrency_limit();
 
         execute_transaction(
             transaction,
             &prefix_path,
             &LazyClient::default(),
             &cache,
-            &install_driver,
+            link_context,
             &InstallOptions::default(),
         )
         .await;
@@ -1495,14 +1647,14 @@ mod tests {
             unchanged: vec![],
         };
 
-        let install_driver = InstallDriver::builder().with_prefix_records(&[]).finish();
+        let link_context = TransactionLinkContext::new().without_io_concurrency_limit();
 
         execute_transaction(
             transaction,
             &prefix_path,
             &LazyClient::default(),
             &cache,
-            &install_driver,
+            link_context,
             &InstallOptions::default(),
         )
         .await;
@@ -1534,28 +1686,32 @@ mod tests {
         let packages_dir = tempfile::tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
-        let install_driver = InstallDriver::builder()
-            .clobber_mode(super::ClobberMode::Error)
-            .finish();
-
-        install_driver
-            .pre_process(&transaction, prefix_path.path(), None)
-            .unwrap();
+        let prepared = PreparedTransaction::prepare(
+            &transaction,
+            &prefix_path,
+            TransactionLinkContext::new().without_io_concurrency_limit(),
+            TransactionOptions {
+                clobber_mode: super::ClobberMode::Error,
+                ..TransactionOptions::default()
+            },
+            None,
+        );
+        let link_context = prepared.link_context();
 
         for op in &transaction.operations {
             execute_operation(
                 &prefix_path,
                 &LazyClient::default(),
                 &cache,
-                &install_driver,
+                &link_context,
                 op.clone(),
                 &InstallOptions::default(),
             )
             .await;
         }
 
-        // post_process should return an error because clobbering was detected
-        let result = install_driver.post_process(&transaction, &prefix_path, None);
+        // Finalization should return an error because clobbering was detected.
+        let result = prepared.finalize();
         assert!(
             result.is_err(),
             "Expected an error due to ClobberMode::Error"
@@ -1565,7 +1721,7 @@ mod tests {
         assert!(
             matches!(
                 err,
-                crate::install::driver::PostProcessingError::ClobberingDetected(_)
+                crate::install::FinalizeTransactionError::ClobberingDetected(_)
             ),
             "Expected ClobberingDetected error, got: {err:?}"
         );
@@ -1596,7 +1752,7 @@ mod tests {
             &prefix_path,
             &LazyClient::default(),
             &cache,
-            &InstallDriver::default(),
+            TransactionLinkContext::default(),
             &InstallOptions::default(),
         )
         .await;
