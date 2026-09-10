@@ -20,6 +20,18 @@ impl AzureOptionsMap {
     pub fn contains(&self, key: &AzureEndpointKey) -> bool {
         self.0.contains_key(key)
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&AzureEndpointKey, &AzureEndpointOptions)> {
+        self.0.iter()
+    }
+
+    pub fn insert(&mut self, key: AzureEndpointKey, options: AzureEndpointOptions) {
+        self.0.insert(key, options);
+    }
+
+    pub fn remove(&mut self, key: &AzureEndpointKey) -> bool {
+        self.0.shift_remove(key).is_some()
+    }
 }
 
 /// Both spellings reach serde, which silently keeps whichever the table iterated
