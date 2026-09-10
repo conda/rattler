@@ -17,6 +17,7 @@ from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.removed_package import RemovedPackage
 from rattler.repo_data.repo_data import ChannelRelations
 from rattler.repo_data.who_needs import Dependent, _target_to_py
+from rattler.repo_data.sparse import PackageFormatSelection, SparseRepoData
 
 if TYPE_CHECKING:
     from rattler.repo_data.package_record import PackageRecord
@@ -292,13 +293,14 @@ class Gateway:
 
     async def query(
         self,
-        sources: Iterable[Union[Channel, str, RepoDataSource]],
+        sources: Iterable[Union[Channel, str, SparseRepoData, RepoDataSource]],
         platforms: Iterable[Platform | PlatformLiteral],
         specs: Iterable[MatchSpec | PackageName | str],
         recursive: bool = True,
         channel_relations: Optional[ChannelRelationsMode] = None,
         channel_relations_max_depth: Optional[int] = None,
         channel_notices: bool = False,
+        package_format_selection: Optional[PackageFormatSelection] = None,
     ) -> GatewayQueryResult:
         """Queries the gateway for repodata from channels and custom sources.
 
@@ -334,6 +336,7 @@ class Gateway:
                                          default (10). ``0`` behaves like
                                          ``channel_relations="disabled"``.
             channel_notices: Whether to fetch CEP-6 notices for this query.
+            package_format_selection: Defines which package formats are selected.
 
         Returns:
             A list of lists of `RepoDataRecord`s. The outer list contains one entry per
@@ -373,6 +376,7 @@ class Gateway:
             channel_notices=channel_notices,
             channel_relations=channel_relations,
             channel_relations_max_depth=channel_relations_max_depth,
+            package_format_selection=package_format_selection.value if package_format_selection is not None else None,
         )
 
         # Convert the records, removed packages, and notices into Python objects.
@@ -428,11 +432,12 @@ class Gateway:
 
     async def names(
         self,
-        sources: Iterable[Union[Channel, str, RepoDataSource]],
+        sources: Iterable[Union[Channel, str, SparseRepoData, RepoDataSource]],
         platforms: Iterable[Platform | PlatformLiteral],
         channel_relations: Optional[ChannelRelationsMode] = None,
         channel_relations_max_depth: Optional[int] = None,
         channel_notices: bool = False,
+        package_format_selection: Optional[PackageFormatSelection] = None,
     ) -> GatewayNamesResult:
         """Queries all the names of packages in channels or custom sources.
 
@@ -446,6 +451,9 @@ class Gateway:
                                          ``channel_relations``. ``None`` uses the
                                          default (10).
             channel_notices: Whether to fetch CEP-6 notices for this query.
+            package_format_selection: Defines which package formats are selected. Only
+                                       applies to sources backed by sparse repodata
+                                       (e.g. `SparseRepoData` or local channels).
 
         Returns:
             A list of package names that are present in the given subdirectories.
@@ -471,6 +479,7 @@ class Gateway:
             channel_notices=channel_notices,
             channel_relations=channel_relations,
             channel_relations_max_depth=channel_relations_max_depth,
+            package_format_selection=package_format_selection.value if package_format_selection is not None else None,
         )
 
         # Convert the names and notices into Python objects.
@@ -580,7 +589,6 @@ def _convert_sources(sources: Iterable[Any]) -> List[Any]:
         TypeError: If a source doesn't implement the required interface.
     """
     from rattler.repo_data.source import RepoDataSource
-    from rattler.repo_data.sparse import SparseRepoData
 
     converted = []
     for source in sources:

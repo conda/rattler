@@ -1,11 +1,14 @@
 use std::sync::Arc;
 
 use ahash::HashMap;
-use rattler_conda_types::{ChannelRelations, PackageName, RepoDataRecord, RepodataRevisions};
+use rattler_conda_types::{
+    ChannelRelations, PackageName, RepoDataRecord, RepodataRevisions,
+    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveType},
+};
 
 use super::GatewayError;
 use crate::Reporter;
-use crate::sparse::{RemovedPackage, empty_repodata_revisions};
+use crate::sparse::{PackageFormatSelection, RemovedPackage, empty_repodata_revisions};
 use coalesced_map::{CoalescedGetError, CoalescedMap};
 
 /// Records for a single package, with precomputed unique dependency strings
@@ -83,6 +86,81 @@ pub(crate) fn extract_unique_deps_split<'a>(
     (Arc::from(base), Arc::new(per_extra))
 }
 
+/// Filters and, where applicable, deduplicates `records` according to
+/// `selection`. Applied once per name/subdir fetch in
+/// [`SubdirData::get_or_fetch_package_records`], after the (query-agnostic,
+/// cross-query-cached) record set has been retrieved.
+fn filter_records_by_package_format(
+    records: Vec<Arc<RepoDataRecord>>,
+    selection: PackageFormatSelection,
+) -> Vec<Arc<RepoDataRecord>> {
+    match selection {
+        PackageFormatSelection::All => records,
+        PackageFormatSelection::Both => records
+            .into_iter()
+            .filter(|r| !matches!(r.identifier.archive_type, DistArchiveType::Wheel(_)))
+            .collect(),
+        PackageFormatSelection::OnlyTarBz2 => records
+            .into_iter()
+            .filter(|r| {
+                matches!(
+                    r.identifier.archive_type,
+                    DistArchiveType::Conda(CondaArchiveType::TarBz2)
+                )
+            })
+            .collect(),
+        PackageFormatSelection::OnlyConda => records
+            .into_iter()
+            .filter(|r| {
+                matches!(
+                    r.identifier.archive_type,
+                    DistArchiveType::Conda(CondaArchiveType::Conda)
+                )
+            })
+            .collect(),
+        PackageFormatSelection::PreferConda => dedup_records_by_preference(records, false),
+        PackageFormatSelection::PreferCondaWithWhl => dedup_records_by_preference(records, true),
+    }
+}
+
+/// Keeps, for each unique (name, version, build) archive identifier, only
+/// the most-preferred variant, per [`DistArchiveType::cmp_preference`]
+/// (`.conda` over `.tar.bz2` over `.whl`). When `include_whl` is `false`,
+/// `.whl` records are dropped outright rather than being allowed to win a
+/// group. The relative order of the surviving records is otherwise
+/// preserved.
+fn dedup_records_by_preference(
+    records: Vec<Arc<RepoDataRecord>>,
+    include_whl: bool,
+) -> Vec<Arc<RepoDataRecord>> {
+    let mut positions: std::collections::HashMap<ArchiveIdentifier, usize> =
+        std::collections::HashMap::new();
+    let mut out: Vec<Arc<RepoDataRecord>> = Vec::with_capacity(records.len());
+    for record in records {
+        if !include_whl && matches!(record.identifier.archive_type, DistArchiveType::Wheel(_)) {
+            continue;
+        }
+        match positions.entry(record.identifier.identifier.clone()) {
+            std::collections::hash_map::Entry::Occupied(entry) => {
+                let idx = *entry.get();
+                if record
+                    .identifier
+                    .archive_type
+                    .cmp_preference(out[idx].identifier.archive_type)
+                    == std::cmp::Ordering::Greater
+                {
+                    out[idx] = record;
+                }
+            }
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                entry.insert(out.len());
+                out.push(record);
+            }
+        }
+    }
+    out
+}
+
 pub enum Subdir {
     /// The subdirectory is missing from the channel, it is considered empty.
     NotFound,
@@ -142,11 +220,13 @@ impl SubdirData {
         &self,
         name: &PackageName,
         reporter: Option<Arc<dyn Reporter>>,
+        package_format_selection: PackageFormatSelection,
     ) -> Result<PackageRecords, GatewayError> {
         let client = self.client.clone();
         let name_clone = name.clone();
 
-        self.records
+        let mut records = self
+            .records
             .get_or_try_init(name.clone(), || async move {
                 client
                     .fetch_package_records(&name_clone, reporter.as_deref())
@@ -159,7 +239,14 @@ impl SubdirData {
                     "a coalesced request failed".to_string(),
                     std::io::ErrorKind::Other.into(),
                 ),
-            })
+            })?;
+
+        // `records` is the entry cloned out of the shared, cross-query
+        // cache, so filtering it here is safe: it never mutates what other
+        // queries (potentially with a different selection) will see.
+        records.records =
+            filter_records_by_package_format(records.records, package_format_selection);
+        Ok(records)
     }
 
     /// Fetches the records for `name` without inserting them into the
@@ -171,15 +258,20 @@ impl SubdirData {
         &self,
         name: &PackageName,
         reporter: Option<&dyn Reporter>,
+        package_format_selection: PackageFormatSelection,
     ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
-        if let Some(cached) = self.records.get(name) {
-            return Ok(cached.records);
-        }
-        Ok(self
-            .client
-            .fetch_package_records(name, reporter)
-            .await?
-            .records)
+        let records = if let Some(cached) = self.records.get(name) {
+            cached.records
+        } else {
+            self.client
+                .fetch_package_records(name, reporter)
+                .await?
+                .records
+        };
+        Ok(filter_records_by_package_format(
+            records,
+            package_format_selection,
+        ))
     }
 
     /// The number of package names currently held in the per-name record

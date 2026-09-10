@@ -36,7 +36,7 @@ impl PyRepoDataSource {
     /// Create a new adapter wrapping the given Python object.
     ///
     /// The object should implement the `RepoDataSource` protocol:
-    /// - `async def fetch_package_records(self, platform, name) -> List[RepoDataRecord]`
+    /// - `async def fetch_package_records(self, platform, name, package_format_selection) -> List[RepoDataRecord]`
     /// - `def package_names(self, platform) -> List[str]`
     pub fn new(obj: Py<PyAny>) -> Self {
         Self { inner: obj }

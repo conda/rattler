@@ -23,7 +23,11 @@ class MockRepoDataSource(RepoDataSource):
         """Initialize with a mapping of platform -> package_name -> records."""
         self._records = records_by_platform
 
-    async def fetch_package_records(self, platform: Platform, name: PackageName) -> List[RepoDataRecord]:
+    async def fetch_package_records(
+        self,
+        platform: Platform,
+        name: PackageName,
+    ) -> List[RepoDataRecord]:
         """Fetch records for a specific package name and platform."""
         platform_str = str(platform)
         name_str = name.normalized
@@ -254,7 +258,11 @@ async def test_custom_source_backed_by_sparse_repodata() -> None:
         def __init__(self, repodata_by_platform: dict[str, SparseRepoData]):
             self._repodata = repodata_by_platform
 
-        async def fetch_package_records(self, platform: Platform, name: PackageName) -> List[RepoDataRecord]:
+        async def fetch_package_records(
+            self,
+            platform: Platform,
+            name: PackageName,
+        ) -> List[RepoDataRecord]:
             platform_str = str(platform)
             if platform_str in self._repodata:
                 return self._repodata[platform_str].load_records(name)

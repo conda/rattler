@@ -31,7 +31,7 @@ class RepoDataSource(Protocol):
     Example
     -------
     ```python
-    from rattler import Platform, PackageName, RepoDataRecord
+    from rattler import Platform, PackageName, PackageFormatSelection, RepoDataRecord
 
     class MyCustomSource:
         async def fetch_package_records(
