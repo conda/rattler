@@ -149,6 +149,11 @@ impl Middleware for MirrorMiddleware {
 
         for (key, url) in self.keys() {
             if let Some(url_rest) = url_str.strip_prefix(key) {
+                // Require a path-segment boundary so `conda-forge` doesn't match `conda-forge2`.
+                if !key.ends_with('/') && !url_rest.is_empty() && !url_rest.starts_with('/') {
+                    continue;
+                }
+
                 let url_rest = url_rest.trim_start_matches('/');
                 // replace the key with the mirror
                 let mirrors = self.mirror_map.get(url).unwrap();
@@ -238,6 +243,11 @@ mod test {
 
     async fn broken_return() -> StatusCode {
         StatusCode::INTERNAL_SERVER_ERROR
+    }
+
+    /// Echoes the server identity and request path to detect misrouting.
+    async fn echo_path_prefixed(prefix: &'static str, req: axum::extract::Request) -> String {
+        format!("HIT {prefix} at path: {}", req.uri().path())
     }
 
     async fn test_server(name: &str, broken: bool) -> Url {
@@ -394,6 +404,65 @@ mod test {
         assert!(res.status().is_success(), "status: {}", res.status());
         let body = res.text().await.unwrap();
         assert_eq!(body, "Hi from counter: mirror server");
+    }
+
+    #[tokio::test]
+    async fn test_mirror_middleware_does_not_cross_channel_boundary() {
+        // Echo requests received by the conda-forge mirror.
+        let mirror_router = Router::new()
+            .fallback(|req: axum::extract::Request| echo_path_prefixed("conda-forge mirror", req));
+        let mirror_addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
+        let mirror_listener = tokio::net::TcpListener::bind(&mirror_addr).await.unwrap();
+        let mirror_addr = mirror_listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(mirror_listener, mirror_router.into_make_service()).into_future());
+        let mirror_url: Url = format!("http://{}:{}", mirror_addr.ip(), mirror_addr.port())
+            .parse()
+            .unwrap();
+
+        // Unmatched channels should reach this upstream server unchanged.
+        let upstream_router = Router::new()
+            .fallback(|req: axum::extract::Request| echo_path_prefixed("real upstream", req));
+        let upstream_addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
+        let upstream_listener = tokio::net::TcpListener::bind(&upstream_addr).await.unwrap();
+        let upstream_addr = upstream_listener.local_addr().unwrap();
+        tokio::spawn(
+            axum::serve(upstream_listener, upstream_router.into_make_service()).into_future(),
+        );
+
+        let mut mirror_map = std::collections::HashMap::new();
+        // `from_map` permits keys without a trailing slash.
+        mirror_map.insert(
+            format!(
+                "http://{}:{}/conda-forge",
+                upstream_addr.ip(),
+                upstream_addr.port()
+            )
+            .parse()
+            .unwrap(),
+            vec![mirror_setting(mirror_url)],
+        );
+
+        let middleware = MirrorMiddleware::from_map(mirror_map);
+        let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+            .with(middleware)
+            .build();
+
+        // conda-forge2 must reach upstream unchanged.
+        let res = client
+            .get(format!(
+                "http://{}:{}/conda-forge2/count",
+                upstream_addr.ip(),
+                upstream_addr.port()
+            ))
+            .send()
+            .await
+            .unwrap();
+        assert!(res.status().is_success(), "status: {}", res.status());
+        let body = res.text().await.unwrap();
+        assert_eq!(
+            body, "HIT real upstream at path: /conda-forge2/count",
+            "request for the unrelated 'conda-forge2' channel was routed to the 'conda-forge' mirror instead of the real upstream: {body}"
+        );
     }
 
     #[cfg(feature = "rattler_config")]
