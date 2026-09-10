@@ -7,6 +7,134 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-09-10
+
+### Highlights
+
+**Solving got about twice as fast.** Median solve times of `py-rattler-v0.25.0` (resolvo 0.10.3) against this release (0.12.1):
+
+| Environment | 0.25.0 / 0.10.3 | 0.26.0 / 0.12.1 | Reduction |
+|---|---:|---:|---:|
+| Python 3.9 | 2.948 ms | 1.588 ms | 46.1% |
+| xtensor/xsimd | 1.903 ms | 1.163 ms | 38.9% |
+| TensorFlow | 152.068 ms | 65.047 ms | 57.2% |
+| Quetz | 203.054 ms | 97.023 ms | 52.2% |
+| TensorBoard/grpc | 74.354 ms | 30.696 ms | 58.7% |
+
+**Read a single file out of a package without downloading it.** `PackageArchive` opens a `.conda` archive over HTTP range requests and reads only the entries you ask for, so inspecting metadata no longer costs a full download. Local paths work too, and `RepoDataRecord.from_package_archive()` turns a local `.conda` or `.tar.bz2` into a record that `install()` accepts.
+
+```python
+from rattler.package_streaming import PackageArchive
+
+pkg = await PackageArchive.from_url(client, url)
+index = await pkg.index_json()
+recipe = await pkg.read_file("info/recipe/meta.yaml")
+```
+
+**Solve from repodata you already have.** `solve` accepts `SparseRepoData` next to channels and `RepoDataSource`, so cached or locally produced repodata can go into a solve without routing it through the gateway. Both solve entry points also gained `add_pip_as_python_dependency`.
+
+```python
+sparse = SparseRepoData(Channel("conda-forge"), "noarch", "noarch/repodata.json")
+records = await solve([sparse], ["python 3.12.*"], add_pip_as_python_dependency=True)
+```
+
+**Read a config file from Python.** `Config` parses the same TOML the rest of the rattler tooling reads, and `install()`, `index_fs()`, `index_s3()`, `Client.from_config()` and `Gateway.from_config()` accept one. Nothing reads a config file unless you pass it in.
+
+```python
+config = Config.load_from_default_locations("rattler-build")
+gateway = Gateway.from_config(config)
+await install(records, target_prefix, config=config)
+```
+
+**Ask what depends on a package.** `Gateway.who_needs()` scans a subdir's repodata in reverse and returns the records that declare a dependency on your target, direct dependents only.
+
+```python
+dependents = await Gateway().who_needs([Channel("conda-forge")], ["linux-64"], "openssl")
+{d.record.name.normalized for d in dependents}
+```
+
+**CEP-6 channel notices.** Pass `channel_notices=True` to `query`/`names` and read them off the result, or fetch them with `Gateway.channel_notices(...)`.
+
+**Breaking: `repodata_revisions` is a list now.** The `vN`-keyed mapping introduced in 0.25.0 let callers hand-write revision statistics that the indexer already derives. Revisions are selected by name now, optionally with a publisher message, and the old mapping raises a `TypeError` that spells out the new shape.
+
+```python
+# before
+await index_fs(channel_dir, repodata_revisions={"v3": {"n_packages": 1}})
+# now
+await index_fs(channel_dir, repodata_revisions=["v3"])
+await index_fs(channel_dir, repodata_revisions=[{"revision": "v3", "message": "v3 packages"}])
+```
+
+**Breaking: CEP-42 relations are followed by default.** `Gateway.query()`, `Gateway.names()` and `solve()` follow a channel's declared `channel_relations` now, pulling the related channels into the query and into the priority order; previously they were ignored. Only channels that publish CEP-42 metadata are affected. Cycles and failed fetches surface as `rattler.exceptions.GatewayWarning`, and `channel_relations="disabled"` restores the old behavior ([#2462](https://github.com/conda/rattler/pull/2462)).
+
+### Added
+
+- Read rattler configuration files from Python with `Config`, including `from_toml`, `load_from_files`, `load_from_default_locations`, `set`/`unset`, `to_toml` and `save` in [#2772](https://github.com/conda/rattler/pull/2772)
+- Accept a `config` argument on `install`, `index_fs` and `index_s3`, add `Client.from_config()` and `Gateway.from_config()`, and raise `ConfigError` for a config that cannot be loaded in [#2772](https://github.com/conda/rattler/pull/2772)
+- Look up reverse dependencies with `Gateway.who_needs(sources, platforms, target)`, returning `Dependent` edges with `record`, `dependency`, `kind`, `run_export_kind` and `extra` in [#2738](https://github.com/conda/rattler/pull/2738)
+- Inspect the packages a channel marks as removed through `GatewayQueryResult.removed`, `SparseRepoData.load_removed()` and the new `RemovedPackage` in [#2751](https://github.com/conda/rattler/pull/2751)
+- Expose `noarch`, `extra_depends`, `flags`, `purls`, `python_site_packages_path` and `repodata_revision` on `IndexJson` in [#2771](https://github.com/conda/rattler/pull/2771)
+- Build a `RepoDataRecord` from a local `.conda` or `.tar.bz2` archive with `await RepoDataRecord.from_package_archive(path)`, ready to pass to `install()`, in [#2698](https://github.com/conda/rattler/pull/2698)
+- Add stable `MatchSpec.to_canonical_string()` output and `CanonicalMatchSpecError` for values the grammar cannot represent in [#2670](https://github.com/conda/rattler/pull/2670)
+- Expose repodata revision metadata on `RepoData`, `ChannelInfo` and `SparseRepoData`, plus `PackageRecord.flags`, in [#2674](https://github.com/conda/rattler/pull/2674)
+- Add the `networkx` install extra for `PackageRecord.to_graph()` in [#2725](https://github.com/conda/rattler/pull/2725)
+- Publish wheels for Windows ARM64 and Linux RISC-V GNU and musl in [#2700](https://github.com/conda/rattler/pull/2700)
+- `PackageArchive` for sparse reads from remote and local packages, with `read_file`, `read_files`, `list_files`, `index_json` and `paths_json` in [#2632](https://github.com/conda/rattler/pull/2632)
+- Accept `SparseRepoData` directly as a `solve` source in [#2627](https://github.com/conda/rattler/pull/2627)
+- `add_pip_as_python_dependency` on `solve` and `solve_with_sparse_repodata` in [#2677](https://github.com/conda/rattler/pull/2677)
+- CEP-6 channel notices: `Gateway.channel_notices()` plus a `channel_notices` flag on `query` and `names` in [#2639](https://github.com/conda/rattler/pull/2639)
+- `ChannelPriority.Flexible` in [#2617](https://github.com/conda/rattler/pull/2617)
+- `alternative_target_prefix` on `Installer`, to patch a different prefix into hardcoded paths in [#2484](https://github.com/conda/rattler/pull/2484)
+- iOS and Android subdirs with matching `__ios` and `__android` virtual packages and overrides in [#2613](https://github.com/conda/rattler/pull/2613)
+- `emscripten-wasm64` platform in [#2680](https://github.com/conda/rattler/pull/2680)
+- `cache_dir` on `VirtualPackage.detect()` in [#2568](https://github.com/conda/rattler/pull/2568)
+- Signed entry-point launchers for Windows x86, x64 and arm64 in [#2493](https://github.com/conda/rattler/pull/2493)
+
+### Changed
+
+- **BREAKING:** `index_fs`/`index_s3` take `repodata_revisions` as a sequence of selections (`["v3"]` or `[{"revision": "v3", "message": ...}]`); the `vN`-keyed mapping and `RepodataRevisionMetadata` are gone in [#2669](https://github.com/conda/rattler/pull/2669)
+- **BREAKING:** `Gateway.query()`, `Gateway.names()` and `solve()` follow CEP-42 `channel_relations` by default, so channels declaring relations contribute extra channels to the query and the priority order; the new `channel_relations` and `channel_relations_max_depth` arguments control it, and `"disabled"` restores the old behavior in [#2462](https://github.com/conda/rattler/pull/2462)
+- Run `Gateway.who_needs()` against full repodata instead of fetching one shard per package name, and take `SourceConfig.sharded_enabled` literally: `file://` channels are never sharded, and `fast.prefix.dev` no longer forces sharding on in [#2776](https://github.com/conda/rattler/pull/2776)
+- Upgrade PyO3 to 0.29 in [#2545](https://github.com/conda/rattler/pull/2545) and [#2546](https://github.com/conda/rattler/pull/2546)
+- Bound concurrent downloads with a semaphore in [#2475](https://github.com/conda/rattler/pull/2475)
+- Record git `lfs` on source locations in the lock file in [#2633](https://github.com/conda/rattler/pull/2633)
+
+### Fixed
+
+- Make `MatchSpec` parsing and `str(MatchSpec)` round-trip safely in awkward cases; build-only specs now render as `foo[build="py39h123_0"]` instead of inventing a `*` version in [#2670](https://github.com/conda/rattler/pull/2670)
+- Canonicalize `depends`, `constrains` and `extra_depends` when `index_fs`/`index_s3` write v3 repodata in [#2718](https://github.com/conda/rattler/pull/2718)
+- Keep packages with legacy-compatible `extra_depends` in legacy repodata so older clients can see them in [#2721](https://github.com/conda/rattler/pull/2721)
+- Leave archives listed under the `removed` key of a `repodata.json` out of `Gateway.query()`, `Gateway.names()` and `SparseRepoData.load_records()` results, matching sharded channels; they are not installable and were never valid solve candidates in [#2751](https://github.com/conda/rattler/pull/2751)
+- Deduplicate archives present in both legacy and v3 repodata and prefer the v3 record in [#2720](https://github.com/conda/rattler/pull/2720)
+- Rate a solvable's repeated requirements on the same package by the most restrictive one, so `solve()` picks the same build for tied candidates across platforms in [#2649](https://github.com/conda/rattler/pull/2649)
+- Fix a panic in the solver's conflict detection that could abort a `solve()` ([resolvo#231](https://github.com/prefix-dev/resolvo/pull/231))
+- Accept quoted extras lists in `MatchSpec` (`foobar[extras=["science"]]`) and enforce CEP 44's group-name grammar in [#2552](https://github.com/conda/rattler/pull/2552)
+- Keep a trailing underscore in a `MatchSpec` version instead of splitting it into the build string, per CEP 33: `tmux=3.7b_` is version `3.7b_` with no build in [#2606](https://github.com/conda/rattler/pull/2606)
+- Follow the OCI registry's `WWW-Authenticate` challenge in [#2628](https://github.com/conda/rattler/pull/2628)
+- Report a missing OCI manifest as a 404 in [#2651](https://github.com/conda/rattler/pull/2651) and retry a digest-addressed blob 404 through the manifest in [#2653](https://github.com/conda/rattler/pull/2653)
+- Honor `max-age` without a `public` cache directive in [#2664](https://github.com/conda/rattler/pull/2664)
+- Limit concurrent shard cache reads in the gateway in [#2163](https://github.com/conda/rattler/pull/2163)
+- Detect read-only filesystems in the package cache instead of failing in [#2594](https://github.com/conda/rattler/pull/2594)
+- Reject a truncated package archive in `extract()` and `download_and_extract()` instead of leaving an empty directory behind, and skip tar symlink entries on Windows rather than failing the whole extraction in [#2748](https://github.com/conda/rattler/pull/2748)
+- Make the Windows package-cache rename retry actually fire in [#2555](https://github.com/conda/rattler/pull/2555)
+- Include the sha256 in the cache key for `file://` packages in [#2507](https://github.com/conda/rattler/pull/2507)
+- Use a valid regex when searching Windows keyring credentials in [#2564](https://github.com/conda/rattler/pull/2564)
+- Write `repodata.json` atomically when indexing in [#2511](https://github.com/conda/rattler/pull/2511)
+- Make shard creation deterministic in [#2553](https://github.com/conda/rattler/pull/2553)
+- Preserve a leading `..` when normalizing `UrlOrPath`, so distinct relative paths no longer collapse in [#2548](https://github.com/conda/rattler/pull/2548)
+- Escape environment variable values in activation scripts in [#2621](https://github.com/conda/rattler/pull/2621) and preserve newlines in them in [#2591](https://github.com/conda/rattler/pull/2591)
+- Build the pty support on Android, OpenBSD and illumos in [#2533](https://github.com/conda/rattler/pull/2533), [#2524](https://github.com/conda/rattler/pull/2524) and [#2635](https://github.com/conda/rattler/pull/2635)
+- Build the sdist with pax tar headers by requiring maturin 1.14 in [#2696](https://github.com/conda/rattler/pull/2696)
+
+### Performance
+
+- Cut solve times by 38.9% to 58.7% (51.2% geometric mean) from py-rattler 0.25.0 / resolvo 0.10.3 to 0.26.0 / 0.12.1, combining Resolvo's clause and hot-path work with Rattler's candidate-ordering changes in [#2520](https://github.com/conda/rattler/pull/2520), [#2609](https://github.com/conda/rattler/pull/2609), [#2711](https://github.com/conda/rattler/pull/2711) and [#2730](https://github.com/conda/rattler/pull/2730)
+- Extract packages on a blocking worker, which speeds up `install()`, `extract()` and `download_and_extract()`, most noticeably on Windows in [#2748](https://github.com/conda/rattler/pull/2748)
+- Speed up version, version spec and match spec parsing in [#2515](https://github.com/conda/rattler/pull/2515)
+- Speed up CUDA virtual package detection in [#2568](https://github.com/conda/rattler/pull/2568)
+- Probe reflink support once per filesystem instead of per file in [#2508](https://github.com/conda/rattler/pull/2508)
+- Avoid parsing match specs when checking dependency overrides in [#2506](https://github.com/conda/rattler/pull/2506)
+
 ## [0.25.0] - 2026-06-09
 
 ### Changed
