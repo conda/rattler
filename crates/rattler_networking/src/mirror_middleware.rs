@@ -245,9 +245,7 @@ mod test {
         StatusCode::INTERNAL_SERVER_ERROR
     }
 
-    /// Echoes back whatever path it received, prefixed to identify which
-    /// server handled the request. Used to make misrouted requests
-    /// unmistakable in the cross-channel-boundary test below.
+    /// Echoes the server identity and request path to detect misrouting.
     async fn echo_path_prefixed(prefix: &'static str, req: axum::extract::Request) -> String {
         format!("HIT {prefix} at path: {}", req.uri().path())
     }
@@ -410,9 +408,7 @@ mod test {
 
     #[tokio::test]
     async fn test_mirror_middleware_does_not_cross_channel_boundary() {
-        // Server backing the "conda-forge" mirror. `fallback` echoes back
-        // whatever path it actually received, so a misrouted request is
-        // unmistakable.
+        // Echo requests received by the conda-forge mirror.
         let mirror_router = Router::new()
             .fallback(|req: axum::extract::Request| echo_path_prefixed("conda-forge mirror", req));
         let mirror_addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
@@ -423,11 +419,7 @@ mod test {
             .parse()
             .unwrap();
 
-        // A second, separate server standing in for the *real* upstream
-        // that "conda-forge2" should be reaching (unmodified) when no
-        // mirror matches. Registering the mirror map key against this same
-        // host:port lets us assert the request lands here, not at the
-        // conda-forge mirror.
+        // Unmatched channels should reach this upstream server unchanged.
         let upstream_router = Router::new()
             .fallback(|req: axum::extract::Request| echo_path_prefixed("real upstream", req));
         let upstream_addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
@@ -438,8 +430,7 @@ mod test {
         );
 
         let mut mirror_map = std::collections::HashMap::new();
-        // Registered WITHOUT a trailing slash, as a direct `from_map` caller
-        // may do (only `from_config` force-adds the trailing slash).
+        // `from_map` permits keys without a trailing slash.
         mirror_map.insert(
             format!(
                 "http://{}:{}/conda-forge",
@@ -456,9 +447,7 @@ mod test {
             .with(middleware)
             .build();
 
-        // "conda-forge2" is an unrelated channel with no mirror registered
-        // for it; it must reach the real upstream unmodified, NOT the
-        // "conda-forge" mirror.
+        // conda-forge2 must reach upstream unchanged.
         let res = client
             .get(format!(
                 "http://{}:{}/conda-forge2/count",
