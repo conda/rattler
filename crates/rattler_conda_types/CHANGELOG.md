@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.52.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.52.1...rattler_conda_types-v0.52.2) - 2026-09-10
+
+### Fixed
+
+- *(rattler_conda_types)* load prefix records in a deterministic order ([#2782](https://github.com/conda/rattler/pull/2782))
+
 ## [0.52.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.52.0...rattler_conda_types-v0.52.1) - 2026-08-27
 
 ### Other

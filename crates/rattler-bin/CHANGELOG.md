@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/conda/rattler/compare/rattler-bin-v0.3.0...rattler-bin-v0.4.0) - 2026-09-10
+
+### Added
+
+- *(rattler-bin)* [**breaking**] add output formats to solve and list ([#2780](https://github.com/conda/rattler/pull/2780))
+
+### Fixed
+
+- *(rattler-bin)* HTTP timeouts and retries, S3 config, safer downloads, list fixes ([#2779](https://github.com/conda/rattler/pull/2779))
+
 ## [0.3.0](https://github.com/conda/rattler/compare/rattler-bin-v0.2.13...rattler-bin-v0.3.0) - 2026-09-08
 
 ### Added
