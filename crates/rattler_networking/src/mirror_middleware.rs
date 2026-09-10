@@ -149,13 +149,7 @@ impl Middleware for MirrorMiddleware {
 
         for (key, url) in self.keys() {
             if let Some(url_rest) = url_str.strip_prefix(key) {
-                // `key` is used as a prefix, but a plain string prefix match
-                // has no notion of path-segment boundaries: without this
-                // check, a key like "https://host/conda-forge" would also
-                // match "https://host/conda-forge2/...", silently routing
-                // an unrelated channel to this mirror. Require the matched
-                // prefix to already end in '/', or the remainder to be
-                // empty or start with '/'.
+                // Require a path-segment boundary so `conda-forge` doesn't match `conda-forge2`.
                 if !key.ends_with('/') && !url_rest.is_empty() && !url_rest.starts_with('/') {
                     continue;
                 }
