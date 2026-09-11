@@ -950,8 +950,6 @@ async fn index_subdir_inner(
             repodata_revisions: repodata_revisions_for_packages(
                 &repodata_revisions,
                 &existing_repodata_revisions,
-                &packages,
-                &conda_packages,
                 &v3,
             ),
             channel_relations: channel_metadata.channel_relations,
@@ -1330,18 +1328,19 @@ impl RevisionStats {
 fn repodata_revisions_for_packages(
     configured: &[RepodataRevisionSelection],
     existing: &RepodataRevisions,
-    legacy_packages: &IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
-    legacy_conda_packages: &IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
     v3: &V3Packages,
 ) -> RepodataRevisions {
     // `BTreeMap` keeps the result ordered ascending regardless of input order.
     // Existing package statistics are deliberately discarded: generated
     // statistics always describe the typed records written below.
+    //
+    // The legacy layout is never advertised. CEP 48 requires every
+    // `info.repodata_revisions` key to be `vN` with `N` >= 3, so there is no
+    // revision to describe the `packages` and `packages.conda` maps, and an
+    // existing `v0` entry is dropped rather than carried forward.
     let mut revisions = existing
         .iter()
-        .filter(|(revision, _)| {
-            revision.uses_legacy_package_layout() || **revision == RepodataRevision::V3
-        })
+        .filter(|(revision, _)| **revision == RepodataRevision::V3)
         .map(|(revision, metadata)| {
             (
                 *revision,
@@ -1361,15 +1360,6 @@ fn repodata_revisions_for_packages(
     }
 
     let mut stats = BTreeMap::<RepodataRevision, RevisionStats>::new();
-    for record in legacy_packages
-        .values()
-        .chain(legacy_conda_packages.values())
-    {
-        stats
-            .entry(RepodataRevision::Legacy)
-            .or_default()
-            .add(record);
-    }
     for (_, record) in v3.records() {
         stats.entry(RepodataRevision::V3).or_default().add(record);
     }
@@ -2174,62 +2164,22 @@ mod tests {
     }
 
     #[test]
-    fn legacy_revision_metadata_includes_configured_message_and_package_stats() {
-        let mut legacy_packages = IndexMap::default();
-        let mut legacy_conda_packages = IndexMap::default();
-        let oldest: rattler_conda_types::utils::TimestampMs =
-            serde_json::from_str("1710000000000").unwrap();
-        let newest: rattler_conda_types::utils::TimestampMs =
-            serde_json::from_str("1720000000000").unwrap();
-
-        let mut tar_bz2_record = PackageRecord::new(
-            PackageName::new_unchecked("legacy-tar"),
-            Version::from_str("1.0").unwrap(),
-            "0".to_string(),
-        );
-        tar_bz2_record.timestamp = Some(oldest);
-        legacy_packages.insert(
-            DistArchiveIdentifier::try_from_filename("legacy-tar-1.0-0.tar.bz2").unwrap(),
-            tar_bz2_record,
-        );
-
-        let mut conda_record = PackageRecord::new(
-            PackageName::new_unchecked("legacy-conda"),
-            Version::from_str("1.0").unwrap(),
-            "0".to_string(),
-        );
-        conda_record.timestamp = Some(newest);
-        legacy_conda_packages.insert(
-            DistArchiveIdentifier::try_from_filename("legacy-conda-1.0-0.conda").unwrap(),
-            conda_record,
-        );
-
+    fn legacy_packages_are_not_advertised_as_a_revision() {
+        // CEP 48 has no revision key for the legacy package maps, so indexing a
+        // channel that only holds them must not write `info.repodata_revisions`,
+        // and an existing `v0` entry must not survive a re-index.
         let existing = RepodataRevisions::from([(
             RepodataRevision::Legacy,
             RepodataRevisionMetadata {
-                message: Some("stale message".to_string()),
+                message: Some("stale legacy message".to_string()),
                 n_packages: Some(99),
-                oldest: Some(newest),
-                newest: Some(newest),
+                ..RepodataRevisionMetadata::default()
             },
         )]);
-        let revisions = repodata_revisions_for_packages(
-            &[RepodataRevisionSelection {
-                revision: RepodataRevision::Legacy,
-                message: Some("legacy packages".to_string()),
-            }],
-            &existing,
-            &legacy_packages,
-            &legacy_conda_packages,
-            &V3Packages::default(),
-        );
 
-        assert_eq!(revisions.len(), 1);
-        let metadata = &revisions[&RepodataRevision::Legacy];
-        assert_eq!(metadata.message.as_deref(), Some("legacy packages"));
-        assert_eq!(metadata.n_packages, Some(2));
-        assert_eq!(metadata.oldest, Some(oldest));
-        assert_eq!(metadata.newest, Some(newest));
+        let revisions = repodata_revisions_for_packages(&[], &existing, &V3Packages::default());
+
+        assert!(revisions.is_empty());
     }
 
     #[test]
@@ -2319,10 +2269,7 @@ mod tests {
                 ..RepodataRevisionMetadata::default()
             },
         )]);
-        let empty = IndexMap::default();
-
-        let preserved =
-            repodata_revisions_for_packages(&[], &existing, &empty, &empty, &V3Packages::default());
+        let preserved = repodata_revisions_for_packages(&[], &existing, &V3Packages::default());
         assert_eq!(
             preserved[&RepodataRevision::V3].message.as_deref(),
             Some("existing message")
@@ -2335,8 +2282,6 @@ mod tests {
                 message: Some("caller message".to_string()),
             }],
             &existing,
-            &empty,
-            &empty,
             &V3Packages::default(),
         );
         assert_eq!(
