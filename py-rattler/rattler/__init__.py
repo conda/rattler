@@ -38,7 +38,7 @@ from rattler.package import (
     NoArchLiteral,
 )
 from rattler.prefix import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType, Link, LinkType
-from rattler.platform import Platform
+from rattler.platform import Subdir, Platform
 from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version
 from rattler.install import install, InstallerReporter
 from rattler.index import index
@@ -105,6 +105,7 @@ __all__ = [
     "PypiLockedPackage",
     "solve",
     "solve_with_sparse_repodata",
+    "Subdir",
     "Platform",
     "install",
     "InstallerReporter",

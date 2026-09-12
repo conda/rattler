@@ -10,7 +10,7 @@ from typing import Iterator
 import boto3
 import pytest
 
-from rattler import Config, Platform
+from rattler import Config, Subdir
 from rattler.index import index_fs, index_s3
 from rattler.index.index import S3Credentials
 
@@ -66,7 +66,7 @@ async def test_index_uses_config_with_explicit_overrides(package_directory):
 
 @pytest.mark.asyncio
 async def test_index_specific_subdir_non_noarch(package_directory):
-    await index_fs(package_directory, Platform("win-64"))
+    await index_fs(package_directory, Subdir("win-64"))
 
     assert "repodata.json" in os.listdir(package_directory / "win-64")
     with open(package_directory / "win-64/repodata.json") as f:
@@ -75,7 +75,7 @@ async def test_index_specific_subdir_non_noarch(package_directory):
 
 @pytest.mark.asyncio
 async def test_index_specific_subdir_noarch(package_directory):
-    await index_fs(package_directory, Platform("noarch"))
+    await index_fs(package_directory, Subdir("noarch"))
 
     win_files = os.listdir(package_directory / "win-64")
     assert "repodata.json" not in win_files
@@ -89,7 +89,7 @@ async def test_index_specific_subdir_noarch(package_directory):
 async def test_index_repodata_revisions(package_directory):
     await index_fs(
         package_directory,
-        Platform("noarch"),
+        Subdir("noarch"),
         repodata_revisions=[{"revision": "v3", "message": "v3 packages"}],
         package_revision_assignment="latest",
         force=True,
@@ -108,7 +108,7 @@ async def test_index_repodata_revisions_reject_legacy_selection(package_director
     with pytest.raises(ValueError, match="expected 'v3'"):
         await index_fs(
             package_directory,
-            Platform("noarch"),
+            Subdir("noarch"),
             repodata_revisions=["legacy"],
         )
 
@@ -119,7 +119,7 @@ async def test_index_repodata_revisions_reject_obsolete_statistics(package_direc
     with pytest.raises(TypeError, match="no longer accepted.*derives package statistics"):
         await index_fs(
             package_directory,
-            Platform("noarch"),
+            Subdir("noarch"),
             repodata_revisions=[{"revision": "v3", obsolete_field: 1}],
         )
 
@@ -129,7 +129,7 @@ async def test_index_repodata_revisions_reject_legacy_mapping(package_directory)
     with pytest.raises(TypeError, match="no longer accepts a vN-keyed metadata mapping"):
         await index_fs(
             package_directory,
-            Platform("noarch"),
+            Subdir("noarch"),
             repodata_revisions={"v3": {"n_packages": 1}},  # type: ignore[arg-type]
         )
 

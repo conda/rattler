@@ -3,7 +3,7 @@
 use fs_err as fs;
 use memmap2::Mmap;
 use once_cell::sync::Lazy;
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_digest::Sha256;
 use rattler_digest::{HashingWriter, Sha256Hash};
@@ -159,7 +159,7 @@ pub fn link_file(
     allow_symbolic_links: bool,
     allow_hard_links: bool,
     allow_ref_links: bool,
-    target_platform: Platform,
+    target_platform: Subdir,
     apple_codesign_behavior: AppleCodeSignBehavior,
     modification_time: filetime::FileTime,
     external_symlink_policy: ExternalSymlinkPolicy,
@@ -622,7 +622,7 @@ pub fn copy_and_replace_placeholders(
     mut destination: impl Write,
     prefix_placeholder: &str,
     target_prefix: &str,
-    target_platform: &Platform,
+    target_platform: &Subdir,
     file_mode: FileMode,
 ) -> Result<(), std::io::Error> {
     match file_mode {
@@ -675,7 +675,7 @@ static PYTHON_REGEX: Lazy<Regex> = Lazy::new(|| {
 });
 
 /// Finds if the shebang line length is valid.
-fn is_valid_shebang_length(shebang: &str, platform: &Platform) -> bool {
+fn is_valid_shebang_length(shebang: &str, platform: &Subdir) -> bool {
     const MAX_SHEBANG_LENGTH_LINUX: usize = 127;
     const MAX_SHEBANG_LENGTH_MACOS: usize = 512;
 
@@ -717,7 +717,7 @@ fn convert_shebang_to_env(shebang: Cow<'_, str>) -> Cow<'_, str> {
 fn replace_shebang<'a>(
     shebang: Cow<'a, str>,
     old_new: (&str, &str),
-    platform: &Platform,
+    platform: &Subdir,
 ) -> Cow<'a, str> {
     // If the new shebang would contain a space, return a `#!/usr/bin/env` shebang
     assert!(
@@ -762,7 +762,7 @@ pub fn copy_and_replace_textual_placeholder(
     mut destination: impl Write,
     prefix_placeholder: &str,
     target_prefix: &str,
-    target_platform: &Platform,
+    target_platform: &Subdir,
 ) -> Result<(), std::io::Error> {
     // Get the prefixes as bytes
     let old_prefix = prefix_placeholder.as_bytes();
@@ -933,7 +933,7 @@ mod test {
     use super::ExternalSymlinkPolicy;
     use super::PYTHON_REGEX;
     use fs_err as fs;
-    use rattler_conda_types::Platform;
+    use rattler_conda_types::Subdir;
     use rstest::rstest;
     use std::io::Cursor;
 
@@ -985,7 +985,7 @@ mod test {
             true,
             true,
             true,
-            Platform::Linux64,
+            Subdir::Linux64,
             AppleCodeSignBehavior::DoNothing,
             modification_time,
             ExternalSymlinkPolicy::Deny,
@@ -1046,7 +1046,7 @@ mod test {
             true,
             true,
             true,
-            Platform::Linux64,
+            Subdir::Linux64,
             AppleCodeSignBehavior::DoNothing,
             modification_time,
             ExternalSymlinkPolicy::Deny,
@@ -1108,7 +1108,7 @@ mod test {
             true,
             true,
             true,
-            Platform::Linux64,
+            Subdir::Linux64,
             AppleCodeSignBehavior::DoNothing,
             modification_time,
             ExternalSymlinkPolicy::Deny,
@@ -1145,7 +1145,7 @@ mod test {
             &mut output,
             prefix_placeholder,
             target_prefix,
-            &Platform::Linux64,
+            &Subdir::Linux64,
         )
         .unwrap();
         assert_eq!(
@@ -1221,7 +1221,7 @@ mod test {
         let replaced = super::replace_shebang(
             shebang_with_spaces,
             ("placeholder", "with space"),
-            &Platform::Linux64,
+            &Subdir::Linux64,
         );
         assert_eq!(replaced, "#!/usr/bin/env executable -o test -x");
     }
@@ -1229,30 +1229,30 @@ mod test {
     #[test]
     fn test_replace_long_shebang() {
         let short_shebang = "#!/path/to/executable -x 123".into();
-        let replaced = super::replace_shebang(short_shebang, ("", ""), &Platform::Linux64);
+        let replaced = super::replace_shebang(short_shebang, ("", ""), &Subdir::Linux64);
         assert_eq!(replaced, "#!/path/to/executable -x 123");
 
         let shebang = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong/executable -o test -x";
-        let replaced = super::replace_shebang(shebang.into(), ("", ""), &Platform::Linux64);
+        let replaced = super::replace_shebang(shebang.into(), ("", ""), &Subdir::Linux64);
         assert_eq!(replaced, "#!/usr/bin/env executable -o test -x");
 
-        let replaced = super::replace_shebang(shebang.into(), ("", ""), &Platform::Osx64);
+        let replaced = super::replace_shebang(shebang.into(), ("", ""), &Subdir::Osx64);
         assert_eq!(replaced, shebang);
 
         let shebang_with_escapes = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooo\\ oooooo\\ oooooo\\ oooooooooooooooooooooooooooooooooooong/exe\\ cutable -o test -x";
         let replaced =
-            super::replace_shebang(shebang_with_escapes.into(), ("", ""), &Platform::Linux64);
+            super::replace_shebang(shebang_with_escapes.into(), ("", ""), &Subdir::Linux64);
         assert_eq!(replaced, "#!/usr/bin/env exe\\ cutable -o test -x");
 
         let shebang = "#!    /this/is/looooooooooooooooooooooooooooooooooooooooooooo\\ \\ ooooooo\\ oooooo\\ oooooo\\ ooooooooooooooooo\\ ooooooooooooooooooong/exe\\ cutable -o \"te  st\" -x";
-        let replaced = super::replace_shebang(shebang.into(), ("", ""), &Platform::Linux64);
+        let replaced = super::replace_shebang(shebang.into(), ("", ""), &Subdir::Linux64);
         assert_eq!(replaced, "#!/usr/bin/env exe\\ cutable -o \"te  st\" -x");
 
         let shebang = "#!/usr/bin/env perl";
         let replaced = super::replace_shebang(
             shebang.into(),
             ("/placeholder", "/with space"),
-            &Platform::Linux64,
+            &Subdir::Linux64,
         );
         assert_eq!(replaced, shebang);
 
@@ -1260,7 +1260,7 @@ mod test {
         let replaced = super::replace_shebang(
             shebang.into(),
             ("/placeholder", "/with space"),
-            &Platform::Linux64,
+            &Subdir::Linux64,
         );
         assert_eq!(replaced, "#!/usr/bin/env perl");
     }
@@ -1271,7 +1271,7 @@ mod test {
         let replaced = super::replace_shebang(
             short_shebang,
             ("/path/to", "/new/prefix/with spaces/bin"),
-            &Platform::Linux64,
+            &Subdir::Linux64,
         );
         insta::assert_snapshot!(replaced);
 
@@ -1279,7 +1279,7 @@ mod test {
         let replaced = super::replace_shebang(
             short_shebang,
             ("/path/to", "/new/prefix/with spaces/bin"),
-            &Platform::Linux64,
+            &Subdir::Linux64,
         );
         insta::assert_snapshot!(replaced);
     }
@@ -1301,7 +1301,7 @@ mod test {
             &mut output,
             prefix_placeholder,
             &target_prefix,
-            &Platform::Linux64,
+            &Subdir::Linux64,
         )
         .unwrap();
 

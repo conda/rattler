@@ -221,7 +221,7 @@ pub(super) fn solve_conditional_root_requirement_with_logic<T: SolverImpl + Defa
 pub(super) fn rattler_issue_1917_platform_conditionals<T: SolverImpl + Default>() {
     use rattler_conda_types::Version;
 
-    // Platform-specific conditional dependencies
+    // Subdir-specific conditional dependencies
     // Package declares platform-specific deps that should resolve when virtual package is present
     let platform_pkg = PackageBuilder::new("package")
         .version("1.0.0")

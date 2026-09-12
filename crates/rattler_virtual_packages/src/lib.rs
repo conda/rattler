@@ -52,9 +52,7 @@ use std::{
 use archspec::cpu::Microarchitecture;
 use libc::DetectLibCError;
 use linux::ParseLinuxVersionError;
-use rattler_conda_types::{
-    GenericVirtualPackage, PackageName, ParseVersionError, Platform, Version,
-};
+use rattler_conda_types::{GenericVirtualPackage, PackageName, ParseVersionError, Subdir, Version};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::osx::ParseOsxVersionError;
@@ -333,7 +331,7 @@ impl VirtualPackages {
 
         Ok(Self {
             win: Windows::detect(overrides.win.as_ref())?,
-            unix: Platform::current().is_some_and(Platform::is_unix),
+            unix: Subdir::current().is_some_and(Subdir::is_unix),
             linux: Linux::detect(overrides.linux.as_ref())?,
             osx: Osx::detect(overrides.osx.as_ref())?,
             ios: Ios::detect(overrides.ios.as_ref())?,
@@ -366,14 +364,14 @@ impl VirtualPackages {
     /// - **`LibC`** (`__glibc`): `glibc` with [`defaults::default_glibc_version`] (only for Linux
     ///   platforms)
     /// - **CUDA** (`__cuda`): Not included (None)
-    /// - **Archspec**: Platform-specific minimal architecture (e.g., `x86_64` for `osx-64`)
+    /// - **Archspec**: Subdir-specific minimal architecture (e.g., `x86_64` for `osx-64`)
     pub fn detect_for_platform(
-        platform: Platform,
+        platform: Subdir,
         overrides: &VirtualPackageOverrides,
         cache_dir: Option<&Path>,
     ) -> Result<Self, DetectVirtualPackageError> {
         let virtual_packages = Self::detect(overrides, cache_dir)?;
-        if Some(platform) == Platform::current() {
+        if Some(platform) == Subdir::current() {
             // If we're targeting the current platform, just return the detected packages
             return Ok(virtual_packages);
         }
@@ -508,7 +506,7 @@ impl VirtualPackages {
     /// supposed to look like.
     ///
     /// See the [`defaults`] module for the individual versions.
-    pub fn baseline_for_platform(platform: Platform) -> Self {
+    pub fn baseline_for_platform(platform: Subdir) -> Self {
         Self {
             win: platform.is_windows().then(|| Windows {
                 version: Some(defaults::default_windows_version()),
@@ -542,7 +540,7 @@ impl VirtualPackages {
 /// target platform and that a default version is assumed instead.
 fn log_default_virtual_package(
     name: &str,
-    platform: Platform,
+    platform: Subdir,
     version: &Version,
     env_var_name: &str,
 ) {
@@ -1025,46 +1023,44 @@ impl Archspec {
         archspec::cpu::host()
             .ok()
             .map(Into::into)
-            .or_else(|| Platform::current().and_then(Self::from_platform))
+            .or_else(|| Subdir::current().and_then(Self::from_platform))
             .unwrap_or(Archspec::Unknown)
     }
 
     /// Returns the minimal supported archspec architecture for the given
     /// platform.
     #[allow(clippy::match_same_arms)]
-    pub fn from_platform(platform: Platform) -> Option<Self> {
+    pub fn from_platform(platform: Subdir) -> Option<Self> {
         // The values are taken from the archspec-json library.
         // See: https://github.com/archspec/archspec-json/blob/master/cpu/microarchitectures.json
         let archspec_name = match platform {
-            Platform::NoArch => return None,
-            Platform::EmscriptenWasm32 | Platform::WasiWasm32 => return None,
-            Platform::Win32 | Platform::Linux32 => "x86",
-            Platform::Win64 | Platform::Osx64 | Platform::Linux64 => "x86_64",
-            Platform::LinuxAarch64 | Platform::LinuxArmV6l | Platform::LinuxArmV7l => "aarch64",
-            Platform::LinuxLoongArch64 => "loongarch64",
-            Platform::LinuxPpc64le => "ppc64le",
-            Platform::LinuxPpc64 => "ppc64",
-            Platform::LinuxPpc => "ppc",
-            Platform::LinuxS390X => "s390x",
-            Platform::LinuxRiscv32 => "riscv32",
-            Platform::LinuxRiscv64 => "riscv64",
+            Subdir::NoArch => return None,
+            Subdir::EmscriptenWasm32 | Subdir::WasiWasm32 => return None,
+            Subdir::Win32 | Subdir::Linux32 => "x86",
+            Subdir::Win64 | Subdir::Osx64 | Subdir::Linux64 => "x86_64",
+            Subdir::LinuxAarch64 | Subdir::LinuxArmV6l | Subdir::LinuxArmV7l => "aarch64",
+            Subdir::LinuxLoongArch64 => "loongarch64",
+            Subdir::LinuxPpc64le => "ppc64le",
+            Subdir::LinuxPpc64 => "ppc64",
+            Subdir::LinuxPpc => "ppc",
+            Subdir::LinuxS390X => "s390x",
+            Subdir::LinuxRiscv32 => "riscv32",
+            Subdir::LinuxRiscv64 => "riscv64",
             // IBM Zos is a special case. It is not supported by archspec as far as I can see.
-            Platform::ZosZ => return None,
+            Subdir::ZosZ => return None,
 
             // TODO: There must be a minimal aarch64 version that windows supports.
-            Platform::WinArm64 => "aarch64",
+            Subdir::WinArm64 => "aarch64",
 
             // The first every Apple Silicon Macs are based on m1.
-            Platform::OsxArm64 => "m1",
+            Subdir::OsxArm64 => "m1",
 
             // iOS and Android arm64/aarch64 devices are all 64-bit ARM.
-            Platform::IosArm64 | Platform::IosSimulatorArm64 | Platform::AndroidAarch64 => {
-                "aarch64"
-            }
-            Platform::IosSimulator64 | Platform::Android64 => "x86_64",
-            Platform::Android32 => "x86",
+            Subdir::IosArm64 | Subdir::IosSimulatorArm64 | Subdir::AndroidAarch64 => "aarch64",
+            Subdir::IosSimulator64 | Subdir::Android64 => "x86_64",
+            Subdir::Android32 => "x86",
             // 32-bit ARM (armeabi-v7a) is not modelled by archspec.
-            Platform::AndroidArmV7a => return None,
+            Subdir::AndroidArmV7a => return None,
 
             // Otherwise, we assume that the architecture is unknown.
             _ => return None,
@@ -1566,7 +1562,7 @@ mod test {
 
         // Test Linux 64-bit
         let linux_packages =
-            VirtualPackages::detect_for_platform(Platform::Linux64, &overrides, None).unwrap();
+            VirtualPackages::detect_for_platform(Subdir::Linux64, &overrides, None).unwrap();
         let linux_names: Vec<String> = linux_packages
             .into_generic_virtual_packages()
             .map(|pkg| pkg.name.as_normalized().to_string())
@@ -1578,7 +1574,7 @@ mod test {
 
         // Test macOS ARM64
         let osx_packages =
-            VirtualPackages::detect_for_platform(Platform::OsxArm64, &overrides, None).unwrap();
+            VirtualPackages::detect_for_platform(Subdir::OsxArm64, &overrides, None).unwrap();
         let osx_names: Vec<String> = osx_packages
             .into_generic_virtual_packages()
             .map(|pkg| pkg.name.as_normalized().to_string())
@@ -1589,7 +1585,7 @@ mod test {
 
         // Test Windows 64-bit
         let win_packages =
-            VirtualPackages::detect_for_platform(Platform::Win64, &overrides, None).unwrap();
+            VirtualPackages::detect_for_platform(Subdir::Win64, &overrides, None).unwrap();
         let win_names: Vec<String> = win_packages
             .into_generic_virtual_packages()
             .map(|pkg| pkg.name.as_normalized().to_string())
@@ -1601,21 +1597,21 @@ mod test {
 
     #[test]
     fn baseline_only_fills_slots_the_platform_carries() {
-        let linux = VirtualPackages::baseline_for_platform(Platform::Linux64);
+        let linux = VirtualPackages::baseline_for_platform(Subdir::Linux64);
         assert!(linux.linux.is_some());
         assert!(linux.libc.is_some());
         assert!(linux.unix);
         assert!(linux.win.is_none());
         assert!(linux.osx.is_none());
 
-        let win = VirtualPackages::baseline_for_platform(Platform::Win64);
+        let win = VirtualPackages::baseline_for_platform(Subdir::Win64);
         assert!(win.win.is_some());
         assert!(!win.unix);
         assert!(win.linux.is_none());
         assert!(win.libc.is_none());
         assert!(win.osx.is_none());
 
-        let osx = VirtualPackages::baseline_for_platform(Platform::OsxArm64);
+        let osx = VirtualPackages::baseline_for_platform(Subdir::OsxArm64);
         assert!(osx.osx.is_some());
         assert!(osx.unix);
         assert!(osx.linux.is_none());
@@ -1627,7 +1623,7 @@ mod test {
     fn baseline_assumes_no_gpu() {
         // Both CUDA slots are valid on any platform, but nothing is assumed to
         // have a GPU -- they only appear once something detects or declares them.
-        for platform in [Platform::Linux64, Platform::Win64, Platform::OsxArm64] {
+        for platform in [Subdir::Linux64, Subdir::Win64, Subdir::OsxArm64] {
             let baseline = VirtualPackages::baseline_for_platform(platform);
             assert!(baseline.cuda.is_none(), "{platform}");
             assert!(baseline.cuda_arch.is_none(), "{platform}");
@@ -1636,7 +1632,7 @@ mod test {
 
     #[test]
     fn baseline_uses_the_documented_default_versions() {
-        let linux = VirtualPackages::baseline_for_platform(Platform::Linux64);
+        let linux = VirtualPackages::baseline_for_platform(Subdir::Linux64);
         assert_eq!(
             linux.linux.unwrap().version,
             defaults::default_linux_version()
@@ -1645,24 +1641,24 @@ mod test {
         assert_eq!(libc.family, "glibc");
         assert_eq!(
             libc.version,
-            defaults::default_glibc_version(Platform::Linux64)
+            defaults::default_glibc_version(Subdir::Linux64)
         );
 
-        let osx = VirtualPackages::baseline_for_platform(Platform::OsxArm64);
+        let osx = VirtualPackages::baseline_for_platform(Subdir::OsxArm64);
         assert_eq!(
             osx.osx.unwrap().version,
-            defaults::default_mac_os_version(Platform::OsxArm64).unwrap()
+            defaults::default_mac_os_version(Subdir::OsxArm64).unwrap()
         );
 
-        let win = VirtualPackages::baseline_for_platform(Platform::Win64);
+        let win = VirtualPackages::baseline_for_platform(Subdir::Win64);
         assert_eq!(
             win.win.unwrap().version.unwrap(),
             defaults::default_windows_version()
         );
 
         assert_eq!(
-            VirtualPackages::baseline_for_platform(Platform::Linux64).archspec,
-            Archspec::from_platform(Platform::Linux64)
+            VirtualPackages::baseline_for_platform(Subdir::Linux64).archspec,
+            Archspec::from_platform(Subdir::Linux64)
         );
     }
 
@@ -1671,14 +1667,14 @@ mod test {
     /// would make every package look uninstallable.
     #[test]
     fn baseline_assumes_a_newer_glibc_on_riscv64() {
-        let riscv = VirtualPackages::baseline_for_platform(Platform::LinuxRiscv64);
+        let riscv = VirtualPackages::baseline_for_platform(Subdir::LinuxRiscv64);
         let libc = riscv.libc.expect("__glibc should be present");
         assert_eq!(libc.family, "glibc");
         assert_eq!(libc.version, Version::from_str("2.39").unwrap());
 
         // Other Linux platforms keep the RHEL 8 baseline.
         assert_eq!(
-            VirtualPackages::baseline_for_platform(Platform::Linux64)
+            VirtualPackages::baseline_for_platform(Subdir::Linux64)
                 .libc
                 .expect("__glibc should be present")
                 .version,
@@ -1691,11 +1687,11 @@ mod test {
     /// host has nothing to say about.
     #[test]
     fn baseline_matches_cross_compiled_detection() {
-        let current = Platform::current().expect("host platform");
+        let current = Subdir::current().expect("host platform");
         let target = if current.is_linux() {
-            Platform::Win64
+            Subdir::Win64
         } else {
-            Platform::Linux64
+            Subdir::Linux64
         };
 
         let baseline = VirtualPackages::baseline_for_platform(target);
@@ -1717,11 +1713,11 @@ mod test {
         // host's own platform family is skipped because there the detected
         // (host) versions take precedence over the defaults.
         let overrides = VirtualPackageOverrides::default();
-        let current = Platform::current().expect("host platform");
+        let current = Subdir::current().expect("host platform");
 
         if !current.is_linux() {
             let packages =
-                VirtualPackages::detect_for_platform(Platform::Linux64, &overrides, None).unwrap();
+                VirtualPackages::detect_for_platform(Subdir::Linux64, &overrides, None).unwrap();
             assert_eq!(
                 packages.linux.expect("__linux should be present").version,
                 defaults::default_linux_version()
@@ -1730,22 +1726,22 @@ mod test {
             assert_eq!(libc.family, "glibc");
             assert_eq!(
                 libc.version,
-                defaults::default_glibc_version(Platform::Linux64)
+                defaults::default_glibc_version(Subdir::Linux64)
             );
         }
 
         if !current.is_osx() {
             let packages =
-                VirtualPackages::detect_for_platform(Platform::OsxArm64, &overrides, None).unwrap();
+                VirtualPackages::detect_for_platform(Subdir::OsxArm64, &overrides, None).unwrap();
             assert_eq!(
                 packages.osx.expect("__osx should be present").version,
-                defaults::default_mac_os_version(Platform::OsxArm64).unwrap()
+                defaults::default_mac_os_version(Subdir::OsxArm64).unwrap()
             );
         }
 
         if !current.is_windows() {
             let packages =
-                VirtualPackages::detect_for_platform(Platform::Win64, &overrides, None).unwrap();
+                VirtualPackages::detect_for_platform(Subdir::Win64, &overrides, None).unwrap();
             assert_eq!(
                 packages.win.expect("__win should be present").version,
                 Some(defaults::default_windows_version())
@@ -1758,7 +1754,7 @@ mod test {
         // Cross-compiling to an ios-* subdir yields __ios (falling back to
         // version 0) plus __unix, but not __osx.
         let ios_packages = VirtualPackages::detect_for_platform(
-            Platform::IosArm64,
+            Subdir::IosArm64,
             &VirtualPackageOverrides::default(),
             None,
         )
@@ -1777,7 +1773,7 @@ mod test {
             ..Default::default()
         };
         let ios_packages =
-            VirtualPackages::detect_for_platform(Platform::IosSimulatorArm64, &overrides, None)
+            VirtualPackages::detect_for_platform(Subdir::IosSimulatorArm64, &overrides, None)
                 .unwrap();
         let ios = ios_packages
             .into_generic_virtual_packages()
@@ -1788,7 +1784,7 @@ mod test {
         // Cross-compiling to an android-* subdir yields __android plus __unix,
         // but not __linux.
         let android_packages = VirtualPackages::detect_for_platform(
-            Platform::AndroidAarch64,
+            Subdir::AndroidAarch64,
             &VirtualPackageOverrides::default(),
             None,
         )
@@ -1807,8 +1803,7 @@ mod test {
             ..Default::default()
         };
         let android_packages =
-            VirtualPackages::detect_for_platform(Platform::AndroidArmV7a, &overrides, None)
-                .unwrap();
+            VirtualPackages::detect_for_platform(Subdir::AndroidArmV7a, &overrides, None).unwrap();
         let android = android_packages
             .into_generic_virtual_packages()
             .find(|pkg| pkg.name.as_normalized() == "__android")

@@ -58,7 +58,7 @@ use itertools::Itertools;
 pub use link::{LinkFileError, LinkMethod, link_file};
 pub use python::PythonInfo;
 use rattler_conda_types::{
-    Platform,
+    Subdir,
     package::{AboutJson, IndexJson, LinkJson, NoArchLinks, PackageFile, PathsEntry, PathsJson},
     prefix::Prefix,
     prefix_record::{self, LinkType},
@@ -227,7 +227,7 @@ pub struct InstallOptions {
     /// The platform for which the package is installed. Some operations like
     /// signing require different behavior depending on the platform. If the
     /// field is set to `None` the current platform is used.
-    pub platform: Option<Platform>,
+    pub platform: Option<Subdir>,
 
     /// Python version information of the python distribution installed within
     /// the environment. This is only used when installing noarch Python
@@ -364,7 +364,7 @@ pub async fn link_package(
     // Determine the platform to use
     let platform = options
         .platform
-        .or_else(Platform::current)
+        .or_else(Subdir::current)
         .ok_or(InstallError::UnknownHostPlatform)?;
 
     // compute all path renames
@@ -718,7 +718,7 @@ pub fn link_package_sync(
     // Determine the platform to use
     let platform = options
         .platform
-        .or_else(Platform::current)
+        .or_else(Subdir::current)
         .ok_or(InstallError::UnknownHostPlatform)?;
 
     // compute all path renames
@@ -1342,7 +1342,7 @@ mod test {
     };
     use futures::{StreamExt, stream};
     use rattler_conda_types::{
-        ExplicitEnvironmentSpec, Platform, Version, package::CondaArchiveIdentifier,
+        ExplicitEnvironmentSpec, Subdir, Version, package::CondaArchiveIdentifier,
     };
     use rattler_lock::LockFile;
     use rattler_networking::LazyClient;
@@ -1353,7 +1353,7 @@ mod test {
     #[tokio::test]
     pub async fn test_explicit_lock() {
         // Load a prepared explicit environment file for the current platform.
-        let current_platform = Platform::current().expect("host platform");
+        let current_platform = Subdir::current().expect("host platform");
         let explicit_env_path =
             get_test_data_dir().join(format!("python/explicit-env-{current_platform}.txt"));
         let env = ExplicitEnvironmentSpec::from_path(&explicit_env_path).unwrap();
@@ -1379,7 +1379,7 @@ mod test {
         let lock_path = get_test_data_dir().join("conda-lock/v4/python-lock.yml");
         let lock = LockFile::from_path(&lock_path).unwrap();
 
-        let current_platform = Platform::current().expect("host platform");
+        let current_platform = Subdir::current().expect("host platform");
         let lock_env = lock
             .default_environment()
             .expect("no default environment in lock file");
@@ -1402,7 +1402,7 @@ mod test {
     pub async fn test_install_python(
         urls: impl Iterator<Item = Url>,
         cache_name: &str,
-        platform: Platform,
+        platform: Subdir,
     ) {
         // Open a package cache in the systems temporary directory with a specific name.
         // This allows us to reuse a package cache across multiple invocations
@@ -1459,7 +1459,7 @@ mod test {
             .await;
 
         // Run the python command and validate the version it outputs
-        let python_path = if Platform::current().expect("host platform").is_windows() {
+        let python_path = if Subdir::current().expect("host platform").is_windows() {
             "python.exe"
         } else {
             "bin/python"

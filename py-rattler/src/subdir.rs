@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use pyo3::{PyResult, exceptions::PyRuntimeError, pyclass, pymethods};
-use rattler_conda_types::{Arch, Platform};
+use rattler_conda_types::{Arch, Subdir};
 
 use crate::error::PyRattlerError;
 
@@ -53,55 +53,55 @@ impl PyArch {
 }
 
 ///////////////////////////
-/// Platform            ///
+/// Subdir            ///
 ///////////////////////////
 
 #[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub struct PyPlatform {
-    pub inner: Platform,
+pub struct PySubdir {
+    pub inner: Subdir,
 }
 
-impl From<Platform> for PyPlatform {
-    fn from(value: Platform) -> Self {
-        PyPlatform { inner: value }
+impl From<Subdir> for PySubdir {
+    fn from(value: Subdir) -> Self {
+        PySubdir { inner: value }
     }
 }
 
-impl From<PyPlatform> for Platform {
-    fn from(value: PyPlatform) -> Self {
+impl From<PySubdir> for Subdir {
+    fn from(value: PySubdir) -> Self {
         value.inner
     }
 }
 
-impl FromStr for PyPlatform {
+impl FromStr for PySubdir {
     type Err = PyRattlerError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let platform = Platform::from_str(s).map_err(PyRattlerError::from)?;
+        let platform = Subdir::from_str(s).map_err(PyRattlerError::from)?;
         Ok(platform.into())
     }
 }
 
 #[pymethods]
-impl PyPlatform {
+impl PySubdir {
     #[new]
     pub fn __init__(platform: &str) -> Result<Self, PyRattlerError> {
-        let platform = Platform::from_str(platform).map_err(PyRattlerError::from)?;
+        let platform = Subdir::from_str(platform).map_err(PyRattlerError::from)?;
         Ok(platform.into())
     }
 
     #[staticmethod]
     pub fn current() -> PyResult<Self> {
-        Platform::current()
+        Subdir::current()
             .map(Into::into)
             .ok_or_else(|| PyRuntimeError::new_err(UNKNOWN_HOST_PLATFORM))
     }
 
     #[staticmethod]
     pub fn all() -> Vec<Self> {
-        Platform::all().map(Into::into).collect()
+        Subdir::all().map(Into::into).collect()
     }
 
     #[getter]

@@ -2,10 +2,10 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any, Dict, Literal, Tuple, Optional
 
-from rattler.rattler import PyPlatform
+from rattler.rattler import PySubdir
 from rattler.platform.arch import Arch
 
-PlatformLiteral = Literal[
+SubdirLiteral = Literal[
     "noarch",
     "linux-32",
     "linux-64",
@@ -41,46 +41,46 @@ PlatformLiteral = Literal[
 ]
 
 
-class PlatformSingleton(type):
-    _instances: Dict[str, Platform]
+class SubdirSingleton(type):
+    _instances: Dict[str, Subdir]
 
     def __init__(cls, *args: Tuple[Any], **kwargs: Dict[Any, Any]) -> None:
         cls._instances = {}
 
-    def __call__(cls, platform: str, *args: Tuple[Any], **kwargs: Dict[Any, Any]) -> Platform:
+    def __call__(cls, subdir: str, *args: Tuple[Any], **kwargs: Dict[Any, Any]) -> Subdir:
         try:
-            return cls._instances[platform]
+            return cls._instances[subdir]
         except KeyError:
             pass
 
-        instance = super().__call__(platform, *args, **kwargs)
-        cls._instances[platform] = instance
+        instance = super().__call__(subdir, *args, **kwargs)
+        cls._instances[subdir] = instance
         return instance
 
 
-class Platform(metaclass=PlatformSingleton):
-    def __init__(self, value: PlatformLiteral | str):
-        self._inner = PyPlatform(value)
+class Subdir(metaclass=SubdirSingleton):
+    def __init__(self, value: SubdirLiteral | str):
+        self._inner = PySubdir(value)
 
     @classmethod
-    def _from_py_platform(cls, py_platform: PyPlatform) -> Platform:
-        """Construct Rattler version from FFI PyArch object."""
+    def _from_py_subdir(cls, py_subdir: PySubdir) -> Subdir:
+        """Construct a Subdir from an FFI PySubdir object."""
         try:
-            platform = cls._instances[py_platform.name]
+            subdir = cls._instances[py_subdir.name]
         except KeyError:
-            platform = cls.__new__(cls)
-            platform._inner = py_platform
-            cls._instances[str(platform)] = platform
-        return platform
+            subdir = cls.__new__(cls)
+            subdir._inner = py_subdir
+            cls._instances[str(subdir)] = subdir
+        return subdir
 
     def __str__(self) -> str:
         """
-        Returns a string representation of the platform.
+        Returns a string representation of the subdir.
 
         Examples
         --------
         ```python
-        >>> str(Platform("linux-64"))
+        >>> str(Subdir("linux-64"))
         'linux-64'
         >>>
         ```
@@ -89,54 +89,54 @@ class Platform(metaclass=PlatformSingleton):
 
     def __repr__(self) -> str:
         """
-        Returns a representation of the platform.
+        Returns a representation of the subdir.
 
         Examples
         --------
         ```python
-        >>> Platform("linux-64")
-        Platform(linux-64)
+        >>> Subdir("linux-64")
+        Subdir(linux-64)
         >>>
         ```
         """
-        return f"Platform({self._inner.name})"
+        return f"Subdir({self._inner.name})"
 
     @classmethod
-    def current(cls) -> Platform:
+    def current(cls) -> Subdir:
         """
-        Returns the platform of the current host.
+        Returns the subdir of the current host.
 
         Raises `RuntimeError` when the host is not a known conda platform.
         """
-        return cls._from_py_platform(PyPlatform.current())
+        return cls._from_py_subdir(PySubdir.current())
 
     @classmethod
-    def all(cls) -> Iterator[Platform]:
+    def all(cls) -> Iterator[Subdir]:
         """
-        Returns all supported platforms.
+        Returns all known subdirs.
 
         Examples
         --------
         ```python
-        >>> next(Platform.all())
-        Platform(noarch)
-        >>> len(list(Platform.all()))
+        >>> next(Subdir.all())
+        Subdir(noarch)
+        >>> len(list(Subdir.all()))
         32
         >>>
         """
-        return (cls._from_py_platform(p) for p in PyPlatform.all())
+        return (cls._from_py_subdir(p) for p in PySubdir.all())
 
     @property
     def is_linux(self) -> bool:
         """
-        Return True if the platform is linux.
+        Return True if the subdir is linux.
 
         Examples
         --------
         ```python
-        >>> Platform("linux-64").is_linux
+        >>> Subdir("linux-64").is_linux
         True
-        >>> Platform("osx-64").is_linux
+        >>> Subdir("osx-64").is_linux
         False
         >>>
         ```
@@ -146,14 +146,14 @@ class Platform(metaclass=PlatformSingleton):
     @property
     def is_osx(self) -> bool:
         """
-        Return True if the platform is osx.
+        Return True if the subdir is osx.
 
         Examples
         --------
         ```python
-        >>> Platform("osx-64").is_osx
+        >>> Subdir("osx-64").is_osx
         True
-        >>> Platform("linux-64").is_osx
+        >>> Subdir("linux-64").is_osx
         False
         >>>
         ```
@@ -163,14 +163,14 @@ class Platform(metaclass=PlatformSingleton):
     @property
     def is_windows(self) -> bool:
         """
-        Return True if the platform is win.
+        Return True if the subdir is win.
 
         Examples
         --------
         ```python
-        >>> Platform("win-64").is_windows
+        >>> Subdir("win-64").is_windows
         True
-        >>> Platform("linux-64").is_windows
+        >>> Subdir("linux-64").is_windows
         False
         >>>
         ```
@@ -180,14 +180,14 @@ class Platform(metaclass=PlatformSingleton):
     @property
     def is_unix(self) -> bool:
         """
-        Return True if the platform is unix.
+        Return True if the subdir is unix.
 
         Examples
         --------
         ```python
-        >>> Platform("linux-64").is_unix
+        >>> Subdir("linux-64").is_unix
         True
-        >>> Platform("win-64").is_unix
+        >>> Subdir("win-64").is_unix
         False
         >>>
         ```
@@ -197,14 +197,14 @@ class Platform(metaclass=PlatformSingleton):
     @property
     def arch(self) -> Optional[Arch]:
         """
-        Return the architecture of the platform.
+        Return the architecture of the subdir.
 
         Examples
         --------
         ```python
-        >>> Platform("linux-64").arch
+        >>> Subdir("linux-64").arch
         Arch(x86_64)
-        >>> Platform("linux-aarch64").arch
+        >>> Subdir("linux-aarch64").arch
         Arch(aarch64)
         >>>
         ```
@@ -215,14 +215,21 @@ class Platform(metaclass=PlatformSingleton):
     @property
     def only_platform(self) -> Optional[str]:
         """
-        Return the platform without the architecture.
+        Return the platform (os) part of the subdir.
 
         Examples
         --------
         ```python
-        >>> Platform("linux-64").only_platform
+        >>> Subdir("linux-64").only_platform
         'linux'
         >>>
         ```
         """
         return self._inner.only_platform
+
+
+#: Alias for [Subdir][rattler.platform.subdir.Subdir], kept for backwards compatibility.
+Platform = Subdir
+
+#: Alias for [SubdirLiteral][rattler.platform.subdir.SubdirLiteral], kept for backwards compatibility.
+PlatformLiteral = SubdirLiteral

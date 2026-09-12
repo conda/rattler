@@ -8,15 +8,15 @@ pub enum ParsePlatformError {
     ParsePlatformNameError(String),
 
     #[error("failed to parse '{0}' as a Subdir")]
-    ParseSubdirError(#[from] rattler_conda_types::ParsePlatformError),
+    ParseSubdirError(#[from] rattler_conda_types::ParseSubdirError),
 }
 
 /// A valid name for a platform
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct PlatformName(String);
 
-impl From<&rattler_conda_types::Platform> for PlatformName {
-    fn from(value: &rattler_conda_types::Platform) -> Self {
+impl From<&rattler_conda_types::Subdir> for PlatformName {
+    fn from(value: &rattler_conda_types::Subdir) -> Self {
         Self(value.to_string())
     }
 }
@@ -114,7 +114,7 @@ impl<'lock> Platform<'lock> {
     }
 
     /// Returns the underlying conda subdir/platform.
-    pub fn subdir(&self) -> rattler_conda_types::Platform {
+    pub fn subdir(&self) -> rattler_conda_types::Subdir {
         self.data().subdir
     }
 
@@ -166,7 +166,7 @@ pub struct PlatformData {
     /// The name of the platform.
     pub name: PlatformName,
     /// The subdir of the platform.
-    pub subdir: rattler_conda_types::Platform,
+    pub subdir: rattler_conda_types::Subdir,
     /// The list of virtual conda packages.
     pub virtual_packages: Vec<String>,
 }

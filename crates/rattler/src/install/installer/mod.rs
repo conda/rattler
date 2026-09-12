@@ -22,8 +22,8 @@ pub use indicatif::{
 use itertools::Itertools;
 use rattler_cache::package_cache::{CacheMetadata, CacheReporter};
 use rattler_conda_types::{
-    MatchSpec, PackageName, PackageNameMatcher, PackageRecord, Platform, PrefixRecord,
-    RepoDataRecord, prefix_record::Link, utils::ensure_safe_path_component,
+    MatchSpec, PackageName, PackageNameMatcher, PackageRecord, PrefixRecord, RepoDataRecord,
+    Subdir, prefix_record::Link, utils::ensure_safe_path_component,
 };
 use rattler_networking::{LazyClient, retry_policies::default_retry_policy};
 use rayon::prelude::*;
@@ -82,7 +82,7 @@ pub struct Installer {
     io_semaphore: Option<Arc<Semaphore>>,
     concurrent_requests_semaphore: Option<Arc<Semaphore>>,
     reporter: Option<Arc<dyn Reporter>>,
-    target_platform: Option<Platform>,
+    target_platform: Option<Subdir>,
     apple_code_sign_behavior: AppleCodeSignBehavior,
     alternative_target_prefix: Option<PathBuf>,
     reinstall_packages: Option<HashSet<PackageName>>,
@@ -363,7 +363,7 @@ impl Installer {
     /// Sets the target platform of the installation. If not specifically set
     /// this will default to the current platform.
     #[must_use]
-    pub fn with_target_platform(self, target_platform: Platform) -> Self {
+    pub fn with_target_platform(self, target_platform: Subdir) -> Self {
         Self {
             target_platform: Some(target_platform),
             ..self
@@ -375,7 +375,7 @@ impl Installer {
     ///
     /// This function is similar to [`Self::with_target_platform`], but modifies
     /// an existing instance.
-    pub fn set_target_platform(&mut self, target_platform: Platform) -> &mut Self {
+    pub fn set_target_platform(&mut self, target_platform: Subdir) -> &mut Self {
         self.target_platform = Some(target_platform);
         self
     }
@@ -523,7 +523,7 @@ impl Installer {
         // Construct a transaction from the current and desired situation.
         let target_platform = self
             .target_platform
-            .or_else(Platform::current)
+            .or_else(Subdir::current)
             .ok_or(InstallerError::UnknownHostPlatform)?;
         let desired_records: Vec<_> = records.into_iter().collect();
         let mut transaction = Transaction::from_current_and_desired(
@@ -566,7 +566,7 @@ impl Installer {
 
         // Validate that if the target platform is NoArch, all packages to be installed
         // must also be noarch (subdir == "noarch")
-        if target_platform == Platform::NoArch {
+        if target_platform == Subdir::NoArch {
             let non_noarch_packages: Vec<String> = transaction
                 .installed_packages()
                 .filter(|record| record.package_record.subdir != "noarch")
@@ -1603,7 +1603,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_noarch_platform_rejects_platform_specific_packages() {
-        use rattler_conda_types::Platform;
+        use rattler_conda_types::Subdir;
 
         let (_temp_dir, target_prefix) = create_test_environment();
 
@@ -1611,8 +1611,8 @@ mod tests {
         let mut platform_specific_package = create_dummy_repo_record();
         platform_specific_package.package_record.subdir = "osx-arm64".to_string();
 
-        // Try to install this platform-specific package with Platform::NoArch
-        let installer = Installer::new().with_target_platform(Platform::NoArch);
+        // Try to install this platform-specific package with Subdir::NoArch
+        let installer = Installer::new().with_target_platform(Subdir::NoArch);
         let result = installer
             .install(&target_prefix, vec![platform_specific_package.clone()])
             .await;
@@ -1642,7 +1642,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_noarch_platform_accepts_noarch_packages() {
-        use rattler_conda_types::{NoArchType, Platform};
+        use rattler_conda_types::{NoArchType, Subdir};
 
         let (_temp_dir, target_prefix) = create_test_environment();
 
@@ -1651,8 +1651,8 @@ mod tests {
         noarch_package.package_record.subdir = "noarch".to_string();
         noarch_package.package_record.noarch = NoArchType::generic();
 
-        // Try to install this noarch package with Platform::NoArch
-        let installer = Installer::new().with_target_platform(Platform::NoArch);
+        // Try to install this noarch package with Subdir::NoArch
+        let installer = Installer::new().with_target_platform(Subdir::NoArch);
         let result = installer
             .install(&target_prefix, vec![noarch_package.clone()])
             .await;

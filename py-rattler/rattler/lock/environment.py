@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Union
 from rattler.channel import Channel
 from rattler.lock.channel import LockChannel
 from rattler.lock.package import LockedPackage, PypiLockedPackage
-from rattler.platform.platform import Platform
+from rattler.platform.subdir import Subdir
 
 from rattler.rattler import PyEnvironment
 from rattler.repo_data.record import RepoDataRecord
@@ -20,7 +20,7 @@ class Environment:
     _env: PyEnvironment
 
     def __init__(
-        self, name: str, requirements: Dict[Platform, List[RepoDataRecord]], channels: List[Union[Channel, LockChannel]]
+        self, name: str, requirements: Dict[Subdir, List[RepoDataRecord]], channels: List[Union[Channel, LockChannel]]
     ) -> None:
         """
         Create a new environment.

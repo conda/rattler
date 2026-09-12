@@ -6,7 +6,7 @@ use std::{
 
 use clap::Parser;
 use itertools::Itertools;
-use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, Platform};
+use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, Subdir};
 use rattler_repodata_gateway::Gateway;
 use rattler_solve::{ChannelPriority, SolveStrategy};
 
@@ -18,7 +18,7 @@ struct Args {
 
     /// The subdirs to query.
     #[clap(short, long, num_args=1..)]
-    subdir: Vec<Platform>,
+    subdir: Vec<Subdir>,
 
     /// The output path
     #[clap(short)]
@@ -37,11 +37,11 @@ async fn main() {
     .unwrap();
 
     // Determine the subdirs to query.
-    let mut subdirs: HashSet<Platform> = HashSet::from_iter(args.subdir);
+    let mut subdirs: HashSet<Subdir> = HashSet::from_iter(args.subdir);
     if subdirs.is_empty() {
-        subdirs.extend(Platform::current());
+        subdirs.extend(Subdir::current());
     }
-    subdirs.insert(Platform::NoArch);
+    subdirs.insert(Subdir::NoArch);
     let platforms = subdirs.iter().copied().collect_vec();
 
     // Construct a gateway to fetch repodata. The gateway transparently handles
@@ -114,7 +114,7 @@ async fn main() {
             subdirs
                 .iter()
                 .copied()
-                .map(Platform::as_str)
+                .map(Subdir::as_str)
                 .sorted()
                 .join("-")
         )

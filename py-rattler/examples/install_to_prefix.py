@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import get_args
 
 from rattler import install as rattler_install
-from rattler import LockFile, Platform
-from rattler.platform.platform import PlatformLiteral
+from rattler import LockFile, Subdir
+from rattler.platform.subdir import SubdirLiteral
 from rattler.networking import Client, MirrorMiddleware, AuthenticationMiddleware
 import typer
 
@@ -17,7 +17,7 @@ app = typer.Typer()
 async def _install(
     lock_file_path: Path,
     environment_name: str,
-    platform: Platform,
+    platform: Subdir,
     target_prefix: Path,
 ) -> None:
     lock_file = LockFile.from_path(lock_file_path)
@@ -30,7 +30,7 @@ async def _install(
         None,
     )
     if lock_platform is None:
-        raise ValueError(f"Platform {platform} not found in environment {environment_name}")
+        raise ValueError(f"Subdir {platform} not found in environment {environment_name}")
     records = environment.conda_repodata_records_for_platform(lock_platform)
     if not records:
         raise ValueError(f"No records found for platform {platform} in lock file {lock_file_path}")
@@ -50,19 +50,19 @@ async def _install(
 def install(
     lock_file_path: Path = Path("pixi.lock").absolute(),
     environment_name: str = "default",
-    platform: str = str(Platform.current()),
+    platform: str = str(Subdir.current()),
     target_prefix: Path = Path("env").absolute(),
 ) -> None:
     """
     Installs a pixi.lock file to a custom prefix.
     """
-    if platform not in get_args(PlatformLiteral):
-        raise ValueError(f"Invalid platform {platform}. Must be one of {get_args(PlatformLiteral)}")
+    if platform not in get_args(SubdirLiteral):
+        raise ValueError(f"Invalid platform {platform}. Must be one of {get_args(SubdirLiteral)}")
     asyncio.run(
         _install(
             lock_file_path=lock_file_path,
             environment_name=environment_name,
-            platform=Platform(platform),
+            platform=Subdir(platform),
             target_prefix=target_prefix,
         )
     )

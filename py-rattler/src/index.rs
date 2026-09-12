@@ -1,6 +1,6 @@
 use pyo3::{Bound, PyAny, PyResult, Python, pyfunction};
 use pyo3_async_runtimes::tokio::future_into_py;
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 use rattler_config::config::concurrency::default_max_concurrent_solves;
 use rattler_index::{
     ChannelMetadata, IndexFsConfig, IndexS3Config, PackageRevisionAssignment,
@@ -10,7 +10,7 @@ use url::Url;
 
 use crate::{
     config::PyConfig, error::PyRattlerError,
-    networking::client::authentication_storage_from_config, platform::PyPlatform,
+    networking::client::authentication_storage_from_config, subdir::PySubdir,
 };
 use pyo3::exceptions::PyValueError;
 use pythonize::depythonize;
@@ -34,7 +34,7 @@ fn parse_package_revision_assignment(value: &str) -> PyResult<PackageRevisionAss
 pub fn py_index_fs<'py>(
     py: Python<'py>,
     channel_directory: PathBuf,
-    target_platform: Option<PyPlatform>,
+    target_platform: Option<PySubdir>,
     repodata_patch: Option<String>,
     write_zst: Option<bool>,
     write_shards: Option<bool>,
@@ -72,7 +72,7 @@ pub fn py_index_fs<'py>(
         .unwrap_or_else(default_max_concurrent_solves);
     let channel_metadata = ChannelMetadata::from_index_config(&resolved);
     future_into_py(py, async move {
-        let target_platform = target_platform.map(Platform::from);
+        let target_platform = target_platform.map(Subdir::from);
         index_fs_with_channel_metadata(
             IndexFsConfig {
                 channel: channel_directory,
@@ -100,7 +100,7 @@ pub fn py_index_s3<'py>(
     py: Python<'py>,
     channel_url: String,
     credentials: Option<Bound<'py, PyAny>>,
-    target_platform: Option<PyPlatform>,
+    target_platform: Option<PySubdir>,
     repodata_patch: Option<String>,
     write_zst: Option<bool>,
     write_shards: Option<bool>,
@@ -173,7 +173,7 @@ pub fn py_index_s3<'py>(
             })
             .transpose()?,
     };
-    let target_platform = target_platform.map(Platform::from);
+    let target_platform = target_platform.map(Subdir::from);
     future_into_py(py, async move {
         // Resolve the credentials
         let credentials =

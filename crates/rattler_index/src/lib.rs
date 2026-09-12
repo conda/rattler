@@ -30,8 +30,8 @@ use opendal::services::S3Config;
 use opendal::{Configurator, Operator, services::FsConfig};
 use rattler_conda_types::{
     ChannelInfo, ChannelNotice, ChannelNotices, ChannelRelations, MatchSpec, PackageRecord,
-    ParseMatchSpecOptions, PatchInstructions, Platform, RepoData, Shard, ShardedRepodata,
-    ShardedSubdirInfo, UrlOrPath, V3Extensions, V3Packages, WhlPackageRecord,
+    ParseMatchSpecOptions, PatchInstructions, RepoData, Shard, ShardedRepodata, ShardedSubdirInfo,
+    Subdir, UrlOrPath, V3Extensions, V3Packages, WhlPackageRecord,
     package::{
         CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
         RunExportsJson, ValidatedMatchSpecs, WheelArchiveType,
@@ -139,7 +139,7 @@ pub struct SubdirIndexStats {
 #[derive(Debug, Clone, Default)]
 pub struct IndexStats {
     /// Statistics per subdir
-    pub subdirs: HashMap<Platform, SubdirIndexStats>,
+    pub subdirs: HashMap<Subdir, SubdirIndexStats>,
 }
 
 const REPODATA_FROM_PACKAGES: &str = "repodata_from_packages.json";
@@ -255,7 +255,7 @@ fn repodata_patch_from_conda_package_stream<'a>(
                     .as_os_str()
                     .to_str()
                     .context("Could not convert OsStr to str")?;
-                let _ = Platform::from_str(subdir_str)?;
+                let _ = Subdir::from_str(subdir_str)?;
                 subdir_str.to_string()
             } else {
                 return Err(anyhow::anyhow!(
@@ -436,7 +436,7 @@ fn parse_package_buffer(
 async fn read_and_parse_package(
     op: &Operator,
     cache: &cache::PackageRecordCache,
-    subdir: Platform,
+    subdir: Subdir,
     filename: &str,
 ) -> std::io::Result<IndexedPackageRecord> {
     let file_path = format!("{subdir}/{filename}");
@@ -561,7 +561,7 @@ impl RepodataMetadataCollection {
     /// Collect metadata for all critical repodata files in a subdir.
     pub async fn new(
         op: &Operator,
-        subdir: Platform,
+        subdir: Subdir,
         has_patch: bool,
         write_zst: bool,
         write_shards: bool,
@@ -623,7 +623,7 @@ impl RepodataMetadataCollection {
 
 #[allow(clippy::too_many_arguments)]
 async fn index_subdir(
-    subdir: Platform,
+    subdir: Subdir,
     op: Operator,
     force: bool,
     write_zst: bool,
@@ -721,7 +721,7 @@ async fn index_subdir(
 
 #[allow(clippy::too_many_arguments)]
 async fn index_subdir_inner(
-    subdir: Platform,
+    subdir: Subdir,
     op: Operator,
     force: bool,
     write_zst: bool,
@@ -1398,7 +1398,7 @@ fn repodata_revisions_for_packages(
 pub async fn write_repodata(
     repodata: RepoData,
     repodata_patch: Option<PatchInstructions>,
-    subdir: Platform,
+    subdir: Subdir,
     op: Operator,
     metadata: &RepodataMetadataCollection,
 ) -> Result<(), RepodataError> {
@@ -1598,7 +1598,7 @@ pub struct IndexFsConfig {
     /// The channel to index.
     pub channel: PathBuf,
     /// The target platform to index.
-    pub target_platform: Option<Platform>,
+    pub target_platform: Option<Subdir>,
     /// The path to a repodata patch to apply to the index.
     pub repodata_patch: Option<String>,
     /// Whether to write the repodata as a zstd-compressed file.
@@ -1646,7 +1646,7 @@ pub async fn index_fs_with_channel_metadata(
     // Write through a temp dir on the same volume and rename over the target,
     // so a memory-mapped repodata.json isn't truncated in place (fails with
     // ERROR_USER_MAPPED_FILE on Windows). `.tmp` is skipped during subdir
-    // enumeration since it doesn't parse as a `Platform`.
+    // enumeration since it doesn't parse as a `Subdir`.
     config.atomic_write_dir = Some(root.join(".tmp").to_string_lossy().to_string());
     let builder = config.into_builder();
     let op = Operator::new(builder)?.finish();
@@ -1676,7 +1676,7 @@ pub struct IndexS3Config {
     /// The resolved credentials to use for S3 access.
     pub credentials: ResolvedS3Credentials,
     /// The target platform to index.
-    pub target_platform: Option<Platform>,
+    pub target_platform: Option<Subdir>,
     /// The path to a repodata patch to apply to the index.
     pub repodata_patch: Option<String>,
     /// Whether to write the repodata as a zstd-compressed file.
@@ -1787,7 +1787,7 @@ pub async fn index_s3_with_channel_metadata(
 /// including the number of packages added/removed and retry counts per subdir.
 #[allow(clippy::too_many_arguments)]
 pub async fn index(
-    target_platform: Option<Platform>,
+    target_platform: Option<Subdir>,
     op: Operator,
     repodata_patch: Option<String>,
     write_zst: bool,
@@ -1820,7 +1820,7 @@ pub async fn index(
 /// and write channel metadata into the generated repodata.
 #[allow(clippy::too_many_arguments)]
 pub async fn index_with_channel_metadata(
-    target_platform: Option<Platform>,
+    target_platform: Option<Subdir>,
     op: Operator,
     repodata_patch: Option<String>,
     write_zst: bool,
@@ -1862,19 +1862,16 @@ pub async fn index_with_channel_metadata(
                     None
                 }
             })
-            .filter_map(|s| Platform::from_str(&s).ok())
+            .filter_map(|s| Subdir::from_str(&s).ok())
             .collect::<HashSet<_>>()
     };
 
-    if !op
-        .exists(&format!("{}/", Platform::NoArch.as_str()))
-        .await?
-    {
+    if !op.exists(&format!("{}/", Subdir::NoArch.as_str())).await? {
         // If `noarch` subdir does not exist, we create it.
         tracing::debug!("Did not find noarch subdir, creating.");
-        op.create_dir(&format!("{}/", Platform::NoArch.as_str()))
+        op.create_dir(&format!("{}/", Subdir::NoArch.as_str()))
             .await?;
-        subdirs.insert(Platform::NoArch);
+        subdirs.insert(Subdir::NoArch);
     }
 
     let repodata_patch = if let Some(path) = repodata_patch {
@@ -1902,7 +1899,7 @@ pub async fn index_with_channel_metadata(
     let semaphore = Semaphore::new(max_parallel);
     let semaphore = Arc::new(semaphore);
 
-    let mut tasks: Vec<(Platform, _)> = Vec::new();
+    let mut tasks: Vec<(Subdir, _)> = Vec::new();
     for subdir in subdirs.iter() {
         // Create a separate cache for each subdir.
         // The cache persists across retry attempts for this specific subdir.
@@ -2000,7 +1997,7 @@ pub async fn ensure_channel_initialized_with_channel_metadata(
     op: &Operator,
     channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<()> {
-    let noarch_repodata_path = format!("{}/{REPODATA}", Platform::NoArch.as_str());
+    let noarch_repodata_path = format!("{}/{REPODATA}", Subdir::NoArch.as_str());
 
     if op.exists(&noarch_repodata_path).await? {
         tracing::debug!("Channel already initialized");
@@ -2009,14 +2006,14 @@ pub async fn ensure_channel_initialized_with_channel_metadata(
 
     tracing::info!("Initializing channel with empty noarch/repodata.json");
 
-    let noarch_path = format!("{}/", Platform::NoArch.as_str());
+    let noarch_path = format!("{}/", Subdir::NoArch.as_str());
     if !op.exists(&noarch_path).await? {
         op.create_dir(&noarch_path).await?;
     }
 
     let empty_repodata = RepoData {
         info: Some(ChannelInfo {
-            subdir: Some(Platform::NoArch.to_string()),
+            subdir: Some(Subdir::NoArch.to_string()),
             base_url: channel_metadata.base_url,
             repodata_revisions: RepodataRevisions::new(),
             channel_relations: channel_metadata.channel_relations,

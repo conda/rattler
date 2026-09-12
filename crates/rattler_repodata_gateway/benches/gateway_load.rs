@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use rattler_conda_types::{Channel, MatchSpec, ParseMatchSpecOptions, Platform};
+use rattler_conda_types::{Channel, MatchSpec, ParseMatchSpecOptions, Subdir};
 use rattler_repodata_gateway::{Gateway, RepoData};
 use url::Url;
 
@@ -45,7 +45,7 @@ fn bench_rubin_env(c: &mut Criterion) {
         warm_gateway
             .query(
                 vec![channel.clone()],
-                [Platform::Linux64, Platform::NoArch],
+                [Subdir::Linux64, Subdir::NoArch],
                 specs.clone(),
             )
             .recursive(true)
@@ -68,7 +68,7 @@ fn bench_rubin_env(c: &mut Criterion) {
                 let records = fresh_gateway
                     .query(
                         vec![channel.clone()],
-                        [Platform::Linux64, Platform::NoArch],
+                        [Subdir::Linux64, Subdir::NoArch],
                         specs.clone(),
                     )
                     .recursive(true)
@@ -88,7 +88,7 @@ fn bench_rubin_env(c: &mut Criterion) {
                 let records = warm_gateway
                     .query(
                         vec![channel.clone()],
-                        [Platform::Linux64, Platform::NoArch],
+                        [Subdir::Linux64, Subdir::NoArch],
                         specs.clone(),
                     )
                     .recursive(true)
@@ -114,7 +114,7 @@ fn bench_rubin_env(c: &mut Criterion) {
                     let records = cold_gateway
                         .query(
                             vec![channel.clone()],
-                            [Platform::Linux64, Platform::NoArch],
+                            [Subdir::Linux64, Subdir::NoArch],
                             specs.clone(),
                         )
                         .recursive(true)

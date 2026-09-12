@@ -29,7 +29,7 @@ try:
         ParseArchError,
         ParseCondaLockError,
         ParseExplicitEnvironmentSpecError,
-        ParsePlatformError,
+        ParseSubdirError,
         RequirementError,
         ShellError,
         SolverError,
@@ -64,7 +64,7 @@ except ImportError:
         """An error that can occur during conversion"""
 
     class ConvertSubdirError(Exception):  # type: ignore[no-redef]
-        """An error that can occur when parsing a platform from a string."""
+        """An error that can occur when parsing a subdir from a string."""
 
     class DetectVirtualPackageError(Exception):  # type: ignore[no-redef]
         """An error that can occur when trying to detect virtual packages"""
@@ -130,7 +130,7 @@ except ImportError:
     class ParseExplicitEnvironmentSpecError(Exception):  # type: ignore[no-redef]
         """An error that can occur when parsing an explicit environment spec"""
 
-    class ParsePlatformError(Exception):  # type: ignore[no-redef]
+    class ParseSubdirError(Exception):  # type: ignore[no-redef]
         """An error that can occur when parsing a platform from a string."""
 
     class RequirementError(Exception):  # type: ignore[no-redef]
@@ -154,6 +154,9 @@ except ImportError:
     class VersionExtendError(Exception):  # type: ignore[no-redef]
         """An error that can occur when extending a version."""
 
+
+#: Alias for [ParseSubdirError][rattler.exceptions.ParseSubdirError], kept for backwards compatibility.
+ParsePlatformError = ParseSubdirError
 
 __all__ = [
     "ActivationError",
@@ -185,6 +188,7 @@ __all__ = [
     "ParseArchError",
     "ParseCondaLockError",
     "ParseExplicitEnvironmentSpecError",
+    "ParseSubdirError",
     "ParsePlatformError",
     "RequirementError",
     "ShellError",

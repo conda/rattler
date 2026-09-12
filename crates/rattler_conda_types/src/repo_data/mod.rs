@@ -26,7 +26,7 @@ use url::Url;
 
 use crate::{
     Arch, Channel, Flag, MatchSpec, Matches, NoArchType, PackageName, PackageUrl,
-    ParseMatchSpecError, ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
+    ParseMatchSpecError, ParseStrictness, RepoDataRecord, Subdir, VersionWithSource,
     build_spec::BuildNumber,
     package::{
         ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, IndexJson, RunExportsJson,
@@ -608,9 +608,9 @@ pub struct PackageRecord {
     pub noarch: NoArchType,
 
     /// Optionally the platform the package supports.
-    /// Note that this does not match the [`Platform`] enum, but is only the
+    /// Note that this does not match the [`Subdir`] enum, but is only the
     /// first part of the platform (e.g. `linux`, `osx`, `win`, ...).
-    /// The `subdir` field contains the `Platform` enum.
+    /// The `subdir` field contains the `Subdir` enum.
     pub platform: Option<String>,
 
     /// Package identifiers of packages that are equivalent to this package but
@@ -945,7 +945,7 @@ impl PackageRecord {
             extra_depends: BTreeMap::new(),
             sha256: None,
             size: None,
-            subdir: Platform::current().unwrap_or(Platform::NoArch).to_string(),
+            subdir: Subdir::current().unwrap_or(Subdir::NoArch).to_string(),
             timestamp: None,
             track_features: vec![],
             version: version.into(),
@@ -1133,7 +1133,7 @@ pub enum ConvertSubdirError {
         /// The architecture.
         arch: String,
     },
-    /// Platform key is empty
+    /// Subdir key is empty
     #[error("platform key is empty in index.json")]
     PlatformEmpty,
     /// Arch key is empty
@@ -1146,9 +1146,9 @@ pub enum ConvertSubdirError {
 /// These were the combinations that have been found in the database.
 /// and have been represented in the function.
 ///
-/// # Why can we not use `Platform::FromStr`?
+/// # Why can we not use `Subdir::FromStr`?
 ///
-/// We cannot use the [`Platform`] `FromStr` directly because `x86` and `x86_64`
+/// We cannot use the [`Subdir`] `FromStr` directly because `x86` and `x86_64`
 /// are different architecture strings. Also some combinations have been
 /// removed, because they have not been found.
 fn determine_subdir(
