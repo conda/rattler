@@ -38,12 +38,12 @@ struct LockMetaV3 {
     pub channels: Vec<Channel>,
     /// The platforms this lock file supports
     #[serde_as(as = "crate::utils::serde::Ordered<_>")]
-    pub platforms: Vec<rattler_conda_types::Platform>,
+    pub platforms: Vec<rattler_conda_types::Subdir>,
 }
 
 #[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 struct LockedPackageV3 {
-    pub platform: rattler_conda_types::Platform,
+    pub platform: rattler_conda_types::Subdir,
     #[serde(flatten)]
     pub kind: LockedPackageKindV3,
 }
@@ -109,7 +109,7 @@ pub struct CondaLockedPackageV3 {
 }
 
 fn create_platforms_and_packages(
-    mut per_package: ahash::HashMap<rattler_conda_types::Platform, IndexSet<PackageIndex>>,
+    mut per_package: ahash::HashMap<rattler_conda_types::Subdir, IndexSet<PackageIndex>>,
     packages: &[LockedPackage],
 ) -> Result<
     (
@@ -125,7 +125,7 @@ fn create_platforms_and_packages(
         .filter(|platform| unique_platforms.insert(**platform))
         .map(|platform| PlatformData {
             name: PlatformName::try_from(platform.to_string())
-                .expect("All `rattler_conda_types::Platform` are valid platform names"),
+                .expect("All `rattler_conda_types::Subdir` are valid platform names"),
             subdir: *platform,
             virtual_packages: Vec::new(),
         })
@@ -164,7 +164,7 @@ pub fn parse_v3_or_lower(
     // let mut pypi_packages = IndexSet::with_capacity(lock_file.package.len());
     let mut packages = IndexSet::with_capacity(lock_file.package.len());
 
-    let mut per_platform: ahash::HashMap<rattler_conda_types::Platform, IndexSet<PackageIndex>> =
+    let mut per_platform: ahash::HashMap<rattler_conda_types::Subdir, IndexSet<PackageIndex>> =
         ahash::HashMap::default();
     for package in lock_file.package {
         let LockedPackageV3 { platform, kind } = package;
@@ -192,7 +192,7 @@ pub fn parse_v3_or_lower(
                             .path_segments()
                             .and_then(|split| split.rev().nth(1))
                     })
-                    .and_then(|subdir_str| rattler_conda_types::Platform::from_str(subdir_str).ok())
+                    .and_then(|subdir_str| rattler_conda_types::Subdir::from_str(subdir_str).ok())
                     .unwrap_or(platform);
 
                 let location = UrlOrPath::Url(value.url).normalize().into_owned();

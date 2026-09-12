@@ -9,7 +9,7 @@
 //!
 //! To create an explicit environment file, you can use the `conda env export` command.
 
-use crate::{ParsePlatformError, Platform};
+use crate::{ParseSubdirError, Subdir};
 use fs_err::{self as fs, File};
 use serde::{Deserialize, Serialize};
 use std::{io::Read, path::Path, str::FromStr};
@@ -26,7 +26,7 @@ pub struct ExplicitEnvironmentSpec {
     ///
     /// This can be indicated by `# platform: <x>` in the environment file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub platform: Option<Platform>,
+    pub platform: Option<Subdir>,
 
     /// Explicit package references
     pub packages: Vec<ExplicitEnvironmentEntry>,
@@ -132,7 +132,7 @@ pub enum ParseExplicitEnvironmentSpecError {
 
     /// The platform string could not be parsed
     #[error(transparent)]
-    InvalidPlatform(#[from] ParsePlatformError),
+    InvalidPlatform(#[from] ParseSubdirError),
 
     /// An IO error occurred
     #[error(transparent)]
@@ -193,7 +193,7 @@ impl FromStr for ExplicitEnvironmentSpec {
                 // Unless that comment line is `# platform: `. Because then we're interested in the
                 // platform specifier.
                 if let Some(platform_str) = comment_line.trim_start().strip_prefix("platform:") {
-                    platform = Some(Platform::from_str(platform_str.trim())?);
+                    platform = Some(Subdir::from_str(platform_str.trim())?);
                 }
             } else if line.trim() == "@EXPLICIT" {
                 is_explicit = true;

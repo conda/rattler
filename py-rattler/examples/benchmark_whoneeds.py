@@ -19,22 +19,22 @@ from time import perf_counter
 from typing import cast
 
 from rattler.networking import Client
-from rattler.platform import Platform
+from rattler.platform import Subdir
 from rattler.repo_data import Dependent, Gateway, SourceConfig
 
-CONDA_FORGE_PLATFORMS = [
-    Platform("linux-64"),
-    Platform("linux-aarch64"),
-    Platform("linux-armv7l"),
-    Platform("linux-ppc64le"),
-    Platform("linux-riscv64"),
-    Platform("linux-s390x"),
-    Platform("osx-64"),
-    Platform("osx-arm64"),
-    Platform("win-32"),
-    Platform("win-64"),
-    Platform("win-arm64"),
-    Platform("noarch"),
+CONDA_FORGE_SUBDIRS = [
+    Subdir("linux-64"),
+    Subdir("linux-aarch64"),
+    Subdir("linux-armv7l"),
+    Subdir("linux-ppc64le"),
+    Subdir("linux-riscv64"),
+    Subdir("linux-s390x"),
+    Subdir("osx-64"),
+    Subdir("osx-arm64"),
+    Subdir("win-32"),
+    Subdir("win-64"),
+    Subdir("win-arm64"),
+    Subdir("noarch"),
 ]
 TARGETS = ("python", "polars")
 
@@ -68,7 +68,7 @@ async def main() -> None:
     pause = cast(bool, parse_args().pause)
     print(f"PID: {os.getpid()}")
     print("Channel: conda-forge")
-    print("Platforms: " + ", ".join(str(platform) for platform in CONDA_FORGE_PLATFORMS))
+    print("Platforms: " + ", ".join(str(platform) for platform in CONDA_FORGE_SUBDIRS))
 
     gateway = Gateway(
         default_config=SourceConfig(
@@ -88,7 +88,7 @@ async def main() -> None:
         started = perf_counter()
         next_result = await gateway.who_needs(
             sources=["conda-forge"],
-            platforms=CONDA_FORGE_PLATFORMS,
+            platforms=CONDA_FORGE_SUBDIRS,
             target=target,
         )
         elapsed = perf_counter() - started

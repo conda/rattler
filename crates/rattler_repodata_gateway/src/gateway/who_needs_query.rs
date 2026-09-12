@@ -22,14 +22,14 @@ use futures::{
     StreamExt, TryStreamExt,
     stream::{self, FuturesUnordered},
 };
-use rattler_conda_types::{PackageName, Platform};
+use rattler_conda_types::{PackageName, Subdir};
 
 use super::{
     GatewayError, GatewayInner,
     boxed::{BoxFuture, BoxStream, box_future, box_stream},
     local_subdir::LocalSubdirClient,
     source::{CustomSourceClient, Source},
-    subdir::{Subdir, SubdirData},
+    subdir::{SubdirData, SubdirState},
 };
 use crate::{
     Reporter,
@@ -78,7 +78,7 @@ const NAME_BATCH_SIZE: usize = 100;
 pub struct WhoNeedsQuery {
     gateway: Arc<GatewayInner>,
     sources: Vec<Source>,
-    platforms: Vec<Platform>,
+    platforms: Vec<Subdir>,
     target: WhoNeedsTarget,
     reporter: Option<Arc<dyn Reporter>>,
 }
@@ -89,7 +89,7 @@ impl WhoNeedsQuery {
     pub(super) fn new(
         gateway: Arc<GatewayInner>,
         sources: Vec<Source>,
-        platforms: Vec<Platform>,
+        platforms: Vec<Subdir>,
         target: WhoNeedsTarget,
     ) -> Self {
         Self {
@@ -138,11 +138,11 @@ impl WhoNeedsQuery {
     ///
     /// ```no_run
     /// # use futures::TryStreamExt;
-    /// # use rattler_conda_types::{Channel, PackageName, Platform};
+    /// # use rattler_conda_types::{Channel, PackageName, Subdir};
     /// # use rattler_repodata_gateway::Gateway;
     /// # async fn example(gateway: Gateway, channel: Channel, name: PackageName) -> anyhow::Result<()> {
     /// let mut stream = gateway
-    ///     .who_needs(vec![channel], vec![Platform::Linux64], name)
+    ///     .who_needs(vec![channel], vec![Subdir::Linux64], name)
     ///     .stream();
     ///
     /// // Count the dependents while holding only one record at a time.
@@ -158,7 +158,7 @@ impl WhoNeedsQuery {
         // Deduplicate platforms while keeping the input order, so the
         // result order stays deterministic and no subdir is scanned twice.
         let mut seen_platforms = std::collections::HashSet::new();
-        let platforms: Vec<Platform> = self
+        let platforms: Vec<Subdir> = self
             .platforms
             .iter()
             .copied()
@@ -209,14 +209,14 @@ async fn spawn_scan<T>(
 }
 
 /// A resolved subdir tagged with the index of the source it came from.
-type IndexedSubdir = (usize, Arc<Subdir>);
+type IndexedSubdir = (usize, Arc<SubdirState>);
 
 /// Streams the dependents of `target` found on `platform`, across the
 /// subdirs of every source, in the caller's source order.
 fn scan_platform(
     gateway: Arc<GatewayInner>,
     sources: Vec<Source>,
-    platform: Platform,
+    platform: Subdir,
     target: WhoNeedsTarget,
     reporter: Option<Arc<dyn Reporter>>,
 ) -> BoxStream<Result<Dependent, GatewayError>> {
@@ -248,7 +248,7 @@ fn scan_platform(
 async fn resolve_subdirs(
     gateway: Arc<GatewayInner>,
     sources: Vec<Source>,
-    platform: Platform,
+    platform: Subdir,
     reporter: Option<Arc<dyn Reporter>>,
 ) -> Result<Vec<IndexedSubdir>, GatewayError> {
     // Kick off the subdir fetch of every channel source; custom and sparse
@@ -275,7 +275,7 @@ async fn resolve_subdirs(
                 let client = CustomSourceClient::new(custom_source, platform);
                 subdirs.push((
                     source_index,
-                    Arc::new(Subdir::Found(SubdirData::from_client(client))),
+                    Arc::new(SubdirState::Found(SubdirData::from_client(client))),
                 ));
             }
             Source::SparseRepoData(sparse_list) => {
@@ -283,10 +283,10 @@ async fn resolve_subdirs(
                     .iter()
                     .find(|sparse| platform.as_str() == sparse.subdir())
                 {
-                    Some(sparse) => Arc::new(Subdir::Found(SubdirData::from_client(
+                    Some(sparse) => Arc::new(SubdirState::Found(SubdirData::from_client(
                         LocalSubdirClient::new(sparse.clone()),
                     ))),
-                    None => Arc::new(Subdir::NotFound),
+                    None => Arc::new(SubdirState::NotFound),
                 };
                 subdirs.push((source_index, subdir));
             }
@@ -319,17 +319,17 @@ const BATCH_CONCURRENCY: usize = 16;
 /// at most [`BATCH_CONCURRENCY`] run at once, so matches reach the consumer
 /// while the rest of the subdir is still being scanned.
 fn scan_subdir(
-    subdir: Arc<Subdir>,
+    subdir: Arc<SubdirState>,
     target: WhoNeedsTarget,
     reporter: Option<Arc<dyn Reporter>>,
 ) -> BoxStream<Result<Dependent, GatewayError>> {
     let names: Vec<PackageName> = match subdir.as_ref() {
-        Subdir::Found(subdir_data) => subdir_data
+        SubdirState::Found(subdir_data) => subdir_data
             .package_names()
             .into_iter()
             .filter_map(|name| PackageName::try_from(name).ok())
             .collect(),
-        Subdir::NotFound => Vec::new(),
+        SubdirState::NotFound => Vec::new(),
     };
     let batches: Vec<Vec<PackageName>> = names
         .chunks(NAME_BATCH_SIZE)
@@ -343,7 +343,7 @@ fn scan_subdir(
                 let target = target.clone();
                 let reporter = reporter.clone();
                 spawn_scan(async move {
-                    let Subdir::Found(subdir_data) = subdir.as_ref() else {
+                    let SubdirState::Found(subdir_data) = subdir.as_ref() else {
                         return Ok(Vec::new());
                     };
                     let mut matches = Vec::new();
@@ -373,7 +373,7 @@ fn scan_subdir(
 mod tests {
     use std::{path::Path, str::FromStr};
 
-    use rattler_conda_types::{Channel, PackageName, Platform};
+    use rattler_conda_types::{Channel, PackageName, Subdir};
 
     use super::super::Gateway;
     use crate::who_needs::{DependencyKind, Dependent, WhoNeedsTarget};
@@ -422,7 +422,7 @@ mod tests {
     }
 
     /// The dependents of `target` in the `dummy` channel, rendered.
-    async fn who_needs_dummy(channel: &str, platform: Platform, target: WhoNeedsTarget) -> String {
+    async fn who_needs_dummy(channel: &str, platform: Subdir, target: WhoNeedsTarget) -> String {
         let dependents = Gateway::new()
             .who_needs(vec![local_channel(channel)], vec![platform], target)
             .execute()
@@ -439,7 +439,7 @@ mod tests {
         insta::assert_snapshot!(
             who_needs_dummy(
                 "dummy",
-                Platform::Linux64,
+                Subdir::Linux64,
                 PackageName::from_str("bors").unwrap().into(),
             )
             .await,
@@ -455,9 +455,9 @@ mod tests {
     /// matches it: the `bors <2.0` edges disappear for `bors 2.1`.
     #[tokio::test]
     async fn test_who_needs_record_target() {
-        let bors_1_1 = record(&local_channel("dummy"), Platform::Linux64, "bors", "1.1").await;
+        let bors_1_1 = record(&local_channel("dummy"), Subdir::Linux64, "bors", "1.1").await;
         insta::assert_snapshot!(
-            who_needs_dummy("dummy", Platform::Linux64, bors_1_1.into()).await,
+            who_needs_dummy("dummy", Subdir::Linux64, bors_1_1.into()).await,
             @r###"
         constrains | foo-3.0.2-py36h1af98f8_3 | bors <2.0
         depends | foobar-2.0-bla_1 | bors <2.0
@@ -465,9 +465,9 @@ mod tests {
         "###
         );
 
-        let bors_2_1 = record(&local_channel("dummy"), Platform::Linux64, "bors", "2.1").await;
+        let bors_2_1 = record(&local_channel("dummy"), Subdir::Linux64, "bors", "2.1").await;
         insta::assert_snapshot!(
-            who_needs_dummy("dummy", Platform::Linux64, bors_2_1.into()).await,
+            who_needs_dummy("dummy", Subdir::Linux64, bors_2_1.into()).await,
             @""
         );
     }
@@ -481,7 +481,7 @@ mod tests {
             build_string: "0".to_string(),
         };
         insta::assert_snapshot!(
-            who_needs_dummy("dummy", Platform::Linux64, cuda.into()).await,
+            who_needs_dummy("dummy", Subdir::Linux64, cuda.into()).await,
             @"constrains | cuda-version-12.5-hd4f0392_3 | __cuda >=12.1"
         );
     }
@@ -496,7 +496,7 @@ mod tests {
         insta::assert_snapshot!(
             who_needs_dummy(
                 channel,
-                Platform::NoArch,
+                Subdir::NoArch,
                 PackageName::from_str("bar").unwrap().into(),
             )
             .await,
@@ -507,9 +507,9 @@ mod tests {
         "###
         );
 
-        let bar_1 = record(&local_channel(channel), Platform::NoArch, "bar", "1").await;
+        let bar_1 = record(&local_channel(channel), Subdir::NoArch, "bar", "1").await;
         insta::assert_snapshot!(
-            who_needs_dummy(channel, Platform::NoArch, bar_1.into()).await,
+            who_needs_dummy(channel, Subdir::NoArch, bar_1.into()).await,
             @r###"
         extra_depends[extra1] | conflicting-extras-1-xxx | bar <2
         extra_depends[with-bar] | foo-1-xxx | bar <2
@@ -521,7 +521,7 @@ mod tests {
     /// a concrete [`WhoNeedsTarget`].
     async fn record(
         channel: &Channel,
-        platform: Platform,
+        platform: Subdir,
         name: &str,
         version: &str,
     ) -> rattler_conda_types::PackageRecord {
@@ -554,7 +554,7 @@ mod tests {
             .who_needs(
                 vec![channel.clone()],
                 // The duplicate platform must be scanned only once.
-                vec![Platform::Linux64, Platform::NoArch, Platform::Linux64],
+                vec![Subdir::Linux64, Subdir::NoArch, Subdir::Linux64],
                 target.clone(),
             )
             .execute()
@@ -579,11 +579,7 @@ mod tests {
 
         // The duplicate platform did not duplicate results.
         let deduplicated = gateway
-            .who_needs(
-                vec![channel],
-                vec![Platform::Linux64, Platform::NoArch],
-                target,
-            )
+            .who_needs(vec![channel], vec![Subdir::Linux64, Subdir::NoArch], target)
             .execute()
             .await
             .unwrap();
@@ -600,7 +596,7 @@ mod tests {
         gateway
             .query(
                 vec![channel.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![python.clone()],
             )
             .recursive(false)
@@ -610,10 +606,10 @@ mod tests {
 
         let linux_subdir = gateway
             .inner
-            .get_or_create_subdir(&channel, Platform::Linux64, None, true)
+            .get_or_create_subdir(&channel, Subdir::Linux64, None, true)
             .await
             .unwrap();
-        let super::Subdir::Found(linux_data) = linux_subdir.as_ref() else {
+        let super::SubdirState::Found(linux_data) = linux_subdir.as_ref() else {
             panic!("expected the linux-64 subdir to exist");
         };
         assert_eq!(linux_data.cached_package_count(), 1);
@@ -623,7 +619,7 @@ mod tests {
         let dependents = gateway
             .who_needs(
                 vec![channel.clone()],
-                vec![Platform::Linux64, Platform::NoArch],
+                vec![Subdir::Linux64, Subdir::NoArch],
                 PackageName::from_str("python_abi").unwrap(),
             )
             .execute()
@@ -634,17 +630,17 @@ mod tests {
         assert_eq!(linux_data.cached_package_count(), 1);
         let noarch_subdir = gateway
             .inner
-            .get_or_create_subdir(&channel, Platform::NoArch, None, true)
+            .get_or_create_subdir(&channel, Subdir::NoArch, None, true)
             .await
             .unwrap();
-        let super::Subdir::Found(noarch_data) = noarch_subdir.as_ref() else {
+        let super::SubdirState::Found(noarch_data) = noarch_subdir.as_ref() else {
             panic!("expected the noarch subdir to exist");
         };
         assert_eq!(noarch_data.cached_package_count(), 0);
 
         // The previously cached records are still usable afterwards.
         let records = gateway
-            .query(vec![channel], vec![Platform::Linux64], vec![python])
+            .query(vec![channel], vec![Subdir::Linux64], vec![python])
             .recursive(false)
             .execute()
             .await
@@ -663,7 +659,7 @@ mod tests {
         let result = gateway
             .who_needs(
                 vec![channel],
-                vec![Platform::NoArch],
+                vec![Subdir::NoArch],
                 PackageName::from_str("python").unwrap(),
             )
             .execute()
@@ -741,7 +737,7 @@ mod tests {
 
         if prime_cache {
             gateway
-                .names([channel.clone()], [Platform::Linux64])
+                .names([channel.clone()], [Subdir::Linux64])
                 .await
                 .unwrap();
         }
@@ -749,7 +745,7 @@ mod tests {
         let dependents = gateway
             .who_needs(
                 [channel.clone()],
-                [Platform::Linux64],
+                [Subdir::Linux64],
                 PackageName::new_unchecked("bors"),
             )
             .await
@@ -758,7 +754,7 @@ mod tests {
 
         // Ordinary queries must still follow the sharding configuration,
         // including when who_needs was the first query on this gateway.
-        let names = gateway.names([channel], [Platform::Linux64]).await.unwrap();
+        let names = gateway.names([channel], [Subdir::Linux64]).await.unwrap();
         if sharded_enabled {
             assert_eq!(
                 names.names,

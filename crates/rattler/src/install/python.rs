@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use rattler_conda_types::{PackageRecord, Platform, Version};
+use rattler_conda_types::{PackageRecord, Subdir, Version};
 
 /// Information required for linking no-arch python packages. The struct
 /// contains information about a specific Python version that is installed in an
@@ -11,7 +11,7 @@ use rattler_conda_types::{PackageRecord, Platform, Version};
 #[derive(Debug, Clone)]
 pub struct PythonInfo {
     /// The platform that the python package is installed for
-    pub platform: Platform,
+    pub platform: Subdir,
 
     /// The major and minor version
     pub short_version: (u64, u64),
@@ -37,7 +37,7 @@ impl PythonInfo {
     /// python interpreter.
     pub fn from_python_record(
         record: &PackageRecord,
-        platform: Platform,
+        platform: Subdir,
     ) -> Result<Self, PythonInfoError> {
         Self::from_version(
             record.version.version(),
@@ -51,7 +51,7 @@ impl PythonInfo {
     pub fn from_version(
         version: &Version,
         site_packages_path: Option<&str>,
-        platform: Platform,
+        platform: Subdir,
     ) -> Result<Self, PythonInfoError> {
         // Determine the major, and minor versions of the version
         let (major, minor) = version

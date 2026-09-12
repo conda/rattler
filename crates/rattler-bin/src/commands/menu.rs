@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use miette::IntoDiagnostic;
-use rattler_conda_types::{PackageName, Platform, PrefixRecord, menuinst::MenuMode};
+use rattler_conda_types::{PackageName, PrefixRecord, menuinst::MenuMode};
 
 /// Install menu items for an installed package.
 #[derive(Debug, Parser)]
@@ -55,7 +55,7 @@ pub async fn install_menu(opts: InstallOpt) -> miette::Result<()> {
     rattler_menuinst::install_menuitems_for_record(
         &prefix,
         record,
-        Platform::current(),
+        crate::host_platform()?,
         MenuMode::User,
     )
     .into_diagnostic()?;

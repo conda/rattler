@@ -7,7 +7,7 @@
 //! - `pty_process` - Lower-level PTY process control
 //! - `pty_session` - Higher-level interactive session management
 //!
-//! ## Platform Support
+//! ## Subdir Support
 //! This module is only available when the `pty` feature is enabled.
 //! The underlying `rattler_pty` crate is Unix-only, so this will only
 //! work on Linux and macOS.

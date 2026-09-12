@@ -21,11 +21,11 @@ use crate::error::PyRattlerError;
 use crate::match_spec::PyMatchSpec;
 use crate::networking::client::PyClientWithMiddleware;
 use crate::package_name::PyPackageName;
-use crate::platform::PyPlatform;
 use crate::record::PyRecord;
 use crate::repo_data::PyChannelRelations;
 use crate::repo_data::source::PyRepoDataSource;
 use crate::repo_data::sparse::PySparseRepoData;
+use crate::subdir::PySubdir;
 use crate::{PyChannel, Wrap};
 
 #[pyclass(from_py_object)]
@@ -113,7 +113,7 @@ impl From<Gateway> for PyGateway {
 impl<'a, 'source> FromPyObject<'a, 'source> for Wrap<SubdirSelection> {
     type Error = PyErr;
     fn extract(ob: Borrowed<'a, 'source, PyAny>) -> PyResult<Self> {
-        let parsed = match ob.extract::<Option<HashSet<PyPlatform>>>()? {
+        let parsed = match ob.extract::<Option<HashSet<PySubdir>>>()? {
             Some(platforms) => SubdirSelection::Some(
                 platforms
                     .into_iter()
@@ -320,7 +320,7 @@ impl PyGateway {
         &self,
         py: Python<'a>,
         channel: PyChannel,
-        platform: PyPlatform,
+        platform: PySubdir,
     ) -> PyResult<Bound<'a, PyAny>> {
         let gateway = self.inner.clone();
         future_into_py(py, async move {
@@ -346,7 +346,7 @@ impl PyGateway {
         &self,
         py: Python<'a>,
         sources: Vec<Bound<'a, PyAny>>,
-        platforms: Vec<PyPlatform>,
+        platforms: Vec<PySubdir>,
         specs: Vec<PyMatchSpec>,
         recursive: bool,
         channel_relations: Option<Wrap<ChannelRelationsMode>>,
@@ -421,7 +421,7 @@ impl PyGateway {
         &self,
         py: Python<'a>,
         sources: Vec<Bound<'a, PyAny>>,
-        platforms: Vec<PyPlatform>,
+        platforms: Vec<PySubdir>,
         target: &Bound<'a, PyAny>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let rust_sources: Vec<Source> = sources
@@ -458,7 +458,7 @@ impl PyGateway {
         &self,
         py: Python<'a>,
         sources: Vec<Bound<'a, PyAny>>,
-        platforms: Vec<PyPlatform>,
+        platforms: Vec<PySubdir>,
         channel_relations: Option<Wrap<ChannelRelationsMode>>,
         channel_relations_max_depth: Option<usize>,
         channel_notices: bool,
@@ -483,7 +483,7 @@ impl PyGateway {
             }
         }
 
-        let platforms_vec: Vec<rattler_conda_types::Platform> =
+        let platforms_vec: Vec<rattler_conda_types::Subdir> =
             platforms.into_iter().map(|p| p.inner).collect();
 
         let gateway = self.inner.clone();

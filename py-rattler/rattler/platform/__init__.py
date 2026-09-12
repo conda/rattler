@@ -1,4 +1,4 @@
-from rattler.platform.platform import Platform, PlatformLiteral
+from rattler.platform.subdir import Subdir, SubdirLiteral, Platform, PlatformLiteral
 from rattler.platform.arch import Arch
 
-__all__ = ["Platform", "PlatformLiteral", "Arch"]
+__all__ = ["Subdir", "SubdirLiteral", "Platform", "PlatformLiteral", "Arch"]

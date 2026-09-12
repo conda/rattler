@@ -14,7 +14,7 @@ use std::{
 use enum_dispatch::enum_dispatch;
 use indexmap::IndexMap;
 use itertools::Itertools;
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 use thiserror::Error;
 
 use crate::activation::PathModificationBehavior;
@@ -86,7 +86,7 @@ pub trait Shell {
         f: &mut impl Write,
         paths: &[PathBuf],
         modification_behavior: PathModificationBehavior,
-        platform: &Platform,
+        platform: &Subdir,
     ) -> ShellResult {
         let mut paths_vec = paths
             .iter()
@@ -116,14 +116,14 @@ pub trait Shell {
     fn create_run_script_command(&self, path: &Path) -> Command;
 
     /// Path separator
-    fn path_separator(&self, platform: &Platform) -> &str {
+    fn path_separator(&self, platform: &Subdir) -> &str {
         if platform.is_unix() { ":" } else { ";" }
     }
 
     /// Returns the name of the PATH variable for the given platform. On
     /// Windows, path variables are case-insensitive but not all shells treat
     /// them case-insensitive.
-    fn path_var(&self, platform: &Platform) -> &str {
+    fn path_var(&self, platform: &Subdir) -> &str {
         if platform.is_windows() {
             "Path"
         } else {
@@ -337,7 +337,7 @@ impl Shell for Bash {
         f: &mut impl Write,
         paths: &[PathBuf],
         modification_behavior: PathModificationBehavior,
-        platform: &Platform,
+        platform: &Subdir,
     ) -> ShellResult {
         // Put paths in a vector of the correct format.
         let paths_vec = paths
@@ -379,7 +379,7 @@ impl Shell for Bash {
     }
 
     /// For Bash, the path variable is always all capital PATH, even on Windows.
-    fn path_var(&self, _platform: &Platform) -> &str {
+    fn path_var(&self, _platform: &Subdir) -> &str {
         "PATH"
     }
 
@@ -910,7 +910,7 @@ impl Shell for NuShell {
         f: &mut impl Write,
         paths: &[PathBuf],
         modification_behavior: PathModificationBehavior,
-        platform: &Platform,
+        platform: &Subdir,
     ) -> ShellResult {
         let path = paths
             .iter()
@@ -1185,12 +1185,12 @@ pub struct ShellScript<T: Shell> {
     /// The contents of the script.
     contents: String,
     /// The platform for which the script will be generated
-    platform: Platform,
+    platform: Subdir,
 }
 
 impl<T: Shell + 'static> ShellScript<T> {
     /// Create a new [`ShellScript`] for the given shell.
-    pub fn new(shell: T, platform: Platform) -> Self {
+    pub fn new(shell: T, platform: Subdir) -> Self {
         Self {
             shell,
             contents: String::new(),
@@ -1332,7 +1332,7 @@ mod tests {
 
     #[test]
     fn test_bash() {
-        let mut script = ShellScript::new(Bash::default(), Platform::Linux64);
+        let mut script = ShellScript::new(Bash::default(), Subdir::Linux64);
 
         let paths = vec![PathBuf::from("bar"), PathBuf::from("a/b")];
 
@@ -1363,7 +1363,7 @@ mod tests {
 
     #[test]
     fn test_fish() {
-        let mut script = ShellScript::new(Fish, Platform::Linux64);
+        let mut script = ShellScript::new(Fish, Subdir::Linux64);
 
         script
             .set_env_var("FOO", "bar")
@@ -1378,7 +1378,7 @@ mod tests {
 
     #[test]
     fn test_xonsh_bash() {
-        let mut script = ShellScript::new(Xonsh, Platform::Linux64);
+        let mut script = ShellScript::new(Xonsh, Subdir::Linux64);
 
         script
             .run_script(&PathBuf::from_str("foo.sh").unwrap())
@@ -1389,7 +1389,7 @@ mod tests {
 
     #[test]
     fn test_xonsh_xsh() {
-        let mut script = ShellScript::new(Xonsh, Platform::Linux64);
+        let mut script = ShellScript::new(Xonsh, Subdir::Linux64);
         script
             .set_env_var("FOO", "bar")
             .unwrap()
@@ -1416,7 +1416,7 @@ mod tests {
 
     #[test]
     fn test_path_separator() {
-        let mut script = ShellScript::new(Bash::default(), Platform::Linux64);
+        let mut script = ShellScript::new(Bash::default(), Subdir::Linux64);
         script
             .set_path(
                 &[PathBuf::from("/foo"), PathBuf::from("/bar")],
@@ -1425,7 +1425,7 @@ mod tests {
             .unwrap();
         assert!(script.contents.contains("/foo:/bar"));
 
-        let mut script = ShellScript::new(Bash::default(), Platform::Win64);
+        let mut script = ShellScript::new(Bash::default(), Subdir::Win64);
         script
             .set_path(
                 &[PathBuf::from("/foo"), PathBuf::from("/bar")],
@@ -1476,7 +1476,7 @@ mod tests {
                 Bash {
                     flavor: BashFlavor::Bash,
                 },
-                Platform::Linux64,
+                Subdir::Linux64,
             );
             s.set_env_var("FOO", "bar").unwrap();
             s.set_path(&paths, PathModificationBehavior::Prepend)
@@ -1484,7 +1484,7 @@ mod tests {
             s.contents
         };
         for flavor in flavors {
-            let mut s = ShellScript::new(Bash { flavor }, Platform::Linux64);
+            let mut s = ShellScript::new(Bash { flavor }, Subdir::Linux64);
             s.set_env_var("FOO", "bar").unwrap();
             s.set_path(&paths, PathModificationBehavior::Prepend)
                 .unwrap();
@@ -1560,7 +1560,7 @@ mod tests {
 
     #[test]
     fn test_parse_env() {
-        let script = ShellScript::new(CmdExe, Platform::Win64);
+        let script = ShellScript::new(CmdExe, Subdir::Win64);
         let input = "VAR1=\"value1\"\nNUM=1\nNUM2=\"2\"";
         let parsed_env = script.shell.parse_env(input);
 

@@ -27,6 +27,15 @@ pub fn global_multi_progress() -> MultiProgress {
     GLOBAL_MP.clone()
 }
 
+/// Returns the conda platform of the host, or an error when the host has none.
+pub fn host_platform() -> miette::Result<rattler_conda_types::Subdir> {
+    rattler_conda_types::Subdir::current().ok_or_else(|| {
+        miette::miette!(
+            "the current host is not a known conda platform, specify the platform explicitly"
+        )
+    })
+}
+
 /// Command line options available through the `rattler` cli.
 #[derive(Debug, Parser)]
 #[clap(author, version, about, long_about = None)]

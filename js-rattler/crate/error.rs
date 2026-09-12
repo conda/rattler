@@ -1,6 +1,6 @@
 use rattler_conda_types::version_spec::ParseVersionSpecError;
 use rattler_conda_types::{
-    InvalidPackageNameError, ParseChannelError, ParseMatchSpecError, ParsePlatformError,
+    InvalidPackageNameError, ParseChannelError, ParseMatchSpecError, ParseSubdirError,
     ParseVersionError, VersionBumpError, VersionExtendError,
 };
 use rattler_repodata_gateway::{GatewayError, fetch::FetchRepoDataError};
@@ -21,7 +21,7 @@ pub enum JsError {
     #[error(transparent)]
     ParseChannel(#[from] ParseChannelError),
     #[error(transparent)]
-    ParsePlatform(#[from] ParsePlatformError),
+    ParsePlatform(#[from] ParseSubdirError),
     #[error(transparent)]
     ParseMatchSpec(#[from] ParseMatchSpecError),
     #[error(transparent)]

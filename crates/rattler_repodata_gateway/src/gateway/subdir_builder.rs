@@ -1,7 +1,7 @@
 use std::{path::Path, sync::Arc};
 
 use file_url::url_to_path;
-use rattler_conda_types::{Channel, Platform};
+use rattler_conda_types::{Channel, Subdir};
 
 use crate::{
     GatewayError, Reporter, SourceConfig,
@@ -11,14 +11,14 @@ use crate::{
         error::SubdirNotFoundError,
         local_subdir::LocalSubdirClient,
         remote_subdir, sharded_subdir,
-        subdir::{Subdir, SubdirData},
+        subdir::{SubdirData, SubdirState},
     },
 };
 
 /// Builder for creating a `Subdir` instance.
 pub struct SubdirBuilder<'g> {
     channel: Channel,
-    platform: Platform,
+    platform: Subdir,
     reporter: Option<Arc<dyn Reporter>>,
     gateway: &'g GatewayInner,
     sharded_enabled: bool,
@@ -28,7 +28,7 @@ impl<'g> SubdirBuilder<'g> {
     pub fn new(
         gateway: &'g GatewayInner,
         channel: Channel,
-        platform: Platform,
+        platform: Subdir,
         reporter: Option<Arc<dyn Reporter>>,
         sharded_enabled: bool,
     ) -> Self {
@@ -41,7 +41,7 @@ impl<'g> SubdirBuilder<'g> {
         }
     }
 
-    pub async fn build(self) -> Result<Subdir, GatewayError> {
+    pub async fn build(self) -> Result<SubdirState, GatewayError> {
         let url = self.channel.platform_url(self.platform);
 
         let subdir_data = if url.scheme() == "file" {
@@ -100,8 +100,8 @@ impl<'g> SubdirBuilder<'g> {
         };
 
         match subdir_data {
-            Ok(client) => Ok(Subdir::Found(client)),
-            Err(GatewayError::SubdirNotFoundError(err)) if self.platform != Platform::NoArch => {
+            Ok(client) => Ok(SubdirState::Found(client)),
+            Err(GatewayError::SubdirNotFoundError(err)) if self.platform != Subdir::NoArch => {
                 // If the subdir was not found and the platform is not `noarch` we assume its
                 // just empty.
                 tracing::info!(
@@ -109,7 +109,7 @@ impl<'g> SubdirBuilder<'g> {
                     err.subdir,
                     err.channel.canonical_name()
                 );
-                Ok(Subdir::NotFound)
+                Ok(SubdirState::NotFound)
             }
             Err(GatewayError::FetchRepoDataError(FetchRepoDataError::NotFound(err))) => {
                 Err(Box::new(SubdirNotFoundError {

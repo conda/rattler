@@ -3,7 +3,7 @@ use std::{collections::HashMap, env, path::PathBuf, time::Instant};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
 use rattler::install::{IndicatifReporter, Installer, Transaction, TransactionOperation};
-use rattler_conda_types::{ChannelConfig, PackageName, Platform, PrefixRecord, RepoDataRecord};
+use rattler_conda_types::{ChannelConfig, PackageName, PrefixRecord, RepoDataRecord, Subdir};
 use rattler_repodata_gateway::RepoData;
 use rattler_solve::SolverTask;
 
@@ -50,7 +50,7 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     // Make the target prefix absolute
     let target_prefix = std::path::absolute(opt.target_prefix).into_diagnostic()?;
 
-    let install_platform = opt.solver.platform;
+    let install_platform = opt.solver.platform()?;
 
     println!("Installing for platform: {install_platform}");
 
@@ -83,11 +83,7 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     let repo_data = wrap_in_async_progress(
         "loading repodata",
         gateway
-            .query(
-                channels,
-                [install_platform, Platform::NoArch],
-                specs.clone(),
-            )
+            .query(channels, [install_platform, Subdir::NoArch], specs.clone())
             .recursive(true),
     )
     .await

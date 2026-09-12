@@ -10,7 +10,7 @@ create_exception!(exceptions, PackageNameMatcherParseError, PyException);
 create_exception!(exceptions, InvalidUrlError, PyException);
 create_exception!(exceptions, InvalidChannelError, PyException);
 create_exception!(exceptions, ActivationError, PyException);
-create_exception!(exceptions, ParsePlatformError, PyException);
+create_exception!(exceptions, ParseSubdirError, PyException);
 create_exception!(exceptions, ParseArchError, PyException);
 create_exception!(exceptions, FetchRepoDataError, PyException);
 create_exception!(exceptions, CacheDirError, PyException);
