@@ -32,6 +32,9 @@ pub enum MenuInstError {
     #[error("invalid path: {0}")]
     InvalidPath(PathBuf),
 
+    #[error("the platform of the current host is not a known conda platform")]
+    UnknownHostPlatform,
+
     #[cfg(target_os = "linux")]
     #[error("could not quote command with shlex: {0}")]
     ShlexQuoteError(#[from] shlex::QuoteError),

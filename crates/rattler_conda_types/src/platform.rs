@@ -17,7 +17,6 @@ use thiserror::Error;
 #[derive(EnumIter, Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Platform {
     NoArch,
-    Unknown,
 
     Linux32,
     Linux64,
@@ -121,48 +120,50 @@ pub enum Arch {
 }
 
 impl Platform {
-    /// Returns the platform for which the current binary was build.
-    pub const fn current() -> Platform {
+    /// Returns the platform for which the current binary was built, or `None`
+    /// when the build target has no conda subdir (for example
+    /// `wasm32-unknown-unknown` or Mac Catalyst).
+    pub const fn current() -> Option<Platform> {
         #[cfg(target_os = "linux")]
         {
             #[cfg(target_arch = "x86")]
-            return Platform::Linux32;
+            return Some(Platform::Linux32);
 
             #[cfg(target_arch = "x86_64")]
-            return Platform::Linux64;
+            return Some(Platform::Linux64);
 
             #[cfg(target_arch = "aarch64")]
-            return Platform::LinuxAarch64;
+            return Some(Platform::LinuxAarch64);
 
             #[cfg(target_arch = "arm")]
             {
                 #[cfg(target_feature = "v7")]
-                return Platform::LinuxArmV7l;
+                return Some(Platform::LinuxArmV7l);
 
                 #[cfg(not(target_feature = "v7"))]
-                return Platform::LinuxArmV6l;
+                return Some(Platform::LinuxArmV6l);
             }
 
             #[cfg(target_arch = "loongarch64")]
-            return Platform::LinuxLoongArch64;
+            return Some(Platform::LinuxLoongArch64);
 
             #[cfg(all(target_arch = "powerpc64", target_endian = "little"))]
-            return Platform::LinuxPpc64le;
+            return Some(Platform::LinuxPpc64le);
 
             #[cfg(all(target_arch = "powerpc64", target_endian = "big"))]
-            return Platform::LinuxPpc64;
+            return Some(Platform::LinuxPpc64);
 
             #[cfg(target_arch = "powerpc")]
-            return Platform::LinuxPpc;
+            return Some(Platform::LinuxPpc);
 
             #[cfg(target_arch = "s390x")]
-            return Platform::LinuxS390X;
+            return Some(Platform::LinuxS390X);
 
             #[cfg(target_arch = "riscv32")]
-            return Platform::LinuxRiscv32;
+            return Some(Platform::LinuxRiscv32);
 
             #[cfg(target_arch = "riscv64")]
-            return Platform::LinuxRiscv64;
+            return Some(Platform::LinuxRiscv64);
 
             #[cfg(not(any(
                 target_arch = "x86_64",
@@ -181,13 +182,13 @@ impl Platform {
         #[cfg(target_os = "freebsd")]
         {
             #[cfg(target_arch = "x86")]
-            return Platform::FreeBsd32;
+            return Some(Platform::FreeBsd32);
 
             #[cfg(target_arch = "x86_64")]
-            return Platform::FreeBsd64;
+            return Some(Platform::FreeBsd64);
 
             #[cfg(target_arch = "aarch64")]
-            return Platform::FreeBsdArm64;
+            return Some(Platform::FreeBsdArm64);
 
             #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64")))]
             compile_error!("unsupported freebsd architecture");
@@ -195,13 +196,13 @@ impl Platform {
         #[cfg(windows)]
         {
             #[cfg(target_arch = "x86")]
-            return Platform::Win32;
+            return Some(Platform::Win32);
 
             #[cfg(target_arch = "x86_64")]
-            return Platform::Win64;
+            return Some(Platform::Win64);
 
             #[cfg(target_arch = "aarch64")]
-            return Platform::WinArm64;
+            return Some(Platform::WinArm64);
 
             #[cfg(not(any(target_arch = "x86_64", target_arch = "x86", target_arch = "aarch64")))]
             compile_error!("unsupported windows architecture");
@@ -209,10 +210,10 @@ impl Platform {
         #[cfg(target_os = "macos")]
         {
             #[cfg(target_arch = "x86_64")]
-            return Platform::Osx64;
+            return Some(Platform::Osx64);
 
             #[cfg(target_arch = "aarch64")]
-            return Platform::OsxArm64;
+            return Some(Platform::OsxArm64);
         }
 
         #[cfg(target_os = "ios")]
@@ -221,20 +222,20 @@ impl Platform {
             // "ios"`, but produces binaries that run on macOS. No conda
             // subdir exists for it.
             #[cfg(target_abi = "macabi")]
-            return Platform::Unknown;
+            return None;
 
             #[cfg(all(target_arch = "aarch64", target_abi = "sim"))]
-            return Platform::IosSimulatorArm64;
+            return Some(Platform::IosSimulatorArm64);
 
             #[cfg(all(
                 target_arch = "aarch64",
                 not(any(target_abi = "sim", target_abi = "macabi"))
             ))]
-            return Platform::IosArm64;
+            return Some(Platform::IosArm64);
 
             // The only x86_64 iOS target (`x86_64-apple-ios`) is the simulator.
             #[cfg(all(target_arch = "x86_64", not(target_abi = "macabi")))]
-            return Platform::IosSimulator64;
+            return Some(Platform::IosSimulator64);
 
             #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
             compile_error!("unsupported ios architecture");
@@ -243,17 +244,17 @@ impl Platform {
         #[cfg(target_os = "android")]
         {
             #[cfg(target_arch = "aarch64")]
-            return Platform::AndroidAarch64;
+            return Some(Platform::AndroidAarch64);
 
             // armv7-linux-androideabi and thumbv7neon-linux-androideabi → armeabi-v7a
             #[cfg(target_arch = "arm")]
-            return Platform::AndroidArmV7a;
+            return Some(Platform::AndroidArmV7a);
 
             #[cfg(target_arch = "x86")]
-            return Platform::Android32;
+            return Some(Platform::Android32);
 
             #[cfg(target_arch = "x86_64")]
-            return Platform::Android64;
+            return Some(Platform::Android64);
 
             // e.g. riscv64-linux-android
             #[cfg(not(any(
@@ -268,16 +269,16 @@ impl Platform {
         #[cfg(target_os = "emscripten")]
         {
             #[cfg(target_arch = "wasm32")]
-            return Platform::EmscriptenWasm32;
+            return Some(Platform::EmscriptenWasm32);
 
             #[cfg(target_arch = "wasm64")]
-            return Platform::EmscriptenWasm64;
+            return Some(Platform::EmscriptenWasm64);
         }
 
         #[cfg(target_os = "wasi")]
         {
             #[cfg(target_arch = "wasm32")]
-            return Platform::WasiWasm32;
+            return Some(Platform::WasiWasm32);
         }
 
         #[cfg(not(any(
@@ -291,7 +292,7 @@ impl Platform {
             windows
         )))]
         {
-            return Platform::Unknown;
+            None
         }
     }
 
@@ -375,7 +376,7 @@ impl Platform {
     /// and unknown platforms.
     pub fn only_platform(&self) -> Option<&str> {
         match self {
-            Platform::NoArch | Platform::Unknown => None,
+            Platform::NoArch => None,
             Platform::Linux32
             | Platform::Linux64
             | Platform::LinuxAarch64
@@ -503,7 +504,6 @@ impl From<Platform> for &'static str {
             Platform::EmscriptenWasm64 => "emscripten-wasm64",
             Platform::WasiWasm32 => "wasi-wasm32",
             Platform::ZosZ => "zos-z",
-            Platform::Unknown => "unknown",
         }
     }
 }
@@ -515,7 +515,7 @@ impl Platform {
     /// respectively.
     pub fn arch(&self) -> Option<Arch> {
         match self {
-            Platform::Unknown | Platform::NoArch => None,
+            Platform::NoArch => None,
             Platform::LinuxArmV6l => Some(Arch::ArmV6l),
             Platform::LinuxArmV7l => Some(Arch::ArmV7l),
             Platform::LinuxLoongArch64 => Some(Arch::LoongArch64),
@@ -575,10 +575,10 @@ impl<'de> serde::Deserialize<'de> for Platform {
 }
 
 impl Arch {
-    /// Returns the current arch.
-    pub fn current() -> Self {
-        // this cannot be `noarch` so unwrap is fine
-        Platform::current().arch().unwrap()
+    /// Returns the arch for which the current binary was built, or `None`
+    /// when [`Platform::current`] is `None`.
+    pub fn current() -> Option<Self> {
+        Platform::current().and_then(|platform| platform.arch())
     }
 
     /// Returns a string representation of the arch.

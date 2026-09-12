@@ -292,7 +292,7 @@ mod tests {
             operations,
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: Vec::new(),
         };
 
@@ -320,7 +320,7 @@ mod tests {
             operations: vec![TransactionOperation::Remove(prefix_records[0].clone())],
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: Vec::new(),
         };
 

@@ -521,7 +521,10 @@ impl Installer {
         };
 
         // Construct a transaction from the current and desired situation.
-        let target_platform = self.target_platform.unwrap_or_else(Platform::current);
+        let target_platform = self
+            .target_platform
+            .or_else(Platform::current)
+            .ok_or(InstallerError::UnknownHostPlatform)?;
         let desired_records: Vec<_> = records.into_iter().collect();
         let mut transaction = Transaction::from_current_and_desired(
             installed.iter(),

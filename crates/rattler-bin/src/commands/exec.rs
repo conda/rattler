@@ -54,9 +54,10 @@ pub struct Opt {
     #[clap(short, long = "channel")]
     pub channels: Option<Vec<String>>,
 
-    /// The platform to create the environment for.
-    #[clap(long, short, default_value_t = Platform::current())]
-    pub platform: Platform,
+    /// The platform to create the environment for. Defaults to the platform
+    /// of the current host.
+    #[clap(long, short)]
+    pub platform: Option<Platform>,
 
     /// Always create a new environment, even if one already exists.
     #[clap(long)]
@@ -119,7 +120,7 @@ pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
     let prefix = create_exec_prefix(CreateExecPrefixOptions {
         specs: &install_specs,
         channels: &channels,
-        platform: opt.platform,
+        platform: opt.platform.map_or_else(crate::host_platform, Ok)?,
         dir_prefix,
         force_reinstall: opt.force_reinstall,
         list: opt.list.as_deref(),
