@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 use rattler_config::config::{
     concurrency::default_max_concurrent_solves, index::IndexChannelConfig,
 };
@@ -55,7 +55,7 @@ struct Cli {
     /// A specific platform to index.
     /// Defaults to all platforms available in the channel.
     #[arg(long, global = true)]
-    target_platform: Option<Platform>,
+    target_platform: Option<Subdir>,
 
     /// The name of the conda package (expected to be in the `noarch` subdir)
     /// that should be used for repodata patching. For more information, see `https://prefix.dev/blog/repodata_patching`.

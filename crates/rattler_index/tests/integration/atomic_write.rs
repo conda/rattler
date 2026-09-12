@@ -1,4 +1,4 @@
-use rattler_conda_types::{Channel, ChannelConfig, Platform};
+use rattler_conda_types::{Channel, ChannelConfig, Subdir};
 use rattler_index::{IndexFsConfig, PackageRevisionAssignment, index_fs};
 use rattler_repodata_gateway::sparse::SparseRepoData;
 
@@ -12,7 +12,7 @@ async fn test_index_fs_over_memory_mapped_repodata() {
 
     let make_config = || IndexFsConfig {
         channel: channel_path.clone(),
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         repodata_patch: None,
         write_zst: false,
         write_shards: false,

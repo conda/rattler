@@ -5,7 +5,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::{
-    Channel, ChannelConfig, MatchSpec, ParseMatchSpecOptions, Platform, RepoDataRecord,
+    Channel, ChannelConfig, MatchSpec, ParseMatchSpecOptions, RepoDataRecord, Subdir,
 };
 use rattler_repodata_gateway::RepoData;
 
@@ -32,9 +32,9 @@ pub struct Opt {
     #[clap(short, long, default_value = "conda-forge")]
     channels: Vec<String>,
 
-    /// Platform to search for. Defaults to the platform of the current host.
+    /// Subdir to search for. Defaults to the platform of the current host.
     #[clap(short, long)]
-    platform: Option<Platform>,
+    platform: Option<Subdir>,
 
     /// Maximum number of packages to display
     #[clap(long, default_value = "3")]
@@ -105,7 +105,7 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
     let repo_data = gateway
         .query(
             channels,
-            [platform, Platform::NoArch],
+            [platform, Subdir::NoArch],
             vec![matchspec.clone()],
         )
         .recursive(false) // Don't fetch dependencies for search

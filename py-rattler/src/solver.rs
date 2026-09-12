@@ -22,9 +22,9 @@ use crate::{
     error::PyRattlerError,
     generic_virtual_package::PyGenericVirtualPackage,
     match_spec::PyMatchSpec,
-    platform::PyPlatform,
     record::PyRecord,
     repo_data::gateway::{PyGateway, emit_gateway_warnings, py_object_to_source},
+    subdir::PySubdir,
 };
 
 impl<'a, 'py> FromPyObject<'a, 'py> for Wrap<SolveStrategy> {
@@ -96,7 +96,7 @@ fn patch_python_with_pip(record: &RepoDataRecord) -> Option<RepoDataRecord> {
 pub fn py_solve<'a>(
     py: Python<'a>,
     sources: Vec<Bound<'a, PyAny>>,
-    platforms: Vec<PyPlatform>,
+    platforms: Vec<PySubdir>,
     specs: Vec<PyMatchSpec>,
     constraints: Vec<PyMatchSpec>,
     gateway: PyGateway,

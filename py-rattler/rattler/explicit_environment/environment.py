@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from rattler.rattler import PyExplicitEnvironmentSpec as _PyExplicitEnvironmentSpec
 from rattler.rattler import PyExplicitEnvironmentEntry as _PyExplicitEnvironmentEntry
-from rattler.platform import Platform
+from rattler.platform import Subdir
 
 
 class ExplicitEnvironmentEntry:
@@ -47,7 +47,7 @@ class ExplicitEnvironmentSpec:
         ... http://repo.anaconda.com/pkgs/main/linux-64/python-3.9.0-h3.tar.bz2
         ... ''')
         >>> spec.platform
-        Platform(linux-64)
+        Subdir(linux-64)
         >>> spec.packages[0].url
         'http://repo.anaconda.com/pkgs/main/linux-64/python-3.9.0-h3.tar.bz2'
         >>>
@@ -56,11 +56,11 @@ class ExplicitEnvironmentSpec:
         return cls(_PyExplicitEnvironmentSpec.from_str(content))
 
     @property
-    def platform(self) -> Optional[Platform]:
+    def platform(self) -> Optional[Subdir]:
         """Returns the platform specified in the explicit environment specification"""
         platform = self._inner.platform()
         if platform is not None:
-            return Platform._from_py_platform(platform)
+            return Subdir._from_py_subdir(platform)
         return None
 
     @property

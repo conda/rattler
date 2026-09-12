@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use rattler_conda_types::{
-    Platform, PrefixRecord,
+    PrefixRecord, Subdir,
     menuinst::{MenuMode, Tracker},
 };
 
@@ -83,7 +83,7 @@ pub fn is_menu_schema_path(path: &Path) -> bool {
 pub fn install_menuitems_for_record(
     target_prefix: &Path,
     prefix_record: &PrefixRecord,
-    platform: Platform,
+    platform: Subdir,
     menu_mode: MenuMode,
 ) -> Result<(), MenuInstError> {
     // Look for Menu/*.json files in the package paths
@@ -123,7 +123,7 @@ pub fn install_menuitems(
     file: &Path,
     prefix: &Path,
     base_prefix: &Path,
-    platform: Platform,
+    platform: Subdir,
     menu_mode: MenuMode,
 ) -> Result<Vec<Tracker>, MenuInstError> {
     let text = std::fs::read_to_string(file)?;

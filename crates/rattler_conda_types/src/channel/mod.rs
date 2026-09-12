@@ -12,7 +12,7 @@ use thiserror::Error;
 use typed_path::{Utf8TypedPath, Utf8TypedPathBuf};
 use url::Url;
 
-use super::{ParsePlatformError, Platform};
+use super::{ParseSubdirError, Subdir};
 use crate::utils::{path::is_path, url::parse_scheme};
 
 mod channel_url;
@@ -192,7 +192,7 @@ pub struct Channel {
     /// The platforms supported by this channel, or None if no explicit
     /// platforms have been specified.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub platforms: Option<Vec<Platform>>,
+    pub platforms: Option<Vec<Subdir>>,
 
     /// Base URL of the channel, everything is relative to this url.
     pub base_url: ChannelUrl,
@@ -252,7 +252,7 @@ impl Channel {
     }
 
     /// Set the explicit platforms of the channel.
-    pub fn with_explicit_platforms(self, platforms: impl IntoIterator<Item = Platform>) -> Self {
+    pub fn with_explicit_platforms(self, platforms: impl IntoIterator<Item = Subdir>) -> Self {
         Self {
             platforms: Some(platforms.into_iter().collect()),
             ..self
@@ -376,12 +376,12 @@ impl Channel {
     }
 
     /// Returns the Urls for the given platform
-    pub fn platform_url(&self, platform: Platform) -> Url {
+    pub fn platform_url(&self, platform: Subdir) -> Url {
         self.base_url.platform_url(platform)
     }
 
     /// Returns the Urls for all the supported platforms of this package.
-    pub fn platforms_url(&self) -> Vec<(Platform, Url)> {
+    pub fn platforms_url(&self) -> Vec<(Subdir, Url)> {
         self.platforms_or_default()
             .iter()
             .map(|&platform| (platform, self.platform_url(platform)))
@@ -390,7 +390,7 @@ impl Channel {
 
     /// Returns the platforms explicitly mentioned in the channel or the default
     /// platforms of the current system.
-    pub fn platforms_or_default(&self) -> &[Platform] {
+    pub fn platforms_or_default(&self) -> &[Subdir] {
         if let Some(platforms) = &self.platforms {
             platforms.as_slice()
         } else {
@@ -409,7 +409,7 @@ impl Channel {
 pub enum ParseChannelError {
     /// Error when the platform could not be parsed.
     #[error("could not parse the platforms")]
-    ParsePlatformError(#[source] ParsePlatformError),
+    ParseSubdirError(#[source] ParseSubdirError),
 
     /// Error when the url could not be parsed.
     #[error("could not parse url")]
@@ -432,9 +432,9 @@ pub enum ParseChannelError {
     NotUtf8RootDir(PathBuf),
 }
 
-impl From<ParsePlatformError> for ParseChannelError {
-    fn from(err: ParsePlatformError) -> Self {
-        ParseChannelError::ParsePlatformError(err)
+impl From<ParseSubdirError> for ParseChannelError {
+    fn from(err: ParseSubdirError) -> Self {
+        ParseChannelError::ParseSubdirError(err)
     }
 }
 
@@ -446,7 +446,7 @@ impl From<url::ParseError> for ParseChannelError {
 
 /// Extract the platforms from the given human readable channel.
 #[allow(clippy::type_complexity)]
-fn parse_platforms(channel: &str) -> Result<(Option<Vec<Platform>>, &str), ParsePlatformError> {
+fn parse_platforms(channel: &str) -> Result<(Option<Vec<Subdir>>, &str), ParseSubdirError> {
     // A platform selector is the last `[...]` group, and it must end the
     // string. Using `strip_suffix` avoids panicking on a multi-byte trailing
     // character and misreading a `]` in the middle of the string; `rfind`
@@ -475,10 +475,10 @@ fn parse_platforms(channel: &str) -> Result<(Option<Vec<Platform>>, &str), Parse
 
 /// Returns the default platforms. These are based on the platform this binary
 /// was build for as well as platform agnostic platforms.
-pub(crate) const fn default_platforms() -> &'static [Platform] {
-    const DEFAULT_PLATFORMS: &[Platform] = match Platform::current() {
-        Some(current) => &[current, Platform::NoArch],
-        None => &[Platform::NoArch],
+pub(crate) const fn default_platforms() -> &'static [Subdir] {
+    const DEFAULT_PLATFORMS: &[Subdir] = match Subdir::current() {
+        Some(current) => &[current, Subdir::NoArch],
+        None => &[Subdir::NoArch],
     };
     DEFAULT_PLATFORMS
 }
@@ -539,7 +539,7 @@ mod tests {
         let channel = Channel::from_str("https://[::1]/conda[linux-64,noarch]", &config).unwrap();
         assert_eq!(
             channel.platforms,
-            Some(vec![Platform::Linux64, Platform::NoArch])
+            Some(vec![Subdir::Linux64, Subdir::NoArch])
         );
         assert_eq!(channel.base_url.url().as_str(), "https://[::1]/conda/");
     }
@@ -563,20 +563,24 @@ mod tests {
     fn test_parse_platforms() {
         assert_eq!(
             parse_platforms("[noarch, linux-64]"),
-            Ok((Some(vec![Platform::NoArch, Platform::Linux64]), ""))
+            Ok((Some(vec![Subdir::NoArch, Subdir::Linux64]), ""))
         );
         assert_eq!(
             parse_platforms("sometext[noarch]"),
-            Ok((Some(vec![Platform::NoArch]), "sometext"))
+            Ok((Some(vec![Subdir::NoArch]), "sometext"))
         );
         assert_eq!(
             parse_platforms("sometext[noarch,]"),
-            Ok((Some(vec![Platform::NoArch]), "sometext"))
+            Ok((Some(vec![Subdir::NoArch]), "sometext"))
         );
         assert_eq!(parse_platforms("sometext[]"), Ok((None, "sometext")));
         assert!(matches!(
             parse_platforms("[notaplatform]"),
-            Err(ParsePlatformError { .. })
+            Err(ParseSubdirError::InvalidName(_))
+        ));
+        assert!(matches!(
+            parse_platforms("[linux-esp32s3]"),
+            Err(ParseSubdirError::UnknownSubdir { .. })
         ));
     }
 
@@ -741,7 +745,7 @@ mod tests {
         assert_eq!(channel.platforms, None);
         assert_eq!(channel.name(), "http://localhost:1234/");
 
-        let noarch_url = channel.platform_url(Platform::NoArch);
+        let noarch_url = channel.platform_url(Subdir::NoArch);
         assert_eq!(noarch_url.to_string(), "http://localhost:1234/noarch/");
 
         assert!(matches!(
@@ -752,7 +756,7 @@ mod tests {
 
     #[test]
     fn parse_platform() {
-        let platform = Platform::Linux32;
+        let platform = Subdir::Linux32;
         let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
 
         let channel = Channel::from_str(

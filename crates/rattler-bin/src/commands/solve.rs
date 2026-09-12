@@ -6,9 +6,7 @@ use std::{
 
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
-use rattler_conda_types::{
-    ChannelConfig, MatchSpec, Matches, PackageName, Platform, RepoDataRecord,
-};
+use rattler_conda_types::{ChannelConfig, MatchSpec, Matches, PackageName, RepoDataRecord, Subdir};
 use rattler_repodata_gateway::RepoData;
 use rattler_solve::SolverTask;
 use url::Url;
@@ -69,7 +67,7 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
     let repo_data = wrap_in_async_progress(
         "loading repodata",
         gateway
-            .query(channels, [platform, Platform::NoArch], specs.clone())
+            .query(channels, [platform, Subdir::NoArch], specs.clone())
             .recursive(true),
     )
     .await

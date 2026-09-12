@@ -8,7 +8,7 @@ use rattler::{
 use rattler_cache::EXEC_ENVS_DIR;
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
-    ParseMatchSpecOptions, Platform,
+    ParseMatchSpecOptions, Subdir,
 };
 use rattler_repodata_gateway::RepoData;
 use rattler_shell::shell::ShellEnum;
@@ -57,7 +57,7 @@ pub struct Opt {
     /// The platform to create the environment for. Defaults to the platform
     /// of the current host.
     #[clap(long, short)]
-    pub platform: Option<Platform>,
+    pub platform: Option<Subdir>,
 
     /// Always create a new environment, even if one already exists.
     #[clap(long)]
@@ -184,7 +184,7 @@ pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
 struct CreateExecPrefixOptions<'a> {
     specs: &'a [MatchSpec],
     channels: &'a [Channel],
-    platform: Platform,
+    platform: Subdir,
     dir_prefix: Option<String>,
     force_reinstall: bool,
     list: Option<&'a str>,
@@ -233,7 +233,7 @@ async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Res
         gateway
             .query(
                 channels.to_vec(),
-                [platform, Platform::NoArch],
+                [platform, Subdir::NoArch],
                 specs.to_vec(),
             )
             .recursive(true),
@@ -323,7 +323,7 @@ fn parse_specs(raw: &[String]) -> miette::Result<Vec<MatchSpec>> {
 ///
 /// Two invocations with the same logical environment always produce the same
 /// hash, regardless of argument order.
-fn compute_env_hash(specs: &[MatchSpec], channels: &[String], platform: Platform) -> String {
+fn compute_env_hash(specs: &[MatchSpec], channels: &[String], platform: Subdir) -> String {
     let mut sorted_specs: Vec<String> =
         specs.iter().map(std::string::ToString::to_string).collect();
     sorted_specs.sort_unstable();
@@ -437,7 +437,7 @@ mod tests {
     use rattler_conda_types::{MatchSpec, ParseStrictness};
 
     use super::{compute_env_hash, exec_dir_prefix};
-    use rattler_conda_types::Platform;
+    use rattler_conda_types::Subdir;
 
     fn spec(s: &str) -> MatchSpec {
         MatchSpec::from_str(s, ParseStrictness::Lenient).unwrap()
@@ -471,8 +471,8 @@ mod tests {
     fn env_hash_is_deterministic() {
         let specs = vec![spec("python=3.12"), spec("numpy")];
         let channels = vec!["https://conda.anaconda.org/conda-forge/".to_string()];
-        let h1 = compute_env_hash(&specs, &channels, Platform::Linux64);
-        let h2 = compute_env_hash(&specs, &channels, Platform::Linux64);
+        let h1 = compute_env_hash(&specs, &channels, Subdir::Linux64);
+        let h2 = compute_env_hash(&specs, &channels, Subdir::Linux64);
         assert_eq!(h1, h2);
     }
 
@@ -482,12 +482,12 @@ mod tests {
         let h1 = compute_env_hash(
             &[spec("numpy"), spec("python=3.12")],
             &channels,
-            Platform::Linux64,
+            Subdir::Linux64,
         );
         let h2 = compute_env_hash(
             &[spec("python=3.12"), spec("numpy")],
             &channels,
-            Platform::Linux64,
+            Subdir::Linux64,
         );
         assert_eq!(h1, h2);
     }
@@ -496,8 +496,8 @@ mod tests {
     fn env_hash_differs_by_platform() {
         let specs = vec![spec("python=3.12")];
         let channels = vec!["https://conda.anaconda.org/conda-forge/".to_string()];
-        let h_linux = compute_env_hash(&specs, &channels, Platform::Linux64);
-        let h_osx = compute_env_hash(&specs, &channels, Platform::OsxArm64);
+        let h_linux = compute_env_hash(&specs, &channels, Subdir::Linux64);
+        let h_osx = compute_env_hash(&specs, &channels, Subdir::OsxArm64);
         assert_ne!(h_linux, h_osx);
     }
 }

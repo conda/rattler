@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 
 use super::{
     add_trailing_slash, decode_zst_bytes_async, is_missing_sharded_repodata_status, parse_records,
@@ -157,7 +157,7 @@ impl ShardedSubdir {
     pub fn clear_cache(
         cache_dir: &Path,
         channel: &Channel,
-        platform: Platform,
+        platform: Subdir,
     ) -> Result<(), std::io::Error> {
         let index_base_url = channel
             .base_url

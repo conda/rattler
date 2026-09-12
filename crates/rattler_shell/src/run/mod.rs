@@ -1,6 +1,6 @@
 //! Helpers to run commands in an activated environment.
 
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 use std::process::{Command, ExitStatus, Output};
 use std::{collections::HashMap, path::Path};
 
@@ -39,7 +39,7 @@ pub async fn run_command_in_environment(
     env_vars: &HashMap<String, String>,
     cwd: Option<&Path>,
 ) -> Result<ExitStatus, RunError> {
-    let platform = Platform::current().ok_or(RunError::UnknownHostPlatform)?;
+    let platform = Subdir::current().ok_or(RunError::UnknownHostPlatform)?;
     let activator = Activator::from_path(prefix, shell, platform)?;
 
     let current_path = std::env::var("PATH")
@@ -80,7 +80,7 @@ pub fn run_in_environment(
     shell: ShellEnum,
     env_vars: &HashMap<String, String>,
 ) -> Result<Output, RunError> {
-    let platform = Platform::current().ok_or(RunError::UnknownHostPlatform)?;
+    let platform = Subdir::current().ok_or(RunError::UnknownHostPlatform)?;
     let mut shell_script = shell::ShellScript::new(shell.clone(), platform);
 
     for (k, v) in env_vars.iter() {
