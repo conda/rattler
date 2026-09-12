@@ -117,7 +117,7 @@ pub async fn inject(opt: InjectOpt, offline: bool) -> miette::Result<()> {
     desired_records.extend(resolved.into_iter().map(|package| package.record));
 
     Installer::new()
-        .with_target_platform(Platform::current())
+        .with_target_platform(crate::host_platform()?)
         .with_installed_packages(installed_packages)
         .with_package_cache(package_cache)
         .with_execute_link_scripts(true)
@@ -266,7 +266,7 @@ pub async fn remove_from_prefix(opt: RemoveFromPrefixOpt) -> miette::Result<()> 
         .collect::<Vec<_>>();
 
     Installer::new()
-        .with_target_platform(Platform::current())
+        .with_target_platform(crate::host_platform()?)
         .with_installed_packages(installed_packages)
         .with_execute_link_scripts(true)
         .install(&target_prefix, desired_records)
@@ -289,7 +289,7 @@ pub async fn remove_from_prefix(opt: RemoveFromPrefixOpt) -> miette::Result<()> 
 }
 
 fn validate_package_compatibility(package_record: &PackageRecord) -> miette::Result<()> {
-    validate_package_compatibility_for_platform(package_record, Platform::current())
+    validate_package_compatibility_for_platform(package_record, crate::host_platform()?)
 }
 
 fn validate_package_compatibility_for_platform(

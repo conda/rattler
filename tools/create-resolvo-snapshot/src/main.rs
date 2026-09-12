@@ -39,7 +39,7 @@ async fn main() {
     // Determine the subdirs to query.
     let mut subdirs: HashSet<Platform> = HashSet::from_iter(args.subdir);
     if subdirs.is_empty() {
-        subdirs.insert(Platform::current());
+        subdirs.extend(Platform::current());
     }
     subdirs.insert(Platform::NoArch);
     let platforms = subdirs.iter().copied().collect_vec();

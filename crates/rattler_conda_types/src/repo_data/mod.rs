@@ -945,7 +945,7 @@ impl PackageRecord {
             extra_depends: BTreeMap::new(),
             sha256: None,
             size: None,
-            subdir: Platform::current().to_string(),
+            subdir: Platform::current().unwrap_or(Platform::NoArch).to_string(),
             timestamp: None,
             track_features: vec![],
             version: version.into(),

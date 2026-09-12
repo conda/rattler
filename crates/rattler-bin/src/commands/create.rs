@@ -50,7 +50,7 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     // Make the target prefix absolute
     let target_prefix = std::path::absolute(opt.target_prefix).into_diagnostic()?;
 
-    let install_platform = opt.solver.platform;
+    let install_platform = opt.solver.platform()?;
 
     println!("Installing for platform: {install_platform}");
 

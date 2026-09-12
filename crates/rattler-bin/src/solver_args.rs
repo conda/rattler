@@ -34,9 +34,9 @@ pub struct SolverArgs {
     #[clap(long = "constraint", value_name = "SPEC")]
     constraints: Vec<String>,
 
-    /// The platform to solve for.
-    #[clap(long, default_value_t = Platform::current())]
-    pub platform: Platform,
+    /// The platform to solve for. Defaults to the platform of the current host.
+    #[clap(long)]
+    platform: Option<Platform>,
 
     /// Virtual packages to use for solving, e.g. __glibc=2.28.
     ///
@@ -160,12 +160,18 @@ impl SolverArgs {
             .into_diagnostic()
     }
 
+    /// The platform to solve for, either as given on the command line or the
+    /// platform of the current host.
+    pub fn platform(&self) -> miette::Result<Platform> {
+        self.platform.map_or_else(crate::host_platform, Ok)
+    }
+
     /// The virtual packages to solve with, either as given on the command line
     /// or detected from the current system.
     pub fn virtual_packages(&self) -> miette::Result<Vec<GenericVirtualPackage>> {
         let Some(virtual_packages) = &self.virtual_package else {
             return VirtualPackages::detect_for_platform(
-                self.platform,
+                self.platform()?,
                 &VirtualPackageOverrides::from_env(),
                 rattler::default_cache_dir().ok().as_deref(),
             )
