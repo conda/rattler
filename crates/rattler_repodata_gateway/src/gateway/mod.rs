@@ -369,10 +369,10 @@ impl Gateway {
             use std::str::FromStr;
 
             let platforms_to_clear: Vec<Subdir> = match &subdirs {
-                SubdirSelection::All => Subdir::all().collect(),
+                SubdirSelection::All => Subdir::known().collect(),
                 SubdirSelection::Some(subdirs) => subdirs
                     .iter()
-                    .filter_map(|s| Subdir::from_str(s).ok())
+                    .filter_map(|subdir| Subdir::from_str(subdir).ok())
                     .collect(),
             };
 

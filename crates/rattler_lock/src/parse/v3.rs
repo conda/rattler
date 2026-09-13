@@ -1,6 +1,6 @@
 //! A module that enables parsing of lock files version 3 or lower.
 
-use std::{collections::BTreeSet, ops::Not, str::FromStr, sync::Arc};
+use std::{collections::BTreeSet, ops::Not, sync::Arc};
 
 use super::{
     ParseCondaLockError,
@@ -192,7 +192,7 @@ pub fn parse_v3_or_lower(
                             .path_segments()
                             .and_then(|split| split.rev().nth(1))
                     })
-                    .and_then(|subdir_str| rattler_conda_types::Subdir::from_str(subdir_str).ok())
+                    .and_then(rattler_conda_types::Subdir::from_known_str)
                     .unwrap_or(platform);
 
                 let location = UrlOrPath::Url(value.url).normalize().into_owned();

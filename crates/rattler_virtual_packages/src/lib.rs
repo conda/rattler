@@ -331,7 +331,7 @@ impl VirtualPackages {
 
         Ok(Self {
             win: Windows::detect(overrides.win.as_ref())?,
-            unix: Subdir::current().is_some_and(Subdir::is_unix),
+            unix: Subdir::current().is_some_and(|subdir| subdir.is_unix()),
             linux: Linux::detect(overrides.linux.as_ref())?,
             osx: Osx::detect(overrides.osx.as_ref())?,
             ios: Ios::detect(overrides.ios.as_ref())?,

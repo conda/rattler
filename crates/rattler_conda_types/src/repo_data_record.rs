@@ -1,6 +1,6 @@
 //! Defines the `[RepoDataRecord]` struct.
 
-use std::{collections::HashMap, str::FromStr, vec::Vec};
+use std::{collections::HashMap, vec::Vec};
 
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -56,7 +56,10 @@ impl RepoDataRecord {
             let mut out = Vec::new();
             for segment in segments {
                 out.push(segment);
-                if Subdir::from_str(segment).is_ok() {
+                // Only subdirs rattler knows may end the channel path; a
+                // CEP 26-shaped name like `conda-forge` is a channel, not a
+                // subdir.
+                if Subdir::from_known_str(segment).is_some() {
                     break;
                 }
             }

@@ -87,7 +87,7 @@ pub use repo_data::{
 };
 pub use repo_data_record::{RepoDataRecord, SolverResult};
 pub use run_export::RunExportKind;
-pub use subdir::{Arch, ParseArchError, ParseSubdirError, Subdir};
+pub use subdir::{Arch, ParseArchError, ParseSubdirError, Subdir, is_valid_subdir_name};
 
 /// An package identifier that can be used to identify packages across package
 /// ecosystems.

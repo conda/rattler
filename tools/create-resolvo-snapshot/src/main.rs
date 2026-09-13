@@ -111,12 +111,7 @@ async fn main() {
         format!(
             "snapshot-{}-{}.json",
             channel.name(),
-            subdirs
-                .iter()
-                .copied()
-                .map(Subdir::as_str)
-                .sorted()
-                .join("-")
+            subdirs.iter().map(ToString::to_string).sorted().join("-")
         )
     });
     eprintln!("serializing snapshot to {}", &output_file);

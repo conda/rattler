@@ -1030,8 +1030,10 @@ fn parse_channel_and_subdir(
         ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap_or_default());
 
     if let Some((channel, subdir)) = input.rsplit_once('/') {
-        // If the subdir is a platform, we assume the channel has a subdir
-        if Subdir::from_str(subdir).is_ok() {
+        // Only a subdir rattler knows splits off here. `conda-forge` also
+        // satisfies the CEP 26 subdir syntax, so accepting arbitrary names
+        // would turn `conda-forge::python` into a subdir reference.
+        if Subdir::from_known_str(subdir).is_some() {
             return Ok((
                 Some(Channel::from_str(channel, &channel_config)?),
                 Some(subdir.to_string()),

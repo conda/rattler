@@ -53,6 +53,7 @@ smallvec = { workspace = true, features = [
 strum = { workspace = true, features = ["derive"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
+tinystr = { workspace = true }
 tracing = { workspace = true }
 typed-path = { workspace = true }
 url = { workspace = true, features = ["serde"] }

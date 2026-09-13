@@ -576,12 +576,13 @@ mod tests {
         assert_eq!(parse_platforms("sometext[]"), Ok((None, "sometext")));
         assert!(matches!(
             parse_platforms("[notaplatform]"),
-            Err(ParseSubdirError::InvalidName(_))
+            Err(ParseSubdirError { .. })
         ));
-        assert!(matches!(
+        // A channel can pin a subdir rattler has no built-in knowledge of.
+        assert_eq!(
             parse_platforms("[linux-esp32s3]"),
-            Err(ParseSubdirError::UnknownSubdir { .. })
-        ));
+            Ok((Some(vec!["linux-esp32s3".parse().unwrap()]), ""))
+        );
     }
 
     #[test]

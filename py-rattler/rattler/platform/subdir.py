@@ -112,20 +112,58 @@ class Subdir(metaclass=SubdirSingleton):
         return cls._from_py_subdir(PySubdir.current())
 
     @classmethod
-    def all(cls) -> Iterator[Subdir]:
+    def known(cls) -> Iterator[Subdir]:
         """
-        Returns all known subdirs.
+        Returns every subdir rattler has built-in knowledge of.
+
+        Any other name following CEP 26 can still be constructed; use
+        `is_known` to tell them apart.
 
         Examples
         --------
         ```python
-        >>> next(Subdir.all())
+        >>> next(Subdir.known())
         Subdir(noarch)
-        >>> len(list(Subdir.all()))
+        >>> len(list(Subdir.known()))
         32
+        >>> Subdir("linux-esp32s3") in list(Subdir.known())
+        False
         >>>
+        ```
         """
-        return (cls._from_py_subdir(p) for p in PySubdir.all())
+        return (cls._from_py_subdir(subdir) for subdir in PySubdir.known())
+
+    @classmethod
+    def all(cls) -> Iterator[Subdir]:
+        """
+        Returns every subdir rattler has built-in knowledge of.
+
+        .. deprecated:: 0.27.0 Use `known` instead. Subdirs are no longer a
+           closed set, so "all" would be misleading.
+        """
+        warnings.warn(
+            "`Subdir.all` is deprecated, use `Subdir.known` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return cls.known()
+
+    @property
+    def is_known(self) -> bool:
+        """
+        Return True if rattler has built-in knowledge of this subdir.
+
+        Examples
+        --------
+        ```python
+        >>> Subdir("linux-64").is_known
+        True
+        >>> Subdir("linux-esp32s3").is_known
+        False
+        >>>
+        ```
+        """
+        return self._inner.is_known
 
     @property
     def is_linux(self) -> bool:

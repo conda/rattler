@@ -1158,17 +1158,22 @@ fn determine_subdir(
     let platform = platform.ok_or(ConvertSubdirError::PlatformEmpty)?;
     let arch = arch.ok_or(ConvertSubdirError::ArchEmpty)?;
 
-    match arch.parse::<Arch>() {
-        Ok(arch) => {
-            let arch_str = match arch {
-                Arch::X86 => "32",
-                Arch::X86_64 => "64",
-                _ => arch.as_str(),
-            };
-            Ok(format!("{platform}-{arch_str}"))
-        }
-        Err(_) => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
+    let Ok(arch) = arch.parse::<Arch>() else {
+        return Err(ConvertSubdirError::NoKnownCombination { platform, arch });
+    };
+    let arch_str = match arch {
+        Arch::X86 => "32",
+        Arch::X86_64 => "64",
+        _ => arch.as_str(),
+    };
+    let subdir = format!("{platform}-{arch_str}");
+    if !crate::is_valid_subdir_name(&subdir) {
+        return Err(ConvertSubdirError::NoKnownCombination {
+            platform,
+            arch: arch.to_string(),
+        });
     }
+    Ok(subdir)
 }
 
 impl PackageRecord {
@@ -1222,7 +1227,7 @@ mod test {
 
     use crate::{
         Channel, ChannelConfig, ChannelInfo, ChannelRelations, PackageRecord, RepoData,
-        RepodataRevision, V3Extensions, V3Packages,
+        RepodataRevision, Subdir, V3Extensions, V3Packages,
         package::DistArchiveIdentifier,
         repo_data::{compute_package_url, determine_subdir},
     };
@@ -1237,6 +1242,28 @@ mod test {
             determine_subdir(Some("osx".to_string()), Some("x86_64".to_string())).unwrap(),
             "osx-64"
         );
+    }
+
+    /// Every known subdir survives the round trip through the `platform` and
+    /// `arch` fields of an `index.json`, which spell `x86`/`x86_64` out in full
+    /// while the subdir abbreviates them to `32`/`64`.
+    #[test]
+    fn test_determine_subdir_round_trips_known_subdirs() {
+        for subdir in Subdir::known() {
+            let (Some(platform), Some(arch)) = (subdir.only_platform(), subdir.arch()) else {
+                assert_eq!(subdir, Subdir::NoArch);
+                continue;
+            };
+            assert_eq!(
+                determine_subdir(Some(platform.to_string()), Some(arch.to_string())).unwrap(),
+                subdir.as_str(),
+                "{subdir} did not survive the arch round trip"
+            );
+        }
+
+        // A combination that cannot spell a valid subdir is rejected rather
+        // than producing a malformed one.
+        assert!(determine_subdir(Some("linux".to_string()), Some("foo_bar".to_string())).is_err());
     }
 
     #[test]

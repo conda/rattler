@@ -184,6 +184,7 @@ tempfile = "3"
 temp-env = { version = "0.3", features = ["async_closure"] }
 test-log = "0.2"
 thiserror = "2"
+tinystr = { version = "0.8", default-features = false, features = ["serde"] }
 tokio = { version = "1", default-features = false }
 tokio-stream = "0.1"
 tokio-util = "0.7"

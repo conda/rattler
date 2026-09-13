@@ -31,7 +31,7 @@ use opendal::{Configurator, Operator, services::FsConfig};
 use rattler_conda_types::{
     ChannelInfo, ChannelNotice, ChannelNotices, ChannelRelations, MatchSpec, PackageRecord,
     ParseMatchSpecOptions, PatchInstructions, RepoData, Shard, ShardedRepodata, ShardedSubdirInfo,
-    Subdir, UrlOrPath, V3Extensions, V3Packages, WhlPackageRecord,
+    Subdir, UrlOrPath, V3Extensions, V3Packages, WhlPackageRecord, is_valid_subdir_name,
     package::{
         CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
         RunExportsJson, ValidatedMatchSpecs, WheelArchiveType,
@@ -255,7 +255,9 @@ fn repodata_patch_from_conda_package_stream<'a>(
                     .as_os_str()
                     .to_str()
                     .context("Could not convert OsStr to str")?;
-                let _ = Subdir::from_str(subdir_str)?;
+                if !is_valid_subdir_name(subdir_str) {
+                    return Err(anyhow::anyhow!("'{subdir_str}' is not a valid subdir name"));
+                }
                 subdir_str.to_string()
             } else {
                 return Err(anyhow::anyhow!(
