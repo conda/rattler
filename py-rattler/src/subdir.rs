@@ -50,6 +50,16 @@ impl PyArch {
     pub fn as_str(&self) -> &str {
         self.inner.as_str()
     }
+
+    #[staticmethod]
+    pub fn known() -> Vec<Self> {
+        Arch::known().map(Into::into).collect()
+    }
+
+    #[getter]
+    pub fn is_known(&self) -> bool {
+        self.inner.is_known()
+    }
 }
 
 ///////////////////////////
@@ -100,8 +110,13 @@ impl PySubdir {
     }
 
     #[staticmethod]
-    pub fn all() -> Vec<Self> {
-        Subdir::all().map(Into::into).collect()
+    pub fn known() -> Vec<Self> {
+        Subdir::known().map(Into::into).collect()
+    }
+
+    #[getter]
+    pub fn is_known(&self) -> bool {
+        self.inner.is_known()
     }
 
     #[getter]

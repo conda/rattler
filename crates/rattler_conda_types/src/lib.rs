@@ -90,7 +90,7 @@ pub use repo_data::{
 };
 pub use repo_data_record::{RepoDataRecord, SolverResult};
 pub use run_export::RunExportKind;
-pub use subdir::{Arch, ParseArchError, ParseSubdirError, Subdir};
+pub use subdir::{Arch, ParseArchError, ParseSubdirError, Subdir, is_valid_subdir_name};
 pub use virtual_package_demand::referenced_virtual_packages;
 pub use virtual_package_detector::{DetectorRegistrationMetadata, VirtualPackageName};
 
