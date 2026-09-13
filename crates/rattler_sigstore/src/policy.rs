@@ -357,7 +357,7 @@ mod tests {
     #[test]
     fn wildcard_matching() {
         assert!(wildcard_match("abc", "abc"));
-        assert!(!wildcard_match("abc", "abd"));
+        assert!(!wildcard_match("abc", "xyz"));
         assert!(wildcard_match("*", ""));
         assert!(wildcard_match("*", "anything"));
         assert!(wildcard_match(
