@@ -90,6 +90,8 @@ pub struct Installer {
     requested_specs: Option<Vec<MatchSpec>>,
     link_options: LinkOptions,
     external_symlink_policy: ExternalSymlinkPolicy,
+    #[cfg(feature = "sigstore")]
+    attestation_policy: Arc<rattler_sigstore::VerificationPolicy>,
 }
 
 #[derive(Debug)]
@@ -467,6 +469,41 @@ impl Installer {
         self
     }
 
+    /// Sets the policy for verifying the Sigstore attestations of the packages
+    /// that are installed.
+    ///
+    /// Attestations are discovered through the `attestations_sha256` field of
+    /// the package records, fetched from the channel and verified against the
+    /// package `sha256` while the package itself is being downloaded. With
+    /// [`rattler_sigstore::VerificationPolicy::Require`] a package whose
+    /// attestations do not verify fails the installation with
+    /// [`InstallerError::AttestationRejected`] before anything is linked. With
+    /// [`rattler_sigstore::VerificationPolicy::Warn`] problems are logged.
+    ///
+    /// Defaults to [`rattler_sigstore::VerificationPolicy::Disabled`].
+    #[cfg(feature = "sigstore")]
+    #[must_use]
+    pub fn with_attestation_policy(self, policy: rattler_sigstore::VerificationPolicy) -> Self {
+        Self {
+            attestation_policy: Arc::new(policy),
+            ..self
+        }
+    }
+
+    /// Sets the policy for verifying the Sigstore attestations of the packages
+    /// that are installed.
+    ///
+    /// This function is similar to [`Self::with_attestation_policy`], but
+    /// modifies an existing instance.
+    #[cfg(feature = "sigstore")]
+    pub fn set_attestation_policy(
+        &mut self,
+        policy: rattler_sigstore::VerificationPolicy,
+    ) -> &mut Self {
+        self.attestation_policy = Arc::new(policy);
+        self
+    }
+
     /// Sets the requested specs for the installer. These will be used to
     /// populate the `requested_spec` field in generated `PrefixRecord`
     /// instances.
@@ -707,6 +744,9 @@ impl Installer {
             pending_unlink_futures.push(op);
         }
 
+        #[cfg(feature = "sigstore")]
+        let attestation_policy = &self.attestation_policy;
+
         let mut pending_link_futures = FuturesUnordered::new();
         // Execute the operations (install) in the transaction.
         for (operation_idx, operation) in transaction
@@ -742,19 +782,32 @@ impl Installer {
                     let reporter = reporter.clone();
                     let package_cache = package_cache.clone();
                     let concurrent_requests_semaphore = concurrent_requests_semaphore.clone();
+                    #[cfg(feature = "sigstore")]
+                    let attestation_policy = attestation_policy.clone();
                     tokio::spawn(async move {
                         let populate_cache_report = reporter.clone().map(|r| {
                             let cache_index = r.on_populate_cache_start(operation_idx, &record);
                             (r, cache_index)
                         });
-                        let cache_metadata = populate_cache(
+                        let populate_cache = populate_cache(
                             &record,
-                            downloader,
+                            downloader.clone(),
                             &package_cache,
                             populate_cache_report.clone(),
                             concurrent_requests_semaphore,
-                        )
-                        .await?;
+                        );
+
+                        // Verify the attestations of the package while it is
+                        // being fetched. Verification only needs the sha256
+                        // from the record, which the cache checks against the
+                        // downloaded bytes.
+                        #[cfg(feature = "sigstore")]
+                        let (cache_metadata, ()) = futures::try_join!(
+                            populate_cache,
+                            verify_attestations(&record, &attestation_policy, &downloader)
+                        )?;
+                        #[cfg(not(feature = "sigstore"))]
+                        let cache_metadata = populate_cache.await?;
                         if let Some((reporter, index)) = populate_cache_report {
                             reporter.on_populate_cache_complete(index);
                         }
@@ -981,6 +1034,38 @@ async fn populate_cache(
             .await
             .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
     }
+}
+
+/// Verifies the attestations of `record` according to `policy`.
+///
+/// Returns an error if the policy requires verification and it fails. Warnings
+/// are logged.
+#[cfg(feature = "sigstore")]
+async fn verify_attestations(
+    record: &RepoDataRecord,
+    policy: &rattler_sigstore::VerificationPolicy,
+    downloader: &LazyClient,
+) -> Result<(), InstallerError> {
+    if !policy.is_enabled() {
+        return Ok(());
+    }
+    let outcome = rattler_sigstore::verify_record(policy, record, downloader.client())
+        .await
+        .map_err(|err| {
+            InstallerError::AttestationRejected(record.identifier.to_string(), Box::new(err))
+        })?;
+    for warning in &outcome.warnings {
+        tracing::warn!("{}: {warning}", record.identifier);
+    }
+    if let Some(attestation) = &outcome.attestation {
+        tracing::info!(
+            "verified attestation for {} (identity: {}, issuer: {})",
+            record.identifier,
+            attestation.identity.as_deref().unwrap_or("unknown"),
+            attestation.issuer.as_deref().unwrap_or("unknown"),
+        );
+    }
+    Ok(())
 }
 
 /// Updates only the `requested_specs` fields in a conda-meta JSON file.

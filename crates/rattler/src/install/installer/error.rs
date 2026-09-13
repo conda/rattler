@@ -74,6 +74,12 @@ pub enum InstallerError {
     /// Failed to acquire the global cache lock
     #[error("failed to acquire global cache lock")]
     FailedToAcquireCacheLock(#[source] PackageCacheError),
+
+    /// The attestations of a package did not satisfy the configured
+    /// [`rattler_sigstore::VerificationPolicy`].
+    #[cfg(feature = "sigstore")]
+    #[error("attestation verification failed for {0}")]
+    AttestationRejected(String, #[source] Box<rattler_sigstore::SigstoreError>),
 }
 
 impl From<Cancelled> for InstallerError {

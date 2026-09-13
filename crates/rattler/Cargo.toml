@@ -13,8 +13,11 @@ readme.workspace = true
 
 [features]
 default = ['rustls']
-native-tls =['reqwest/native-tls', 'rattler_package_streaming/native-tls', 'rattler_cache/native-tls', 'rattler_networking/native-tls']
-rustls = ['reqwest/rustls', 'rattler_package_streaming/rustls', 'rattler_cache/rustls', 'rattler_networking/rustls']
+native-tls =['reqwest/native-tls', 'rattler_package_streaming/native-tls', 'rattler_cache/native-tls', 'rattler_networking/native-tls', 'rattler_sigstore?/native-tls']
+rustls = ['reqwest/rustls', 'rattler_package_streaming/rustls', 'rattler_cache/rustls', 'rattler_networking/rustls', 'rattler_sigstore?/rustls']
+# Verification of Sigstore attestations during installation, see
+# `Installer::with_attestation_policy`.
+sigstore = ['dep:rattler_sigstore']
 oauth = ["dep:openidconnect", "dep:oauth2-reqwest", "dep:open"]
 cli-tools = ['dep:clap', 'oauth', 'dep:console']
 # Adds an interactive MultiSelect picker to `auth logout` when run without
@@ -53,6 +56,7 @@ rattler_networking = { workspace = true }
 rattler_shell = { workspace = true }
 rattler_package_streaming = { workspace = true, features = ["reqwest"] }
 rattler_menuinst = { workspace = true, default-features = false }
+rattler_sigstore = { workspace = true, optional = true, default-features = false }
 path_resolver = { workspace = true, default-features = false }
 rayon = { workspace = true }
 reflink-copy = { workspace = true }
