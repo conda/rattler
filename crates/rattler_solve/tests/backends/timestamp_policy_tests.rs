@@ -178,7 +178,7 @@ fn resolvo_timestamp_diagnostics() {
         record.package_record.timestamp = build.map(Into::into);
         record.package_record.indexed_timestamp = indexed.map(Into::into);
         let records = vec![record];
-        let error = rattler_solve::resolvo::Solver::default()
+        let error = rattler_solve::resolvo::Solver
             .solve(SolverTask {
                 specs: vec!["foo".parse().unwrap()],
                 exclude_newer: Some(
