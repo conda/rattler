@@ -6,16 +6,21 @@ use std::{
 
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
-use rattler::{default_cache_dir, package_cache::PackageCache};
 use rattler_conda_types::{
     ChannelConfig, MatchSpec, Matches, PackageName, Platform, RepoDataRecord,
 };
-use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
+use rattler_repodata_gateway::RepoData;
 use rattler_solve::SolverTask;
 use url::Url;
 
 use crate::{
-    commands::progress::{wrap_in_async_progress, wrap_in_progress},
+    commands::{
+        QueryOutputFormat,
+        gateway::{build_gateway, load_config},
+        print_url_lines,
+        progress::{wrap_in_async_progress, wrap_in_progress},
+        table::{Cell, Table},
+    },
     solver_args::SolverArgs,
 };
 
@@ -24,6 +29,10 @@ use crate::{
 /// Resolves the specified package specs for a target platform and prints the
 /// resulting package set.
 #[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler solve python numpy                 # print the solved environment as a table
+  rattler solve python --format json         # print the solved records as JSON
+  rattler solve python --format urls         # print only the urls of the solved packages"#)]
 pub struct Opt {
     /// Package specs to solve.
     #[clap(required = true)]
@@ -32,9 +41,9 @@ pub struct Opt {
     #[clap(flatten)]
     solver: SolverArgs,
 
-    /// Output in JSON format
+    /// Output format (defaults to human-readable output)
     #[clap(long)]
-    json: bool,
+    format: Option<QueryOutputFormat>,
 }
 
 pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
@@ -49,30 +58,12 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
     let specs = SolverArgs::parse_specs(&opt.specs)?;
     let constraints = opt.solver.constraints()?;
 
-    let cache_dir = default_cache_dir()
-        .map_err(|e| miette::miette!("could not determine default cache directory: {}", e))?;
-    rattler_cache::ensure_cache_dir(&cache_dir)
-        .map_err(|e| miette::miette!("could not create cache directory: {}", e))?;
-
     let channels = opt.solver.channels(&channel_config)?;
 
     let download_client = super::client::create_client_with_middleware(offline)?;
 
-    let gateway = Gateway::builder()
-        .with_cache_dir(cache_dir.join(rattler_cache::REPODATA_CACHE_DIR))
-        .with_package_cache(PackageCache::new(
-            cache_dir.join(rattler_cache::PACKAGE_CACHE_DIR),
-        ))
-        .with_client(download_client)
-        .with_channel_config(rattler_repodata_gateway::ChannelConfig {
-            default: SourceConfig {
-                sharded_enabled: true,
-                cache_action: super::client::repodata_cache_action(offline),
-                ..SourceConfig::default()
-            },
-            per_channel: HashMap::new(),
-        })
-        .finish();
+    let config = load_config()?;
+    let gateway = build_gateway(download_client, &config, offline, true)?;
 
     let start_load_repo_data = Instant::now();
     let repo_data = wrap_in_async_progress(
@@ -84,6 +75,11 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
     .await
     .into_diagnostic()
     .context("failed to load repodata")?;
+
+    // Surface any non-fatal CEP-42 channel-relation problems.
+    for warning in &repo_data.warnings {
+        eprintln!("warning: {warning}");
+    }
 
     let total_records: usize = repo_data.iter().map(RepoData::len).sum();
     eprintln!(
@@ -143,31 +139,37 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
 
     if solved_packages.is_empty() {
         eprintln!("No packages solved");
-        if opt.json {
+        if opt.format == Some(QueryOutputFormat::Json) {
             println!("[]");
         }
         return Ok(());
     }
 
-    if opt.json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&solved_packages).into_diagnostic()?
-        );
-    } else {
-        eprintln!(
-            "Solved {} package{} in {}:",
-            solved_packages.len(),
-            if solved_packages.len() == 1 { "" } else { "s" },
-            format_elapsed(solve_duration)
-        );
-        print_records(
-            &solved_packages,
-            &solver_result.extras,
-            &specs,
-            &constraints,
-            &channel_config,
-        );
+    match opt.format {
+        Some(QueryOutputFormat::Json) => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&solved_packages).into_diagnostic()?
+            );
+        }
+        Some(QueryOutputFormat::Urls) => {
+            print_url_lines(solved_packages.iter().map(|record| &record.url))?;
+        }
+        None => {
+            eprintln!(
+                "Solved {} package{} in {}:",
+                solved_packages.len(),
+                if solved_packages.len() == 1 { "" } else { "s" },
+                format_elapsed(solve_duration)
+            );
+            print_records(
+                &solved_packages,
+                &solver_result.extras,
+                &specs,
+                &constraints,
+                &channel_config,
+            );
+        }
     }
 
     Ok(())
@@ -196,19 +198,18 @@ fn print_records(
     constraints: &[MatchSpec],
     channel_config: &ChannelConfig,
 ) {
-    let mut header = vec![
-        "Package".to_string(),
-        "Version".to_string(),
-        "Build".to_string(),
-        "Channel".to_string(),
-    ];
+    let mut header = vec!["Package", "Version", "Build", "Channel"];
     if !constraints.is_empty() {
-        header.push("Constraint".to_string());
+        header.push("Constraint");
     }
+    let mut table = Table::with_header(header);
 
-    // These initial widths match the header column lengths.
-    let mut widths: Vec<usize> = header.iter().map(String::len).collect();
-    let mut rows = Vec::with_capacity(records.len());
+    // Dimmed cell for the columns that are secondary information.
+    let dim = |text: String| {
+        let styled = console::style(&text).dim().to_string();
+        Cell::styled(styled, text)
+    };
+
     for record in records {
         let mut name = record.package_record.name.as_normalized().to_string();
         if let Some(extras) = extras.get(&record.package_record.name) {
@@ -217,69 +218,34 @@ fn print_records(
             name.push(']');
         }
 
-        let mut fields = vec![
-            name,
-            record.package_record.version.to_string(),
-            record.package_record.build.clone(),
-            format_channel(record, channel_config),
-        ];
-        if !constraints.is_empty() {
-            fields.push(
-                constraints
-                    .iter()
-                    .filter(|constraint| constraint.matches(&record.package_record))
-                    .join(", "),
-            );
-        }
-        for (width, field) in widths.iter_mut().zip(&fields) {
-            *width = (*width).max(field.chars().count());
-        }
-
         let explicit = specs
             .iter()
             .any(|spec| spec.matches(&record.package_record));
-        rows.push((fields, explicit));
+        let name_cell = if explicit {
+            let styled = console::style(&name).green().bold().to_string();
+            Cell::styled(styled, name)
+        } else {
+            Cell::plain(name)
+        };
+
+        let mut row = vec![
+            name_cell,
+            Cell::plain(record.package_record.version.to_string()),
+            dim(record.package_record.build.clone()),
+            dim(format_channel(record, channel_config)),
+        ];
+        if !constraints.is_empty() {
+            row.push(dim(constraints
+                .iter()
+                .filter(|constraint| constraint.matches(&record.package_record))
+                .join(", ")));
+        }
+        table.add_row(row);
     }
 
     // Separates the table from the status messages on stderr.
     eprintln!();
-    let styled_header: Vec<String> = header
-        .iter()
-        .map(|field| console::style(field).bold().to_string())
-        .collect();
-    print_row(&styled_header, &widths, &header);
-    for (fields, explicit) in &rows {
-        let styled: Vec<String> = fields
-            .iter()
-            .enumerate()
-            .map(|(i, field)| match i {
-                0 if *explicit => console::style(field).green().bold().to_string(),
-                0 | 1 => field.clone(),
-                _ => console::style(field).dim().to_string(),
-            })
-            .collect();
-        print_row(&styled, &widths, fields);
-    }
-}
-
-/// Prints a single table row, padding each column to `widths`.
-///
-/// `styled` holds the fields as they should be displayed, `plain` the same
-/// fields without any styling. Padding is computed from `plain` because ANSI
-/// escape codes in `styled` do not occupy any terminal columns but would
-/// otherwise be counted by the formatter.
-fn print_row(styled: &[String], widths: &[usize], plain: &[String]) {
-    let mut line = String::new();
-    for (i, field) in styled.iter().enumerate() {
-        line.push_str(field);
-        // Don't pad the last column, that would only add trailing whitespace.
-        if i + 1 < styled.len() {
-            let padding = widths[i].saturating_sub(plain[i].chars().count());
-            // Two spaces as inter-column padding.
-            line.push_str(&" ".repeat(padding + 2));
-        }
-    }
-    println!("{}", line.trim_end());
+    table.print();
 }
 
 /// Formats the channel of a record as `<channel name>/<subdir>`.

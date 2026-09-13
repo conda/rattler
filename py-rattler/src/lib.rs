@@ -1,5 +1,6 @@
 mod about_json;
 mod channel;
+mod config;
 mod error;
 mod explicit_environment_spec;
 mod generic_virtual_package;
@@ -36,16 +37,17 @@ use std::ops::Deref;
 
 use about_json::PyAboutJson;
 use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
+use config::PyConfig;
 use error::PyRattlerError;
 use exceptions::{
     ActivationError, ActivationScriptFormatError, AuthenticationStorageError, CacheDirError,
-    CanonicalMatchSpecError, ConversionError, ConvertSubdirError, DetectVirtualPackageError,
-    EnvironmentCreationError, FetchRepoDataError, InvalidChannelError, InvalidHeaderNameError,
-    InvalidHeaderValueError, InvalidMatchSpecError, InvalidPackageNameError, InvalidUrlError,
-    InvalidVersionError, InvalidVersionSpecError, IoError, LinkError, LockFileError,
-    PackageNameMatcherParseError, ParseArchError, ParseCondaLockError,
-    ParseExplicitEnvironmentSpecError, ParsePlatformError, RequirementError, ShellError,
-    SolverError, TransactionError, ValidatePackageRecordsError, VersionBumpError,
+    CanonicalMatchSpecError, ConfigError, ConversionError, ConvertSubdirError,
+    DetectVirtualPackageError, EnvironmentCreationError, FetchRepoDataError, InvalidChannelError,
+    InvalidHeaderNameError, InvalidHeaderValueError, InvalidMatchSpecError,
+    InvalidPackageNameError, InvalidUrlError, InvalidVersionError, InvalidVersionSpecError,
+    IoError, LinkError, LockFileError, PackageNameMatcherParseError, ParseArchError,
+    ParseCondaLockError, ParseExplicitEnvironmentSpecError, ParsePlatformError, RequirementError,
+    ShellError, SolverError, TransactionError, ValidatePackageRecordsError, VersionBumpError,
     VersionExtendError,
 };
 use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
@@ -75,7 +77,9 @@ use pyo3::prelude::*;
 use record::{PyLink, PyRecord};
 use repo_data::{
     PyChannelInfo, PyChannelRelations, PyRepoData,
-    gateway::{PyChannelNotice, PyFetchRepoDataOptions, PyGateway, PySourceConfig},
+    gateway::{
+        PyChannelNotice, PyFetchRepoDataOptions, PyGateway, PyRemovedPackage, PySourceConfig,
+    },
     patch_instructions::PyPatchInstructions,
     sparse::{PyPackageFormatSelection, PySparseRepoData},
 };
@@ -115,6 +119,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyChannel>()?;
     m.add_class::<PyChannelConfig>()?;
     m.add_class::<PyChannelPriority>()?;
+    m.add_class::<PyConfig>()?;
     m.add_class::<PyPlatform>()?;
     m.add_class::<PyArch>()?;
 
@@ -150,6 +155,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyPatchInstructions>()?;
     m.add_class::<PyGateway>()?;
     m.add_class::<PyChannelNotice>()?;
+    m.add_class::<PyRemovedPackage>()?;
     m.add_class::<PySourceConfig>()?;
     m.add_class::<PyFetchRepoDataOptions>()?;
 
@@ -299,6 +305,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
         "InvalidHeaderValueError",
         py.get_type::<InvalidHeaderValueError>(),
     )?;
+    m.add("ConfigError", py.get_type::<ConfigError>())?;
 
     Ok(())
 }

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, path::Path, time::Instant};
+use std::{env, path::Path, time::Instant};
 
 use futures_util::TryStreamExt;
 use indexmap::IndexMap;
@@ -6,13 +6,13 @@ use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::{
-    Channel, ChannelConfig, PackageName, PackageRecord, Platform, package::IndexJson,
+    Channel, ChannelConfig, PackageName, PackageRecord, Platform, Version, package::IndexJson,
 };
-use rattler_repodata_gateway::{
-    Gateway, SourceConfig,
-    who_needs::{DependencyKind, Dependent, WhoNeedsTarget},
-};
+use rattler_repodata_gateway::who_needs::{DependencyKind, Dependent, WhoNeedsTarget};
 use url::Url;
+
+use super::{QueryOutputFormat, print_url_lines};
+use crate::commands::gateway::{build_gateway, load_config};
 
 /// Show packages that depend on the given package (reverse dependencies).
 #[derive(Debug, clap::Parser)]
@@ -20,7 +20,8 @@ use url::Url;
   rattler whoneeds numpy                      # packages that depend on numpy
   rattler whoneeds __cuda                     # packages that depend on a virtual package
   rattler whoneeds ./python-3.13.1-h123_0.conda   # packages that can use this exact package
-  rattler whoneeds https://conda.anaconda.org/conda-forge/noarch/polars-1.44.1-pyh8da0edf_0.conda"#)]
+  rattler whoneeds https://conda.anaconda.org/conda-forge/noarch/polars-1.44.1-pyh8da0edf_0.conda
+  rattler whoneeds numpy --format urls        # print only the urls of the dependent packages"#)]
 pub struct Opt {
     /// The package to find reverse dependencies for.
     ///
@@ -47,9 +48,9 @@ pub struct Opt {
     #[clap(long)]
     all: bool,
 
-    /// Output in JSON format
+    /// Output format (defaults to human-readable output)
     #[clap(long, conflicts_with_all = ["limit", "all"])]
-    json: bool,
+    format: Option<QueryOutputFormat>,
 }
 
 /// Interprets the package argument as a package archive URL or path, or as
@@ -131,21 +132,8 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
         channels.iter().map(Channel::canonical_name).join(", ")
     );
 
-    // Create gateway. Sharded repodata is disabled because a reverse
-    // dependency lookup needs the records of every package in the channel,
-    // which is one request per package with shards but a single request
-    // with a full repodata.json.
-    let gateway = Gateway::builder()
-        .with_client(download_client)
-        .with_channel_config(rattler_repodata_gateway::ChannelConfig {
-            default: SourceConfig {
-                sharded_enabled: false,
-                cache_action: super::client::repodata_cache_action(offline),
-                ..SourceConfig::default()
-            },
-            per_channel: HashMap::new(),
-        })
-        .finish();
+    let config = load_config()?;
+    let gateway = build_gateway(download_client, &config, offline, true)?;
 
     // Show progress while loading repodata
     let pb = ProgressBar::new_spinner();
@@ -158,11 +146,45 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
         .who_needs(channels, [opt.platform, Platform::NoArch], target)
         .stream();
 
-    // Both output modes reduce every dependent to something much smaller
+    // All output modes reduce every dependent to something much smaller
     // than the record it came from, so they consume the stream and drop
     // each record as it arrives. A channel-wide query matches enough
     // records that retaining them all would cost about a gigabyte.
-    if opt.json {
+    if opt.format == Some(QueryOutputFormat::Urls) {
+        // The stream reports a record once per dependency kind through
+        // which it references the target, so the same url can arrive more
+        // than once. Only what is needed to sort and print is retained.
+        let mut records: Vec<(PackageName, Version, u64, Url)> = Vec::new();
+        while let Some(dependent) = stream
+            .try_next()
+            .await
+            .into_diagnostic()
+            .context("failed to compute reverse dependencies")?
+        {
+            let record = &dependent.record.package_record;
+            records.push((
+                record.name.clone(),
+                record.version.version().clone(),
+                record.build_number,
+                dependent.record.url.clone(),
+            ));
+        }
+        pb.finish_and_clear();
+
+        // Sort by name and then by version (newest first), like
+        // `rattler search --format urls`.
+        records.sort_unstable_by(|a, b| {
+            a.0.cmp(&b.0)
+                .then_with(|| b.1.cmp(&a.1))
+                .then_with(|| b.2.cmp(&a.2))
+                .then_with(|| a.3.cmp(&b.3))
+        });
+        records.dedup_by(|a, b| a.3 == b.3);
+
+        return print_url_lines(records.into_iter().map(|(_, _, _, url)| url));
+    }
+
+    if opt.format == Some(QueryOutputFormat::Json) {
         let mut json_records = Vec::new();
         while let Some(dependent) = stream
             .try_next()

@@ -4935,10 +4935,10 @@ dependencies = [
 
 [[package]]
 name = "rattler-bin"
-version = "0.2.13"
+version = "0.3.0"
 dependencies = [
- "anyhow",
  "astral-reqwest-middleware",
+ "astral-reqwest-retry",
  "clap",
  "clap_complete",
  "clap_complete_nushell",
@@ -4949,10 +4949,10 @@ dependencies = [
  "hex",
  "indexmap 2.14.1",
  "indicatif",
+ "insta",
  "itertools 0.15.0",
  "jiff",
  "miette",
- "once_cell",
  "rattler",
  "rattler_cache",
  "rattler_conda_types",
@@ -5197,7 +5197,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_libsolv_c"
-version = "1.4.1"
+version = "1.4.2"
 dependencies = [
  "anyhow",
  "cc",
@@ -5209,7 +5209,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.32.6"
+version = "0.32.7"
 dependencies = [
  "ahash",
  "file_url",
@@ -5406,7 +5406,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.33.3"
+version = "0.33.4"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5501,7 +5501,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_sandbox"
-version = "0.2.29"
+version = "0.2.30"
 dependencies = [
  "birdcage",
  "clap",
@@ -5557,7 +5557,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "9.0.6"
+version = "9.0.7"
 dependencies = [
  "criterion",
  "futures",
@@ -5587,7 +5587,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_upload"
-version = "0.10.7"
+version = "0.10.8"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-reqwest-retry",

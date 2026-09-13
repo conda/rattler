@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.4](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.33.3...rattler_repodata_gateway-v0.33.4) - 2026-09-08
+
+### Added
+
+- report removed packages from repodata gateway queries ([#2751](https://github.com/conda/rattler/pull/2751))
+
+### Fixed
+
+- Automatically disable sharded in whoneeds queries ([#2776](https://github.com/conda/rattler/pull/2776))
+
 ## [0.33.3](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.33.2...rattler_repodata_gateway-v0.33.3) - 2026-09-04
 
 ### Added

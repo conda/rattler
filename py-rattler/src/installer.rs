@@ -12,8 +12,8 @@ use std::collections::HashSet;
 
 use crate::match_spec::PyMatchSpec;
 use crate::{
-    error::PyRattlerError, networking::client::PyClientWithMiddleware, platform::PyPlatform,
-    record::PyRecord,
+    config::PyConfig, error::PyRattlerError, networking::client::PyClientWithMiddleware,
+    platform::PyPlatform, record::PyRecord,
 };
 
 /// A [`Reporter`] implementation that delegates progress events to a Python object. The Python object should implement the following methods:
@@ -214,12 +214,12 @@ impl Reporter for PyReporter {
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
-#[pyo3(signature = (records, target_prefix, execute_link_scripts=false, show_progress=false, platform=None, client=None, cache_dir=None, installed_packages=None, reinstall_packages=None, ignored_packages=None, requested_specs=None, reporter=None, alternative_target_prefix=None))]
+#[pyo3(signature = (records, target_prefix, execute_link_scripts=None, show_progress=false, platform=None, client=None, cache_dir=None, installed_packages=None, reinstall_packages=None, ignored_packages=None, requested_specs=None, reporter=None, alternative_target_prefix=None, config=None))]
 pub fn py_install<'a>(
     py: Python<'a>,
     records: Vec<Bound<'a, PyAny>>,
     target_prefix: PathBuf,
-    execute_link_scripts: bool,
+    execute_link_scripts: Option<bool>,
     show_progress: bool,
     platform: Option<PyPlatform>,
     client: Option<PyClientWithMiddleware>,
@@ -230,6 +230,7 @@ pub fn py_install<'a>(
     requested_specs: Option<Vec<PyMatchSpec>>,
     reporter: Option<Py<PyAny>>,
     alternative_target_prefix: Option<PathBuf>,
+    config: Option<PyConfig>,
 ) -> PyResult<Bound<'a, PyAny>> {
     let dependencies = records
         .into_iter()
@@ -266,7 +267,16 @@ pub fn py_install<'a>(
     let client = client.map(|c| c.inner);
 
     future_into_py(py, async move {
-        let mut installer = Installer::new().with_execute_link_scripts(execute_link_scripts);
+        let mut installer = Installer::new();
+
+        if let Some(config) = &config {
+            installer.set_config(&config.inner);
+        }
+
+        // Explicit function arguments take precedence over configuration.
+        if let Some(execute_link_scripts) = execute_link_scripts {
+            installer.set_execute_link_scripts(execute_link_scripts);
+        }
 
         if let Some(py_reporter) = reporter {
             installer.set_reporter(PyReporter {

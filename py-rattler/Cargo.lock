@@ -3613,7 +3613,7 @@ dependencies = [
 
 [[package]]
 name = "py-rattler"
-version = "0.25.0"
+version = "0.26.0"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -3647,6 +3647,7 @@ dependencies = [
  "rattler_solve",
  "rattler_virtual_packages",
  "reqwest",
+ "serde",
  "serde_json",
  "thiserror 2.0.20",
  "tokio",
@@ -3969,6 +3970,7 @@ dependencies = [
  "path_resolver",
  "rattler_cache",
  "rattler_conda_types",
+ "rattler_config",
  "rattler_digest",
  "rattler_menuinst",
  "rattler_networking",
@@ -4150,7 +4152,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.32.6"
+version = "0.32.7"
 dependencies = [
  "ahash",
  "file_url",
@@ -4237,6 +4239,7 @@ dependencies = [
  "itertools 0.15.0",
  "keyring-core",
  "netrc-rs",
+ "rattler_config",
  "regex",
  "reqwest",
  "retry-policies",
@@ -4311,7 +4314,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.33.3"
+version = "0.33.4"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4347,6 +4350,7 @@ dependencies = [
  "pin-project-lite",
  "rattler_cache",
  "rattler_conda_types",
+ "rattler_config",
  "rattler_digest",
  "rattler_networking",
  "rattler_package_streaming",
@@ -4413,7 +4417,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "9.0.6"
+version = "9.0.7"
 dependencies = [
  "futures",
  "hex",

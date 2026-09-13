@@ -6,7 +6,6 @@ use rattler_conda_types::{Channel, Platform};
 use crate::{
     GatewayError, Reporter, SourceConfig,
     fetch::FetchRepoDataError,
-    gateway,
     gateway::{
         GatewayInner,
         error::SubdirNotFoundError,
@@ -22,6 +21,7 @@ pub struct SubdirBuilder<'g> {
     platform: Platform,
     reporter: Option<Arc<dyn Reporter>>,
     gateway: &'g GatewayInner,
+    sharded_enabled: bool,
 }
 
 impl<'g> SubdirBuilder<'g> {
@@ -30,12 +30,14 @@ impl<'g> SubdirBuilder<'g> {
         channel: Channel,
         platform: Platform,
         reporter: Option<Arc<dyn Reporter>>,
+        sharded_enabled: bool,
     ) -> Self {
         Self {
             channel,
             platform,
             reporter,
             gateway,
+            sharded_enabled,
         }
     }
 
@@ -59,9 +61,7 @@ impl<'g> SubdirBuilder<'g> {
             let source_config = self.gateway.channel_config.get(&self.channel.base_url);
 
             // Use sharded repodata if enabled
-            let subdir_data = if source_config.sharded_enabled
-                || gateway::force_sharded_repodata(&url)
-            {
+            let subdir_data = if self.sharded_enabled {
                 match self.build_sharded(source_config).await {
                     Ok(client) => Some(client),
                     Err(GatewayError::SubdirNotFoundError(_)) => {

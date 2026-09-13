@@ -10,7 +10,7 @@ from typing import Iterator
 import boto3
 import pytest
 
-from rattler import Platform
+from rattler import Config, Platform
 from rattler.index import index_fs, index_s3
 from rattler.index.index import S3Credentials
 
@@ -41,6 +41,27 @@ async def test_index(package_directory):
     assert "repodata.json" in os.listdir(package_directory / "noarch")
     with open(package_directory / "noarch/repodata.json") as f:
         assert "pytweening-1.0.4-pyhd8ed1ab_0" in f.read()
+
+
+@pytest.mark.asyncio
+async def test_index_uses_config_with_explicit_overrides(package_directory):
+    config = Config.from_toml("""
+        [index-config]
+        write-zst = false
+        write-shards = false
+        package-revision-assignment = "latest"
+        repodata-revisions = ["v3"]
+    """)
+
+    await index_fs(package_directory, config=config, write_zst=True)
+
+    for subdir in ("noarch", "win-64"):
+        assert (package_directory / subdir / "repodata.json.zst").is_file()
+        assert not (package_directory / subdir / "repodata_shards.msgpack.zst").exists()
+
+    with open(package_directory / "noarch/repodata.json") as f:
+        repodata = json.load(f)
+    assert "pytweening-1.0.4-pyhd8ed1ab_0" in repodata["v3"]["tar.bz2"]
 
 
 @pytest.mark.asyncio

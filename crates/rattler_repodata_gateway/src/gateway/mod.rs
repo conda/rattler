@@ -42,13 +42,12 @@ pub use query::{NamesQuery, NamesQueryOutput, RepoDataQuery, RepoDataQueryOutput
 use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, ChannelRelations, MatchSpec, Platform, RepoDataRecord};
 use rattler_networking::LazyClient;
-pub use repo_data::RepoData;
+pub use repo_data::{RemovedPackages, RepoData};
 use run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
 pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
 pub use source::{RepoDataSource, Source};
 use subdir::Subdir;
 use tracing::{Level, instrument};
-use url::Url;
 pub use warning::GatewayWarning;
 pub use who_needs_query::WhoNeedsQuery;
 
@@ -215,6 +214,9 @@ impl Gateway {
     /// the query if you can reduce the matches as they arrive, since for a
     /// widely used package the results are the larger cost.
     ///
+    /// Channel sources always use full repodata, regardless of the gateway's
+    /// sharding configuration, to avoid fetching a shard for every package.
+    ///
     /// ```no_run
     /// # use rattler_conda_types::{Channel, PackageName, Platform};
     /// # use rattler_repodata_gateway::Gateway;
@@ -289,7 +291,7 @@ impl Gateway {
     ) -> Result<Option<ChannelRelations>, GatewayError> {
         match self
             .inner
-            .get_or_create_subdir(channel, platform, None)
+            .get_or_create_subdir(channel, platform, None, true)
             .await
         {
             Ok(subdir) => Ok(subdir.channel_relations().cloned()),
@@ -402,8 +404,9 @@ impl Gateway {
 }
 
 struct GatewayInner {
-    /// A map of subdirectories for each channel and platform.
-    subdirs: CoalescedMap<(Channel, Platform), Arc<Subdir>>,
+    /// Subdirectories keyed by channel, platform and whether sharding is enabled.
+    /// Full repodata scans must not reuse a sharded subdir from an ordinary query.
+    subdirs: CoalescedMap<(Channel, Platform, bool), Arc<Subdir>>,
 
     /// The client to use to fetch repodata.
     client: LazyClient,
@@ -452,23 +455,36 @@ impl GatewayInner {
     /// coalesced, and they will all receive the same subdir. If an error
     /// occurs while creating the subdir all waiting tasks will also return an
     /// error.
+    ///
+    /// Set `allow_sharded` to false to force full repodata scans.
     #[instrument(skip(self, reporter, channel), fields(channel = %channel.base_url), err(level = Level::INFO))]
     async fn get_or_create_subdir(
         &self,
         channel: &Channel,
         platform: Platform,
         reporter: Option<Arc<dyn Reporter>>,
+        allow_sharded: bool,
     ) -> Result<Arc<Subdir>, GatewayError> {
-        let key = (channel.clone(), platform);
+        let url = channel.platform_url(platform);
+        let sharded_enabled = allow_sharded
+            && url.scheme() != "file"
+            && self.channel_config.get(&channel.base_url).sharded_enabled;
+        let key = (channel.clone(), platform, sharded_enabled);
         let channel_for_create = channel.clone();
         let reporter_for_create = reporter.clone();
 
         let subdir = self
             .subdirs
             .get_or_try_init(key, || async move {
-                let subdir = self
-                    .create_subdir(&channel_for_create, platform, reporter_for_create)
-                    .await?;
+                let subdir = SubdirBuilder::new(
+                    self,
+                    channel_for_create,
+                    platform,
+                    reporter_for_create,
+                    sharded_enabled,
+                )
+                .build()
+                .await?;
                 Ok(Arc::new(subdir))
             })
             .await
@@ -489,22 +505,6 @@ impl GatewayInner {
 
         Ok(subdir)
     }
-
-    async fn create_subdir(
-        &self,
-        channel: &Channel,
-        platform: Platform,
-        reporter: Option<Arc<dyn Reporter>>,
-    ) -> Result<Subdir, GatewayError> {
-        SubdirBuilder::new(self, channel.clone(), platform, reporter)
-            .build()
-            .await
-    }
-}
-
-fn force_sharded_repodata(url: &Url) -> bool {
-    matches!(url.scheme(), "http" | "https")
-        && matches!(url.host_str(), Some("fast.prefiks.dev" | "fast.prefix.dev"))
 }
 
 #[cfg(test)]
@@ -1612,6 +1612,80 @@ mod test {
             .find(|record| record.package_record.name.as_normalized() == "python")
             .unwrap();
         assert!(python.package_record.depends.is_empty());
+    }
+
+    /// Packages listed under `removed` are hidden from the records of a query
+    /// and reported through `RepoData::removed` for every fetched name.
+    #[tokio::test]
+    async fn test_removed_packages_are_reported() {
+        let channel_dir = tempfile::tempdir().unwrap();
+        let subdir = channel_dir.path().join("linux-64");
+        fs_err::create_dir_all(&subdir).unwrap();
+        fs_err::write(
+            subdir.join("repodata.json"),
+            serde_json::json!({
+                "info": {"subdir": "linux-64"},
+                "packages.conda": {
+                    "foo-1.0-0.conda": {
+                        "name": "foo",
+                        "version": "1.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "subdir": "linux-64"
+                    },
+                    "foo-2.0-0.conda": {
+                        "name": "foo",
+                        "version": "2.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "subdir": "linux-64"
+                    }
+                },
+                "removed": ["foo-2.0-0.conda", "foo-0.1-0.tar.bz2", "bar-1.0-0.conda"]
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let gateway = Gateway::new();
+        let channel = Channel::try_from_directory(channel_dir.path()).unwrap();
+        let output = gateway
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("foo", Lenient).unwrap()],
+            )
+            .await
+            .unwrap();
+        let repodata = &output[0];
+
+        let records: Vec<_> = repodata
+            .iter()
+            .map(|record| record.identifier.to_file_name())
+            .collect();
+        assert_eq!(records, ["foo-1.0-0.conda"]);
+
+        let removed_url = channel
+            .base_url
+            .url()
+            .join("linux-64/foo-2.0-0.conda")
+            .unwrap();
+        assert!(repodata.removed().contains(&removed_url));
+        assert_eq!(
+            repodata.removed().get(&removed_url).unwrap().identifier,
+            "foo-2.0-0.conda".parse().unwrap()
+        );
+
+        // Only names touched by the query are reported, so `bar` is absent.
+        let mut removed: Vec<_> = repodata
+            .removed()
+            .iter()
+            .map(|removed| removed.identifier.to_file_name())
+            .collect();
+        removed.sort();
+        assert_eq!(removed, ["foo-0.1-0.tar.bz2", "foo-2.0-0.conda"]);
     }
 
     /// Integration test that verifies cache clearing actually works end-to-end.

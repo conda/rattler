@@ -14,6 +14,7 @@ use crate::{
     GatewayError,
     fetch::FetchRepoDataError,
     gateway::subdir::{PackageRecords, extract_unique_deps_split},
+    sparse::RemovedPackage,
 };
 
 /// Returns `true` if the HTTP status indicates that the server does not expose
@@ -154,10 +155,27 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
                 }));
             }
 
+            // Sort the removed set so the result does not depend on hash order.
+            let mut removed: Vec<RemovedPackage> = shard
+                .removed
+                .into_iter()
+                .map(|identifier| {
+                    let file_name = identifier.to_file_name();
+                    RemovedPackage {
+                        url: Url::parse(&format!("{base_url_str}{file_name}"))
+                            .expect("filename is not a valid url"),
+                        identifier,
+                        channel: Some(channel_str.clone()),
+                    }
+                })
+                .collect();
+            removed.sort_by(|a, b| a.identifier.cmp(&b.identifier));
+
             let (unique_base_deps, unique_extra_deps) =
                 extract_unique_deps_split(records.iter().map(|r| &**r));
             Ok(PackageRecords {
                 records,
+                removed,
                 unique_base_deps,
                 unique_extra_deps,
             })
@@ -182,11 +200,16 @@ mod tests {
         http::{Response, StatusCode},
         routing::get,
     };
-    use rattler_conda_types::{Channel, RepodataRevisions, ShardedRepodata, ShardedSubdirInfo};
+    use itertools::Itertools;
+    use rattler_conda_types::{
+        Channel, PackageName, PackageRecord, RepodataRevisions, Shard, ShardedRepodata,
+        ShardedSubdirInfo, Version, package::DistArchiveIdentifier,
+    };
     use rattler_digest::{Sha256, parse_digest_from_hex};
     use std::future::IntoFuture;
     use std::net::SocketAddr;
     use std::path::Path;
+    use std::str::FromStr;
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -596,5 +619,61 @@ mod tests {
                 "{action:?} may not download a shard"
             );
         }
+    }
+
+    /// A shard may keep the records of removed packages. Those records are
+    /// dropped from the result and every removed entry is reported with the
+    /// URL the package was served from, whether or not its record is present.
+    #[tokio::test]
+    async fn parse_records_reports_removed_packages() {
+        let record = |version: &str| {
+            PackageRecord::new(
+                PackageName::new_unchecked("foo"),
+                Version::from_str(version).unwrap(),
+                "0".to_string(),
+            )
+        };
+        let identifier =
+            |file_name: &str| DistArchiveIdentifier::try_from_filename(file_name).unwrap();
+
+        let mut shard = Shard::default();
+        shard
+            .conda_packages
+            .insert(identifier("foo-1.0-0.conda"), record("1.0"));
+        shard
+            .conda_packages
+            .insert(identifier("foo-2.0-0.conda"), record("2.0"));
+        shard.removed.insert(identifier("foo-2.0-0.conda"));
+        shard.removed.insert(identifier("foo-0.1-0.tar.bz2"));
+
+        let channel = Channel::from_url(Url::parse("https://example.com/channel/").unwrap());
+        let base_url = Url::parse("https://example.com/channel/linux-64/").unwrap();
+        let records = super::parse_records(
+            rmp_serde::to_vec_named(&shard).unwrap(),
+            channel.base_url.clone(),
+            base_url,
+        )
+        .await
+        .unwrap();
+
+        let urls = records.records.iter().map(|record| &record.url).join("\n");
+        insta::assert_snapshot!(urls, @"https://example.com/channel/linux-64/foo-1.0-0.conda");
+
+        let removed = records
+            .removed
+            .iter()
+            .map(|removed| {
+                format!(
+                    "{} {} {}",
+                    removed.url,
+                    removed.identifier,
+                    removed.channel.as_deref().unwrap_or("-")
+                )
+            })
+            .join("\n");
+        insta::assert_snapshot!(removed, @r"
+        https://example.com/channel/linux-64/foo-0.1-0.tar.bz2 foo-0.1-0.tar.bz2 https://example.com/channel/
+        https://example.com/channel/linux-64/foo-2.0-0.conda foo-2.0-0.conda https://example.com/channel/
+        ");
     }
 }
