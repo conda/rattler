@@ -24,6 +24,7 @@ mod min_age_tests;
 mod solver_case_tests;
 mod sorting_tests;
 mod strategy_tests;
+mod timestamp_policy_tests;
 mod variant_flags_tests;
 
 fn channel_config() -> ChannelConfig {
@@ -526,8 +527,8 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
-        fn test_min_age_include_unknown_timestamp() {
-            crate::min_age_tests::solve_min_age_include_unknown_timestamp::<$T>();
+        fn test_min_age_allow_missing_timestamps() {
+            crate::min_age_tests::solve_min_age_allow_missing_timestamps::<$T>();
         }
 
         #[test]
@@ -635,6 +636,26 @@ macro_rules! solver_backend_tests {
         #[test]
         fn test_solver_case_constraints() {
             crate::solver_case_tests::solve_constraints::<$T>();
+        }
+
+        #[test]
+        fn test_missing_timestamps() {
+            crate::timestamp_policy_tests::missing_timestamps::<$T>();
+        }
+
+        #[test]
+        fn test_indexed_timestamp_cutoffs() {
+            crate::timestamp_policy_tests::indexed_timestamp_cutoffs::<$T>();
+        }
+
+        #[test]
+        fn test_timestamp_overrides() {
+            crate::timestamp_policy_tests::timestamp_overrides::<$T>();
+        }
+
+        #[test]
+        fn test_timestamp_archive_fallback() {
+            crate::timestamp_policy_tests::timestamp_archive_fallback::<$T>();
         }
 
         #[test]
