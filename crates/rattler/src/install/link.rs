@@ -238,11 +238,14 @@ pub fn link_file(
         let metadata = fs::symlink_metadata(&source_path)
             .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
         // (re)sign the binary if the file is executable or is a Mach-O binary (e.g., dylib)
-        // This is required for all macOS platforms because prefix replacement modifies the binary
-        // content, which invalidates existing signatures. We need to preserve entitlements.
+        // This is required for all macOS and iOS platforms because prefix replacement modifies
+        // the binary content, which invalidates existing signatures. We need to preserve
+        // entitlements. On arm64 an invalid signature does not just emit a warning, the binary
+        // is killed on load, so iOS (device and simulator) binaries need this just as much as
+        // macOS ones.
         if (has_executable_permissions(&metadata.permissions())
             || file_type == Some(FileType::MachO))
-            && target_platform.is_osx()
+            && (target_platform.is_osx() || target_platform.is_ios())
             && *file_mode == FileMode::Binary
         {
             // Did the binary actually change?
@@ -676,9 +679,11 @@ fn is_valid_shebang_length(shebang: &str, platform: &Platform) -> bool {
     const MAX_SHEBANG_LENGTH_LINUX: usize = 127;
     const MAX_SHEBANG_LENGTH_MACOS: usize = 512;
 
-    if platform.is_linux() {
+    // Android uses the Linux kernel and therefore inherits its shebang limit;
+    // iOS shares the XNU kernel with macOS.
+    if platform.is_linux() || platform.is_android() {
         shebang.len() <= MAX_SHEBANG_LENGTH_LINUX
-    } else if platform.is_osx() {
+    } else if platform.is_osx() || platform.is_ios() {
         shebang.len() <= MAX_SHEBANG_LENGTH_MACOS
     } else {
         true

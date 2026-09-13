@@ -6,6 +6,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5](https://github.com/conda/rattler/compare/rattler_redaction-v0.2.4...rattler_redaction-v0.2.5) - 2026-08-27
+
+### Added
+
+- mask SAS signatures in rattler_redaction ([#2729](https://github.com/conda/rattler/pull/2729))
+
+## [0.2.4](https://github.com/conda/rattler/compare/rattler_redaction-v0.2.3...rattler_redaction-v0.2.4) - 2026-08-26
+
+### Other
+
+- rename CEP 146 to CEP 48 ([#2717](https://github.com/conda/rattler/pull/2717))
+
+## [0.2.3](https://github.com/conda/rattler/compare/rattler_redaction-v0.2.2...rattler_redaction-v0.2.3) - 2026-08-21
+
+### Fixed
+
+- recover merged CEP 48 PRs (#2674, #2673, #2670)
+
+## [0.2.2](https://github.com/conda/rattler/compare/rattler_redaction-v0.2.1...rattler_redaction-v0.2.2) - 2026-07-14
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.2.1](https://github.com/conda/rattler/compare/rattler_redaction-v0.2.0...rattler_redaction-v0.2.1) - 2026-05-19
 
 ### Added

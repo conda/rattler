@@ -4,8 +4,6 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::config::{Config, MergeError, ValidationError};
-#[cfg(feature = "edit")]
-use crate::edit::ConfigEditError;
 
 #[derive(Clone, Default, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -133,21 +131,19 @@ impl RepodataConfig {
 }
 
 impl Config for RepodataConfig {
-    fn get_extension_name(&self) -> String {
-        "repodata".to_string()
-    }
-
     /// Merge the given `RepodataConfig` into the current one.
-    /// The `other` configuration should take priority over the current one.
+    /// The `other` configuration takes priority over the current one.
     fn merge_config(self, other: &Self) -> Result<Self, MergeError> {
-        // Make `other` mutable to allow for moving the values out of it.
+        // Note: `RepodataChannelConfig::merge` keeps `self` and only fills
+        // the gaps from its argument, so the higher-priority side must be
+        // the receiver.
         let mut merged = self.clone();
-        merged.default = merged.default.merge(other.default.clone());
+        merged.default = other.default.clone().merge(merged.default);
         for (url, config) in &other.per_channel {
             merged
                 .per_channel
                 .entry(url.clone())
-                .and_modify(|existing| *existing = existing.merge(config.clone()))
+                .and_modify(|existing| *existing = config.clone().merge(existing.clone()))
                 .or_insert_with(|| config.clone());
         }
         Ok(merged)
@@ -161,71 +157,11 @@ impl Config for RepodataConfig {
     }
 
     fn keys(&self) -> Vec<String> {
-        vec!["default".to_string(), "per-channel".to_string()]
-    }
-
-    #[cfg(feature = "edit")]
-    fn set(
-        &mut self,
-        key: &str,
-        value: Option<String>,
-    ) -> Result<(), crate::config::ConfigEditError> {
-        if key == "repodata-config" {
-            *self = value
-                .map(|v| {
-                    serde_json::de::from_str(&v).map_err(|e| ConfigEditError::JsonParseError {
-                        key: key.to_string(),
-                        source: e,
-                    })
-                })
-                .transpose()?
-                .unwrap_or_default();
-            return Ok(());
-        } else if !key.starts_with("repodata-config.") {
-            return Err(ConfigEditError::UnknownKeyInner {
-                key: key.to_string(),
-            });
-        }
-
-        let subkey = key.strip_prefix("repodata-config.").unwrap();
-        match subkey {
-            "disable-bzip2" => {
-                self.default.disable_bzip2 = value
-                    .map(|v| {
-                        v.parse().map_err(|e| ConfigEditError::BoolParseError {
-                            key: key.to_string(),
-                            source: e,
-                        })
-                    })
-                    .transpose()?;
-            }
-            "disable-zstd" => {
-                self.default.disable_zstd = value
-                    .map(|v| {
-                        v.parse().map_err(|e| ConfigEditError::BoolParseError {
-                            key: key.to_string(),
-                            source: e,
-                        })
-                    })
-                    .transpose()?;
-            }
-            "disable-sharded" => {
-                self.default.disable_sharded = value
-                    .map(|v| {
-                        v.parse().map_err(|e| ConfigEditError::BoolParseError {
-                            key: key.to_string(),
-                            source: e,
-                        })
-                    })
-                    .transpose()?;
-            }
-            _ => {
-                return Err(ConfigEditError::UnknownKeyInner {
-                    key: key.to_string(),
-                });
-            }
-        }
-        Ok(())
+        vec![
+            "disable-bzip2".to_string(),
+            "disable-zstd".to_string(),
+            "disable-sharded".to_string(),
+        ]
     }
 }
 

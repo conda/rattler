@@ -9,7 +9,7 @@ use crate::{
     package_name_matcher::PyPackageNameMatcher, record::PyRecord,
 };
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyMatchSpec {
@@ -153,6 +153,15 @@ impl PyMatchSpec {
     #[getter]
     pub fn sha256<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
         self.inner.sha256.map(|sha256| PyBytes::new(py, &sha256))
+    }
+
+    /// Returns the stable, canonical string representation of `MatchSpec`.
+    /// Values that cannot be represented in canonical syntax are an error.
+    pub fn to_canonical_string(&self) -> PyResult<String> {
+        Ok(self
+            .inner
+            .to_canonical_string()
+            .map_err(PyRattlerError::from)?)
     }
 
     /// Returns a string representation of `MatchSpec`

@@ -1,4 +1,8 @@
-use std::{collections::HashSet, io::BufWriter, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    io::BufWriter,
+    path::Path,
+};
 
 use clap::Parser;
 use itertools::Itertools;
@@ -93,6 +97,7 @@ async fn main() {
         None,
         SolveStrategy::default(),
         Vec::new(),
+        &HashMap::default(),
     )
     .unwrap();
 

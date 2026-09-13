@@ -7,6 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.5](https://github.com/conda/rattler/compare/rattler_index-v0.31.4...rattler_index-v0.31.5) - 2026-09-04
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.31.4](https://github.com/conda/rattler/compare/rattler_index-v0.31.3...rattler_index-v0.31.4) - 2026-08-27
+
+### Other
+
+- updated the following local packages: rattler_package_streaming, rattler_conda_types, rattler_config, rattler_networking, rattler_s3
+
+## [0.31.3](https://github.com/conda/rattler/compare/rattler_index-v0.31.2...rattler_index-v0.31.3) - 2026-08-26
+
+### Fixed
+
+- keep legacy-compatible extra_depends in legacy repodata ([#2721](https://github.com/conda/rattler/pull/2721))
+- canonicalize MatchSpecs in v3 repodata ([#2718](https://github.com/conda/rattler/pull/2718))
+
+### Other
+
+- rename CEP 146 to CEP 48 ([#2717](https://github.com/conda/rattler/pull/2717))
+
+## [0.31.2](https://github.com/conda/rattler/compare/rattler_index-v0.31.1...rattler_index-v0.31.2) - 2026-08-21
+
+### Added
+
+- add the CEP 48 repodata wire model ([#2669](https://github.com/conda/rattler/pull/2669))
+
+### Fixed
+
+- resolve build backends from conda-forge without a version pin ([#2689](https://github.com/conda/rattler/pull/2689))
+
+## [0.31.1](https://github.com/conda/rattler/compare/rattler_index-v0.31.0...rattler_index-v0.31.1) - 2026-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_config, rattler_package_streaming, rattler_s3
+
+## [0.31.0](https://github.com/conda/rattler/compare/rattler_index-v0.30.11...rattler_index-v0.31.0) - 2026-08-11
+
+### Added
+
+- add CEP-6 channel notice support ([#2639](https://github.com/conda/rattler/pull/2639))
+
+### Other
+
+- unblock pixi setup and source package builds ([#2642](https://github.com/conda/rattler/pull/2642))
+
+## [0.30.11](https://github.com/conda/rattler/compare/rattler_index-v0.30.10...rattler_index-v0.30.11) - 2026-08-03
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.30.10](https://github.com/conda/rattler/compare/rattler_index-v0.30.9...rattler_index-v0.30.10) - 2026-07-24
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.30.9](https://github.com/conda/rattler/compare/rattler_index-v0.30.8...rattler_index-v0.30.9) - 2026-07-14
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.30.8](https://github.com/conda/rattler/compare/rattler_index-v0.30.7...rattler_index-v0.30.8) - 2026-07-09
+
+### Fixed
+
+- make shard creation deterministic ([#2553](https://github.com/conda/rattler/pull/2553))
+
+### Other
+
+- make the extension mechanism reliable and self-serving ([#2557](https://github.com/conda/rattler/pull/2557))
+
+## [0.30.7](https://github.com/conda/rattler/compare/rattler_index-v0.30.6...rattler_index-v0.30.7) - 2026-06-26
+
+### Other
+
+- update Cargo.lock dependencies
+
 ## [0.30.6](https://github.com/conda/rattler/compare/rattler_index-v0.30.5...rattler_index-v0.30.6) - 2026-06-17
 
 ### Other

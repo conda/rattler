@@ -5,7 +5,7 @@ use crate::package_name::PyPackageName;
 use crate::version::PyVersion;
 use crate::virtual_package::PyVirtualPackage;
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyGenericVirtualPackage {

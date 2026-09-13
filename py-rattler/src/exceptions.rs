@@ -1,9 +1,10 @@
 use pyo3::create_exception;
-use pyo3::exceptions::PyException;
+use pyo3::exceptions::{PyException, PyUserWarning};
 
 create_exception!(exceptions, InvalidVersionError, PyException);
 create_exception!(exceptions, InvalidVersionSpecError, PyException);
 create_exception!(exceptions, InvalidMatchSpecError, PyException);
+create_exception!(exceptions, CanonicalMatchSpecError, PyException);
 create_exception!(exceptions, InvalidPackageNameError, PyException);
 create_exception!(exceptions, PackageNameMatcherParseError, PyException);
 create_exception!(exceptions, InvalidUrlError, PyException);
@@ -29,6 +30,7 @@ create_exception!(exceptions, LockFileError, PyException);
 create_exception!(exceptions, ExtractError, PyException);
 create_exception!(exceptions, ActivationScriptFormatError, PyException);
 create_exception!(exceptions, GatewayError, PyException);
+create_exception!(exceptions, GatewayWarning, PyUserWarning);
 create_exception!(exceptions, InstallerError, PyException);
 create_exception!(exceptions, ParseExplicitEnvironmentSpecError, PyException);
 create_exception!(exceptions, ValidatePackageRecordsError, PyException);
@@ -36,3 +38,4 @@ create_exception!(exceptions, AuthenticationStorageError, PyException);
 create_exception!(exceptions, ShellError, PyException);
 create_exception!(exceptions, InvalidHeaderNameError, PyException);
 create_exception!(exceptions, InvalidHeaderValueError, PyException);
+create_exception!(exceptions, ConfigError, PyException);

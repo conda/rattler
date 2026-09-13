@@ -5,7 +5,7 @@ use url::Url;
 
 use crate::{error::PyRattlerError, platform::PyPlatform};
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyChannelConfig {
@@ -37,7 +37,7 @@ impl PyChannelConfig {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone, Hash, Eq, PartialEq)]
 pub struct PyChannel {
@@ -83,12 +83,16 @@ impl PyChannel {
     }
 }
 
-#[pyclass(eq, eq_int)]
+#[pyclass(eq, eq_int, from_py_object)]
 #[derive(Clone, PartialEq, Eq)]
 pub enum PyChannelPriority {
     /// The channel that the package is first found in will be used as the only channel
     /// for that package.
     Strict,
+
+    /// For a given package, candidates from higher-priority channel's are exhausted
+    /// before falling back to the next channel, regardless of the version.
+    Flexible,
 
     /// Packages can be retrieved from any channel as package version takes precedence.
     Disabled,
@@ -98,6 +102,7 @@ impl From<ChannelPriority> for PyChannelPriority {
     fn from(channel_priority: ChannelPriority) -> Self {
         match channel_priority {
             ChannelPriority::Strict => PyChannelPriority::Strict,
+            ChannelPriority::Flexible => PyChannelPriority::Flexible,
             ChannelPriority::Disabled => PyChannelPriority::Disabled,
         }
     }
@@ -107,6 +112,7 @@ impl From<PyChannelPriority> for ChannelPriority {
     fn from(py_channel_priority: PyChannelPriority) -> Self {
         match py_channel_priority {
             PyChannelPriority::Strict => ChannelPriority::Strict,
+            PyChannelPriority::Flexible => ChannelPriority::Flexible,
             PyChannelPriority::Disabled => ChannelPriority::Disabled,
         }
     }

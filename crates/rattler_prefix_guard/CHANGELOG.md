@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/conda/rattler/compare/rattler_prefix_guard-v0.1.1...rattler_prefix_guard-v0.1.2) - 2026-07-14
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.1.1](https://github.com/conda/rattler/compare/rattler_prefix_guard-v0.1.0...rattler_prefix_guard-v0.1.1) - 2026-05-13
 
 ### Other

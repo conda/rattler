@@ -7,14 +7,19 @@ use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::{
     Channel, ChannelConfig, MatchSpec, ParseMatchSpecOptions, Platform, RepoDataRecord,
 };
-use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
+use rattler_repodata_gateway::RepoData;
+
+use crate::commands::gateway::{build_gateway, load_config};
+
+use super::{QueryOutputFormat, print_url_lines};
 
 /// Search for packages in conda channels using glob or regex patterns.
 #[derive(Debug, clap::Parser)]
 #[clap(after_help = r#"Examples:
-  rattler search 'python*'            # glob pattern
-  rattler search '^numpy-.*$'         # regex pattern
-  rattler search openssl -c bioconda  # search in specific channel"#)]
+  rattler search 'python*'              # glob pattern
+  rattler search '^numpy-.*$'           # regex pattern
+  rattler search openssl -c bioconda    # search in specific channel
+  rattler search xtensor --format urls  # print only the package urls"#)]
 pub struct Opt {
     /// The matchspec pattern to search for.
     ///
@@ -47,12 +52,12 @@ pub struct Opt {
     #[clap(long, default_value = "true", action = clap::ArgAction::Set)]
     sharded: bool,
 
-    /// Output in JSON format
+    /// Output format (defaults to human-readable output)
     #[clap(long, conflicts_with_all = ["limit", "limit_packages", "all"])]
-    json: bool,
+    format: Option<QueryOutputFormat>,
 }
 
-pub async fn search(opt: Opt) -> miette::Result<()> {
+pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
 
@@ -83,19 +88,11 @@ pub async fn search(opt: Opt) -> miette::Result<()> {
     );
 
     // Create HTTP client
-    let download_client = super::client::create_client_with_middleware()?;
+    let download_client = super::client::create_client_with_middleware(offline)?;
 
     // Create gateway
-    let gateway = Gateway::builder()
-        .with_client(download_client)
-        .with_channel_config(rattler_repodata_gateway::ChannelConfig {
-            default: SourceConfig {
-                sharded_enabled: opt.sharded,
-                ..SourceConfig::default()
-            },
-            per_channel: HashMap::new(),
-        })
-        .finish();
+    let config = load_config()?;
+    let gateway = build_gateway(download_client, &config, offline, opt.sharded)?;
 
     // Show progress while loading repodata
     let pb = ProgressBar::new_spinner();
@@ -117,7 +114,7 @@ pub async fn search(opt: Opt) -> miette::Result<()> {
 
     pb.finish_and_clear();
 
-    if opt.json {
+    if opt.format == Some(QueryOutputFormat::Json) {
         // Group records by platform (subdir), same format as `pixi search --json`
         let mut grouped: IndexMap<&str, Vec<&RepoDataRecord>> = IndexMap::new();
         for record in repo_data.iter().flat_map(RepoData::iter) {
@@ -132,6 +129,20 @@ pub async fn search(opt: Opt) -> miette::Result<()> {
         let json_str = serde_json::to_string_pretty(&grouped).into_diagnostic()?;
         println!("{json_str}");
         return Ok(());
+    }
+
+    if opt.format == Some(QueryOutputFormat::Urls) {
+        // Only print the plain urls to stdout, sorted by name and then by
+        // version (newest first).
+        let mut records: Vec<&RepoDataRecord> = repo_data.iter().flat_map(RepoData::iter).collect();
+        records.sort_unstable_by(|a, b| {
+            a.package_record
+                .name
+                .cmp(&b.package_record.name)
+                .then_with(|| b.cmp(a))
+        });
+
+        return print_url_lines(records.iter().map(|record| &record.url));
     }
 
     // Collect all records

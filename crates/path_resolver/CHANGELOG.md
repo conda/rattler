@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.13](https://github.com/conda/rattler/compare/path_resolver-v0.2.12...path_resolver-v0.2.13) - 2026-08-21
+
+### Other
+
+- *(ci)* Pin dependencies ([#2691](https://github.com/conda/rattler/pull/2691))
+
+## [0.2.12](https://github.com/conda/rattler/compare/path_resolver-v0.2.11...path_resolver-v0.2.12) - 2026-07-14
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.2.11](https://github.com/conda/rattler/compare/path_resolver-v0.2.10...path_resolver-v0.2.11) - 2026-06-02
 
 ### Fixed

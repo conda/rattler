@@ -1,7 +1,7 @@
 use pyo3::pyclass;
 use rattler_conda_types::PatchInstructions;
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPatchInstructions {

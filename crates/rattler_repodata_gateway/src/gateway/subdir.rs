@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use ahash::HashMap;
-use rattler_conda_types::{PackageName, RepoDataRecord, RepodataRevisions};
+use rattler_conda_types::{ChannelRelations, PackageName, RepoDataRecord, RepodataRevisions};
 
 use super::GatewayError;
 use crate::Reporter;
-use crate::sparse::empty_repodata_revisions;
+use crate::sparse::{RemovedPackage, empty_repodata_revisions};
 use coalesced_map::{CoalescedGetError, CoalescedMap};
 
 /// Records for a single package, with precomputed unique dependency strings
@@ -19,6 +19,10 @@ use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub struct PackageRecords {
     /// All repodata records for this package.
     pub records: Vec<Arc<RepoDataRecord>>,
+
+    /// Packages of this name that the subdirectory lists as removed. These
+    /// never appear in `records`.
+    pub removed: Vec<RemovedPackage>,
 
     /// Unique base dependency strings across all records.
     pub unique_base_deps: Arc<[String]>,
@@ -103,6 +107,17 @@ impl Subdir {
             Subdir::NotFound => empty_repodata_revisions(),
         }
     }
+
+    /// [CEP-42] channel relations from this subdir's repodata, or
+    /// `None` if absent / subdir not found.
+    ///
+    /// [CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
+    pub fn channel_relations(&self) -> Option<&ChannelRelations> {
+        match self {
+            Subdir::Found(subdir) => subdir.channel_relations(),
+            Subdir::NotFound => None,
+        }
+    }
 }
 
 /// Fetches and caches repodata records by package name for a specific
@@ -147,12 +162,46 @@ impl SubdirData {
             })
     }
 
+    /// Fetches the records for `name` without inserting them into the
+    /// long-lived per-name cache. A previously cached entry is still reused.
+    /// Used by streaming scans (e.g. the gateway's `who_needs` query) that
+    /// visit every package of a subdir exactly once and would otherwise
+    /// permanently fill the cache with millions of records.
+    pub async fn fetch_package_records_uncached(
+        &self,
+        name: &PackageName,
+        reporter: Option<&dyn Reporter>,
+    ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
+        if let Some(cached) = self.records.get(name) {
+            return Ok(cached.records);
+        }
+        Ok(self
+            .client
+            .fetch_package_records(name, reporter)
+            .await?
+            .records)
+    }
+
+    /// The number of package names currently held in the per-name record
+    /// cache.
+    #[cfg(test)]
+    pub(crate) fn cached_package_count(&self) -> usize {
+        self.records.len()
+    }
+
     pub fn package_names(&self) -> Vec<String> {
         self.client.package_names()
     }
 
     pub fn repodata_revisions(&self) -> &RepodataRevisions {
         self.client.repodata_revisions()
+    }
+
+    /// [CEP-42] channel relations from this subdir's repodata, if any.
+    ///
+    /// [CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
+    pub fn channel_relations(&self) -> Option<&ChannelRelations> {
+        self.client.channel_relations()
     }
 }
 
@@ -174,6 +223,14 @@ pub trait SubdirClient: Send + Sync {
     /// Returns repodata revisions advertised by the subdirectory.
     fn repodata_revisions(&self) -> &RepodataRevisions {
         empty_repodata_revisions()
+    }
+
+    /// [CEP-42] channel relations from this subdir's repodata, if any.
+    /// Sources without CEP-42 metadata (e.g. custom) keep the default.
+    ///
+    /// [CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
+    fn channel_relations(&self) -> Option<&ChannelRelations> {
+        None
     }
 }
 

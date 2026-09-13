@@ -59,7 +59,7 @@ impl RepoDataSource for PyRepoDataSource {
         let name_clone = name.clone();
 
         // Get the Python coroutine and convert to future
-        let future = Python::with_gil(|py| {
+        let future = Python::attach(|py| {
             let py_platform = PyPlatform::from(platform);
             let py_name = PyPackageName::from(name_clone);
 
@@ -87,7 +87,7 @@ impl RepoDataSource for PyRepoDataSource {
         //
         // Iterating via `try_iter` avoids materializing an intermediate
         // `Vec<Bound<PyAny>>` first; we hit each Python item once.
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let bound = result.bind(py);
             let mut rust_records: Vec<Arc<RepoDataRecord>> =
                 Vec::with_capacity(bound.len().unwrap_or(0));
@@ -109,7 +109,7 @@ impl RepoDataSource for PyRepoDataSource {
     }
 
     fn package_names(&self, platform: Platform) -> Vec<String> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let py_platform = PyPlatform::from(platform);
 
             self.inner

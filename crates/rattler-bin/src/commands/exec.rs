@@ -10,7 +10,7 @@ use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
     ParseMatchSpecOptions, Platform,
 };
-use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
+use rattler_repodata_gateway::RepoData;
 use rattler_shell::shell::ShellEnum;
 use rattler_solve::{SolverImpl, SolverTask, resolvo::Solver};
 use rattler_virtual_packages::{VirtualPackage, VirtualPackageOverrides};
@@ -21,12 +21,13 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
-use tokio;
 
 use crate::{
     commands::{
         client::create_client_with_middleware,
+        gateway::{build_gateway, load_config},
         progress::{wrap_in_async_progress, wrap_in_progress},
+        table::{Cell, Table},
     },
     global_multi_progress,
 };
@@ -72,7 +73,7 @@ pub struct Opt {
 }
 
 /// CLI entry point for `rattler exec`.
-pub async fn exec(opt: Opt) -> miette::Result<()> {
+pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
 
@@ -115,15 +116,16 @@ pub async fn exec(opt: Opt) -> miette::Result<()> {
     let dir_prefix = exec_dir_prefix(&install_specs, Some(command), should_guess);
 
     // Solve + install (or reuse) the cached environment
-    let prefix = create_exec_prefix(
-        &install_specs,
-        &channels,
-        opt.platform,
+    let prefix = create_exec_prefix(CreateExecPrefixOptions {
+        specs: &install_specs,
+        channels: &channels,
+        platform: opt.platform,
         dir_prefix,
-        opt.force_reinstall,
-        opt.list.as_deref(),
-        &cache_dir,
-    )
+        force_reinstall: opt.force_reinstall,
+        list: opt.list.as_deref(),
+        cache_dir: &cache_dir,
+        offline,
+    })
     .await?;
 
     // Build extra environment variables
@@ -178,16 +180,29 @@ pub async fn exec(opt: Opt) -> miette::Result<()> {
     std::process::exit(status.code().unwrap_or(1));
 }
 
-/// Creates a prefix for the `rattler exec` command.
-async fn create_exec_prefix(
-    specs: &[MatchSpec],
-    channels: &[Channel],
+struct CreateExecPrefixOptions<'a> {
+    specs: &'a [MatchSpec],
+    channels: &'a [Channel],
     platform: Platform,
     dir_prefix: Option<String>,
     force_reinstall: bool,
-    list: Option<&str>,
-    cache_dir: &Path,
-) -> miette::Result<PathBuf> {
+    list: Option<&'a str>,
+    cache_dir: &'a Path,
+    offline: bool,
+}
+
+/// Creates a prefix for the `rattler exec` command.
+async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Result<PathBuf> {
+    let CreateExecPrefixOptions {
+        specs,
+        channels,
+        platform,
+        dir_prefix,
+        force_reinstall,
+        list,
+        cache_dir,
+        offline,
+    } = options;
     let channel_urls: Vec<String> = channels.iter().map(|c| c.base_url.to_string()).collect();
     let env_hash = compute_env_hash(specs, &channel_urls, platform);
 
@@ -207,22 +222,10 @@ async fn create_exec_prefix(
         return Ok(prefix);
     }
 
-    let download_client = create_client_with_middleware()?;
+    let download_client = create_client_with_middleware(offline)?;
 
-    let gateway = Gateway::builder()
-        .with_cache_dir(cache_dir.join(rattler_cache::REPODATA_CACHE_DIR))
-        .with_package_cache(PackageCache::new(
-            cache_dir.join(rattler_cache::PACKAGE_CACHE_DIR),
-        ))
-        .with_client(download_client.clone())
-        .with_channel_config(rattler_repodata_gateway::ChannelConfig {
-            default: SourceConfig {
-                sharded_enabled: true,
-                ..SourceConfig::default()
-            },
-            per_channel: HashMap::new(),
-        })
-        .finish();
+    let config = load_config()?;
+    let gateway = build_gateway(download_client.clone(), &config, offline, true)?;
 
     let repo_data = wrap_in_async_progress(
         "fetching repodata",
@@ -238,17 +241,24 @@ async fn create_exec_prefix(
     .into_diagnostic()
     .context("failed to fetch repodata")?;
 
+    // Surface any non-fatal CEP-42 channel-relation problems.
+    for warning in &repo_data.warnings {
+        eprintln!("warning: {warning}");
+    }
+
     let total_records: usize = repo_data.iter().map(RepoData::len).sum();
     tracing::debug!("loaded {} records from repodata", total_records);
 
     // Determine virtual packages of the current platform
-    let virtual_packages: Vec<GenericVirtualPackage> =
-        VirtualPackage::detect(&VirtualPackageOverrides::from_env())
-            .into_diagnostic()
-            .context("failed to determine virtual packages")?
-            .into_iter()
-            .map(GenericVirtualPackage::from)
-            .collect();
+    let virtual_packages: Vec<GenericVirtualPackage> = VirtualPackage::detect(
+        &VirtualPackageOverrides::from_env(),
+        rattler::default_cache_dir().ok().as_deref(),
+    )
+    .into_diagnostic()
+    .context("failed to determine virtual packages")?
+    .into_iter()
+    .map(GenericVirtualPackage::from)
+    .collect();
 
     let solver_task = SolverTask {
         specs: specs.to_vec(),
@@ -402,20 +412,21 @@ fn list_environment(
     };
     println!("{header}");
 
+    let mut table = Table::new().with_indent(2);
     for r in &packages {
         let is_explicit = specs.iter().any(|s| s.matches(&r.package_record));
         let bullet = if is_explicit {
-            console::style("*").green().bold()
+            Cell::styled(console::style("*").green().bold(), "*")
         } else {
-            console::style(" ").dim()
+            Cell::plain(" ")
         };
-        println!(
-            "  {} {:<40} {}",
+        table.add_row([
             bullet,
-            r.package_record.name.as_normalized(),
-            r.package_record.version,
-        );
+            Cell::plain(r.package_record.name.as_normalized()),
+            Cell::plain(r.package_record.version.to_string()),
+        ]);
     }
+    table.print();
 
     Ok(())
 }

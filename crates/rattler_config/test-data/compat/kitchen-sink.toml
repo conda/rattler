@@ -1,0 +1,47 @@
+# Every shared configuration key, canonical (kebab-case) spelling.
+default-channels = ["conda-forge", "bioconda"]
+authentication-override-file = "/path/to/auth.json"
+tls-no-verify = false
+tls-root-certs = "webpki"
+run-post-link-scripts = "insecure"
+allow-symbolic-links = true
+allow-hard-links = false
+allow-ref-links = true
+
+[mirrors]
+"https://conda.anaconda.org/conda-forge" = [
+    "https://mirror.example.com/conda-forge",
+    "https://backup.example.com/conda-forge",
+]
+
+[build]
+package-format = "conda:max"
+
+[repodata-config]
+disable-bzip2 = true
+disable-zstd = false
+disable-sharded = false
+
+[repodata-config."https://prefix.dev"]
+disable-sharded = true
+
+[concurrency]
+solves = 4
+downloads = 12
+
+[proxy-config]
+https = "https://proxy.example.com:8080"
+http = "http://proxy.example.com:8080"
+non-proxy-hosts = ["localhost", "127.0.0.1"]
+
+[s3-options.my-bucket]
+endpoint-url = "https://s3.example.com"
+region = "eu-central-1"
+force-path-style = true
+
+[index-config]
+write-zst = true
+write-shards = false
+
+[index-config."s3://my-bucket/staging"]
+base-url = "../packages/"

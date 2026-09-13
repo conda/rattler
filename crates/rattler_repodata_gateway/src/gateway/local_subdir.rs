@@ -1,6 +1,6 @@
 use std::{path::Path, sync::Arc};
 
-use rattler_conda_types::{Channel, PackageName, RepodataRevisions};
+use rattler_conda_types::{Channel, ChannelRelations, PackageName, RepodataRevisions};
 
 use crate::{
     Reporter,
@@ -22,6 +22,12 @@ pub struct LocalSubdirClient {
 }
 
 impl LocalSubdirClient {
+    /// Create a client directly from an already-loaded [`SparseRepoData`],
+    /// without parsing anything from disk.
+    pub fn new(sparse: Arc<SparseRepoData>) -> Self {
+        Self { sparse }
+    }
+
     pub fn from_file(
         repodata_path: &Path,
         channel: Channel,
@@ -77,21 +83,26 @@ impl SubdirClient for LocalSubdirClient {
         let sparse_repodata = self.sparse.clone();
         let name = name.clone();
 
-        let load_records = move || match sparse_repodata
-            .load_records(&name, PackageFormatSelection::PreferConda)
-        {
-            Ok(records) => {
-                let (unique_base_deps, unique_extra_deps) = extract_unique_deps_split(&records);
-                Ok(PackageRecords {
-                    records: records.into_iter().map(Arc::new).collect(),
-                    unique_base_deps,
-                    unique_extra_deps,
-                })
-            }
-            Err(err) => Err(GatewayError::IoError(
-                "failed to extract repodata records from sparse repodata".to_string(),
-                err,
-            )),
+        let load_records = move || {
+            let io_error = |err: std::io::Error| {
+                GatewayError::IoError(
+                    "failed to extract repodata records from sparse repodata".to_string(),
+                    err,
+                )
+            };
+            let records = sparse_repodata
+                .load_records(&name, PackageFormatSelection::PreferConda)
+                .map_err(io_error)?;
+            let removed = sparse_repodata
+                .load_removed(Some(&name))
+                .map_err(io_error)?;
+            let (unique_base_deps, unique_extra_deps) = extract_unique_deps_split(&records);
+            Ok(PackageRecords {
+                records: records.into_iter().map(Arc::new).collect(),
+                removed,
+                unique_base_deps,
+                unique_extra_deps,
+            })
         };
 
         #[cfg(target_arch = "wasm32")]
@@ -110,5 +121,9 @@ impl SubdirClient for LocalSubdirClient {
 
     fn repodata_revisions(&self) -> &RepodataRevisions {
         self.sparse.repodata_revisions()
+    }
+
+    fn channel_relations(&self) -> Option<&ChannelRelations> {
+        self.sparse.channel_relations()
     }
 }

@@ -1,32 +1,9 @@
-use std::sync::LazyLock;
-
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::config::{Config, MergeError, ValidationError};
-#[cfg(feature = "edit")]
-use crate::edit::ConfigEditError;
 
-// detect proxy env vars like curl: https://curl.se/docs/manpage.html
-static ENV_HTTP_PROXY: LazyLock<Option<String>> = LazyLock::new(|| {
-    ["http_proxy", "all_proxy", "ALL_PROXY"]
-        .iter()
-        .find_map(|&k| std::env::var(k).ok().filter(|v| !v.is_empty()))
-});
-static ENV_HTTPS_PROXY: LazyLock<Option<String>> = LazyLock::new(|| {
-    ["https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"]
-        .iter()
-        .find_map(|&k| std::env::var(k).ok().filter(|v| !v.is_empty()))
-});
-static ENV_NO_PROXY: LazyLock<Option<String>> = LazyLock::new(|| {
-    ["no_proxy", "NO_PROXY"]
-        .iter()
-        .find_map(|&k| std::env::var(k).ok().filter(|v| !v.is_empty()))
-});
-static USE_PROXY_FROM_ENV: LazyLock<bool> =
-    LazyLock::new(|| (*ENV_HTTPS_PROXY).is_some() || (*ENV_HTTP_PROXY).is_some());
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub struct ProxyConfig {
     /// The HTTPS proxy to use
@@ -45,38 +22,41 @@ pub struct ProxyConfig {
     pub non_proxy_hosts: Vec<String>,
 }
 
-impl Default for ProxyConfig {
-    fn default() -> Self {
-        if *USE_PROXY_FROM_ENV {
-            Self {
-                https: ENV_HTTPS_PROXY.as_ref().and_then(|s| Url::parse(s).ok()),
-                http: ENV_HTTP_PROXY.as_ref().and_then(|s| Url::parse(s).ok()),
-                non_proxy_hosts: ENV_NO_PROXY
-                    .as_ref()
-                    .map(|s| s.split(',').map(String::from).collect())
-                    .unwrap_or_default(),
-            }
-        } else {
-            Self {
-                https: None,
-                http: None,
-                non_proxy_hosts: Vec::new(),
-            }
+impl ProxyConfig {
+    /// Read the proxy configuration from the standard environment
+    /// variables, like curl does: <https://curl.se/docs/manpage.html>.
+    ///
+    /// Returns an empty configuration when no proxy variables are set.
+    /// Note that `Default::default()` deliberately does *not* consult the
+    /// environment: a default-constructed configuration must be empty so
+    /// that it can be serialized, merged and compared without leaking
+    /// machine state. Consumers that want the environment behavior merge
+    /// this on top explicitly.
+    pub fn from_env() -> Self {
+        let env = |keys: &[&str]| {
+            keys.iter()
+                .find_map(|&k| std::env::var(k).ok().filter(|v| !v.is_empty()))
+        };
+        let http = env(&["http_proxy", "all_proxy", "ALL_PROXY"]);
+        let https = env(&["https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"]);
+        if http.is_none() && https.is_none() {
+            return Self::default();
+        }
+        Self {
+            https: https.and_then(|s| Url::parse(&s).ok()),
+            http: http.and_then(|s| Url::parse(&s).ok()),
+            non_proxy_hosts: env(&["no_proxy", "NO_PROXY"])
+                .map(|s| s.split(',').map(String::from).collect())
+                .unwrap_or_default(),
         }
     }
-}
 
-impl ProxyConfig {
     pub fn is_default(&self) -> bool {
-        self.https.is_none() && self.https.is_none() && self.non_proxy_hosts.is_empty()
+        self.https.is_none() && self.http.is_none() && self.non_proxy_hosts.is_empty()
     }
 }
 
 impl Config for ProxyConfig {
-    fn get_extension_name(&self) -> String {
-        "proxy".to_string()
-    }
-
     fn merge_config(self, other: &Self) -> Result<Self, MergeError> {
         Ok(Self {
             https: other.https.as_ref().or(self.https.as_ref()).cloned(),
@@ -102,72 +82,6 @@ impl Config for ProxyConfig {
             "http".to_string(),
             "non-proxy-hosts".to_string(),
         ]
-    }
-
-    #[cfg(feature = "edit")]
-    fn set(
-        &mut self,
-        key: &str,
-        value: Option<String>,
-    ) -> Result<(), crate::config::ConfigEditError> {
-        if key == "proxy-config" {
-            if let Some(value) = value {
-                *self = serde_json::de::from_str(&value).map_err(|e| {
-                    ConfigEditError::JsonParseError {
-                        key: key.to_string(),
-                        source: e,
-                    }
-                })?;
-            } else {
-                *self = ProxyConfig::default();
-            }
-            return Ok(());
-        } else if !key.starts_with("proxy-config.") {
-            return Err(ConfigEditError::UnknownKeyInner {
-                key: key.to_string(),
-            });
-        }
-
-        let subkey = key.strip_prefix("proxy-config.").unwrap();
-        match subkey {
-            "https" => {
-                self.https = value
-                    .map(|v| {
-                        Url::parse(&v).map_err(|e| ConfigEditError::UrlParseError {
-                            key: key.to_string(),
-                            source: e,
-                        })
-                    })
-                    .transpose()?;
-            }
-            "http" => {
-                self.http = value
-                    .map(|v| {
-                        Url::parse(&v).map_err(|e| ConfigEditError::UrlParseError {
-                            key: key.to_string(),
-                            source: e,
-                        })
-                    })
-                    .transpose()?;
-            }
-            "non-proxy-hosts" => {
-                self.non_proxy_hosts = value
-                    .map(|v| {
-                        serde_json::de::from_str(&v).map_err(|e| ConfigEditError::JsonParseError {
-                            key: key.to_string(),
-                            source: e,
-                        })
-                    })
-                    .transpose()?
-                    .unwrap_or_default();
-            }
-            _ => {
-                return Err(ConfigEditError::UnknownKeyInner {
-                    key: key.to_string(),
-                });
-            }
-        }
-        Ok(())
     }
 }
 

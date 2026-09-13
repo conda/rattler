@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.10](https://github.com/conda/rattler/compare/rattler_cache-v0.10.9...rattler_cache-v0.10.10) - 2026-09-04
+
+### Other
+
+- updated the following local packages: rattler_package_streaming
+
+## [0.10.9](https://github.com/conda/rattler/compare/rattler_cache-v0.10.8...rattler_cache-v0.10.9) - 2026-08-27
+
+### Other
+
+- updated the following local packages: rattler_redaction, rattler_package_streaming, rattler_conda_types, rattler_networking
+
+## [0.10.8](https://github.com/conda/rattler/compare/rattler_cache-v0.10.7...rattler_cache-v0.10.8) - 2026-08-26
+
+### Other
+
+- updated the following local packages: rattler_redaction, rattler_conda_types, rattler_package_streaming, rattler_networking
+
+## [0.10.7](https://github.com/conda/rattler/compare/rattler_cache-v0.10.6...rattler_cache-v0.10.7) - 2026-08-21
+
+### Other
+
+- updated the following local packages: rattler_redaction, rattler_conda_types, rattler_package_streaming, rattler_networking
+
+## [0.10.6](https://github.com/conda/rattler/compare/rattler_cache-v0.10.5...rattler_cache-v0.10.6) - 2026-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.10.5](https://github.com/conda/rattler/compare/rattler_cache-v0.10.4...rattler_cache-v0.10.5) - 2026-08-11
+
+### Added
+
+- *(rattler_cache)* add package layer filtering ([#2652](https://github.com/conda/rattler/pull/2652))
+
+## [0.10.4](https://github.com/conda/rattler/compare/rattler_cache-v0.10.3...rattler_cache-v0.10.4) - 2026-07-24
+
+### Added
+
+- let callers restrict which candidates a solve may pick ([#2609](https://github.com/conda/rattler/pull/2609))
+
+### Fixed
+
+- *(rattler_cache)* detect read-only filesystems in PackageCacheLayer ([#2594](https://github.com/conda/rattler/pull/2594))
+
+## [0.10.3](https://github.com/conda/rattler/compare/rattler_cache-v0.10.2...rattler_cache-v0.10.3) - 2026-07-14
+
+### Other
+
+- update dependencies ([#2589](https://github.com/conda/rattler/pull/2589))
+
+## [0.10.2](https://github.com/conda/rattler/compare/rattler_cache-v0.10.1...rattler_cache-v0.10.2) - 2026-07-09
+
+### Fixed
+
+- make the Windows package-cache rename retry actually fire ([#2555](https://github.com/conda/rattler/pull/2555))
+
+## [0.10.1](https://github.com/conda/rattler/compare/rattler_cache-v0.10.0...rattler_cache-v0.10.1) - 2026-06-26
+
+### Other
+
+- updated the following local packages: rattler_networking, rattler_package_streaming
+
 ## [0.10.0](https://github.com/conda/rattler/compare/rattler_cache-v0.9.2...rattler_cache-v0.10.0) - 2026-06-17
 
 ### Added

@@ -1,0 +1,20 @@
+# A second layer merged on top of kitchen-sink.toml in the merge tests.
+default-channels = ["robostack"]
+tls-no-verify = true
+
+[mirrors]
+"https://conda.anaconda.org/bioconda" = ["https://mirror.example.com/bioconda"]
+
+[repodata-config]
+disable-bzip2 = false
+
+[repodata-config."https://prefix.dev"]
+disable-zstd = true
+
+[concurrency]
+solves = 9
+
+[s3-options.other-bucket]
+endpoint-url = "https://minio.example.com"
+region = "auto"
+force-path-style = false

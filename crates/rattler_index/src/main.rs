@@ -103,7 +103,7 @@ enum Commands {
 
 /// The configuration type for rattler-index - just extends rattler config and
 /// can load the same TOML files as pixi.
-pub type Config = rattler_config::config::ConfigBase<()>;
+pub type Config = rattler_config::config::ConfigBase;
 
 /// Entry point of the `rattler-index` cli.
 #[tokio::main]
@@ -230,7 +230,7 @@ fn effective_index_options(
 ) -> (
     bool,
     bool,
-    Vec<rattler_index::RepodataRevisionInfo>,
+    Vec<rattler_index::RepodataRevisionSelection>,
     PackageRevisionAssignment,
 ) {
     let write_zst = cfg.write_zst.unwrap_or(true);

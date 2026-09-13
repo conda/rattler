@@ -39,11 +39,39 @@ pub enum Platform {
     Osx64,
     OsxArm64,
 
+    // iOS and Android map the PyPI wheel-tag model (PEP 730/738) onto conda:
+    // a wheel tag like `ios_13_0_arm64_iphoneos` packs arch, ABI and
+    // minimum OS version into one string. Conda splits these axes: arch + ABI
+    // become the subdir, while the minimum OS version (min iOS version /
+    // Android API level) is expressed through the `__ios`/`__android` virtual
+    // packages, so version compatibility is handled by the solver just like
+    // `__osx` and `__glibc`.
+    //
+    // Each subdir is single-arch by construction and keeps to a single
+    // `<os>-<arch>` dash so tools that split the subdir on `-` keep working;
+    // the device/simulator split is folded into the os token
+    // (`iossimulator`).
+    IosArm64,
+    IosSimulatorArm64,
+    IosSimulator64,
+
+    // Android runs a Linux kernel but links against Bionic instead of glibc,
+    // which is why `android-*` gets its own subdirs and is deliberately not
+    // `is_linux()`: `linux-*` packages declare their libc requirement via
+    // `__glibc`, a constraint Bionic cannot satisfy, so mixing the two
+    // subdirs would install packages whose libc requirement is silently
+    // violated.
+    AndroidAarch64,
+    AndroidArmV7a,
+    Android64,
+    Android32,
+
     Win32,
     Win64,
     WinArm64,
 
     EmscriptenWasm32,
+    EmscriptenWasm64,
     WasiWasm32,
 
     ZosZ,
@@ -74,6 +102,12 @@ pub enum Arch {
     Arm64,
     ArmV6l,
     ArmV7l,
+    // armv7a is used for Android's `armeabi-v7a` ABI. It is distinct from
+    // `armv7l` (the `uname -m` value used for `linux-armv7l`): both are
+    // 32-bit ARMv7, but `armeabi-v7a` uses Android's softfp calling
+    // convention and links against Bionic instead of glibc, so binaries are
+    // not interchangeable between the two.
+    ArmV7a,
     LoongArch64,
     Ppc64le,
     Ppc64,
@@ -82,6 +116,7 @@ pub enum Arch {
     Riscv32,
     Riscv64,
     Wasm32,
+    Wasm64,
     Z,
 }
 
@@ -180,10 +215,63 @@ impl Platform {
             return Platform::OsxArm64;
         }
 
+        #[cfg(target_os = "ios")]
+        {
+            // Mac Catalyst (`*-apple-ios-macabi`) also reports `target_os =
+            // "ios"`, but produces binaries that run on macOS. No conda
+            // subdir exists for it.
+            #[cfg(target_abi = "macabi")]
+            return Platform::Unknown;
+
+            #[cfg(all(target_arch = "aarch64", target_abi = "sim"))]
+            return Platform::IosSimulatorArm64;
+
+            #[cfg(all(
+                target_arch = "aarch64",
+                not(any(target_abi = "sim", target_abi = "macabi"))
+            ))]
+            return Platform::IosArm64;
+
+            // The only x86_64 iOS target (`x86_64-apple-ios`) is the simulator.
+            #[cfg(all(target_arch = "x86_64", not(target_abi = "macabi")))]
+            return Platform::IosSimulator64;
+
+            #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+            compile_error!("unsupported ios architecture");
+        }
+
+        #[cfg(target_os = "android")]
+        {
+            #[cfg(target_arch = "aarch64")]
+            return Platform::AndroidAarch64;
+
+            // armv7-linux-androideabi and thumbv7neon-linux-androideabi → armeabi-v7a
+            #[cfg(target_arch = "arm")]
+            return Platform::AndroidArmV7a;
+
+            #[cfg(target_arch = "x86")]
+            return Platform::Android32;
+
+            #[cfg(target_arch = "x86_64")]
+            return Platform::Android64;
+
+            // e.g. riscv64-linux-android
+            #[cfg(not(any(
+                target_arch = "aarch64",
+                target_arch = "arm",
+                target_arch = "x86",
+                target_arch = "x86_64"
+            )))]
+            compile_error!("unsupported android architecture");
+        }
+
         #[cfg(target_os = "emscripten")]
         {
             #[cfg(target_arch = "wasm32")]
             return Platform::EmscriptenWasm32;
+
+            #[cfg(target_arch = "wasm64")]
+            return Platform::EmscriptenWasm64;
         }
 
         #[cfg(target_os = "wasi")]
@@ -196,6 +284,8 @@ impl Platform {
             target_os = "linux",
             target_os = "freebsd",
             target_os = "macos",
+            target_os = "ios",
+            target_os = "android",
             target_os = "emscripten",
             target_os = "wasi",
             windows
@@ -224,9 +314,12 @@ impl Platform {
     pub const fn is_unix(self) -> bool {
         self.is_linux()
             || self.is_osx()
+            || self.is_ios()
+            || self.is_android()
             || matches!(
                 self,
                 Platform::EmscriptenWasm32
+                    | Platform::EmscriptenWasm64
                     | Platform::FreeBsd32
                     | Platform::FreeBsd64
                     | Platform::FreeBsdArm64
@@ -257,7 +350,29 @@ impl Platform {
         matches!(self, Platform::Osx64 | Platform::OsxArm64)
     }
 
-    /// Return only the platform (linux, win, or osx from the platform enum)
+    /// Returns true if the platform is an iOS based platform (device or
+    /// simulator).
+    pub const fn is_ios(self) -> bool {
+        matches!(
+            self,
+            Platform::IosArm64 | Platform::IosSimulatorArm64 | Platform::IosSimulator64
+        )
+    }
+
+    /// Returns true if the platform is an Android based platform.
+    pub const fn is_android(self) -> bool {
+        matches!(
+            self,
+            Platform::AndroidAarch64
+                | Platform::AndroidArmV7a
+                | Platform::Android64
+                | Platform::Android32
+        )
+    }
+
+    /// Return only the OS part of the platform (e.g. `linux`, `win`, `osx`,
+    /// `freebsd`, `ios`, `iossimulator`, `android`), or `None` for `noarch`
+    /// and unknown platforms.
     pub fn only_platform(&self) -> Option<&str> {
         match self {
             Platform::NoArch | Platform::Unknown => None,
@@ -275,8 +390,14 @@ impl Platform {
             | Platform::LinuxRiscv64 => Some("linux"),
             Platform::FreeBsd32 | Platform::FreeBsd64 | Platform::FreeBsdArm64 => Some("freebsd"),
             Platform::Osx64 | Platform::OsxArm64 => Some("osx"),
+            Platform::IosArm64 => Some("ios"),
+            Platform::IosSimulatorArm64 | Platform::IosSimulator64 => Some("iossimulator"),
+            Platform::AndroidAarch64
+            | Platform::AndroidArmV7a
+            | Platform::Android64
+            | Platform::Android32 => Some("android"),
             Platform::Win32 | Platform::Win64 | Platform::WinArm64 => Some("win"),
-            Platform::EmscriptenWasm32 => Some("emscripten"),
+            Platform::EmscriptenWasm32 | Platform::EmscriptenWasm64 => Some("emscripten"),
             Platform::WasiWasm32 => Some("wasi"),
             Platform::ZosZ => Some("zos"),
         }
@@ -324,10 +445,18 @@ impl FromStr for Platform {
             "freebsd-arm64" => Platform::FreeBsdArm64,
             "osx-64" => Platform::Osx64,
             "osx-arm64" => Platform::OsxArm64,
+            "ios-arm64" => Platform::IosArm64,
+            "iossimulator-arm64" => Platform::IosSimulatorArm64,
+            "iossimulator-64" => Platform::IosSimulator64,
+            "android-aarch64" => Platform::AndroidAarch64,
+            "android-armv7a" => Platform::AndroidArmV7a,
+            "android-64" => Platform::Android64,
+            "android-32" => Platform::Android32,
             "win-32" => Platform::Win32,
             "win-64" => Platform::Win64,
             "win-arm64" => Platform::WinArm64,
             "emscripten-wasm32" => Platform::EmscriptenWasm32,
+            "emscripten-wasm64" => Platform::EmscriptenWasm64,
             "wasi-wasm32" => Platform::WasiWasm32,
             "zos-z" => Platform::ZosZ,
             string => {
@@ -360,10 +489,18 @@ impl From<Platform> for &'static str {
             Platform::FreeBsdArm64 => "freebsd-arm64",
             Platform::Osx64 => "osx-64",
             Platform::OsxArm64 => "osx-arm64",
+            Platform::IosArm64 => "ios-arm64",
+            Platform::IosSimulatorArm64 => "iossimulator-arm64",
+            Platform::IosSimulator64 => "iossimulator-64",
+            Platform::AndroidAarch64 => "android-aarch64",
+            Platform::AndroidArmV7a => "android-armv7a",
+            Platform::Android64 => "android-64",
+            Platform::Android32 => "android-32",
             Platform::Win32 => "win-32",
             Platform::Win64 => "win-64",
             Platform::WinArm64 => "win-arm64",
             Platform::EmscriptenWasm32 => "emscripten-wasm32",
+            Platform::EmscriptenWasm64 => "emscripten-wasm64",
             Platform::WasiWasm32 => "wasi-wasm32",
             Platform::ZosZ => "zos-z",
             Platform::Unknown => "unknown",
@@ -388,13 +525,24 @@ impl Platform {
             Platform::LinuxS390X => Some(Arch::S390X),
             Platform::LinuxRiscv32 => Some(Arch::Riscv32),
             Platform::LinuxRiscv64 => Some(Arch::Riscv64),
-            Platform::Linux32 | Platform::Win32 | Platform::FreeBsd32 => Some(Arch::X86),
-            Platform::Linux64 | Platform::Win64 | Platform::Osx64 | Platform::FreeBsd64 => {
-                Some(Arch::X86_64)
+            Platform::Linux32 | Platform::Win32 | Platform::FreeBsd32 | Platform::Android32 => {
+                Some(Arch::X86)
             }
-            Platform::LinuxAarch64 => Some(Arch::Aarch64),
-            Platform::WinArm64 | Platform::OsxArm64 | Platform::FreeBsdArm64 => Some(Arch::Arm64),
+            Platform::Linux64
+            | Platform::Win64
+            | Platform::Osx64
+            | Platform::FreeBsd64
+            | Platform::IosSimulator64
+            | Platform::Android64 => Some(Arch::X86_64),
+            Platform::LinuxAarch64 | Platform::AndroidAarch64 => Some(Arch::Aarch64),
+            Platform::WinArm64
+            | Platform::OsxArm64
+            | Platform::FreeBsdArm64
+            | Platform::IosArm64
+            | Platform::IosSimulatorArm64 => Some(Arch::Arm64),
+            Platform::AndroidArmV7a => Some(Arch::ArmV7a),
             Platform::EmscriptenWasm32 | Platform::WasiWasm32 => Some(Arch::Wasm32),
+            Platform::EmscriptenWasm64 => Some(Arch::Wasm64),
             Platform::ZosZ => Some(Arch::Z),
         }
     }
@@ -458,6 +606,7 @@ impl FromStr for Arch {
             "arm64" => Arch::Arm64,
             "armv6l" => Arch::ArmV6l,
             "armv7l" => Arch::ArmV7l,
+            "armv7a" => Arch::ArmV7a,
             "loongarch64" => Arch::LoongArch64,
             "ppc64le" => Arch::Ppc64le,
             "ppc64" => Arch::Ppc64,
@@ -466,6 +615,7 @@ impl FromStr for Arch {
             "riscv32" => Arch::Riscv32,
             "riscv64" => Arch::Riscv64,
             "wasm32" => Arch::Wasm32,
+            "wasm64" => Arch::Wasm64,
             "z" => Arch::Z,
             string => {
                 return Err(ParseArchError {
@@ -485,6 +635,7 @@ impl From<Arch> for &'static str {
             Arch::Aarch64 => "aarch64",
             Arch::ArmV6l => "armv6l",
             Arch::ArmV7l => "armv7l",
+            Arch::ArmV7a => "armv7a",
             Arch::LoongArch64 => "loongarch64",
             Arch::Ppc64le => "ppc64le",
             Arch::Ppc64 => "ppc64",
@@ -493,6 +644,7 @@ impl From<Arch> for &'static str {
             Arch::Riscv32 => "riscv32",
             Arch::Riscv64 => "riscv64",
             Arch::Wasm32 => "wasm32",
+            Arch::Wasm64 => "wasm64",
             Arch::Z => "z",
         }
     }
@@ -558,11 +710,87 @@ mod tests {
             Platform::EmscriptenWasm32
         );
         assert_eq!(
+            "emscripten-wasm64".parse::<Platform>().unwrap(),
+            Platform::EmscriptenWasm64
+        );
+        assert_eq!(
             "wasi-wasm32".parse::<Platform>().unwrap(),
             Platform::WasiWasm32
         );
         assert_eq!("noarch".parse::<Platform>().unwrap(), Platform::NoArch);
         assert_eq!("zos-z".parse::<Platform>().unwrap(), Platform::ZosZ);
+        assert_eq!("ios-arm64".parse::<Platform>().unwrap(), Platform::IosArm64);
+        assert_eq!(
+            "iossimulator-arm64".parse::<Platform>().unwrap(),
+            Platform::IosSimulatorArm64
+        );
+        assert_eq!(
+            "iossimulator-64".parse::<Platform>().unwrap(),
+            Platform::IosSimulator64
+        );
+        assert_eq!(
+            "android-aarch64".parse::<Platform>().unwrap(),
+            Platform::AndroidAarch64
+        );
+        assert_eq!(
+            "android-armv7a".parse::<Platform>().unwrap(),
+            Platform::AndroidArmV7a
+        );
+        assert_eq!(
+            "android-64".parse::<Platform>().unwrap(),
+            Platform::Android64
+        );
+        assert_eq!(
+            "android-32".parse::<Platform>().unwrap(),
+            Platform::Android32
+        );
+    }
+
+    #[test]
+    fn test_ios_android_platform() {
+        // iOS and Android round-trip through their subdir strings.
+        for subdir in [
+            "ios-arm64",
+            "iossimulator-arm64",
+            "iossimulator-64",
+            "android-aarch64",
+            "android-armv7a",
+            "android-64",
+            "android-32",
+        ] {
+            let platform: Platform = subdir.parse().unwrap();
+            assert_eq!(platform.to_string(), subdir);
+        }
+
+        // The arch axis is split out from the subdir. Following conda
+        // convention, x86_64/x86 are spelled `-64`/`-32` in the subdir but
+        // still report the underlying arch.
+        assert_eq!(Platform::IosArm64.arch(), Some(Arch::Arm64));
+        assert_eq!(Platform::IosSimulatorArm64.arch(), Some(Arch::Arm64));
+        assert_eq!(Platform::IosSimulator64.arch(), Some(Arch::X86_64));
+        assert_eq!(Platform::AndroidAarch64.arch(), Some(Arch::Aarch64));
+        assert_eq!(Platform::AndroidArmV7a.arch(), Some(Arch::ArmV7a));
+        assert_eq!(Platform::Android64.arch(), Some(Arch::X86_64));
+        assert_eq!(Platform::Android32.arch(), Some(Arch::X86));
+
+        // iOS/Android classify as unix, but not as osx/linux (they use
+        // different C libraries and get their own virtual packages).
+        assert!(Platform::IosArm64.is_ios());
+        assert!(Platform::IosArm64.is_unix());
+        assert!(!Platform::IosArm64.is_osx());
+        assert_eq!(Platform::IosArm64.only_platform(), Some("ios"));
+        // Simulators are still iOS, but carry their own single-dash subdir
+        // prefix so tools that split the subdir on `-` keep working.
+        assert!(Platform::IosSimulatorArm64.is_ios());
+        assert_eq!(
+            Platform::IosSimulatorArm64.only_platform(),
+            Some("iossimulator")
+        );
+
+        assert!(Platform::AndroidAarch64.is_android());
+        assert!(Platform::AndroidAarch64.is_unix());
+        assert!(!Platform::AndroidAarch64.is_linux());
+        assert_eq!(Platform::AndroidAarch64.only_platform(), Some("android"));
     }
 
     #[test]
@@ -602,6 +830,7 @@ mod tests {
         assert_eq!(Platform::Win64.arch(), Some(Arch::X86_64));
         assert_eq!(Platform::WinArm64.arch(), Some(Arch::Arm64));
         assert_eq!(Platform::EmscriptenWasm32.arch(), Some(Arch::Wasm32));
+        assert_eq!(Platform::EmscriptenWasm64.arch(), Some(Arch::Wasm64));
         assert_eq!(Platform::WasiWasm32.arch(), Some(Arch::Wasm32));
         assert_eq!(Platform::NoArch.arch(), None);
         assert_eq!(Platform::ZosZ.arch(), Some(Arch::Z));

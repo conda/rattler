@@ -1,34 +1,19 @@
-use std::{
-    collections::HashMap,
-    env,
-    path::PathBuf,
-    str::FromStr,
-    time::{Duration, Instant},
-};
+use std::{collections::HashMap, env, path::PathBuf, time::Instant};
 
-use clap::ValueEnum;
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
-use rattler::{
-    default_cache_dir,
-    install::{IndicatifReporter, Installer, Transaction, TransactionOperation},
-    package_cache::PackageCache,
-};
-use rattler_conda_types::{
-    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
-    ParseMatchSpecOptions, Platform, PrefixRecord, RepoDataRecord, Version,
-};
-use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
-use rattler_solve::{
-    SolverImpl, SolverTask,
-    libsolv_c::{self},
-    resolvo,
-};
+use rattler::install::{IndicatifReporter, Installer, Transaction, TransactionOperation};
+use rattler_conda_types::{ChannelConfig, PackageName, Platform, PrefixRecord, RepoDataRecord};
+use rattler_repodata_gateway::RepoData;
+use rattler_solve::SolverTask;
 
 use crate::{
-    commands::progress::{wrap_in_async_progress, wrap_in_progress},
-    exclude_newer::ExcludeNewer,
+    commands::{
+        gateway::{build_gateway, load_config},
+        progress::{wrap_in_async_progress, wrap_in_progress},
+    },
     global_multi_progress,
+    solver_args::SolverArgs,
 };
 
 /// Create a conda environment from package listing
@@ -37,34 +22,16 @@ use crate::{
 /// pulling from the configured channels.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
-    /// Channel to search for packages
-    ///
-    /// Example: -c conda-forge -c main
-    #[clap(short, long = "channel")]
-    channels: Option<Vec<String>>,
-
     /// Package specs to install
     #[clap(required = true)]
     specs: Vec<String>,
 
-    /// Simulute command without installation
+    #[clap(flatten)]
+    solver: SolverArgs,
+
+    /// Simulate command without installation
     #[clap(long)]
     dry_run: bool,
-
-    /// Target platform (e.g., linux-64, osx-arm64)
-    #[clap(long)]
-    platform: Option<String>,
-
-    #[clap(long)]
-    virtual_package: Option<Vec<String>>,
-
-    /// SAT Solver backend to use
-    #[clap(long)]
-    solver: Option<Solver>,
-
-    /// Request solver timeout in milliseconds
-    #[clap(long)]
-    timeout: Option<u64>,
 
     /// Target prefix (environment path) for package installation
     #[clap(
@@ -74,102 +41,29 @@ pub struct Opt {
         default_value = ".prefix"
     )]
     target_prefix: PathBuf,
-
-    #[clap(long)]
-    strategy: Option<SolveStrategy>,
-
-    /// Only install dependencies of package specs
-    #[clap(long, group = "deps_mode")]
-    only_deps: bool,
-
-    /// Only install package specifications without dependencies
-    #[clap(long, group = "deps_mode")]
-    no_deps: bool,
-
-    /// Exclude packages that have been published after the specified timestamp.
-    /// Can be specified as a timestamp (e.g., "2006-12-02T02:07:43Z") or as a date (e.g., "2006-12-02").
-    /// When using a date, packages from the entire day are included.
-    #[clap(long)]
-    exclude_newer: Option<ExcludeNewer>,
 }
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
-pub enum SolveStrategy {
-    /// Resolve the highest compatible version for every package.
-    Highest,
-
-    /// Resolve the lowest compatible version for every package.
-    Lowest,
-
-    /// Resolve the lowest compatible version for direct dependencies but the
-    /// highest compatible for transitive dependencies.
-    LowestDirect,
-}
-
-#[derive(Default, Debug, Clone, Copy, ValueEnum)]
-pub enum Solver {
-    #[default]
-    Resolvo,
-    #[value(name = "libsolv")]
-    LibSolv,
-}
-
-impl From<SolveStrategy> for rattler_solve::SolveStrategy {
-    fn from(value: SolveStrategy) -> Self {
-        match value {
-            SolveStrategy::Highest => rattler_solve::SolveStrategy::Highest,
-            SolveStrategy::Lowest => rattler_solve::SolveStrategy::LowestVersion,
-            SolveStrategy::LowestDirect => rattler_solve::SolveStrategy::LowestVersionDirect,
-        }
-    }
-}
-
-pub async fn create(opt: Opt) -> miette::Result<()> {
+pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
+    let config = load_config()?;
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
     // Make the target prefix absolute
     let target_prefix = std::path::absolute(opt.target_prefix).into_diagnostic()?;
 
-    // Determine the platform we're going to install for
-    let install_platform = if let Some(platform) = opt.platform {
-        Platform::from_str(&platform).into_diagnostic()?
-    } else {
-        Platform::current()
-    };
+    let install_platform = opt.solver.platform;
 
-    println!("Installing for platform: {install_platform:?}");
+    println!("Installing for platform: {install_platform}");
 
     // Parse the specs from the command line. We do this explicitly instead of allow
     // clap to deal with this because we need to parse the `channel_config` when
     // parsing matchspecs.
-    let match_spec_options = ParseMatchSpecOptions::strict()
-        .with_extras(true)
-        .with_conditionals(true)
-        .with_flags(true);
-
-    let specs = opt
-        .specs
-        .iter()
-        .map(|spec| MatchSpec::from_str(spec, match_spec_options))
-        .collect::<Result<Vec<_>, _>>()
-        .into_diagnostic()?;
-
-    // Find the default cache directory. Create it if it doesn't exist yet.
-    let cache_dir = default_cache_dir()
-        .map_err(|e| miette::miette!("could not determine default cache directory: {}", e))?;
-    rattler_cache::ensure_cache_dir(&cache_dir)
-        .map_err(|e| miette::miette!("could not create cache directory: {}", e))?;
+    let specs = SolverArgs::parse_specs(&opt.specs)?;
+    let constraints = opt.solver.constraints()?;
 
     // Determine the channels to use from the command line or select the default.
     // Like matchspecs this also requires the use of the `channel_config` so we
     // have to do this manually.
-    let channels = opt
-        .channels
-        .unwrap_or_else(|| vec![String::from("conda-forge")])
-        .into_iter()
-        .map(|channel_str| Channel::from_str(channel_str, &channel_config))
-        .collect::<Result<Vec<_>, _>>()
-        .into_diagnostic()?;
+    let channels = opt.solver.channels(&channel_config)?;
 
     // Determine the packages that are currently installed in the environment.
     let installed_packages =
@@ -179,24 +73,11 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
     // `repodata.json` that should be available from the corresponding Url. The
     // code below also displays a nice CLI progress-bar to give users some more
     // information about what is going on.
-    let download_client = super::client::create_client_with_middleware()?;
+    let download_client = super::client::create_client_with_middleware(offline)?;
 
     // Get the package names from the matchspecs so we can only load the package
     // records that we need.
-    let gateway = Gateway::builder()
-        .with_cache_dir(cache_dir.join(rattler_cache::REPODATA_CACHE_DIR))
-        .with_package_cache(PackageCache::new(
-            cache_dir.join(rattler_cache::PACKAGE_CACHE_DIR),
-        ))
-        .with_client(download_client.clone())
-        .with_channel_config(rattler_repodata_gateway::ChannelConfig {
-            default: SourceConfig {
-                sharded_enabled: true,
-                ..SourceConfig::default()
-            },
-            per_channel: HashMap::new(),
-        })
-        .finish();
+    let gateway = build_gateway(download_client.clone(), &config, offline, true)?;
 
     let start_load_repo_data = Instant::now();
     let repo_data = wrap_in_async_progress(
@@ -213,6 +94,11 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
     .into_diagnostic()
     .context("failed to load repodata")?;
 
+    // Surface any non-fatal CEP-42 channel-relation problems.
+    for warning in &repo_data.warnings {
+        eprintln!("warning: {warning}");
+    }
+
     // Determine the number of records
     let total_records: usize = repo_data.iter().map(RepoData::len).sum();
     println!(
@@ -224,34 +110,8 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
     // Determine virtual packages of the system. These packages define the
     // capabilities of the system. Some packages depend on these virtual
     // packages to indicate compatibility with the hardware of the system.
-    let virtual_packages = wrap_in_progress("determining virtual packages", move || {
-        if let Some(virtual_packages) = opt.virtual_package {
-            Ok(virtual_packages
-                .iter()
-                .map(|virt_pkg| {
-                    let elems = virt_pkg.split('=').collect::<Vec<&str>>();
-                    Ok(GenericVirtualPackage {
-                        name: elems[0].try_into().into_diagnostic()?,
-                        version: elems
-                            .get(1)
-                            .map_or(Version::from_str("0"), |s| Version::from_str(s))
-                            .into_diagnostic()?,
-                        build_string: (*elems.get(2).unwrap_or(&"")).to_string(),
-                    })
-                })
-                .collect::<miette::Result<Vec<_>>>()?)
-        } else {
-            rattler_virtual_packages::VirtualPackage::detect(
-                &rattler_virtual_packages::VirtualPackageOverrides::from_env(),
-            )
-            .map(|vpkgs| {
-                vpkgs
-                    .iter()
-                    .map(|vpkg| GenericVirtualPackage::from(vpkg.clone()))
-                    .collect::<Vec<_>>()
-            })
-            .into_diagnostic()
-        }
+    let virtual_packages = wrap_in_progress("determining virtual packages", || {
+        opt.solver.virtual_packages()
     })?;
 
     println!(
@@ -260,6 +120,15 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
             .iter()
             .format_with("\n", |i, f| f(&format_args!("  - {i}",)))
     );
+
+    if !constraints.is_empty() {
+        println!(
+            "Constraints:\n{}\n",
+            constraints
+                .iter()
+                .format_with("\n", |i, f| f(&format_args!("  - {i}",)))
+        );
+    }
 
     // Now that we parsed and downloaded all information, construct the packaging
     // problem that we need to solve. We do this by constructing a
@@ -274,28 +143,22 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
         locked_packages,
         virtual_packages,
         specs: specs.clone(),
-        timeout: opt.timeout.map(Duration::from_millis),
-        strategy: opt.strategy.map_or_else(Default::default, Into::into),
-        exclude_newer: opt.exclude_newer.map(Into::into),
+        constraints,
+        timeout: opt.solver.timeout(),
+        strategy: opt.solver.strategy(),
+        channel_priority: opt.solver.channel_priority(),
+        exclude_newer: opt.solver.exclude_newer(),
         ..SolverTask::from_iter(&repo_data)
     };
 
     // Next, use a solver to solve this specific problem. This provides us with all
     // the operations we need to apply to our environment to bring it up to
     // date.
-    let solver_result = wrap_in_progress("solving", move || match opt.solver.unwrap_or_default() {
-        Solver::Resolvo => resolvo::Solver.solve(solver_task),
-        Solver::LibSolv => libsolv_c::Solver.solve(solver_task),
-    })
-    .into_diagnostic()?;
+    let solver_result =
+        wrap_in_progress("solving", || opt.solver.solve(solver_task)).into_diagnostic()?;
 
     let mut required_packages: Vec<RepoDataRecord> = solver_result.records;
-
-    if opt.no_deps {
-        required_packages.retain(|r| specs.iter().any(|s| s.matches(&r.package_record)));
-    } else if opt.only_deps {
-        required_packages.retain(|r| !specs.iter().any(|s| s.matches(&r.package_record)));
-    };
+    opt.solver.filter_deps_mode(&mut required_packages, &specs);
 
     if opt.dry_run {
         // Construct a transaction to
@@ -320,6 +183,7 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
     let install_start = Instant::now();
     let result = Installer::new()
         .with_download_client(download_client)
+        .with_max_concurrent_requests(config.concurrency.downloads)
         .with_target_platform(install_platform)
         .with_installed_packages(installed_packages)
         .with_execute_link_scripts(true)

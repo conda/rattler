@@ -1,6 +1,6 @@
 [package]
 name = "rattler_upload"
-version = "0.8.1"
+version = "0.10.8"
 edition.workspace = true
 authors = [
   "Wolf Vollprecht <w.vollprecht@gmail.com>",
@@ -51,6 +51,7 @@ futures = { workspace = true }
 indicatif = { workspace = true }
 opendal = { workspace = true, optional = true, default-features = false, features = [
   "services-s3",
+  "executors-tokio",
 ] }
 reqwest-retry = { workspace = true }
 tokio-util = { workspace = true, features = ["codec", "compat"] }

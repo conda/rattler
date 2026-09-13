@@ -63,8 +63,12 @@ pub enum PrefixUploadError {
     ))]
     AttestationWithApiKey,
 
-    /// The server returned an authentication error (HTTP 401 or 403).
-    #[error("authentication failed (HTTP {status})")]
+    /// The server returned an authentication error (HTTP 401).
+    #[error("authentication failed (HTTP {status}): {body}")]
+    #[diagnostic(help(
+        "make sure your API key is valid and has not expired (e.g. check the \
+         PREFIX_API_KEY environment variable or your keychain entry)"
+    ))]
     AuthenticationFailed {
         /// The HTTP status code.
         status: u16,
@@ -72,22 +76,40 @@ pub enum PrefixUploadError {
         body: String,
     },
 
+    /// The server rejected the upload (HTTP 403), e.g. because the API key
+    /// lacks write access to the channel or a channel setting disallows the
+    /// upload.
+    #[error("the server rejected the upload (HTTP {status}): {body}")]
+    #[diagnostic(help(
+        "make sure your API key has write access to the channel and that the \
+         channel settings allow this upload"
+    ))]
+    Forbidden {
+        /// The HTTP status code.
+        status: u16,
+        /// The response body.
+        body: String,
+    },
+
     /// The package already exists on the server (HTTP 409).
-    #[error("package already exists (HTTP 409)")]
+    #[error("package already exists (HTTP 409): {body}")]
+    #[diagnostic(help(
+        "use --skip-existing to skip packages that already exist, or --force to overwrite them"
+    ))]
     Conflict {
         /// The response body.
         body: String,
     },
 
     /// The server returned an unprocessable entity error (HTTP 422).
-    #[error("unprocessable entity (HTTP 422)")]
+    #[error("unprocessable entity (HTTP 422): {body}")]
     UnprocessableEntity {
         /// The response body.
         body: String,
     },
 
     /// The server returned a client error (HTTP 400, 404, or 413).
-    #[error("client error (HTTP {status})")]
+    #[error("client error (HTTP {status}): {body}")]
     ClientError {
         /// The HTTP status code.
         status: u16,
@@ -96,7 +118,7 @@ pub enum PrefixUploadError {
     },
 
     /// The upload failed after exhausting retries.
-    #[error("upload failed after retries (HTTP {status})")]
+    #[error("upload failed after retries (HTTP {status}): {body}")]
     ServerError {
         /// The HTTP status code.
         status: u16,
@@ -112,6 +134,24 @@ pub enum PrefixUploadError {
 impl From<miette::Report> for PrefixUploadError {
     fn from(report: miette::Report) -> Self {
         PrefixUploadError::Other(report)
+    }
+}
+
+/// Maximum number of characters of a server response body to include in an
+/// error message.
+const MAX_BODY_LENGTH: usize = 512;
+
+/// Prepares a server response body for inclusion in an error message: trims
+/// whitespace, truncates overly long bodies, and substitutes a placeholder
+/// when the server returned nothing useful.
+fn sanitize_response_body(body: String) -> String {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return "<no response body>".to_string();
+    }
+    match trimmed.char_indices().nth(MAX_BODY_LENGTH) {
+        Some((idx, _)) => format!("{}…", &trimmed[..idx]),
+        None => trimmed.to_string(),
     }
 }
 
@@ -412,12 +452,18 @@ pub async fn upload_package_to_prefix(
             }
 
             let status = response.status();
-            let body = response.text().await.into_diagnostic()?;
+            let body = sanitize_response_body(response.text().await.into_diagnostic()?);
 
             // Non-retry status codes
             match status {
-                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+                StatusCode::UNAUTHORIZED => {
                     return Err(PrefixUploadError::AuthenticationFailed {
+                        status: status.as_u16(),
+                        body,
+                    });
+                }
+                StatusCode::FORBIDDEN => {
+                    return Err(PrefixUploadError::Forbidden {
                         status: status.as_u16(),
                         body,
                     });
@@ -494,6 +540,13 @@ mod test {
 
     async fn unauthorized(_body: axum::body::Bytes) -> StatusCode {
         StatusCode::UNAUTHORIZED
+    }
+
+    async fn forbidden_v3_disabled(_body: axum::body::Bytes) -> (StatusCode, &'static str) {
+        (
+            StatusCode::FORBIDDEN,
+            "Channel 'test-channel' does not allow v3 repodata uploads",
+        )
     }
 
     async fn conflict(_body: axum::body::Bytes) -> StatusCode {
@@ -598,6 +651,47 @@ mod test {
             ),
             "expected AuthenticationFailed, got: {err:?}"
         );
+        assert_eq!(
+            err.to_string(),
+            "authentication failed (HTTP 401): <no response body>"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_prefix_upload_forbidden_shows_server_message() {
+        let router = Router::new().fallback(forbidden_v3_disabled);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let prefix_data = make_prefix_data(url, false);
+        let err = upload_package_to_prefix(&storage, &vec![test_package_path()], prefix_data)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, PrefixUploadError::Forbidden { status: 403, .. }),
+            "expected Forbidden, got: {err:?}"
+        );
+        assert_eq!(
+            err.to_string(),
+            "the server rejected the upload (HTTP 403): Channel 'test-channel' does not allow v3 repodata uploads"
+        );
+    }
+
+    #[test]
+    fn test_sanitize_response_body() {
+        use super::sanitize_response_body;
+        assert_eq!(sanitize_response_body(String::new()), "<no response body>");
+        assert_eq!(
+            sanitize_response_body("  \n\t ".to_string()),
+            "<no response body>"
+        );
+        assert_eq!(
+            sanitize_response_body("  some error \n".to_string()),
+            "some error"
+        );
+        let long = "x".repeat(1000);
+        let sanitized = sanitize_response_body(long);
+        assert_eq!(sanitized.chars().count(), 513);
+        assert!(sanitized.ends_with('…'));
     }
 
     #[tokio::test]

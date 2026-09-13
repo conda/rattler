@@ -1,0 +1,12 @@
+# Legacy snake_case spellings must keep parsing (serde aliases).
+default_channels = ["conda-forge"]
+authentication_override_file = "/path/to/auth.json"
+tls_no_verify = true
+tls_root_certs = "system"
+allow_symbolic_links = false
+allow_hard_links = true
+allow_ref_links = false
+
+[repodata_config]
+disable_bzip2 = true
+disable_zstd = true

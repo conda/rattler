@@ -8,6 +8,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: release-plz-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # Release unpublished packages.
   release-plz-release:
@@ -52,7 +56,7 @@ jobs:
         id: crates-io-auth
         uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
       - name: Run release-plz
-        uses: release-plz/action@e8792575c7f2366cf6ff3ccc33ead9ace5b691c7 # v0.5.130
+        uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
         with:
           command: release
         env:
@@ -66,9 +70,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    concurrency:
-      group: release-plz-${{ github.ref }}
-      cancel-in-progress: false
     steps:
       - name: Obtain GitHub app token
         id: octo-sts
@@ -102,9 +103,22 @@ jobs:
           git config --global --list
 
       - name: Run release-plz
-        uses: release-plz/action@e8792575c7f2366cf6ff3ccc33ead9ace5b691c7 # v0.5.130
+        uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
         id: release-plz
         with:
           command: release-pr
         env:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
+
+      - name: Update bindings lockfiles
+        if: steps.release-plz.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          PR: ${{ steps.release-plz.outputs.pr }}
+        run: |
+          gh pr checkout "$(jq -r .number <<<"$PR")"
+          cargo update --manifest-path py-rattler/Cargo.toml --workspace
+          cargo update --manifest-path js-rattler/Cargo.toml --workspace
+          git add py-rattler/Cargo.lock js-rattler/Cargo.lock
+          git diff --cached --quiet || git commit -m "chore: update bindings lockfiles"
+          git push

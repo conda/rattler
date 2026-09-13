@@ -18,12 +18,20 @@ requires-pixi = ">=0.67.0"
 # Use the same Rust version everywhere
 rust_compiler_version = ["1.95.0"]
 
+# The build backend has to match the build API version that pixi hands out, so
+# the workspace cutoff cannot hold it back. On Windows the MSVC runtime it links
+# against has to come along.
+[exclude-newer]
+pixi-build-rust = "0d"
+vc14_runtime = "0d"
+vcomp14 = "0d"
+
 [tasks]
 build = "cargo build"
 check = "cargo check"
 # libsolv compilation cannot find pixi's clang for some reason
 # so we skip that test for now
-test = "cargo nextest run --workspace --no-default-features --features=indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,edit,rattler_config,cli-tools -E 'not test(libsolv_bindings_up_to_date)' --no-fail-fast"
+test = "cargo nextest run --workspace --no-default-features --features=indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,edit,rattler_config,cli-tools,rattler_conda_types/semver -E 'not test(libsolv_bindings_up_to_date)' --no-fail-fast"
 rattler = "cargo run --bin rattler --release --"
 doc = "RUSTDOCFLAGS='-Dwarnings -Wunreachable-pub' cargo doc --no-deps --all --all-features"
 
@@ -56,12 +64,14 @@ typos = ">=1.23.1,<2"
 dprint = ">=0.50.0,<0.51"
 lefthook = ">=2.0.11,<3"
 actionlint = ">=1.7.7,<2"
+zizmor = ">=1.29.0,<2"
 shellcheck = ">=0.10.0,<0.11"
 [feature.lint.target.unix.dependencies]
 vouch = "*"
 
 [feature.lint.tasks]
 actionlint = { cmd = "actionlint", env = { SHELLCHECK_OPTS = "-e SC2086 -e SC2046 -e SC2028" } }
+zizmor-check = { cmd = "zizmor --no-progress --min-severity high --fix --offline .", description = "Audit GitHub Actions workflows with zizmor" }
 dprint-check = { cmd = "dprint check --log-level=silent", description = "Check formatting with dprint" }
 dprint-fmt = { cmd = "dprint fmt --incremental=false", description = "Format with dprint" }
 lefthook = { cmd = "lefthook", description = "Run lefthook" }
@@ -81,6 +91,21 @@ cargo-clippy = "cargo clippy --all-targets --workspace -- -D warnings -Dclippy::
 
 [environments]
 lint = { features = ["lint"], solve-group = "default" }
+
+#------------------------------
+# Breaking API change detection
+#------------------------------
+[feature.semver-check.dependencies]
+nushell = "*"
+
+[feature.semver-check.tasks]
+breaking-changes = "nu scripts/check-breaking-changes.nu"
+test-breaking-changes = "nu scripts/test-breaking-changes.nu"
+update-breaking-change-comment = "nu scripts/update-breaking-change-comment.nu"
+
+[environments.semver-check]
+features = ["semver-check"]
+no-default-feature = true
 
 #------------------------------
 # Minio E2E test

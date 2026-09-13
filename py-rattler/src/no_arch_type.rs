@@ -6,7 +6,7 @@ use std::{
 use pyo3::{basic::CompareOp, pyclass, pymethods};
 use rattler_conda_types::NoArchType;
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct PyNoArchType {
     pub inner: NoArchType,

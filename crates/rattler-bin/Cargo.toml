@@ -1,6 +1,6 @@
 [package]
 name = "rattler-bin"
-version = "0.2.1"
+version = "0.3.0"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust binary for common Conda operations"
@@ -31,25 +31,29 @@ rustls = [
   "rattler_networking/rustls",
   "rattler_cache/rustls",
 ]
-s3 = ["rattler_networking/s3", "rattler_upload/s3"]
+s3 = [
+  "rattler_networking/s3",
+  "rattler_networking/rattler_config",
+  "rattler_upload/s3",
+]
 gcs = ["rattler_networking/gcs"]
 oauth = ["rattler/oauth"]
 
 [dependencies]
-anyhow = { workspace = true }
 jiff = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 clap_complete = { workspace = true }
 clap_complete_nushell = { workspace = true }
 console = { workspace = true, features = ["windows-console-colors"] }
+dirs = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }
 indicatif = { workspace = true }
 miette = { workspace = true }
-once_cell = { workspace = true }
 rattler = { workspace = true, features = ["indicatif", "cli-tools", "auth-interactive"] }
 rattler_conda_types = { workspace = true, default-features = false }
+rattler_config = { workspace = true, default-features = false }
 rattler_index = { workspace = true, default-features = false }
 rattler_networking = { workspace = true, default-features = false, features = [
   "system-integration",
@@ -72,6 +76,8 @@ rattler_upload = { workspace = true }
 rattler_shell = { workspace = true, default-features = false }
 reqwest = { workspace = true, features = ["stream", "query"] }
 reqwest-middleware = { workspace = true }
+reqwest-retry = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }
@@ -82,3 +88,6 @@ sha2 = { workspace = true }
 tracing = { workspace = true }
 dunce = { workspace = true }
 regex = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }

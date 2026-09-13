@@ -91,7 +91,7 @@ impl DownloadReporter for ProgressReporter {
         bytes_downloaded: usize,
         total_bytes: Option<usize>,
     ) {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let args = PyTuple::new(py, [Some(bytes_downloaded), total_bytes])
                 .expect("Failed to create tuple");
             self.callback.call1(py, args).expect("Callback failed!");

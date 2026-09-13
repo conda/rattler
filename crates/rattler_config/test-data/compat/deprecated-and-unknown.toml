@@ -1,0 +1,17 @@
+# Legacy values, deprecated keys and typos: everything here must PARSE.
+# Deprecated/unknown keys surface in the unused-keys set (warnings), never
+# as hard errors — a user's old config must keep working.
+default-channels = ["conda-forge"]
+tls-root-certs = "native" # legacy spelling, alias for "system"
+definitely-a-typo = 1
+
+# keys of other tools / extensions this consumer does not know about:
+pinning-strategy = "semver"
+change-ps1 = true
+
+[repodata-config]
+disable-bzip2 = true
+disable-jlap = true # removed long ago, must only warn
+
+[repodata-config."https://prefix.dev"]
+disable-jlap = true # also tolerated per-channel

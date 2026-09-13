@@ -1120,6 +1120,34 @@ mod tests {
         test_run_activation(crate::shell::Bash::default().into(), false);
     }
 
+    /// Regression test for prefix-dev/pixi#6575: a post-activation env
+    /// var whose value contains a newline must survive the env dump /
+    /// parse round-trip instead of being truncated at the newline.
+    #[test]
+    #[cfg(unix)]
+    fn test_run_activation_preserves_newline_in_env_var() {
+        let environment_dir = tempfile::TempDir::new().unwrap();
+        let mut activator = Activator::from_path(
+            environment_dir.path(),
+            shell::Bash::default(),
+            Platform::current(),
+        )
+        .unwrap();
+        activator.post_activation_env_vars = IndexMap::from_iter([(
+            String::from("ENV_WITH_NEWLINE"),
+            String::from("hello\nworld"),
+        )]);
+
+        let activation_env = activator
+            .run_activation(ActivationVariables::default(), None)
+            .unwrap();
+
+        assert_eq!(
+            activation_env.get("ENV_WITH_NEWLINE").map(String::as_str),
+            Some("hello\nworld")
+        );
+    }
+
     #[test]
     #[cfg(target_os = "macos")]
     fn test_run_activation_zsh() {

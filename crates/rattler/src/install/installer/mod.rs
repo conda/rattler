@@ -61,6 +61,17 @@ pub struct LinkOptions {
     pub allow_ref_links: Option<bool>,
 }
 
+#[cfg(feature = "rattler_config")]
+impl From<&rattler_config::config::CommonConfig> for LinkOptions {
+    fn from(config: &rattler_config::config::CommonConfig) -> Self {
+        Self {
+            allow_symbolic_links: config.allow_symbolic_links,
+            allow_hard_links: config.allow_hard_links,
+            allow_ref_links: config.allow_ref_links,
+        }
+    }
+}
+
 /// An installer that can install packages into a prefix.
 #[derive(Default)]
 pub struct Installer {
@@ -180,6 +191,36 @@ impl Installer {
     /// but modifies an existing instance.
     pub fn set_concurrent_requests_semaphore(&mut self, semaphore: Arc<Semaphore>) -> &mut Self {
         self.concurrent_requests_semaphore = Some(semaphore);
+        self
+    }
+
+    /// Apply the shared rattler configuration (see [`rattler_config`]) to
+    /// this installer: the link options are derived from the
+    /// `allow-*-links` keys, the maximum number of concurrent requests from
+    /// `concurrency.downloads`, and link-script execution from
+    /// `run-post-link-scripts`.
+    ///
+    /// Accepts a [`rattler_config::config::CommonConfig`]; a
+    /// `&ConfigBase<T>` of any extension coerces into it.
+    #[cfg(feature = "rattler_config")]
+    #[must_use]
+    pub fn with_config(mut self, config: &rattler_config::config::CommonConfig) -> Self {
+        self.set_config(config);
+        self
+    }
+
+    /// Apply the shared rattler configuration to this installer. See
+    /// [`Installer::with_config`].
+    #[cfg(feature = "rattler_config")]
+    pub fn set_config(&mut self, config: &rattler_config::config::CommonConfig) -> &mut Self {
+        self.set_link_options(LinkOptions::from(config));
+        self.set_max_concurrent_requests(config.concurrency.downloads);
+        if let Some(run_post_link_scripts) = &config.run_post_link_scripts {
+            self.set_execute_link_scripts(matches!(
+                run_post_link_scripts,
+                rattler_config::config::run_post_link_scripts::RunPostLinkScripts::Insecure
+            ));
+        }
         self
     }
 

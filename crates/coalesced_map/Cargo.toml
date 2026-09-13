@@ -1,6 +1,6 @@
 [package]
 name = "coalesced_map"
-version = "0.1.3"
+version = "0.1.4"
 edition.workspace = true
 license.workspace = true
 homepage.workspace = true

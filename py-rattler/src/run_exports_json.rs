@@ -10,7 +10,7 @@ use crate::{error::PyRattlerError, networking::client::PyClientWithMiddleware};
 /// A representation of the `run_exports.json` file found in package archives.
 ///
 /// The `run_exports.json` file contains information about the run exports of a package
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyRunExportsJson {
@@ -117,7 +117,7 @@ impl PyRunExportsJson {
                 >(client.into(), url)
                 .await;
 
-            Python::with_gil(|py| match run_exports_json {
+            Python::attach(|py| match run_exports_json {
                 Ok(r) => Ok(Some(Py::new(py, PyRunExportsJson::from(r))?.into_any())),
                 Err(rattler_package_streaming::ExtractError::MissingComponent) => Ok(None),
                 Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string())),

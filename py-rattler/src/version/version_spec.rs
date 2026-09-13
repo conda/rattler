@@ -6,7 +6,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyVersionSpec {

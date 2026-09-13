@@ -550,7 +550,9 @@ mod test {
     // Extras present.
     #[case("numpy[extras=[gpu]]", "numpy", &["gpu"])]
     #[case("numpy[extras=[gpu, mkl]]", "numpy", &["gpu", "mkl"])]
-    #[case("Numpy[extras=[GPU]]", "numpy", &["GPU"])]
+    // Uppercase group names violate the CEP 44 grammar ([a-z0-9_.+-]); the
+    // parser rejects them, so extras fall back to empty (name still extracted).
+    #[case("Numpy[extras=[GPU]]", "numpy", &[])]
     // Extras combined with other bracket keys.
     #[case(
         r#"aiohttp[extras=[speedups], build="py*"]"#,

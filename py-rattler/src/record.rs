@@ -8,9 +8,10 @@ use pyo3::basic::CompareOp;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::PyAnyMethods;
 use pyo3::{
-    Bound, FromPyObject, PyAny, PyErr, PyResult, Python, exceptions::PyTypeError, intern, pyclass,
-    pymethods, types::PyBytes,
+    Bound, PyAny, PyErr, PyResult, Python, exceptions::PyTypeError, intern, pyclass, pymethods,
+    types::PyBytes,
 };
+use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::{
     Flag, NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, UrlOrPath, VersionWithSource,
     WhlPackageRecord,
@@ -38,7 +39,7 @@ use crate::{
 ///
 /// `PyO3` cannot expose tagged enums directly, to achieve this we use the
 /// `PyRecord` wrapper pyclass on top of `RecordInner`.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyRecord {
@@ -137,7 +138,7 @@ impl PyRecord {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct PyLink {
     #[pyo3(get, set)]
@@ -610,7 +611,7 @@ impl PyRecord {
         if let Some(ts) = timestamp {
             self.as_package_record_mut().timestamp = Some(TimestampMs::from_timestamp_millis(
                 jiff::Timestamp::from_millisecond(ts)
-                    .map_err(|_| PyValueError::new_err("Invalid timestamp"))?,
+                    .map_err(|err| PyValueError::new_err(format!("Invalid timestamp: {err}")))?,
             ));
         } else {
             self.as_package_record_mut().timestamp = None;
@@ -846,7 +847,7 @@ impl<'a> TryFrom<Bound<'a, PyAny>> for PyRecord {
             return Err(PyTypeError::new_err("'_record' is invalid"));
         }
 
-        PyRecord::extract_bound(&inner)
+        Ok(inner.extract::<PyRecord>()?)
     }
 }
 
@@ -1018,6 +1019,25 @@ impl PyRecord {
         Ok(PackageRecord::from_index_json(index, size, sha256, md5)
             .map(Into::into)
             .map_err(PyRattlerError::from)?)
+    }
+
+    /// Builds a `PyRecord` (as a `RepoDataRecord`) directly from a local
+    /// `.conda` or `.tar.bz2` package file, without requiring a channel or
+    /// `repodata.json`.
+    ///
+    /// The resulting record's `url` is a `file://` URL pointing at the given
+    /// path, and `channel` is left unset.
+    #[staticmethod]
+    fn from_package_archive(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, PyAny>> {
+        future_into_py(py, async move {
+            let record = rattler_package_streaming::fs::repodata_record_from_package_archive(path)
+                .await
+                .map_err(PyRattlerError::from)?;
+
+            Ok(Self {
+                inner: RecordInner::RepoData(Arc::new(record)),
+            })
+        })
     }
 
     /// Validate that the given package records are valid w.r.t. 'depends' and

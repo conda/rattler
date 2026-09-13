@@ -117,10 +117,6 @@ impl Serialize for PackageFormatAndCompression {
 }
 
 impl Config for BuildConfig {
-    fn get_extension_name(&self) -> String {
-        "build".to_string()
-    }
-
     fn merge_config(self, other: &Self) -> Result<Self, MergeError> {
         Ok(Self {
             package_format: other
@@ -136,6 +132,6 @@ impl Config for BuildConfig {
     }
 
     fn keys(&self) -> Vec<String> {
-        vec!["package_format".to_string()]
+        vec!["package-format".to_string()]
     }
 }

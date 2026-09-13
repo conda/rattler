@@ -32,6 +32,8 @@ struct SourceLocationData<'a> {
     pub tag: Option<Cow<'a, str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub subdirectory: Option<Cow<'a, str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lfs: Option<bool>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<Cow<'a, str>>,
@@ -58,6 +60,7 @@ impl<'a> From<&'a UrlSourceLocation> for SourceLocationData<'a> {
             branch: None,
             tag: None,
             subdirectory: value.subdirectory.as_deref().map(Cow::Borrowed),
+            lfs: None,
             path: None,
         }
     }
@@ -86,6 +89,7 @@ impl<'a> From<&'a GitSourceLocation> for SourceLocationData<'a> {
                 None
             },
             subdirectory: value.subdirectory.as_deref().map(Cow::Borrowed),
+            lfs: value.lfs,
             path: None,
         }
     }
@@ -102,6 +106,7 @@ impl<'a> From<&'a PathSourceLocation> for SourceLocationData<'a> {
             branch: None,
             tag: None,
             subdirectory: None,
+            lfs: None,
             path: Some(Cow::Borrowed(value.path.as_str())),
         }
     }
@@ -133,6 +138,7 @@ impl<'a> TryFrom<SourceLocationData<'a>> for SourceLocation {
             branch,
             tag,
             subdirectory,
+            lfs,
         } = value;
 
         let count = [url.is_some(), path.is_some(), git.is_some()]
@@ -172,6 +178,7 @@ impl<'a> TryFrom<SourceLocationData<'a>> for SourceLocation {
                 git,
                 rev,
                 subdirectory: subdirectory.map(Cow::into_owned),
+                lfs,
             }))
         } else {
             unreachable!("we already checked that exactly one of url, path or git is set")

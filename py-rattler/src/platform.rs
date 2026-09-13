@@ -9,7 +9,7 @@ use crate::error::PyRattlerError;
 /// Arch                ///
 ///////////////////////////
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct PyArch {
     pub inner: Arch,
@@ -52,7 +52,7 @@ impl PyArch {
 /// Platform            ///
 ///////////////////////////
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct PyPlatform {

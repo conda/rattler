@@ -3,19 +3,49 @@ from __future__ import annotations
 import os
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Iterable, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Iterable, List, Literal, Optional, Union
 
 from rattler.channel.channel import Channel
+from rattler.config import Config
 from rattler.match_spec.match_spec import MatchSpec
 from rattler.networking.client import Client
 from rattler.networking.fetch_repo_data import CacheAction
 from rattler.package.package_name import PackageName
 from rattler.platform.platform import Platform, PlatformLiteral
-from rattler.rattler import PyGateway, PyMatchSpec, PySourceConfig
+from rattler.rattler import PyChannelNotice, PyGateway, PyMatchSpec, PySourceConfig
 from rattler.repo_data.record import RepoDataRecord
+from rattler.repo_data.removed_package import RemovedPackage
+from rattler.repo_data.repo_data import ChannelRelations
+from rattler.repo_data.who_needs import Dependent, _target_to_py
 
 if TYPE_CHECKING:
+    from rattler.repo_data.package_record import PackageRecord
     from rattler.repo_data.source import RepoDataSource
+    from rattler.virtual_package.generic import GenericVirtualPackage
+
+
+ChannelRelationsMode = Literal["disabled", "warn", "strict"]
+"""How a gateway query should handle [CEP-42] `channel_relations`:
+
+* `'disabled'`: ignore declared relations; use only the user-supplied
+  channels. Setting ``channel_relations_max_depth=0`` has the same effect.
+* `'warn'` (default): follow relations recursively but tolerate problems:
+  cycles, malformed metadata (non-``../`` references, self-relations,
+  ``base==overrides``), depth-exceeded chains, and failed discovery fetches
+  surface via Python's standard :mod:`warnings` module as
+  :class:`rattler.exceptions.GatewayWarning` (a ``UserWarning`` subclass)
+  rather than aborting. **Deviates from CEP-42**, which mandates aborting
+  on cycles and malformed metadata.
+* `'strict'`: follow relations recursively and abort on any violation,
+  raising :class:`GatewayError`. CEP-42 compliant.
+
+Custom :class:`RepoDataSource` instances passed in ``sources`` are not subject
+to CEP-42 reordering — they keep their caller-specified position. Discovered
+transitive channels are slotted next to the user channel that introduced them,
+in CEP-42 priority order.
+
+[CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
+"""
 
 
 class _RepoDataSourceAdapter:
@@ -102,6 +132,67 @@ class SourceConfig:
         )
 
 
+@dataclass(frozen=True)
+class ChannelNotice:
+    """A CEP-6 notice published by a conda channel."""
+
+    channel: str
+    id: str
+    message: str
+    level: Literal["info", "warning", "critical"]
+    created_at: Optional[str]
+    expires_at: Optional[str]
+    interval: Optional[int]
+
+    @classmethod
+    def _from_py(cls, notice: PyChannelNotice) -> ChannelNotice:
+        return cls(
+            channel=notice.channel,
+            id=notice.id,
+            message=notice.message,
+            level=notice.level,
+            created_at=notice.created_at,
+            expires_at=notice.expires_at,
+            interval=notice.interval,
+        )
+
+
+class GatewayQueryResult(list[List[RepoDataRecord]]):
+    """Repodata, removed packages, and CEP-6 notices returned by :meth:`Gateway.query`.
+
+    This remains a list for compatibility with earlier releases.
+    """
+
+    def __init__(
+        self,
+        repodata: List[List[RepoDataRecord]],
+        notices: List[ChannelNotice],
+        removed: Optional[List[List[RemovedPackage]]] = None,
+    ) -> None:
+        super().__init__(repodata)
+        self.repodata = self
+        self.notices = notices
+        self.removed: List[List[RemovedPackage]] = removed if removed is not None else [[] for _ in repodata]
+        """Packages the sources list as removed, one list per entry in ``repodata``.
+
+        Every removed entry of a package name the query fetched is included; the
+        match specs of the query do not filter this list. Removed packages never
+        appear in ``repodata``.
+        """
+
+
+class GatewayNamesResult(list[PackageName]):
+    """Package names and CEP-6 notices returned by :meth:`Gateway.names`.
+
+    This remains a list for compatibility with earlier releases.
+    """
+
+    def __init__(self, names: List[PackageName], notices: List[ChannelNotice]) -> None:
+        super().__init__(names)
+        self.names = self
+        self.notices = notices
+
+
 class Gateway:
     """
     The gateway manages all the quircks and complex bits of efficiently acquiring
@@ -161,13 +252,54 @@ class Gateway:
             show_progress=show_progress,
         )
 
+    @classmethod
+    def from_config(
+        cls,
+        config: Config,
+        cache_dir: Optional[os.PathLike[str]] = None,
+        client: Optional[Client] = None,
+        show_progress: bool = False,
+    ) -> Gateway:
+        """Create a gateway using repodata and networking settings from ``config``.
+
+        ``repodata-config`` controls the enabled repodata formats and its
+        per-channel overrides, while ``concurrency.downloads`` controls the
+        request limit. If ``client`` is omitted, a config-aware standard
+        client is created, applying mirrors, S3, proxies, TLS, and
+        authentication settings too.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import Config
+        >>> gateway = Gateway.from_config(Config.from_toml('''
+        ...     [repodata-config]
+        ...     disable-sharded = true
+        ... '''))
+        >>> gateway
+        Gateway()
+        >>>
+        ```
+        """
+        gateway = cls.__new__(cls)
+        gateway._gateway = PyGateway.from_config(
+            config._inner,
+            cache_dir=cache_dir,
+            client=client._client if client is not None else None,
+            show_progress=show_progress,
+        )
+        return gateway
+
     async def query(
         self,
         sources: Iterable[Union[Channel, str, RepoDataSource]],
         platforms: Iterable[Platform | PlatformLiteral],
         specs: Iterable[MatchSpec | PackageName | str],
         recursive: bool = True,
-    ) -> List[List[RepoDataRecord]]:
+        channel_relations: Optional[ChannelRelationsMode] = None,
+        channel_relations_max_depth: Optional[int] = None,
+        channel_notices: bool = False,
+    ) -> GatewayQueryResult:
         """Queries the gateway for repodata from channels and custom sources.
 
         If `recursive` is `True` the gateway will recursively fetch the dependencies of the
@@ -193,10 +325,29 @@ class Gateway:
             platforms: The platforms to query.
             specs: The specs to query.
             recursive: Whether recursively fetch dependencies or not.
+            channel_relations: How to treat CEP-42 ``channel_relations`` metadata. ``None``
+                               uses the gateway default (``"warn"``). Non-fatal problems
+                               are reported via Python's ``warnings`` module as
+                               :class:`rattler.exceptions.GatewayWarning`.
+            channel_relations_max_depth: Maximum recursion depth when following
+                                         ``channel_relations``. ``None`` uses the
+                                         default (10). ``0`` behaves like
+                                         ``channel_relations="disabled"``.
+            channel_notices: Whether to fetch CEP-6 notices for this query.
 
         Returns:
-            A list of lists of `RepoDataRecord`s. The outer list contains the results for each
-            source in the same order they are provided in the `sources` argument.
+            A list of lists of `RepoDataRecord`s. The outer list contains one entry per
+            queried source, in the order the sources were provided. When CEP-42
+            ``channel_relations`` are followed (the default) and a channel declares
+            relations, extra entries for the transitively discovered channels are
+            inserted next to the channel that referenced them, with a declared ``base``
+            placed before it. Pass ``channel_relations="disabled"`` (or
+            ``channel_relations_max_depth=0``) to guarantee a strict one-to-one,
+            positional correspondence with `sources`.
+
+            The result also carries ``removed``: for every entry in the list, the
+            packages the source lists as removed for the fetched package names.
+            Use it to detect that a previously locked package was yanked.
 
         Examples
         --------
@@ -208,7 +359,7 @@ class Gateway:
         >>>
         ```
         """
-        py_records = await self._gateway.query(
+        py_records, py_removed, py_notices = await self._gateway.query(
             sources=_convert_sources(sources),
             platforms=[
                 platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
@@ -219,22 +370,82 @@ class Gateway:
                 for spec in specs
             ],
             recursive=recursive,
+            channel_notices=channel_notices,
+            channel_relations=channel_relations,
+            channel_relations_max_depth=channel_relations_max_depth,
         )
 
-        # Convert the records into python objects
-        return [[RepoDataRecord._from_py_record(record) for record in records] for records in py_records]
+        # Convert the records, removed packages, and notices into Python objects.
+        return GatewayQueryResult(
+            [[RepoDataRecord._from_py_record(record) for record in records] for records in py_records],
+            [ChannelNotice._from_py(notice) for notice in py_notices],
+            [[RemovedPackage._from_py(removed) for removed in removed_packages] for removed_packages in py_removed],
+        )
+
+    async def who_needs(
+        self,
+        sources: Iterable[Union[Channel, str, RepoDataSource]],
+        platforms: Iterable[Platform | PlatformLiteral],
+        target: Union[str, PackageName, "PackageRecord", "GenericVirtualPackage"],
+    ) -> List[Dependent]:
+        """Returns the reverse dependencies of `target` in the given sources.
+
+        Scans every package of the queried sources and platforms entirely
+        in Rust and converts only the matching records to Python objects.
+        A record references `target` when one of its `depends`,
+        `constrains` or `extra_depends` entries, or one of its run
+        exports, matches it; the `kind` of each result tells which field
+        matched.
+
+        How dependencies are matched depends on the target: a package name
+        (or `str`) reports every record with a dependency entry on that
+        name, while a concrete `PackageRecord` or `GenericVirtualPackage`
+        only reports dependents whose dependency match spec matches it.
+
+        Channel sources always use full repodata, regardless of the
+        gateway's sharding configuration, to avoid fetching a shard for
+        every package name in the channel.
+
+        Arguments:
+            sources: The sources to query. Can be channels (by name, URL, or Channel object)
+                     or custom RepoDataSource implementations.
+            platforms: The platforms to query.
+            target: The package to find reverse dependencies for.
+
+        Returns:
+            The records that reference `target`, together with the
+            dependency string and kind through which they reference it.
+        """
+        py_dependents = await self._gateway.who_needs(
+            sources=_convert_sources(sources),
+            platforms=[
+                platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
+                for platform in platforms
+            ],
+            target=_target_to_py(target),
+        )
+        return [Dependent._from_py_dependent(py_dependent) for py_dependent in py_dependents]
 
     async def names(
         self,
         sources: Iterable[Union[Channel, str, RepoDataSource]],
         platforms: Iterable[Platform | PlatformLiteral],
-    ) -> List[PackageName]:
+        channel_relations: Optional[ChannelRelationsMode] = None,
+        channel_relations_max_depth: Optional[int] = None,
+        channel_notices: bool = False,
+    ) -> GatewayNamesResult:
         """Queries all the names of packages in channels or custom sources.
 
         Arguments:
             sources: The sources to query. Can be channels (by name, URL, or Channel object)
                      or custom RepoDataSource implementations.
             platforms: The platforms to query.
+            channel_relations: How to treat CEP-42 ``channel_relations`` metadata. ``None``
+                               uses the gateway default (``"warn"``).
+            channel_relations_max_depth: Maximum recursion depth when following
+                                         ``channel_relations``. ``None`` uses the
+                                         default (10).
+            channel_notices: Whether to fetch CEP-6 notices for this query.
 
         Returns:
             A list of package names that are present in the given subdirectories.
@@ -251,16 +462,59 @@ class Gateway:
         ```
         """
 
-        py_package_names = await self._gateway.names(
+        py_package_names, py_notices = await self._gateway.names(
             sources=_convert_sources(sources),
             platforms=[
                 platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
                 for platform in platforms
             ],
+            channel_notices=channel_notices,
+            channel_relations=channel_relations,
+            channel_relations_max_depth=channel_relations_max_depth,
         )
 
-        # Convert the records into python objects
-        return [PackageName._from_py_package_name(package_name) for package_name in py_package_names]
+        # Convert the names and notices into Python objects.
+        return GatewayNamesResult(
+            [PackageName._from_py_package_name(package_name) for package_name in py_package_names],
+            [ChannelNotice._from_py(notice) for notice in py_notices],
+        )
+
+    async def channel_notices(
+        self,
+        channels: Iterable[Channel | str],
+    ) -> List[ChannelNotice]:
+        """Fetch CEP-6 notices for the given channels.
+
+        Results reuse the same expiration-aware cache as regular queries.
+        """
+        py_notices = await self._gateway.channel_notices(
+            [channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for channel in channels]
+        )
+        return [ChannelNotice._from_py(notice) for notice in py_notices]
+
+    async def channel_relations(
+        self,
+        channel: Channel | str,
+        platform: Platform | PlatformLiteral,
+    ) -> Optional[ChannelRelations]:
+        """Returns the CEP-42 ``channel_relations`` declared by the given
+        ``(channel, platform)`` subdirectory, or ``None`` if none were declared
+        or the subdirectory doesn't exist.
+
+        Reuses the gateway's internal subdir cache, so if the pair has
+        already been fetched by a `query` this is free.
+
+        Arguments:
+            channel: The channel to read relations from.
+            platform: The platform whose subdir to inspect.
+        """
+        py_relations = await self._gateway.channel_relations(
+            channel._channel if isinstance(channel, Channel) else Channel(channel)._channel,
+            platform._inner if isinstance(platform, Platform) else Platform(platform)._inner,
+        )
+        if py_relations is None:
+            return None
+        return ChannelRelations._from_inner(py_relations)
 
     def clear_repodata_cache(
         self,
@@ -319,11 +573,14 @@ def _convert_sources(sources: Iterable[Any]) -> List[Any]:
     Channels are converted to their internal PyChannel representation.
     Custom RepoDataSource implementations are wrapped in an adapter that
     converts between FFI types and Python wrapper types.
+    SparseRepoData objects are converted to their internal PySparseRepoData
+    representation.
 
     Raises:
         TypeError: If a source doesn't implement the required interface.
     """
     from rattler.repo_data.source import RepoDataSource
+    from rattler.repo_data.sparse import SparseRepoData
 
     converted = []
     for source in sources:
@@ -333,12 +590,15 @@ def _convert_sources(sources: Iterable[Any]) -> List[Any]:
         elif isinstance(source, Channel):
             # Channel object - extract PyChannel
             converted.append(source._channel)
+        elif isinstance(source, SparseRepoData):
+            # SparseRepoData object - extract PySparseRepoData
+            converted.append(source._sparse)
         elif isinstance(source, RepoDataSource):
             # Wrap RepoDataSource in adapter for FFI type conversion
             converted.append(_RepoDataSourceAdapter(source))
         else:
             raise TypeError(
-                f"Expected Channel, str, or object implementing RepoDataSource protocol, "
+                f"Expected Channel, str, SparseRepoData, or object implementing RepoDataSource protocol, "
                 f"got {type(source).__name__}. "
                 f"See rattler.RepoDataSource for the required interface."
             )

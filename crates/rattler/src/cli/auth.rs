@@ -124,11 +124,22 @@ struct LogoutArgs {
 }
 
 #[derive(Parser, Debug)]
+struct TokenArgs {
+    /// The host to print the stored token for (e.g. prefix.dev)
+    host: String,
+}
+
+#[derive(Parser, Debug)]
 struct StatusArgs {
     /// Show endpoint URLs, client ID, and other IdP-introspection fields
     /// that are only useful for debugging.
-    #[clap(short, long)]
-    verbose: bool,
+    // NOTE: this intentionally avoids the `--verbose`/`-v` name. `Args` is
+    // embedded as a subcommand in larger CLIs (pixi, the `rattler` binary, ...)
+    // that define their own global `--verbose` logging flag. Sharing the name
+    // makes clap either merge the two args (panicking on a type mismatch) or
+    // reject them as duplicate long names — see prefix-dev/pixi#6466.
+    #[clap(long)]
+    details: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -138,6 +149,8 @@ enum Subcommand {
     Login(LoginArgs),
     /// Remove authentication information for a given host
     Logout(LogoutArgs),
+    /// Print the stored authentication token for a given host
+    Token(TokenArgs),
     /// Show stored authentication entries and non-secret token metadata
     Status(StatusArgs),
 }
@@ -196,6 +209,10 @@ pub enum AuthenticationCLIError {
     #[error("General http request error")]
     ReqwestError(#[from] reqwest::Error),
 
+    /// Network access was requested while offline mode was enabled.
+    #[error("network access is disabled by offline mode")]
+    Offline,
+
     /// JSON parsing failed
     #[error("Failed to parse JSON: {0}")]
     JsonParseError(String),
@@ -207,6 +224,11 @@ pub enum AuthenticationCLIError {
     /// No stored credentials were found for the requested host.
     #[error("No stored credentials found for {0}")]
     NotLoggedIn(String),
+
+    /// Credentials were found for the host, but they aren't a bearer-style
+    /// token that can be printed on its own (e.g. basic auth or S3 keys).
+    #[error("Stored credentials for {0} are {1} credentials, not a printable token")]
+    NotAToken(String, String),
 
     /// Interactive logout was requested but the process isn't attached to a TTY.
     #[cfg(feature = "auth-interactive")]
@@ -350,15 +372,27 @@ pub enum ValidationResult {
 /// This function validates the authentication method based on the host and
 /// stores the credentials if successful. For prefix.dev hosts, it validates the
 /// token by making a GraphQL API call.
+#[cfg(test)]
 async fn login(
     args: LoginArgs,
     storage: AuthenticationStorage,
+) -> Result<(), AuthenticationCLIError> {
+    login_with_offline(args, storage, false).await
+}
+
+async fn login_with_offline(
+    args: LoginArgs,
+    storage: AuthenticationStorage,
+    offline: bool,
 ) -> Result<(), AuthenticationCLIError> {
     // explicit `--oauth` *or* no explicit method on an OAuth-capable host
     #[cfg(feature = "oauth")]
     {
         let auto_default = default_oauth_for_login(&args);
         if args.oauth || auto_default.is_some() {
+            if offline {
+                return Err(AuthenticationCLIError::Offline);
+            }
             if !args.oauth {
                 eprintln!(
                     "No credentials provided; using OAuth device code login for {}.",
@@ -409,6 +443,7 @@ async fn login(
                 scopes,
                 redirect_uri,
                 user_agent: args.user_agent,
+                callback_page: None,
             };
 
             let auth = oauth::perform_oauth_login(config).await?;
@@ -463,6 +498,10 @@ async fn login(
 
     // Only validate token for prefix.dev
     if args.host.contains("prefix.dev") {
+        if offline {
+            return Err(AuthenticationCLIError::Offline);
+        }
+
         // Extract the token from BearerToken
         let token = match &auth {
             Authentication::BearerToken(t) => t,
@@ -652,9 +691,18 @@ fn logout_candidate_keys(host: &str) -> Result<Vec<String>, AuthenticationCLIErr
     Ok(keys)
 }
 
+#[cfg(test)]
 async fn logout(
     args: LogoutArgs,
     storage: AuthenticationStorage,
+) -> Result<(), AuthenticationCLIError> {
+    logout_with_offline(args, storage, false).await
+}
+
+async fn logout_with_offline(
+    args: LogoutArgs,
+    storage: AuthenticationStorage,
+    offline: bool,
 ) -> Result<(), AuthenticationCLIError> {
     // Enumerate hosts without reading secrets — important on macOS where each
     // keychain read prompts the user. We fetch credentials lazily, once per
@@ -721,18 +769,25 @@ async fn logout(
             ..
         } = &auth
         {
-            eprintln!(
-                "Revoking OAuth tokens for {} ({})",
-                entry.host, entry.source
-            );
-            oauth::revoke_tokens(
-                revocation_endpoint,
-                access_token,
-                refresh_token.as_deref(),
-                client_id,
-                None,
-            )
-            .await;
+            if offline {
+                eprintln!(
+                    "Skipping OAuth token revocation for {} ({}) because offline mode is enabled",
+                    entry.host, entry.source
+                );
+            } else {
+                eprintln!(
+                    "Revoking OAuth tokens for {} ({})",
+                    entry.host, entry.source
+                );
+                oauth::revoke_tokens(
+                    revocation_endpoint,
+                    access_token,
+                    refresh_token.as_deref(),
+                    client_id,
+                    None,
+                )
+                .await;
+            }
         }
         // Silence unused-variable warning when oauth is off.
         let _ = auth;
@@ -744,6 +799,41 @@ async fn logout(
         storage.delete_entry(&entry.host, &entry.source)?;
     }
 
+    Ok(())
+}
+
+/// Extract a bearer-style secret suitable for printing as a plain token.
+fn printable_token(auth: &Authentication) -> Option<&str> {
+    match auth {
+        Authentication::BearerToken(token) | Authentication::CondaToken(token) => Some(token),
+        Authentication::OAuth { access_token, .. } => Some(access_token),
+        Authentication::BasicHTTP { .. } | Authentication::S3Credentials { .. } => None,
+    }
+}
+
+async fn token(
+    args: TokenArgs,
+    storage: AuthenticationStorage,
+    offline: bool,
+) -> Result<(), AuthenticationCLIError> {
+    let url = ensure_url_scheme(&args.host);
+
+    // Refresh an expired OAuth access token before printing it, unless we're
+    // offline (needs network access).
+    let auth = if offline {
+        storage.get_by_url(url)?.1
+    } else {
+        storage.get_by_url_refreshed(url).await?.1
+    };
+
+    let Some(auth) = auth else {
+        return Err(AuthenticationCLIError::NotLoggedIn(args.host));
+    };
+
+    let token = printable_token(&auth)
+        .ok_or_else(|| AuthenticationCLIError::NotAToken(args.host, auth.method().to_string()))?;
+
+    println!("{token}");
     Ok(())
 }
 
@@ -1047,7 +1137,7 @@ async fn status(
             entry.active,
             account.as_deref(),
             now,
-            args.verbose,
+            args.details,
         );
     }
 
@@ -1056,11 +1146,17 @@ async fn status(
 
 /// CLI entrypoint for authentication
 pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
+    execute_with_offline(args, false).await
+}
+
+/// CLI entrypoint for authentication with optional offline mode.
+pub async fn execute_with_offline(args: Args, offline: bool) -> Result<(), AuthenticationCLIError> {
     let storage = AuthenticationStorage::from_env_and_defaults()?;
 
     match args.subcommand {
-        Subcommand::Login(args) => login(args, storage).await,
-        Subcommand::Logout(args) => logout(args, storage).await,
+        Subcommand::Login(args) => login_with_offline(args, storage, offline).await,
+        Subcommand::Logout(args) => logout_with_offline(args, storage, offline).await,
+        Subcommand::Token(args) => token(args, storage, offline).await,
         Subcommand::Status(args) => status(args, storage).await,
     }
 }
@@ -1121,6 +1217,45 @@ mod tests {
             URL_SAFE_NO_PAD.encode(serde_json::to_vec(&header).unwrap()),
             URL_SAFE_NO_PAD.encode(serde_json::to_vec(&payload).unwrap())
         )
+    }
+
+    // Auth `Args` must be embeddable as a subcommand of a larger CLI that
+    // defines its own `global = true` `--verbose` flag, without clashing.
+    // pixi uses a `u8` (count) flag, the `rattler` binary a `bool` one — both
+    // previously broke `auth status` (panic on type mismatch or a duplicate
+    // long-name assertion). See prefix-dev/pixi#6466.
+    #[test]
+    fn auth_embeds_under_global_verbose_flag() {
+        #[derive(Parser, Debug)]
+        struct CountParent {
+            #[clap(short, long, action = clap::ArgAction::Count, global = true)]
+            verbose: u8,
+            #[clap(subcommand)]
+            command: ParentCommand,
+        }
+
+        #[derive(Parser, Debug)]
+        struct BoolParent {
+            #[clap(short, long, global = true)]
+            verbose: bool,
+            #[clap(subcommand)]
+            command: ParentCommand,
+        }
+
+        #[derive(Parser, Debug)]
+        enum ParentCommand {
+            Auth(super::Args),
+        }
+
+        // `try_parse_from` panics (rather than returning `Err`) on the clashing
+        // definitions, so reaching an `Ok`/`Err` at all proves the clash is gone.
+        assert!(CountParent::try_parse_from(["prog", "auth", "status"]).is_ok());
+        assert!(BoolParent::try_parse_from(["prog", "auth", "status"]).is_ok());
+
+        // The parent's global `--verbose` is still accepted after the subcommand.
+        assert!(CountParent::try_parse_from(["prog", "auth", "status", "--verbose"]).is_ok());
+        // And our renamed detail flag works on its own.
+        assert!(CountParent::try_parse_from(["prog", "auth", "status", "--details"]).is_ok());
     }
 
     #[test]
@@ -1406,6 +1541,57 @@ mod tests {
         // No explicit method on a non-OAuth host → still falls through to existing
         // NoAuthenticationMethod error.
         assert!(default_oauth_for_login(&create_login_args("example.com")).is_none());
+    }
+
+    fn token_args(host: &str) -> TokenArgs {
+        TokenArgs {
+            host: host.to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn token_prints_bearer_token_for_matching_host() {
+        let (storage, _temp_dir) = create_test_storage();
+        storage
+            .store("*.prefix.dev", &Authentication::BearerToken("tok".into()))
+            .unwrap();
+
+        // `repo.prefix.dev` should resolve against the `*.prefix.dev` entry.
+        assert!(
+            token(token_args("repo.prefix.dev"), storage, true)
+                .await
+                .is_ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn token_unknown_host_returns_not_logged_in() {
+        let (storage, _temp_dir) = create_test_storage();
+        let result = token(token_args("nothing-here.example"), storage, true).await;
+        assert!(matches!(
+            result,
+            Err(AuthenticationCLIError::NotLoggedIn(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn token_basic_auth_credentials_are_not_a_token() {
+        let (storage, _temp_dir) = create_test_storage();
+        storage
+            .store(
+                "example.com",
+                &Authentication::BasicHTTP {
+                    username: "user".into(),
+                    password: "pass".into(),
+                },
+            )
+            .unwrap();
+
+        let result = token(token_args("example.com"), storage, true).await;
+        assert!(matches!(
+            result,
+            Err(AuthenticationCLIError::NotAToken(_, _))
+        ));
     }
 
     fn logout_args(host: Option<&str>, all: bool) -> LogoutArgs {

@@ -10,7 +10,7 @@ use url::Url;
 use crate::{error::PyRattlerError, networking::client::PyClientWithMiddleware};
 
 /// The `about.json` file contains metadata about the package
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyAboutJson {
@@ -87,7 +87,7 @@ impl PyAboutJson {
                 >(client.into(), url)
                 .await;
 
-            Python::with_gil(|py| match about_json {
+            Python::attach(|py| match about_json {
                 Ok(r) => Ok(Some(Py::new(py, PyAboutJson::from(r))?.into_any())),
                 Err(rattler_package_streaming::ExtractError::MissingComponent) => Ok(None),
                 Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string())),

@@ -6,6 +6,7 @@ use std::{
 use rattler_conda_types::{Channel, InvalidPackageNameError, MatchSpec};
 use rattler_redaction::Redact;
 use thiserror::Error;
+use url::Url;
 
 use crate::{
     fetch,
@@ -60,8 +61,34 @@ pub enum GatewayError {
     #[error("{0}")]
     CacheError(String),
 
+    #[cfg(target_arch = "wasm32")]
+    #[error(transparent)]
+    JsFetchError(#[from] crate::utils::js_fetch::JsFetchError),
+
+    /// No usable sharded index for a subdir while the gateway may only read
+    /// from the cache. Callers fall back to `repodata.json` for the subdir
+    /// rather than failing: the sharded index is one way to read a channel,
+    /// not the channel itself.
+    ///
+    /// The URL is redacted when the error is built, so it can be formatted
+    /// without leaking channel credentials.
+    #[error("no sharded repodata index is cached for {0}")]
+    ShardedIndexNotCached(Url),
+
+    /// A cache-only query needed a shard that was never fetched. Nothing is
+    /// known about the package then, which is not the same as the package
+    /// having no records; see `SourceConfig::missing_shards_are_empty` for
+    /// callers that want the latter reading.
+    #[error("the shard for package '{0}' is not in the cache")]
+    ShardNotCached(String),
+
     #[error("direct url queries are not supported ({0})")]
     DirectUrlQueryNotSupported(String),
+
+    /// Raised in [`ChannelRelationsMode::Strict`](crate::gateway::ChannelRelationsMode::Strict)
+    /// when the declared CEP-42 relations are malformed.
+    #[error("malformed CEP-42 channel relations: {0}")]
+    ChannelRelationsError(String),
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -93,6 +120,10 @@ pub enum HttpOrFilesystemError {
 
     #[error(transparent)]
     Filesystem(#[from] io::Error),
+
+    #[cfg(target_arch = "wasm32")]
+    #[error(transparent)]
+    JsFetch(#[from] crate::utils::js_fetch::JsFetchError),
 }
 
 impl From<fetch::RepoDataNotFoundError> for HttpOrFilesystemError {
@@ -100,6 +131,8 @@ impl From<fetch::RepoDataNotFoundError> for HttpOrFilesystemError {
         match value {
             RepoDataNotFoundError::HttpError(err) => HttpOrFilesystemError::Http(err),
             RepoDataNotFoundError::FileSystemError(err) => HttpOrFilesystemError::Filesystem(err),
+            #[cfg(target_arch = "wasm32")]
+            RepoDataNotFoundError::JsFetchError(err) => HttpOrFilesystemError::JsFetch(err),
         }
     }
 }

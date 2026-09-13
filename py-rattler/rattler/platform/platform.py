@@ -25,10 +25,18 @@ PlatformLiteral = Literal[
     "freebsd-arm64",
     "osx-64",
     "osx-arm64",
+    "ios-arm64",
+    "iossimulator-arm64",
+    "iossimulator-64",
+    "android-aarch64",
+    "android-armv7a",
+    "android-64",
+    "android-32",
     "win-32",
     "win-64",
     "win-arm64",
     "emscripten-wasm32",
+    "emscripten-wasm64",
     "wasi-wasm32",
     "zos-z",
 ]
@@ -112,7 +120,7 @@ class Platform(metaclass=PlatformSingleton):
         >>> next(Platform.all())
         Platform(noarch)
         >>> len(list(Platform.all()))
-        25
+        33
         >>>
         """
         return (cls._from_py_platform(p) for p in PyPlatform.all())

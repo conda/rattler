@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.17](https://github.com/conda/rattler/compare/rattler_shell-v0.27.16...rattler_shell-v0.27.17) - 2026-08-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.27.16](https://github.com/conda/rattler/compare/rattler_shell-v0.27.15...rattler_shell-v0.27.16) - 2026-08-26
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.27.15](https://github.com/conda/rattler/compare/rattler_shell-v0.27.14...rattler_shell-v0.27.15) - 2026-08-21
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.27.14](https://github.com/conda/rattler/compare/rattler_shell-v0.27.13...rattler_shell-v0.27.14) - 2026-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.27.13](https://github.com/conda/rattler/compare/rattler_shell-v0.27.12...rattler_shell-v0.27.13) - 2026-08-11
+
+### Fixed
+
+- *(shell)* escape env var values in activation script ([#2621](https://github.com/conda/rattler/pull/2621))
+
+## [0.27.12](https://github.com/conda/rattler/compare/rattler_shell-v0.27.11...rattler_shell-v0.27.12) - 2026-08-03
+
+### Other
+
+- updated the following local packages: rattler_pty
+
+## [0.27.11](https://github.com/conda/rattler/compare/rattler_shell-v0.27.10...rattler_shell-v0.27.11) - 2026-07-24
+
+### Fixed
+
+- *(shell)* preserve newlines in activation env vars ([#2591](https://github.com/conda/rattler/pull/2591))
+
+## [0.27.10](https://github.com/conda/rattler/compare/rattler_shell-v0.27.9...rattler_shell-v0.27.10) - 2026-07-14
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.27.9](https://github.com/conda/rattler/compare/rattler_shell-v0.27.8...rattler_shell-v0.27.9) - 2026-07-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.27.8](https://github.com/conda/rattler/compare/rattler_shell-v0.27.7...rattler_shell-v0.27.8) - 2026-06-26
+
+### Other
+
+- updated the following local packages: rattler_pty
+
 ## [0.27.7](https://github.com/conda/rattler/compare/rattler_shell-v0.27.6...rattler_shell-v0.27.7) - 2026-06-17
 
 ### Other

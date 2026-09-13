@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
 use pyo3::{Bound, PyRef, PyResult, Python, pyclass, pymethods};
 
@@ -8,6 +8,8 @@ use crate::channel::PyChannel;
 use crate::match_spec::PyMatchSpec;
 use crate::package_name::PyPackageName;
 use crate::record::PyRecord;
+use crate::repo_data::gateway::PyRemovedPackage;
+use crate::repo_data::{PyRepodataRevisionMetadata, repodata_revisions_to_python};
 use parking_lot::RwLock;
 use pyo3::exceptions::PyValueError;
 
@@ -22,10 +24,13 @@ pub struct PySparseRepoData {
     // in a RwLock because most of the time we just want to be able to read from it. We only
     // need write access to close it.
     //
-    // This whole thing is then wrapped in an Arc so we can share this with a background thread
-    // without blocking the GIL.
-    pub(crate) inner: Arc<RwLock<Option<SparseRepoData>>>,
-    subdir: String,
+    // The `SparseRepoData` itself is wrapped in an `Arc` too, so `as_source` can hand out a
+    // cheap clone of the *same* `Arc` on every call rather than re-parsing or copying data.
+    //
+    // This whole thing is then wrapped in an outer Arc so we can share this with a background
+    // thread without blocking the GIL.
+    pub(crate) inner: Arc<RwLock<Option<Arc<SparseRepoData>>>>,
+    pub(crate) subdir: String,
 }
 
 impl PySparseRepoData {
@@ -33,18 +38,29 @@ impl PySparseRepoData {
     pub(crate) fn from_args(channel: PyChannel, subdir: String, path: PathBuf) -> PyResult<Self> {
         Ok(SparseRepoData::from_file(channel.into(), subdir, path, None)?.into())
     }
+
+    /// Returns the underlying `SparseRepoData` so it can be passed directly
+    /// to `Gateway::query` as a `Source::SparseRepoData` (e.g. via `solve`'s
+    /// `sources` argument).
+    pub(crate) fn as_source(&self) -> PyResult<Arc<SparseRepoData>> {
+        self.inner
+            .read()
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| PyValueError::new_err("I/O operation on closed file."))
+    }
 }
 
 impl From<SparseRepoData> for PySparseRepoData {
     fn from(value: SparseRepoData) -> Self {
         Self {
             subdir: value.subdir().to_owned(),
-            inner: Arc::new(RwLock::new(Some(value))),
+            inner: Arc::new(RwLock::new(Some(Arc::new(value)))),
         }
     }
 }
 
-#[pyclass(eq)]
+#[pyclass(eq, from_py_object)]
 #[derive(Copy, Clone, PartialEq)]
 pub enum PyPackageFormatSelection {
     OnlyTarBz2,
@@ -104,7 +120,7 @@ impl PySparseRepoData {
         subdir: String,
         path: PathBuf,
     ) -> PyResult<Self> {
-        py.allow_threads(move || Self::from_args(channel, subdir, path))
+        py.detach(move || Self::from_args(channel, subdir, path))
     }
 
     pub fn package_names(
@@ -113,7 +129,7 @@ impl PySparseRepoData {
         package_format_selection: PyPackageFormatSelection,
     ) -> PyResult<Vec<String>> {
         let inner = self.inner.clone();
-        py.allow_threads(move || {
+        py.detach(move || {
             let lock = inner.read();
             let Some(sparse) = lock.as_ref() else {
                 return Err(PyValueError::new_err("I/O operation on closed file."));
@@ -131,7 +147,7 @@ impl PySparseRepoData {
         package_format_selection: PyPackageFormatSelection,
     ) -> PyResult<usize> {
         let inner = self.inner.clone();
-        py.allow_threads(move || {
+        py.detach(move || {
             let lock = inner.read();
             let Some(sparse) = lock.as_ref() else {
                 return Err(PyValueError::new_err("I/O operation on closed file."));
@@ -148,7 +164,7 @@ impl PySparseRepoData {
     ) -> PyResult<Vec<PyRecord>> {
         let inner = self.inner.clone();
         let name = package_name.inner.clone();
-        py.allow_threads(move || {
+        py.detach(move || {
             let lock = inner.read();
             let Some(sparse) = lock.as_ref() else {
                 return Err(PyValueError::new_err("I/O operation on closed file."));
@@ -167,7 +183,7 @@ impl PySparseRepoData {
         package_format_selection: PyPackageFormatSelection,
     ) -> PyResult<Vec<PyRecord>> {
         let inner = self.inner.clone();
-        py.allow_threads(move || {
+        py.detach(move || {
             let lock = inner.read();
             let Some(sparse) = lock.as_ref() else {
                 return Err(PyValueError::new_err("I/O operation on closed file."));
@@ -188,7 +204,7 @@ impl PySparseRepoData {
     ) -> PyResult<Vec<PyRecord>> {
         let inner = self.inner.clone();
         let owned_specs: Vec<_> = specs.iter().map(|s| s.inner.clone()).collect();
-        py.allow_threads(move || {
+        py.detach(move || {
             let lock = inner.read();
             let Some(sparse) = lock.as_ref() else {
                 return Err(PyValueError::new_err("I/O operation on closed file."));
@@ -201,9 +217,42 @@ impl PySparseRepoData {
         })
     }
 
+    /// Returns the packages listed under the `removed` key, for a single
+    /// package name or for the whole file when no name is given.
+    #[pyo3(signature = (package_name=None))]
+    pub fn load_removed(
+        &self,
+        py: Python<'_>,
+        package_name: Option<&PyPackageName>,
+    ) -> PyResult<Vec<PyRemovedPackage>> {
+        let inner = self.inner.clone();
+        let name = package_name.map(|package_name| package_name.inner.clone());
+        py.detach(move || {
+            let lock = inner.read();
+            let Some(sparse) = lock.as_ref() else {
+                return Err(PyValueError::new_err("I/O operation on closed file."));
+            };
+            Ok(sparse
+                .load_removed(name.as_ref())?
+                .into_iter()
+                .map(Into::into)
+                .collect::<Vec<_>>())
+        })
+    }
+
     #[getter]
     pub fn subdir(&self) -> String {
         self.subdir.clone()
+    }
+
+    /// Returns the revisions advertised by the repodata, keyed by `vN`.
+    #[getter]
+    pub fn repodata_revisions(&self) -> PyResult<BTreeMap<String, PyRepodataRevisionMetadata>> {
+        let lock = self.inner.read();
+        let Some(sparse) = lock.as_ref() else {
+            return Err(PyValueError::new_err("I/O operation on closed file."));
+        };
+        Ok(repodata_revisions_to_python(sparse.repodata_revisions()))
     }
 
     pub fn close(&self) {
@@ -228,12 +277,12 @@ impl PySparseRepoData {
         let repo_data_refs = repo_data_locks
             .iter()
             .map(|s| {
-                s.as_ref()
+                s.as_deref()
                     .ok_or_else(|| PyValueError::new_err("I/O operation on closed file."))
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        py.allow_threads(move || {
+        py.detach(move || {
             let package_names = package_names.into_iter().map(Into::into);
             Ok(SparseRepoData::load_records_recursive(
                 repo_data_refs,

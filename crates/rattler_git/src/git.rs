@@ -13,8 +13,8 @@ use std::{
     sync::LazyLock,
 };
 
+use crate::LazyClient;
 use reqwest::StatusCode;
-use reqwest_middleware::ClientWithMiddleware;
 use url::Url;
 
 use crate::{
@@ -25,7 +25,13 @@ use crate::{
 /// A file indicates that if present, `git reset` has been done and a repo
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
 const CHECKOUT_READY_LOCK: &str = ".ok";
+/// Content of [`CHECKOUT_READY_LOCK`] indicating that LFS was requested but
+/// `git-lfs` was unavailable. Such a checkout is reusable while `git-lfs`
+/// remains unavailable, but must be recreated once it becomes available.
+const CHECKOUT_LFS_DEGRADED: &str = "lfs-degraded";
 pub const GIT_DIR: &str = "GIT_DIR";
+pub const GIT_TERMINAL_PROMPT: &str = "GIT_TERMINAL_PROMPT";
+pub const GIT_LFS_SKIP_SMUDGE: &str = "GIT_LFS_SKIP_SMUDGE";
 
 #[derive(Debug, thiserror::Error, Clone)]
 pub enum GitBinaryError {
@@ -42,6 +48,68 @@ pub static GIT: LazyLock<Result<PathBuf, GitBinaryError>> = LazyLock::new(|| {
         e => GitBinaryError::Other(e),
     })
 });
+
+/// Cached `git lfs` invoker. Probes `git lfs version` once; on success
+/// callers get a `GitLfs` whose [`GitLfs::cmd`] returns a fresh `Command`
+/// pre-set to `git lfs ...` with the terminal prompt disabled. Mirrors uv's
+/// `GIT_LFS` static.
+pub static GIT_LFS: LazyLock<Result<GitLfs, GitBinaryError>> = LazyLock::new(GitLfs::probe);
+
+/// Pre-configured `git lfs` command builder. Kept opaque so the git path is
+/// resolved exactly once.
+#[derive(Debug, Clone)]
+pub struct GitLfs {
+    git: PathBuf,
+}
+
+impl GitLfs {
+    fn probe() -> Result<Self, GitBinaryError> {
+        let git = GIT.as_ref().map_err(Clone::clone)?.clone();
+        let ok = Command::new(&git)
+            .args(["lfs", "version"])
+            .env(GIT_TERMINAL_PROMPT, "0")
+            .output()
+            .is_ok_and(|o| o.status.success());
+        if ok {
+            Ok(Self { git })
+        } else {
+            Err(GitBinaryError::GitNotFound)
+        }
+    }
+
+    /// Fresh `git lfs` command with `GIT_TERMINAL_PROMPT=0` already set.
+    pub fn cmd(&self) -> Command {
+        let mut c = Command::new(&self.git);
+        c.arg("lfs").env(GIT_TERMINAL_PROMPT, "0");
+        c
+    }
+}
+
+/// Runs a prepared `git` command and returns its output, failing when git
+/// exits with a non-zero status. Failed commands can write misleading output;
+/// `git rev-parse`, for example, echoes unresolved refnames to stdout.
+fn git_output(cmd: &mut Command) -> Result<std::process::Output, GitError> {
+    let output = cmd.output()?;
+    if !output.status.success() {
+        let args = cmd
+            .get_args()
+            .map(|arg| arg.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ");
+        return Err(GitError::Command(
+            args,
+            String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        ));
+    }
+    Ok(output)
+}
+
+/// Value for `GIT_LFS_SKIP_SMUDGE`: only an explicit `Some(true)` enables
+/// smudging. The checkout's origin is the local database, which only contains
+/// LFS objects when they were explicitly requested and fetched.
+fn lfs_skip_smudge_env(lfs: Option<bool>) -> &'static str {
+    if lfs == Some(true) { "0" } else { "1" }
+}
 
 /// Strategy when fetching refspecs for a [`GitReference`]
 enum RefspecStrategy {
@@ -223,7 +291,8 @@ impl GitRemote {
         db: Option<GitDatabase>,
         reference: &GitReference,
         locked_rev: Option<GitOid>,
-        client: &ClientWithMiddleware,
+        client: &LazyClient,
+        options: &CheckoutOptions,
     ) -> Result<(GitDatabase, GitOid), GitError> {
         let locked_ref = locked_rev.map(|oid| GitReference::FullCommit(oid.to_string()));
         let reference = locked_ref.as_ref().unwrap_or(reference);
@@ -236,7 +305,12 @@ impl GitRemote {
             };
 
             if let Some(rev) = resolved_commit_hash {
-                return Ok((db, rev));
+                let ready = (options.lfs == Some(true))
+                    .then(|| {
+                        maybe_fetch_lfs(&mut db.repo, self.url.as_str(), rev, &options.lfs_filter)
+                    })
+                    .flatten();
+                return Ok((db.with_lfs_ready(ready), rev));
             }
         }
 
@@ -252,17 +326,40 @@ impl GitRemote {
         fetch(&mut repo, self.url.as_str(), reference, client)?;
         let rev = match locked_rev {
             Some(rev) => rev,
-            None => reference.resolve(&repo)?,
+            None => reference.resolve(&repo).map_err(|err| {
+                let mut repository = self.url.clone();
+                let _ = repository.set_password(None);
+                let _ = repository.set_username("");
+                GitError::ReferenceNotFound {
+                    reference: reference.as_rev().to_string(),
+                    repository: repository.to_string(),
+                    source: Box::new(err),
+                }
+            })?,
         };
 
-        Ok((GitDatabase { repo }, rev))
+        let ready = (options.lfs == Some(true))
+            .then(|| maybe_fetch_lfs(&mut repo, self.url.as_str(), rev, &options.lfs_filter))
+            .flatten();
+
+        Ok((
+            GitDatabase {
+                repo,
+                lfs_ready: None,
+            }
+            .with_lfs_ready(ready),
+            rev,
+        ))
     }
 
     /// Creates a [`GitDatabase`] of this remote at `db_path`.
     #[allow(clippy::unused_self)]
     pub(crate) fn db_at(&self, db_path: &Path) -> Result<GitDatabase, GitError> {
         let repo = GitRepository::open(db_path)?;
-        Ok(GitDatabase { repo })
+        Ok(GitDatabase {
+            repo,
+            lfs_ready: None,
+        })
     }
 
     pub fn url(&self) -> &Url {
@@ -270,17 +367,71 @@ impl GitRemote {
     }
 }
 
-/// Options controlling checkout behavior (submodules, etc.).
+/// Path filters passed to Git LFS. Values use the comma-separated gitignore
+/// pattern syntax accepted by `git lfs fetch --include/--exclude`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+pub struct LfsFilter {
+    /// Only materialize LFS objects whose paths match these patterns.
+    pub include: Option<String>,
+    /// Do not materialize LFS objects whose paths match these patterns.
+    pub exclude: Option<String>,
+}
+
+impl LfsFilter {
+    pub fn is_empty(&self) -> bool {
+        self.include.is_none() && self.exclude.is_none()
+    }
+
+    fn configure_git(&self, command: &mut Command) {
+        if let Some(include) = &self.include {
+            command.arg("-c").arg(format!("lfs.fetchinclude={include}"));
+        }
+        if let Some(exclude) = &self.exclude {
+            command.arg("-c").arg(format!("lfs.fetchexclude={exclude}"));
+        }
+    }
+
+    fn configure_lfs_fetch(&self, command: &mut Command) {
+        if let Some(include) = &self.include {
+            command.arg(format!("--include={include}"));
+        }
+        if let Some(exclude) = &self.exclude {
+            command.arg(format!("--exclude={exclude}"));
+        }
+    }
+}
+
+/// Options controlling checkout behavior (submodules, LFS, etc.).
 #[derive(Debug, Clone)]
 pub struct CheckoutOptions {
     /// Whether to recursively initialize and update submodules.
     pub update_submodules: bool,
+
+    /// Git LFS handling, tri-state:
+    /// * `Some(true)`: fetch LFS objects into the database (`git lfs fetch`)
+    ///   and run the smudge filter during checkout so pointer files are
+    ///   materialised into real content.
+    /// * `Some(false)`: force-skip the smudge filter (`GIT_LFS_SKIP_SMUDGE=1`)
+    ///   so checkouts always contain pointer files. Callers can handle LFS
+    ///   themselves afterwards.
+    /// * `None`: LFS is not requested and the smudge filter is skipped. This
+    ///   differs from `Some(false)` only in preserving the caller's preference.
+    pub lfs: Option<bool>,
+
+    /// Optional path filters limiting which LFS objects are fetched and
+    /// materialized. Filters have no effect unless `lfs == Some(true)`.
+    pub lfs_filter: LfsFilter,
 }
 
 impl Default for CheckoutOptions {
     fn default() -> Self {
         Self {
             update_submodules: true,
+            // Skipping the smudge filter is the safe default: the checkout's
+            // origin points at the local database, which has no LFS objects
+            // unless `lfs == Some(true)` fetched them.
+            lfs: Some(false),
+            lfs_filter: LfsFilter::default(),
         }
     }
 }
@@ -290,9 +441,34 @@ impl Default for CheckoutOptions {
 pub(crate) struct GitDatabase {
     /// Underlying Git repository instance for this database.
     repo: GitRepository,
+    /// `Some(true)` = fsck passed, `Some(false)` = fsck failed or git-lfs
+    /// missing, `None` = LFS never requested.
+    lfs_ready: Option<bool>,
 }
 
 impl GitDatabase {
+    pub(crate) fn lfs_ready(&self) -> Option<bool> {
+        self.lfs_ready
+    }
+
+    /// Builder: set [`Self::lfs_ready`] and return self. Mirrors uv's
+    /// `with_lfs_ready` so callers can chain after a fetch or cache hit.
+    #[must_use]
+    pub(crate) fn with_lfs_ready(mut self, value: Option<bool>) -> Self {
+        self.lfs_ready = value;
+        self
+    }
+
+    /// True if the LFS objects reachable from `revision` are already present
+    /// and valid in this database (i.e. `git lfs fsck --objects` passes).
+    /// Used to decide whether a cached DB satisfies an LFS-aware request.
+    pub(crate) fn contains_lfs_artifacts(&self, revision: GitOid, filter: &LfsFilter) -> bool {
+        // A filtered fetch is cheap when its objects are already cached and is
+        // the authoritative way to apply Git LFS's path matching semantics.
+        // Do not claim a DB-only cache hit for filtered requests.
+        filter.is_empty() && self.repo.lfs_fsck_objects(revision)
+    }
+
     /// Checkouts to a revision at `destination` from this database.
     pub(crate) fn copy_to(
         &self,
@@ -308,7 +484,7 @@ impl GitDatabase {
         let checkout = match GitRepository::open(destination)
             .ok()
             .map(|repo| GitCheckout::new(rev, repo))
-            .filter(GitCheckout::is_fresh)
+            .filter(|checkout| checkout.is_fresh(GIT_LFS.is_err()))
         {
             Some(co) => co,
             None => GitCheckout::clone_into(destination, self, rev, source_url, options)?,
@@ -318,12 +494,13 @@ impl GitDatabase {
 
     /// Get a short OID for a `revision`, usually 7 chars or more if ambiguous.
     pub(crate) fn to_short_id(&self, revision: GitOid) -> Result<String, GitError> {
-        let output = Command::new(GIT.as_ref().map_err(Clone::clone)?)
-            .arg("rev-parse")
-            .arg("--short")
-            .arg(revision.as_str())
-            .current_dir(&self.repo.path)
-            .output()?;
+        let output = git_output(
+            Command::new(GIT.as_ref().map_err(Clone::clone)?)
+                .arg("rev-parse")
+                .arg("--short")
+                .arg(revision.as_str())
+                .current_dir(&self.repo.path),
+        )?;
 
         let mut result = String::from_utf8(output.stdout)?;
 
@@ -369,10 +546,11 @@ impl GitRepository {
     /// Initializes a Git repository at `path`.
     fn init(path: &Path) -> Result<GitRepository, GitError> {
         // Initialize the repository.
-        Command::new(GIT.as_ref().map_err(Clone::clone)?)
-            .arg("init")
-            .current_dir(path)
-            .output()?;
+        git_output(
+            Command::new(GIT.as_ref().map_err(Clone::clone)?)
+                .arg("init")
+                .current_dir(path),
+        )?;
 
         Ok(GitRepository {
             path: path.to_path_buf(),
@@ -381,16 +559,52 @@ impl GitRepository {
 
     /// Parses the object ID of the given `refname`.
     fn rev_parse(&self, refname: &str) -> Result<GitOid, GitError> {
-        let result = Command::new(GIT.as_ref().map_err(Clone::clone)?)
-            .arg("rev-parse")
-            .arg(refname)
-            .current_dir(&self.path)
-            .output()?;
+        let result = git_output(
+            Command::new(GIT.as_ref().map_err(Clone::clone)?)
+                .arg("rev-parse")
+                .arg(refname)
+                .current_dir(&self.path),
+        )?;
 
         let mut result = String::from_utf8(result.stdout)?;
 
         result.truncate(result.trim_end().len());
         result.parse().map_err(GitError::OidParse)
+    }
+
+    /// `git lfs fsck --objects <revision>`. Returns `true` iff fsck passes;
+    /// any failure (missing git-lfs, non-zero exit) is warned and returns
+    /// `false`. Informational — see [`GitDatabase::lfs_ready`].
+    fn lfs_fsck_objects(&self, revision: GitOid) -> bool {
+        let Ok(lfs) = GIT_LFS.as_ref() else {
+            return false;
+        };
+        let output = lfs
+            .cmd()
+            .arg("fsck")
+            .arg("--objects")
+            .arg(revision.as_str())
+            .env_remove(GIT_DIR)
+            .current_dir(&self.path)
+            .output();
+        match output {
+            Ok(out) if out.status.success() => true,
+            Ok(out) => {
+                tracing::warn!(
+                    "`git lfs fsck` reported problems for {revision} in {}: {}",
+                    self.path.display(),
+                    String::from_utf8_lossy(&out.stderr).trim()
+                );
+                false
+            }
+            Err(err) => {
+                tracing::warn!(
+                    "failed to run `git lfs fsck` for {revision} in {}: {err}",
+                    self.path.display()
+                );
+                false
+            }
+        }
     }
 }
 
@@ -431,19 +645,24 @@ impl GitCheckout {
         // hardlinks to set up the repository. This should speed up the clone operation
         // quite a bit if it works.
         //
-        // Skip LFS smudge filter during clone because the database doesn't have
-        // LFS objects. LFS files are handled separately after checkout when the
-        // recipe explicitly requests it.
-        let output = Command::new(GIT.as_ref().map_err(Clone::clone)?)
+        // The smudge filter is controlled by `options.lfs`: when LFS was not
+        // requested we skip it, because the database the clone originates
+        // from has no LFS objects. When LFS was requested, the objects were
+        // fetched into the database beforehand, so smudging can succeed.
+        let mut clone_cmd = Command::new(GIT.as_ref().map_err(Clone::clone)?);
+        if options.lfs == Some(true) {
+            options.lfs_filter.configure_git(&mut clone_cmd);
+        }
+        clone_cmd
             .arg("clone")
             .arg("--local")
             // Make sure to pass the local file path and not a file://... url. If given a url,
             // Git treats the repository as a remote origin and gets confused because we don't
             // have a HEAD checked out.
             .arg(dunce::simplified(&database.repo.path).display().to_string())
-            .arg(dunce::simplified(into).display().to_string())
-            .env("GIT_LFS_SKIP_SMUDGE", "1")
-            .output()?;
+            .arg(dunce::simplified(into).display().to_string());
+        clone_cmd.env(GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge_env(options.lfs));
+        let output = git_output(&mut clone_cmd)?;
 
         tracing::debug!("output after cloning {:?}", output);
 
@@ -453,12 +672,17 @@ impl GitCheckout {
         Ok(checkout)
     }
 
-    /// Checks if the `HEAD` of this checkout points to the expected revision.
-    fn is_fresh(&self) -> bool {
+    /// Checks if the `HEAD` points to the expected revision and its ready
+    /// marker is usable. An LFS-degraded checkout is only reusable while the
+    /// current process still has no usable `git-lfs`.
+    fn is_fresh(&self, accept_lfs_degraded: bool) -> bool {
         match self.repo.rev_parse("HEAD") {
             Ok(id) if id == self.revision => {
                 // See comments in reset() for why we check this
-                self.repo.path.join(CHECKOUT_READY_LOCK).exists()
+                match fs_err::read_to_string(self.repo.path.join(CHECKOUT_READY_LOCK)) {
+                    Ok(contents) => contents != CHECKOUT_LFS_DEGRADED || accept_lfs_degraded,
+                    Err(_) => false,
+                }
             }
             _ => false,
         }
@@ -483,17 +707,29 @@ impl GitCheckout {
 
         tracing::debug!("reset {} to {}", self.repo.path.display(), self.revision);
 
-        // Perform the hard reset.
-        // Skip LFS smudge filter during reset because the checkout's origin
-        // points to the local database which doesn't have LFS objects.
-        // LFS files are handled separately after checkout.
-        Command::new(GIT.as_ref().map_err(Clone::clone)?)
+        let skip_smudge = lfs_skip_smudge_env(options.lfs);
+
+        // Perform the hard reset. Configure the filter explicitly when LFS is
+        // enabled so materialization does not depend on a prior global
+        // `git lfs install`.
+        let mut reset_cmd = Command::new(GIT.as_ref().map_err(Clone::clone)?);
+        if options.lfs == Some(true) && GIT_LFS.is_ok() {
+            options.lfs_filter.configure_git(&mut reset_cmd);
+            reset_cmd
+                .arg("-c")
+                .arg("filter.lfs.smudge=git-lfs smudge -- %f")
+                .arg("-c")
+                .arg("filter.lfs.process=git-lfs filter-process")
+                .arg("-c")
+                .arg("filter.lfs.required=true");
+        }
+        reset_cmd
             .arg("reset")
             .arg("--hard")
             .arg(self.revision.as_str())
             .current_dir(&self.repo.path)
-            .env("GIT_LFS_SKIP_SMUDGE", "1")
-            .output()?;
+            .env(GIT_LFS_SKIP_SMUDGE, skip_smudge);
+        git_output(&mut reset_cmd)?;
 
         if options.update_submodules {
             // The checkout's origin points to the local bare cache database
@@ -503,22 +739,29 @@ impl GitCheckout {
             resolve_submodule_urls(&self.repo.path, source_url)?;
 
             // Update submodules (`git submodule update --recursive`).
-            // Also skip LFS smudge here — submodules may contain LFS files.
-            // Allow file:// protocol so local clones and file-based
+            // Submodules may contain LFS files too, so apply the same smudge
+            // policy. Allow file:// protocol so local clones and file-based
             // submodule URLs work on modern Git (>= 2.38.1).
-            Command::new(GIT.as_ref().map_err(Clone::clone)?)
+            let mut submodule_cmd = Command::new(GIT.as_ref().map_err(Clone::clone)?);
+            if options.lfs == Some(true) {
+                options.lfs_filter.configure_git(&mut submodule_cmd);
+            }
+            submodule_cmd
                 .args(["-c", "protocol.file.allow=always"])
                 .arg("submodule")
                 .arg("update")
                 .arg("--recursive")
                 .arg("--init")
-                .current_dir(&self.repo.path)
-                .env("GIT_LFS_SKIP_SMUDGE", "1")
-                .output()
-                .map(drop)?;
+                .current_dir(&self.repo.path);
+            submodule_cmd.env(GIT_LFS_SKIP_SMUDGE, skip_smudge);
+            git_output(&mut submodule_cmd)?;
         }
 
-        fs_err::File::create(ok_file)?;
+        if options.lfs == Some(true) && GIT_LFS.is_err() {
+            fs_err::write(ok_file, CHECKOUT_LFS_DEGRADED)?;
+        } else {
+            fs_err::File::create(ok_file)?;
+        }
         Ok(())
     }
 }
@@ -535,7 +778,7 @@ pub(crate) fn fetch(
     repo: &mut GitRepository,
     remote_url: &str,
     reference: &GitReference,
-    client: &ClientWithMiddleware,
+    client: &LazyClient,
 ) -> Result<(), GitError> {
     let oid_to_fetch = match github_fast_path(repo, remote_url, reference, client) {
         Ok(FastPathRev::UpToDate) => return Ok(()),
@@ -662,6 +905,86 @@ pub(crate) fn fetch(
     result
 }
 
+/// Best-effort `fetch_lfs`: warns and continues on missing git-lfs or fetch
+/// failure. Returns the value to record in [`GitDatabase::lfs_ready`].
+fn maybe_fetch_lfs(
+    repo: &mut GitRepository,
+    url: &str,
+    revision: GitOid,
+    filter: &LfsFilter,
+) -> Option<bool> {
+    let lfs = if let Ok(lfs) = GIT_LFS.as_ref() {
+        lfs
+    } else {
+        tracing::warn!(
+            "`git-lfs` is not installed; skipping LFS fetch for {url}. \
+             Install git-lfs to download LFS-tracked files."
+        );
+        return Some(false);
+    };
+    match fetch_lfs(lfs, repo, url, revision, filter) {
+        Ok(fsck_ok) => Some(fsck_ok),
+        Err(err) => {
+            tracing::warn!("failed to fetch LFS objects for {url} at {revision}: {err}");
+            Some(false)
+        }
+    }
+}
+
+/// `git lfs fetch <url> <revision>` then `git lfs fsck --objects <revision>`.
+/// Scoping to the resolved rev (not just HEAD) means LFS objects on feature
+/// branches and tags are fetched too. Returns the fsck result; the bool of
+/// `Ok` is `true` if fsck passes. `GIT_LFS_SKIP_SMUDGE` is removed from the
+/// env so an inherited value can't suppress smudge mid-fetch.
+fn fetch_lfs(
+    lfs: &GitLfs,
+    repo: &mut GitRepository,
+    url: &str,
+    revision: GitOid,
+    filter: &LfsFilter,
+) -> Result<bool, GitError> {
+    let remote = lfs_remote_url(url);
+    tracing::debug!("fetching LFS objects for {remote} at {revision}");
+
+    let mut command = lfs.cmd();
+    command.arg("fetch");
+    filter.configure_lfs_fetch(&mut command);
+    let output = command
+        .arg(&*remote)
+        .arg(revision.as_str())
+        .env_remove(GIT_DIR)
+        .env_remove(GIT_LFS_SKIP_SMUDGE)
+        .current_dir(&repo.path)
+        .output()?;
+    if !output.status.success() {
+        let stderr = String::from_utf8(output.stderr)?;
+        return Err(GitError::LfsFetch(remote.into_owned(), stderr));
+    }
+    tracing::debug!("git lfs fetch output: {:?}", output);
+
+    // `git lfs fsck` supports exclusions but not includes. A successful
+    // filtered fetch is therefore the best available validation for a subset;
+    // unfiltered requests retain the full object-integrity check.
+    Ok(!filter.is_empty() || repo.lfs_fsck_objects(revision))
+}
+
+/// The remote to pass to `git lfs fetch`. git-lfs' standalone file transfer
+/// agent only accepts a literal `file://` URL (or the name of a configured
+/// remote) — plain local paths fail with "missing protocol" and Windows
+/// drive-letter paths (`D:/repo`, parsed with a single-letter URL scheme)
+/// fail with "no valid file:// URLs found". Convert such local paths to
+/// canonical `file://` URLs; everything else passes through unchanged.
+fn lfs_remote_url(url: &str) -> std::borrow::Cow<'_, str> {
+    if let Ok(parsed) = Url::parse(url)
+        && parsed.scheme().len() == 1
+        && parsed.scheme().chars().all(|c| c.is_ascii_alphabetic())
+        && let Ok(file_url) = Url::from_file_path(Path::new(url))
+    {
+        return std::borrow::Cow::Owned(file_url.to_string());
+    }
+    std::borrow::Cow::Borrowed(url)
+}
+
 /// Attempts to use `git` CLI installed on the system to fetch a repository.
 fn fetch_with_cli(
     repo: &mut GitRepository,
@@ -683,6 +1006,10 @@ fn fetch_with_cli(
         //     // location (this takes precedence over the cwd). Make sure this is
         //     // unset so git will look at cwd for the repo.
         .env_remove(GIT_DIR)
+        // Disable interactive credential prompts so an unreachable or
+        // non-existent remote fails fast instead of hanging waiting for
+        // input on the controlling TTY.
+        .env(GIT_TERMINAL_PROMPT, "0")
         .current_dir(&repo.path);
 
     // // We capture the output to avoid streaming it to the user's console during clones.
@@ -727,7 +1054,7 @@ fn github_fast_path(
     repo: &mut GitRepository,
     url: &str,
     reference: &GitReference,
-    client: &ClientWithMiddleware,
+    client: &LazyClient,
 ) -> Result<FastPathRev, GitError> {
     let url = Url::parse(url)?;
     if !is_github(&url) {
@@ -811,15 +1138,21 @@ fn github_fast_path(
 
     runtime.block_on(async move {
         tracing::debug!("Attempting GitHub fast path for: {url}");
-        let mut request = client.get(&url);
-        request = request.header("Accept", "application/vnd.github.3.sha");
-        request = request.header("User-Agent", "pixi");
+        let mut request = client
+            .client()
+            .get(&url)
+            .header("Accept", "application/vnd.github.3.sha");
         if let Some(local_object) = local_object {
             request = request.header("If-None-Match", local_object.to_string());
         }
+        let mut request = request.build()?;
+        if !request.headers().contains_key("User-Agent") {
+            request
+                .headers_mut()
+                .insert("User-Agent", "rattler".parse().unwrap());
+        }
 
-        let response = request.send().await?;
-        response.error_for_status_ref()?;
+        let response = client.client().execute(request).await?;
         let response_code = response.status();
         if response_code == StatusCode::NOT_MODIFIED {
             Ok(FastPathRev::UpToDate)
@@ -827,9 +1160,11 @@ fn github_fast_path(
             let oid_to_fetch = response.text().await?.parse()?;
             Ok(FastPathRev::NeedsFetch(oid_to_fetch))
         } else {
-            // Usually response_code == 404 if the repository does not exist, and
-            // response_code == 422 if exists but GitHub is unable to resolve the
-            // requested rev.
+            // The fast path is only an optimization; any non-success status
+            // (404 for a missing repo, 422 when the rev cannot be resolved,
+            // 403 when rate-limited, 5xx, etc.) just falls back to a normal
+            // git fetch.
+            tracing::debug!("GitHub fast path returned {response_code}, falling back to git fetch");
             Ok(FastPathRev::Indeterminate)
         }
     })
@@ -929,6 +1264,36 @@ fn resolve_submodule_urls(repo_path: &Path, source_url: &Url) -> Result<(), GitE
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_lfs_remote_url() {
+        // A Windows drive-letter path parses as a URL with a single-letter
+        // scheme; git-lfs' standalone file agent needs it as a `file://`
+        // URL. (`Url::from_file_path` only accepts absolute paths, so this
+        // conversion naturally only happens on Windows hosts.)
+        if cfg!(windows) {
+            assert_eq!(
+                lfs_remote_url("D:/a/work/lfs_repo"),
+                "file:///D:/a/work/lfs_repo"
+            );
+        } else {
+            assert_eq!(lfs_remote_url("D:/a/work/lfs_repo"), "D:/a/work/lfs_repo");
+        }
+
+        // file:// URLs and remote URLs pass through unchanged.
+        assert_eq!(
+            lfs_remote_url("file:///repos/sample"),
+            "file:///repos/sample"
+        );
+        assert_eq!(
+            lfs_remote_url("https://github.com/owner/repo.git"),
+            "https://github.com/owner/repo.git"
+        );
+        assert_eq!(
+            lfs_remote_url("ssh://git@github.com/owner/repo.git"),
+            "ssh://git@github.com/owner/repo.git"
+        );
+    }
 
     #[test]
     fn test_resolve_relative_url() {

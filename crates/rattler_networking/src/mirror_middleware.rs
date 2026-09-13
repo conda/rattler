@@ -76,6 +76,47 @@ impl MirrorMiddleware {
     pub fn keys(&self) -> &[(String, Url)] {
         &self.sorted_keys
     }
+
+    /// Create a new `MirrorMiddleware` from the `mirrors` map of the shared
+    /// rattler configuration (see [`rattler_config`]).
+    ///
+    /// Accepts a [`rattler_config::config::CommonConfig`]; a
+    /// `&ConfigBase<T>` of any extension coerces into it.
+    #[cfg(feature = "rattler_config")]
+    pub fn from_config(config: &rattler_config::config::CommonConfig) -> Self {
+        /// Mirror urls are used as prefixes; without a trailing slash the
+        /// last component would be truncated when joining relative paths.
+        fn with_trailing_slash(url: &Url) -> Url {
+            if url.path().ends_with('/') {
+                url.clone()
+            } else {
+                let mut url = url.clone();
+                url.set_path(&format!("{}/", url.path()));
+                url
+            }
+        }
+
+        Self::from_map(
+            config
+                .mirrors
+                .iter()
+                .map(|(url, mirrors)| {
+                    (
+                        with_trailing_slash(url),
+                        mirrors
+                            .iter()
+                            .map(|mirror| Mirror {
+                                url: with_trailing_slash(mirror),
+                                no_zstd: false,
+                                no_bz2: false,
+                                max_failures: None,
+                            })
+                            .collect(),
+                    )
+                })
+                .collect(),
+        )
+    }
 }
 
 fn select_mirror(mirrors: &[MirrorState]) -> Option<&MirrorState> {
@@ -353,5 +394,26 @@ mod test {
         assert!(res.status().is_success(), "status: {}", res.status());
         let body = res.text().await.unwrap();
         assert_eq!(body, "Hi from counter: mirror server");
+    }
+
+    #[cfg(feature = "rattler_config")]
+    #[test]
+    fn from_config_appends_trailing_slashes() {
+        let (config, _) = rattler_config::ConfigBase::<rattler_config::NoExtension>::from_toml_str(
+            r#"
+            [mirrors]
+            "https://conda.anaconda.org/conda-forge" = ["https://mirror.example.com/conda-forge"]
+            "#,
+        )
+        .unwrap();
+
+        let middleware = MirrorMiddleware::from_config(&config);
+        assert_eq!(
+            middleware.keys(),
+            [(
+                "https://conda.anaconda.org/conda-forge/".to_string(),
+                Url::parse("https://conda.anaconda.org/conda-forge/").unwrap()
+            )]
+        );
     }
 }

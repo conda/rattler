@@ -27,6 +27,28 @@ use crate::{
 use crate::{render::replace_placeholders, utils::slugify};
 use std::collections::HashMap;
 
+/// Lexically resolves `..` and `.` components in `path`, without touching
+/// the filesystem (the path may not exist yet). Unlike `Path::join` +
+/// `Path::starts_with`, which never resolve `..`, this makes a containment
+/// check against the result meaningful: a `..`-laden path can no longer
+/// masquerade as a descendant of its base directory just because their
+/// unresolved component prefixes happen to match.
+fn lexically_normalize(path: &Path) -> PathBuf {
+    let mut result = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::ParentDir => {
+                if !result.pop() {
+                    result.push(component);
+                }
+            }
+            std::path::Component::CurDir => {}
+            other => result.push(other),
+        }
+    }
+    result
+}
+
 pub fn quote_args<I, S>(args: I) -> Vec<String>
 where
     I: IntoIterator<Item = S>,
@@ -402,7 +424,7 @@ impl MacOSMenu {
         for (src, dest) in link_in_bundle {
             let src = src.resolve(&self.placeholders);
             let dest = dest.resolve(&self.placeholders);
-            let dest = self.directories.location.join(&dest);
+            let dest = lexically_normalize(&self.directories.location.join(&dest));
             if !dest.starts_with(&self.directories.location) {
                 return Err(MenuInstError::InstallError(format!(
                     "'link_in_bundle' destinations MUST be created inside the .app bundle ({}), but it points to '{}'.",
@@ -924,6 +946,27 @@ mod tests {
         let dirs = super::Directories::new_test();
         assert!(dirs.location.exists());
         assert!(dirs.nested_location.exists());
+    }
+
+    #[test]
+    fn test_lexically_normalize() {
+        use super::lexically_normalize;
+
+        assert_eq!(
+            lexically_normalize(Path::new("/a/b/./c")),
+            PathBuf::from("/a/b/c")
+        );
+        assert_eq!(
+            lexically_normalize(Path::new("/a/b/../c")),
+            PathBuf::from("/a/c")
+        );
+        // A `link_in_bundle` destination that escapes the bundle directory
+        // must no longer look contained after normalization.
+        let location = PathBuf::from("/Users/victim/Applications/MyApp.app");
+        let dest = location.join("../../../../.ssh/authorized_keys");
+        let normalized = lexically_normalize(&dest);
+        assert!(!normalized.starts_with(&location));
+        assert_eq!(normalized, PathBuf::from("/.ssh/authorized_keys"));
     }
 
     struct FakePlaceholders {

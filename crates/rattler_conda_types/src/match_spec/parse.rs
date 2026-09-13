@@ -4,7 +4,7 @@ use nom::{
     Finish, IResult, Parser,
     branch::alt,
     bytes::complete::{tag, take_till1, take_until, take_while, take_while1},
-    character::complete::{char, multispace0, multispace1, one_of, space0},
+    character::complete::{char, multispace0, one_of, space0},
     combinator::{opt, recognize},
     error::{ContextError, ParseError, context},
     multi::{separated_list0, separated_list1},
@@ -20,7 +20,7 @@ use super::{
     MatchSpec,
     matcher::{StringMatcher, StringMatcherParseError},
 };
-use crate::match_spec::condition::parse_condition;
+use crate::match_spec::condition::parse_condition_with_options;
 use crate::{
     Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError, ParseMatchSpecOptions,
     ParseStrictness, ParseVersionError, Platform, VersionSpec,
@@ -61,6 +61,12 @@ pub enum ParseMatchSpecError {
     /// Invalid key in match spec
     #[error("invalid bracket key: {0}")]
     InvalidBracketKey(String),
+
+    /// An extras group name does not conform to the CEP 44 grammar.
+    #[error(
+        "invalid extras group name '{0}': names must match the pattern [a-z0-9_.+-] and be between 1 and 64 characters long"
+    )]
+    InvalidExtraName(String),
 
     /// Missing package name in match spec
     #[error("missing package name")]
@@ -153,54 +159,104 @@ impl MatchSpec {
     }
 }
 
-/// Strips a comment from a match spec. A comment is preceded by a '#' followed
-/// by the comment itself. This functions splits the matchspec into the
-/// matchspec and comment part.
-fn strip_comment(input: &str) -> (&str, Option<&str>) {
-    input
-        .split_once('#')
-        .map_or_else(|| (input, None), |(spec, comment)| (spec, Some(comment)))
+/// Returns whether `input` starts a bracket section with a known `MatchSpec` key.
+fn starts_bracket_fields(input: &str) -> bool {
+    let Some(contents) = input.strip_prefix('[') else {
+        return false;
+    };
+    let contents = contents.trim_start();
+    let key_end = contents
+        .char_indices()
+        .take_while(|(_, character)| character.is_alphanumeric() || matches!(character, '_' | '-'))
+        .map(|(position, character)| position + character.len_utf8())
+        .last()
+        .unwrap_or(0);
+    let key = &contents[..key_end];
+    // Any identifier followed by `=` marks a field section; unknown keys are
+    // rejected later with a precise error. A key whitelist here would leave
+    // quotes untracked for unknown keys, so a `#` inside a quoted value would
+    // be stripped as a comment. Platform selectors (`[linux-64]`) and glob
+    // character classes have no `=` and still fall through.
+    !key.is_empty() && contents[key_end..].trim_start().starts_with('=')
 }
 
-/// Rejects the deprecated `; if` syntax and returns an error if found.
-/// Users should migrate to the new `[when="..."]` bracket syntax.
-/// Also returns an error for bare semicolons (more than one).
-fn reject_deprecated_if_syntax(input: &str) -> Result<&str, ParseMatchSpecError> {
-    // Fast path: no semicolons at all (99%+ of match specs)
-    if input.find(';').is_none() {
-        return Ok(input.trim());
+/// Returns up to `limit` occurrences of `needle` outside quoted bracket fields.
+fn unquoted_positions(input: &str, needle: char, limit: usize) -> SmallVec<[usize; 2]> {
+    let mut positions = SmallVec::new();
+    let mut characters = input.char_indices().peekable();
+    let mut quote = None;
+    let mut field_depth = 0_u32;
+
+    while let Some((position, character)) = characters.next() {
+        if let Some(quote_character) = quote {
+            match character {
+                '\\' => {
+                    characters.next();
+                }
+                character if character == quote_character => quote = None,
+                _ => {}
+            }
+            continue;
+        }
+
+        match character {
+            '[' if field_depth > 0 => field_depth += 1,
+            '[' if starts_bracket_fields(&input[position..]) => field_depth = 1,
+            ']' if field_depth > 0 => field_depth -= 1,
+            '\'' | '"'
+                if field_depth > 0
+                    && input[..position]
+                        .trim_end()
+                        .chars()
+                        .next_back()
+                        .is_some_and(|previous| matches!(previous, '=' | '[' | ',')) =>
+            {
+                quote = Some(character);
+            }
+            character if character == needle => {
+                positions.push(position);
+                if positions.len() == limit {
+                    break;
+                }
+            }
+            _ => {}
+        }
     }
 
-    // Check for deprecated "; if" syntax first (more helpful error)
-    if has_if_statement(input) {
+    positions
+}
+
+/// Splits an unquoted comment from a `MatchSpec` while retaining URL fragments
+/// and other `#` characters inside bracket scalar values.
+fn strip_comment(input: &str) -> (&str, Option<&str>) {
+    unquoted_positions(input, '#', 1)
+        .first()
+        .copied()
+        .map_or_else(
+            || (input, None),
+            |position| (&input[..position], Some(&input[position + 1..])),
+        )
+}
+
+/// Rejects the deprecated `; if` syntax and multiple unquoted semicolons.
+fn reject_deprecated_if_syntax(input: &str) -> Result<&str, ParseMatchSpecError> {
+    let semicolons = unquoted_positions(input, ';', 2);
+    let Some(&first) = semicolons.first() else {
+        return Ok(input.trim());
+    };
+
+    let after = input[first + 1..].trim_start();
+    if after
+        .strip_prefix("if")
+        .is_some_and(|remainder| remainder.starts_with(char::is_whitespace))
+    {
         return Err(ParseMatchSpecError::DeprecatedIfSyntax);
     }
-
-    // Check that we only have a single semicolon (if any)
-    if input.matches(';').count() > 1 {
+    if semicolons.len() > 1 {
         return Err(ParseMatchSpecError::MoreThanOneSemicolon);
     }
 
-    // No deprecated syntax found, return the input as is
     Ok(input.trim())
-}
-
-/// Check if the input contains the deprecated `; if` syntax
-fn has_if_statement(input: &str) -> bool {
-    let mut parser = (
-        // Take everything up to "; if"
-        nom::bytes::complete::take_until::<_, _, nom::error::Error<&str>>(";"),
-        // Match "; if " with flexible whitespace
-        (
-            multispace0::<_, nom::error::Error<&str>>,
-            char(';'),
-            multispace0,
-            tag("if"),
-            multispace1, // At least one whitespace after "if"
-        ),
-    );
-
-    parser.parse(input).is_ok()
 }
 
 /// An optimized data structure to store key value pairs in between a bracket
@@ -377,52 +433,106 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
 /// Strips the brackets part of the matchspec returning the rest of the
 /// matchspec and  the contents of the brackets as a `Vec<&str>`.
 fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMatchSpecError> {
-    let bytes = input.as_bytes();
-
     // Brackets are a balanced `[...]` group at the end of the spec.
-    if bytes.last() != Some(&b']') {
+    if !input.ends_with(']') {
         return Ok((input.into(), SmallVec::new()));
     }
 
-    // Scan back to the matching `[`, tracking depth. `[`/`]` are ASCII, so byte
-    // scanning is safe on UTF-8 input.
+    // Scan forward for the group that closes at the end of the input,
+    // ignoring brackets inside quoted values: a `]` in `fn='a]b'` is content,
+    // and counting it would slice the section wrong or reject it as
+    // unbalanced.
     let mut depth = 0usize;
     let mut open = None;
-    for (idx, &b) in bytes.iter().enumerate().rev() {
-        match b {
-            b']' => depth += 1,
-            b'[' => {
-                depth -= 1;
+    let mut quote = None;
+    let mut characters = input.char_indices();
+    while let Some((idx, character)) = characters.next() {
+        if let Some(quote_character) = quote {
+            match character {
+                '\\' => {
+                    characters.next();
+                }
+                character if character == quote_character => quote = None,
+                _ => {}
+            }
+            continue;
+        }
+        match character {
+            '\'' | '"' if depth > 0 => quote = Some(character),
+            '[' => {
                 if depth == 0 {
                     open = Some(idx);
-                    break;
+                }
+                depth += 1;
+            }
+            ']' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 && idx != input.len() - 1 {
+                    open = None;
                 }
             }
             _ => {}
         }
     }
 
-    let Some(open) = open else {
-        // Unbalanced brackets: leave the input untouched.
-        return Ok((input.into(), SmallVec::new()));
+    let (Some(open), 0, None) = (open, depth, quote) else {
+        // The input ends with `]` but no well-formed bracket group closes at
+        // the end. Report the malformed section instead of letting bracket
+        // text flow into the positional grammar, where it could accidentally
+        // parse as something else.
+        return Err(ParseMatchSpecError::InvalidBracket);
     };
 
     let bracket_contents = parse_bracket_list(&input[open..])?;
     Ok((Cow::Borrowed(&input[..open]), bracket_contents))
 }
 
+/// Returns whether `name` conforms to the CEP 44 optional dependency group
+/// name grammar: the regex `[a-z0-9_.+-]{1,64}`. This is enforced when parsing
+/// `extras` so we never accept (and later serialize) group names that would be
+/// invalid metadata per the spec.
+pub(crate) fn is_valid_extra_group_name(name: &str) -> bool {
+    let mut len = 0usize;
+    for c in name.chars() {
+        if !(c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '_' | '-' | '.' | '+')) {
+            return false;
+        }
+        len += 1;
+    }
+    (1..=64).contains(&len)
+}
+
 /// Parses a list of optional dependencies from a string `feat1, feat2, feat3]`
 /// -> `vec![feat1, feat2, feat3]`.
+///
+/// Group names are validated against the CEP 44 grammar (`[a-z0-9_.+-]{1,64}`);
+/// names that do not conform produce a [`ParseMatchSpecError::InvalidExtraName`]
+/// error.
 pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
     use nom::{
         combinator::{all_consuming, map},
         multi::separated_list1,
     };
 
+    // Permissive tokenizer character set: anything that could plausibly be part
+    // of a group name. The strict CEP 44 grammar is enforced separately below so
+    // that a non-conforming name yields a descriptive error rather than an
+    // opaque "invalid bracket".
+    fn is_name_token_char(c: char) -> bool {
+        c.is_alphanumeric() || matches!(c, '_' | '-' | '.' | '+')
+    }
+
     fn parse_feature_name(i: &str) -> IResult<&str, &str> {
+        // A feature name is either a bare identifier or an (optionally) quoted
+        // string, so that Python-style lists like `["science", 'plot']` parse
+        // the same as `[science, plot]`.
         delimited(
             multispace0,
-            take_while1(|c: char| c.is_alphanumeric() || c == '_' || c == '-'),
+            alt((
+                parse_quoted_string_with_escapes('"'),
+                parse_quoted_string_with_escapes('\''),
+                take_while1(is_name_token_char),
+            )),
             multispace0,
         )
         .parse(i)
@@ -432,10 +542,20 @@ pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
         separated_list1(char(','), map(parse_feature_name, |s: &str| s.to_string())).parse(i)
     }
 
-    match all_consuming(parse_features).parse(input).finish() {
-        Ok((_remaining, features)) => Ok(features),
-        Err(_e) => Err(ParseMatchSpecError::InvalidBracket),
+    let features = match all_consuming(parse_features).parse(input).finish() {
+        Ok((_remaining, features)) => features,
+        Err(_e) => return Err(ParseMatchSpecError::InvalidBracket),
+    };
+
+    // Enforce the CEP 44 group name grammar so we never produce metadata that is
+    // not up to spec (lowercase only, `[a-z0-9_.+-]`, at most 64 characters).
+    for name in &features {
+        if !is_valid_extra_group_name(name) {
+            return Err(ParseMatchSpecError::InvalidExtraName(name.clone()));
+        }
     }
+
+    Ok(features)
 }
 
 /// Parses variant flags from either a single string or a comma-separated list.
@@ -560,7 +680,7 @@ fn parse_bracket_vec_into_components(
                     // Unescape the value in case it contains escaped quotes
                     let unescaped_value = unescape_string(value);
                     let (remainder, condition) =
-                        parse_condition(&unescaped_value).map_err(|e| {
+                        parse_condition_with_options(&unescaped_value, options).map_err(|e| {
                             ParseMatchSpecError::InvalidCondition(value.to_string(), e.to_string())
                         })?;
 
@@ -613,12 +733,43 @@ fn strip_package_name(
     input: &str,
     exact_names_only: bool,
 ) -> Result<(PackageNameMatcher, &str), ParseMatchSpecError> {
+    let trimmed = input.trim();
+
+    // A regex name is anchored `^...$` and may contain whitespace and
+    // version-constraint characters (e.g. `^py(?!py).*$`), so the name ends
+    // at the first `$` followed by nothing, whitespace, or a constraint
+    // start. The final `$` would swallow a regex build matcher.
+    if trimmed.starts_with('^') {
+        let end = trimmed
+            .match_indices('$')
+            .map(|(index, _)| index)
+            .find(|&index| {
+                trimmed[index + 1..]
+                    .chars()
+                    .next()
+                    .is_none_or(|c| c.is_whitespace() || is_start_of_version_constraint(c))
+            });
+        if let Some(end) = end {
+            let (package_name, rest) = trimmed.split_at(end + 1);
+            let package_name = PackageNameMatcher::from_str(package_name)
+                .map_err(ParseMatchSpecError::InvalidPackageNameMatcher)?;
+            if let PackageNameMatcher::Regex(regex) = &package_name {
+                if exact_names_only {
+                    return Err(
+                        ParseMatchSpecError::OnlyExactPackageNameMatchersAllowedRegex(
+                            regex.as_str().to_string(),
+                        ),
+                    );
+                }
+                return Ok((package_name, rest.trim()));
+            }
+        }
+    }
+
     let (rest, package_name) =
-        take_while1(|c: char| !c.is_whitespace() && !is_start_of_version_constraint(c))(
-            input.trim(),
-        )
-        .finish()
-        .map_err(|_err: nom::error::Error<_>| ParseMatchSpecError::MissingPackageName)?;
+        take_while1(|c: char| !c.is_whitespace() && !is_start_of_version_constraint(c))(trimmed)
+            .finish()
+            .map_err(|_err: nom::error::Error<_>| ParseMatchSpecError::MissingPackageName)?;
 
     let trimmed_package_name = package_name.trim();
     if trimmed_package_name.is_empty() {
@@ -872,9 +1023,11 @@ impl NamelessMatchSpec {
 fn parse_channel_and_subdir(
     input: &str,
 ) -> Result<(Option<Channel>, Option<String>), ParseMatchSpecError> {
-    let channel_config = ChannelConfig::default_with_root_dir(
-        std::env::current_dir().expect("Could not get current directory"),
-    );
+    // The root directory only resolves relative path channels. With an
+    // empty-root fallback those fail with a parse error instead of panicking
+    // when the current directory is unavailable.
+    let channel_config =
+        ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap_or_default());
 
     if let Some((channel, subdir)) = input.rsplit_once('/') {
         // If the subdir is a platform, we assume the channel has a subdir
@@ -1052,9 +1205,9 @@ mod tests {
     };
     use crate::match_spec::parse::parse_extras;
     use crate::{
-        BuildNumberSpec, Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError,
-        ParseMatchSpecOptions, ParseStrictness, ParseStrictness::*, Version, VersionSpec,
-        match_spec::parse::parse_bracket_list,
+        BuildNumberSpec, Channel, ChannelConfig, MatchSpecCondition, NamelessMatchSpec,
+        ParseChannelError, ParseMatchSpecOptions, ParseStrictness, ParseStrictness::*, Version,
+        VersionSpec, match_spec::parse::parse_bracket_list,
     };
 
     fn channel_config() -> ChannelConfig {
@@ -1146,6 +1299,19 @@ mod tests {
         assert_matches!(
             split_version_and_build("==1!164.3095,<1!165=py27_0", Strict),
             Err(ParseMatchSpecError::InvalidBuildString(_))
+        );
+
+        assert_matches!(
+            split_version_and_build("=3.7b_", Lenient),
+            Ok(("=3.7b_", None))
+        );
+        assert_matches!(
+            split_version_and_build("==3.7b_", Strict),
+            Ok(("==3.7b_", None))
+        );
+        assert_matches!(
+            split_version_and_build("=1.0_=py27_0", Lenient),
+            Ok(("=1.0_", Some("py27_0")))
         );
 
         assert_matches!(
@@ -1819,6 +1985,114 @@ mod tests {
     }
 
     #[test]
+    fn test_build_only_matchspec_roundtrips() {
+        // A build without a version renders in brackets: the historic
+        // `foo * py39h123_0` placeholder reparsed with `version: Any` instead
+        // of `version: None`.
+        let spec = MatchSpec::from_str("foo[build=py39h123_0]", Strict).unwrap();
+        assert_eq!(spec.version, None);
+        assert!(spec.build.is_some());
+
+        let rendered = spec.to_string();
+        assert_eq!(rendered, r#"foo[build="py39h123_0"]"#);
+
+        for strictness in [ParseStrictness::Lenient, Strict] {
+            let reparsed = MatchSpec::from_str(&rendered, strictness).unwrap();
+            assert_eq!(reparsed, spec);
+        }
+    }
+
+    /// Legacy `Display` must quote scalars losslessly, never escape them:
+    /// the parser keeps escape sequences in scalar bracket values in place
+    /// (only `when=` and `flags=` unescape), so an escaped value reparses to
+    /// a different value.
+    #[test]
+    fn test_display_scalar_quoting_roundtrips() {
+        // Baseline fact about the parser: escapes are kept verbatim.
+        let parsed = MatchSpec::from_str(r#"python[fn="a\b"]"#, Strict).unwrap();
+        assert_eq!(parsed.file_name.as_deref(), Some(r"a\b"));
+
+        // Backslash value: Display -> parse must give back the same file_name.
+        let spec = MatchSpec {
+            file_name: Some(r"a\b".to_string()),
+            ..MatchSpec::from_str("python", Strict).unwrap()
+        };
+        let rendered = spec.to_string();
+        let reparsed = MatchSpec::from_str(&rendered, Strict)
+            .unwrap_or_else(|e| panic!("Display output {rendered:?} unparsable: {e}"));
+        assert_eq!(reparsed.file_name.as_deref(), Some(r"a\b"));
+
+        // Quote value: whenever the rendered form parses, the value must
+        // survive.
+        let spec = MatchSpec {
+            file_name: Some(r#"qu"ote"#.to_string()),
+            ..MatchSpec::from_str("python", Strict).unwrap()
+        };
+        let rendered = spec.to_string();
+        if let Ok(reparsed) = MatchSpec::from_str(&rendered, Strict) {
+            assert_eq!(reparsed.file_name.as_deref(), Some(r#"qu"ote"#));
+        }
+    }
+
+    /// A nested `when` has no syntax; `Display` must render it so parsing
+    /// fails loudly instead of panicking or dropping the condition.
+    #[test]
+    fn test_nested_when_display_fails_loudly() {
+        let leaf = MatchSpec {
+            condition: Some(MatchSpecCondition::MatchSpec(Box::new(
+                MatchSpec::from_str("__linux", Strict).unwrap(),
+            ))),
+            ..MatchSpec::from_str("python", Strict).unwrap()
+        };
+        let spec = MatchSpec {
+            condition: Some(MatchSpecCondition::MatchSpec(Box::new(leaf))),
+            ..MatchSpec::from_str("target", Strict).unwrap()
+        };
+
+        let rendered = spec.to_string();
+        assert!(
+            parse_conditional(&rendered).is_err(),
+            "rendered: {rendered}"
+        );
+    }
+
+    /// A channel whose own name ends in a platform segment must not render
+    /// positionally: `conda-forge/linux-64::demo` would reparse as channel
+    /// `conda-forge` plus `subdir=linux-64`.
+    #[test]
+    fn test_channel_with_platform_suffix_name_roundtrips() {
+        let spec = MatchSpec {
+            channel: Some(Arc::new(
+                Channel::from_str("conda-forge/linux-64", &channel_config()).unwrap(),
+            )),
+            ..MatchSpec::from_str("demo", Strict).unwrap()
+        };
+
+        let rendered = spec.to_string();
+        let reparsed = MatchSpec::from_str(&rendered, Strict).unwrap();
+        assert_eq!(reparsed, spec, "rendered: {rendered}");
+    }
+
+    /// A build matcher containing a version-group separator must not render
+    /// positionally: `python ==1 ,*` merges the build back into the version
+    /// group on reparse.
+    #[test]
+    fn test_group_separator_build_display_roundtrips() {
+        let spec = MatchSpec {
+            version: Some(VersionSpec::from_str("==1", Strict).unwrap()),
+            build: Some(",*".parse().unwrap()),
+            ..MatchSpec::from_str("python", Strict).unwrap()
+        };
+
+        let rendered = spec.to_string();
+        for strictness in [Strict, ParseStrictness::Lenient] {
+            if let Ok(reparsed) = MatchSpec::from_str(&rendered, strictness) {
+                assert_eq!(reparsed, spec, "rendered: {rendered}");
+            }
+        }
+    }
+
+    #[test]
     fn test_pixi_issue_3922() {
         let match_spec = MatchSpec::from_str(
             "bird_tool_utils_python =0.*,>=0.4.1",
@@ -1828,6 +2102,32 @@ mod tests {
         let version_spec = match_spec.version.unwrap();
         let version = Version::from_str("0.4.1").unwrap();
         assert!(version_spec.matches(&version));
+    }
+
+    #[test]
+    fn test_pixi_issue_6618() {
+        // A trailing underscore belongs to the version, not the build string
+        for strictness in [ParseStrictness::Lenient, ParseStrictness::Strict] {
+            let match_spec = MatchSpec::from_str("tmux=3.7b_", strictness).unwrap();
+            assert_eq!(
+                match_spec.version,
+                Some(VersionSpec::from_str("3.7b_.*", strictness).unwrap())
+            );
+            assert_eq!(match_spec.build, None);
+            assert!(
+                match_spec
+                    .version
+                    .unwrap()
+                    .matches(&Version::from_str("3.7b_").unwrap())
+            );
+
+            let match_spec = MatchSpec::from_str("tmux==3.7b_", strictness).unwrap();
+            assert_eq!(
+                match_spec.version,
+                Some(VersionSpec::from_str("==3.7b_", strictness).unwrap())
+            );
+            assert_eq!(match_spec.build, None);
+        }
     }
 
     #[test]
@@ -1891,10 +2191,7 @@ mod tests {
     fn test_conditional_parsing_with_and_or() {
         // Complex condition with AND/OR
         let spec = parse_conditional(r#"foo[when="python >=3.6 and linux"]"#).unwrap();
-        assert_eq!(
-            spec.condition.unwrap().to_string(),
-            "(python>=3.6 and linux)"
-        );
+        assert_eq!(spec.condition.unwrap().to_string(), "python>=3.6 and linux");
     }
 
     #[test]
@@ -1917,7 +2214,7 @@ mod tests {
         let spec = parse_conditional(r#"foo[when="python >=3.6 or python <3.0"]"#).unwrap();
         assert_eq!(
             spec.condition.unwrap().to_string(),
-            "(python>=3.6 or python<3.0)"
+            "python>=3.6 or python<3.0"
         );
     }
 
@@ -2199,7 +2496,7 @@ mod tests {
         let condition = spec.condition.as_ref().unwrap().to_string();
         assert_eq!(
             condition,
-            r#"((python[version=">=3.8", build="py39*"] and __linux) or __win)"#
+            r#"python[version=">=3.8", build="py39*"] and __linux or __win"#
         );
 
         let rendered = spec.to_string();
@@ -2289,6 +2586,86 @@ mod tests {
             vec!["bar".to_string(), "baz".to_string()]
         );
         assert!(parse_extras("[bar,baz]").is_err());
+    }
+
+    #[test]
+    fn test_quoted_extras() {
+        let opts = ParseMatchSpecOptions::strict().with_extras(true);
+
+        // Double-quoted list items (Python-style list syntax).
+        let spec = MatchSpec::from_str("foobar[extras=[\"science\", \"plot\"]]", opts).unwrap();
+        assert_eq!(
+            spec.extras,
+            Some(vec!["science".to_string(), "plot".to_string()])
+        );
+
+        // Single-quoted and a mix of quoted/unquoted items should also work.
+        let spec = MatchSpec::from_str("foobar[extras=['science', plot]]", opts).unwrap();
+        assert_eq!(
+            spec.extras,
+            Some(vec!["science".to_string(), "plot".to_string()])
+        );
+
+        // Direct parse_extras checks.
+        assert_eq!(
+            parse_extras("\"science\", \"plot\"").unwrap(),
+            vec!["science".to_string(), "plot".to_string()]
+        );
+        assert_eq!(
+            parse_extras("'bar' , baz").unwrap(),
+            vec!["bar".to_string(), "baz".to_string()]
+        );
+
+        // CEP 44 group names allow `.` and `+` (regex `[a-z0-9_.+-]{1,64}`);
+        // these must parse both bare and quoted.
+        assert_eq!(
+            parse_extras("foo.bar, c++").unwrap(),
+            vec!["foo.bar".to_string(), "c++".to_string()]
+        );
+        assert_eq!(
+            parse_extras("\"foo.bar\"").unwrap(),
+            vec!["foo.bar".to_string()]
+        );
+
+        // Empty quoted feature names are still rejected.
+        assert!(parse_extras("\"\"").is_err());
+        // Quotes cannot smuggle in characters outside the group-name grammar.
+        assert!(parse_extras("\"foo bar\"").is_err());
+        assert!(parse_extras("\"foo/bar\"").is_err());
+    }
+
+    #[test]
+    fn test_extras_cep44_grammar() {
+        // CEP 44 group names MUST match `[a-z0-9_.+-]{1,64}`. Enforce it so we
+        // never accept (and later serialize) metadata that is not up to spec.
+
+        // Uppercase is rejected (bare and quoted).
+        assert!(matches!(
+            parse_extras("GPU"),
+            Err(ParseMatchSpecError::InvalidExtraName(name)) if name == "GPU"
+        ));
+        assert!(parse_extras("\"GPU\"").is_err());
+        assert!(parse_extras("gpu, MKL").is_err());
+
+        // Non-ASCII "alphanumerics" are rejected even though `char::is_alphanumeric` accepts them.
+        assert!(parse_extras("\u{e9}").is_err());
+        assert!(parse_extras("\u{3b1}").is_err());
+
+        // Length: 1..=64 characters.
+        assert!(parse_extras("").is_err());
+        let max = "a".repeat(64);
+        assert_eq!(parse_extras(&max).unwrap(), vec![max.clone()]);
+        let too_long = "a".repeat(65);
+        assert!(matches!(
+            parse_extras(&too_long),
+            Err(ParseMatchSpecError::InvalidExtraName(_))
+        ));
+
+        // All allowed symbols parse.
+        assert_eq!(
+            parse_extras("a_b-c.d+e").unwrap(),
+            vec!["a_b-c.d+e".to_string()]
+        );
     }
 
     #[test]
