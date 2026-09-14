@@ -68,8 +68,9 @@ pub struct SolverArgs {
     #[clap(long, group = "deps_mode")]
     no_deps: bool,
 
-    /// Exclude packages that have been published after the specified timestamp.
-    /// Can be specified as a timestamp (e.g., "2006-12-02T02:07:43Z") or as a date (e.g., "2006-12-02").
+    /// Exclude packages newer than the specified cutoff.
+    /// Can be specified as a timestamp (e.g., "2006-12-02T02:07:43Z"), a date
+    /// (e.g., "2006-12-02"), or a duration (e.g., "3d").
     /// When using a date, packages from the entire day are included.
     #[clap(long)]
     exclude_newer: Option<ExcludeNewer>,

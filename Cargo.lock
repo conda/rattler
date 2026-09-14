@@ -4995,6 +4995,7 @@ dependencies = [
  "dunce",
  "futures-util",
  "hex",
+ "humantime",
  "indexmap 2.14.2",
  "indicatif",
  "insta",
