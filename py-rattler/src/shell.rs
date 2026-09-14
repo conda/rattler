@@ -1,5 +1,5 @@
 use crate::error::PyRattlerError;
-use crate::platform::PyPlatform;
+use crate::subdir::PySubdir;
 use pyo3::{
     Borrowed, FromPyObject, PyAny, PyErr, PyResult, exceptions::PyValueError,
     pybacked::PyBackedStr, pyclass, pymethods,
@@ -138,7 +138,7 @@ impl PyActivator {
     pub fn activate(
         prefix: PathBuf,
         activation_vars: PyActivationVariables,
-        platform: PyPlatform,
+        platform: PySubdir,
         shell: PyShellEnum,
     ) -> Result<PyActivationResult, PyRattlerError> {
         let activation_vars = activation_vars.inner;

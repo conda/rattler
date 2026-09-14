@@ -1423,7 +1423,7 @@ packages:
         let lock_file = LockFile::builder()
             .with_platforms(vec![crate::PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: rattler_conda_types::Platform::Linux64,
+                subdir: rattler_conda_types::Subdir::Linux64,
                 virtual_packages: Vec::new(),
             }])
             .unwrap()
@@ -2214,7 +2214,7 @@ packages:
         let lock_file = LockFile::builder()
             .with_platforms(vec![PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: rattler_conda_types::Platform::Linux64,
+                subdir: rattler_conda_types::Subdir::Linux64,
                 virtual_packages: Vec::new(),
             }])
             .unwrap()
@@ -2354,7 +2354,7 @@ packages:
         let lock_file = LockFile::builder()
             .with_platforms(vec![PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: rattler_conda_types::Platform::Linux64,
+                subdir: rattler_conda_types::Subdir::Linux64,
                 virtual_packages: Vec::new(),
             }])
             .unwrap()

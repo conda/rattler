@@ -1,6 +1,6 @@
 use crate::channel::PyChannel;
 use crate::match_spec::PyMatchSpec;
-use crate::platform::PyPlatform;
+use crate::subdir::PySubdir;
 use crate::version::PyVersion;
 use crate::{error::PyRattlerError, record::PyRecord};
 use pep508_rs::Requirement;
@@ -312,7 +312,7 @@ impl PyLockPlatform {
     }
 
     /// Returns the underlying conda subdir/platform.
-    pub fn subdir(&self) -> rattler_conda_types::Platform {
+    pub fn subdir(&self) -> rattler_conda_types::Subdir {
         match &self.inner {
             LockPlatformInner::Owned(owned) => owned.as_ref().subdir(),
             LockPlatformInner::Standalone(data) => data.subdir,
@@ -375,7 +375,7 @@ impl PyLockPlatform {
     #[pyo3(signature = (name, subdir=None, virtual_packages=None))]
     pub fn new(
         name: String,
-        subdir: Option<PyPlatform>,
+        subdir: Option<PySubdir>,
         virtual_packages: Option<Vec<String>>,
     ) -> PyResult<Self> {
         let platform_name = PlatformName::try_from(name.clone())
@@ -384,7 +384,7 @@ impl PyLockPlatform {
         // Try to determine the subdir from the name if not provided
         let subdir = match subdir {
             Some(p) => p.inner,
-            None => rattler_conda_types::Platform::from_str(&name)
+            None => rattler_conda_types::Subdir::from_str(&name)
                 .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?,
         };
 
@@ -405,7 +405,7 @@ impl PyLockPlatform {
 
     /// The underlying conda subdir/platform.
     #[getter(subdir)]
-    fn py_subdir(&self) -> PyPlatform {
+    fn py_subdir(&self) -> PySubdir {
         self.subdir().into()
     }
 
@@ -451,7 +451,7 @@ impl PyEnvironment {
     #[new]
     pub fn new(
         name: String,
-        records: HashMap<PyPlatform, Vec<PyRecord>>,
+        records: HashMap<PySubdir, Vec<PyRecord>>,
         channels: Vec<PyChannel>,
     ) -> PyResult<Self> {
         let mut lock = LockFile::builder();

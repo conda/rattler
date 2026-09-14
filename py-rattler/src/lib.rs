@@ -16,7 +16,6 @@ mod package_name;
 mod package_name_matcher;
 mod package_streaming;
 mod paths_json;
-mod platform;
 mod prefix_paths;
 #[cfg(feature = "pty")]
 mod pty;
@@ -24,6 +23,7 @@ mod record;
 mod repo_data;
 mod shell;
 mod solver;
+mod subdir;
 mod utils;
 mod version;
 mod virtual_package;
@@ -46,7 +46,7 @@ use exceptions::{
     InvalidHeaderNameError, InvalidHeaderValueError, InvalidMatchSpecError,
     InvalidPackageNameError, InvalidUrlError, InvalidVersionError, InvalidVersionSpecError,
     IoError, LinkError, LockFileError, PackageNameMatcherParseError, ParseArchError,
-    ParseCondaLockError, ParseExplicitEnvironmentSpecError, ParsePlatformError, RequirementError,
+    ParseCondaLockError, ParseExplicitEnvironmentSpecError, ParseSubdirError, RequirementError,
     ShellError, SolverError, TransactionError, ValidatePackageRecordsError, VersionBumpError,
     VersionExtendError,
 };
@@ -71,7 +71,6 @@ use no_arch_type::PyNoArchType;
 use package_name::PyPackageName;
 use package_name_matcher::PyPackageNameMatcher;
 use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
-use platform::{PyArch, PyPlatform};
 use prefix_paths::{PyPrefixPathType, PyPrefixPaths, PyPrefixPathsEntry};
 use pyo3::prelude::*;
 use record::{PyLink, PyRecord};
@@ -86,6 +85,7 @@ use repo_data::{
 use run_exports_json::PyRunExportsJson;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
 use solver::{py_solve, py_solve_with_sparse_repodata};
+use subdir::{PyArch, PySubdir};
 use version::{PyVersion, PyVersionSpec};
 use virtual_package::{PyOverride, PyVirtualPackage, PyVirtualPackageOverrides};
 use who_needs::PyDependent;
@@ -120,7 +120,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyChannelConfig>()?;
     m.add_class::<PyChannelPriority>()?;
     m.add_class::<PyConfig>()?;
-    m.add_class::<PyPlatform>()?;
+    m.add_class::<PySubdir>()?;
     m.add_class::<PyArch>()?;
 
     m.add_class::<PyMirrorMiddleware>()?;
@@ -245,7 +245,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
         "ActivationScriptFormatError",
         py.get_type::<ActivationScriptFormatError>(),
     )?;
-    m.add("ParsePlatformError", py.get_type::<ParsePlatformError>())?;
+    m.add("ParseSubdirError", py.get_type::<ParseSubdirError>())?;
     m.add("ParseArchError", py.get_type::<ParseArchError>())?;
     m.add("FetchRepoDataError", py.get_type::<FetchRepoDataError>())?;
     m.add("CacheDirError", py.get_type::<CacheDirError>())?;

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, List, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from rattler.platform.platform import Platform
+    from rattler.platform.subdir import Subdir
     from rattler.package.package_name import PackageName
     from rattler.repo_data.record import RepoDataRecord
 
@@ -31,16 +31,16 @@ class RepoDataSource(Protocol):
     Example
     -------
     ```python
-    from rattler import Platform, PackageName, RepoDataRecord
+    from rattler import Subdir, PackageName, RepoDataRecord
 
     class MyCustomSource:
         async def fetch_package_records(
-            self, platform: Platform, name: PackageName
+            self, platform: Subdir, name: PackageName
         ) -> List[RepoDataRecord]:
             # Fetch records from your custom source
             return [...]
 
-        def package_names(self, platform: Platform) -> List[str]:
+        def package_names(self, platform: Subdir) -> List[str]:
             # Return all available package names for the platform
             return ["numpy", "pandas", ...]
 
@@ -54,7 +54,7 @@ class RepoDataSource(Protocol):
     ```
     """
 
-    async def fetch_package_records(self, platform: Platform, name: PackageName) -> List[RepoDataRecord]:
+    async def fetch_package_records(self, platform: Subdir, name: PackageName) -> List[RepoDataRecord]:
         """Fetch records for a specific package name and platform.
 
         This method is called by the gateway when it needs repodata records
@@ -70,7 +70,7 @@ class RepoDataSource(Protocol):
         """
         ...
 
-    def package_names(self, platform: Platform) -> List[str]:
+    def package_names(self, platform: Subdir) -> List[str]:
         """Return all available package names for the given platform.
 
         This is used by the gateway to know which packages are available

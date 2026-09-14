@@ -19,7 +19,7 @@ use std::{fmt::Write as _, path::PathBuf, sync::Arc};
 
 use rattler_conda_types::{
     Channel, ChannelConfig, MatchSpec, MatchSpecCondition, NamelessMatchSpec, PackageNameMatcher,
-    ParseMatchSpecOptions, Platform, RepodataRevision, StringMatcher,
+    ParseMatchSpecOptions, RepodataRevision, StringMatcher, Subdir,
 };
 use url::Url;
 
@@ -310,7 +310,7 @@ fn channels() {
         &with_channel(
             Channel::from_str("https://repo.example/custom", &channel_config())
                 .unwrap()
-                .with_explicit_platforms([] as [Platform; 0]),
+                .with_explicit_platforms([] as [Subdir; 0]),
         ),
     );
 

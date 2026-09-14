@@ -1,6 +1,6 @@
 //! Helpers to run commands in an activated environment.
 
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 use std::process::{Command, ExitStatus, Output};
 use std::{collections::HashMap, path::Path};
 
@@ -25,6 +25,9 @@ pub enum RunError {
 
     #[error("Unsupported shell: {0}")]
     UnsupportedShell(String),
+
+    #[error("the platform of the current host is not a known conda platform")]
+    UnknownHostPlatform,
 }
 
 /// Run a subprocess in an activated environment (inherited stdio, `command` non-empty).
@@ -36,7 +39,8 @@ pub async fn run_command_in_environment(
     env_vars: &HashMap<String, String>,
     cwd: Option<&Path>,
 ) -> Result<ExitStatus, RunError> {
-    let activator = Activator::from_path(prefix, shell, Platform::current())?;
+    let platform = Subdir::current().ok_or(RunError::UnknownHostPlatform)?;
+    let activator = Activator::from_path(prefix, shell, platform)?;
 
     let current_path = std::env::var("PATH")
         .ok()
@@ -76,7 +80,8 @@ pub fn run_in_environment(
     shell: ShellEnum,
     env_vars: &HashMap<String, String>,
 ) -> Result<Output, RunError> {
-    let mut shell_script = shell::ShellScript::new(shell.clone(), Platform::current());
+    let platform = Subdir::current().ok_or(RunError::UnknownHostPlatform)?;
+    let mut shell_script = shell::ShellScript::new(shell.clone(), platform);
 
     for (k, v) in env_vars.iter() {
         shell_script
@@ -84,7 +89,7 @@ pub fn run_in_environment(
             .map_err(ActivationError::from)?;
     }
 
-    let activator = Activator::from_path(prefix, shell.clone(), Platform::current())?;
+    let activator = Activator::from_path(prefix, shell.clone(), platform)?;
 
     let current_path = std::env::var("PATH")
         .ok()

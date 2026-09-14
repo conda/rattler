@@ -3,7 +3,7 @@ use rattler_conda_types::{Channel, ChannelConfig};
 use rattler_solve::ChannelPriority;
 use url::Url;
 
-use crate::{error::PyRattlerError, platform::PyPlatform};
+use crate::{error::PyRattlerError, subdir::PySubdir};
 
 #[pyclass(from_py_object)]
 #[repr(transparent)]
@@ -78,7 +78,7 @@ impl PyChannel {
     }
 
     /// Returns the Urls for the given platform.
-    pub fn platform_url(&self, platform: &PyPlatform) -> String {
+    pub fn platform_url(&self, platform: &PySubdir) -> String {
         self.inner.platform_url((*platform).into()).into()
     }
 }

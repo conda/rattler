@@ -68,8 +68,8 @@ impl TryFrom<&DeserializablePlatformData> for PlatformData {
 
     fn try_from(value: &DeserializablePlatformData) -> Result<Self, Self::Error> {
         let subdir = value.subdir.as_ref().map_or_else(
-            || rattler_conda_types::Platform::from_str(&value.name),
-            |s| rattler_conda_types::Platform::from_str(s),
+            || rattler_conda_types::Subdir::from_str(&value.name),
+            |s| rattler_conda_types::Subdir::from_str(s),
         )?;
 
         Ok(Self {
@@ -184,7 +184,7 @@ struct LegacyEnvironment {
     indexes: Option<PypiIndexes>,
     #[serde(default)]
     options: SolveOptions,
-    packages: BTreeMap<rattler_conda_types::Platform, Vec<LegacyPackageSelector>>,
+    packages: BTreeMap<rattler_conda_types::Subdir, Vec<LegacyPackageSelector>>,
 }
 
 impl<'de> DeserializeAs<'de, LegacyPackageData> for V5 {
@@ -737,7 +737,7 @@ fn parse_from_lock_legacy<P>(
 
 /// Create a new `Vec<Platform>` from a legacy lock file.
 ///
-/// Iterate over the environments and take the `rattler_conda_types::Platform`
+/// Iterate over the environments and take the `rattler_conda_types::Subdir`
 /// listed there and turn those into `Platform`.
 fn create_legacy_platforms<P>(
     raw: &DeserializableLockFileLegacy<P>,
@@ -991,7 +991,7 @@ fn parse_from_lock<P>(
 fn resolve_package_selector(
     selector: DeserializablePackageSelector,
     env_name: &str,
-    platform: rattler_conda_types::Platform,
+    platform: rattler_conda_types::Subdir,
     selector_index: &[(SelectorId, PackageIndex)],
 ) -> Result<PackageIndex, ParseCondaLockError> {
     let (kind, id) = match selector {
