@@ -333,7 +333,7 @@ impl VirtualPackages {
 
         Ok(Self {
             win: Windows::detect(overrides.win.as_ref())?,
-            unix: Platform::current().is_unix(),
+            unix: Platform::current().is_some_and(Platform::is_unix),
             linux: Linux::detect(overrides.linux.as_ref())?,
             osx: Osx::detect(overrides.osx.as_ref())?,
             ios: Ios::detect(overrides.ios.as_ref())?,
@@ -373,7 +373,7 @@ impl VirtualPackages {
         cache_dir: Option<&Path>,
     ) -> Result<Self, DetectVirtualPackageError> {
         let virtual_packages = Self::detect(overrides, cache_dir)?;
-        if platform == Platform::current() {
+        if Some(platform) == Platform::current() {
             // If we're targeting the current platform, just return the detected packages
             return Ok(virtual_packages);
         }
@@ -1025,7 +1025,7 @@ impl Archspec {
         archspec::cpu::host()
             .ok()
             .map(Into::into)
-            .or_else(|| Self::from_platform(Platform::current()))
+            .or_else(|| Platform::current().and_then(Self::from_platform))
             .unwrap_or(Archspec::Unknown)
     }
 
@@ -1036,7 +1036,7 @@ impl Archspec {
         // The values are taken from the archspec-json library.
         // See: https://github.com/archspec/archspec-json/blob/master/cpu/microarchitectures.json
         let archspec_name = match platform {
-            Platform::NoArch | Platform::Unknown => return None,
+            Platform::NoArch => return None,
             Platform::EmscriptenWasm32 | Platform::WasiWasm32 => return None,
             Platform::Win32 | Platform::Linux32 => "x86",
             Platform::Win64 | Platform::Osx64 | Platform::Linux64 => "x86_64",
@@ -1691,7 +1691,7 @@ mod test {
     /// host has nothing to say about.
     #[test]
     fn baseline_matches_cross_compiled_detection() {
-        let current = Platform::current();
+        let current = Platform::current().expect("host platform");
         let target = if current.is_linux() {
             Platform::Win64
         } else {
@@ -1717,7 +1717,7 @@ mod test {
         // host's own platform family is skipped because there the detected
         // (host) versions take precedence over the defaults.
         let overrides = VirtualPackageOverrides::default();
-        let current = Platform::current();
+        let current = Platform::current().expect("host platform");
 
         if !current.is_linux() {
             let packages =

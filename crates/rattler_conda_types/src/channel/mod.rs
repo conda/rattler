@@ -476,8 +476,11 @@ fn parse_platforms(channel: &str) -> Result<(Option<Vec<Platform>>, &str), Parse
 /// Returns the default platforms. These are based on the platform this binary
 /// was build for as well as platform agnostic platforms.
 pub(crate) const fn default_platforms() -> &'static [Platform] {
-    const CURRENT_PLATFORMS: [Platform; 2] = [Platform::current(), Platform::NoArch];
-    &CURRENT_PLATFORMS
+    const DEFAULT_PLATFORMS: &[Platform] = match Platform::current() {
+        Some(current) => &[current, Platform::NoArch],
+        None => &[Platform::NoArch],
+    };
+    DEFAULT_PLATFORMS
 }
 
 /// Returns the specified path as an absolute path
