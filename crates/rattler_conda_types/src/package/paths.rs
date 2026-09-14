@@ -121,6 +121,7 @@ impl PathsJson {
                             prefix_placeholder: prefix.map(|entry| PrefixPlaceholder {
                                 file_mode: entry.file_mode,
                                 placeholder: (*entry.prefix).to_owned(),
+                                c_string: None,
                             }),
                             no_link: no_link.contains(&path),
                             sha256: None,
@@ -187,6 +188,11 @@ pub struct PrefixPlaceholder {
     /// was build.
     #[serde(rename = "prefix_placeholder")]
     pub placeholder: String,
+
+    /// Optionally indicates whether to use C-string (NUL-terminated) padding when replacing the prefix.
+    /// If `Some(true)` or `None`, NUL padding is used. If `Some(false)`, slash padding (`///`) is used.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub c_string: Option<bool>,
 }
 
 /// A single entry in the `paths.json` file.
