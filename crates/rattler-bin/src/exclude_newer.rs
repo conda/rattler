@@ -170,4 +170,15 @@ mod tests {
         let exclude_newer = ExcludeNewer::from_str("2006-12-02T02:07:43Z").unwrap();
         assert_eq!(exclude_newer.to_string(), "2006-12-02T02:07:43Z");
     }
+
+    #[test]
+    fn test_parse_named_cutoff() {
+        assert_eq!(
+            NamedCutoff::from_str("conda-forge=3d").unwrap(),
+            NamedCutoff {
+                name: "conda-forge".to_string(),
+                cutoff: ExcludeNewer::Duration(Duration::from_secs(3 * 24 * 60 * 60)),
+            }
+        );
+    }
 }
