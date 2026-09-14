@@ -8,9 +8,8 @@ use std::{
 
 use rattler_conda_types::{PackageName, PackageRecord, Platform, PrefixRecord};
 use rattler_shell::shell::{Bash, CmdExe, ShellEnum};
-use thiserror::Error;
 
-use super::{InstallDriver, Transaction, installer::Reporter};
+use super::{Transaction, installer::Reporter};
 
 /// Error type for link script errors
 #[derive(Debug, thiserror::Error)]
@@ -75,14 +74,6 @@ pub struct PrePostLinkResult {
 
     /// Packages that failed to run the link scripts
     pub failed_packages: Vec<PackageName>,
-}
-
-/// An error that can occur during pre-, post-link script execution.
-#[derive(Debug, Error)]
-pub enum PrePostLinkError {
-    /// Failed to determine the currently installed packages.
-    #[error("failed to determine the installed packages")]
-    FailedToDetectInstalledPackages(#[source] std::io::Error),
 }
 
 /// Run the link scripts for a given package
@@ -206,58 +197,54 @@ pub fn run_link_scripts<'a>(
     })
 }
 
-impl InstallDriver {
-    /// Run any post-link scripts that are part of the packages that are being
-    /// installed.
-    pub fn run_post_link_scripts<Old, New>(
-        &self,
-        transaction: &Transaction<Old, New>,
-        prefix_records: &[&PrefixRecord],
-        target_prefix: &Path,
-        reporter: Option<&dyn Reporter>,
-    ) -> Result<PrePostLinkResult, LinkScriptError>
-    where
-        Old: AsRef<New>,
-        New: AsRef<PackageRecord>,
-    {
-        let to_install = transaction
-            .installed_packages()
-            .map(|r| &r.as_ref().name)
-            .collect::<HashSet<_>>();
+/// Run any post-link scripts that are part of the packages that are being
+/// installed.
+pub fn run_post_link_scripts<Old, New>(
+    transaction: &Transaction<Old, New>,
+    prefix_records: &[&PrefixRecord],
+    target_prefix: &Path,
+    reporter: Option<&dyn Reporter>,
+) -> Result<PrePostLinkResult, LinkScriptError>
+where
+    Old: AsRef<New>,
+    New: AsRef<PackageRecord>,
+{
+    let to_install = transaction
+        .installed_packages()
+        .map(|r| &r.as_ref().name)
+        .collect::<HashSet<_>>();
 
-        let filter_iter = prefix_records
-            .iter()
-            .filter(|r| to_install.contains(&r.repodata_record.package_record.name))
-            .cloned();
+    let filter_iter = prefix_records
+        .iter()
+        .filter(|r| to_install.contains(&r.repodata_record.package_record.name))
+        .cloned();
 
-        run_link_scripts(
-            LinkScriptType::PostLink,
-            filter_iter,
-            target_prefix,
-            &transaction.platform,
-            reporter,
-        )
-    }
+    run_link_scripts(
+        LinkScriptType::PostLink,
+        filter_iter,
+        target_prefix,
+        &transaction.platform,
+        reporter,
+    )
+}
 
-    /// Run any pre-unlink scripts that are part of the packages that are being
-    /// removed.
-    pub fn run_pre_unlink_scripts<Old, New>(
-        &self,
-        transaction: &Transaction<Old, New>,
-        target_prefix: &Path,
-        reporter: Option<&dyn Reporter>,
-    ) -> Result<PrePostLinkResult, LinkScriptError>
-    where
-        Old: Borrow<PrefixRecord>,
-    {
-        run_link_scripts(
-            LinkScriptType::PreUnlink,
-            transaction.removed_packages().map(Borrow::borrow),
-            target_prefix,
-            &transaction.platform,
-            reporter,
-        )
-    }
+/// Run any pre-unlink scripts that are part of the packages that are being
+/// removed.
+pub fn run_pre_unlink_scripts<Old, New>(
+    transaction: &Transaction<Old, New>,
+    target_prefix: &Path,
+    reporter: Option<&dyn Reporter>,
+) -> Result<PrePostLinkResult, LinkScriptError>
+where
+    Old: Borrow<PrefixRecord>,
+{
+    run_link_scripts(
+        LinkScriptType::PreUnlink,
+        transaction.removed_packages().map(Borrow::borrow),
+        target_prefix,
+        &transaction.platform,
+        reporter,
+    )
 }
 
 #[cfg(test)]
@@ -265,8 +252,8 @@ mod tests {
     use crate::{
         get_repodata_record, get_test_data_dir,
         install::{
-            InstallDriver, InstallOptions, TransactionOperation, test_utils::execute_transaction,
-            transaction,
+            InstallOptions, TransactionLinkContext, TransactionOperation, TransactionOptions,
+            test_utils::execute_transaction_with_options, transaction,
         },
         package_cache::PackageCache,
     };
@@ -298,15 +285,18 @@ mod tests {
 
         let packages_dir = tempfile::tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
-        let driver = InstallDriver::builder().execute_link_scripts(true).finish();
 
-        execute_transaction(
+        execute_transaction_with_options(
             transaction,
             &target_prefix,
             &LazyClient::default(),
             &cache,
-            &driver,
+            TransactionLinkContext::new(),
             &InstallOptions::default(),
+            TransactionOptions {
+                execute_link_scripts: true,
+                ..TransactionOptions::default()
+            },
         )
         .await;
 
@@ -324,13 +314,17 @@ mod tests {
             unchanged: Vec::new(),
         };
 
-        execute_transaction(
+        execute_transaction_with_options(
             transaction,
             &target_prefix,
             &LazyClient::default(),
             &cache,
-            &driver,
+            TransactionLinkContext::new().with_prefix_records(&prefix_records),
             &InstallOptions::default(),
+            TransactionOptions {
+                execute_link_scripts: true,
+                ..TransactionOptions::default()
+            },
         )
         .await;
 

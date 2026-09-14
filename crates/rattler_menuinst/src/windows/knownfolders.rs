@@ -71,30 +71,29 @@ impl Folders {
             UserHandle::Common => (&self.system_folders, &self.user_folders),
         };
 
-        if let Some(folder) = preferred_folders.get(&key) {
-            if let Some(path) = get_known_folder_path(*folder) {
-                return Ok(path);
-            }
+        if let Some(folder) = preferred_folders.get(&key)
+            && let Some(path) = get_known_folder_path(*folder)
+        {
+            return Ok(path);
         }
 
         // Implement fallback for user documents
-        if preferred_mode == UserHandle::Current && key == Folder::Documents {
-            if let Some(profile_folder) = preferred_folders.get(&Folder::Profile) {
-                if let Some(profile_path) = get_known_folder_path(*profile_folder) {
-                    let documents_path = profile_path.join("Documents");
-                    if documents_path.is_dir() {
-                        return Ok(documents_path);
-                    }
-                }
+        if preferred_mode == UserHandle::Current
+            && key == Folder::Documents
+            && let Some(profile_folder) = preferred_folders.get(&Folder::Profile)
+            && let Some(profile_path) = get_known_folder_path(*profile_folder)
+        {
+            let documents_path = profile_path.join("Documents");
+            if documents_path.is_dir() {
+                return Ok(documents_path);
             }
         }
 
-        if check_other_mode {
-            if let Some(folder) = other_folders.get(&key) {
-                if let Some(path) = get_known_folder_path(*folder) {
-                    return Ok(path);
-                }
-            }
+        if check_other_mode
+            && let Some(folder) = other_folders.get(&key)
+            && let Some(path) = get_known_folder_path(*folder)
+        {
+            return Ok(path);
         }
 
         Err(FolderError::PathNotFound)

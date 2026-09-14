@@ -32,8 +32,9 @@ use simple_spawn_blocking::tokio::run_blocking_task;
 use tokio::{sync::Semaphore, task::JoinError};
 
 use super::{
-    AppleCodeSignBehavior, ExternalSymlinkPolicy, InstallDriver, InstallOptions, Prefix,
-    Transaction, unlink_package,
+    AppleCodeSignBehavior, ExternalSymlinkPolicy, InstallOptions, Prefix, PreparedTransaction,
+    Transaction, TransactionLinkContext, TransactionOptions, unlink::remove_empty_directories,
+    unlink_package,
 };
 use crate::{
     default_cache_dir,
@@ -635,9 +636,8 @@ impl Installer {
         // is held for the duration of both. When None, concurrency is unlimited.
         let concurrent_requests_semaphore = self.concurrent_requests_semaphore;
 
-        // Construct a driver.
-        let driver = InstallDriver::builder()
-            .execute_link_scripts(self.execute_link_scripts)
+        // Share linking state across all operations in this transaction.
+        let link_context = TransactionLinkContext::new()
             .with_io_concurrency_semaphore(
                 self.io_semaphore.unwrap_or(Arc::new(Semaphore::new(100))),
             )
@@ -646,8 +646,7 @@ impl Installer {
                     .unchanged_packages()
                     .iter()
                     .chain(transaction.removed_packages()),
-            )
-            .finish();
+            );
 
         // Determine base installer options.
         let base_install_options = InstallOptions {
@@ -662,10 +661,17 @@ impl Installer {
             ..InstallOptions::default()
         };
 
-        // Preprocess the transaction
-        let pre_process_result = driver
-            .pre_process(&transaction, &prefix, self.reporter.as_deref())
-            .map_err(InstallerError::PreProcessingFailed)?;
+        let prepared = PreparedTransaction::prepare(
+            &transaction,
+            &prefix,
+            link_context,
+            TransactionOptions {
+                execute_link_scripts: self.execute_link_scripts,
+                ..TransactionOptions::default()
+            },
+            self.reporter.as_deref(),
+        );
+        let link_context = prepared.link_context();
 
         if let Some(reporter) = &self.reporter {
             reporter.on_transaction_start(&transaction);
@@ -675,7 +681,7 @@ impl Installer {
         // Execute the operations (remove) in the transaction.
         for (operation_idx, operation) in transaction.operations.iter().enumerate() {
             let reporter = self.reporter.clone();
-            let driver = &driver;
+            let link_context = &link_context;
             let prefix = &prefix;
 
             let op = async move {
@@ -688,7 +694,7 @@ impl Installer {
                     let reporter = reporter
                         .as_deref()
                         .map(move |r| (r, r.on_unlink_start(operation_idx, record)));
-                    driver.clobber_registry().unregister_paths(record);
+                    link_context.unregister_paths(record);
                     unlink_package(prefix, record).await.map_err(|e| {
                         InstallerError::UnlinkError(
                             record.repodata_record.identifier.to_string(),
@@ -724,7 +730,7 @@ impl Installer {
             let package_cache = &package_cache;
             let reporter = self.reporter.clone();
             let base_install_options = &base_install_options;
-            let driver = &driver;
+            let link_context = &link_context;
             let prefix = &prefix;
             let concurrent_requests_semaphore = &concurrent_requests_semaphore;
             let spec_mapping_ref = spec_mapping.clone();
@@ -795,7 +801,7 @@ impl Installer {
                         prefix,
                         cache_metadata.path(),
                         install_options,
-                        driver,
+                        link_context,
                         requested_spec,
                     )
                     .await?;
@@ -821,13 +827,12 @@ impl Installer {
         }
         drop(pending_unlink_futures);
 
-        driver
-            .remove_empty_directories(
-                &transaction.operations,
-                transaction.unchanged_packages(),
-                &prefix,
-            )
-            .map_err(|e| InstallerError::UnlinkError("remove_empty_directories".to_string(), e))?;
+        remove_empty_directories(
+            &transaction.operations,
+            transaction.unchanged_packages(),
+            &prefix,
+        )
+        .map_err(|e| InstallerError::UnlinkError("remove_empty_directories".to_string(), e))?;
 
         // Wait for all transaction operations to finish
         while let Some(result) = pending_link_futures.next().await {
@@ -835,9 +840,7 @@ impl Installer {
         }
         drop(pending_link_futures);
 
-        // Post process the transaction
-        let post_process_result =
-            driver.post_process(&transaction, &prefix, self.reporter.as_deref())?;
+        let lifecycle_result = prepared.finalize()?;
 
         if let Some(reporter) = &self.reporter {
             reporter.on_transaction_complete();
@@ -847,9 +850,9 @@ impl Installer {
 
         Ok(InstallationResult {
             transaction,
-            pre_link_script_result: pre_process_result,
-            post_link_script_result: post_process_result.post_link_result,
-            clobbered_paths: post_process_result.clobbered_paths,
+            pre_link_script_result: lifecycle_result.pre_link_script_result,
+            post_link_script_result: lifecycle_result.post_link_script_result,
+            clobbered_paths: lifecycle_result.clobbered_paths,
         })
     }
 }
@@ -859,13 +862,13 @@ async fn link_package(
     target_prefix: &Prefix,
     cached_package_dir: &Path,
     install_options: InstallOptions,
-    driver: &InstallDriver,
+    link_context: &Arc<TransactionLinkContext>,
     requested_specs: Vec<String>,
 ) -> Result<(), InstallerError> {
     let record = record.clone();
     let target_prefix = target_prefix.clone();
     let cached_package_dir = cached_package_dir.to_path_buf();
-    let clobber_registry = driver.clobber_registry.clone();
+    let link_context = Arc::clone(link_context);
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -878,7 +881,7 @@ async fn link_package(
             let (paths, link_type) = crate::install::link_package_sync(
                 &cached_package_dir,
                 &target_prefix,
-                clobber_registry,
+                &link_context,
                 install_options,
             )
             .map_err(|e| InstallerError::LinkError(record.identifier.to_string(), e))?;

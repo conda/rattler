@@ -16,12 +16,12 @@ pub struct Opt {
 }
 
 pub async fn link(opt: Opt) -> miette::Result<()> {
-    let driver = install::InstallDriver::default();
+    let link_context = install::TransactionLinkContext::default();
     let options = install::InstallOptions::default();
     let target_dir =
         rattler_conda_types::prefix::Prefix::create(opt.destination.clone()).into_diagnostic()?;
 
-    install::link_package(&opt.package_dir, &target_dir, &driver, options)
+    install::link_package(&opt.package_dir, &target_dir, &link_context, options)
         .await
         .into_diagnostic()?;
     Ok(())

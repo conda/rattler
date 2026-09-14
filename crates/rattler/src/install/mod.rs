@@ -1,26 +1,16 @@
-//! This module contains the logic to install a package into a prefix. The main
-//! entry point is the [`link_package`] function.
+//! Installs conda packages into a prefix.
 //!
-//! The [`link_package`] function takes a package directory and a target
-//! directory. The package directory is the directory that contains the
-//! extracted package archive. The target directory is the directory into which
-//! the package should be installed. The target directory is also called
-//! the "prefix".
-//!
-//! The [`link_package`] function will read the `paths.json` file from the
-//! package directory and link all files specified in that file into the target
-//! directory. The `paths.json` file contains a list of files that should be
-//! installed and how they should be installed. For example, the `paths.json`
-//! file might contain a file that should be copied into the target directory.
-//! Or it might contain a file that should be linked into the target directory.
-//! The `paths.json` file also contains a SHA256 hash for each file. This hash
-//! is used to verify that the file was not tampered with.
+//! Use [`Installer`] for complete package transactions, or [`PreparedTransaction`]
+//! and [`TransactionLinkContext`] when executing a transaction manually.
 pub mod apple_codesign;
 mod clobber_registry;
-mod driver;
 mod entry_point;
+mod filesystem;
+mod lifecycle;
 pub mod link;
+mod link_context;
 pub mod link_script;
+mod package_linker;
 mod python;
 mod transaction;
 pub mod unlink;
@@ -29,22 +19,19 @@ mod installer;
 #[cfg(test)]
 mod test_utils;
 
-#[cfg(unix)]
-use std::sync::OnceLock;
 use std::{
     cmp::Ordering,
-    collections::{BinaryHeap, HashMap, HashSet, binary_heap::PeekMut},
+    collections::{BinaryHeap, HashSet, binary_heap::PeekMut},
     fs,
     future::ready,
     io::ErrorKind,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 pub use apple_codesign::AppleCodeSignBehavior;
-pub use clobber_registry::ClobberMode;
-pub use driver::InstallDriver;
-use fs_err::tokio as tokio_fs;
+pub use clobber_registry::{ClobberError, ClobberMode, ClobberedPath};
+use filesystem::{can_create_hardlinks, can_create_reflinks_sync, can_create_symlinks};
 use futures::{FutureExt, StreamExt, stream::FuturesUnordered};
 #[cfg(feature = "indicatif")]
 pub use installer::{
@@ -55,17 +42,19 @@ pub use installer::{
     Installer, InstallerError, LinkOptions, Reporter, result_record::InstallationResultRecord,
 };
 use itertools::Itertools;
+pub use lifecycle::{
+    FinalizeTransactionError, PreparedTransaction, TransactionLifecycleResult, TransactionOptions,
+};
 pub use link::{LinkFileError, LinkMethod, link_file};
+pub use link_context::TransactionLinkContext;
+use package_linker::LinkPath;
+pub use package_linker::link_package_sync;
 pub use python::PythonInfo;
 use rattler_conda_types::{
     Platform,
-    package::{AboutJson, IndexJson, LinkJson, NoArchLinks, PackageFile, PathsEntry, PathsJson},
+    package::{AboutJson, IndexJson, LinkJson, NoArchLinks, PackageFile, PathsJson},
     prefix::Prefix,
-    prefix_record::{self, LinkType},
-};
-use rayon::{
-    iter::Either,
-    prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator},
+    prefix_record,
 };
 use simple_spawn_blocking::Cancelled;
 use tokio::task::JoinError;
@@ -73,11 +62,10 @@ use tracing::instrument;
 pub use transaction::{Transaction, TransactionError, TransactionOperation};
 pub use unlink::{empty_trash, unlink_package};
 
-pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
-use crate::install::{
-    clobber_registry::{CLOBBERS_DIR_NAME, ClobberRegistry},
-    entry_point::{create_unix_python_entry_point, create_windows_python_entry_point},
+use crate::install::entry_point::{
+    create_unix_python_entry_point, create_windows_python_entry_point,
 };
+pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
 
 /// An error that might occur when installing a package.
 #[derive(Debug, thiserror::Error)]
@@ -272,13 +260,6 @@ pub enum ExternalSymlinkPolicy {
     Deny,
 }
 
-#[derive(Debug)]
-struct LinkPath {
-    entry: PathsEntry,
-    computed_path: PathBuf,
-    clobber_path: Option<PathBuf>,
-}
-
 /// Find a timestamp to put on all files we modify. Use `info/about.json`, as a base. This
 /// file is always written after all the packaged data is already stored.
 ///
@@ -297,17 +278,15 @@ fn modification_time(package_dir: &Path) -> filetime::FileTime {
     }
 }
 
-/// Given an extracted package archive (`package_dir`), installs its files to
-/// the `target_dir`.
+/// Links one extracted package into `target_dir`.
 ///
-/// Returns a [`PathsEntry`] for every file that was linked into the target
-/// directory. The entries are ordered in the same order as they appear in the
-/// `paths.json` file of the package.
+/// Use the same `link_context` for every package linked as part of one transaction.
+/// The returned [`prefix_record::PathsEntry`] values follow the package's `paths.json` order.
 #[instrument(skip_all, fields(package_dir = % package_dir.display()))]
 pub async fn link_package(
     package_dir: &Path,
     target_dir: &Prefix,
-    driver: &InstallDriver,
+    link_context: &TransactionLinkContext,
     options: InstallOptions,
 ) -> Result<Vec<prefix_record::PathsEntry>, InstallError> {
     // Determine the target prefix for linking
@@ -321,8 +300,8 @@ pub async fn link_package(
 
     // Reuse or read the `paths.json` and `index.json` files from the package
     // directory
-    let paths_json = read_paths_json(package_dir, driver, options.paths_json);
-    let index_json = read_index_json(package_dir, driver, options.index_json);
+    let paths_json = read_paths_json(package_dir, link_context, options.paths_json);
+    let index_json = read_index_json(package_dir, link_context, options.index_json);
     let (paths_json, index_json) = tokio::try_join!(paths_json, index_json)?;
 
     let modification_time = modification_time(package_dir);
@@ -335,7 +314,7 @@ pub async fn link_package(
 
     // Parse the `link.json` file and extract entry points from it.
     let link_json = if index_json.noarch.is_python() {
-        read_link_json(package_dir, driver, options.link_json.flatten()).await?
+        read_link_json(package_dir, link_context, options.link_json.flatten()).await?
     } else {
         None
     };
@@ -363,12 +342,10 @@ pub async fn link_package(
     // compute all path renames
     let final_paths = compute_paths(&index_json, &paths_json, options.python_info.as_ref());
 
-    // register all paths in the install driver path registry
-    let clobber_paths = Arc::new(
-        driver
-            .clobber_registry()
-            .register_paths(&index_json, &final_paths),
-    );
+    // Register all paths in the transaction's path registry.
+    let clobber_paths = link_context
+        .clobber_registry()
+        .register_paths(&index_json, &final_paths);
 
     let final_paths: Vec<LinkPath> = final_paths
         .into_iter()
@@ -410,7 +387,7 @@ pub async fn link_package(
     }
 
     let directories_target_dir = target_dir.path().to_path_buf();
-    driver
+    link_context
         .run_blocking_io_task(move || {
             for directory in directories_to_construct.into_iter().sorted() {
                 let full_path = directories_target_dir.join(directory);
@@ -438,39 +415,36 @@ pub async fn link_package(
         let target_prefix = target_prefix.clone();
 
         let install_future = async move {
-            let _permit = driver.acquire_io_permit().await;
+            let _permit = link_context.acquire_io_permit().await;
 
             // Spawn a blocking task to link the specific file. We use a blocking task here
             // because filesystem access is blocking anyway so its more
             // efficient to group them together in a single blocking call.
-            let cloned_entry = entry.clone();
             let is_clobber = link_path.clobber_path.is_some();
-            let result = match tokio::task::spawn_blocking(move || {
-                link_file(
-                    &cloned_entry,
+            let (entry, result) = tokio::task::spawn_blocking(move || {
+                let result = link_file(
+                    &entry,
                     link_path.clobber_path.unwrap_or(link_path.computed_path),
                     &package_dir,
                     &target_dir,
                     &target_prefix,
-                    allow_symbolic_links && !cloned_entry.no_link,
-                    allow_hard_links && !cloned_entry.no_link,
-                    allow_ref_links && !cloned_entry.no_link,
+                    allow_symbolic_links && !entry.no_link,
+                    allow_hard_links && !entry.no_link,
+                    allow_ref_links && !entry.no_link,
                     platform,
                     options.apple_codesign_behavior,
                     modification_time,
                     options.external_symlink_policy,
-                )
+                );
+                (entry, result)
             })
-            .await
-            .map_err(JoinError::try_into_panic)
-            {
-                Ok(Ok(Some(linked_file))) => linked_file,
-                Ok(Ok(None)) => return Ok(vec![]),
-                Ok(Err(e)) => {
-                    return Err(InstallError::FailedToLink(entry.relative_path.clone(), e));
+            .await?;
+            let result = match result {
+                Ok(Some(linked_file)) => linked_file,
+                Ok(None) => return Ok(vec![]),
+                Err(error) => {
+                    return Err(InstallError::FailedToLink(entry.relative_path, error));
                 }
-                Err(Ok(payload)) => std::panic::resume_unwind(payload),
-                Err(Err(_err)) => return Err(InstallError::Cancelled),
             };
 
             // Construct a `PathsEntry` from the result of the linking operation
@@ -493,12 +467,14 @@ pub async fn link_package(
                 size_in_bytes: Some(result.file_size),
                 file_mode: match result.method {
                     LinkMethod::Patched(file_mode) => Some(file_mode),
-                    _ => None,
+                    LinkMethod::Reflink
+                    | LinkMethod::Hardlink
+                    | LinkMethod::Softlink
+                    | LinkMethod::Copy => None,
                 },
                 prefix_placeholder: entry
                     .prefix_placeholder
-                    .as_ref()
-                    .map(|p| p.placeholder.clone()),
+                    .map(|placeholder| placeholder.placeholder),
             };
 
             Ok(vec![(number_of_paths_entries, paths_entry)])
@@ -537,7 +513,7 @@ pub async fn link_package(
 
             let entry_point_fut = async move {
                 // Acquire an IO permit
-                let _permit = driver.acquire_io_permit().await;
+                let _permit = link_context.acquire_io_permit().await;
 
                 let entries = if platform.is_windows() {
                     match create_windows_python_entry_point(
@@ -620,399 +596,6 @@ pub async fn link_package(
     Ok(paths)
 }
 
-/// Given an extracted package archive (`package_dir`), installs its files to
-/// the `target_dir`.
-///
-/// Returns a [`PathsEntry`] for every file that was linked into the target
-/// directory. The entries are ordered in the same order as they appear in the
-/// `paths.json` file of the package.
-#[instrument(skip_all, fields(package_dir = % package_dir.display()))]
-pub fn link_package_sync(
-    package_dir: &Path,
-    target_dir: &Prefix,
-    clobber_registry: Arc<Mutex<ClobberRegistry>>,
-    options: InstallOptions,
-) -> Result<(Vec<prefix_record::PathsEntry>, LinkType), InstallError> {
-    // Determine the target prefix for linking
-    let target_prefix = options
-        .target_prefix
-        .as_deref()
-        .unwrap_or(target_dir)
-        .to_str()
-        .ok_or(InstallError::TargetPrefixIsNotUtf8)?
-        .to_owned();
-
-    // Reuse or read the `paths.json` and `index.json` files from the package
-    // directory
-    let paths_json = options.paths_json.map_or_else(
-        || {
-            PathsJson::from_package_directory_with_deprecated_fallback(package_dir)
-                .map_err(InstallError::FailedToReadPathsJson)
-        },
-        Ok,
-    )?;
-    let index_json = options.index_json.map_or_else(
-        || {
-            IndexJson::from_package_directory(package_dir)
-                .map_err(InstallError::FailedToReadIndexJson)
-        },
-        Ok,
-    )?;
-    let modification_time = modification_time(package_dir);
-
-    // Error out if this is a noarch python package but the python information is
-    // missing.
-    if index_json.noarch.is_python() && options.python_info.is_none() {
-        return Err(InstallError::MissingPythonInfo);
-    }
-
-    // Parse the `link.json` file and extract entry points from it.
-    let link_json = if index_json.noarch.is_python() {
-        options.link_json.flatten().map_or_else(
-            || {
-                LinkJson::from_package_directory(package_dir)
-                    .map_or_else(
-                        |e| {
-                            // Its ok if the file is not present.
-                            if e.kind() == ErrorKind::NotFound {
-                                Ok(None)
-                            } else {
-                                Err(e)
-                            }
-                        },
-                        |link_json| Ok(Some(link_json)),
-                    )
-                    .map_err(InstallError::FailedToReadLinkJson)
-            },
-            |value| Ok(Some(value)),
-        )?
-    } else {
-        None
-    };
-
-    // Determine whether or not we can use symbolic links
-    let allow_symbolic_links = options
-        .allow_symbolic_links
-        .unwrap_or_else(|| can_create_symlinks_sync(target_dir));
-    let allow_hard_links = options
-        .allow_hard_links
-        .unwrap_or_else(|| can_create_hardlinks_sync(target_dir, package_dir));
-    // Record the link type that will be used for this package. Hard links take
-    // priority
-    let link_type = if allow_hard_links {
-        LinkType::HardLink
-    } else {
-        LinkType::Copy
-    };
-    let mut allow_ref_links = options
-        .allow_ref_links
-        .unwrap_or_else(|| can_create_reflinks_sync(target_dir, package_dir, allow_hard_links));
-
-    // Determine the platform to use
-    let platform = options.platform.unwrap_or(Platform::current());
-
-    // compute all path renames
-    let final_paths = compute_paths(&index_json, &paths_json, options.python_info.as_ref());
-
-    // register all paths in the install driver path registry
-    let clobber_paths = clobber_registry
-        .lock()
-        .unwrap()
-        .register_paths(&index_json, &final_paths);
-
-    let final_paths = final_paths.into_iter().map(|el| {
-        let (entry, computed_path) = el;
-        let clobber_path = clobber_paths.get(&computed_path).cloned();
-        LinkPath {
-            entry,
-            computed_path,
-            clobber_path,
-        }
-    });
-
-    // Figure out all the directories that we are going to need
-    let mut directories_to_construct = HashSet::new();
-    let mut paths_by_directory = HashMap::new();
-    for link_path in final_paths {
-        let Some(entry_parent) = link_path.computed_path.parent() else {
-            continue;
-        };
-
-        // Iterate over all parent directories and create them if they do not exist.
-        let mut current_path = Some(entry_parent);
-        while let Some(path) = current_path {
-            if !path.as_os_str().is_empty() && directories_to_construct.insert(path.to_path_buf()) {
-                current_path = path.parent();
-            } else {
-                break;
-            }
-        }
-
-        // Since we store clobbers in the separate directory
-        // (`__clobbers__`) now we have to create all necessary
-        // directories for it as well.
-        let clobber_path = link_path.clobber_path.as_ref();
-        let mut current_path = clobber_path.and_then(|p| p.parent());
-        while let Some(path) = current_path {
-            if !path.as_os_str().is_empty() && directories_to_construct.insert(path.to_path_buf()) {
-                current_path = path.parent();
-            } else {
-                break;
-            }
-        }
-
-        // Store the path by directory so we can create them in parallel
-        paths_by_directory
-            .entry(entry_parent.to_path_buf())
-            .or_insert_with(Vec::new)
-            .push(link_path);
-    }
-
-    let mut created_directories = HashSet::new();
-    let mut reflinked_files = HashMap::new();
-    for directory in directories_to_construct
-        .into_iter()
-        .sorted_by(|a, b| a.components().count().cmp(&b.components().count()))
-    {
-        let full_path = target_dir.path().join(&directory);
-
-        // if we already (recursively) created the parent directory we can skip this
-        if created_directories
-            .iter()
-            .any(|dir| directory.starts_with(dir))
-        {
-            continue;
-        }
-
-        // can we lock this directory?
-        if full_path.exists() {
-            continue;
-        }
-
-        if allow_ref_links
-            && cfg!(target_os = "macos")
-            && !directory.starts_with(CLOBBERS_DIR_NAME)
-            && !index_json.noarch.is_python()
-        {
-            // reflink the whole directory if possible
-            // currently this does not handle noarch packages
-            match reflink_copy::reflink(package_dir.join(&directory), &full_path) {
-                Ok(_) => {
-                    created_directories.insert(directory.clone());
-                    // remove paths that we just reflinked (everything that starts with the directory)
-                    let (matching, non_matching): (HashMap<_, _>, HashMap<_, _>) =
-                        paths_by_directory
-                            .drain()
-                            .partition(|(k, _)| k.starts_with(&directory));
-
-                    // Store matching paths in reflinked_files
-                    reflinked_files.extend(matching);
-                    // Keep non-matching paths in paths_by_directory
-                    paths_by_directory = non_matching;
-                }
-                Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
-                Err(_) => {
-                    allow_ref_links = false;
-                    match fs::create_dir(&full_path) {
-                        Ok(_) => (),
-                        Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
-                        Err(e) => return Err(InstallError::FailedToCreateDirectory(full_path, e)),
-                    }
-                }
-            }
-        } else {
-            match fs::create_dir(&full_path) {
-                Ok(_) => (),
-                Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
-                Err(e) => return Err(InstallError::FailedToCreateDirectory(full_path, e)),
-            }
-        }
-    }
-
-    // Take care of all the reflinked files (macos only)
-    //  - Add them to the paths.json
-    //  - Fix any occurrences of the prefix in the files
-    //  - Rename files that need clobber-renames
-    let mut reflinked_paths_entries = Vec::new();
-    for (parent_dir, files) in reflinked_files {
-        // files that are either in the clobber map or contain a placeholder,
-        // we defer to the regular linking that comes after this block
-        // and re-add them to the paths_by_directory map
-        for link_path in files {
-            if link_path.clobber_path.is_some() || link_path.entry.prefix_placeholder.is_some() {
-                paths_by_directory
-                    .entry(parent_dir.clone())
-                    .or_insert_with(Vec::new)
-                    .push(link_path);
-            } else {
-                let entry = link_path.entry;
-                reflinked_paths_entries.push(prefix_record::PathsEntry {
-                    relative_path: entry.relative_path,
-                    path_type: entry.path_type.into(),
-                    no_link: entry.no_link,
-                    sha256: entry.sha256,
-                    size_in_bytes: entry.size_in_bytes,
-                    // No placeholder, no clobbering, so these are none for sure
-                    original_path: None,
-                    sha256_in_prefix: None,
-                    file_mode: None,
-                    prefix_placeholder: None,
-                });
-            }
-        }
-    }
-
-    // Wrap the python info in an `Arc` so we can more easily share it with async
-    // tasks.
-    let python_info = options.python_info;
-
-    // Link the individual files in parallel
-    let link_target_prefix = target_prefix.clone();
-    let package_dir = package_dir.to_path_buf();
-    let mut paths = paths_by_directory
-        .into_values()
-        .collect_vec()
-        .into_par_iter()
-        .with_min_len(100)
-        .flat_map(move |entries_in_subdir| {
-            let mut path_entries = Vec::with_capacity(entries_in_subdir.len());
-            for link_path in entries_in_subdir {
-                let entry = link_path.entry;
-
-                let is_clobber = link_path.clobber_path.is_some();
-                let link_result = link_file(
-                    &entry,
-                    link_path
-                        .clobber_path
-                        .unwrap_or(link_path.computed_path.clone()),
-                    &package_dir,
-                    target_dir,
-                    &link_target_prefix,
-                    allow_symbolic_links && !entry.no_link,
-                    allow_hard_links && !entry.no_link,
-                    allow_ref_links && !entry.no_link,
-                    platform,
-                    options.apple_codesign_behavior,
-                    modification_time,
-                    options.external_symlink_policy,
-                );
-
-                let result = match link_result {
-                    Ok(Some(linked_file)) => linked_file,
-                    Ok(None) => continue,
-                    Err(e) => {
-                        return vec![Err(InstallError::FailedToLink(
-                            entry.relative_path.clone(),
-                            e,
-                        ))];
-                    }
-                };
-
-                // Construct a `PathsEntry` from the result of the linking operation
-                path_entries.push(Ok(prefix_record::PathsEntry {
-                    relative_path: result.relative_path,
-                    original_path: if is_clobber {
-                        Some(link_path.computed_path)
-                    } else {
-                        None
-                    },
-                    path_type: entry.path_type.into(),
-                    no_link: entry.no_link,
-                    sha256: entry.sha256,
-                    // Only set sha256_in_prefix if it differs from the original sha256
-                    sha256_in_prefix: if Some(result.sha256) == entry.sha256 {
-                        None
-                    } else {
-                        Some(result.sha256)
-                    },
-                    size_in_bytes: Some(result.file_size),
-                    file_mode: match result.method {
-                        LinkMethod::Patched(file_mode) => Some(file_mode),
-                        _ => None,
-                    },
-                    prefix_placeholder: entry
-                        .prefix_placeholder
-                        .as_ref()
-                        .map(|p| p.placeholder.clone()),
-                }));
-            }
-
-            path_entries
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-
-    paths.extend(reflinked_paths_entries);
-
-    // If this package is a noarch python package we also have to create entry
-    // points.
-    //
-    // Be careful with the fact that this code is currently running in parallel with
-    // the linking of individual files.
-    if let Some(link_json) = link_json {
-        // Parse the `link.json` file and extract entry points from it.
-        let entry_points = match link_json.noarch {
-            NoArchLinks::Python(entry_points) => entry_points.entry_points,
-            NoArchLinks::Generic => {
-                unreachable!("we only use link.json for noarch: python packages")
-            }
-        };
-
-        // Get python info
-        let python_info = python_info
-            .clone()
-            .expect("should be safe because its checked above that this contains a value");
-
-        let target_prefix = target_prefix.clone();
-
-        // Create entry points for each listed item. This is different between Windows
-        // and unix because on Windows, two PathEntry's are created whereas on
-        // Linux only one is created.
-        let mut entry_point_paths = if platform.is_windows() {
-            entry_points
-                .into_iter()
-                // .into_par_iter()
-                // .with_min_len(100)
-                .flat_map(move |entry_point| {
-                    match create_windows_python_entry_point(
-                        target_dir,
-                        &target_prefix,
-                        &entry_point,
-                        &python_info,
-                        &platform,
-                    ) {
-                        Ok([a, b]) => Either::Left([Ok(a), Ok(b)].into_iter()),
-                        Err(e) => Either::Right(std::iter::once(Err(
-                            InstallError::FailedToCreatePythonEntryPoint(e),
-                        ))),
-                    }
-                })
-                .collect::<Result<Vec<_>, _>>()?
-        } else {
-            entry_points
-                .into_iter()
-                // .into_par_iter()
-                // .with_min_len(100)
-                .map(move |entry_point| {
-                    match create_unix_python_entry_point(
-                        target_dir,
-                        &target_prefix,
-                        &entry_point,
-                        &python_info,
-                    ) {
-                        Ok(a) => Ok(a),
-                        Err(e) => Err(InstallError::FailedToCreatePythonEntryPoint(e)),
-                    }
-                })
-                .collect::<Result<_, _>>()?
-        };
-
-        paths.append(&mut entry_point_paths);
-    };
-
-    paths.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
-    Ok((paths, link_type))
-}
-
 fn compute_paths(
     index_json: &IndexJson,
     paths_json: &PathsJson,
@@ -1038,14 +621,14 @@ fn compute_paths(
 /// has already been provided, in which case it is returned immediately.
 async fn read_paths_json(
     package_dir: &Path,
-    driver: &InstallDriver,
+    link_context: &TransactionLinkContext,
     paths_json: Option<PathsJson>,
 ) -> Result<PathsJson, InstallError> {
     if let Some(paths_json) = paths_json {
         Ok(paths_json)
     } else {
         let package_dir = package_dir.to_owned();
-        driver
+        link_context
             .run_blocking_io_task(move || {
                 PathsJson::from_package_directory_with_deprecated_fallback(&package_dir)
                     .map_err(InstallError::FailedToReadPathsJson)
@@ -1058,14 +641,14 @@ async fn read_paths_json(
 /// has already been provided, in which case it is returned immediately.
 async fn read_index_json(
     package_dir: &Path,
-    driver: &InstallDriver,
+    link_context: &TransactionLinkContext,
     index_json: Option<IndexJson>,
 ) -> Result<IndexJson, InstallError> {
     if let Some(index) = index_json {
         Ok(index)
     } else {
         let package_dir = package_dir.to_owned();
-        driver
+        link_context
             .run_blocking_io_task(move || {
                 IndexJson::from_package_directory(package_dir)
                     .map_err(InstallError::FailedToReadIndexJson)
@@ -1078,14 +661,14 @@ async fn read_index_json(
 /// has already been provided, in which case it is returned immediately.
 async fn read_link_json(
     package_dir: &Path,
-    driver: &InstallDriver,
+    link_context: &TransactionLinkContext,
     index_json: Option<LinkJson>,
 ) -> Result<Option<LinkJson>, InstallError> {
     if let Some(index) = index_json {
         Ok(Some(index))
     } else {
         let package_dir = package_dir.to_owned();
-        driver
+        link_context
             .run_blocking_io_task(move || {
                 LinkJson::from_package_directory(package_dir)
                     .map_or_else(
@@ -1102,33 +685,6 @@ async fn read_link_json(
                     .map_err(InstallError::FailedToReadLinkJson)
             })
             .await
-    }
-}
-
-/// Returns true if it is possible to create symlinks in the target directory.
-fn can_create_symlinks_sync(target_dir: &Prefix) -> bool {
-    let uuid = uuid::Uuid::new_v4();
-    let symlink_path = target_dir.path().join(format!("symtest_{uuid}"));
-    #[cfg(windows)]
-    let result = std::os::windows::fs::symlink_file("./", &symlink_path);
-    #[cfg(unix)]
-    let result = fs_err::os::unix::fs::symlink("./", &symlink_path);
-    match result {
-        Ok(_) => {
-            if let Err(e) = fs_err::remove_file(&symlink_path) {
-                tracing::warn!(
-                    "failed to delete temporary file '{}': {e}",
-                    symlink_path.display()
-                );
-            }
-            true
-        }
-        Err(e) => {
-            tracing::debug!(
-                "failed to create symlink in target directory: {e}. Disabling use of symlinks."
-            );
-            false
-        }
     }
 }
 
@@ -1160,174 +716,13 @@ impl<T> Ord for OrderWrapper<T> {
     }
 }
 
-/// Returns true if it is possible to create symlinks in the target directory.
-async fn can_create_symlinks(target_dir: &Prefix) -> bool {
-    let uuid = uuid::Uuid::new_v4();
-    let symlink_path = target_dir.path().join(format!("symtest_{uuid}"));
-    #[cfg(windows)]
-    let result = tokio_fs::symlink_file("./", &symlink_path).await;
-    #[cfg(unix)]
-    let result = tokio_fs::symlink("./", &symlink_path).await;
-    match result {
-        Ok(_) => {
-            if let Err(e) = tokio_fs::remove_file(&symlink_path).await {
-                tracing::warn!(
-                    "failed to delete temporary file '{}': {e}",
-                    symlink_path.display()
-                );
-            }
-            true
-        }
-        Err(e) => {
-            tracing::debug!(
-                "failed to create symlink in target directory: {e}. Disabling use of symlinks."
-            );
-            false
-        }
-    }
-}
-
-/// Returns true if it is possible to create hard links from the target
-/// directory to the package cache directory.
-async fn can_create_hardlinks(target_dir: &Prefix, package_dir: &Path) -> bool {
-    paths_have_same_filesystem(target_dir, package_dir).await
-}
-
-/// Returns true if it is possible to create hard links from the target
-/// directory to the package cache directory.
-fn can_create_hardlinks_sync(target_dir: &Prefix, package_dir: &Path) -> bool {
-    paths_have_same_filesystem_sync(target_dir.path(), package_dir)
-}
-
-/// Returns true if it is possible to create reflinks (copy-on-write clones)
-/// from the package cache directory to the target directory.
-///
-/// [`reflink_copy::check_reflink_support`] only returns a definitive answer on
-/// Windows; on all other platforms it returns `Unknown`. Guessing wrong is
-/// expensive: every failed reflink attempt creates the destination file,
-/// issues the clone ioctl, and removes the destination again before falling
-/// back to a hard link or copy. To avoid paying that cost for every file we
-/// probe reflink support once per filesystem and cache the result for the
-/// lifetime of the process.
-fn can_create_reflinks_sync(target_dir: &Prefix, package_dir: &Path, fallback: bool) -> bool {
-    match reflink_copy::check_reflink_support(package_dir, target_dir.path()) {
-        Ok(reflink_copy::ReflinkSupport::Supported) => true,
-        Ok(reflink_copy::ReflinkSupport::NotSupported) | Err(_) => false,
-        Ok(reflink_copy::ReflinkSupport::Unknown) => {
-            probe_reflink_support(target_dir.path(), package_dir, fallback)
-        }
-    }
-}
-
-/// Determines whether reflinks work between the two paths by performing a
-/// trial reflink in the target directory. The result is cached per device so
-/// the probe runs at most once per filesystem.
-#[cfg(unix)]
-fn probe_reflink_support(target_dir: &Path, package_dir: &Path, _fallback: bool) -> bool {
-    use std::os::unix::fs::MetadataExt;
-
-    static REFLINK_SUPPORT_CACHE: OnceLock<Mutex<HashMap<u64, bool>>> = OnceLock::new();
-
-    let (Ok(target_meta), Ok(package_meta)) = (
-        std::fs::metadata(target_dir),
-        std::fs::metadata(package_dir),
-    ) else {
-        return false;
-    };
-
-    // Reflinks cannot cross filesystem boundaries.
-    if target_meta.dev() != package_meta.dev() {
-        return false;
-    }
-
-    let mut cache = REFLINK_SUPPORT_CACHE
-        .get_or_init(Mutex::default)
-        .lock()
-        .unwrap();
-    if let Some(&supported) = cache.get(&target_meta.dev()) {
-        return supported;
-    }
-
-    // Probe by reflinking a small file inside a temporary directory in the
-    // target directory. Since the package directory resides on the same
-    // filesystem the result also holds for cache-to-prefix reflinks. The
-    // temporary directory is removed again when it goes out of scope, even if
-    // the probe fails halfway through.
-    let supported = tempfile::Builder::new()
-        .prefix(".refprobe-")
-        .tempdir_in(target_dir)
-        .is_ok_and(|probe_dir| {
-            let probe_src = probe_dir.path().join("src");
-            let probe_dst = probe_dir.path().join("dst");
-            std::fs::write(&probe_src, b"reflink probe").is_ok()
-                && reflink_copy::reflink(&probe_src, &probe_dst).is_ok()
-        });
-
-    if !supported {
-        tracing::debug!(
-            "filesystem of '{}' does not support reflinks, disabling reflink usage",
-            target_dir.display()
-        );
-    }
-
-    cache.insert(target_meta.dev(), supported);
-    supported
-}
-
-/// On platforms where we cannot cheaply identify the filesystem we keep the
-/// previous heuristic.
-#[cfg(not(unix))]
-fn probe_reflink_support(_target_dir: &Path, _package_dir: &Path, fallback: bool) -> bool {
-    fallback
-}
-
-/// Returns true if two paths share the same filesystem
-#[cfg(unix)]
-async fn paths_have_same_filesystem(a: &Prefix, b: &Path) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    match tokio::join!(tokio_fs::metadata(a.path()), tokio_fs::metadata(b)) {
-        (Ok(a), Ok(b)) => a.dev() == b.dev(),
-        _ => false,
-    }
-}
-
-/// Returns true if two paths share the same filesystem
-#[cfg(unix)]
-fn paths_have_same_filesystem_sync(a: &Path, b: &Path) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    let a = std::fs::metadata(a);
-    let b = std::fs::metadata(b);
-    match (a, b) {
-        (Ok(a), Ok(b)) => a.dev() == b.dev(),
-        _ => false,
-    }
-}
-
-/// Returns true if two paths share the same filesystem
-#[cfg(not(unix))]
-async fn paths_have_same_filesystem(a: &Path, b: &Path) -> bool {
-    match (a.canonicalize(), b.canonicalize()) {
-        (Ok(a), Ok(b)) => a.components().next() == b.components().next(),
-        _ => false,
-    }
-}
-
-/// Returns true if two paths share the same filesystem
-#[cfg(not(unix))]
-fn paths_have_same_filesystem_sync(a: &Path, b: &Path) -> bool {
-    match (a.canonicalize(), b.canonicalize()) {
-        (Ok(a), Ok(b)) => a.components().next() == b.components().next(),
-        _ => false,
-    }
-}
-
 #[cfg(test)]
 mod test {
     use std::{collections::HashSet, env::temp_dir, path::Path, process::Command, str::FromStr};
 
     use crate::{
         get_test_data_dir,
-        install::{InstallDriver, InstallOptions, Prefix, PythonInfo, link_package},
+        install::{InstallOptions, Prefix, PythonInfo, TransactionLinkContext, link_package},
         package_cache::PackageCache,
     };
     use futures::{StreamExt, stream};
@@ -1408,14 +803,14 @@ mod test {
                 .unwrap();
 
         // Download and install each layer into an environment.
-        let install_driver = InstallDriver::default();
         let target_dir = tempdir().unwrap();
         let prefix_path = Prefix::create(target_dir.path()).unwrap();
+        let link_context = TransactionLinkContext::default();
         stream::iter(urls)
             .for_each_concurrent(Some(50), |package_url| {
                 let client = client.clone();
                 let package_cache = &package_cache;
-                let install_driver = &install_driver;
+                let link_context = &link_context;
                 let python_version = &python_version;
                 let prefix_path = prefix_path.clone();
                 async move {
@@ -1436,7 +831,7 @@ mod test {
                     link_package(
                         package_cache_lock.path(),
                         &prefix_path,
-                        install_driver,
+                        link_context,
                         InstallOptions {
                             python_info: Some(python_version.clone()),
                             ..InstallOptions::default()
@@ -1484,13 +879,14 @@ mod test {
         // Create package cache
         rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
-        let install_driver = InstallDriver::default();
+        let prefix = Prefix::create(environment_dir.path()).unwrap();
+        let link_context = TransactionLinkContext::default();
 
         // Link the package
         let paths = link_package(
             package_dir.path(),
-            &Prefix::create(environment_dir.path()).unwrap(),
-            &install_driver,
+            &prefix,
+            &link_context,
             InstallOptions::default(),
         )
         .await
@@ -1518,13 +914,13 @@ mod test {
         .unwrap();
         rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
-        let install_driver = InstallDriver::default();
         let prefix = Prefix::create(environment_dir.path()).unwrap();
+        let link_context = TransactionLinkContext::default();
 
         let (paths, _link_type) = crate::install::link_package_sync(
             package_dir.path(),
             &prefix,
-            install_driver.clobber_registry.clone(),
+            &link_context,
             InstallOptions::default(),
         )
         .unwrap();

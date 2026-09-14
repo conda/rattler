@@ -338,14 +338,11 @@ pub fn unregister_url_protocol(
         format!(r"Software\Classes\{protocol}")
     };
 
-    if let Ok(key) = hkey.create(&base_path) {
-        if let Ok(value) = key.get_string("_menuinst") {
-            if value == identifier {
-                hkey.remove_tree(&base_path)?;
-            } else {
-                return Ok(());
-            }
-        }
+    if let Ok(key) = hkey.create(&base_path)
+        && let Ok(value) = key.get_string("_menuinst")
+        && value == identifier
+    {
+        hkey.remove_tree(&base_path)?;
     }
 
     Ok(())
