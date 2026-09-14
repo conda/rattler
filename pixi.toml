@@ -108,20 +108,25 @@ features = ["semver-check"]
 no-default-feature = true
 
 #------------------------------
-# Minio E2E test
+# RustFS E2E test
 #------------------------------
-[feature.minio.dependencies]
-minio-server = ">=2025.1.20,<2026"
-minio-client = ">=2025.7.21,<2026"
+# The rustfs server is not packaged for Windows yet, so this environment is
+# restricted to the platforms it is available on.
+[feature.rustfs]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
+
+[feature.rustfs.dependencies]
+rustfs = ">=1.0.0beta.12,<2"
+rustfs-cli = ">=0.1.33,<0.2"
 rattler_index = { path = "crates/rattler_index" }
 rattler = { path = "crates/rattler-bin" }
 nushell = ">=0.106.1,<0.107"
 
-[feature.minio.tasks]
-e2e-s3-minio = "nu scripts/e2e/s3-minio.nu"
+[feature.rustfs.tasks]
+e2e-s3-rustfs = "nu scripts/e2e/s3-rustfs.nu"
 
-[environments.minio]
-features = ["minio"]
+[environments.rustfs]
+features = ["rustfs"]
 no-default-feature = true
 
 #------------------------------
