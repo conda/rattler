@@ -788,14 +788,6 @@ impl PackageRecord {
     pub fn has_run_exports(&self) -> bool {
         self.run_exports.is_some()
     }
-
-    /// Returns the timestamp used by indexing operations.
-    ///
-    /// Prefers the server-assigned index timestamp, falling back to the
-    /// builder-controlled build timestamp for older channel metadata.
-    pub fn timestamp_for_indexing(&self) -> Option<TimestampMs> {
-        self.indexed_timestamp.or(self.timestamp)
-    }
 }
 
 impl RepoData {
@@ -1619,29 +1611,6 @@ mod test {
             reparsed.v3.extensions.get("zip"),
             Some(&serde_json::json!({"future": true}))
         );
-    }
-
-    #[test]
-    fn test_package_record_timestamp_for_indexing() {
-        let timestamp = crate::utils::TimestampMs::from_timestamp_millis(
-            jiff::Timestamp::from_millisecond(1_700_000_000_000).unwrap(),
-        );
-        let mut record = PackageRecord::new(
-            crate::PackageName::new_unchecked("demo"),
-            crate::Version::major(1),
-            "0".to_string(),
-        );
-
-        assert_eq!(record.timestamp_for_indexing(), None);
-        record.timestamp = Some(timestamp);
-        assert_eq!(record.timestamp_for_indexing(), Some(timestamp));
-        let indexed = jiff::Timestamp::from_millisecond(1_800_000_000_000)
-            .unwrap()
-            .into();
-        record.indexed_timestamp = Some(indexed);
-        assert_eq!(record.timestamp_for_indexing(), Some(indexed));
-        record.timestamp = None;
-        assert_eq!(record.timestamp_for_indexing(), Some(indexed));
     }
 
     #[test]
