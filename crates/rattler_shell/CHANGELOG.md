@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.0](https://github.com/conda/rattler/compare/rattler_shell-v0.27.17...rattler_shell-v0.28.0) - 2026-09-14
+
+### Other
+
+- [**breaking**] remove Platform::Unknown, make Platform::current() return Option ([#2786](https://github.com/conda/rattler/pull/2786))
+
 ## [0.27.17](https://github.com/conda/rattler/compare/rattler_shell-v0.27.16...rattler_shell-v0.27.17) - 2026-08-27
 
 ### Other
