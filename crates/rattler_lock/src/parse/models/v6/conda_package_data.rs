@@ -195,6 +195,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for LegacyCondaPackageData {
             size: value.size.into_owned(),
             subdir,
             timestamp: value.timestamp.map(Into::into),
+            indexed_timestamp: None,
             track_features: value.track_features.into_owned(),
             version: value
                 .version

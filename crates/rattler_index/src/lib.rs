@@ -216,6 +216,7 @@ fn indexed_package_record_from_index_json<T: Read>(
         license: index.license,
         license_family: index.license_family,
         timestamp: index.timestamp,
+        indexed_timestamp: None,
         python_site_packages_path: index.python_site_packages_path,
         legacy_bz2_md5: None,
         legacy_bz2_size: None,

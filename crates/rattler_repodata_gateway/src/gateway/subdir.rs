@@ -278,6 +278,7 @@ mod tests {
             size: None,
             subdir: "linux-64".to_string(),
             timestamp: None,
+            indexed_timestamp: None,
             track_features: Vec::new(),
             version: VersionWithSource::from_str("1.0").unwrap(),
             purls: None,

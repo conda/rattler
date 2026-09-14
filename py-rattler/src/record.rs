@@ -219,6 +219,7 @@ impl PyRecord {
                 sha256: None,
                 size: None,
                 timestamp: None,
+                indexed_timestamp: None,
                 track_features: Vec::new(),
             })),
         }
@@ -617,6 +618,23 @@ impl PyRecord {
             self.as_package_record_mut().timestamp = None;
         }
 
+        Ok(())
+    }
+
+    /// Server-assigned first index time in Unix milliseconds (CEP-0047).
+    #[getter]
+    pub fn indexed_timestamp(&self) -> Option<i64> {
+        self.as_package_record()
+            .indexed_timestamp
+            .map(|ts| ts.timestamp_millis())
+    }
+
+    #[setter]
+    pub fn set_indexed_timestamp(&mut self, timestamp: Option<i64>) -> PyResult<()> {
+        self.as_package_record_mut().indexed_timestamp = timestamp
+            .map(|ts| jiff::Timestamp::from_millisecond(ts).map(TimestampMs::from_timestamp_millis))
+            .transpose()
+            .map_err(|err| PyValueError::new_err(format!("Invalid indexed timestamp: {err}")))?;
         Ok(())
     }
 
