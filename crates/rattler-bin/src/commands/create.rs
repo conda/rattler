@@ -64,6 +64,7 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     // Like matchspecs this also requires the use of the `channel_config` so we
     // have to do this manually.
     let channels = opt.solver.channels(&channel_config)?;
+    let exclude_newer = opt.solver.exclude_newer(&channel_config)?;
 
     // Determine the packages that are currently installed in the environment.
     let installed_packages =
@@ -147,7 +148,7 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
         timeout: opt.solver.timeout(),
         strategy: opt.solver.strategy(),
         channel_priority: opt.solver.channel_priority(),
-        exclude_newer: opt.solver.exclude_newer(),
+        exclude_newer,
         ..SolverTask::from_iter(&repo_data)
     };
 

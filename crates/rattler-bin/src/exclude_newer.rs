@@ -11,13 +11,50 @@ pub enum ExcludeNewer {
     Duration(Duration),
 }
 
-impl From<ExcludeNewer> for rattler_solve::ExcludeNewer {
-    fn from(value: ExcludeNewer) -> Self {
-        match value {
-            ExcludeNewer::Timestamp(timestamp) => Self::from_datetime(timestamp),
-            ExcludeNewer::Duration(duration) => Self::from_duration(duration),
+impl ExcludeNewer {
+    pub fn into_solver(self, now: Timestamp) -> rattler_solve::ExcludeNewer {
+        match self {
+            Self::Timestamp(timestamp) => rattler_solve::ExcludeNewer::from_datetime(timestamp),
+            Self::Duration(duration) => {
+                rattler_solve::ExcludeNewer::from_duration_with_now(duration, now)
+            }
         }
     }
+
+    pub fn apply_to_channel(
+        self,
+        exclude_newer: rattler_solve::ExcludeNewer,
+        channel: impl Into<String>,
+        now: Timestamp,
+    ) -> rattler_solve::ExcludeNewer {
+        match self {
+            Self::Timestamp(timestamp) => exclude_newer.with_channel_cutoff(channel, timestamp),
+            Self::Duration(duration) => {
+                exclude_newer.with_channel_duration_with_now(channel, duration, now)
+            }
+        }
+    }
+
+    pub fn apply_to_package(
+        self,
+        exclude_newer: rattler_solve::ExcludeNewer,
+        package: rattler_conda_types::PackageName,
+        now: Timestamp,
+    ) -> rattler_solve::ExcludeNewer {
+        match self {
+            Self::Timestamp(timestamp) => exclude_newer.with_package_cutoff(package, timestamp),
+            Self::Duration(duration) => {
+                exclude_newer.with_package_duration_with_now(package, duration, now)
+            }
+        }
+    }
+}
+
+/// A named channel or package and its cutoff override.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NamedCutoff {
+    pub name: String,
+    pub cutoff: ExcludeNewer,
 }
 
 #[derive(Debug)]
@@ -33,6 +70,17 @@ impl fmt::Display for ParseExcludeNewerError {
 }
 
 impl std::error::Error for ParseExcludeNewerError {}
+
+#[derive(Debug)]
+pub struct ParseNamedCutoffError(String);
+
+impl fmt::Display for ParseNamedCutoffError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::error::Error for ParseNamedCutoffError {}
 
 impl FromStr for ExcludeNewer {
     type Err = ParseExcludeNewerError;
@@ -59,6 +107,29 @@ impl FromStr for ExcludeNewer {
         humantime::parse_duration(s)
             .map(ExcludeNewer::Duration)
             .map_err(|_duration_error| ParseExcludeNewerError)
+    }
+}
+
+impl FromStr for NamedCutoff {
+    type Err = ParseNamedCutoffError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (name, cutoff) = s.rsplit_once('=').ok_or_else(|| {
+            ParseNamedCutoffError("expected NAME=CUTOFF (for example, conda-forge=3d)".to_string())
+        })?;
+        if name.is_empty() || cutoff.is_empty() {
+            return Err(ParseNamedCutoffError(
+                "the name and cutoff must both be non-empty".to_string(),
+            ));
+        }
+
+        let cutoff = cutoff
+            .parse()
+            .map_err(|error: ParseExcludeNewerError| ParseNamedCutoffError(error.to_string()))?;
+        Ok(Self {
+            name: name.to_string(),
+            cutoff,
+        })
     }
 }
 
