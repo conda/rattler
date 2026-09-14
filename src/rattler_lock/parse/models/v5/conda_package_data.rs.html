@@ -159,22 +159,23 @@
 <a href=#157 id=157 data-nosnippet>157</a>                size: value.size.into_owned(),
 <a href=#158 id=158 data-nosnippet>158</a>                subdir,
 <a href=#159 id=159 data-nosnippet>159</a>                timestamp: value.timestamp.map(Into::into),
-<a href=#160 id=160 data-nosnippet>160</a>                track_features: value.track_features.into_owned(),
-<a href=#161 id=161 data-nosnippet>161</a>                version: value.version.into_owned(),
-<a href=#162 id=162 data-nosnippet>162</a>                run_exports: <span class="prelude-val">None</span>,
-<a href=#163 id=163 data-nosnippet>163</a>                <span class="comment">// Polyfill the arch and platform fields if they are not present in the lock-file.
-<a href=#164 id=164 data-nosnippet>164</a>                </span>arch: value.arch.into_owned().or(derived_arch),
-<a href=#165 id=165 data-nosnippet>165</a>                platform: value.platform.into_owned().or(derived_platform),
-<a href=#166 id=166 data-nosnippet>166</a>                python_site_packages_path: value.python_site_packages_path.into_owned(),
-<a href=#167 id=167 data-nosnippet>167</a>            },
-<a href=#168 id=168 data-nosnippet>168</a>            channel: value
-<a href=#169 id=169 data-nosnippet>169</a>                .channel
-<a href=#170 id=170 data-nosnippet>170</a>                .into_owned()
-<a href=#171 id=171 data-nosnippet>171</a>                .map(ChannelUrl::from)
-<a href=#172 id=172 data-nosnippet>172</a>                .or_else(|| derive_channel_from_location(<span class="kw-2">&amp;</span>location)),
-<a href=#173 id=173 data-nosnippet>173</a>            file_name,
-<a href=#174 id=174 data-nosnippet>174</a>            location,
-<a href=#175 id=175 data-nosnippet>175</a>        })
-<a href=#176 id=176 data-nosnippet>176</a>    }
-<a href=#177 id=177 data-nosnippet>177</a>}
+<a href=#160 id=160 data-nosnippet>160</a>                indexed_timestamp: <span class="prelude-val">None</span>,
+<a href=#161 id=161 data-nosnippet>161</a>                track_features: value.track_features.into_owned(),
+<a href=#162 id=162 data-nosnippet>162</a>                version: value.version.into_owned(),
+<a href=#163 id=163 data-nosnippet>163</a>                run_exports: <span class="prelude-val">None</span>,
+<a href=#164 id=164 data-nosnippet>164</a>                <span class="comment">// Polyfill the arch and platform fields if they are not present in the lock-file.
+<a href=#165 id=165 data-nosnippet>165</a>                </span>arch: value.arch.into_owned().or(derived_arch),
+<a href=#166 id=166 data-nosnippet>166</a>                platform: value.platform.into_owned().or(derived_platform),
+<a href=#167 id=167 data-nosnippet>167</a>                python_site_packages_path: value.python_site_packages_path.into_owned(),
+<a href=#168 id=168 data-nosnippet>168</a>            },
+<a href=#169 id=169 data-nosnippet>169</a>            channel: value
+<a href=#170 id=170 data-nosnippet>170</a>                .channel
+<a href=#171 id=171 data-nosnippet>171</a>                .into_owned()
+<a href=#172 id=172 data-nosnippet>172</a>                .map(ChannelUrl::from)
+<a href=#173 id=173 data-nosnippet>173</a>                .or_else(|| derive_channel_from_location(<span class="kw-2">&amp;</span>location)),
+<a href=#174 id=174 data-nosnippet>174</a>            file_name,
+<a href=#175 id=175 data-nosnippet>175</a>            location,
+<a href=#176 id=176 data-nosnippet>176</a>        })
+<a href=#177 id=177 data-nosnippet>177</a>    }
+<a href=#178 id=178 data-nosnippet>178</a>}
 </code></pre></div></section></main></body></html>
