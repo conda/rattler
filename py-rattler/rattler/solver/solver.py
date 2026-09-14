@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, List, Literal, Optional, Sequence, Union
 from rattler.channel.channel import Channel
 from rattler.channel.channel_priority import ChannelPriority
 from rattler.match_spec.match_spec import MatchSpec
-from rattler.platform.platform import Platform, PlatformLiteral
+from rattler.platform.subdir import Subdir, SubdirLiteral
 from rattler.rattler import PyMatchSpec, py_solve, py_solve_with_sparse_repodata
 from rattler.repo_data.gateway import ChannelRelationsMode, Gateway, _convert_sources
 from rattler.repo_data.record import RepoDataRecord
@@ -25,7 +25,7 @@ async def solve(
     sources: Sequence[Union[Channel, str, RepoDataSource, SparseRepoData]],
     specs: Sequence[MatchSpec | str],
     gateway: Gateway = Gateway(),
-    platforms: Optional[Sequence[Platform | PlatformLiteral]] = None,
+    platforms: Optional[Sequence[Subdir | SubdirLiteral]] = None,
     locked_packages: Optional[Sequence[RepoDataRecord]] = None,
     pinned_packages: Optional[Sequence[RepoDataRecord]] = None,
     virtual_packages: Optional[Sequence[GenericVirtualPackage | VirtualPackage]] = None,
@@ -97,15 +97,14 @@ async def solve(
         Resolved list of `RepoDataRecord`s.
     """
 
-    platforms = platforms if platforms is not None else [Platform.current(), Platform("noarch")]
+    platforms = platforms if platforms is not None else [Subdir.current(), Subdir("noarch")]
 
     return [
         RepoDataRecord._from_py_record(solved_package)
         for solved_package in await py_solve(
             sources=_convert_sources(sources),
             platforms=[
-                platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
-                for platform in platforms
+                platform._inner if isinstance(platform, Subdir) else Subdir(platform)._inner for platform in platforms
             ],
             specs=[
                 spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True, True)

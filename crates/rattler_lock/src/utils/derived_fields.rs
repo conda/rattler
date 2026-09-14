@@ -107,10 +107,9 @@ pub fn derive_subdir_from_url(url: &Url) -> Option<&str> {
     // can't derive the subdir.
     let _ = CondaArchiveIdentifier::try_from_filename(archive_str)?;
 
-    // Parse the subdir as a platform, if it fails we can't derive the subdir.
-    rattler_conda_types::Platform::from_str(subdir_str)
-        .is_ok()
-        .then_some(subdir_str)
+    // Only a subdir rattler knows can be recognised in a URL path; any other
+    // segment may just as well be part of the channel.
+    rattler_conda_types::Subdir::from_known_str(subdir_str).map(|_| subdir_str)
 }
 
 /// Channel from url, this is everything before the filename and the subdir
@@ -135,7 +134,7 @@ pub(crate) fn derive_channel_from_location(url: &UrlOrPath) -> Option<ChannelUrl
 }
 
 pub(crate) fn derive_arch_and_platform(subdir: &str) -> (Option<String>, Option<String>) {
-    let platform = rattler_conda_types::Platform::from_str(subdir).ok();
+    let platform = rattler_conda_types::Subdir::from_known_str(subdir);
     platform.map_or((None, None), |p| {
         (
             p.arch().map(|arch| arch.to_string()),

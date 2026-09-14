@@ -37,7 +37,7 @@ struct SerializableLockFile<'a, V> {
 struct SerializablePlatform<'a> {
     name: &'a str,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    subdir: Option<&'static str>,
+    subdir: Option<&'a str>,
     #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
     virtual_packages: &'a [String],
 }

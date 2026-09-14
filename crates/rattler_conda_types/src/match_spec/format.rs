@@ -10,7 +10,6 @@
 //! `tests/matchspec_proptest.rs`.
 
 use std::fmt::{self, Display, Write};
-use std::str::FromStr;
 
 use itertools::Itertools;
 use rattler_digest::{Md5Hash, Sha256Hash};
@@ -23,7 +22,7 @@ use super::package_name_matcher::PackageNameMatcher;
 use super::parse::{escape_bracket_value, is_valid_extra_group_name};
 use super::{CanonicalMatchSpecError, MatchSpec, NamelessMatchSpec};
 use crate::flags::is_valid_matchspec_flag;
-use crate::{Channel, ChannelConfig, Platform, VersionSpec, build_spec::BuildNumberSpec};
+use crate::{Channel, ChannelConfig, Subdir, VersionSpec, build_spec::BuildNumberSpec};
 
 /// The dialect a match spec is rendered in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -359,7 +358,7 @@ fn channel_name_for_url(url: &Url) -> Option<String> {
     // trailing slash and survives.
     if name
         .rsplit_once('/')
-        .is_some_and(|(_, last)| Platform::from_str(last).is_ok())
+        .is_some_and(|(_, last)| Subdir::from_known_str(last).is_some())
     {
         return None;
     }
@@ -600,7 +599,7 @@ impl SpecView<'_> {
             subdir: channel
                 && self
                     .subdir
-                    .is_some_and(|subdir| Platform::from_str(subdir).is_ok()),
+                    .is_some_and(|subdir| Subdir::from_known_str(subdir).is_some()),
             namespace: channel && self.namespace.is_some_and(is_safe_positional_token),
             version,
             // Positional only after a positional version (the old

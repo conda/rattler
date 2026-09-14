@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+import warnings
+from typing import TYPE_CHECKING, Any
+
 try:
     from rattler.rattler import (
         ActivationError,
@@ -29,7 +34,7 @@ try:
         ParseArchError,
         ParseCondaLockError,
         ParseExplicitEnvironmentSpecError,
-        ParsePlatformError,
+        ParseSubdirError,
         RequirementError,
         ShellError,
         SolverError,
@@ -64,7 +69,7 @@ except ImportError:
         """An error that can occur during conversion"""
 
     class ConvertSubdirError(Exception):  # type: ignore[no-redef]
-        """An error that can occur when parsing a platform from a string."""
+        """An error that can occur when parsing a subdir from a string."""
 
     class DetectVirtualPackageError(Exception):  # type: ignore[no-redef]
         """An error that can occur when trying to detect virtual packages"""
@@ -130,7 +135,7 @@ except ImportError:
     class ParseExplicitEnvironmentSpecError(Exception):  # type: ignore[no-redef]
         """An error that can occur when parsing an explicit environment spec"""
 
-    class ParsePlatformError(Exception):  # type: ignore[no-redef]
+    class ParseSubdirError(Exception):  # type: ignore[no-redef]
         """An error that can occur when parsing a platform from a string."""
 
     class RequirementError(Exception):  # type: ignore[no-redef]
@@ -153,6 +158,28 @@ except ImportError:
 
     class VersionExtendError(Exception):  # type: ignore[no-redef]
         """An error that can occur when extending a version."""
+
+
+_DEPRECATED_ALIASES = {"ParsePlatformError": "ParseSubdirError"}
+
+if TYPE_CHECKING:
+    ParsePlatformError = ParseSubdirError
+else:
+
+    def __getattr__(name: str) -> Any:
+        """Resolve the deprecated `ParsePlatformError` name.
+
+        .. deprecated:: 0.27.0 Use `ParseSubdirError` instead.
+        """
+        if name in _DEPRECATED_ALIASES:
+            replacement = _DEPRECATED_ALIASES[name]
+            warnings.warn(
+                f"`{name}` is deprecated, use `{replacement}` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            return globals()[replacement]
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 __all__ = [
@@ -185,6 +212,7 @@ __all__ = [
     "ParseArchError",
     "ParseCondaLockError",
     "ParseExplicitEnvironmentSpecError",
+    "ParseSubdirError",
     "ParsePlatformError",
     "RequirementError",
     "ShellError",

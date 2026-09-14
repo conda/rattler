@@ -234,7 +234,7 @@ mod tests {
         path::Path,
     };
 
-    use rattler_conda_types::{Platform, RepoDataRecord, prefix::Prefix};
+    use rattler_conda_types::{RepoDataRecord, Subdir, prefix::Prefix};
 
     use crate::install::test_utils::download_and_get_prefix_record;
     use crate::install::{InstallDriver, Transaction, empty_trash, unlink_package};
@@ -272,7 +272,7 @@ mod tests {
             Vec::<RepoDataRecord>::new().into_iter(),
             None,
             None, // ignored packages
-            Platform::current(),
+            Subdir::current().expect("host platform"),
         )
         .unwrap();
 
@@ -339,7 +339,7 @@ mod tests {
             Vec::<RepoDataRecord>::new().into_iter(),
             None,
             None, // ignored packages
-            Platform::current(),
+            Subdir::current().expect("host platform"),
         )
         .unwrap();
 

@@ -26,7 +26,7 @@ use url::Url;
 
 use crate::{
     Arch, Channel, Flag, MatchSpec, Matches, NoArchType, PackageName, PackageUrl,
-    ParseMatchSpecError, ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
+    ParseMatchSpecError, ParseStrictness, RepoDataRecord, Subdir, VersionWithSource,
     build_spec::BuildNumber,
     package::{
         ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, IndexJson, RunExportsJson,
@@ -614,9 +614,9 @@ pub struct PackageRecord {
     pub noarch: NoArchType,
 
     /// Optionally the platform the package supports.
-    /// Note that this does not match the [`Platform`] enum, but is only the
+    /// Note that this does not match the [`Subdir`] enum, but is only the
     /// first part of the platform (e.g. `linux`, `osx`, `win`, ...).
-    /// The `subdir` field contains the `Platform` enum.
+    /// The `subdir` field contains the `Subdir` enum.
     pub platform: Option<String>,
 
     /// Package identifiers of packages that are equivalent to this package but
@@ -951,7 +951,7 @@ impl PackageRecord {
             extra_depends: BTreeMap::new(),
             sha256: None,
             size: None,
-            subdir: Platform::current().to_string(),
+            subdir: Subdir::current().unwrap_or(Subdir::NoArch).to_string(),
             timestamp: None,
             indexed_timestamp: None,
             track_features: vec![],
@@ -1140,7 +1140,7 @@ pub enum ConvertSubdirError {
         /// The architecture.
         arch: String,
     },
-    /// Platform key is empty
+    /// Subdir key is empty
     #[error("platform key is empty in index.json")]
     PlatformEmpty,
     /// Arch key is empty
@@ -1153,9 +1153,9 @@ pub enum ConvertSubdirError {
 /// These were the combinations that have been found in the database.
 /// and have been represented in the function.
 ///
-/// # Why can we not use `Platform::FromStr`?
+/// # Why can we not use `Subdir::FromStr`?
 ///
-/// We cannot use the [`Platform`] `FromStr` directly because `x86` and `x86_64`
+/// We cannot use the [`Subdir`] `FromStr` directly because `x86` and `x86_64`
 /// are different architecture strings. Also some combinations have been
 /// removed, because they have not been found.
 fn determine_subdir(
@@ -1165,17 +1165,22 @@ fn determine_subdir(
     let platform = platform.ok_or(ConvertSubdirError::PlatformEmpty)?;
     let arch = arch.ok_or(ConvertSubdirError::ArchEmpty)?;
 
-    match arch.parse::<Arch>() {
-        Ok(arch) => {
-            let arch_str = match arch {
-                Arch::X86 => "32",
-                Arch::X86_64 => "64",
-                _ => arch.as_str(),
-            };
-            Ok(format!("{platform}-{arch_str}"))
-        }
-        Err(_) => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
+    let Ok(arch) = arch.parse::<Arch>() else {
+        return Err(ConvertSubdirError::NoKnownCombination { platform, arch });
+    };
+    let arch_str = match arch {
+        Arch::X86 => "32",
+        Arch::X86_64 => "64",
+        _ => arch.as_str(),
+    };
+    let subdir = format!("{platform}-{arch_str}");
+    if !crate::is_valid_subdir_name(&subdir) {
+        return Err(ConvertSubdirError::NoKnownCombination {
+            platform,
+            arch: arch.to_string(),
+        });
     }
+    Ok(subdir)
 }
 
 impl PackageRecord {
@@ -1230,7 +1235,7 @@ mod test {
 
     use crate::{
         Channel, ChannelConfig, ChannelInfo, ChannelRelations, PackageRecord, RepoData,
-        RepodataRevision, V3Extensions, V3Packages,
+        RepodataRevision, Subdir, V3Extensions, V3Packages,
         package::DistArchiveIdentifier,
         repo_data::{compute_package_url, determine_subdir},
     };
@@ -1245,6 +1250,28 @@ mod test {
             determine_subdir(Some("osx".to_string()), Some("x86_64".to_string())).unwrap(),
             "osx-64"
         );
+    }
+
+    /// Every known subdir survives the round trip through the `platform` and
+    /// `arch` fields of an `index.json`, which spell `x86`/`x86_64` out in full
+    /// while the subdir abbreviates them to `32`/`64`.
+    #[test]
+    fn test_determine_subdir_round_trips_known_subdirs() {
+        for subdir in Subdir::known() {
+            let (Some(platform), Some(arch)) = (subdir.only_platform(), subdir.arch()) else {
+                assert_eq!(subdir, Subdir::NoArch);
+                continue;
+            };
+            assert_eq!(
+                determine_subdir(Some(platform.to_string()), Some(arch.to_string())).unwrap(),
+                subdir.as_str(),
+                "{subdir} did not survive the arch round trip"
+            );
+        }
+
+        // A combination that cannot spell a valid subdir is rejected rather
+        // than producing a malformed one.
+        assert!(determine_subdir(Some("linux".to_string()), Some("foo_bar".to_string())).is_err());
     }
 
     #[test]

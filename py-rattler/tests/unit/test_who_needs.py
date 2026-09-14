@@ -4,7 +4,7 @@ from rattler import (
     Gateway,
     GenericVirtualPackage,
     PackageName,
-    Platform,
+    Subdir,
     Version,
 )
 from rattler.repo_data import Dependent
@@ -111,7 +111,7 @@ async def test_who_needs_multi_platform(gateway: Gateway, conda_forge_channel: C
 
     per_platform = [
         key(dependent)
-        for platform in (Platform("linux-64"), Platform("noarch"))
+        for platform in (Subdir("linux-64"), Subdir("noarch"))
         for dependent in await gateway.who_needs([conda_forge_channel], [platform], "python_abi")
     ]
     assert per_platform  # the fixture channel must actually exercise this

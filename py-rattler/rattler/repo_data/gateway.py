@@ -11,7 +11,7 @@ from rattler.match_spec.match_spec import MatchSpec
 from rattler.networking.client import Client
 from rattler.networking.fetch_repo_data import CacheAction
 from rattler.package.package_name import PackageName
-from rattler.platform.platform import Platform, PlatformLiteral
+from rattler.platform.subdir import Subdir, SubdirLiteral
 from rattler.rattler import PyChannelNotice, PyGateway, PyMatchSpec, PySourceConfig
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.removed_package import RemovedPackage
@@ -52,7 +52,7 @@ class _RepoDataSourceAdapter:
     """Adapter that wraps a user's RepoDataSource and converts FFI types.
 
     This adapter receives raw PyPlatform and PyPackageName from Rust,
-    converts them to the proper Python wrapper types (Platform, PackageName),
+    converts them to the proper Python wrapper types (Subdir, PackageName),
     and calls the user's implementation.
     """
 
@@ -62,7 +62,7 @@ class _RepoDataSourceAdapter:
     async def fetch_package_records(self, py_platform: Any, py_name: Any) -> List[RepoDataRecord]:
         """Convert FFI types and delegate to the wrapped source."""
         # Wrap raw FFI types in Python wrapper classes
-        platform = Platform._from_py_platform(py_platform)
+        platform = Subdir._from_py_subdir(py_platform)
         name = PackageName._from_py_package_name(py_name)
 
         # Call the user's implementation with proper Python types
@@ -70,7 +70,7 @@ class _RepoDataSourceAdapter:
 
     def package_names(self, py_platform: Any) -> List[str]:
         """Convert FFI types and delegate to the wrapped source."""
-        platform = Platform._from_py_platform(py_platform)
+        platform = Subdir._from_py_subdir(py_platform)
         return self._source.package_names(platform)
 
 
@@ -293,7 +293,7 @@ class Gateway:
     async def query(
         self,
         sources: Iterable[Union[Channel, str, RepoDataSource]],
-        platforms: Iterable[Platform | PlatformLiteral],
+        platforms: Iterable[Subdir | SubdirLiteral],
         specs: Iterable[MatchSpec | PackageName | str],
         recursive: bool = True,
         channel_relations: Optional[ChannelRelationsMode] = None,
@@ -362,8 +362,7 @@ class Gateway:
         py_records, py_removed, py_notices = await self._gateway.query(
             sources=_convert_sources(sources),
             platforms=[
-                platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
-                for platform in platforms
+                platform._inner if isinstance(platform, Subdir) else Subdir(platform)._inner for platform in platforms
             ],
             specs=[
                 spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True, True)
@@ -385,7 +384,7 @@ class Gateway:
     async def who_needs(
         self,
         sources: Iterable[Union[Channel, str, RepoDataSource]],
-        platforms: Iterable[Platform | PlatformLiteral],
+        platforms: Iterable[Subdir | SubdirLiteral],
         target: Union[str, PackageName, "PackageRecord", "GenericVirtualPackage"],
     ) -> List[Dependent]:
         """Returns the reverse dependencies of `target` in the given sources.
@@ -419,8 +418,7 @@ class Gateway:
         py_dependents = await self._gateway.who_needs(
             sources=_convert_sources(sources),
             platforms=[
-                platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
-                for platform in platforms
+                platform._inner if isinstance(platform, Subdir) else Subdir(platform)._inner for platform in platforms
             ],
             target=_target_to_py(target),
         )
@@ -429,7 +427,7 @@ class Gateway:
     async def names(
         self,
         sources: Iterable[Union[Channel, str, RepoDataSource]],
-        platforms: Iterable[Platform | PlatformLiteral],
+        platforms: Iterable[Subdir | SubdirLiteral],
         channel_relations: Optional[ChannelRelationsMode] = None,
         channel_relations_max_depth: Optional[int] = None,
         channel_notices: bool = False,
@@ -465,8 +463,7 @@ class Gateway:
         py_package_names, py_notices = await self._gateway.names(
             sources=_convert_sources(sources),
             platforms=[
-                platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
-                for platform in platforms
+                platform._inner if isinstance(platform, Subdir) else Subdir(platform)._inner for platform in platforms
             ],
             channel_notices=channel_notices,
             channel_relations=channel_relations,
@@ -495,7 +492,7 @@ class Gateway:
     async def channel_relations(
         self,
         channel: Channel | str,
-        platform: Platform | PlatformLiteral,
+        platform: Subdir | SubdirLiteral,
     ) -> Optional[ChannelRelations]:
         """Returns the CEP-42 ``channel_relations`` declared by the given
         ``(channel, platform)`` subdirectory, or ``None`` if none were declared
@@ -510,7 +507,7 @@ class Gateway:
         """
         py_relations = await self._gateway.channel_relations(
             channel._channel if isinstance(channel, Channel) else Channel(channel)._channel,
-            platform._inner if isinstance(platform, Platform) else Platform(platform)._inner,
+            platform._inner if isinstance(platform, Subdir) else Subdir(platform)._inner,
         )
         if py_relations is None:
             return None
@@ -519,7 +516,7 @@ class Gateway:
     def clear_repodata_cache(
         self,
         channel: Channel | str,
-        subdirs: Optional[Iterable[Platform | PlatformLiteral]] = None,
+        subdirs: Optional[Iterable[Subdir | SubdirLiteral]] = None,
         clear_disk: bool = False,
     ) -> None:
         """
@@ -546,7 +543,7 @@ class Gateway:
         """
         self._gateway.clear_repodata_cache(
             channel._channel if isinstance(channel, Channel) else Channel(channel)._channel,
-            {subdir._inner if isinstance(subdir, Platform) else Platform(subdir)._inner for subdir in subdirs}
+            {subdir._inner if isinstance(subdir, Subdir) else Subdir(subdir)._inner for subdir in subdirs}
             if subdirs is not None
             else None,
             clear_disk,

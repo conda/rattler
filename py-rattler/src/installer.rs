@@ -13,7 +13,7 @@ use std::collections::HashSet;
 use crate::match_spec::PyMatchSpec;
 use crate::{
     config::PyConfig, error::PyRattlerError, networking::client::PyClientWithMiddleware,
-    platform::PyPlatform, record::PyRecord,
+    record::PyRecord, subdir::PySubdir,
 };
 
 /// A [`Reporter`] implementation that delegates progress events to a Python object. The Python object should implement the following methods:
@@ -221,7 +221,7 @@ pub fn py_install<'a>(
     target_prefix: PathBuf,
     execute_link_scripts: Option<bool>,
     show_progress: bool,
-    platform: Option<PyPlatform>,
+    platform: Option<PySubdir>,
     client: Option<PyClientWithMiddleware>,
     cache_dir: Option<PathBuf>,
     installed_packages: Option<Vec<Bound<'a, PyAny>>>,

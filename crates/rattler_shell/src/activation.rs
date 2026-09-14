@@ -17,7 +17,7 @@ use anyhow::{Context, Result};
 use fs_err as fs;
 use indexmap::IndexMap;
 use itertools::Itertools;
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 #[cfg(target_family = "unix")]
 use rattler_pty::unix::PtySession;
 
@@ -103,7 +103,7 @@ pub struct Activator<T: Shell + 'static> {
     pub post_activation_env_vars: IndexMap<String, String>,
 
     /// The platform for which to generate the Activator
-    pub platform: Platform,
+    pub platform: Subdir,
 }
 
 /// Collect all script files that match a certain shell type from a given path.
@@ -300,7 +300,7 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
 /// # Returns
 ///
 /// A vector of path entries
-pub fn prefix_path_entries(prefix: &Path, platform: &Platform) -> Vec<PathBuf> {
+pub fn prefix_path_entries(prefix: &Path, platform: &Subdir) -> Vec<PathBuf> {
     if platform.is_windows() {
         vec![
             prefix.to_path_buf(),
@@ -357,17 +357,17 @@ impl<T: Shell + Clone> Activator<T> {
     /// ```
     /// use rattler_shell::activation::Activator;
     /// use rattler_shell::shell;
-    /// use rattler_conda_types::Platform;
+    /// use rattler_conda_types::Subdir;
     /// use std::path::PathBuf;
     ///
-    /// let activator = Activator::from_path(&PathBuf::from("tests/fixtures/env_vars"), shell::Bash::default(), Platform::Osx64).unwrap();
+    /// let activator = Activator::from_path(&PathBuf::from("tests/fixtures/env_vars"), shell::Bash::default(), Subdir::Osx64).unwrap();
     /// assert_eq!(activator.paths.len(), 1);
     /// assert_eq!(activator.paths[0], PathBuf::from("tests/fixtures/env_vars/bin"));
     /// ```
     pub fn from_path(
         path: &Path,
         shell_type: T,
-        platform: Platform,
+        platform: Subdir,
     ) -> Result<Activator<T>, ActivationError> {
         let activation_scripts = collect_scripts(&path.join("etc/conda/activate.d"), &shell_type)?;
 
@@ -415,7 +415,9 @@ impl<T: Shell + Clone> Activator<T> {
             .tempfile()
             .context("Failed to create tmp file")?;
 
-        let mut shell_script = ShellScript::new(shell, Platform::current());
+        let platform =
+            Subdir::current().context("the host platform is not a known conda platform")?;
+        let mut shell_script = ShellScript::new(shell, platform);
         for (key, value) in env {
             shell_script
                 .set_env_var(key, value)
@@ -728,7 +730,7 @@ mod tests {
             deactivation_scripts: vec![],
             env_vars: pre_env,
             post_activation_env_vars: post_env,
-            platform: Platform::current(),
+            platform: Subdir::current().expect("host platform"),
         };
 
         let result = activator
@@ -793,7 +795,7 @@ mod tests {
         assert_eq!(scripts[1], script1);
         assert_eq!(scripts[2], script3);
 
-        let activator = Activator::from_path(tdir.path(), shell_type, Platform::Osx64).unwrap();
+        let activator = Activator::from_path(tdir.path(), shell_type, Subdir::Osx64).unwrap();
         assert_eq!(activator.activation_scripts.len(), 3);
         assert_eq!(activator.activation_scripts[0], script2);
         assert_eq!(activator.activation_scripts[1], script1);
@@ -913,7 +915,7 @@ mod tests {
     #[test]
     fn test_add_to_path() {
         let prefix = PathBuf::from_str("/opt/conda").unwrap();
-        let new_paths = prefix_path_entries(&prefix, &Platform::Osx64);
+        let new_paths = prefix_path_entries(&prefix, &Subdir::Osx64);
         assert_eq!(new_paths.len(), 1);
     }
 
@@ -937,7 +939,7 @@ mod tests {
     ) -> String {
         let tdir = create_temp_dir();
 
-        let activator = Activator::from_path(tdir.path(), shell_type, Platform::Osx64).unwrap();
+        let activator = Activator::from_path(tdir.path(), shell_type, Subdir::Osx64).unwrap();
 
         // Create a test environment
         let test_env = HashMap::from([
@@ -1077,7 +1079,12 @@ mod tests {
         .unwrap();
 
         // Create an activator for the environment
-        let activator = Activator::from_path(&env, shell.clone(), Platform::current()).unwrap();
+        let activator = Activator::from_path(
+            &env,
+            shell.clone(),
+            Subdir::current().expect("host platform"),
+        )
+        .unwrap();
         let activation_env = activator
             .run_activation(ActivationVariables::default(), None)
             .unwrap();
@@ -1130,7 +1137,7 @@ mod tests {
         let mut activator = Activator::from_path(
             environment_dir.path(),
             shell::Bash::default(),
-            Platform::current(),
+            Subdir::current().expect("host platform"),
         )
         .unwrap();
         activator.post_activation_env_vars = IndexMap::from_iter([(
@@ -1207,7 +1214,7 @@ mod tests {
                 deactivation_scripts: vec![],
                 env_vars: env_vars.clone(),
                 post_activation_env_vars: IndexMap::new(),
-                platform: Platform::current(),
+                platform: Subdir::current().expect("host platform"),
             };
 
             // Test edge case: CONDA_SHLVL not set (current behavior)
@@ -1264,7 +1271,7 @@ mod tests {
                 deactivation_scripts: vec![],
                 env_vars: env_vars.clone(),
                 post_activation_env_vars: IndexMap::new(),
-                platform: Platform::current(),
+                platform: Subdir::current().expect("host platform"),
             };
 
             // CONDA_SHLVL to set to the initial level ( 1 meaning that it's activated)
@@ -1334,7 +1341,7 @@ mod tests {
                 deactivation_scripts: vec![],
                 env_vars: second_env_vars.clone(),
                 post_activation_env_vars: IndexMap::new(),
-                platform: Platform::current(),
+                platform: Subdir::current().expect("host platform"),
             };
 
             let mut existing_env_vars = HashMap::new();
@@ -1457,7 +1464,7 @@ mod tests {
                 deactivation_scripts: vec![],
                 env_vars: second_env_vars.clone(),
                 post_activation_env_vars: IndexMap::new(),
-                platform: Platform::current(),
+                platform: Subdir::current().expect("host platform"),
             };
 
             let mut existing_env_vars = HashMap::new();

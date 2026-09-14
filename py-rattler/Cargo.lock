@@ -4061,6 +4061,7 @@ dependencies = [
  "strum",
  "tempfile",
  "thiserror 2.0.20",
+ "tinystr",
  "tracing",
  "typed-path",
  "url",
@@ -5591,6 +5592,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1e27c91459209c2986af3dcf603a5a74a4368754ce37414f59acc971167f643"
 dependencies = [
  "displaydoc",
+ "serde_core",
  "zerovec",
 ]
 

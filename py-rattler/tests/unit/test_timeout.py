@@ -5,7 +5,7 @@ from typing import Generator
 
 import pytest
 
-from rattler import Channel, ChannelConfig, Client, Gateway, Platform
+from rattler import Channel, ChannelConfig, Client, Gateway, Subdir
 
 
 class DelayedHandler(BaseHTTPRequestHandler):
@@ -44,7 +44,7 @@ async def test_gateway_timeout(delayed_server: int) -> None:
     channel = Channel("test-channel", ChannelConfig(channel_url))
 
     with pytest.raises(Exception) as excinfo:
-        await gateway.query([channel], [Platform("linux-64")], ["python"])
+        await gateway.query([channel], [Subdir("linux-64")], ["python"])
 
     # The exact error message might vary depending on how reqwest/pyo3 reports it,
     # but it should be a timeout related error.
@@ -66,6 +66,6 @@ async def test_gateway_no_timeout(delayed_server: int) -> None:
 
     # It might still fail because we return empty {}, but it shouldn't be a timeout
     try:
-        await gateway.query([channel], [Platform("linux-64")], ["python"])
+        await gateway.query([channel], [Subdir("linux-64")], ["python"])
     except Exception as e:
         assert "timeout" not in str(e).lower()

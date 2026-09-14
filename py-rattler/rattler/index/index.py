@@ -13,7 +13,7 @@ if TYPE_CHECKING:
         from typing_extensions import TypeAlias
 
 from rattler.config import Config
-from rattler.platform import Platform
+from rattler.platform import Subdir
 from rattler.rattler import py_index_fs, py_index_s3
 
 
@@ -132,7 +132,7 @@ def _repodata_revisions_to_dicts(
 
 async def index_fs(
     channel_directory: os.PathLike[str],
-    target_platform: Optional[Platform] = None,
+    target_platform: Optional[Subdir] = None,
     repodata_patch: Optional[str] = None,
     write_zst: Optional[bool] = None,
     write_shards: Optional[bool] = None,
@@ -152,7 +152,7 @@ async def index_fs(
     Arguments:
         channel_directory: A `os.PathLike[str]` that is the directory containing subdirectories
                            of dependencies to index.
-        target_platform: A `Platform` to index dependencies for.
+        target_platform: A `Subdir` to index dependencies for.
         repodata_patch: The name of the conda package (expected to be in the `noarch` subdir) that should be used for repodata patching.
         write_zst: Whether to write repodata.json.zst. When omitted, uses the
                    matching ``index-config`` value or defaults to True.
@@ -196,7 +196,7 @@ async def index_fs(
 async def index_s3(
     channel_url: str,
     credentials: Optional[S3Credentials] = None,
-    target_platform: Optional[Platform] = None,
+    target_platform: Optional[Subdir] = None,
     repodata_patch: Optional[str] = None,
     write_zst: Optional[bool] = None,
     write_shards: Optional[bool] = None,
@@ -219,7 +219,7 @@ async def index_s3(
                      of dependencies to index.
         credentials: The credentials to use for accessing the S3 bucket. If not provided, will use the default
                      credentials from the environment.
-        target_platform: A `Platform` to index dependencies for.
+        target_platform: A `Subdir` to index dependencies for.
         repodata_patch: The name of the conda package (expected to be in the `noarch` subdir) that should be used for repodata patching.
         write_zst: Whether to write repodata.json.zst. When omitted, uses the
                    matching ``index-config`` value or defaults to True.

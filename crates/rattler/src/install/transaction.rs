@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use rattler_conda_types::{PackageName, Platform, PrefixRecord};
+use rattler_conda_types::{PackageName, PrefixRecord, Subdir};
 
 use super::{InstallationResultRecord, installer::result_record::ContentComparable};
 use crate::install::{PythonInfo, python::PythonInfoError};
@@ -114,7 +114,7 @@ pub struct Transaction<Old, New> {
     pub current_python_info: Option<PythonInfo>,
 
     /// The target platform of the transaction
-    pub platform: Platform,
+    pub platform: Subdir,
 
     /// The records that are not touched by the transaction.
     pub unchanged: Vec<Old>,
@@ -191,7 +191,7 @@ where
         desired: NewIter,
         reinstall: Option<&HashSet<PackageName>>,
         ignored: Option<&HashSet<PackageName>>,
-        platform: Platform,
+        platform: Subdir,
     ) -> Result<Self, TransactionError> {
         let current_packages = current.into_iter().collect::<Vec<_>>();
         let desired_packages = desired.into_iter().collect::<Vec<_>>();
@@ -393,7 +393,7 @@ impl<New> Transaction<PrefixRecord, New> {
 /// none of the packages refers to a Python installation.
 fn find_python_info(
     records: impl IntoIterator<Item = impl ContentComparable>,
-    platform: Platform,
+    platform: Subdir,
 ) -> Result<Option<PythonInfo>, PythonInfoError> {
     records
         .into_iter()
@@ -442,7 +442,7 @@ mod tests {
     use std::collections::HashSet;
 
     use assert_matches::assert_matches;
-    use rattler_conda_types::{Platform, prefix::Prefix};
+    use rattler_conda_types::{Subdir, prefix::Prefix};
 
     use crate::install::{
         Transaction, TransactionOperation, test_utils::download_and_get_prefix_record,
@@ -466,7 +466,7 @@ mod tests {
             vec![prefix_record.clone()],
             Some(&HashSet::from_iter(vec![name])),
             None, // ignored packages
-            Platform::current(),
+            Subdir::current().expect("host platform"),
         )
         .unwrap();
 
@@ -498,7 +498,7 @@ mod tests {
             vec![prefix_record.repodata_record.clone()],
             None, // reinstall
             ignored_packages.as_ref(),
-            Platform::current(),
+            Subdir::current().expect("host platform"),
         )
         .unwrap();
 
@@ -513,7 +513,7 @@ mod tests {
             Vec::<rattler_conda_types::RepoDataRecord>::new(), // empty desired
             None,                                              // reinstall
             ignored_packages.as_ref(),
-            Platform::current(),
+            Subdir::current().expect("host platform"),
         )
         .unwrap();
 
@@ -528,7 +528,7 @@ mod tests {
             vec![prefix_record.repodata_record.clone()],
             None, // reinstall
             ignored_packages.as_ref(),
-            Platform::current(),
+            Subdir::current().expect("host platform"),
         )
         .unwrap();
 

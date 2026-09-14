@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
 from rattler.version import Version, VersionSpec, VersionWithSource
 from rattler.match_spec import MatchSpec, NamelessMatchSpec
 from rattler.repo_data import (
@@ -38,7 +42,8 @@ from rattler.package import (
     NoArchLiteral,
 )
 from rattler.prefix import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType, Link, LinkType
-from rattler.platform import Platform
+from rattler import platform as _platform
+from rattler.platform import Subdir
 from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version
 from rattler.install import install, InstallerReporter
 from rattler.index import index
@@ -105,6 +110,7 @@ __all__ = [
     "PypiLockedPackage",
     "solve",
     "solve_with_sparse_repodata",
+    "Subdir",
     "Platform",
     "install",
     "InstallerReporter",
@@ -137,3 +143,16 @@ try:
     __all__.extend(["PtySession", "PtyProcess", "PtyProcessOptions"])
 except ImportError:
     pass
+
+
+_DEPRECATED_ALIASES = {"Platform": "Subdir"}
+
+if TYPE_CHECKING:
+    Platform = Subdir
+else:
+
+    def __getattr__(name: str) -> Any:
+        """Forward the deprecated `Platform` name to `rattler.platform`, which warns."""
+        if name in _DEPRECATED_ALIASES:
+            return getattr(_platform, name)
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
