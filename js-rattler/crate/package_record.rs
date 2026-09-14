@@ -1,4 +1,5 @@
 use rattler_conda_types::{Flag, PackageName, PackageRecord};
+use serde::Serialize;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::js_sys;
 
@@ -65,7 +66,8 @@ impl JsPackageRecord {
     /// PackageRecord.
     #[wasm_bindgen(js_name = "toJson")]
     pub fn to_json(&self) -> Result<JsPackageRecordJson, crate::error::JsError> {
-        Ok(serde_wasm_bindgen::to_value(&self.inner)?.into())
+        let serializer = serde_wasm_bindgen::Serializer::json_compatible();
+        Ok(self.inner.serialize(&serializer)?.into())
     }
 }
 
@@ -141,6 +143,33 @@ macro_rules! impl_package_record {
             #[wasm_bindgen::prelude::wasm_bindgen(setter)]
             pub fn set_depends(&mut self, depends: Vec<String>) {
                 AsMut::<PackageRecord>::as_mut(self).depends = depends;
+            }
+
+            /// Conditional or optional dependencies. Maps an extra name to the
+            /// dependency specifications required when that extra is active.
+            #[wasm_bindgen::prelude::wasm_bindgen(
+                getter,
+                js_name = "extraDepends",
+                unchecked_return_type = "Record<string, string[]>"
+            )]
+            pub fn extra_depends(&self) -> Result<JsValue, crate::error::JsError> {
+                let serializer = serde_wasm_bindgen::Serializer::json_compatible();
+                Ok(AsRef::<PackageRecord>::as_ref(self)
+                    .extra_depends
+                    .serialize(&serializer)?)
+            }
+
+            #[wasm_bindgen::prelude::wasm_bindgen(setter, js_name = "extraDepends")]
+            pub fn set_extra_depends(
+                &mut self,
+                #[wasm_bindgen::prelude::wasm_bindgen(
+                    unchecked_param_type = "Record<string, string[]>"
+                )]
+                extra_depends: JsValue,
+            ) -> Result<(), crate::error::JsError> {
+                AsMut::<PackageRecord>::as_mut(self).extra_depends =
+                    serde_wasm_bindgen::from_value(extra_depends)?;
+                Ok(())
             }
 
             /// Features are a deprecated way to specify different feature sets for the
@@ -467,9 +496,39 @@ macro_rules! impl_package_record {
                 });
             }
 
+            /// Server-assigned first index time (CEP-0047).
+            #[wasm_bindgen::prelude::wasm_bindgen(
+                getter,
+                js_name = "indexedTimestamp",
+                unchecked_return_type = "Date | undefined"
+            )]
+            pub fn indexed_timestamp(&self) -> Option<js_sys::Date> {
+                AsRef::<PackageRecord>::as_ref(self)
+                    .indexed_timestamp
+                    .map(|ts| {
+                        js_sys::Date::new(&wasm_bindgen::JsValue::from_f64(
+                            ts.timestamp_millis() as f64
+                        ))
+                    })
+            }
+
+            #[wasm_bindgen::prelude::wasm_bindgen(setter, js_name = "indexedTimestamp")]
+            pub fn set_indexed_timestamp(
+                &mut self,
+                #[wasm_bindgen::prelude::wasm_bindgen(unchecked_param_type = "Date | undefined")]
+                timestamp: Option<js_sys::Date>,
+            ) {
+                AsMut::<PackageRecord>::as_mut(self).indexed_timestamp =
+                    timestamp.and_then(|date| {
+                        jiff::Timestamp::from_millisecond(date.get_time() as i64)
+                            .ok()
+                            .map(Into::into)
+                    });
+            }
+
             /// Track features are nowadays only used to downweight packages (ie. give
             /// them less priority). To that effect, the package is downweighted
-            /// by the number of track_features.
+            /// by the number of `track_features`.
             #[wasm_bindgen::prelude::wasm_bindgen(getter, js_name = "trackFeatures")]
             pub fn track_features(&self) -> Vec<String> {
                 AsRef::<PackageRecord>::as_ref(self).track_features.clone()

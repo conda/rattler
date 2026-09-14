@@ -1,10 +1,10 @@
 [build-system]
-requires = ["maturin>=1.13.3,<2.0"]
+requires = ["maturin>=1.14.0,<2.0"]
 build-backend = "maturin"
 
 [project]
 name = "py-rattler"
-version = "0.25.0"
+version = "0.26.0"
 requires-python = ">=3.10"
 description = "A blazing fast library to work with the conda ecosystem"
 readme = "README.md"
@@ -22,6 +22,9 @@ classifiers = [
   "Typing :: Typed",
 ]
 license = "BSD-3-Clause"
+
+[project.optional-dependencies]
+networkx = ["networkx"]
 
 [project.urls]
 Homepage = "https://github.com/conda/rattler"

@@ -58,10 +58,11 @@
 //! [`config::ConfigBase::load_from_files`] merges a list of files in order
 //! (later files win) and validates the result.
 //! [`config::ConfigBase::load_from_default_locations`] does the same for the
-//! conventional locations described in [`locations`], which is how tools
-//! share one configuration: e.g. rattler-build can load
-//! `&["pixi", "rattler-build"]` to layer its own configuration on top of
-//! pixi's.
+//! conventional locations described in [`locations`]: the shared `rattler`
+//! configuration files, which every rattler-based tool reads and which may
+//! only contain the [`config::CommonConfig`] keys, layered with the tool's
+//! own files. This is how tools share one configuration without reading
+//! each other's files.
 //!
 //! # Editing
 //!
@@ -76,6 +77,7 @@ pub mod edit;
 pub mod locations;
 
 pub use config::{CommonConfig, Config, ConfigBase, LoadError, MergeError, NoExtension};
+pub use locations::{ConfigLayer, ConfigLocation};
 
 #[cfg(test)]
 mod tests {
@@ -467,6 +469,80 @@ mod tests {
 
         let (_, unused) = ConfigBase::<crate::NoExtension>::from_toml_str(toml).unwrap();
         assert!(unused.contains("custom_field"));
+    }
+
+    #[test]
+    fn test_from_toml_str_shared_rejects_extension_keys() {
+        let toml = r#"
+            default-channels = ["conda-forge"]
+            tls-no-verify = true
+            custom_field = "an extension key"
+            definitely-a-typo = true
+        "#;
+
+        let (config, unused) = TestConfig::from_toml_str_shared(toml).unwrap();
+
+        // Common keys are consumed as usual.
+        assert_eq!(config.default_channels.as_ref().map(Vec::len), Some(1));
+        assert_eq!(config.tls_no_verify, Some(true));
+
+        // A shared file means the same thing to every tool: extension keys
+        // are reported as unused even though the extension knows them, and
+        // the extension stays at its default.
+        assert!(unused.contains("custom_field"));
+        assert!(unused.contains("definitely-a-typo"));
+        assert_eq!(config.extensions, TestExtension::default());
+    }
+
+    #[test]
+    fn test_load_from_locations_layers_shared_and_tool_files() {
+        use crate::locations::{ConfigLayer, ConfigLocation};
+
+        let temp_dir = TempDir::new().unwrap();
+        let shared_path = temp_dir.path().join("shared.toml");
+        let tool_path = temp_dir.path().join("tool.toml");
+        std::fs::write(
+            &shared_path,
+            r#"
+            default-channels = ["conda-forge"]
+            tls-no-verify = true
+            "#,
+        )
+        .unwrap();
+        std::fs::write(
+            &tool_path,
+            r#"
+            default-channels = ["bioconda"]
+            custom_field = "tool files accept extension keys"
+            "#,
+        )
+        .unwrap();
+
+        let config = TestConfig::load_from_locations([
+            ConfigLocation {
+                path: shared_path.clone(),
+                layer: ConfigLayer::Shared,
+            },
+            ConfigLocation {
+                path: tool_path.clone(),
+                layer: ConfigLayer::Tool,
+            },
+        ])
+        .unwrap();
+
+        // The tool file wins where both set a key…
+        assert_eq!(
+            config.default_channels.as_ref().and_then(|c| c.first()),
+            Some(&"bioconda".parse().unwrap())
+        );
+        // …values only in the shared file are kept…
+        assert_eq!(config.tls_no_verify, Some(true));
+        // …and extension keys from the tool file are consumed.
+        assert_eq!(
+            config.extensions.custom_field.as_deref(),
+            Some("tool files accept extension keys")
+        );
+        assert_eq!(config.loaded_from, vec![shared_path, tool_path]);
     }
 
     #[test]

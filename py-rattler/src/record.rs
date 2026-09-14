@@ -11,6 +11,7 @@ use pyo3::{
     Bound, PyAny, PyErr, PyResult, Python, exceptions::PyTypeError, intern, pyclass, pymethods,
     types::PyBytes,
 };
+use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::{
     Flag, NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, UrlOrPath, VersionWithSource,
     WhlPackageRecord,
@@ -218,6 +219,7 @@ impl PyRecord {
                 sha256: None,
                 size: None,
                 timestamp: None,
+                indexed_timestamp: None,
                 track_features: Vec::new(),
             })),
         }
@@ -610,12 +612,29 @@ impl PyRecord {
         if let Some(ts) = timestamp {
             self.as_package_record_mut().timestamp = Some(TimestampMs::from_timestamp_millis(
                 jiff::Timestamp::from_millisecond(ts)
-                    .map_err(|_| PyValueError::new_err("Invalid timestamp"))?,
+                    .map_err(|err| PyValueError::new_err(format!("Invalid timestamp: {err}")))?,
             ));
         } else {
             self.as_package_record_mut().timestamp = None;
         }
 
+        Ok(())
+    }
+
+    /// Server-assigned first index time in Unix milliseconds (CEP-0047).
+    #[getter]
+    pub fn indexed_timestamp(&self) -> Option<i64> {
+        self.as_package_record()
+            .indexed_timestamp
+            .map(|ts| ts.timestamp_millis())
+    }
+
+    #[setter]
+    pub fn set_indexed_timestamp(&mut self, timestamp: Option<i64>) -> PyResult<()> {
+        self.as_package_record_mut().indexed_timestamp = timestamp
+            .map(|ts| jiff::Timestamp::from_millisecond(ts).map(TimestampMs::from_timestamp_millis))
+            .transpose()
+            .map_err(|err| PyValueError::new_err(format!("Invalid indexed timestamp: {err}")))?;
         Ok(())
     }
 
@@ -1018,6 +1037,25 @@ impl PyRecord {
         Ok(PackageRecord::from_index_json(index, size, sha256, md5)
             .map(Into::into)
             .map_err(PyRattlerError::from)?)
+    }
+
+    /// Builds a `PyRecord` (as a `RepoDataRecord`) directly from a local
+    /// `.conda` or `.tar.bz2` package file, without requiring a channel or
+    /// `repodata.json`.
+    ///
+    /// The resulting record's `url` is a `file://` URL pointing at the given
+    /// path, and `channel` is left unset.
+    #[staticmethod]
+    fn from_package_archive(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, PyAny>> {
+        future_into_py(py, async move {
+            let record = rattler_package_streaming::fs::repodata_record_from_package_archive(path)
+                .await
+                .map_err(PyRattlerError::from)?;
+
+            Ok(Self {
+                inner: RecordInner::RepoData(Arc::new(record)),
+            })
+        })
     }
 
     /// Validate that the given package records are valid w.r.t. 'depends' and

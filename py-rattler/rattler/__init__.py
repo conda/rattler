@@ -2,19 +2,26 @@ from rattler.version import Version, VersionSpec, VersionWithSource
 from rattler.match_spec import MatchSpec, NamelessMatchSpec
 from rattler.repo_data import (
     ChannelInfo,
+    ChannelNotice,
     ChannelRelations,
     PackageRecord,
+    RemovedPackage,
     RepoData,
     RepoDataRecord,
     WhlPackageRecord,
     PatchInstructions,
     SparseRepoData,
     Gateway,
+    GatewayNamesResult,
+    GatewayQueryResult,
     SourceConfig,
     PackageFormatSelection,
     RepoDataSource,
+    RepodataRevisionMetadata,
+    Dependent,
 )
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
+from rattler.config import Config, RunPostLinkScripts, TlsRootCerts
 from rattler.networking import Client, fetch_repo_data
 from rattler.virtual_package import GenericVirtualPackage, VirtualPackage, VirtualPackageOverrides, Override
 from rattler.package import (
@@ -59,13 +66,18 @@ __all__ = [
     "MatchSpec",
     "NamelessMatchSpec",
     "ChannelInfo",
+    "ChannelNotice",
     "ChannelRelations",
     "PackageRecord",
     "Channel",
     "ChannelConfig",
     "ChannelPriority",
+    "Config",
+    "RunPostLinkScripts",
+    "TlsRootCerts",
     "Client",
     "PatchInstructions",
+    "RemovedPackage",
     "RepoDataRecord",
     "WhlPackageRecord",
     "RepoData",
@@ -106,8 +118,12 @@ __all__ = [
     "FileMode",
     "IndexJson",
     "Gateway",
+    "GatewayNamesResult",
+    "GatewayQueryResult",
     "SourceConfig",
     "RepoDataSource",
+    "Dependent",
+    "RepodataRevisionMetadata",
     "NoArchType",
     "NoArchLiteral",
     "Link",

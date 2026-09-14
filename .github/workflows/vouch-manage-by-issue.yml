@@ -22,12 +22,14 @@ jobs:
     steps:
       - name: Obtain GitHub app token
         id: generate-token
-        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
         with:
           app-id: ${{ vars.VOUCHED_APP_ID }}
           private-key: ${{ secrets.VOUCHED_APP_PRIVATE_KEY }}
           owner: prefix-dev
           repositories: vouched
+          # The token is only used to check out and push to the vouched repo
+          permission-contents: write
 
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:

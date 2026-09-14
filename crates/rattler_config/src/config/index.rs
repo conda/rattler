@@ -22,12 +22,21 @@
 //! [index-config."s3://my-bucket/staging".channel-relations]
 //! base = "../conda-forge"
 //!
+//! [[index-config."s3://my-bucket/staging".notices]]
+//! id = "security-1"
+//! message = "Please update the affected package"
+//! level = "critical"
+//! created_at = "2025-01-01T12:00:00Z"
+//! expires_at = "2025-02-01T12:00:00Z"
+//!
 //! [index-config."/srv/conda/internal"]
 //! base-url = "../packages/"
 //! ```
 use std::{collections::HashMap, str::FromStr};
 
-use rattler_conda_types::{ChannelRelations, RepodataRevision, RepodataRevisionInfo};
+use rattler_conda_types::{
+    ChannelNotice, ChannelRelations, RepodataRevision, RepodataRevisionSelection,
+};
 use serde::{Deserialize, Deserializer, Serialize, de::Error as DeError};
 
 use crate::config::{Config, MergeError, ValidationError};
@@ -42,7 +51,7 @@ pub enum PackageRevisionAssignment {
     #[default]
     FromIndexJson,
     /// Assign every package to the newest revision configured for the index.
-    /// If no revisions are configured, packages are assigned to `Legacy`.
+    /// If no revisions are configured, packages use the legacy layout.
     Latest,
 }
 
@@ -76,13 +85,14 @@ pub struct IndexChannelConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub write_shards: Option<bool>,
 
-    /// Repodata revisions to advertise in generated repodata.
+    /// Additional repodata revisions to advertise in generated repodata.
+    /// The legacy layout is implicit; currently only v3 can be selected.
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
         deserialize_with = "deserialize_optional_repodata_revisions"
     )]
-    pub repodata_revisions: Option<Vec<RepodataRevisionInfo>>,
+    pub repodata_revisions: Option<Vec<RepodataRevisionSelection>>,
 
     /// How packages are assigned to repodata revisions.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -91,6 +101,13 @@ pub struct IndexChannelConfig {
     /// `info.base_url` value written to generated repodata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
+
+    /// CEP-6 notices to write to the channel's root `notices.json`.
+    ///
+    /// When unset, an existing notices file is left untouched. An empty list
+    /// explicitly writes a notices file with no notices.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notices: Option<Vec<ChannelNotice>>,
 
     /// `info.channel_relations` value written to generated repodata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -105,6 +122,7 @@ impl IndexChannelConfig {
             && self.repodata_revisions.is_none()
             && self.package_revision_assignment.is_none()
             && self.base_url.is_none()
+            && self.notices.is_none()
             && self.channel_relations.is_none()
     }
 
@@ -120,6 +138,7 @@ impl IndexChannelConfig {
                 .package_revision_assignment
                 .or(self.package_revision_assignment),
             base_url: other.base_url.or_else(|| self.base_url.clone()),
+            notices: other.notices.or_else(|| self.notices.clone()),
             channel_relations: other
                 .channel_relations
                 .or_else(|| self.channel_relations.clone()),
@@ -238,7 +257,7 @@ fn validate_channel_relations(
 
 fn deserialize_optional_repodata_revisions<'de, D>(
     deserializer: D,
-) -> Result<Option<Vec<RepodataRevisionInfo>>, D::Error>
+) -> Result<Option<Vec<RepodataRevisionSelection>>, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -247,14 +266,16 @@ where
         .map(|revs| {
             revs.into_iter()
                 .map(|s| {
-                    RepodataRevision::from_str(&s)
-                        .map(|revision| RepodataRevisionInfo {
-                            revision,
-                            n_packages: None,
-                            oldest: None,
-                            newest: None,
-                        })
-                        .map_err(D::Error::custom)
+                    let revision = RepodataRevision::from_str(&s).map_err(D::Error::custom)?;
+                    if revision != RepodataRevision::V3 {
+                        return Err(D::Error::custom(
+                            "only v3 can be configured; the legacy layout is implicit",
+                        ));
+                    }
+                    Ok(RepodataRevisionSelection {
+                        revision,
+                        message: None,
+                    })
                 })
                 .collect::<Result<Vec<_>, _>>()
         })
@@ -305,6 +326,26 @@ base = "../conda-forge"
             Some("../conda-forge")
         );
         assert!(cfg.per_channel.is_empty());
+    }
+
+    #[test]
+    fn parses_channel_notices() {
+        let cfg = parse(
+            r#"
+[[notices]]
+id = "security-1"
+message = "Please update demo"
+level = "critical"
+created_at = "2025-01-01T12:00:00Z"
+expires_at = "2025-02-01T12:00:00Z"
+interval = 24
+"#,
+        );
+
+        let notices = cfg.default.notices.unwrap();
+        assert_eq!(notices.len(), 1);
+        assert_eq!(notices[0].id, "security-1");
+        assert_eq!(notices[0].interval, Some(24));
     }
 
     #[test]
@@ -391,6 +432,12 @@ base-url = "../packages/"
         );
         let resolved = cfg.resolve("s3://my-bucket-other/channel");
         assert!(resolved.base_url.is_none());
+    }
+
+    #[test]
+    fn rejects_legacy_repodata_revision_selection() {
+        let err = toml::from_str::<IndexConfig>("repodata-revisions = [\"legacy\"]\n").unwrap_err();
+        assert!(err.to_string().contains("the legacy layout is implicit"));
     }
 
     #[test]

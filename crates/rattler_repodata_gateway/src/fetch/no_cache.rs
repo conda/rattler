@@ -77,6 +77,18 @@ impl From<Compression> for Encoding {
     }
 }
 
+/// Returns the URL of the repodata file for the given variant and
+/// compression.
+fn repo_data_variant_url(subdir_url: &Url, variant: Variant, method: Compression) -> Url {
+    let file_name = variant.file_name();
+    match method {
+        Compression::Zst => subdir_url.join(&format!("{file_name}.zst")),
+        Compression::Bz2 => subdir_url.join(&format!("{file_name}.bz2")),
+        Compression::None => subdir_url.join(file_name),
+    }
+    .expect("must be valid url at this point")
+}
+
 /// Try to execute a request for a certain kind of repodata with a given
 /// compression.
 async fn execute_request(
@@ -87,13 +99,7 @@ async fn execute_request(
 ) -> Result<(Request, Response, SystemTime), reqwest_middleware::Error> {
     // Determine the URL of the repodata file based on the compression and the
     // variant
-    let file_name = variant.file_name();
-    let repo_data_url = match method {
-        Compression::Zst => subdir_url.join(&format!("{file_name}.zst")),
-        Compression::Bz2 => subdir_url.join(&format!("{file_name}.bz2")),
-        Compression::None => subdir_url.join(variant.file_name()),
-    }
-    .expect("must be valid url at this point");
+    let repo_data_url = repo_data_variant_url(&subdir_url, variant, method);
 
     // Construct a request
     let request_builder = client.get(repo_data_url.clone());
@@ -290,6 +296,66 @@ pub async fn fetch_repo_data(
     }
 
     Ok(bytes)
+}
+
+/// Fetch the repodata.json file for the given subdirectory through a
+/// JavaScript fetch implementation. The semantics mirror
+/// [`fetch_repo_data`]: the compressed variants are probed before the plain
+/// `repodata.json`, and a missing file is reported as
+/// [`FetchRepoDataError::NotFound`]. Retrying is left to the fetch
+/// implementation.
+#[cfg(target_arch = "wasm32")]
+pub async fn fetch_repo_data_js(
+    subdir_url: Url,
+    fetcher: crate::utils::js_fetch::JsFetcher,
+    options: FetchRepoDataOptions,
+) -> Result<Bytes, FetchRepoDataError> {
+    // Try with supported compression methods.
+    for compression in [
+        options.zstd_enabled.then_some(Compression::Zst),
+        options.bz2_enabled.then_some(Compression::Bz2),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        let repo_data_url = repo_data_variant_url(&subdir_url, options.variant, compression);
+        match fetcher.get(&repo_data_url).await {
+            Ok(response) => {
+                return decode_repo_data_bytes(response.bytes, compression, repo_data_url).await;
+            }
+            Err(err) if err.status() == Some(StatusCode::NOT_FOUND) => continue,
+            Err(err) => return Err(FetchRepoDataError::JsFetchError(err)),
+        }
+    }
+
+    // If none of the compressed variants are available, try the uncompressed
+    // one.
+    let repo_data_url = repo_data_variant_url(&subdir_url, options.variant, Compression::None);
+    match fetcher.get(&repo_data_url).await {
+        Ok(response) => Ok(response.bytes),
+        Err(err) if err.status() == Some(StatusCode::NOT_FOUND) => Err(
+            FetchRepoDataError::NotFound(RepoDataNotFoundError::JsFetchError(err)),
+        ),
+        Err(err) => Err(FetchRepoDataError::JsFetchError(err)),
+    }
+}
+
+/// Decompresses repodata bytes based on the compression derived from the
+/// file extension. The transfer encoding is already decoded by the
+/// JavaScript fetch implementation.
+#[cfg(target_arch = "wasm32")]
+async fn decode_repo_data_bytes(
+    bytes: Bytes,
+    compression: Compression,
+    repo_data_url: Url,
+) -> Result<Bytes, FetchRepoDataError> {
+    let mut decoded = Vec::new();
+    tokio::io::BufReader::new(bytes.as_ref())
+        .decode(compression.into())
+        .read_to_end(&mut decoded)
+        .await
+        .map_err(|e| FetchRepoDataError::FailedToDownload(repo_data_url.redact(), e))?;
+    Ok(Bytes::from(decoded))
 }
 
 async fn stream_response_body(

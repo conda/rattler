@@ -7,11 +7,12 @@ use crate::{
     Reporter,
     fetch::{
         FetchRepoDataError,
-        no_cache::{FetchRepoDataOptions, fetch_repo_data},
+        no_cache::{FetchRepoDataOptions, fetch_repo_data, fetch_repo_data_js},
     },
     gateway::{
         GatewayError, SourceConfig, error::SubdirNotFoundError, local_subdir::LocalSubdirClient,
     },
+    utils::js_fetch::JsFetcher,
 };
 
 pub struct RemoteSubdirClient {
@@ -23,23 +24,22 @@ impl RemoteSubdirClient {
         channel: Channel,
         platform: Platform,
         client: LazyClient,
+        js_fetch: Option<JsFetcher>,
         source_config: SourceConfig,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Self, GatewayError> {
         let subdir_url = channel.platform_url(platform);
+        let options = FetchRepoDataOptions {
+            zstd_enabled: source_config.zstd_enabled,
+            bz2_enabled: source_config.bz2_enabled,
+            ..FetchRepoDataOptions::default()
+        };
 
         // Fetch the repodata from the remote server
-        let repodata_bytes = fetch_repo_data(
-            subdir_url,
-            client,
-            FetchRepoDataOptions {
-                zstd_enabled: source_config.zstd_enabled,
-                bz2_enabled: source_config.bz2_enabled,
-                ..FetchRepoDataOptions::default()
-            },
-            reporter,
-        )
-        .await
+        let repodata_bytes = match js_fetch {
+            Some(fetcher) => fetch_repo_data_js(subdir_url, fetcher, options).await,
+            None => fetch_repo_data(subdir_url, client, options, reporter).await,
+        }
         .map_err(|e| match e {
             FetchRepoDataError::NotFound(e) => {
                 GatewayError::SubdirNotFoundError(Box::new(SubdirNotFoundError {

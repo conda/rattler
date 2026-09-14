@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.48.7](https://github.com/conda/rattler/compare/rattler-v0.48.6...rattler-v0.48.7) - 2026-09-04
+
+### Other
+
+- updated the following local packages: rattler_package_streaming, rattler_menuinst, rattler_cache
+
+## [0.48.6](https://github.com/conda/rattler/compare/rattler-v0.48.5...rattler-v0.48.6) - 2026-08-27
+
+### Other
+
+- updated the following local packages: rattler_package_streaming, rattler_conda_types, rattler_config, rattler_networking, rattler_cache, rattler_shell, rattler_menuinst
+
+## [0.48.5](https://github.com/conda/rattler/compare/rattler-v0.48.4...rattler-v0.48.5) - 2026-08-26
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_package_streaming, rattler_networking, rattler_cache, rattler_shell, rattler_menuinst
+
+## [0.48.4](https://github.com/conda/rattler/compare/rattler-v0.48.3...rattler-v0.48.4) - 2026-08-21
+
+### Other
+
+- *(ci)* Pin dependencies ([#2691](https://github.com/conda/rattler/pull/2691))
+
+## [0.48.3](https://github.com/conda/rattler/compare/rattler-v0.48.2...rattler-v0.48.3) - 2026-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_config, rattler_package_streaming, rattler_cache, rattler_shell, rattler_menuinst
+
+## [0.48.2](https://github.com/conda/rattler/compare/rattler-v0.48.1...rattler-v0.48.2) - 2026-08-11
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_cache, rattler_shell, rattler_menuinst
+
+## [0.48.1](https://github.com/conda/rattler/compare/rattler-v0.48.0...rattler-v0.48.1) - 2026-08-03
+
+### Other
+
+- updated the following local packages: rattler_shell, rattler_menuinst
+
+## [0.48.0](https://github.com/conda/rattler/compare/rattler-v0.47.1...rattler-v0.48.0) - 2026-07-24
+
+### Added
+
+- add iOS and Android subdirs and __ios/__android virtual packages ([#2613](https://github.com/conda/rattler/pull/2613))
+- add `auth token` subcommand ([#2614](https://github.com/conda/rattler/pull/2614))
+
 ## [0.47.1](https://github.com/conda/rattler/compare/rattler-v0.47.0...rattler-v0.47.1) - 2026-07-14
 
 ### Other

@@ -76,7 +76,7 @@ Matching rules:
 | --- | --- | --- |
 | `write-zst` | boolean | Writes `repodata.json.zst`. Defaults to `true`. |
 | `write-shards` | boolean | Writes `repodata_shards.msgpack.zst` and shard files. Defaults to `true`. |
-| `repodata-revisions` | array | Repodata revisions to enable. Each entry is a string (`"v3"`, `"legacy"`). The indexer fills revision package counts and timestamps while writing repodata. |
+| `repodata-revisions` | array | Additional repodata revisions to enable. The legacy layout is implicit; currently only `"v3"` can be selected. The indexer derives revision package counts and timestamps from the records it writes. |
 | `package-revision-assignment` | string | Controls which `repodata-revisions` bucket a freshly indexed package lands in. `from-index-json` (default) reads the revision from each package's `info/index.json`, so legacy packages stay in the legacy maps and v3-tagged packages go to the v3 bucket. `latest` is an opt-in override that forces every package into the newest configured revision — useful for migrating a whole channel onto v3 in one shot. A future revision-assignment mode will pick based on a package's timestamp so repodata can be deterministically recreated. |
 | `base-url` | string | Writes `info.base_url` in generated `repodata.json` and sharded repodata metadata. May be relative or absolute. |
 | `channel-relations.base` | string | A single channel reference with higher priority than this channel, written to `info.channel_relations.base`. |
@@ -119,12 +119,11 @@ example:
 {
   "info": {
     "base_url": "../packages/",
-    "repodata_revisions": [
-      {
-        "revision": 3,
+    "repodata_revisions": {
+      "v3": {
         "n_packages": 42
       }
-    ],
+    },
     "channel_relations": {
       "base": "../conda-forge",
       "overrides": "../fallback"

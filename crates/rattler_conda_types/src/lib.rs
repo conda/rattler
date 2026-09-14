@@ -7,6 +7,7 @@ pub mod backup;
 mod build_spec;
 mod channel;
 mod channel_data;
+mod channel_notice;
 mod explicit_environment_spec;
 mod flags;
 pub mod match_spec;
@@ -14,11 +15,12 @@ pub mod menuinst;
 mod no_arch_type;
 mod parse_mode;
 pub mod platform;
+#[cfg(feature = "proptest")]
+pub mod proptest;
 mod repo_data;
 mod repo_data_record;
 mod run_export;
 pub mod utils;
-mod version;
 pub mod version_spec;
 
 pub mod compression_level;
@@ -38,6 +40,7 @@ use std::path::{Path, PathBuf};
 pub use build_spec::{BuildNumber, BuildNumberSpec, OrdOperator, ParseBuildNumberSpecError};
 pub use channel::{Channel, ChannelConfig, ChannelUrl, NamedChannelOrUrl, ParseChannelError};
 pub use channel_data::{ChannelData, ChannelDataPackage};
+pub use channel_notice::{ChannelNotice, ChannelNoticeLevel, ChannelNotices};
 pub use environment_yaml::{EnvironmentYaml, MatchSpecOrSubSection};
 pub use explicit_environment_spec::{
     ExplicitEnvironmentEntry, ExplicitEnvironmentSpec, PackageArchiveHash,
@@ -48,7 +51,7 @@ pub use generic_virtual_package::GenericVirtualPackage;
 pub use match_spec::condition::MatchSpecCondition;
 pub use match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError};
 pub use match_spec::{
-    MatchSpec, MatchSpecUrlError, Matches, NamelessMatchSpec,
+    CanonicalMatchSpecError, MatchSpec, MatchSpecUrlError, Matches, NamelessMatchSpec,
     matcher::{StringMatcher, StringMatcherParseError},
     parse::ParseMatchSpecError,
 };
@@ -59,26 +62,32 @@ pub use no_arch_type::{NoArchKind, NoArchType, RawNoArchType};
 pub use package_name::{
     InvalidPackageNameError, NormalizedPackageName, PackageName, SourcePackageName,
 };
-pub use parse_mode::{ParseMatchSpecOptions, ParseStrictness, ParseStrictnessWithNameMatcher};
+pub use parse_mode::{ParseMatchSpecOptions, ParseStrictnessWithNameMatcher};
 pub use platform::{Arch, ParseArchError, ParsePlatformError, Platform};
 pub use prefix_data::PrefixData;
 pub use prefix_record::PrefixRecord;
+#[cfg(feature = "semver")]
+pub use rattler_conda_version::version::VersionToSemverError;
+pub use rattler_conda_version::version::{
+    Component, ParseVersionError, ParseVersionErrorKind, StrictVersion, VersionBumpError,
+    VersionBumpType, VersionExtendError, VersionWithSource,
+};
+pub use rattler_conda_version::version_spec::{
+    EqualityOperator, LogicalOperator, ParseConstraintError, ParseVersionSpecError, RangeOperator,
+    StrictRangeOperator, VersionOperators,
+};
+pub use rattler_conda_version::{ParseStrictness, Version, VersionSpec};
 pub use record_traits::HasArtifactIdentificationRefs;
 pub use repo_data::{
     ChannelInfo, ChannelRelations, ConvertSubdirError, PackageRecord, RecordFromPath, RepoData,
-    RepodataRevision, RepodataRevisionInfo, RepodataRevisionMetadata, RepodataRevisions,
-    SubdirRunExportsJson, UrlOrPath, V3Packages, ValidatePackageRecordsError, WhlPackageRecord,
-    compute_package_url,
+    RepodataRevision, RepodataRevisionInfo, RepodataRevisionMetadata, RepodataRevisionSelection,
+    RepodataRevisions, ReservedV3ExtensionError, SubdirRunExportsJson, UrlOrPath, V3Extensions,
+    V3Packages, ValidatePackageRecordsError, WhlPackageRecord, compute_package_url,
     patches::{PackageRecordPatch, PatchInstructions, RepoDataPatch},
     sharded::{Shard, ShardedRepodata, ShardedSubdirInfo},
 };
 pub use repo_data_record::{RepoDataRecord, SolverResult};
 pub use run_export::RunExportKind;
-pub use version::{
-    Component, ParseVersionError, ParseVersionErrorKind, StrictVersion, Version, VersionBumpError,
-    VersionBumpType, VersionExtendError, VersionWithSource,
-};
-pub use version_spec::VersionSpec;
 
 /// An package identifier that can be used to identify packages across package
 /// ecosystems.

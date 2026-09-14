@@ -1,5 +1,4 @@
 # type: ignore
-import datetime
 import os
 import json
 import shutil
@@ -11,7 +10,7 @@ from typing import Iterator
 import boto3
 import pytest
 
-from rattler import Platform
+from rattler import Config, Platform
 from rattler.index import index_fs, index_s3
 from rattler.index.index import S3Credentials
 
@@ -45,6 +44,27 @@ async def test_index(package_directory):
 
 
 @pytest.mark.asyncio
+async def test_index_uses_config_with_explicit_overrides(package_directory):
+    config = Config.from_toml("""
+        [index-config]
+        write-zst = false
+        write-shards = false
+        package-revision-assignment = "latest"
+        repodata-revisions = ["v3"]
+    """)
+
+    await index_fs(package_directory, config=config, write_zst=True)
+
+    for subdir in ("noarch", "win-64"):
+        assert (package_directory / subdir / "repodata.json.zst").is_file()
+        assert not (package_directory / subdir / "repodata_shards.msgpack.zst").exists()
+
+    with open(package_directory / "noarch/repodata.json") as f:
+        repodata = json.load(f)
+    assert "pytweening-1.0.4-pyhd8ed1ab_0" in repodata["v3"]["tar.bz2"]
+
+
+@pytest.mark.asyncio
 async def test_index_specific_subdir_non_noarch(package_directory):
     await index_fs(package_directory, Platform("win-64"))
 
@@ -67,21 +87,10 @@ async def test_index_specific_subdir_noarch(package_directory):
 
 @pytest.mark.asyncio
 async def test_index_repodata_revisions(package_directory):
-    # Timestamps round-trip through Unix milliseconds, so exercise millisecond
-    # precision and assert against the exact millisecond values.
-    epoch = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-    oldest_ms = 1710000000123
-    newest_ms = 1773851561010
     await index_fs(
         package_directory,
         Platform("noarch"),
-        repodata_revisions={
-            "v3": {
-                "n_packages": 123,
-                "oldest": epoch + datetime.timedelta(milliseconds=oldest_ms),
-                "newest": epoch + datetime.timedelta(milliseconds=newest_ms),
-            }
-        },
+        repodata_revisions=[{"revision": "v3", "message": "v3 packages"}],
         package_revision_assignment="latest",
         force=True,
     )
@@ -90,13 +99,39 @@ async def test_index_repodata_revisions(package_directory):
         repodata = json.load(f)
 
     assert "pytweening-1.0.4-pyhd8ed1ab_0" in repodata["v3"]["tar.bz2"]
-    assert repodata["info"]["repodata_revisions"] == {
-        "v3": {
-            "n_packages": 123,
-            "oldest": oldest_ms,
-            "newest": newest_ms,
-        }
-    }
+    assert repodata["info"]["repodata_revisions"]["v3"]["n_packages"] == 1
+    assert repodata["info"]["repodata_revisions"]["v3"]["message"] == "v3 packages"
+
+
+@pytest.mark.asyncio
+async def test_index_repodata_revisions_reject_legacy_selection(package_directory):
+    with pytest.raises(ValueError, match="expected 'v3'"):
+        await index_fs(
+            package_directory,
+            Platform("noarch"),
+            repodata_revisions=["legacy"],
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("obsolete_field", ["n_packages", "oldest", "newest"])
+async def test_index_repodata_revisions_reject_obsolete_statistics(package_directory, obsolete_field):
+    with pytest.raises(TypeError, match="no longer accepted.*derives package statistics"):
+        await index_fs(
+            package_directory,
+            Platform("noarch"),
+            repodata_revisions=[{"revision": "v3", obsolete_field: 1}],
+        )
+
+
+@pytest.mark.asyncio
+async def test_index_repodata_revisions_reject_legacy_mapping(package_directory):
+    with pytest.raises(TypeError, match="no longer accepts a vN-keyed metadata mapping"):
+        await index_fs(
+            package_directory,
+            Platform("noarch"),
+            repodata_revisions={"v3": {"n_packages": 1}},  # type: ignore[arg-type]
+        )
 
 
 # ---------------------------------------- S3 ---------------------------------------- #
