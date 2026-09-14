@@ -468,7 +468,7 @@
 <a href=#466 id=466 data-nosnippet>466</a>            <span class="macro">vec!</span>[prefix_record.clone()],
 <a href=#467 id=467 data-nosnippet>467</a>            <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>HashSet::from_iter(<span class="macro">vec!</span>[name])),
 <a href=#468 id=468 data-nosnippet>468</a>            <span class="prelude-val">None</span>, <span class="comment">// ignored packages
-<a href=#469 id=469 data-nosnippet>469</a>            </span>Platform::current(),
+<a href=#469 id=469 data-nosnippet>469</a>            </span>Platform::current().expect(<span class="string">"host platform"</span>),
 <a href=#470 id=470 data-nosnippet>470</a>        )
 <a href=#471 id=471 data-nosnippet>471</a>        .unwrap();
 <a href=#472 id=472 data-nosnippet>472</a>
@@ -500,7 +500,7 @@
 <a href=#498 id=498 data-nosnippet>498</a>            <span class="macro">vec!</span>[prefix_record.repodata_record.clone()],
 <a href=#499 id=499 data-nosnippet>499</a>            <span class="prelude-val">None</span>, <span class="comment">// reinstall
 <a href=#500 id=500 data-nosnippet>500</a>            </span>ignored_packages.as_ref(),
-<a href=#501 id=501 data-nosnippet>501</a>            Platform::current(),
+<a href=#501 id=501 data-nosnippet>501</a>            Platform::current().expect(<span class="string">"host platform"</span>),
 <a href=#502 id=502 data-nosnippet>502</a>        )
 <a href=#503 id=503 data-nosnippet>503</a>        .unwrap();
 <a href=#504 id=504 data-nosnippet>504</a>
@@ -515,7 +515,7 @@
 <a href=#513 id=513 data-nosnippet>513</a>            Vec::&lt;rattler_conda_types::RepoDataRecord&gt;::new(), <span class="comment">// empty desired
 <a href=#514 id=514 data-nosnippet>514</a>            </span><span class="prelude-val">None</span>,                                              <span class="comment">// reinstall
 <a href=#515 id=515 data-nosnippet>515</a>            </span>ignored_packages.as_ref(),
-<a href=#516 id=516 data-nosnippet>516</a>            Platform::current(),
+<a href=#516 id=516 data-nosnippet>516</a>            Platform::current().expect(<span class="string">"host platform"</span>),
 <a href=#517 id=517 data-nosnippet>517</a>        )
 <a href=#518 id=518 data-nosnippet>518</a>        .unwrap();
 <a href=#519 id=519 data-nosnippet>519</a>
@@ -530,7 +530,7 @@
 <a href=#528 id=528 data-nosnippet>528</a>            </span><span class="macro">vec!</span>[prefix_record.repodata_record.clone()],
 <a href=#529 id=529 data-nosnippet>529</a>            <span class="prelude-val">None</span>, <span class="comment">// reinstall
 <a href=#530 id=530 data-nosnippet>530</a>            </span>ignored_packages.as_ref(),
-<a href=#531 id=531 data-nosnippet>531</a>            Platform::current(),
+<a href=#531 id=531 data-nosnippet>531</a>            Platform::current().expect(<span class="string">"host platform"</span>),
 <a href=#532 id=532 data-nosnippet>532</a>        )
 <a href=#533 id=533 data-nosnippet>533</a>        .unwrap();
 <a href=#534 id=534 data-nosnippet>534</a>

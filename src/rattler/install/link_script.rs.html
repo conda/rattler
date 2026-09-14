@@ -294,7 +294,7 @@
 <a href=#292 id=292 data-nosnippet>292</a>            operations,
 <a href=#293 id=293 data-nosnippet>293</a>            python_info: <span class="prelude-val">None</span>,
 <a href=#294 id=294 data-nosnippet>294</a>            current_python_info: <span class="prelude-val">None</span>,
-<a href=#295 id=295 data-nosnippet>295</a>            platform: Platform::current(),
+<a href=#295 id=295 data-nosnippet>295</a>            platform: Platform::current().expect(<span class="string">"host platform"</span>),
 <a href=#296 id=296 data-nosnippet>296</a>            unchanged: Vec::new(),
 <a href=#297 id=297 data-nosnippet>297</a>        };
 <a href=#298 id=298 data-nosnippet>298</a>
@@ -322,7 +322,7 @@
 <a href=#320 id=320 data-nosnippet>320</a>            operations: <span class="macro">vec!</span>[TransactionOperation::Remove(prefix_records[<span class="number">0</span>].clone())],
 <a href=#321 id=321 data-nosnippet>321</a>            python_info: <span class="prelude-val">None</span>,
 <a href=#322 id=322 data-nosnippet>322</a>            current_python_info: <span class="prelude-val">None</span>,
-<a href=#323 id=323 data-nosnippet>323</a>            platform: Platform::current(),
+<a href=#323 id=323 data-nosnippet>323</a>            platform: Platform::current().expect(<span class="string">"host platform"</span>),
 <a href=#324 id=324 data-nosnippet>324</a>            unchanged: Vec::new(),
 <a href=#325 id=325 data-nosnippet>325</a>        };
 <a href=#326 id=326 data-nosnippet>326</a>

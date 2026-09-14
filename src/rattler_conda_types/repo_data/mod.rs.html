@@ -953,7 +953,7 @@
 <a href=#951 id=951 data-nosnippet>951</a>            extra_depends: BTreeMap::new(),
 <a href=#952 id=952 data-nosnippet>952</a>            sha256: <span class="prelude-val">None</span>,
 <a href=#953 id=953 data-nosnippet>953</a>            size: <span class="prelude-val">None</span>,
-<a href=#954 id=954 data-nosnippet>954</a>            subdir: Platform::current().to_string(),
+<a href=#954 id=954 data-nosnippet>954</a>            subdir: Platform::current().unwrap_or(Platform::NoArch).to_string(),
 <a href=#955 id=955 data-nosnippet>955</a>            timestamp: <span class="prelude-val">None</span>,
 <a href=#956 id=956 data-nosnippet>956</a>            indexed_timestamp: <span class="prelude-val">None</span>,
 <a href=#957 id=957 data-nosnippet>957</a>            track_features: <span class="macro">vec!</span>[],

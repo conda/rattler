@@ -335,7 +335,7 @@
 <a href=#333 id=333 data-nosnippet>333</a>
 <a href=#334 id=334 data-nosnippet>334</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
 <a href=#335 id=335 data-nosnippet>335</a>            win: Windows::detect(overrides.win.as_ref())<span class="question-mark">?</span>,
-<a href=#336 id=336 data-nosnippet>336</a>            unix: Platform::current().is_unix(),
+<a href=#336 id=336 data-nosnippet>336</a>            unix: Platform::current().is_some_and(Platform::is_unix),
 <a href=#337 id=337 data-nosnippet>337</a>            linux: Linux::detect(overrides.linux.as_ref())<span class="question-mark">?</span>,
 <a href=#338 id=338 data-nosnippet>338</a>            osx: Osx::detect(overrides.osx.as_ref())<span class="question-mark">?</span>,
 <a href=#339 id=339 data-nosnippet>339</a>            ios: Ios::detect(overrides.ios.as_ref())<span class="question-mark">?</span>,
@@ -375,7 +375,7 @@
 <a href=#373 id=373 data-nosnippet>373</a>        cache_dir: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Path&gt;,
 <a href=#374 id=374 data-nosnippet>374</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, DetectVirtualPackageError&gt; {
 <a href=#375 id=375 data-nosnippet>375</a>        <span class="kw">let </span>virtual_packages = <span class="self">Self</span>::detect(overrides, cache_dir)<span class="question-mark">?</span>;
-<a href=#376 id=376 data-nosnippet>376</a>        <span class="kw">if </span>platform == Platform::current() {
+<a href=#376 id=376 data-nosnippet>376</a>        <span class="kw">if </span><span class="prelude-val">Some</span>(platform) == Platform::current() {
 <a href=#377 id=377 data-nosnippet>377</a>            <span class="comment">// If we're targeting the current platform, just return the detected packages
 <a href=#378 id=378 data-nosnippet>378</a>            </span><span class="kw">return </span><span class="prelude-val">Ok</span>(virtual_packages);
 <a href=#379 id=379 data-nosnippet>379</a>        }
@@ -1027,7 +1027,7 @@
 <a href=#1025 id=1025 data-nosnippet>1025</a>        archspec::cpu::host()
 <a href=#1026 id=1026 data-nosnippet>1026</a>            .ok()
 <a href=#1027 id=1027 data-nosnippet>1027</a>            .map(Into::into)
-<a href=#1028 id=1028 data-nosnippet>1028</a>            .or_else(|| <span class="self">Self</span>::from_platform(Platform::current()))
+<a href=#1028 id=1028 data-nosnippet>1028</a>            .or_else(|| Platform::current().and_then(<span class="self">Self</span>::from_platform))
 <a href=#1029 id=1029 data-nosnippet>1029</a>            .unwrap_or(Archspec::Unknown)
 <a href=#1030 id=1030 data-nosnippet>1030</a>    }
 <a href=#1031 id=1031 data-nosnippet>1031</a>
@@ -1038,7 +1038,7 @@
 <a href=#1036 id=1036 data-nosnippet>1036</a>        <span class="comment">// The values are taken from the archspec-json library.
 <a href=#1037 id=1037 data-nosnippet>1037</a>        // See: https://github.com/archspec/archspec-json/blob/master/cpu/microarchitectures.json
 <a href=#1038 id=1038 data-nosnippet>1038</a>        </span><span class="kw">let </span>archspec_name = <span class="kw">match </span>platform {
-<a href=#1039 id=1039 data-nosnippet>1039</a>            Platform::NoArch | Platform::Unknown =&gt; <span class="kw">return </span><span class="prelude-val">None</span>,
+<a href=#1039 id=1039 data-nosnippet>1039</a>            Platform::NoArch =&gt; <span class="kw">return </span><span class="prelude-val">None</span>,
 <a href=#1040 id=1040 data-nosnippet>1040</a>            Platform::EmscriptenWasm32 | Platform::WasiWasm32 =&gt; <span class="kw">return </span><span class="prelude-val">None</span>,
 <a href=#1041 id=1041 data-nosnippet>1041</a>            Platform::Win32 | Platform::Linux32 =&gt; <span class="string">"x86"</span>,
 <a href=#1042 id=1042 data-nosnippet>1042</a>            Platform::Win64 | Platform::Osx64 | Platform::Linux64 =&gt; <span class="string">"x86_64"</span>,
@@ -1693,7 +1693,7 @@
 <a href=#1691 id=1691 data-nosnippet>1691</a>    /// host has nothing to say about.
 <a href=#1692 id=1692 data-nosnippet>1692</a>    </span><span class="attr">#[test]
 <a href=#1693 id=1693 data-nosnippet>1693</a>    </span><span class="kw">fn </span>baseline_matches_cross_compiled_detection() {
-<a href=#1694 id=1694 data-nosnippet>1694</a>        <span class="kw">let </span>current = Platform::current();
+<a href=#1694 id=1694 data-nosnippet>1694</a>        <span class="kw">let </span>current = Platform::current().expect(<span class="string">"host platform"</span>);
 <a href=#1695 id=1695 data-nosnippet>1695</a>        <span class="kw">let </span>target = <span class="kw">if </span>current.is_linux() {
 <a href=#1696 id=1696 data-nosnippet>1696</a>            Platform::Win64
 <a href=#1697 id=1697 data-nosnippet>1697</a>        } <span class="kw">else </span>{
@@ -1719,7 +1719,7 @@
 <a href=#1717 id=1717 data-nosnippet>1717</a>        // host's own platform family is skipped because there the detected
 <a href=#1718 id=1718 data-nosnippet>1718</a>        // (host) versions take precedence over the defaults.
 <a href=#1719 id=1719 data-nosnippet>1719</a>        </span><span class="kw">let </span>overrides = VirtualPackageOverrides::default();
-<a href=#1720 id=1720 data-nosnippet>1720</a>        <span class="kw">let </span>current = Platform::current();
+<a href=#1720 id=1720 data-nosnippet>1720</a>        <span class="kw">let </span>current = Platform::current().expect(<span class="string">"host platform"</span>);
 <a href=#1721 id=1721 data-nosnippet>1721</a>
 <a href=#1722 id=1722 data-nosnippet>1722</a>        <span class="kw">if </span>!current.is_linux() {
 <a href=#1723 id=1723 data-nosnippet>1723</a>            <span class="kw">let </span>packages =
