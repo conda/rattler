@@ -92,6 +92,11 @@ aws-config = { version = "1", default-features = false }
 aws-sdk-s3 = { version = "1", default-features = false }
 aws-smithy-http-client = { version = "1", default-features = false }
 aws-credential-types = { version = "1", default-features = false }
+# aws-smithy-types 1.7.0 changed the `Document::Object` payload type, so
+# aws-smithy-json 0.63 -- still required by aws-config 1.12 -- no longer compiles
+# against it. The upper bound keeps a lockfile-free resolution on a working set.
+# TODO(aws-config>=1.13): drop this bound once aws-config requires aws-smithy-json 0.64.
+aws-smithy-types = { version = "1, <1.7", default-features = false }
 hashbrown = "0.17"
 hex = "0.4"
 hex-literal = "1"
