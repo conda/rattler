@@ -73,6 +73,10 @@ pub struct SolverArgs {
     /// When using a date, packages from the entire day are included.
     #[clap(long)]
     exclude_newer: Option<ExcludeNewer>,
+
+    /// Policy for selecting package timestamps when using `--exclude-newer`.
+    #[clap(long, default_value = "require-timestamp")]
+    timestamp_policy: TimestampPolicy,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -94,6 +98,31 @@ impl From<SolveStrategy> for rattler_solve::SolveStrategy {
             SolveStrategy::Highest => rattler_solve::SolveStrategy::Highest,
             SolveStrategy::Lowest => rattler_solve::SolveStrategy::LowestVersion,
             SolveStrategy::LowestDirect => rattler_solve::SolveStrategy::LowestVersionDirect,
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, Copy, ValueEnum)]
+pub enum TimestampPolicy {
+    /// Prefer the indexed timestamp, then the build timestamp, and allow
+    /// packages that have neither.
+    AllowMissing,
+
+    /// Prefer the indexed timestamp, then the build timestamp, and reject
+    /// packages that have neither.
+    #[default]
+    RequireTimestamp,
+
+    /// Use only the indexed timestamp and reject packages without one.
+    RequireIndexedTimestamp,
+}
+
+impl From<TimestampPolicy> for rattler_solve::TimestampPolicy {
+    fn from(value: TimestampPolicy) -> Self {
+        match value {
+            TimestampPolicy::AllowMissing => Self::AllowMissing,
+            TimestampPolicy::RequireTimestamp => Self::RequireTimestamp,
+            TimestampPolicy::RequireIndexedTimestamp => Self::RequireIndexedTimestamp,
         }
     }
 }
@@ -208,7 +237,10 @@ impl SolverArgs {
     }
 
     pub fn exclude_newer(&self) -> Option<rattler_solve::ExcludeNewer> {
-        self.exclude_newer.map(Into::into)
+        self.exclude_newer.map(|exclude_newer| {
+            rattler_solve::ExcludeNewer::from(exclude_newer)
+                .with_timestamp_policy(self.timestamp_policy.into())
+        })
     }
 
     /// Solves the task with the selected backend.
