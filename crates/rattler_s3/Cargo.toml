@@ -33,6 +33,7 @@ aws-config = { workspace = true, features = [
 aws-sdk-s3 = { workspace = true, features = ["rt-tokio", "default-https-client"] }
 aws-smithy-http-client = { workspace = true }
 aws-credential-types = { workspace = true }
+aws-smithy-types = { workspace = true }
 
 rattler_networking = { workspace = true, default-features = false }
 
