@@ -14,8 +14,10 @@ readme.workspace = true
 [dependencies]
 ahash = { workspace = true }
 jiff = { workspace = true }
+hex = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }
 itertools = { workspace = true }
+rattler_conda_lock = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
 rattler_solve = { workspace = true, default-features = false, features = ["serde"] }
