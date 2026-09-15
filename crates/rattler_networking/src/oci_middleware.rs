@@ -43,7 +43,7 @@ enum OciMiddlewareError {
     #[error("Invalid OCI URL '{0}': {1}")]
     InvalidUrl(Url, &'static str),
 
-    #[error("OCI channel layouts do not publish sharded repodata")]
+    #[error("sharded repodata is not supported by the current OCI channel layout")]
     ShardedRepodataUnavailable,
 
     #[error("OCI registry requested authentication")]
@@ -461,11 +461,24 @@ fn version_build_tag(tag: &str) -> String {
         .replace('=', "__eq__")
 }
 
-/// Whether `filename` is part of sharded repodata: the
-/// `repodata_shards.msgpack.zst` index or one of the `<sha256>.msgpack.zst`
-/// shards it points at.
-fn is_sharded_repodata(filename: &str) -> bool {
-    filename.ends_with(".msgpack.zst")
+/// Whether `url` is the sharded repodata index or one of its content-addressed
+/// shards. Keep this narrow: other `.msgpack.zst` paths may be valid OCI
+/// repository names.
+fn is_sharded_repodata(url: &Url) -> bool {
+    let Some(mut segments) = url.path_segments() else {
+        return false;
+    };
+    let Some(filename) = segments.next_back() else {
+        return false;
+    };
+    if filename == "repodata_shards.msgpack.zst" {
+        return true;
+    }
+
+    filename
+        .strip_suffix(".msgpack.zst")
+        .is_some_and(|digest| digest.len() == 64 && digest.bytes().all(|b| b.is_ascii_hexdigit()))
+        && segments.next_back() == Some("shards")
 }
 
 impl OCIUrl {
@@ -543,14 +556,12 @@ impl OCIUrl {
             } else if filename.ends_with(".zst") {
                 res.media_type = "application/vnd.conda.repodata.v1+json+zst".to_string();
             }
-        } else if is_sharded_repodata(filename) {
-            // An OCI channel layout only ever publishes `repodata.json`, so the
-            // gateway's sharded probe can be answered without touching the
-            // network. Falling through would turn the filename into a
-            // repository name no registry has, and ghcr.io reports an absent
-            // repository as `403 DENIED` rather than `404` — a status callers
-            // cannot degrade from, which aborts the whole solve instead of
-            // falling back to `repodata.json`.
+        } else if is_sharded_repodata(url) {
+            // The current OCI channel layout does not define a mapping for
+            // sharded repodata. Answer the gateway's probe without touching the
+            // network so it falls back to `repodata.json`. Falling through would
+            // turn the filename into a repository name; ghcr.io reports that
+            // missing repository as `403 DENIED` rather than a degradable 404.
             return Err(OciMiddlewareError::ShardedRepodataUnavailable);
         }
 
@@ -722,7 +733,7 @@ fn lookup_error_to_response(
         }
         OciMiddlewareError::ShardedRepodataUnavailable => Ok(create_404_response(
             url,
-            "OCI channel layouts do not publish sharded repodata",
+            "sharded repodata is not supported by the current OCI channel layout",
         )),
         _ => Err(reqwest_middleware::Error::Middleware(error.into())),
     }
@@ -884,10 +895,10 @@ mod tests {
     }
 
     /// Sharded repodata is reported as unavailable before any network request,
-    /// while the compressed `repodata.json` variants keep resolving to the
-    /// `repodata.json` repository.
+    /// while unrelated `.msgpack.zst` repositories and compressed
+    /// `repodata.json` variants keep resolving normally.
     #[test]
-    fn sharded_repodata_is_unavailable_but_compressed_repodata_is_not() {
+    fn sharded_repodata_is_unavailable_but_other_zstd_artifacts_are_not() {
         for filename in [
             "repodata_shards.msgpack.zst",
             "shards/0000000000000000000000000000000000000000000000000000000000000000.msgpack.zst",
@@ -903,6 +914,14 @@ mod tests {
                 ),
                 "{filename} must be reported as unavailable, not turned into a repository name"
             );
+        }
+
+        for filename in ["metadata.msgpack.zst", "shards/not-a-digest.msgpack.zst"] {
+            let url: Url =
+                format!("oci://ghcr.io/channel-mirrors/conda-forge/osx-arm64/{filename}")
+                    .parse()
+                    .unwrap();
+            OCIUrl::new(&url).unwrap_or_else(|_| panic!("{filename} may be a valid repository"));
         }
 
         let url: Url = "oci://ghcr.io/channel-mirrors/conda-forge/osx-arm64/repodata.json.zst"
