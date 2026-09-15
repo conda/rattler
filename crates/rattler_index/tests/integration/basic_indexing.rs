@@ -100,9 +100,14 @@ async fn test_index() {
     let repodata_path = temp_dir.path().join(subdir_path).join("repodata.json");
     let repodata_json: Value = serde_json::from_reader(File::open(repodata_path).unwrap()).unwrap();
 
-    let expected_repodata_entry: Value =
+    let mut expected_repodata_entry: Value =
         serde_json::from_reader(File::open(test_data_dir().join(index_json_path)).unwrap())
             .unwrap();
+
+    let indexed_timestamp =
+        &repodata_json["packages.conda"]["conda-22.11.1-py38haa244fe_1.conda"]["indexed_timestamp"];
+    assert!(indexed_timestamp.as_i64().unwrap() > 1_700_000_000_000);
+    expected_repodata_entry["indexed_timestamp"] = indexed_timestamp.clone();
 
     assert_eq!(
         repodata_json
