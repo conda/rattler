@@ -223,6 +223,7 @@ pub fn parse_v3_or_lower(
                                     |id| id.to_file_name(),
                                 ),
                                 package_record: PackageRecord {
+                                    attestations_sha256: None,
                                     arch: value.arch.or(derived_arch),
                                     build,
                                     build_number,

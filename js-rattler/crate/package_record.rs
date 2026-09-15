@@ -55,7 +55,7 @@ extern "C" {
 #[wasm_bindgen(js_class = "PackageRecord")]
 impl JsPackageRecord {
     /// Constructs a new instance from the json representation of a
-    /// PackageRecord.
+    /// `PackageRecord`.
     #[wasm_bindgen(constructor)]
     pub fn new(json: JsPackageRecordJson) -> Result<JsPackageRecord, crate::error::JsError> {
         let package_record: PackageRecord = serde_wasm_bindgen::from_value(json.into())?;
@@ -63,7 +63,7 @@ impl JsPackageRecord {
     }
 
     /// Convert this instance to the canonical json representation of a
-    /// PackageRecord.
+    /// `PackageRecord`.
     #[wasm_bindgen(js_name = "toJson")]
     pub fn to_json(&self) -> Result<JsPackageRecordJson, crate::error::JsError> {
         let serializer = serde_wasm_bindgen::Serializer::json_compatible();
