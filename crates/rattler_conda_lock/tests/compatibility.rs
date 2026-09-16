@@ -1,3 +1,30 @@
+//! Reading what conda-lock actually writes.
+//!
+//! The fixtures in `test-data/cep37` are byte-for-byte copies of
+//! `conda/conda-lock` at `350c4a04b520104deda43eddc24da29784681f3c`
+//! (`tests/test-multiple-categories/conda-lock.yml` as `multiple-categories.yml`,
+//! `tests/test-install-with-pip-deps/conda-lock.yml` as `pip-deps.yml`,
+//! `tests/test-lockfile/conda-lock.yml` as `legacy-lockfile.yml`,
+//! `tests/test-v2-to-v3-upgrade/conda-lock-v{2.5.8,3.0.2,3.0.3}.yml` as
+//! `upgrade-*.yml`, `tests/test-environment-blas-mkl/conda-lock.yml` as
+//! `blas-mkl.yml` and `tests/test-explicit-toposorted/conda-lock.yml` as
+//! `explicit-toposorted.yml`), plus the CEP-37 example as `cep-example.yml`.
+//! They are excluded from `dprint` in `.dprint.jsonc` so they keep the exact
+//! layout conda-lock emits; reformatting them would make these tests assert
+//! against our own spelling instead.
+//!
+//! Comparison is on parsed YAML semantics, normalizing documented defaults,
+//! channel shorthand, absent/null optional fields and unconstrained `*` Python
+//! requirements. Comments, mapping order and package order are not significant.
+//! Metadata hashes are compared as stored, not recomputed: upstream content
+//! hashes describe input specifications, not the resolved package list.
+//!
+//! The upgrade fixtures contain Git-sourced Python packages. They must survive
+//! CEP-37 read/write, but offline conversion to a pixi lock file may fail
+//! rather than treat a Git repository as a downloadable wheel. SHA256-only
+//! conda packages are valid CEP-37 input even though conda-lock requires MD5;
+//! they are covered separately from upstream acceptance checks.
+
 use std::path::PathBuf;
 
 use rattler_conda_lock::{Document, LockFile};
@@ -193,7 +220,9 @@ fn generated_hashes_match_python_json_dumps() {
         r#""url": "https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2025.10.5-hbd8a1cb_0.conda", "#,
         r#""version": "2025.10.5"}]"#,
     );
-    let expected = hex::encode(<sha2::Sha256 as sha2::Digest>::digest(expected_preimage));
+    let expected = hex::encode(
+        rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(expected_preimage),
+    );
     assert_eq!(lock.compute_content_hashes()["linux-64"], expected);
 }
 

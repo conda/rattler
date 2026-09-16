@@ -4,10 +4,12 @@ use std::{
 };
 
 use pep508_rs::Requirement;
-use rattler_conda_lock::{Document, Error, LockFile as CepLockFile, Manager, Package};
+use rattler_conda_lock::{Document, LockFile as CepLockFile, Manager, NodePath, Package};
 use rattler_conda_types::{PackageName, PackageRecord, Platform, VersionWithSource};
 use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 
+use super::dependencies::{conda_spec, python_spec};
+use super::error::{ChecksumAlgorithm, CondaLockError, CondaLockErrorKind};
 use crate::utils::derived_fields::{
     LocationDerivedFields, derive_arch_and_platform, derive_build_number_from_build,
     derive_noarch_type,
@@ -32,25 +34,58 @@ impl Default for ImportOptions {
     }
 }
 
-/// Imports selected categories without solving, downloading, or expanding variables.
-///
-/// Empty declared platforms remain present in every destination environment.
-/// Errors refer to original CEP paths, including both sides of conflicting selections.
-///
-/// ```
-/// # fn example(cep: &rattler_conda_lock::LockFile) -> Result<(), rattler_conda_lock::Error> {
-/// let options = rattler_lock::conda_lock::ImportOptions::default();
-/// let pixi = rattler_lock::conda_lock::import(cep, &options)?;
-/// assert!(pixi.default_environment().is_some());
-/// # Ok(())
-/// # }
-/// ```
-pub fn import(lock_file: &CepLockFile, options: &ImportOptions) -> Result<LockFile, Error> {
+impl LockFile {
+    /// Imports selected categories of a CEP-37 lock file, without solving,
+    /// downloading, or expanding variables.
+    ///
+    /// Empty declared platforms remain present in every destination environment.
+    /// Errors refer to CEP-37 model paths, including both sides of conflicting
+    /// selections; pass a [`Document`] to [`Self::from_conda_lock_document`] to
+    /// have those paths resolved to source spans as well.
+    ///
+    /// ```
+    /// # fn example(cep: &rattler_conda_lock::LockFile) -> Result<(), rattler_lock::conda_lock::CondaLockError> {
+    /// use rattler_lock::{LockFile, conda_lock::ImportOptions};
+    ///
+    /// let pixi = LockFile::from_conda_lock(cep, &ImportOptions::default())?;
+    /// assert!(pixi.default_environment().is_some());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn from_conda_lock(
+        lock_file: &CepLockFile,
+        options: &ImportOptions,
+    ) -> Result<Self, CondaLockError> {
+        import(lock_file, options)
+    }
+
+    /// Imports a parsed document, attaching its source spans to any error.
+    ///
+    /// ```
+    /// # fn example(yaml: &str) -> Result<(), rattler_lock::conda_lock::CondaLockError> {
+    /// use rattler_lock::{LockFile, conda_lock::ImportOptions};
+    ///
+    /// let document = rattler_conda_lock::Document::parse(yaml)?;
+    /// let pixi = LockFile::from_conda_lock_document(&document, &ImportOptions::default())?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn from_conda_lock_document(
+        document: &Document,
+        options: &ImportOptions,
+    ) -> Result<Self, CondaLockError> {
+        import(document.lock_file(), options)
+            .map_err(|error| document.contextualize(error.into_diagnostic()).into())
+    }
+}
+
+fn import(lock_file: &CepLockFile, options: &ImportOptions) -> Result<LockFile, CondaLockError> {
     lock_file.validate()?;
+    let options_path = NodePath::root().field("options").field("environments");
     if options.environments.is_empty() {
-        return Err(Error::new(
-            "options.environments",
-            "at least one environment selection is required",
+        return Err(CondaLockError::new(
+            options_path,
+            CondaLockErrorKind::NoEnvironments,
         ));
     }
     let mut categories: BTreeSet<&str> = lock_file
@@ -61,22 +96,25 @@ pub fn import(lock_file: &CepLockFile, options: &ImportOptions) -> Result<LockFi
     // An empty lock still has a meaningful empty main environment.
     categories.insert("main");
     for (name, selected) in &options.environments {
-        let path = format!("options.environments.{name}");
+        let path = options_path.field(name);
         if name.trim().is_empty() || selected.is_empty() {
-            return Err(Error::new(
+            return Err(CondaLockError::new(
                 path,
-                "environment names and category selections must be nonempty",
+                CondaLockErrorKind::EmptySelection,
             ));
         }
         for category in selected {
             if !categories.contains(category.as_str()) {
-                return Err(Error::new(
-                    &path,
-                    format!("category '{category}' does not occur in the lock file"),
+                return Err(CondaLockError::new(
+                    path.clone(),
+                    CondaLockErrorKind::UnknownCategory {
+                        category: category.clone(),
+                    },
                 ));
             }
         }
     }
+    let platforms_path = NodePath::root().field("metadata").field("platforms");
     let platforms = lock_file
         .metadata
         .platforms
@@ -84,7 +122,10 @@ pub fn import(lock_file: &CepLockFile, options: &ImportOptions) -> Result<LockFi
         .enumerate()
         .map(|(index, name)| {
             let subdir = Platform::from_str(name).map_err(|error| {
-                Error::new(format!("metadata.platforms[{index}]"), error.to_string())
+                CondaLockError::new(
+                    platforms_path.index(index),
+                    CondaLockErrorKind::UnsupportedPlatform(error),
+                )
             })?;
             Ok(PlatformData {
                 name: (&subdir).into(),
@@ -92,13 +133,16 @@ pub fn import(lock_file: &CepLockFile, options: &ImportOptions) -> Result<LockFi
                 virtual_packages: Vec::new(),
             })
         })
-        .collect::<Result<Vec<_>, Error>>()?;
+        .collect::<Result<Vec<_>, CondaLockError>>()?;
     let mut builder = LockFile::builder()
         .with_platforms(platforms)
-        .map_err(|error| Error::new("metadata.platforms", error.to_string()))?;
+        .map_err(|error| {
+            CondaLockError::new(platforms_path.clone(), CondaLockErrorKind::Builder(error))
+        })?;
+    let packages_path = NodePath::root().field("package");
     // The builder merges packages by artifact identity. Reject divergent records
     // before registration so one environment cannot change another's semantics.
-    let mut artifacts: BTreeMap<(Manager, String), (LockedPackage, usize)> = BTreeMap::new();
+    let mut artifacts: BTreeMap<ArtifactKey<'_>, (LockedPackage, usize)> = BTreeMap::new();
     for (environment, categories) in &options.environments {
         // Declared platforms stay in the environment even when the selected
         // categories contain no package for them.
@@ -106,7 +150,10 @@ pub fn import(lock_file: &CepLockFile, options: &ImportOptions) -> Result<LockFi
             builder
                 .add_environment_platform(environment, platform)
                 .map_err(|error| {
-                    Error::new(format!("metadata.platforms[{index}]"), error.to_string())
+                    CondaLockError::new(
+                        platforms_path.index(index),
+                        CondaLockErrorKind::Builder(error),
+                    )
                 })?;
         }
         builder.set_channels(
@@ -120,82 +167,118 @@ pub fn import(lock_file: &CepLockFile, options: &ImportOptions) -> Result<LockFi
                     used_env_vars: channel.used_env_vars.clone(),
                 }),
         );
-        let mut selected = BTreeMap::<(Manager, String, String), (LockedPackage, usize)>::new();
+        let mut selected = BTreeMap::<EnvironmentSlot<'_>, (LockedPackage, usize)>::new();
         for (index, package) in lock_file.package.iter().enumerate() {
             if !categories.contains(&package.category) {
                 continue;
             }
-            let converted = convert(package, index)?;
-            let name = match &converted {
-                LockedPackage::Conda(data) => data.name().as_normalized().to_owned(),
-                LockedPackage::Pypi(data) => data.name().to_string(),
-            };
-            let key = (package.manager, package.platform.clone(), name);
-            if let Some((original, original_index)) = selected.get(&key) {
+            let path = packages_path.index(index);
+            let converted = convert(package, &path)?;
+            // One destination environment holds one package per normalized
+            // name, whatever categories selected it.
+            let slot = EnvironmentSlot::new(package, &converted);
+            if let Some((original, original_index)) = selected.get(&slot) {
                 if original != &converted {
                     return Err(conflict(
+                        &packages_path,
                         index,
                         *original_index,
-                        "selected categories contain incompatible packages with the same name",
+                        CondaLockErrorKind::IncompatibleSelection,
                     ));
                 }
                 continue;
             }
-            let artifact_key = (package.manager, package.url.clone());
-            if let Some((original, original_index)) = artifacts.get(&artifact_key) {
+            let artifact = ArtifactKey {
+                manager: package.manager,
+                url: package.url.as_str(),
+            };
+            if let Some((original, original_index)) = artifacts.get(&artifact) {
                 if original != &converted {
                     return Err(conflict(
+                        &packages_path,
                         index,
                         *original_index,
-                        "the same artifact has conflicting package metadata",
+                        CondaLockErrorKind::ConflictingArtifact,
                     ));
                 }
             } else {
-                artifacts.insert(artifact_key, (converted.clone(), index));
+                artifacts.insert(artifact, (converted.clone(), index));
             }
-            selected.insert(key, (converted.clone(), index));
+            selected.insert(slot, (converted.clone(), index));
             builder
                 .add_package(environment, &package.platform, converted)
-                .map_err(|error| Error::new(format!("package[{index}]"), error.to_string()))?;
+                .map_err(|error| {
+                    CondaLockError::new(path.clone(), CondaLockErrorKind::Builder(error))
+                })?;
         }
     }
     Ok(builder.finish())
 }
 
-/// Imports a parsed document and attaches its original source spans to errors.
-///
-/// ```
-/// # fn example(yaml: &str) -> Result<(), rattler_conda_lock::Error> {
-/// let document = rattler_conda_lock::Document::parse(yaml)?;
-/// let pixi = rattler_lock::conda_lock::import_document(&document, &Default::default())?;
-/// # Ok(())
-/// # }
-/// ```
-pub fn import_document(document: &Document, options: &ImportOptions) -> Result<LockFile, Error> {
-    import(document.lock_file(), options).map_err(|error| document.contextualize(error))
+/// The slot a package occupies in one destination environment. A pixi
+/// environment holds one package per manager, platform and normalized name,
+/// however many CEP-37 categories selected it.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct EnvironmentSlot<'a> {
+    manager: Manager,
+    platform: &'a str,
+    name: String,
 }
 
-fn conflict(index: usize, original: usize, message: &str) -> Error {
-    Error::new(format!("package[{index}]"), message)
-        .with_related_path(format!("package[{original}]"), "original package selection")
+impl<'a> EnvironmentSlot<'a> {
+    fn new(package: &'a Package, converted: &LockedPackage) -> Self {
+        Self {
+            manager: package.manager,
+            platform: &package.platform,
+            name: match converted {
+                LockedPackage::Conda(data) => data.name().as_normalized().to_owned(),
+                LockedPackage::Pypi(data) => data.name().to_string(),
+            },
+        }
+    }
 }
 
-fn convert(package: &Package, index: usize) -> Result<LockedPackage, Error> {
-    let path = format!("package[{index}]");
+/// The artifact a package resolves to. The pixi lock file stores one record per
+/// artifact, so two CEP-37 packages sharing a URL must agree on its metadata.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct ArtifactKey<'a> {
+    manager: Manager,
+    url: &'a str,
+}
+
+fn conflict(
+    packages: &NodePath,
+    index: usize,
+    original: usize,
+    kind: CondaLockErrorKind,
+) -> CondaLockError {
+    CondaLockError::new(packages.index(index), kind)
+        .with_related_path(packages.index(original), "original package selection")
+}
+
+fn convert(package: &Package, path: &NodePath) -> Result<LockedPackage, CondaLockError> {
     if package.source.is_some() {
-        return Err(Error::new(
-            format!("{path}.source"),
-            "source builds cannot be imported as immutable artifacts",
+        return Err(CondaLockError::new(
+            path.field("source"),
+            CondaLockErrorKind::SourcePackage,
         ));
     }
-    let url = super::artifact_url(&package.url, &format!("{path}.url"))?;
+    let url_path = path.field("url");
+    let url = super::artifact_url(&package.url, &url_path)?;
+    let hash_path = path.field("hash");
     let md5 = package
         .hash
         .md5
         .as_deref()
         .map(|value| {
-            parse_digest_from_hex::<Md5>(value)
-                .ok_or_else(|| Error::new(format!("{path}.hash.md5"), "invalid MD5 digest"))
+            parse_digest_from_hex::<Md5>(value).ok_or_else(|| {
+                CondaLockError::new(
+                    hash_path.field("md5"),
+                    CondaLockErrorKind::InvalidDigest {
+                        algorithm: ChecksumAlgorithm::Md5,
+                    },
+                )
+            })
         })
         .transpose()?;
     let sha256 = package
@@ -203,58 +286,70 @@ fn convert(package: &Package, index: usize) -> Result<LockedPackage, Error> {
         .sha256
         .as_deref()
         .map(|value| {
-            parse_digest_from_hex::<Sha256>(value)
-                .ok_or_else(|| Error::new(format!("{path}.hash.sha256"), "invalid SHA256 digest"))
+            parse_digest_from_hex::<Sha256>(value).ok_or_else(|| {
+                CondaLockError::new(
+                    hash_path.field("sha256"),
+                    CondaLockErrorKind::InvalidDigest {
+                        algorithm: ChecksumAlgorithm::Sha256,
+                    },
+                )
+            })
         })
         .transpose()?;
+    let dependencies_path = path.field("dependencies");
     match package.manager {
         Manager::Conda => {
             if url.as_str() != package.url {
-                return Err(Error::new(
-                    format!("{path}.url"),
-                    "conda artifact URL cannot be preserved without URL normalization",
+                return Err(CondaLockError::new(
+                    url_path,
+                    CondaLockErrorKind::UnnormalizedUrl,
                 ));
             }
             let location = UrlOrPath::Url(url);
             let derived = LocationDerivedFields::new(&location);
             let file_name = derived.identifier.ok_or_else(|| {
-                Error::new(format!("{path}.url"), "expected a conda archive filename")
+                CondaLockError::new(url_path.clone(), CondaLockErrorKind::MissingFileName)
             })?;
             let build = package.build.clone().or(derived.build).ok_or_else(|| {
-                Error::new(
-                    format!("{path}.build"),
-                    "build cannot be reconstructed from the artifact URL",
+                CondaLockError::new(path.field("build"), CondaLockErrorKind::MissingBuildString)
+            })?;
+            let name = PackageName::from_str(&package.name).map_err(|error| {
+                CondaLockError::new(
+                    path.field("name"),
+                    CondaLockErrorKind::InvalidCondaName(error),
                 )
             })?;
-            let name = PackageName::from_str(&package.name)
-                .map_err(|error| Error::new(format!("{path}.name"), error.to_string()))?;
-            let version = VersionWithSource::from_str(&package.version)
-                .map_err(|error| Error::new(format!("{path}.version"), error.to_string()))?;
+            let version = VersionWithSource::from_str(&package.version).map_err(|error| {
+                CondaLockError::new(
+                    path.field("version"),
+                    CondaLockErrorKind::InvalidCondaVersion(error),
+                )
+            })?;
             let mut record = PackageRecord::new(name, version, build);
             // Matches the historical importer: a build string without a trailing
-            // number carries no build number, and CEP never stores one.
+            // number carries no build number, and CEP-37 never stores one.
             record.build_number = derive_build_number_from_build(&record.build).unwrap_or(0);
             record.subdir = derived.subdir.unwrap_or_else(|| package.platform.clone());
             if record.subdir != "noarch" && record.subdir != package.platform {
-                return Err(Error::new(
-                    format!("{path}.url"),
-                    "artifact subdir disagrees with the selected platform",
-                )
-                .with_related_path(format!("{path}.platform"), "selected platform"));
+                return Err(
+                    CondaLockError::new(url_path, CondaLockErrorKind::SubdirMismatch)
+                        .with_related_path(path.field("platform"), "selected platform"),
+                );
             }
             (record.arch, record.platform) = derive_arch_and_platform(&record.subdir);
             record.noarch = derive_noarch_type(&record.subdir, &record.build);
             record.md5 = md5;
             record.sha256 = sha256;
-            let mut names = BTreeMap::new();
+            let mut normalized = BTreeMap::new();
             for (name, value) in &package.dependencies {
-                let dependency_path = format!("{path}.dependencies.{name}");
+                let dependency_path = dependencies_path.field(name);
                 let text = format!("{name} {value}");
-                let (normalized, _) = super::dependencies::conda_spec(&text, &dependency_path)?;
-                if let Some(original) = names.insert(normalized, dependency_path.clone()) {
-                    return Err(Error::new(
-                        &dependency_path,
-                        "dependency names normalize to the same name",
+                let dependency = conda_spec(&text, &dependency_path)?;
+                if let Some(original) = normalized.insert(dependency.name, dependency_path.clone())
+                {
+                    return Err(CondaLockError::new(
+                        dependency_path,
+                        CondaLockErrorKind::AmbiguousDependencyName,
                     )
                     .with_related_path(original, "original dependency"));
                 }
@@ -272,41 +367,47 @@ fn convert(package: &Package, index: usize) -> Result<LockedPackage, Error> {
         }
         Manager::Pip => {
             if package.build.is_some() {
-                return Err(Error::new(
-                    format!("{path}.build"),
-                    "Python artifacts cannot carry a conda build string",
+                return Err(CondaLockError::new(
+                    path.field("build"),
+                    CondaLockErrorKind::PythonBuildString,
                 ));
             }
             let mut requires_dist = Vec::with_capacity(package.dependencies.len());
-            let mut names = BTreeMap::new();
+            let mut normalized = BTreeMap::new();
             for (name, value) in &package.dependencies {
-                let dependency_path = format!("{path}.dependencies.{name}");
+                let dependency_path = dependencies_path.field(name);
                 let constraint = python_constraint(value, &dependency_path)?;
-                let requirement = Requirement::from_str(&format!("{name}{constraint}"))
-                    .map_err(|error| Error::new(&dependency_path, error.to_string()))?;
-                let (normalized, _) =
-                    super::dependencies::python_spec(&requirement, &dependency_path)?;
-                if let Some(original) = names.insert(normalized, dependency_path.clone()) {
-                    return Err(Error::new(
-                        &dependency_path,
-                        "dependency names normalize to the same name",
+                let requirement =
+                    Requirement::from_str(&format!("{name}{constraint}")).map_err(|error| {
+                        CondaLockError::new(
+                            dependency_path.clone(),
+                            CondaLockErrorKind::InvalidRequirement(error),
+                        )
+                    })?;
+                let dependency = python_spec(&requirement, &dependency_path)?;
+                if let Some(original) = normalized.insert(dependency.name, dependency_path.clone())
+                {
+                    return Err(CondaLockError::new(
+                        dependency_path,
+                        CondaLockErrorKind::AmbiguousDependencyName,
                     )
                     .with_related_path(original, "original dependency"));
                 }
                 requires_dist.push(requirement);
             }
             let data = PypiDistributionData {
-                name: package
-                    .name
-                    .parse()
-                    .map_err(|error: pep508_rs::InvalidNameError| {
-                        Error::new(format!("{path}.name"), error.to_string())
-                    })?,
-                version: package.version.parse().map_err(
-                    |error: pep440_rs::VersionParseError| {
-                        Error::new(format!("{path}.version"), error.to_string())
-                    },
-                )?,
+                name: package.name.parse().map_err(|error| {
+                    CondaLockError::new(
+                        path.field("name"),
+                        CondaLockErrorKind::InvalidPythonName(error),
+                    )
+                })?,
+                version: package.version.parse().map_err(|error| {
+                    CondaLockError::new(
+                        path.field("version"),
+                        CondaLockErrorKind::InvalidPythonVersion(error),
+                    )
+                })?,
                 location: Verbatim::new_with_given(UrlOrPath::Url(url), package.url.clone()),
                 index_url: None,
                 hash: PackageHashes::from_hashes(md5, sha256),
@@ -322,15 +423,15 @@ fn convert(package: &Package, index: usize) -> Result<LockedPackage, Error> {
 ///
 /// `*` is unconstrained and a bare version literal is an exact pin. Alternatives
 /// separated by `||` have no PEP 508 equivalent and are rejected.
-fn python_constraint(value: &str, path: &str) -> Result<String, Error> {
+fn python_constraint(value: &str, path: &NodePath) -> Result<String, CondaLockError> {
     let value = value.trim();
     if value == "*" || value.is_empty() {
         return Ok(String::new());
     }
     if value.contains("||") {
-        return Err(Error::new(
-            path,
-            "alternative version constraints cannot be represented in a Python requirement",
+        return Err(CondaLockError::new(
+            path.clone(),
+            CondaLockErrorKind::AlternativeConstraints,
         ));
     }
     if pep440_rs::Version::from_str(value).is_ok() {

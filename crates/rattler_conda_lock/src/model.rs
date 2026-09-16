@@ -1,16 +1,34 @@
 //! Owned CEP-37 v1 data, independent of the source document.
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt};
 
 use serde::{Serialize, Serializer, ser::SerializeStruct};
 
 /// A CEP-37 v1 lockfile. The schema version is implicit.
 ///
 /// ```
-/// use rattler_conda_lock::LockFile;
-/// let lock = LockFile::default();
-/// assert!(lock.validate().is_ok());
-/// assert!(lock.to_yaml()?.contains("version: 1"));
+/// use rattler_conda_lock::{Hashes, LockFile, Manager, Package};
+///
+/// let mut lock = LockFile::default();
+/// lock.metadata.platforms.push("linux-64".into());
+/// lock.package.push(Package {
+///     name: "ca-certificates".into(),
+///     version: "2025.10.5".into(),
+///     manager: Manager::Conda,
+///     platform: "linux-64".into(),
+///     dependencies: Default::default(),
+///     url: "https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2025.10.5-hbd8a1cb_0.conda".into(),
+///     hash: Hashes { md5: None, sha256: Some("3b5ad78b8bb61b6cdc0978a6a99f8dfb2cc789a451378d054698441005ecbdb6".into()) },
+///     source: None,
+///     build: Some("hbd8a1cb_0".into()),
+///     category: "main".into(),
+///     optional: false,
+/// });
+/// lock.metadata.content_hash = lock.compute_content_hashes();
+///
+/// // Writing is canonical, so reading the result back yields the same model.
+/// let yaml = lock.to_yaml()?;
+/// assert_eq!(yaml.parse::<LockFile>()?, lock);
 /// # Ok::<(), rattler_conda_lock::Error>(())
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -29,6 +47,15 @@ pub enum Manager {
     Conda,
     /// A Python distribution.
     Pip,
+}
+
+impl fmt::Display for Manager {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Conda => "conda",
+            Self::Pip => "pip",
+        })
+    }
 }
 
 /// One artifact selected for a target platform and install category.
@@ -58,6 +85,49 @@ pub struct Package {
     pub category: String,
     /// Whether the artifact is optional.
     pub optional: bool,
+}
+
+impl Package {
+    /// The fields that decide what this artifact installs where: two packages
+    /// with one identity make the lock file ambiguous, which
+    /// [`LockFile::validate`] rejects.
+    pub fn identity(&self) -> PackageIdentity<'_> {
+        PackageIdentity {
+            platform: &self.platform,
+            manager: self.manager,
+            name: &self.name,
+            category: &self.category,
+        }
+    }
+}
+
+/// The install identity of a [`Package`], as returned by [`Package::identity`].
+///
+/// The field order is the canonical package order used by
+/// [`LockFile::to_yaml`] and [`LockFile::compute_content_hashes`]: target
+/// platform first, so that all packages for one platform are contiguous.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct PackageIdentity<'a> {
+    /// Install target platform.
+    pub platform: &'a str,
+    /// Installer responsible for the artifact.
+    pub manager: Manager,
+    /// Package name, as written.
+    pub name: &'a str,
+    /// Install category.
+    pub category: &'a str,
+}
+
+impl fmt::Display for PackageIdentity<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            name,
+            manager,
+            platform,
+            category,
+        } = self;
+        write!(f, "{manager}:{platform}:{category}:{name}")
+    }
 }
 
 /// Optional hexadecimal checksums. Empty and SHA256-only hashes are valid.

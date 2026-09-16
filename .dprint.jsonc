@@ -9,8 +9,9 @@
         "**/*.lock",
         "**/node_modules/",
         "dist/",
-        // Verbatim copies of upstream conda-lock/CEP-37 files; reformatting
-        // them would break what the compatibility tests are asserting.
+        // Verbatim copies of conda-lock output and the CEP-37 example; see
+        // crates/rattler_conda_lock/tests/compatibility.rs. Reformatting them
+        // would make those tests assert against our own spelling.
         "test-data/cep37/",
     ],
     "plugins": [

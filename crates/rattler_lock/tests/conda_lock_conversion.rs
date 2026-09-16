@@ -2,7 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use rattler_conda_lock::{Document, Manager};
-use rattler_lock::conda_lock::{ExportOptions, ImportOptions, export, import, import_document};
+use rattler_lock::LockFile;
+use rattler_lock::conda_lock::{CondaLockErrorKind, ExportOptions, ImportOptions};
 
 fn fixture(name: &str) -> Document {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -32,7 +33,7 @@ fn options(environments: &[(&str, &[&str])]) -> ImportOptions {
 fn configured_categories_select_exactly_the_requested_packages() {
     let document = fixture("multiple-categories.yml");
     let cep = document.lock_file();
-    let pixi = import(
+    let pixi = LockFile::from_conda_lock(
         cep,
         &options(&[
             ("default", &["main"]),
@@ -71,15 +72,15 @@ fn configured_categories_select_exactly_the_requested_packages() {
 fn exported_environment_reproduces_the_imported_conda_and_pip_packages() {
     let document = fixture("pip-deps.yml");
     let original = document.lock_file();
-    let pixi = import_document(&document, &ImportOptions::default()).unwrap();
-    let exported = export(
-        pixi.default_environment().unwrap(),
-        &ExportOptions {
+    let pixi = LockFile::from_conda_lock_document(&document, &ImportOptions::default()).unwrap();
+    let exported = pixi
+        .default_environment()
+        .unwrap()
+        .to_conda_lock(&ExportOptions {
             sources: original.metadata.sources.clone(),
             content_hash: Some(original.metadata.content_hash.clone()),
-        },
-    )
-    .unwrap();
+        })
+        .unwrap();
 
     assert_eq!(exported.metadata.platforms, {
         let mut platforms = original.metadata.platforms.clone();
@@ -125,12 +126,17 @@ fn exported_environment_reproduces_the_imported_conda_and_pip_packages() {
 
 #[test]
 fn export_generates_deterministic_hashes_when_the_caller_supplies_none() {
-    let pixi = import_document(&fixture("blas-mkl.yml"), &ImportOptions::default()).unwrap();
+    let pixi =
+        LockFile::from_conda_lock_document(&fixture("blas-mkl.yml"), &ImportOptions::default())
+            .unwrap();
     let environment = pixi.default_environment().unwrap();
-    let exported = export(environment, &ExportOptions::default()).unwrap();
+    let exported = environment
+        .to_conda_lock(&ExportOptions::default())
+        .unwrap();
     assert_eq!(
         exported.metadata.content_hash,
-        export(environment, &ExportOptions::default())
+        environment
+            .to_conda_lock(&ExportOptions::default())
             .unwrap()
             .metadata
             .content_hash
@@ -174,7 +180,8 @@ fn direct_source_packages_report_their_original_location() {
     let document = document(&format!(
         "- name: requests\n  version: '2.32.4'\n  manager: pip\n  platform: linux-64\n  dependencies: {{}}\n  url: {git}\n  hash: {{sha256: 3f07f990ac74f1e1691ba17ef8c14007f05846ab}}\n  source: {{type: url, url: {git}}}\n  optional: false\n"
     ));
-    let error = import_document(&document, &ImportOptions::default()).unwrap_err();
+    let error =
+        LockFile::from_conda_lock_document(&document, &ImportOptions::default()).unwrap_err();
     assert_eq!(error.path(), "package[1].source");
     let span = error
         .labels()
@@ -195,12 +202,14 @@ fn direct_source_packages_report_their_original_location() {
 fn platform_specific_python_requirements_are_rejected_rather_than_merged() {
     // pixi stores one requirement set per artifact; conda-lock stores one per
     // platform, so `click` requiring `colorama` only on Windows cannot be kept.
-    let error =
-        import_document(&fixture("upgrade-v3.0.3.yml"), &ImportOptions::default()).unwrap_err();
+    let error = LockFile::from_conda_lock_document(
+        &fixture("upgrade-v3.0.3.yml"),
+        &ImportOptions::default(),
+    )
+    .unwrap_err();
     assert!(
-        error.message().contains("conflicting package metadata"),
-        "{}",
-        error.message()
+        matches!(error.kind(), CondaLockErrorKind::ConflictingArtifact),
+        "{error:?}"
     );
     assert_eq!(error.labels().len(), 2);
     assert!(error.labels().iter().all(|label| label.span().is_some()));
@@ -216,9 +225,9 @@ fn unknown_categories_and_empty_selections_are_rejected() {
             environments: BTreeMap::new(),
         },
     ] {
-        let error = import(&cep, &invalid).unwrap_err();
+        let error = LockFile::from_conda_lock(&cep, &invalid).unwrap_err();
         assert!(
-            error.path().starts_with("options.environments"),
+            error.path().as_str().starts_with("options.environments"),
             "{}",
             error.path()
         );
@@ -232,7 +241,7 @@ fn conda_lock_constraint_spellings_convert_or_fail_explicitly() {
     let pinned = document(
         "- name: pydantic\n  version: '2.5.1'\n  manager: pip\n  platform: linux-64\n  dependencies: {pydantic-core: '2.14.3', annotated-types: '*', typing-extensions: '>=4.6.1'}\n  url: https://files.pythonhosted.org/packages/ab/pydantic-2.5.1-py3-none-any.whl\n  hash: {sha256: 'dc5244a8939e0d9a68f1f1b5f550b2e1c879912033b1becbedb315accc75441b'}\n  optional: false\n",
     );
-    let pixi = import_document(&pinned, &ImportOptions::default()).unwrap();
+    let pixi = LockFile::from_conda_lock_document(&pinned, &ImportOptions::default()).unwrap();
     let environment = pixi.default_environment().unwrap();
     let platform = environment.platforms().next().unwrap();
     let pydantic = environment
@@ -261,11 +270,11 @@ fn conda_lock_constraint_spellings_convert_or_fail_explicitly() {
     let alternation = document(
         "- name: pydantic-core\n  version: '2.14.3'\n  manager: pip\n  platform: linux-64\n  dependencies: {typing-extensions: '>=4.6.0,<4.7.0 || >4.7.0'}\n  url: https://files.pythonhosted.org/packages/cd/pydantic_core-2.14.3-cp312-none-any.whl\n  hash: {sha256: 'b2b0e0ec4ba0169fb1a7e9ad7c8a2a4b0a1b5d5b1c1f2a7b1a1c1d1e1f101112'}\n  optional: false\n",
     );
-    let error = import_document(&alternation, &ImportOptions::default()).unwrap_err();
+    let error =
+        LockFile::from_conda_lock_document(&alternation, &ImportOptions::default()).unwrap_err();
     assert_eq!(error.path(), "package[1].dependencies.typing-extensions");
     assert!(
-        error.message().contains("alternative version constraints"),
-        "{}",
-        error.message()
+        matches!(error.kind(), CondaLockErrorKind::AlternativeConstraints),
+        "{error:?}"
     );
 }

@@ -1,0 +1,64 @@
+---
+source: crates/rattler_conda_lock/tests/error_messages.rs
+expression: report_all
+---
+# invalid digest
+kind:    InvalidDigest { length: 64 }
+display: metadata.content_hash.linux-64: expected exactly 64 hexadecimal digits
+label:   metadata.content_hash.linux-64 [<primary>] "nope"
+
+# duplicate platform
+kind:    DuplicatePlatform
+display: metadata.platforms[1]: duplicate target platform
+label:   metadata.platforms[1] [<primary>] "linux-64"
+label:   metadata.platforms[0] [first declared here] "linux-64"
+
+# missing content hash
+kind:    MissingContentHash { platform: "linux-64" }
+display: metadata.content_hash: missing content hash for target platform linux-64
+label:   metadata.content_hash [<primary>] "{"
+label:   metadata.platforms[0] [target declared here] "linux-64"
+
+# content hash for undeclared platform
+kind:    UndeclaredContentHashPlatform
+display: metadata.content_hash.osx-64: content hash refers to an undeclared target platform
+label:   metadata.content_hash.osx-64 [<primary>] "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+label:   metadata.platforms [declared targets] "["
+
+# invalid platform
+kind:    InvalidPlatform
+display: metadata.platforms[0]: expected a CEP-26 target subdir (os-arch), excluding noarch
+label:   metadata.platforms[0] [<primary>] "noarch"
+
+# empty channel
+kind:    EmptyChannel
+display: metadata.channels[0].url: channel URL or name must not be empty
+label:   metadata.channels[0].url [<primary>] "'  '"
+
+# absolute source path
+kind:    InvalidSourcePath
+display: metadata.sources[0]: source paths must be nonempty and relative to the lock file
+label:   metadata.sources[0] [<primary>] "'/etc/environment.yml'"
+
+# duplicate source path
+kind:    DuplicateSource
+display: metadata.sources[1]: duplicate source path
+label:   metadata.sources[1] [<primary>] "env.yml"
+label:   metadata.sources[0] [first declared here] "env.yml"
+
+# invalid timestamp
+kind:    InvalidTimestamp
+display: metadata.time_metadata.created_at: expected a UTC timestamp in YYYY-MM-DDTHH:MM:SSZ form
+label:   metadata.time_metadata.created_at [<primary>] "yesterday"
+
+# input hashes for undeclared source
+kind:    UndeclaredInputSource
+display: metadata.inputs_metadata.env.yml: input hash refers to an undeclared source
+label:   metadata.inputs_metadata.env.yml [<primary>] "{"
+label:   metadata.sources [declared sources] "["
+
+# missing input hashes
+kind:    MissingInputHashes { source_path: "other.yml" }
+display: metadata.inputs_metadata: missing input hashes for source other.yml
+label:   metadata.inputs_metadata [<primary>] "inputs_metadata"
+label:   metadata.sources[1] [source declared here] "other.yml"

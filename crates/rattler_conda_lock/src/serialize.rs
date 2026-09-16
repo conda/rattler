@@ -1,14 +1,15 @@
 //! Canonical, borrowed serialization and package-derived content hashing.
 
-use std::{borrow::Cow, collections::BTreeMap, io, path::Path};
+use std::{borrow::Cow, collections::BTreeMap, path::Path, sync::Arc};
 
+use rattler_digest::{HashingWriter, Sha256};
 use serde::{
     Serialize, Serializer,
     ser::{SerializeMap, SerializeSeq},
 };
 use serde_json_python_formatter::PythonFormatter;
-use sha2::{Digest, Sha256};
 
+use crate::error::{ErrorKind, NodePath};
 use crate::{
     Channel, Error, GitMetadata, Hashes, LockFile, Manager, Metadata, Package, PackageSource,
     TimeMetadata,
@@ -30,8 +31,14 @@ impl LockFile {
             metadata: CanonicalMetadata::new(&self.metadata, &platforms),
             package: PackageList(&packages),
         };
-        serde_saphyr::to_string(&document)
-            .map_err(|error| Error::new("", format!("could not serialize lockfile: {error}")))
+        serde_saphyr::to_string(&document).map_err(|error| {
+            Error::new(
+                NodePath::root(),
+                ErrorKind::Serialize {
+                    message: error.to_string(),
+                },
+            )
+        })
     }
 
     /// Validate and serialize before opening the destination, so invalid models
@@ -45,8 +52,15 @@ impl LockFile {
     pub fn to_path(&self, path: impl AsRef<Path>) -> Result<(), Error> {
         let yaml = self.to_yaml()?;
         let path = path.as_ref();
-        std::fs::write(path, yaml)
-            .map_err(|error| Error::new("", format!("could not write {}: {error}", path.display())))
+        std::fs::write(path, yaml).map_err(|error| {
+            Error::new(
+                NodePath::root(),
+                ErrorKind::Write {
+                    path: path.to_owned(),
+                    error: Arc::new(error),
+                },
+            )
+        })
     }
 
     /// Compute package-derived SHA256 hashes for each declared target platform.
@@ -93,18 +107,16 @@ impl LockFile {
                 let end = packages
                     .partition_point(|package| package.platform.as_str() <= platform.as_str());
                 let mut serializer = serde_json::Serializer::with_formatter(
-                    HashWriter(Sha256::new()),
+                    HashingWriter::<_, Sha256>::new(std::io::sink()),
                     PythonFormatter::default(),
                 );
                 // Only strings, booleans, maps and arrays reach an infallible
-                // in-memory writer; no user-provided serializer is called.
+                // sink; no user-provided serializer is called.
                 PackageList(&packages[start..end])
                     .serialize(&mut serializer)
                     .expect("canonical package JSON is infallible");
-                (
-                    platform.clone(),
-                    hex::encode(serializer.into_inner().0.finalize()),
-                )
+                let (_, digest) = serializer.into_inner().finalize();
+                (platform.clone(), hex::encode(digest))
             })
             .collect()
     }
@@ -112,24 +124,8 @@ impl LockFile {
 
 fn sorted_packages(lock: &LockFile) -> Vec<&Package> {
     let mut packages: Vec<_> = lock.package.iter().collect();
-    packages.sort_unstable_by(|a, b| {
-        (&a.platform, a.manager, &a.name, &a.category)
-            .cmp(&(&b.platform, b.manager, &b.name, &b.category))
-            .then_with(|| a.cmp(b))
-    });
+    packages.sort_unstable_by(|a, b| a.identity().cmp(&b.identity()).then_with(|| a.cmp(b)));
     packages
-}
-
-struct HashWriter(Sha256);
-
-impl io::Write for HashWriter {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        self.0.update(bytes);
-        Ok(bytes.len())
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
 }
 
 #[derive(Serialize)]

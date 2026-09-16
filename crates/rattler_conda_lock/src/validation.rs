@@ -4,7 +4,13 @@ use std::{collections::BTreeMap, str::FromStr};
 
 use rattler_conda_types::{MatchSpec, PackageName, ParseStrictness, Version};
 
+use crate::error::{ErrorKind, NodePath};
 use crate::{Error, Hashes, LockFile, Manager};
+
+/// The SHA256 digest length CEP-37 requires for `content_hash` and `sha256`.
+const SHA256_DIGITS: usize = 64;
+/// The MD5 digest length CEP-37 requires for `md5`.
+const MD5_DIGITS: usize = 32;
 
 impl LockFile {
     /// Validate CEP-37 fields, unique identities, and metadata references.
@@ -13,54 +19,52 @@ impl LockFile {
     /// hashes with [`Self::compute_content_hashes`]. Historical ecosystem name
     /// spellings and lenient conda `MatchSpecs` are accepted without normalization.
     pub fn validate(&self) -> Result<(), Error> {
+        let metadata = NodePath::root().field("metadata");
+        let platforms_path = metadata.field("platforms");
+        let content_hash_path = metadata.field("content_hash");
         let mut platforms = BTreeMap::new();
         for (index, platform) in self.metadata.platforms.iter().enumerate() {
-            let path = format!("metadata.platforms[{index}]");
+            let path = platforms_path.index(index);
             validate_platform(platform, &path)?;
             if let Some(previous) = platforms.insert(platform.as_str(), index) {
-                return Err(
-                    Error::new(path, "duplicate target platform").with_related_path(
-                        format!("metadata.platforms[{previous}]"),
-                        "first declared here",
-                    ),
-                );
+                return Err(Error::new(path, ErrorKind::DuplicatePlatform)
+                    .with_related_path(platforms_path.index(previous), "first declared here"));
             }
             if !self.metadata.content_hash.contains_key(platform) {
                 return Err(Error::new(
-                    "metadata.content_hash",
-                    format!("missing content hash for {platform}"),
+                    content_hash_path.clone(),
+                    ErrorKind::MissingContentHash {
+                        platform: platform.clone(),
+                    },
                 )
                 .with_related_path(path, "target declared here"));
             }
         }
         for (platform, hash) in &self.metadata.content_hash {
-            let path = format!("metadata.content_hash.{platform}");
+            let path = content_hash_path.field(platform);
             if !platforms.contains_key(platform.as_str()) {
-                return Err(Error::new(
-                    path,
-                    "content hash refers to an undeclared target platform",
-                )
-                .with_related_path("metadata.platforms", "declared targets"));
+                return Err(Error::new(path, ErrorKind::UndeclaredContentHashPlatform)
+                    .with_related_path(platforms_path.clone(), "declared targets"));
             }
-            validate_digest(hash, 64, &path)?;
+            validate_digest(hash, SHA256_DIGITS, &path)?;
         }
+        let channels_path = metadata.field("channels");
         for (index, channel) in self.metadata.channels.iter().enumerate() {
             if channel.url.trim().is_empty() {
                 return Err(Error::new(
-                    format!("metadata.channels[{index}].url"),
-                    "channel URL or name must not be empty",
+                    channels_path.index(index).field("url"),
+                    ErrorKind::EmptyChannel,
                 ));
             }
         }
+        let sources_path = metadata.field("sources");
         let mut sources = BTreeMap::new();
         for (index, source) in self.metadata.sources.iter().enumerate() {
-            let path = format!("metadata.sources[{index}]");
+            let path = sources_path.index(index);
             validate_source_path(source, &path)?;
             if let Some(previous) = sources.insert(source.as_str(), index) {
-                return Err(Error::new(path, "duplicate source path").with_related_path(
-                    format!("metadata.sources[{previous}]"),
-                    "first declared here",
-                ));
+                return Err(Error::new(path, ErrorKind::DuplicateSource)
+                    .with_related_path(sources_path.index(previous), "first declared here"));
             }
         }
         if let Some(time) = &self.metadata.time_metadata {
@@ -75,39 +79,38 @@ impl LockFile {
                 });
             if !shape || time.created_at.parse::<jiff::Timestamp>().is_err() {
                 return Err(Error::new(
-                    "metadata.time_metadata.created_at",
-                    "expected a valid UTC timestamp in YYYY-MM-DDTHH:MM:SSZ form",
+                    metadata.field("time_metadata").field("created_at"),
+                    ErrorKind::InvalidTimestamp,
                 ));
             }
         }
         if let Some(inputs) = &self.metadata.inputs_metadata {
+            let inputs_path = metadata.field("inputs_metadata");
             for (source, hashes) in inputs {
-                let path = format!("metadata.inputs_metadata.{source}");
+                let path = inputs_path.field(source);
                 if !sources.contains_key(source.as_str()) {
-                    return Err(
-                        Error::new(path, "input hash refers to an undeclared source")
-                            .with_related_path("metadata.sources", "declared sources"),
-                    );
+                    return Err(Error::new(path, ErrorKind::UndeclaredInputSource)
+                        .with_related_path(sources_path.clone(), "declared sources"));
                 }
                 validate_hashes(hashes, &path)?;
             }
             for (source, index) in &sources {
                 if !inputs.contains_key(*source) {
                     return Err(Error::new(
-                        "metadata.inputs_metadata",
-                        format!("missing input hashes for {source}"),
+                        inputs_path.clone(),
+                        ErrorKind::MissingInputHashes {
+                            source_path: (*source).to_owned(),
+                        },
                     )
-                    .with_related_path(
-                        format!("metadata.sources[{index}]"),
-                        "source declared here",
-                    ));
+                    .with_related_path(sources_path.index(*index), "source declared here"));
                 }
             }
         }
+        let packages_path = NodePath::root().field("package");
         let mut identities = BTreeMap::new();
         for (index, package) in self.package.iter().enumerate() {
-            let path = format!("package[{index}]");
-            validate_name(&package.name, package.manager, &format!("{path}.name"))?;
+            let path = packages_path.index(index);
+            validate_name(&package.name, package.manager, &path.field("name"))?;
             let valid_version = match package.manager {
                 Manager::Conda => {
                     package.version.len() <= 64 && Version::from_str(&package.version).is_ok()
@@ -116,47 +119,40 @@ impl LockFile {
             };
             if !valid_version {
                 return Err(Error::new(
-                    format!("{path}.version"),
-                    "invalid resolved package version",
+                    path.field("version"),
+                    ErrorKind::InvalidVersion {
+                        manager: package.manager,
+                    },
                 ));
             }
             if !platforms.contains_key(package.platform.as_str()) {
                 return Err(Error::new(
-                    format!("{path}.platform"),
-                    "package target is not declared in metadata.platforms",
+                    path.field("platform"),
+                    ErrorKind::UndeclaredPackagePlatform,
                 )
-                .with_related_path("metadata.platforms", "declared targets"));
+                .with_related_path(platforms_path.clone(), "declared targets"));
             }
             if package.category.is_empty() {
-                return Err(Error::new(
-                    format!("{path}.category"),
-                    "package category must not be empty",
-                ));
+                return Err(Error::new(path.field("category"), ErrorKind::EmptyCategory));
             }
-            let identity = (
-                &package.name,
-                package.manager,
-                &package.platform,
-                &package.category,
-            );
-            if let Some(previous) = identities.insert(identity, index) {
-                return Err(Error::new(
-                    &path,
-                    "duplicate (name, manager, platform, category) package identity",
-                )
-                .with_related_path(format!("package[{previous}]"), "first declared here"));
+            if let Some(previous) = identities.insert(package.identity(), index) {
+                return Err(
+                    Error::new(path.clone(), ErrorKind::DuplicatePackageIdentity)
+                        .with_related_path(packages_path.index(previous), "first declared here"),
+                );
             }
-            validate_url(&package.url, &format!("{path}.url"))?;
+            validate_url(&package.url, &path.field("url"))?;
             if let Some(source) = &package.source {
-                validate_url(&source.url, &format!("{path}.source.url"))?;
+                validate_url(&source.url, &path.field("source").field("url"))?;
             }
             // conda-lock records the revision of a direct source in `hash.sha256`
             // instead of an artifact digest, so only artifacts require exact
             // digest lengths. Both remain hexadecimal.
+            let hash_path = path.field("hash");
             if package.source.is_some() {
-                validate_revision(&package.hash, &format!("{path}.hash"))?;
+                validate_revision(&package.hash, &hash_path)?;
             } else {
-                validate_hashes(&package.hash, &format!("{path}.hash"))?;
+                validate_hashes(&package.hash, &hash_path)?;
             }
             if let Some(build) = &package.build
                 && package.manager == Manager::Conda
@@ -167,12 +163,13 @@ impl LockFile {
                         .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'+')))
             {
                 return Err(Error::new(
-                    format!("{path}.build"),
-                    "invalid conda build string",
+                    path.field("build"),
+                    ErrorKind::InvalidBuildString,
                 ));
             }
+            let dependencies_path = path.field("dependencies");
             for (name, constraint) in &package.dependencies {
-                let dependency_path = format!("{path}.dependencies.{name}");
+                let dependency_path = dependencies_path.field(name);
                 validate_name(name, package.manager, &dependency_path)?;
                 let valid = match package.manager {
                     Manager::Conda => MatchSpec::from_str(
@@ -185,7 +182,9 @@ impl LockFile {
                 if !valid {
                     return Err(Error::new(
                         dependency_path,
-                        "invalid dependency constraint for this package manager",
+                        ErrorKind::InvalidDependencyConstraint {
+                            manager: package.manager,
+                        },
                     ));
                 }
             }
@@ -206,7 +205,7 @@ fn validate_python_constraint(value: &str) -> bool {
         })
 }
 
-fn validate_platform(value: &str, path: &str) -> Result<(), Error> {
+fn validate_platform(value: &str, path: &NodePath) -> Result<(), Error> {
     let valid = value.len() <= 32
         && value.split_once('-').is_some_and(|(os, arch)| {
             !os.is_empty()
@@ -219,14 +218,11 @@ fn validate_platform(value: &str, path: &str) -> Result<(), Error> {
     if valid {
         Ok(())
     } else {
-        Err(Error::new(
-            path,
-            "expected a CEP-26 target subdir (os-arch), excluding noarch",
-        ))
+        Err(Error::new(path.clone(), ErrorKind::InvalidPlatform))
     }
 }
 
-fn validate_name(value: &str, manager: Manager, path: &str) -> Result<(), Error> {
+fn validate_name(value: &str, manager: Manager, path: &NodePath) -> Result<(), Error> {
     let valid = match manager {
         Manager::Conda => value.len() <= 64 && PackageName::from_str(value).is_ok(),
         Manager::Pip => pep508_rs::PackageName::from_str(value).is_ok(),
@@ -234,23 +230,23 @@ fn validate_name(value: &str, manager: Manager, path: &str) -> Result<(), Error>
     if valid {
         Ok(())
     } else {
-        Err(Error::new(path, "invalid package name"))
+        Err(Error::new(
+            path.clone(),
+            ErrorKind::InvalidPackageName { manager },
+        ))
     }
 }
 
-fn validate_url(value: &str, path: &str) -> Result<(), Error> {
+fn validate_url(value: &str, path: &NodePath) -> Result<(), Error> {
     if value.is_empty() || value.chars().any(char::is_whitespace) || url::Url::parse(value).is_err()
     {
-        Err(Error::new(
-            path,
-            "expected an absolute URL without whitespace",
-        ))
+        Err(Error::new(path.clone(), ErrorKind::InvalidUrl))
     } else {
         Ok(())
     }
 }
 
-fn validate_source_path(value: &str, path: &str) -> Result<(), Error> {
+fn validate_source_path(value: &str, path: &NodePath) -> Result<(), Error> {
     // Check both path syntaxes, regardless of the host OS reading the lockfile.
     if value.is_empty()
         || value.contains('\0')
@@ -258,49 +254,43 @@ fn validate_source_path(value: &str, path: &str) -> Result<(), Error> {
         || value.as_bytes().get(1) == Some(&b':')
         || url::Url::parse(value).is_ok()
     {
-        Err(Error::new(
-            path,
-            "source paths must be non-empty and relative to the lockfile",
-        ))
+        Err(Error::new(path.clone(), ErrorKind::InvalidSourcePath))
     } else {
         Ok(())
     }
 }
 
-fn validate_hashes(value: &Hashes, path: &str) -> Result<(), Error> {
+fn validate_hashes(value: &Hashes, path: &NodePath) -> Result<(), Error> {
     if let Some(md5) = &value.md5 {
-        validate_digest(md5, 32, &format!("{path}.md5"))?;
+        validate_digest(md5, MD5_DIGITS, &path.field("md5"))?;
     }
     if let Some(sha256) = &value.sha256 {
-        validate_digest(sha256, 64, &format!("{path}.sha256"))?;
+        validate_digest(sha256, SHA256_DIGITS, &path.field("sha256"))?;
     }
     Ok(())
 }
 
 /// Direct-source packages carry a revision rather than an artifact digest.
-fn validate_revision(value: &Hashes, path: &str) -> Result<(), Error> {
+fn validate_revision(value: &Hashes, path: &NodePath) -> Result<(), Error> {
     for (field, digest) in [("md5", &value.md5), ("sha256", &value.sha256)] {
         if let Some(digest) = digest
             && (digest.is_empty()
-                || digest.len() > 64
+                || digest.len() > SHA256_DIGITS
                 || !digest.bytes().all(|c| c.is_ascii_hexdigit()))
         {
-            return Err(Error::new(
-                format!("{path}.{field}"),
-                "expected up to 64 hexadecimal digits",
-            ));
+            return Err(Error::new(path.field(field), ErrorKind::InvalidRevision));
         }
     }
     Ok(())
 }
 
-fn validate_digest(value: &str, length: usize, path: &str) -> Result<(), Error> {
+fn validate_digest(value: &str, length: usize, path: &NodePath) -> Result<(), Error> {
     if value.len() == length && value.bytes().all(|c| c.is_ascii_hexdigit()) {
         Ok(())
     } else {
         Err(Error::new(
-            path,
-            format!("expected exactly {length} hexadecimal digits"),
+            path.clone(),
+            ErrorKind::InvalidDigest { length },
         ))
     }
 }
@@ -311,14 +301,16 @@ mod tests {
 
     #[test]
     fn future_subdirs_but_not_artifact_noarch_are_targets() {
-        assert!(validate_platform("future-cpu123", "target").is_ok());
+        let path = NodePath::root().field("target");
+        assert!(validate_platform("future-cpu123", &path).is_ok());
         for invalid in ["noarch", "linux-", "-64", "linux-x86-64", "Linux-64"] {
-            assert!(validate_platform(invalid, "target").is_err());
+            assert!(validate_platform(invalid, &path).is_err());
         }
     }
 
     #[test]
     fn relative_sources_are_host_independent() {
+        let path = NodePath::root().field("source");
         for invalid in [
             "/etc/env.yml",
             "C:\\env.yml",
@@ -326,8 +318,8 @@ mod tests {
             "\\\\server\\env.yml",
             "https://example.org/env.yml",
         ] {
-            assert!(validate_source_path(invalid, "source").is_err());
+            assert!(validate_source_path(invalid, &path).is_err());
         }
-        assert!(validate_source_path("../environments/base.yml", "source").is_ok());
+        assert!(validate_source_path("../environments/base.yml", &path).is_ok());
     }
 }

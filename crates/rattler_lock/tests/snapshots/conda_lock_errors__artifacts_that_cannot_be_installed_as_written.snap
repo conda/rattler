@@ -1,0 +1,39 @@
+---
+source: crates/rattler_lock/tests/conda_lock_errors.rs
+expression: all
+---
+# package built from a source location
+kind:    SourcePackage
+display: package[1].source: source builds cannot be imported as immutable artifacts
+label:   package[1].source [<primary>] "source"
+
+# url that is not a fetchable artifact
+kind:    NotAnArtifactUrl
+display: package[1].url: expected a direct artifact URL, not a source or local path
+label:   package[1].url [<primary>] "git+https://github.com/psf/requests.git"
+
+# url that only survives normalization
+kind:    UnnormalizedUrl
+display: package[1].url: conda artifact URL cannot be preserved without URL normalization
+label:   package[1].url [<primary>] "https://Conda.Anaconda.org/conda-forge/linux-64/numpy-2.1.0-py312_0.conda"
+
+# url without an artifact file name
+kind:    MissingFileName
+display: package[1].url: expected a conda archive filename
+label:   package[1].url [<primary>] "https://conda.anaconda.org/conda-forge/linux-64/"
+
+# url without a parsable archive name
+kind:    MissingFileName
+display: package[1].url: expected a conda archive filename
+label:   package[1].url [<primary>] "https://conda.anaconda.org/conda-forge/linux-64/numpy.conda"
+
+# artifact subdir disagrees with the target
+kind:    SubdirMismatch
+display: package[1].url: artifact subdir disagrees with the selected platform
+label:   package[1].url [<primary>] "https://conda.anaconda.org/conda-forge/osx-64/numpy-2.1.0-py312_0.conda"
+label:   package[1].platform [selected platform] "linux-64"
+
+# conda build string on a python artifact
+kind:    PythonBuildString
+display: package[1].build: Python artifacts cannot carry a conda build string
+label:   package[1].build [<primary>] "py_0"

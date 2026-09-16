@@ -4076,11 +4076,12 @@ dependencies = [
  "pep440_rs",
  "pep508_rs",
  "rattler_conda_types",
+ "rattler_digest",
  "serde",
  "serde-json-python-formatter",
  "serde-saphyr",
+ "serde-untagged",
  "serde_json",
- "sha2 0.11.0",
  "thiserror 2.0.20",
  "url",
 ]

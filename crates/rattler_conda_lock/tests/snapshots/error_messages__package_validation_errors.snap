@@ -1,0 +1,50 @@
+---
+source: crates/rattler_conda_lock/tests/error_messages.rs
+expression: report_all
+---
+# invalid package name
+kind:    InvalidPackageName { manager: Conda }
+display: package[0].name: invalid conda package name
+label:   package[0].name [<primary>] "'py thon'"
+
+# invalid version
+kind:    InvalidVersion { manager: Conda }
+display: package[0].version: invalid resolved conda package version
+label:   package[0].version [<primary>] "'not a version'"
+
+# undeclared package platform
+kind:    UndeclaredPackagePlatform
+display: package[0].platform: package target is not declared in metadata.platforms
+label:   package[0].platform [<primary>] "osx-64"
+label:   metadata.platforms [declared targets] "["
+
+# empty category
+kind:    EmptyCategory
+display: package[0].category: package category must not be empty
+label:   package[0].category [<primary>] "''"
+
+# duplicate package identity
+kind:    DuplicatePackageIdentity
+display: package[1]: duplicate (name, manager, platform, category) package identity
+label:   package[1] [<primary>] ""
+label:   package[0] [first declared here] ""
+
+# invalid url
+kind:    InvalidUrl
+display: package[0].url: expected an absolute URL without whitespace
+label:   package[0].url [<primary>] "./python.conda"
+
+# invalid build string
+kind:    InvalidBuildString
+display: package[0].build: invalid conda build string
+label:   package[0].build [<primary>] "'h9e4cc4f 0'"
+
+# invalid dependency constraint
+kind:    InvalidDependencyConstraint { manager: Conda }
+display: package[0].dependencies.libgcc: invalid conda dependency constraint
+label:   package[0].dependencies.libgcc [<primary>] "'>= <'"
+
+# invalid revision on a source package
+kind:    InvalidRevision
+display: package[0].hash.sha256: expected up to 64 hexadecimal digits
+label:   package[0].hash.sha256 [<primary>] "not-a-revision"

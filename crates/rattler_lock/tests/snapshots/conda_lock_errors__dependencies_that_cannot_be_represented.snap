@@ -1,0 +1,14 @@
+---
+source: crates/rattler_lock/tests/conda_lock_errors.rs
+expression: all
+---
+# poetry style alternatives
+kind:    AlternativeConstraints
+display: package[1].dependencies.typing-extensions: alternative version constraints cannot be represented in a Python requirement
+label:   package[1].dependencies.typing-extensions [<primary>] "'>=4.6.0,<4.7.0 || >4.7.0'"
+
+# two dependencies with one normalized name
+kind:    AmbiguousDependencyName
+display: package[1].dependencies.libgcc: dependency names normalize to the same name
+label:   package[1].dependencies.libgcc [<primary>] "'>=13'"
+label:   package[1].dependencies.Libgcc [original dependency] "'>=14'"

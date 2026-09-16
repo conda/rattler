@@ -1,0 +1,30 @@
+---
+source: crates/rattler_lock/tests/conda_lock_errors.rs
+expression: all
+---
+# incompatible packages in two selected categories
+kind:    IncompatibleSelection
+display: package[1]: selected categories contain incompatible packages with the same name
+label:   package[1] [<primary>] ""
+label:   package[0] [original package selection] ""
+
+# one artifact with two package identities
+kind:    ConflictingArtifact
+display: package[3]: the same artifact has conflicting package metadata
+label:   package[3] [<primary>] ""
+label:   package[2] [original package selection] ""
+
+# category that occurs in no package
+kind:    UnknownCategory { category: "docs" }
+display: options.environments.default: category "docs" does not occur in the lock file
+label:   options.environments.default [<primary>] <no span>
+
+# environment without categories
+kind:    EmptySelection
+display: options.environments.default: environment names and category selections must be nonempty
+label:   options.environments.default [<primary>] <no span>
+
+# no environments at all
+kind:    NoEnvironments
+display: options.environments: at least one environment selection is required
+label:   options.environments [<primary>] <no span>
