@@ -293,13 +293,15 @@ pub fn link_file(
         let metadata = fs::symlink_metadata(&source_path)
             .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
 
-        let executable = has_executable_permissions(&metadata.permissions());
-
         // (re)sign the binary if the file is executable or is a Mach-O binary (e.g., dylib)
-        // This is required for all macOS platforms because prefix replacement modifies the binary
-        // content, which invalidates existing signatures. We need to preserve entitlements.
-        if (executable || file_type == Some(FileType::MachO))
-            && target_platform.is_osx()
+        // This is required for all macOS and iOS platforms because prefix replacement modifies
+        // the binary content, which invalidates existing signatures. We need to preserve
+        // entitlements. On arm64 an invalid signature does not just emit a warning, the binary
+        // is killed on load, so iOS (device and simulator) binaries need this just as much as
+        // macOS ones.
+        if (has_executable_permissions(&metadata.permissions())
+            || file_type == Some(FileType::MachO))
+            && (target_platform.is_osx() || target_platform.is_ios())
             && *file_mode == FileMode::Binary
         {
             // Did the binary actually change?
