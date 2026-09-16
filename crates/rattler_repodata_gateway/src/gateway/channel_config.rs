@@ -23,6 +23,21 @@ pub struct SourceConfig {
     /// Describes fetching repodata from a channel should interact with any
     /// caches.
     pub cache_action: CacheAction,
+
+    /// When the gateway may only read from the cache, report a package whose
+    /// shard is absent as having no records instead of failing the query.
+    ///
+    /// This only affects sharded channels. Their cache holds exactly the
+    /// packages that earlier queries happened to walk, so a query that reaches
+    /// a package none of them did finds nothing, which is not the same as the
+    /// channel being unusable. Callers that restrict a solve to locally
+    /// available packages want that to mean "no local candidates"; callers
+    /// that solve against the full cached repodata want the error, which is
+    /// why this defaults to `false`.
+    ///
+    /// A missing shard *index* remains an error either way: without it nothing
+    /// is known about the subdir at all.
+    pub missing_shards_are_empty: bool,
 }
 
 impl Default for SourceConfig {
@@ -32,6 +47,7 @@ impl Default for SourceConfig {
             bz2_enabled: true,
             sharded_enabled: true,
             cache_action: CacheAction::default(),
+            missing_shards_are_empty: false,
         }
     }
 }
@@ -44,6 +60,7 @@ impl From<rattler_config::config::repodata_config::RepodataChannelConfig> for So
             bz2_enabled: !value.disable_bzip2.unwrap_or(false),
             sharded_enabled: !value.disable_sharded.unwrap_or(false),
             cache_action: CacheAction::default(),
+            missing_shards_are_empty: false,
         }
     }
 }

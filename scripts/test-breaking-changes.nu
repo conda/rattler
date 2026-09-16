@@ -1,7 +1,7 @@
 #!/usr/bin/env nu
 
 use std/assert
-use check-breaking-changes.nu [classify-result clean-log render-comment select-changed-crates]
+use check-breaking-changes.nu [classify-result clean-log clean-semver-target render-comment select-changed-crates workspace-dependency-impact]
 
 let summary = "Summary semver requires new major version: 1 major and 0 minor checks failed"
 assert equal (classify-result 0 "") "success"
@@ -44,6 +44,7 @@ let current_metadata = {
             publish: null
             manifest_path: ($root | path join "crates" "a" "Cargo.toml")
             targets: [{kind: ["lib"]}]
+            dependencies: [{name: "shared"}]
         }
         {
             id: "private"
@@ -72,6 +73,7 @@ let current_metadata = {
             publish: ["crates-io"]
             manifest_path: ($root | path join "crates" "proc" "Cargo.toml")
             targets: [{kind: ["proc-macro"]}]
+            dependencies: [{name: "other"}]
         }
     ]
 }
@@ -89,9 +91,53 @@ assert equal (
 ) ["a"]
 assert equal (
     select-changed-crates $current_metadata $baseline_metadata ["Cargo.lock"]
+) []
+assert equal (
+    select-changed-crates $current_metadata $baseline_metadata ["Cargo.toml"] ["shared"]
+) ["a"]
+assert equal (
+    select-changed-crates $current_metadata $baseline_metadata ["Cargo.toml"] [] true
 ) ["a", "proc"]
 assert equal (
     select-changed-crates $current_metadata $baseline_metadata ["README.md"]
 ) []
+
+let baseline_manifest = {
+    workspace: {
+        members: ["crates/*"]
+        dependencies: {
+            shared: {version: "1"}
+            unchanged: "1"
+        }
+    }
+}
+let current_manifest = {
+    workspace: {
+        members: ["crates/*"]
+        dependencies: {
+            shared: {version: "2"}
+            added: "1"
+            unchanged: "1"
+        }
+    }
+}
+assert equal (
+    workspace-dependency-impact $current_manifest $baseline_manifest
+) {force_all: false, dependencies: ["added", "shared"]}
+assert equal (
+    workspace-dependency-impact ($current_manifest | upsert workspace.members ["crates/*", "tools/*"])
+        $baseline_manifest
+) {force_all: true, dependencies: []}
+
+let target = (mktemp --directory)
+let semver_target = ($target | path join "semver-checks")
+let retained_file = ($target | path join "retained")
+mkdir $semver_target
+"temporary" | save ($semver_target | path join "artifact")
+"retained" | save $retained_file
+clean-semver-target $target
+assert (not ($semver_target | path exists))
+assert ($retained_file | path exists)
+rm --recursive --force $target
 
 print "breaking change script tests passed"

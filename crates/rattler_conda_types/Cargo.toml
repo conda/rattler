@@ -1,7 +1,7 @@
 [package]
 exclude = ["**/snapshots/**", "benches/**"]
 name = "rattler_conda_types"
-version = "0.48.1"
+version = "0.52.1"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust data types for common types used within the Conda ecosystem"
@@ -13,6 +13,7 @@ readme.workspace = true
 
 [features]
 default = ["rayon"]
+semver = ["rattler_conda_version/semver"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -32,6 +33,7 @@ purl = { workspace = true, features = ["serde"] }
 rattler_digest = { workspace = true, default-features = false, features = [
   "serde",
 ] }
+rattler_conda_version = { workspace = true }
 rattler_macros = { workspace = true, default-features = false }
 rattler_redaction = { workspace = true, default-features = false }
 fancy-regex = { workspace = true }
@@ -58,6 +60,7 @@ url = { workspace = true, features = ["serde"] }
 indexmap = { workspace = true }
 dirs = { workspace = true }
 rayon = { workspace = true, optional = true }
+proptest = { workspace = true, optional = true }
 fs-err = { workspace = true }
 memmap2 = { workspace = true }
 
@@ -78,6 +81,9 @@ rattler_package_streaming = { path = "../rattler_package_streaming", default-fea
 ] }
 rstest = { workspace = true }
 assert_matches = { workspace = true }
+proptest = { workspace = true }
+# Enables the `proptest` feature for this crate's own tests.
+rattler_conda_types = { path = ".", features = ["proptest"] }
 hex-literal = { workspace = true }
 criterion = { workspace = true, features = ["html_reports"] }
 pathdiff = { workspace = true }

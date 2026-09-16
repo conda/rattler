@@ -15,7 +15,7 @@ use tracing::instrument;
 use crate::{
     GitError, GitUrl, Reporter,
     credentials::GIT_STORE,
-    git::{CheckoutOptions, GitRemote},
+    git::{CheckoutOptions, GitRemote, LfsFilter},
     resolver::RepositoryReference,
     sha::{GitOid, GitSha},
     url::RepositoryUrl,
@@ -23,7 +23,7 @@ use crate::{
 
 /// Parses a tri-state LFS preference from the environment variable named
 /// `var_name`. Accepts `1`/`0`, `true`/`false`, `yes`/`no`, `on`/`off`
-/// (case-insensitive). Unset/empty → `None` (no opinion).
+/// (case-insensitive). Unset/empty → `None` (LFS is not requested).
 ///
 /// Callers pick the variable name (e.g. pixi uses `PIXI_GIT_LFS`) and pass
 /// the result to [`CheckoutOptions::lfs`].
@@ -103,6 +103,14 @@ impl GitSource {
         self
     }
 
+    /// Limit which LFS paths are fetched and materialized. The filter only has
+    /// an effect when LFS is enabled.
+    #[must_use]
+    pub fn with_lfs_filter(mut self, filter: LfsFilter) -> Self {
+        self.checkout_options.lfs_filter = filter;
+        self
+    }
+
     /// Fetch the underlying Git repository at the given revision.
     #[instrument(skip(self), fields(repository = %self.git.repository, rev = self.git.precise.map(tracing::field::display)))]
     pub fn fetch(self) -> Result<Fetch, GitError> {
@@ -141,7 +149,11 @@ impl GitSource {
             // requested, its LFS objects validate. Skip the regular fetch.
             (Some(rev), Some(db))
                 if db.contains(rev.into())
-                    && (!lfs_requested || db.contains_lfs_artifacts(rev.into())) =>
+                    && (!lfs_requested
+                        || db.contains_lfs_artifacts(
+                            rev.into(),
+                            &self.checkout_options.lfs_filter,
+                        )) =>
             {
                 tracing::debug!(
                     "Using existing Git source `{}` pointed at `{}`",
@@ -170,7 +182,7 @@ impl GitSource {
                     &self.git.reference,
                     locked_rev.map(GitOid::from),
                     &self.client,
-                    self.checkout_options.lfs,
+                    &self.checkout_options,
                 )?;
 
                 (db, GitSha::from(actual_rev), task)
@@ -183,12 +195,22 @@ impl GitSource {
 
         // Check out `actual_rev` from the database to a scoped location on the
         // filesystem. This will use hard links and such to ideally make the
-        // checkout operation here pretty fast.
+        // checkout operation here pretty fast. LFS-enabled checkouts contain
+        // different files than plain checkouts and must not share their path.
+        let checkout_name = if lfs_requested && !self.checkout_options.lfs_filter.is_empty() {
+            let mut hasher = DefaultHasher::new();
+            self.checkout_options.lfs_filter.hash(&mut hasher);
+            format!("{short_id}-lfs-{:x}", hasher.finish())
+        } else if lfs_requested {
+            format!("{short_id}-lfs")
+        } else {
+            short_id.clone()
+        };
         let checkout_path = self
             .cache
             .join("checkouts")
             .join(&ident)
-            .join(short_id.as_str());
+            .join(checkout_name);
 
         tracing::debug!(
             "Copying git revision `{}` to path `{}`",

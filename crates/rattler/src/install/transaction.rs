@@ -466,7 +466,7 @@ mod tests {
             vec![prefix_record.clone()],
             Some(&HashSet::from_iter(vec![name])),
             None, // ignored packages
-            Platform::current(),
+            Platform::current().expect("host platform"),
         )
         .unwrap();
 
@@ -498,7 +498,7 @@ mod tests {
             vec![prefix_record.repodata_record.clone()],
             None, // reinstall
             ignored_packages.as_ref(),
-            Platform::current(),
+            Platform::current().expect("host platform"),
         )
         .unwrap();
 
@@ -513,7 +513,7 @@ mod tests {
             Vec::<rattler_conda_types::RepoDataRecord>::new(), // empty desired
             None,                                              // reinstall
             ignored_packages.as_ref(),
-            Platform::current(),
+            Platform::current().expect("host platform"),
         )
         .unwrap();
 
@@ -528,7 +528,7 @@ mod tests {
             vec![prefix_record.repodata_record.clone()],
             None, // reinstall
             ignored_packages.as_ref(),
-            Platform::current(),
+            Platform::current().expect("host platform"),
         )
         .unwrap();
 

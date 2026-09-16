@@ -44,11 +44,15 @@ impl From<Arc<tokio::sync::Semaphore>> for MaxConcurrency {
 pub struct GatewayBuilder {
     channel_config: ChannelConfig,
     client: Option<LazyClient>,
+    #[cfg(target_arch = "wasm32")]
+    js_fetch: Option<crate::utils::js_fetch::JsFetcher>,
     #[cfg(not(target_arch = "wasm32"))]
     cache: Option<std::path::PathBuf>,
     #[cfg(not(target_arch = "wasm32"))]
     package_cache: Option<PackageCache>,
     max_concurrent_requests: MaxConcurrency,
+    #[cfg(not(target_arch = "wasm32"))]
+    max_concurrent_io: MaxConcurrency,
 }
 
 impl GatewayBuilder {
@@ -67,6 +71,25 @@ impl GatewayBuilder {
     /// Set the client to use for fetching repodata.
     pub fn set_client(&mut self, client: impl Into<LazyClient>) -> &mut Self {
         self.client = Some(client.into());
+        self
+    }
+
+    /// Set a `fetch`-like JavaScript function to use for all requests
+    /// instead of the client. Only needed when the host must route the
+    /// gateway's traffic through its own HTTP stack; see [`crate::JsFetcher`].
+    #[cfg(target_arch = "wasm32")]
+    #[must_use]
+    pub fn with_js_fetch(mut self, fetch: js_sys::Function) -> Self {
+        self.set_js_fetch(fetch);
+        self
+    }
+
+    /// Set a `fetch`-like JavaScript function to use for all requests
+    /// instead of the client. Only needed when the host must route the
+    /// gateway's traffic through its own HTTP stack; see [`crate::JsFetcher`].
+    #[cfg(target_arch = "wasm32")]
+    pub fn set_js_fetch(&mut self, fetch: js_sys::Function) -> &mut Self {
+        self.js_fetch = Some(crate::utils::js_fetch::JsFetcher::new(fetch));
         self
     }
 
@@ -133,6 +156,28 @@ impl GatewayBuilder {
         self
     }
 
+    /// Sets the maximum number of concurrent IO operations (e.g. reading shard
+    /// cache files from disk). This prevents exhausting the OS file-descriptor
+    /// limit when many packages are queried at once.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[must_use]
+    pub fn with_max_concurrent_io(self, max_concurrent_io: impl Into<MaxConcurrency>) -> Self {
+        Self {
+            max_concurrent_io: max_concurrent_io.into(),
+            ..self
+        }
+    }
+
+    /// Sets the maximum number of concurrent IO operations.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_max_concurrent_io(
+        &mut self,
+        max_concurrent_io: impl Into<MaxConcurrency>,
+    ) -> &mut Self {
+        self.max_concurrent_io = max_concurrent_io.into();
+        self
+    }
+
     /// Apply the shared rattler configuration (see [`rattler_config`]) to
     /// this builder: the channel configuration is derived from
     /// `repodata-config` and the maximum number of concurrent requests from
@@ -188,17 +233,30 @@ impl GatewayBuilder {
             MaxConcurrency::Semaphore(sem) => Some(sem),
         };
 
+        #[cfg(not(target_arch = "wasm32"))]
+        let io_concurrency_semaphore = match self.max_concurrent_io {
+            MaxConcurrency::Unlimited => None,
+            MaxConcurrency::Limited(n) => Some(Arc::new(tokio::sync::Semaphore::new(n))),
+            MaxConcurrency::Semaphore(sem) => Some(sem),
+        };
+
         Gateway {
             inner: Arc::new(GatewayInner {
                 subdirs: CoalescedMap::new(),
                 client,
+                #[cfg(target_arch = "wasm32")]
+                js_fetch: self.js_fetch,
                 channel_config: self.channel_config,
+                notices: dashmap::DashMap::new(),
+                notice_fetch_locks: dashmap::DashMap::new(),
                 #[cfg(not(target_arch = "wasm32"))]
                 cache,
                 #[cfg(not(target_arch = "wasm32"))]
                 package_cache,
                 subdir_run_exports_cache: Arc::default(),
                 concurrent_requests_semaphore,
+                #[cfg(not(target_arch = "wasm32"))]
+                io_concurrency_semaphore,
             }),
         }
     }
