@@ -2,7 +2,6 @@ use std::{collections::HashMap, env, path::PathBuf, str::FromStr};
 
 use clap::Parser;
 use miette::IntoDiagnostic;
-use rattler_conda_types::Platform;
 use rattler_shell::{
     activation::{ActivationVariables, Activator, PathModificationBehavior},
     shell::ShellEnum,
@@ -49,7 +48,7 @@ pub async fn shell_hook(opt: Opt) -> miette::Result<()> {
     let shell = determine_shell(opt.shell.as_deref())?;
     let target_prefix = std::path::absolute(opt.target_prefix).into_diagnostic()?;
     let activator =
-        Activator::from_path(&target_prefix, shell, Platform::current()).into_diagnostic()?;
+        Activator::from_path(&target_prefix, shell, crate::host_platform()?).into_diagnostic()?;
     let activation = activator
         .activation(activation_variables_from_env())
         .into_diagnostic()?;

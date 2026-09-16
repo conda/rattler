@@ -10,3 +10,4 @@ wasm-pack.log
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+*.tgz

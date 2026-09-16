@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.8](https://github.com/conda/rattler/compare/rattler_networking-v0.30.7...rattler_networking-v0.30.8) - 2026-08-27
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.30.7](https://github.com/conda/rattler/compare/rattler_networking-v0.30.6...rattler_networking-v0.30.7) - 2026-08-26
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.30.6](https://github.com/conda/rattler/compare/rattler_networking-v0.30.5...rattler_networking-v0.30.6) - 2026-08-21
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.30.5](https://github.com/conda/rattler/compare/rattler_networking-v0.30.4...rattler_networking-v0.30.5) - 2026-08-15
+
+### Fixed
+
+- *(rattler_networking)* retry a digest-addressed OCI blob 404 through the manifest ([#2653](https://github.com/conda/rattler/pull/2653))
+
+## [0.30.4](https://github.com/conda/rattler/compare/rattler_networking-v0.30.3...rattler_networking-v0.30.4) - 2026-08-11
+
+### Fixed
+
+- *(rattler_networking)* report a missing OCI manifest as a 404 instead of erroring ([#2651](https://github.com/conda/rattler/pull/2651))
+- follow the OCI registry's WWW-Authenticate challenge ([#2628](https://github.com/conda/rattler/pull/2628))
+
+## [0.30.3](https://github.com/conda/rattler/compare/rattler_networking-v0.30.2...rattler_networking-v0.30.3) - 2026-07-24
+
+### Other
+
+- updated the following local packages: rattler_config
+
 ## [0.30.2](https://github.com/conda/rattler/compare/rattler_networking-v0.30.1...rattler_networking-v0.30.2) - 2026-07-14
 
 ### Other

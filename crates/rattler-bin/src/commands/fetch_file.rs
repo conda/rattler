@@ -1,16 +1,15 @@
 use std::io::Write;
-use std::path::Path;
 
 use miette::{Context, IntoDiagnostic};
-use rattler_package_streaming::reqwest::fetch::fetch_file_from_remote_url;
-use url::Url;
 
-/// Read a file from inside a remote conda package.
+use super::package_source::{PackageSource, client_for};
+
+/// Read a file from inside a local or remote conda package.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
-    /// URL of the conda package (.conda or .tar.bz2 archive)
+    /// Path or URL of the conda package (.conda or .tar.bz2 archive)
     #[clap(required = true)]
-    url: Url,
+    package: String,
 
     /// Path of the file inside the package (e.g. "info/index.json" or "lib/libfoo.so")
     #[clap(required = true)]
@@ -18,16 +17,18 @@ pub struct Opt {
 }
 
 pub async fn fetch_file(opt: Opt, offline: bool) -> miette::Result<()> {
-    let Opt { url, path } = opt;
+    let Opt { package, path } = opt;
 
-    let client = super::client::create_client_with_middleware(offline)?;
+    let source = PackageSource::parse(&package);
+    let client = client_for([&source], offline)?;
+    let archive = source.open(client.as_ref()).await?;
 
-    let target_path = Path::new(&path);
-
-    let bytes = fetch_file_from_remote_url(client, url, target_path)
+    let bytes = archive
+        .read_file(&path)
         .await
-        .into_diagnostic()?
-        .ok_or_else(|| miette::miette!("file '{}' not found in package", path))?;
+        .into_diagnostic()
+        .with_context(|| format!("failed to read '{path}' from package {source}"))?
+        .ok_or_else(|| miette::miette!("file '{path}' not found in package"))?;
 
     std::io::stdout()
         .write_all(&bytes)

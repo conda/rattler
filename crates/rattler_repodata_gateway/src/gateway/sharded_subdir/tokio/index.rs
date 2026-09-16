@@ -198,9 +198,12 @@ pub async fn fetch_index(
                     ..
                 } => {
                     if cache_action == CacheAction::UseCacheOnly {
-                        return Err(GatewayError::CacheError(format!(
-                            "the sharded index cache for {channel_base_url} is stale and cache-only mode is enabled"
-                        )));
+                        // Cache-only and what we have may not be used, so this
+                        // subdir has no sharded index we can read. The caller
+                        // falls back to `repodata.json`.
+                        return Err(GatewayError::ShardedIndexNotCached(
+                            channel_base_url.clone().redact(),
+                        ));
                     }
 
                     // Determine the actual URL to use for the request
@@ -311,9 +314,9 @@ pub async fn fetch_index(
     }
 
     if cache_action == CacheAction::ForceCacheOnly {
-        return Err(GatewayError::CacheError(format!(
-            "the sharded index cache for {channel_base_url} is not available"
-        )));
+        return Err(GatewayError::ShardedIndexNotCached(
+            channel_base_url.clone().redact(),
+        ));
     }
 
     tracing::debug!("fetching fresh shard index");

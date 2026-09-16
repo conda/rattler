@@ -6,7 +6,6 @@ use rattler_conda_types::{Channel, Platform};
 use crate::{
     GatewayError, Reporter, SourceConfig,
     fetch::FetchRepoDataError,
-    gateway,
     gateway::{
         GatewayInner,
         error::SubdirNotFoundError,
@@ -22,6 +21,7 @@ pub struct SubdirBuilder<'g> {
     platform: Platform,
     reporter: Option<Arc<dyn Reporter>>,
     gateway: &'g GatewayInner,
+    sharded_enabled: bool,
 }
 
 impl<'g> SubdirBuilder<'g> {
@@ -30,12 +30,14 @@ impl<'g> SubdirBuilder<'g> {
         channel: Channel,
         platform: Platform,
         reporter: Option<Arc<dyn Reporter>>,
+        sharded_enabled: bool,
     ) -> Self {
         Self {
             channel,
             platform,
             reporter,
             gateway,
+            sharded_enabled,
         }
     }
 
@@ -59,14 +61,22 @@ impl<'g> SubdirBuilder<'g> {
             let source_config = self.gateway.channel_config.get(&self.channel.base_url);
 
             // Use sharded repodata if enabled
-            let subdir_data = if source_config.sharded_enabled
-                || gateway::force_sharded_repodata(&url)
-            {
+            let subdir_data = if self.sharded_enabled {
                 match self.build_sharded(source_config).await {
                     Ok(client) => Some(client),
                     Err(GatewayError::SubdirNotFoundError(_)) => {
                         tracing::info!(
                             "sharded repodata seems to be missing for {url}, falling back to repodata.json files",
+                        );
+                        None
+                    }
+                    Err(GatewayError::ShardedIndexNotCached(_)) => {
+                        // Cache-only mode with no usable sharded index. The
+                        // channel may still be readable from a cached
+                        // `repodata.json`; if it is not, the fallback reports
+                        // that itself, which is the more useful error.
+                        tracing::info!(
+                            "no sharded repodata index is cached for {url}, falling back to repodata.json files",
                         );
                         None
                     }
@@ -121,6 +131,8 @@ impl<'g> SubdirBuilder<'g> {
             self.channel.clone(),
             self.platform,
             self.gateway.client.clone(),
+            #[cfg(target_arch = "wasm32")]
+            self.gateway.js_fetch.clone(),
             #[cfg(not(target_arch = "wasm32"))]
             self.gateway.cache.clone(),
             source_config.clone(),
@@ -138,11 +150,18 @@ impl<'g> SubdirBuilder<'g> {
             self.channel.clone(),
             self.platform.to_string(),
             self.gateway.client.clone(),
+            #[cfg(target_arch = "wasm32")]
+            self.gateway.js_fetch.clone(),
             #[cfg(not(target_arch = "wasm32"))]
             self.gateway.cache.clone(),
             #[cfg(not(target_arch = "wasm32"))]
-            _source_config.cache_action,
+            sharded_subdir::ShardCachePolicy {
+                action: _source_config.cache_action,
+                missing_shards_are_empty: _source_config.missing_shards_are_empty,
+            },
             self.gateway.concurrent_requests_semaphore.clone(),
+            #[cfg(not(target_arch = "wasm32"))]
+            self.gateway.io_concurrency_semaphore.clone(),
             self.reporter.as_deref(),
         )
         .await?;

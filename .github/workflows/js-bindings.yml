@@ -52,7 +52,7 @@ jobs:
 
       - name: Run clippy
         working-directory: js-rattler
-        run: pixi run cargo clippy --all-targets
+        run: pixi run cargo clippy --locked --all-targets
 
       - name: Check formatting
         working-directory: js-rattler

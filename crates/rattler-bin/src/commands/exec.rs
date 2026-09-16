@@ -7,7 +7,7 @@ use rattler_conda_types::{
     ParseMatchSpecOptions, Platform,
 };
 use rattler_lock::{DEFAULT_ENVIRONMENT_NAME, LockFile, PlatformData, PlatformName};
-use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
+use rattler_repodata_gateway::RepoData;
 use rattler_shell::shell::ShellEnum;
 use rattler_solve::{SolverImpl, SolverTask, resolvo::Solver};
 use rattler_vfs::{Mode, MountConfig, MountHandle, Transport, build_and_mount, force_unmount};
@@ -19,11 +19,12 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
-use tokio;
 
 use crate::commands::{
-    client::{create_client_with_middleware, repodata_cache_action},
+    client::create_client_with_middleware,
+    gateway::{build_gateway, load_config},
     progress::{wrap_in_async_progress, wrap_in_progress},
+    table::{Cell, Table},
 };
 
 /// Run a command and install it in a temporary environment.
@@ -48,9 +49,10 @@ pub struct Opt {
     #[clap(short, long = "channel")]
     pub channels: Option<Vec<String>>,
 
-    /// The platform to create the environment for.
-    #[clap(long, short, default_value_t = Platform::current())]
-    pub platform: Platform,
+    /// The platform to create the environment for. Defaults to the platform
+    /// of the current host.
+    #[clap(long, short)]
+    pub platform: Option<Platform>,
 
     /// Always create a new environment, even if one already exists.
     #[clap(long)]
@@ -116,7 +118,7 @@ pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
     let (prefix, mount_handle) = create_exec_prefix(CreateExecPrefixOptions {
         specs: &install_specs,
         channels: &channels,
-        platform: opt.platform,
+        platform: opt.platform.map_or_else(crate::host_platform, Ok)?,
         dir_prefix,
         force_reinstall: opt.force_reinstall,
         list: opt.list.as_deref(),
@@ -245,19 +247,8 @@ async fn create_exec_prefix(
 
     let download_client = create_client_with_middleware(offline)?;
 
-    let gateway = Gateway::builder()
-        .with_cache_dir(cache_dir.join(rattler_cache::REPODATA_CACHE_DIR))
-        .with_package_cache(package_cache.clone())
-        .with_client(download_client.clone())
-        .with_channel_config(rattler_repodata_gateway::ChannelConfig {
-            default: SourceConfig {
-                sharded_enabled: true,
-                cache_action: repodata_cache_action(offline),
-                ..SourceConfig::default()
-            },
-            per_channel: HashMap::new(),
-        })
-        .finish();
+    let config = load_config()?;
+    let gateway = build_gateway(download_client.clone(), &config, offline, true)?;
 
     let repo_data = wrap_in_async_progress(
         "fetching repodata",
@@ -282,13 +273,15 @@ async fn create_exec_prefix(
     tracing::debug!("loaded {} records from repodata", total_records);
 
     // Determine virtual packages of the current platform
-    let virtual_packages: Vec<GenericVirtualPackage> =
-        VirtualPackage::detect(&VirtualPackageOverrides::from_env())
-            .into_diagnostic()
-            .context("failed to determine virtual packages")?
-            .into_iter()
-            .map(GenericVirtualPackage::from)
-            .collect();
+    let virtual_packages: Vec<GenericVirtualPackage> = VirtualPackage::detect(
+        &VirtualPackageOverrides::from_env(),
+        rattler::default_cache_dir().ok().as_deref(),
+    )
+    .into_diagnostic()
+    .context("failed to determine virtual packages")?
+    .into_iter()
+    .map(GenericVirtualPackage::from)
+    .collect();
 
     let solver_task = SolverTask {
         specs: specs.to_vec(),
@@ -524,20 +517,21 @@ fn list_environment(
     };
     println!("{header}");
 
+    let mut table = Table::new().with_indent(2);
     for r in &packages {
         let is_explicit = specs.iter().any(|s| s.matches(&r.package_record));
         let bullet = if is_explicit {
-            console::style("*").green().bold()
+            Cell::styled(console::style("*").green().bold(), "*")
         } else {
-            console::style(" ").dim()
+            Cell::plain(" ")
         };
-        println!(
-            "  {} {:<40} {}",
+        table.add_row([
             bullet,
-            r.package_record.name.as_normalized(),
-            r.package_record.version,
-        );
+            Cell::plain(r.package_record.name.as_normalized()),
+            Cell::plain(r.package_record.version.to_string()),
+        ]);
     }
+    table.print();
 
     Ok(())
 }

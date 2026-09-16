@@ -19,6 +19,10 @@ pub enum InstallerError {
     #[error("failed to determine the currently installed packages")]
     FailedToDetectInstalledPackages(#[source] std::io::Error),
 
+    /// No target platform was specified and the host has no conda platform.
+    #[error("no target platform was specified and the current host is not a known conda platform")]
+    UnknownHostPlatform,
+
     /// Failed to construct a transaction
     #[error("failed to construct a transaction")]
     FailedToConstructTransaction(#[from] TransactionError),

@@ -447,7 +447,7 @@ mod tests {
             operations,
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -502,7 +502,7 @@ mod tests {
             )],
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -571,7 +571,7 @@ mod tests {
                 operations,
                 python_info: None,
                 current_python_info: None,
-                platform: Platform::current(),
+                platform: Platform::current().expect("host platform"),
                 unchanged: vec![],
             };
 
@@ -656,7 +656,7 @@ mod tests {
                 operations,
                 python_info: None,
                 current_python_info: None,
-                platform: Platform::current(),
+                platform: Platform::current().expect("host platform"),
                 unchanged: vec![],
             };
 
@@ -713,7 +713,7 @@ mod tests {
                 )],
                 python_info: None,
                 current_python_info: None,
-                platform: Platform::current(),
+                platform: Platform::current().expect("host platform"),
                 unchanged: vec![],
             };
 
@@ -765,7 +765,7 @@ mod tests {
             operations,
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -821,7 +821,7 @@ mod tests {
             }],
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -874,7 +874,7 @@ mod tests {
             operations: vec![TransactionOperation::Install(repodata_record_1.clone())],
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -919,7 +919,7 @@ mod tests {
             }],
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -960,7 +960,7 @@ mod tests {
             operations,
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -1018,7 +1018,7 @@ mod tests {
             ],
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -1052,7 +1052,7 @@ mod tests {
             operations: vec![TransactionOperation::Install(update_ops[0].clone())],
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -1091,14 +1091,14 @@ mod tests {
         let python_info = PythonInfo::from_version(
             &Version::from_str("3.11.0").unwrap(),
             None,
-            Platform::current(),
+            Platform::current().expect("host platform"),
         )
         .unwrap();
         let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
             operations,
             python_info: Some(python_info.clone()),
             current_python_info: Some(python_info.clone()),
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -1153,7 +1153,7 @@ mod tests {
             operations,
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -1185,7 +1185,7 @@ mod tests {
                 .collect(),
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -1224,7 +1224,7 @@ mod tests {
             operations: vec![TransactionOperation::Install(repodata_record_1)],
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -1259,7 +1259,7 @@ mod tests {
             ],
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -1312,7 +1312,7 @@ mod tests {
             operations: vec![TransactionOperation::Install(repodata_record_1)],
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -1345,7 +1345,7 @@ mod tests {
             }],
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -1392,7 +1392,7 @@ mod tests {
             ],
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -1443,7 +1443,7 @@ mod tests {
             ],
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -1491,7 +1491,7 @@ mod tests {
             ],
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -1523,7 +1523,7 @@ mod tests {
             operations,
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
@@ -1580,7 +1580,7 @@ mod tests {
             operations,
             python_info: None,
             current_python_info: None,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
             unchanged: vec![],
         };
 
