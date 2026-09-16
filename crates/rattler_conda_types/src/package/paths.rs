@@ -511,6 +511,15 @@ pub enum InvalidOffsetsError {
     /// shape for a text file.
     #[error("the shape of the '{0}' group's ranges does not match the file mode")]
     RangesShapeMismatch(String),
+
+    /// A binary c-string lists fewer than two values, so it has no occurrence
+    /// or no terminator.
+    #[error("a c-string of the '{0}' group lists fewer than two values")]
+    ShortCStringRanges(String),
+
+    /// `shebang_length` is recorded for an entry that is not a text file.
+    #[error("shebang_length is only valid for a text file")]
+    ShebangLengthOnBinary,
 }
 
 /// Validates the structural rules the [draft CEP] imposes on an `offsets`
@@ -522,12 +531,14 @@ pub enum InvalidOffsetsError {
 /// `Err(_)` means the metadata is invalid and the caller should ignore it,
 /// locating occurrences by searching the file contents instead.
 ///
-/// Checked here: the list is non-empty (except for `file_mode: text` entries
-/// with a `shebang_length`), every group's encoding is recognized and unique,
-/// no group carries unrecognized members, and `ranges` are non-empty with a
-/// shape matching `file_mode`. Consistency of the recorded values with the
-/// actual file contents (ordering, bounds, the placeholder bytes being
-/// present) is checked by the replacement functions in `rattler`.
+/// Checked here: `shebang_length` is only present for a text file, the list
+/// is non-empty (except for `file_mode: text` entries with a
+/// `shebang_length`), every group's encoding is recognized and unique, no
+/// group carries unrecognized members, and `ranges` are non-empty, with a
+/// shape matching `file_mode` and at least two values per binary c-string.
+/// Consistency of the recorded values with the actual file contents
+/// (ordering, bounds, the placeholder bytes being present) is checked by the
+/// replacement functions in `rattler`.
 ///
 /// [draft CEP]: https://github.com/conda/ceps/pull/179
 pub fn validate_offset_groups(
@@ -535,6 +546,10 @@ pub fn validate_offset_groups(
     file_mode: FileMode,
     has_shebang_length: bool,
 ) -> Result<(), InvalidOffsetsError> {
+    if has_shebang_length && file_mode != FileMode::Text {
+        return Err(InvalidOffsetsError::ShebangLengthOnBinary);
+    }
+
     if offsets.is_empty() {
         // An empty list is only meaningful for a text file whose every
         // occurrence lies inside the shebang region.
@@ -573,6 +588,13 @@ pub fn validate_offset_groups(
         );
         if !shape_matches {
             return Err(InvalidOffsetsError::RangesShapeMismatch(
+                group.encoding.as_str().to_owned(),
+            ));
+        }
+        if let OffsetRanges::Binary(cstrings) = &group.ranges
+            && cstrings.iter().any(|cstring| cstring.len() < 2)
+        {
+            return Err(InvalidOffsetsError::ShortCStringRanges(
                 group.encoding.as_str().to_owned(),
             ));
         }
@@ -1079,6 +1101,31 @@ mod test {
         assert_eq!(validate_offset_groups(&[], FileMode::Text, true), Ok(()));
         assert!(validate_offset_groups(&[], FileMode::Text, false).is_err());
         assert!(validate_offset_groups(&[], FileMode::Binary, false).is_err());
+
+        // `shebang_length` is only valid for a text file.
+        assert_eq!(
+            validate_offset_groups(std::slice::from_ref(&utf16_binary), FileMode::Binary, true),
+            Err(InvalidOffsetsError::ShebangLengthOnBinary)
+        );
+
+        // Every c-string must list at least one occurrence and its terminator.
+        for cstring in [vec![], vec![384]] {
+            assert_eq!(
+                validate_offset_groups(
+                    &[OffsetGroup {
+                        encoding: OffsetEncoding::Utf8,
+                        ranges: OffsetRanges::Binary(vec![cstring.clone()]),
+                        unknown_members: vec![],
+                    }],
+                    FileMode::Binary,
+                    false
+                ),
+                Err(InvalidOffsetsError::ShortCStringRanges(String::from(
+                    "utf-8"
+                ))),
+                "c-string {cstring:?}"
+            );
+        }
 
         // Duplicate encodings are rejected.
         assert!(
