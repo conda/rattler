@@ -74,7 +74,7 @@ fn anyhow_to_miette(e: anyhow::Error) -> miette::Report {
 
 pub async fn mount(opt: Opt) -> Result<()> {
     let lockfile = LockFile::from_path(&opt.lock_file).into_diagnostic()?;
-    let platform = Platform::current();
+    let platform = Platform::current().expect("host platform");
     let env_hash =
         compute_env_hash(&lockfile, &opt.environment, platform).map_err(anyhow_to_miette)?;
 
