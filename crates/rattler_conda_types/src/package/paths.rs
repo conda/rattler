@@ -197,7 +197,7 @@ pub struct PrefixPlaceholder {
     /// encoding. The absence of a group means the file contains no
     /// occurrences under that encoding. Installers apply exactly the groups
     /// whose encodings their own search-based replacement covers; rattler
-    /// covers all encodings defined by the CEP, see
+    /// covers all encodings defined by the [draft CEP], see
     /// [`validate_offset_groups`].
     ///
     /// Occurrences inside the shebang region (the first
@@ -208,13 +208,15 @@ pub struct PrefixPlaceholder {
     ///
     /// `None` when the package does not carry the field; callers must scan
     /// the file themselves in that case. A value that does not parse as
-    /// offset groups (for example the flat lists written by pre-CEP drafts of
+    /// offset groups (for example the flat lists written by earlier drafts of
     /// this field) is also treated as absent rather than failing the whole
     /// `paths.json`.
     ///
     /// **Experimental**: the Rust field is prefixed until
     /// [conda/ceps#179](https://github.com/conda/ceps/pull/179) is finalized;
     /// the serialized form is `offsets`.
+    ///
+    /// [draft CEP]: https://github.com/conda/ceps/pull/179
     #[serde(
         rename = "offsets",
         default,
@@ -285,11 +287,13 @@ pub struct PathsEntry {
 
 /// The encoding of one [`OffsetGroup`].
 ///
-/// The CEP defines a closed set of names: the encodings replaced by existing
-/// installers. A name outside this set deserializes as
+/// The [draft CEP] defines a closed set of names: the encodings replaced by
+/// existing installers. A name outside this set deserializes as
 /// [`OffsetEncoding::Unknown`] rather than failing the whole `paths.json`;
 /// [`validate_offset_groups`] rejects it so that consumers fall back to
 /// searching the file contents.
+///
+/// [draft CEP]: https://github.com/conda/ceps/pull/179
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub enum OffsetEncoding {
@@ -303,12 +307,12 @@ pub enum OffsetEncoding {
     Utf32Le,
     /// UTF-32, big endian (`utf-32-be`).
     Utf32Be,
-    /// An encoding name not defined by the CEP.
+    /// An encoding name not defined by the draft CEP.
     Unknown(String),
 }
 
 impl OffsetEncoding {
-    /// The encodings defined by the CEP.
+    /// The encodings defined by the draft CEP.
     pub const DEFINED: [OffsetEncoding; 5] = [
         OffsetEncoding::Utf8,
         OffsetEncoding::Utf16Le,
@@ -330,7 +334,7 @@ impl OffsetEncoding {
     }
 
     /// The size in bytes of one code unit of this encoding, which is also the size of the NUL
-    /// terminator of a c-string stored in it. `None` for an encoding the CEP does not define.
+    /// terminator of a c-string stored in it. `None` for an encoding the draft CEP does not define.
     pub fn code_unit_size(&self) -> Option<usize> {
         match self {
             OffsetEncoding::Utf8 => Some(1),
@@ -341,7 +345,7 @@ impl OffsetEncoding {
     }
 
     /// Encodes `text` with this encoding, without a byte order mark. `None` for an encoding the
-    /// CEP does not define.
+    /// draft CEP does not define.
     pub fn encode(&self, text: &str) -> Option<Vec<u8>> {
         let mut bytes = Vec::with_capacity(text.len() * self.code_unit_size()?);
         match self {
@@ -379,8 +383,11 @@ impl From<OffsetEncoding> for String {
     }
 }
 
-/// One offset group of [`PrefixPlaceholder::experimental_offsets`]: where the placeholder
-/// occurs in the file contents under one encoding.
+/// One offset group of [`PrefixPlaceholder::experimental_offsets`]: where the
+/// placeholder occurs in the file contents under one encoding, as defined by
+/// the [draft CEP].
+///
+/// [draft CEP]: https://github.com/conda/ceps/pull/179
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 pub struct OffsetGroup {
     /// The encoding under which the recorded occurrences were found.
@@ -394,7 +401,7 @@ pub struct OffsetGroup {
     /// The names of any members of the group other than `encoding` and
     /// `ranges`.
     ///
-    /// The CEP defines exactly those two keys today; a future CEP may add
+    /// The draft CEP defines exactly those two keys today; a future CEP may add
     /// more. An extra member may change the meaning of the group, so
     /// [`validate_offset_groups`] rejects the metadata and consumers fall
     /// back to searching. Unrecognized members are not preserved on
@@ -440,7 +447,10 @@ impl<'de> Deserialize<'de> for OffsetGroup {
 ///
 /// The shape is determined by `file_mode`, not inferred from the JSON
 /// structure: an empty text list and an empty binary list are
-/// indistinguishable (and invalid, since `ranges` must not be empty).
+/// indistinguishable (and invalid, since `ranges` must not be empty, see the
+/// [draft CEP]).
+///
+/// [draft CEP]: https://github.com/conda/ceps/pull/179
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(untagged)]
 pub enum OffsetRanges {
@@ -453,7 +463,7 @@ pub enum OffsetRanges {
 }
 
 impl OffsetRanges {
-    /// Whether no positions are recorded at all. Invalid per the CEP: a group
+    /// Whether no positions are recorded at all. Invalid per the draft CEP: a group
     /// is present exactly when at least one occurrence is listed in it.
     pub fn is_empty(&self) -> bool {
         match self {
@@ -465,8 +475,10 @@ impl OffsetRanges {
 
 /// Why recorded offset metadata cannot be used.
 ///
-/// Per the CEP, consumers that hit this SHOULD fall back to locating
+/// Per the [draft CEP], consumers that hit this SHOULD fall back to locating
 /// occurrences by searching the file contents (and MAY report a warning).
+///
+/// [draft CEP]: https://github.com/conda/ceps/pull/179
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum InvalidOffsetsError {
     /// The offsets list is empty, which is only valid for a text file whose
@@ -474,7 +486,7 @@ pub enum InvalidOffsetsError {
     #[error("the offsets list is empty, which is only valid for a text file with a shebang_length")]
     EmptyList,
 
-    /// A group's encoding is not in the closed set defined by the CEP.
+    /// A group's encoding is not in the closed set defined by the draft CEP.
     #[error("unrecognized encoding '{0}'")]
     UnrecognizedEncoding(String),
 
@@ -501,13 +513,14 @@ pub enum InvalidOffsetsError {
     RangesShapeMismatch(String),
 }
 
-/// Validates the structural rules the CEP imposes on an `offsets` list.
+/// Validates the structural rules the [draft CEP] imposes on an `offsets`
+/// list.
 ///
-/// Per the CEP, installers apply exactly the groups whose encodings their own
-/// search-based replacement covers. rattler covers every encoding the CEP
-/// defines, so every group of a valid list is applied. `Err(_)` means the
-/// metadata is invalid and the caller should ignore it, locating occurrences
-/// by searching the file contents instead.
+/// Per the draft CEP, installers apply exactly the groups whose encodings
+/// their own search-based replacement covers. rattler covers every encoding
+/// the draft CEP defines, so every group of a valid list is applied.
+/// `Err(_)` means the metadata is invalid and the caller should ignore it,
+/// locating occurrences by searching the file contents instead.
 ///
 /// Checked here: the list is non-empty (except for `file_mode: text` entries
 /// with a `shebang_length`), every group's encoding is recognized and unique,
@@ -515,6 +528,8 @@ pub enum InvalidOffsetsError {
 /// shape matching `file_mode`. Consistency of the recorded values with the
 /// actual file contents (ordering, bounds, the placeholder bytes being
 /// present) is checked by the replacement functions in `rattler`.
+///
+/// [draft CEP]: https://github.com/conda/ceps/pull/179
 pub fn validate_offset_groups(
     offsets: &[OffsetGroup],
     file_mode: FileMode,
@@ -567,7 +582,7 @@ pub fn validate_offset_groups(
 
 /// Deserializes `offsets` leniently: a value that does not parse as a list of
 /// [`OffsetGroup`]s (for example the flat `[10, 45]` / `[[64, 96]]` lists
-/// written by pre-CEP drafts of this field) yields `None` instead of failing
+/// written by earlier drafts of this field) yields `None` instead of failing
 /// the whole `paths.json`. The field is advisory; the search-based path
 /// handles the file correctly without it.
 fn deserialize_offset_groups<'de, D>(deserializer: D) -> Result<Option<Vec<OffsetGroup>>, D::Error>
@@ -900,7 +915,7 @@ mod test {
         );
     }
 
-    /// The two path-entry examples from the CEP's Examples section must
+    /// The two path-entry examples from the draft CEP's Examples section must
     /// deserialize as written there.
     #[test]
     pub fn test_deserialize_cep_examples() {
@@ -973,7 +988,7 @@ mod test {
         );
     }
 
-    /// The flat lists written by pre-CEP drafts of the `offsets` field do not
+    /// The flat lists written by earlier drafts of the `offsets` field do not
     /// parse as offset groups; they must be treated as absent rather than
     /// failing the whole `paths.json`.
     #[test]
@@ -1001,7 +1016,7 @@ mod test {
         }
     }
 
-    /// An encoding name outside the CEP's closed set parses (it must not fail
+    /// An encoding name outside the draft CEP's closed set parses (it must not fail
     /// the whole `paths.json`) but makes the metadata unusable, so validation
     /// reports an error and the consumer falls back to searching.
     #[test]
@@ -1100,8 +1115,8 @@ mod test {
         );
     }
 
-    /// The encodings of the CEP's closed set, as consumers encode the placeholder to search for
-    /// and replace it. No byte order marks, and the code unit size doubles as the size of a
+    /// The encodings of the draft CEP's closed set, as consumers encode the placeholder to search
+    /// for and replace it. No byte order marks, and the code unit size doubles as the size of a
     /// c-string's NUL terminator.
     #[test]
     pub fn test_offset_encoding_encode() {

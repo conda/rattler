@@ -742,7 +742,7 @@ impl OffsetReplaceError {
     }
 }
 
-/// The placeholder and target prefix encoded with one of the encodings defined by the CEP.
+/// The placeholder and target prefix encoded with one of the encodings defined by the draft CEP.
 ///
 /// Prefix replacement covers every one of these encodings, so paths that a binary stores as wide
 /// strings are patched too.
@@ -753,7 +753,7 @@ struct EncodedPrefix {
 }
 
 impl EncodedPrefix {
-    /// Encodes both prefixes with every encoding defined by the CEP, skipping encodings under
+    /// Encodes both prefixes with every encoding defined by the draft CEP, skipping encodings under
     /// which the placeholder is empty because there is nothing to search for.
     fn all(placeholder: &str, target: &str) -> Vec<EncodedPrefix> {
         OffsetEncoding::DEFINED
@@ -780,7 +780,7 @@ impl EncodedPrefix {
     fn code_unit_size(&self) -> usize {
         self.encoding
             .code_unit_size()
-            .expect("only encodings defined by the CEP are constructed")
+            .expect("only encodings defined by the draft CEP are constructed")
     }
 }
 
@@ -834,15 +834,17 @@ struct CStringPatch<'a> {
 /// `prefix_placeholder` text with the `target_prefix` text, using the offset groups recorded in
 /// `paths.json` instead of searching the file contents.
 ///
-/// Per the CEP, an installer applies exactly the groups whose encodings its own search-based
-/// replacement covers, so both paths produce the same bytes. rattler's search-based replacement
-/// covers every encoding the CEP defines, so every group of a valid list is spliced. Valid
-/// metadata with no ranges at all means there is nothing to splice: the file is copied through
-/// unchanged apart from the shebang handling of text files.
+/// Per the [draft CEP], an installer applies exactly the groups whose encodings its own
+/// search-based replacement covers, so both paths produce the same bytes. rattler's search-based
+/// replacement covers every encoding the draft CEP defines, so every group of a valid list is
+/// spliced. Valid metadata with no ranges at all means there is nothing to splice: the file is
+/// copied through unchanged apart from the shebang handling of text files.
 ///
 /// `shebang_length` bounds the leading shebang region for text files and is ignored for binary
 /// files. Returns [`OffsetReplaceError::InconsistentMetadata`] (having written nothing) when the
 /// metadata does not match the file, so the caller can fall back to search-based replacement.
+///
+/// [draft CEP]: https://github.com/conda/ceps/pull/179
 #[allow(clippy::too_many_arguments)]
 pub fn copy_and_replace_placeholders_with_offsets(
     source_bytes: &[u8],
@@ -983,13 +985,15 @@ fn replace_shebang<'a>(
 /// Given the contents of a file copy it to the `destination` and in the process replace the
 /// `prefix_placeholder` text with the `target_prefix` text.
 ///
-/// The placeholder is replaced under every encoding defined by the CEP, so text stored as wide
-/// characters is patched as well.
+/// The placeholder is replaced under every encoding defined by the [draft CEP], so text stored as
+/// wide characters is patched as well.
 ///
 /// This is a text based version where the complete string is replaced. This works fine for text
 /// files but will not work correctly for binary files where the length of the string is often
 /// important. See [`copy_and_replace_cstring_placeholder`] when you are dealing with binary
 /// content.
+///
+/// [draft CEP]: https://github.com/conda/ceps/pull/179
 pub fn copy_and_replace_textual_placeholder(
     source_bytes: &[u8],
     mut destination: impl Write,
@@ -1090,10 +1094,10 @@ fn write_replacement_range<W: Write>(
 /// content.
 ///
 /// Every group of `groups` is applied, each under its own encoding. Its ranges are absolute byte
-/// positions in `source_bytes` and, per the CEP, exclude any occurrence inside the shebang region
-/// (the first `shebang_length` bytes, present exactly when the file starts with `#!`). The region
-/// is handled separately: on targets with shebang handling ([`Platform::is_unix`]) the region
-/// minus its trailing newline is rewritten by `replace_shebang` and the newline byte copied
+/// positions in `source_bytes` and, per the draft CEP, exclude any occurrence inside the shebang
+/// region (the first `shebang_length` bytes, present exactly when the file starts with `#!`). The
+/// region is handled separately: on targets with shebang handling ([`Platform::is_unix`]) the
+/// region minus its trailing newline is rewritten by `replace_shebang` and the newline byte copied
 /// through verbatim; on other targets the region gets plain placeholder replacement.
 ///
 /// The recorded metadata is validated before anything is written, so a mismatch surfaces as
@@ -1129,9 +1133,9 @@ pub fn copy_and_replace_textual_placeholder_offsets(
 /// Determines the shebang region from the recorded `shebang_length` rather than re-deriving it
 /// from the file contents, validating the recorded value against those contents.
 ///
-/// Per the CEP `shebang_length` is present exactly when the file starts with `#!`, and its value
-/// is the offset of the first newline plus one, or the file size when there is no newline. The
-/// first `shebang_length` bytes form the shebang region; a file without a shebang has an empty
+/// Per the draft CEP `shebang_length` is present exactly when the file starts with `#!`, and its
+/// value is the offset of the first newline plus one, or the file size when there is no newline.
+/// The first `shebang_length` bytes form the shebang region; a file without a shebang has an empty
 /// one.
 fn validated_shebang_region_end(
     source_bytes: &[u8],
@@ -1310,8 +1314,8 @@ fn write_patched_text(
 ///
 /// The length of the input will match the output.
 ///
-/// The placeholder is replaced under every encoding defined by the CEP, so paths stored as wide
-/// strings are patched as well. The NUL terminator of a c-string is the zero code unit of its
+/// The placeholder is replaced under every encoding defined by the draft CEP, so paths stored as
+/// wide strings are patched as well. The NUL terminator of a c-string is the zero code unit of its
 /// encoding: one zero byte for UTF-8, two for UTF-16 and four for UTF-32.
 ///
 /// This function replaces binary c-style strings. If you want to simply find-and-replace text in a
@@ -1620,7 +1624,7 @@ mod test {
     use rstest::rstest;
     use std::io::Cursor;
 
-    /// Builds the UTF-8 offset group a CEP-conformant producer would emit.
+    /// Builds the UTF-8 offset group a producer conformant with the draft CEP would emit.
     fn utf8_group(ranges: OffsetRanges) -> OffsetGroup {
         OffsetGroup {
             encoding: OffsetEncoding::Utf8,
@@ -1629,8 +1633,9 @@ mod test {
         }
     }
 
-    /// Builds the offset group a CEP-conformant producer emits for a text file whose occurrences
-    /// are all UTF-8. An empty list means the file has nothing to splice outside its shebang.
+    /// Builds the offset group a producer conformant with the draft CEP emits for a text file whose
+    /// occurrences are all UTF-8. An empty list means the file has nothing to splice outside its
+    /// shebang.
     fn utf8_text_groups(offsets: &[usize]) -> Vec<OffsetGroup> {
         if offsets.is_empty() {
             return Vec::new();
@@ -1638,8 +1643,8 @@ mod test {
         vec![utf8_group(OffsetRanges::Text(offsets.to_vec()))]
     }
 
-    /// Builds the offset group a CEP-conformant producer emits for a binary file whose
-    /// occurrences are all UTF-8, grouped by c-string.
+    /// Builds the offset group a producer conformant with the draft CEP emits for a binary file
+    /// whose occurrences are all UTF-8, grouped by c-string.
     fn utf8_binary_groups(cstrings: &[Vec<usize>]) -> Vec<OffsetGroup> {
         vec![utf8_group(OffsetRanges::Binary(cstrings.to_vec()))]
     }
@@ -2214,7 +2219,7 @@ mod test {
     }
 
     /// Records only the body occurrences in `offsets`, filtering out the ones inside the shebang
-    /// region, exactly what a CEP-conformant producer emits.
+    /// region, exactly what a producer conformant with the draft CEP emits.
     fn conformant_text_offsets(input: &[u8], placeholder: &str) -> (Vec<usize>, Option<usize>) {
         let shebang_length = input.starts_with(b"#!").then(|| {
             input
@@ -2229,7 +2234,7 @@ mod test {
         (offsets, shebang_length)
     }
 
-    /// CEP test vector 1: a Unix target with a short target prefix. The occurrence inside the
+    /// draft CEP test vector 1: a Unix target with a short target prefix. The occurrence inside the
     /// shebang line (excluded from `offsets`) is rewritten by the shebang rules and, being short
     /// enough, the patched line is kept; the body occurrence is spliced at its recorded offset.
     #[test]
@@ -2260,7 +2265,7 @@ mod test {
         assert_eq!(String::from_utf8_lossy(&output.into_inner()), expected);
     }
 
-    /// CEP test vector 3: a non-rewriting target (Windows, e.g. a `noarch` package) with an
+    /// draft CEP test vector 3: a non-rewriting target (Windows, e.g. a `noarch` package) with an
     /// occurrence inside the shebang region. There is no shebang machinery, so the region MUST get
     /// plain placeholder replacement even though its occurrence is not in `offsets`.
     #[test]
@@ -2290,8 +2295,9 @@ mod test {
         assert_eq!(String::from_utf8_lossy(&output.into_inner()), expected);
     }
 
-    /// CEP test vector 4: a shebang file with no trailing newline, where `shebang_length` equals
-    /// the file size. The whole file is the shebang line and there is no newline to copy through.
+    /// draft CEP test vector 4: a shebang file with no trailing newline, where `shebang_length`
+    /// equals the file size. The whole file is the shebang line and there is no newline to copy
+    /// through.
     #[test]
     fn test_textual_offsets_shebang_no_trailing_newline() {
         let prefix_placeholder = "/this/is/placeholder";
@@ -2320,8 +2326,8 @@ mod test {
         );
     }
 
-    /// CEP test vector 5: a file whose only occurrence is in the shebang line, so `offsets` is the
-    /// empty list. The shebang is short enough to keep.
+    /// draft CEP test vector 5: a file whose only occurrence is in the shebang line, so `offsets`
+    /// is the empty list. The shebang is short enough to keep.
     #[test]
     fn test_textual_offsets_only_shebang_occurrence_empty_offsets() {
         let prefix_placeholder = "/this/is/placeholder";
@@ -2349,8 +2355,8 @@ mod test {
         );
     }
 
-    /// CEP test vector 6: multiple occurrences within one shebang line. All of them are in the
-    /// region (so `offsets` is empty) and the shebang rules replace them all.
+    /// draft CEP test vector 6: multiple occurrences within one shebang line. All of them are in
+    /// the region (so `offsets` is empty) and the shebang rules replace them all.
     #[test]
     fn test_textual_offsets_multiple_occurrences_in_shebang() {
         let prefix_placeholder = "/this/is/placeholder";
@@ -2383,9 +2389,9 @@ mod test {
         );
     }
 
-    /// CEP test vector 7: a shebang line longer than the kernel limit that contains no occurrence
-    /// of the placeholder. `shebang_length` is still present (the file starts with `#!`) and the
-    /// over-long line collapses to the `#!/usr/bin/env <program>` form regardless.
+    /// draft CEP test vector 7: a shebang line longer than the kernel limit that contains no
+    /// occurrence of the placeholder. `shebang_length` is still present (the file starts with `#!`)
+    /// and the over-long line collapses to the `#!/usr/bin/env <program>` form regardless.
     #[test]
     fn test_textual_offsets_overlong_shebang_no_occurrence() {
         let prefix_placeholder = "/this/is/placeholder";
@@ -2416,10 +2422,10 @@ mod test {
         );
     }
 
-    /// A CEP-conformant producer never lists a shebang-region occurrence in `offsets`. If a
-    /// non-conformant producer does, the offset function reports inconsistent metadata (writing
-    /// nothing) so the installer falls back to search-based replacement, which produces the same
-    /// bytes.
+    /// A producer conformant with the draft CEP never lists a shebang-region occurrence in
+    /// `offsets`. If a non-conformant producer does, the offset function reports inconsistent
+    /// metadata (writing nothing) so the installer falls back to search-based replacement, which
+    /// produces the same bytes.
     #[test]
     fn test_textual_offsets_shebang_occurrence_in_offsets_is_inconsistent() {
         let prefix_placeholder = "/this/is/placeholder";
@@ -2537,8 +2543,8 @@ mod test {
         );
     }
 
-    /// CEP test vector 8: a binary file whose final C string is unterminated at end-of-file. The
-    /// group's last value is the file size and the length-preserving padding runs to EOF.
+    /// draft CEP test vector 8: a binary file whose final C string is unterminated at end-of-file.
+    /// The group's last value is the file size and the length-preserving padding runs to EOF.
     #[test]
     fn test_binary_offsets_unterminated_final_cstring() {
         let input = b"AAAA/placeholder";
@@ -2577,10 +2583,10 @@ mod test {
         assert_eq!(output.into_inner(), b"Hello, fabulous world!");
     }
 
-    /// CEP test vector 9: a binary file with occurrences under more than one encoding. rattler's
-    /// replacement covers every encoding the CEP defines, so both the UTF-8 c-string and the
-    /// UTF-16-LE wide string are patched, and the offsets path reproduces what the search finds.
-    /// The file length is preserved either way.
+    /// draft CEP test vector 9: a binary file with occurrences under more than one encoding.
+    /// rattler's replacement covers every encoding the draft CEP defines, so both the UTF-8
+    /// c-string and the UTF-16-LE wide string are patched, and the offsets path reproduces what the
+    /// search finds. The file length is preserved either way.
     #[test]
     fn test_offset_groups_binary_multi_encoding_vector9() {
         let placeholder = "/pfx";
@@ -2636,7 +2642,7 @@ mod test {
     }
 
     /// A wide-string occurrence is replaced by the search-based and the offsets-based path alike,
-    /// under every encoding the CEP defines, in text and in binary files.
+    /// under every encoding the draft CEP defines, in text and in binary files.
     #[rstest]
     #[case(OffsetEncoding::Utf8)]
     #[case(OffsetEncoding::Utf16Le)]
@@ -2863,7 +2869,7 @@ mod test {
 
     #[rstest]
     // The NUL terminator sits at offset 27 (the `\x00` byte), not 28. The last value of the group
-    // is the NUL position, per the CEP.
+    // is the NUL position, per the draft CEP.
     #[case(
         b"12345Hello, fabulous world!\x006789",
         vec![vec![12, 27]],
@@ -2947,8 +2953,8 @@ mod test {
         assert_eq!(out.len(), input.len());
     }
 
-    /// CEP test vectors 2 and 5: the placeholder occurs only inside the shebang line, so a
-    /// conformant producer records `offsets: []`. With a target prefix well over the 127-byte
+    /// draft CEP test vectors 2 and 5: the placeholder occurs only inside the shebang line,
+    /// so a conformant producer records `offsets: []`. With a target prefix well over the 127-byte
     /// Linux limit the patched shebang collapses to the `#!/usr/bin/env <program>` form.
     #[test]
     fn test_replace_long_prefix_in_text_file_offsets() {
