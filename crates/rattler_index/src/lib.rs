@@ -1149,11 +1149,12 @@ fn render_record_matchspecs_for_revision(
         } else {
             let parse_options =
                 ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3);
-            let render = |field: &str, spec: &str| -> anyhow::Result<String> {
+            let render = |field: &str, spec: &str, allow_v3: bool| -> anyhow::Result<String> {
                 let parsed = MatchSpec::from_str(spec, parse_options).with_context(|| {
                     format!("failed to parse {revision} repodata MatchSpec in {field}: '{spec}'")
                 })?;
                 if revision.uses_legacy_package_layout()
+                    && !allow_v3
                     && !parsed
                         .required_repodata_revision()
                         .uses_legacy_package_layout()
@@ -1172,12 +1173,12 @@ fn render_record_matchspecs_for_revision(
                 depends: record
                     .depends
                     .iter()
-                    .map(|spec| render("depends", spec))
+                    .map(|spec| render("depends", spec, false))
                     .collect::<Result<_, _>>()?,
                 constrains: record
                     .constrains
                     .iter()
-                    .map(|spec| render("constrains", spec))
+                    .map(|spec| render("constrains", spec, false))
                     .collect::<Result<_, _>>()?,
                 extra_depends: record
                     .extra_depends
@@ -1185,7 +1186,7 @@ fn render_record_matchspecs_for_revision(
                     .map(|(group, specs)| {
                         specs
                             .iter()
-                            .map(|spec| render(&format!("extra_depends.{group}"), spec))
+                            .map(|spec| render(&format!("extra_depends.{group}"), spec, true))
                             .collect::<Result<_, _>>()
                             .map(|rendered| (group.clone(), rendered))
                     })
