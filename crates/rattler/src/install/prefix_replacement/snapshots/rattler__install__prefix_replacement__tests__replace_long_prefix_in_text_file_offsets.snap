@@ -1,5 +1,6 @@
 ---
-source: crates/rattler/src/install/link.rs
+source: crates/rattler/src/install/prefix_replacement/tests.rs
+assertion_line: 1427
 expression: replaced
 ---
 #!/usr/bin/env executable -m 123123
@@ -10,3 +11,4 @@ import sys
 import re
 
 main(...)
+
