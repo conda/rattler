@@ -10,7 +10,7 @@ use rattler_lock::{DEFAULT_ENVIRONMENT_NAME, LockFile, PlatformData, PlatformNam
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
 use rattler_shell::shell::ShellEnum;
 use rattler_solve::{SolverImpl, SolverTask, resolvo::Solver};
-use rattler_vfs::{MountConfig, MountHandle, Transport, build_and_mount, force_unmount};
+use rattler_vfs::{Mode, MountConfig, MountHandle, Transport, build_and_mount, force_unmount};
 use rattler_virtual_packages::{VirtualPackage, VirtualPackageOverrides};
 use sha2::{Digest, Sha256};
 use std::{
@@ -397,16 +397,17 @@ async fn mount_prefix(
     // (adding latency + run-to-run jitter) and print a spurious
     // "not currently mounted" error.
     if should_force_unmount(prefix) {
-        let _ = force_unmount(prefix, Transport::Auto);
+        let _ = force_unmount(prefix, Transport::best());
     }
 
     // ProjFS on Windows has no read-only mode, so ask for read-only where it is
     // supported and let it fall through to writable on Windows.
-    let config = MountConfig::new_read_only_if_supported(
+    let config = MountConfig::new(
         prefix.to_path_buf(),
-        Transport::Auto,
+        Transport::best(),
         env_hash.to_string(),
-    );
+    )
+    .with_mode(Mode::ReadOnlyIfSupported);
 
     build_and_mount(
         lockfile,
