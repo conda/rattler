@@ -334,14 +334,14 @@ impl Label {
 ///
 /// Errors raised from a model carry model paths only. Parsing a
 /// [`crate::Document`], or passing a model error through
-/// [`crate::Document::contextualize`], adds the source text and byte spans.
+/// [`crate::Document::locate`], adds the source text and byte spans.
 pub type Error = Diagnostic<ErrorKind>;
 
 /// A typed diagnostic that can be located in a CEP-37 document.
 ///
 /// Conversion layers reuse this envelope with their own kind, so a
 /// [`crate::Document`] can attach source spans to errors it knows nothing
-/// about; see [`crate::Document::contextualize`].
+/// about; see [`crate::Document::locate`].
 #[derive(Clone, Debug)]
 pub struct Diagnostic<K> {
     pub(crate) kind: K,

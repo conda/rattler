@@ -108,7 +108,7 @@ impl Document {
         document
             .lock_file
             .validate()
-            .map_err(|error| document.contextualize(error))?;
+            .map_err(|error| document.locate(error))?;
         Ok(document)
     }
 
@@ -139,44 +139,51 @@ impl Document {
         self.spans.get(path).and_then(|span| span.key.clone())
     }
 
-    /// Attach this document's source text and locations to a diagnostic raised
-    /// elsewhere.
+    /// Fills in *where* a diagnostic is, by looking up its model paths in this
+    /// document.
     ///
-    /// Everything this crate returns for a document is contextualized already;
-    /// so are the conversions in `rattler_lock::conda_lock` that accept a
-    /// `Document`. This method exists for diagnostics about a lock file that
-    /// this crate cannot produce itself — a caller that resolves
-    /// `metadata.sources`, verifies `content_hash`, or maps packages onto its
-    /// own model raises its own [`Diagnostic`] kind, and only the document
-    /// knows where those paths live in the file.
+    /// A diagnostic built from a model says what is wrong and which field it is
+    /// about — `package[2].url` — but not where that field is in the file. This
+    /// looks each of its paths up in the source map and attaches the byte span
+    /// it found, together with this document's text and file name, so the error
+    /// can be printed against the offending line.
     ///
-    /// Labels that already carry a span are left alone, and a path with no
-    /// recorded span falls back to its nearest recorded ancestor, so an error
-    /// about a missing field still points at the mapping that lacks it.
+    /// Use it for diagnostics you raise yourself about a document you parsed.
+    /// Anything this crate returns for a `Document`, and anything
+    /// `rattler_lock::LockFile::from_conda_lock_document` returns, is located
+    /// already.
+    ///
+    /// A label that already has a span keeps it, and a path with no recorded
+    /// span falls back to its nearest recorded ancestor, so an error about a
+    /// missing field still points at the mapping that lacks it.
     ///
     /// ```
     /// use rattler_conda_lock::{Diagnostic, Document};
     ///
-    /// # let source = "metadata:\n  content_hash: {}\n  channels: []\n  platforms: []\n  sources: [environment.yml]\npackage: []\n";
-    /// let document = Document::parse(source)?;
-    ///
-    /// // A caller-defined kind: this crate never reads the source files.
+    /// // A caller-defined kind: this crate never reads the input files, so it
+    /// // cannot raise this error itself.
     /// #[derive(Debug, thiserror::Error)]
     /// #[error("input file is no longer present")]
     /// struct MissingInput;
     ///
-    /// let error = document.contextualize(Diagnostic::new("metadata.sources[0]", MissingInput));
+    /// # let source = "metadata:\n  content_hash: {}\n  channels: []\n  platforms: []\n  sources: [environment.yml]\npackage: []\n";
+    /// let document = Document::parse(source)?;
+    ///
+    /// let error = Diagnostic::new("metadata.sources[0]", MissingInput);
+    /// assert!(error.span().is_none());
+    ///
+    /// let error = document.locate(error);
     /// assert_eq!(&source[error.span().unwrap()], "environment.yml");
     /// # Ok::<(), rattler_conda_lock::Error>(())
     /// ```
-    pub fn contextualize<K>(&self, mut error: Diagnostic<K>) -> Diagnostic<K> {
-        contextualize_spans(&mut error, &self.spans);
+    pub fn locate<K>(&self, mut error: Diagnostic<K>) -> Diagnostic<K> {
+        locate_labels(&mut error, &self.spans);
         error.attach_source(self.source.clone(), self.name.clone());
         error
     }
 }
 
-pub(crate) fn contextualize_spans<K>(error: &mut Diagnostic<K>, spans: &SourceMap) {
+pub(crate) fn locate_labels<K>(error: &mut Diagnostic<K>, spans: &SourceMap) {
     let mut definitions = Vec::new();
     for label in &mut error.labels {
         if label.span.is_some() {

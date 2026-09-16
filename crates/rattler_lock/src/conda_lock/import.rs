@@ -75,7 +75,7 @@ impl LockFile {
         options: &ImportOptions,
     ) -> Result<Self, CondaLockError> {
         import(document.lock_file(), options)
-            .map_err(|error| document.contextualize(error.into_diagnostic()).into())
+            .map_err(|error| document.locate(error.into_diagnostic()).into())
     }
 }
 

@@ -25,18 +25,7 @@
 //! # Comments and formatting
 //!
 //! Writing is canonical: packages and target platforms are sorted, maps use
-//! lexical key order, and comments are not emitted. A document that is read and
-//! not modified can be copied verbatim with [`Document::source_text`], which
-//! keeps comments and layout exactly; anything that changes the model goes
-//! through [`LockFile::to_yaml`] and comes out normalized.
-//!
-//! Round-tripping comments through the model is not currently possible without
-//! moving them: `serde-saphyr` can capture a node's comments on read, but on
-//! write it only emits them inline after scalars, drops the comments of
-//! mappings and sequences, and its `CommentPosition::Above` mode breaks the
-//! `key: value` layout by putting the comment between the two. Preserving
-//! comments therefore needs either upstream emitter support or a span-based
-//! rewriter that patches the original text instead of re-emitting it.
+//! lexical key order, and comments are not preserved.
 //!
 //! # Errors
 //!

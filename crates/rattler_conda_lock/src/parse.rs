@@ -5,7 +5,7 @@ use serde::{Deserialize, Deserializer};
 use serde_saphyr::{Location, Spanned};
 use serde_untagged::UntaggedEnumVisitor;
 
-use crate::document::{NodeSpan, SourceMap, contextualize_spans};
+use crate::document::{NodeSpan, SourceMap, locate_labels};
 use crate::error::{ErrorKind, NodePath, ValueKind};
 use crate::model::{
     Channel, GitMetadata, Hashes, Manager, Metadata, Package, PackageSource, TimeMetadata,
@@ -152,7 +152,7 @@ pub(crate) fn parse(source: &str) -> Result<(LockFile, SourceMap), Error> {
     let mut spans = SourceMap::new();
     index_spans(&raw, NodePath::root(), None, None, &mut spans)?;
     let lock_file = Parser { source }.lock_file(raw).map_err(|mut error| {
-        contextualize_spans(&mut error, &spans);
+        locate_labels(&mut error, &spans);
         error
     })?;
     Ok((lock_file, spans))
@@ -473,7 +473,7 @@ mod tests {
             )
             .replace('\n', "\r\n");
         let document = Document::parse(&source).unwrap();
-        let error = document.contextualize(Error::new(
+        let error = document.locate(Error::new(
             "metadata.custom_metadata.clé.with.dots",
             ErrorKind::InvalidUrl,
         ));
@@ -491,7 +491,7 @@ mod tests {
             "  sources: []\n  custom_metadata:\n    original: &value héllo\n    copied: *value",
         );
         let document = Document::parse(&source).unwrap();
-        let error = document.contextualize(Error::new(
+        let error = document.locate(Error::new(
             "metadata.custom_metadata.copied",
             ErrorKind::InvalidUrl,
         ));

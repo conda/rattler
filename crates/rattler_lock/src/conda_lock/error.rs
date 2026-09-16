@@ -26,7 +26,7 @@ impl CondaLockError {
     }
 
     /// The underlying diagnostic, for example to render it with miette or to
-    /// pass it to [`rattler_conda_lock::Document::contextualize`].
+    /// pass it to [`rattler_conda_lock::Document::locate`].
     pub fn into_diagnostic(self) -> Diagnostic<CondaLockErrorKind> {
         *self.0
     }
