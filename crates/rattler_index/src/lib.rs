@@ -991,8 +991,9 @@ async fn index_subdir_inner(
 pub const ATTESTATION_SIDECAR_SUFFIX: &str = ".sigs";
 
 /// Reads the attestation sidecar (`<package>.sigs`) for every registered
-/// package that has one, records its SHA256 in the package record and makes
-/// sure the content-addressed copy (`<package>.sigs.<sha256>`) exists.
+/// package that has one, records its SHA256 in the package record and verifies
+/// that the identical content-addressed sidecar (`<package>.sigs.<sha256>`)
+/// has already been published.
 ///
 /// Packages without a sidecar have `attestations_sha256` cleared so that a
 /// removed sidecar is no longer advertised.
@@ -1029,8 +1030,19 @@ async fn apply_attestation_sidecars(
 
         let sha256 = rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(&bytes);
         let content_addressed_path = format!("{sidecar_path}.{}", hex::encode(sha256));
-        if !op.exists(&content_addressed_path).await? {
-            op.write(&content_addressed_path, bytes).await?;
+        let content_addressed_bytes = op
+            .read(&content_addressed_path)
+            .await
+            .map_err(|err| {
+                RepodataError::Other(anyhow::anyhow!(
+                    "failed to read content-addressed attestation sidecar {content_addressed_path}: {err}"
+                ))
+            })?
+            .to_bytes();
+        if content_addressed_bytes != bytes {
+            return Err(RepodataError::Other(anyhow::anyhow!(
+                "content-addressed attestation sidecar {content_addressed_path} does not match {sidecar_path}"
+            )));
         }
 
         indexed.record.attestations_sha256 = Some(sha256);

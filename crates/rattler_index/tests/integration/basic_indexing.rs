@@ -214,8 +214,8 @@ fn noarch_index_config(channel: &Path) -> IndexFsConfig {
 }
 
 /// Validates that an attestation sidecar (`<package>.sigs`) next to a package
-/// is advertised through `attestations_sha256` and copied to its
-/// content-addressed location, and that removing it clears the field again.
+/// is advertised through `attestations_sha256` when its content-addressed copy
+/// exists, and that removing the mutable sidecar clears the field again.
 #[tokio::test]
 async fn test_index_attestation_sidecar() {
     let temp_dir = tempfile::tempdir().unwrap();
@@ -235,6 +235,8 @@ async fn test_index_attestation_sidecar() {
     fs::write(&sidecar_path, sidecar).unwrap();
     let expected_hash =
         hex::encode(rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(sidecar));
+    let content_addressed = subdir_path.join(format!("{package_name}.sigs.{expected_hash}"));
+    fs::write(&content_addressed, sidecar).unwrap();
 
     index_fs(noarch_index_config(temp_dir.path()))
         .await
@@ -246,7 +248,6 @@ async fn test_index_attestation_sidecar() {
     let record = &repodata_json["packages.conda"][package_name];
     assert_eq!(record["attestations_sha256"], expected_hash);
 
-    let content_addressed = subdir_path.join(format!("{package_name}.sigs.{expected_hash}"));
     assert_eq!(fs::read(&content_addressed).unwrap(), sidecar);
 
     // A second run must not choke on the content-addressed copy and must keep
@@ -273,6 +274,67 @@ async fn test_index_attestation_sidecar() {
         repodata_json["packages.conda"][package_name]
             .get("attestations_sha256")
             .is_none()
+    );
+}
+
+/// A mutable sidecar is not enough to advertise attestations: publishers must
+/// create its content-addressed copy before indexing.
+#[tokio::test]
+async fn test_index_rejects_missing_content_addressed_attestation_sidecar() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let subdir_path = temp_dir.path().join("noarch");
+    let package_name = "empty-0.1.0-h4616a5c_0.conda";
+    fs::create_dir(&subdir_path).unwrap();
+    fs::copy(
+        test_data_dir().join("packages").join(package_name),
+        subdir_path.join(package_name),
+    )
+    .unwrap();
+    fs::write(
+        subdir_path.join(format!("{package_name}.sigs")),
+        br#"[{"mediaType":"application/vnd.dev.sigstore.bundle.v0.3+json"}]"#,
+    )
+    .unwrap();
+
+    let err = index_fs(noarch_index_config(temp_dir.path()))
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("failed to read content-addressed attestation sidecar"),
+        "unexpected error: {err}"
+    );
+}
+
+/// The immutable sidecar must contain exactly the bytes named by the mutable
+/// sidecar's SHA256.
+#[tokio::test]
+async fn test_index_rejects_mismatched_content_addressed_attestation_sidecar() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let subdir_path = temp_dir.path().join("noarch");
+    let package_name = "empty-0.1.0-h4616a5c_0.conda";
+    fs::create_dir(&subdir_path).unwrap();
+    fs::copy(
+        test_data_dir().join("packages").join(package_name),
+        subdir_path.join(package_name),
+    )
+    .unwrap();
+
+    let sidecar = br#"[{"mediaType":"application/vnd.dev.sigstore.bundle.v0.3+json"}]"#;
+    fs::write(subdir_path.join(format!("{package_name}.sigs")), sidecar).unwrap();
+    let hash = hex::encode(rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(sidecar));
+    fs::write(
+        subdir_path.join(format!("{package_name}.sigs.{hash}")),
+        b"different bytes",
+    )
+    .unwrap();
+
+    let err = index_fs(noarch_index_config(temp_dir.path()))
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("does not match"),
+        "unexpected error: {err}"
     );
 }
 

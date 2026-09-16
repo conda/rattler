@@ -81,3 +81,4 @@ sha2 = { workspace = true }
 
 [dev-dependencies]
 axum = { workspace = true }
+opendal = { workspace = true, default-features = false, features = ["services-fs"] }
