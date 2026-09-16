@@ -551,6 +551,26 @@ impl PyRecord {
         self.as_package_record_mut().platform = platform;
     }
 
+    /// Optionally a SHA256 hash of the package's Sigstore attestation sidecar.
+    #[getter]
+    pub fn attestations_sha256<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
+        self.as_package_record()
+            .attestations_sha256
+            .map(|sha| PyBytes::new(py, &sha))
+    }
+
+    /// Optionally a SHA256 hash of the package's Sigstore attestation sidecar.
+    #[setter]
+    pub fn set_attestations_sha256(
+        &mut self,
+        attestations_sha256: Option<Bound<'_, PyBytes>>,
+    ) -> PyResult<()> {
+        self.as_package_record_mut().attestations_sha256 = attestations_sha256
+            .map(sha256_from_pybytes)
+            .transpose()?;
+        Ok(())
+    }
+
     /// Optionally a SHA256 hash of the package archive.
     #[getter]
     pub fn sha256<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
