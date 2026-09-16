@@ -14,7 +14,7 @@
 //! use rattler_lock::LockFile;
 //! # async fn example() -> anyhow::Result<()> {
 //! let lockfile = LockFile::from_path("pixi.lock".as_ref())?;
-//! let platform = Platform::current();
+//! let platform = Platform::current().expect("host platform");
 //! let env_hash = compute_env_hash(&lockfile, "default", platform)?;
 //! let cache = PackageCache::new(default_cache_dir()?.join("pkgs"));
 //!
