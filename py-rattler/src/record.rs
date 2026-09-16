@@ -566,9 +566,8 @@ impl PyRecord {
         &mut self,
         attestations_sha256: Option<Bound<'_, PyBytes>>,
     ) -> PyResult<()> {
-        self.as_package_record_mut().attestations_sha256 = attestations_sha256
-            .map(sha256_from_pybytes)
-            .transpose()?;
+        self.as_package_record_mut().attestations_sha256 =
+            attestations_sha256.map(sha256_from_pybytes).transpose()?;
         Ok(())
     }
 
