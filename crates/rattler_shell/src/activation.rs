@@ -415,7 +415,9 @@ impl<T: Shell + Clone> Activator<T> {
             .tempfile()
             .context("Failed to create tmp file")?;
 
-        let mut shell_script = ShellScript::new(shell, Platform::current());
+        let platform =
+            Platform::current().context("the host platform is not a known conda platform")?;
+        let mut shell_script = ShellScript::new(shell, platform);
         for (key, value) in env {
             shell_script
                 .set_env_var(key, value)
@@ -728,7 +730,7 @@ mod tests {
             deactivation_scripts: vec![],
             env_vars: pre_env,
             post_activation_env_vars: post_env,
-            platform: Platform::current(),
+            platform: Platform::current().expect("host platform"),
         };
 
         let result = activator
@@ -1077,7 +1079,12 @@ mod tests {
         .unwrap();
 
         // Create an activator for the environment
-        let activator = Activator::from_path(&env, shell.clone(), Platform::current()).unwrap();
+        let activator = Activator::from_path(
+            &env,
+            shell.clone(),
+            Platform::current().expect("host platform"),
+        )
+        .unwrap();
         let activation_env = activator
             .run_activation(ActivationVariables::default(), None)
             .unwrap();
@@ -1130,7 +1137,7 @@ mod tests {
         let mut activator = Activator::from_path(
             environment_dir.path(),
             shell::Bash::default(),
-            Platform::current(),
+            Platform::current().expect("host platform"),
         )
         .unwrap();
         activator.post_activation_env_vars = IndexMap::from_iter([(
@@ -1207,7 +1214,7 @@ mod tests {
                 deactivation_scripts: vec![],
                 env_vars: env_vars.clone(),
                 post_activation_env_vars: IndexMap::new(),
-                platform: Platform::current(),
+                platform: Platform::current().expect("host platform"),
             };
 
             // Test edge case: CONDA_SHLVL not set (current behavior)
@@ -1264,7 +1271,7 @@ mod tests {
                 deactivation_scripts: vec![],
                 env_vars: env_vars.clone(),
                 post_activation_env_vars: IndexMap::new(),
-                platform: Platform::current(),
+                platform: Platform::current().expect("host platform"),
             };
 
             // CONDA_SHLVL to set to the initial level ( 1 meaning that it's activated)
@@ -1334,7 +1341,7 @@ mod tests {
                 deactivation_scripts: vec![],
                 env_vars: second_env_vars.clone(),
                 post_activation_env_vars: IndexMap::new(),
-                platform: Platform::current(),
+                platform: Platform::current().expect("host platform"),
             };
 
             let mut existing_env_vars = HashMap::new();
@@ -1457,7 +1464,7 @@ mod tests {
                 deactivation_scripts: vec![],
                 env_vars: second_env_vars.clone(),
                 post_activation_env_vars: IndexMap::new(),
-                platform: Platform::current(),
+                platform: Platform::current().expect("host platform"),
             };
 
             let mut existing_env_vars = HashMap::new();

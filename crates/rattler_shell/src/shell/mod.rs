@@ -472,6 +472,7 @@ pub struct Zsh;
 impl Shell for Zsh {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
         validate_env_var_name(env_var)?;
+        let value = escape_double_quoted(value);
         Ok(writeln!(f, "export {env_var}=\"{value}\"")?)
     }
 
@@ -533,6 +534,7 @@ pub struct Xonsh;
 impl Shell for Xonsh {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
         validate_env_var_name(env_var)?;
+        let value = escape_double_quoted(value);
         Ok(writeln!(f, "${env_var} = \"{value}\"")?)
     }
 
@@ -592,7 +594,7 @@ impl Shell for Xonsh {
 
 /// Parses newline-separated `KEY=VALUE` output, as emitted by the
 /// `print_env` of shells whose environment dump is line-based
-/// (cmd.exe's `@SET`, PowerShell's `dir env:`).
+/// (`cmd.exe`'s `@SET`, `PowerShell`'s `dir env:`).
 fn parse_env_lines(env: &str) -> HashMap<&str, &str> {
     env.lines()
         .filter_map(|line| {
@@ -730,6 +732,7 @@ impl Shell for PowerShell {
 
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
         validate_env_var_name(env_var)?;
+        let value = escape_powershell_double_quoted(value);
         Ok(writeln!(f, "${{Env:{env_var}}} = \"{value}\"")?)
     }
 
@@ -791,6 +794,7 @@ pub struct Fish;
 impl Shell for Fish {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
         validate_env_var_name(env_var)?;
+        let value = escape_double_quoted(value);
         Ok(writeln!(f, "set -gx {env_var} \"{value}\"")?)
     }
 
@@ -855,6 +859,19 @@ impl Shell for Fish {
 fn escape_backslashes(s: &str) -> String {
     s.replace('\\', "\\\\")
 }
+
+/// Escapes `value` for inclusion inside a double-quoted string in shells that
+/// use backslash escaping (zsh, fish, xonsh, nushell). Backslashes are escaped
+/// first so the escapes added for the double quotes are not themselves doubled.
+fn escape_double_quoted(s: &str) -> String {
+    escape_backslashes(s).replace('"', "\\\"")
+}
+
+/// Escapes `value` for a `PowerShell` double-quoted string, where the backtick is
+/// the escape character rather than the backslash.
+fn escape_powershell_double_quoted(s: &str) -> String {
+    s.replace('`', "``").replace('"', "`\"")
+}
 fn quote_if_required(s: &str) -> Cow<'_, str> {
     if s.contains(|c: char| !c.is_ascii_alphanumeric() && c != '_' && c != '-') {
         Cow::Owned(format!("\"{s}\""))
@@ -869,13 +886,13 @@ pub struct NuShell;
 
 impl Shell for NuShell {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
-        // escape backslashes for Windows (make them double backslashes)
+        // escape backslashes and double quotes so the value stays inside the string
         validate_env_var_name(env_var)?;
         Ok(writeln!(
             f,
             "$env.{} = \"{}\"",
             quote_if_required(env_var),
-            escape_backslashes(value)
+            escape_double_quoted(value)
         )?)
     }
 
@@ -1293,6 +1310,25 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
+
+    #[test]
+    fn test_set_env_var_escapes_special_chars() {
+        // A value containing a literal double quote (or backslash) must stay inside
+        // the generated string rather than terminating it early, which would break
+        // the activation script or allow command injection. Bash is the reference.
+        fn line<S: Shell>(sh: S, value: &str) -> String {
+            let mut out = String::new();
+            sh.set_env_var(&mut out, "FOO", value).unwrap();
+            out.trim_end().to_string()
+        }
+        let val = r#"a"b\c"#;
+        assert_eq!(line(Zsh, val), r#"export FOO="a\"b\\c""#);
+        assert_eq!(line(Fish, val), r#"set -gx FOO "a\"b\\c""#);
+        assert_eq!(line(Xonsh, val), r#"$FOO = "a\"b\\c""#);
+        assert_eq!(line(NuShell, val), r#"$env.FOO = "a\"b\\c""#);
+        // PowerShell uses the backtick as its escape character; backslash is literal.
+        assert_eq!(line(PowerShell::default(), val), r#"${Env:FOO} = "a`"b\c""#);
+    }
 
     #[test]
     fn test_bash() {

@@ -65,7 +65,7 @@ pub async fn fetch_file_from_remote_full_download(
             let mut zip_reader = ZipFileReader::new(&mut buf_reader);
 
             let mut found: Option<Vec<u8>> = None;
-            let prefix = crate::tokio::async_read::conda_entry_prefix(target_path);
+            let prefix = crate::archive::Section::containing(target_path).zip_prefix();
 
             while let Some(mut entry) = zip_reader
                 .next_with_entry()

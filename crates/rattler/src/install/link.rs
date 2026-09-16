@@ -851,9 +851,11 @@ fn is_valid_shebang_length(shebang: &str, platform: &Platform) -> bool {
     const MAX_SHEBANG_LENGTH_LINUX: usize = 127;
     const MAX_SHEBANG_LENGTH_MACOS: usize = 512;
 
-    if platform.is_linux() {
+    // Android uses the Linux kernel and therefore inherits its shebang limit;
+    // iOS shares the XNU kernel with macOS.
+    if platform.is_linux() || platform.is_android() {
         shebang.len() <= MAX_SHEBANG_LENGTH_LINUX
-    } else if platform.is_osx() {
+    } else if platform.is_osx() || platform.is_ios() {
         shebang.len() <= MAX_SHEBANG_LENGTH_MACOS
     } else {
         true
