@@ -22,7 +22,7 @@ env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: "-D warnings"
   CARGO_TERM_COLOR: always
-  DEFAULT_FEATURES: indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,edit,rattler_config
+  DEFAULT_FEATURES: indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,edit,rattler_config,rattler_conda_types/semver
 
 jobs:
   check-rustdoc-links:
@@ -43,8 +43,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # TODO: We are using 22.04 because for some reason we have a SIGSEV on the libsolv tests on newer versions of Ubuntu.
-          - {name: "Linux-x86_64", target: x86_64-unknown-linux-musl, os: ubuntu-22.04}
+          - {name: "Linux-x86_64", target: x86_64-unknown-linux-musl, os: ubuntu-24.04}
           - {
               name: "Linux-aarch64",
               target: aarch64-unknown-linux-musl,

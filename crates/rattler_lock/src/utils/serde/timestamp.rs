@@ -21,6 +21,24 @@ pub(crate) fn timestamp_to_millis(ts: &JiffTimestamp) -> i64 {
 
 pub(crate) struct Timestamp;
 
+/// Strict millisecond encoding for index timestamps, without legacy unit guessing.
+pub(crate) struct IndexedTimestamp;
+
+impl<'de> DeserializeAs<'de, JiffTimestamp> for IndexedTimestamp {
+    fn deserialize_as<D: Deserializer<'de>>(deserializer: D) -> Result<JiffTimestamp, D::Error> {
+        JiffTimestamp::from_millisecond(i64::deserialize(deserializer)?).map_err(D::Error::custom)
+    }
+}
+
+impl SerializeAs<JiffTimestamp> for IndexedTimestamp {
+    fn serialize_as<S: Serializer>(
+        source: &JiffTimestamp,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        source.as_millisecond().serialize(serializer)
+    }
+}
+
 impl<'de> DeserializeAs<'de, JiffTimestamp> for Timestamp {
     fn deserialize_as<D>(deserializer: D) -> Result<JiffTimestamp, D::Error>
     where

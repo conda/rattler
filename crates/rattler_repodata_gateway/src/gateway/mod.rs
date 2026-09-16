@@ -1,7 +1,9 @@
 mod barrier_cell;
+mod boxed;
 mod builder;
 mod channel_config;
 mod channel_expander;
+mod channel_notices;
 mod channel_relations;
 #[cfg(not(target_arch = "wasm32"))]
 mod direct_url_query;
@@ -18,15 +20,18 @@ mod source;
 mod subdir;
 mod subdir_builder;
 mod warning;
+mod who_needs_query;
 
 use std::{collections::HashSet, sync::Arc};
 
 use crate::reporter::report_unsupported_repodata_revisions;
-use crate::{Reporter, gateway::subdir_builder::SubdirBuilder};
+use crate::{Reporter, gateway::subdir_builder::SubdirBuilder, who_needs::WhoNeedsTarget};
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
 pub use channel_expander::{ChannelRelationsMode, ChannelRelationsWarning};
+use channel_notices::CachedChannelNotices;
+pub use channel_notices::ChannelNoticeResult;
 pub use channel_relations::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH;
 use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use error::GatewayError;
@@ -37,14 +42,14 @@ pub use query::{NamesQuery, NamesQueryOutput, RepoDataQuery, RepoDataQueryOutput
 use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, ChannelRelations, MatchSpec, Platform, RepoDataRecord};
 use rattler_networking::LazyClient;
-pub use repo_data::RepoData;
+pub use repo_data::{RemovedPackages, RepoData};
 use run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
 pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
 pub use source::{RepoDataSource, Source};
 use subdir::Subdir;
 use tracing::{Level, instrument};
-use url::Url;
 pub use warning::GatewayWarning;
+pub use who_needs_query::WhoNeedsQuery;
 
 /// Central access point for high level queries about
 /// [`rattler_conda_types::RepoDataRecord`]s from different channels.
@@ -189,6 +194,88 @@ impl Gateway {
         )
     }
 
+    /// Finds the packages that depend on `target` — its reverse
+    /// dependencies — in the given sources and platforms.
+    ///
+    /// A package is reported when one of its `depends`, `constrains`,
+    /// `extra_depends`, or run export entries references the target; each
+    /// result records which of those it was. What counts as a reference
+    /// depends on the target: a [`PackageName`] matches every dependency on
+    /// that name, while a concrete [`PackageRecord`] or
+    /// [`GenericVirtualPackage`] only matches dependencies whose match spec
+    /// accepts it. See [`WhoNeedsTarget`].
+    ///
+    /// Answering this needs every record of the queried platforms, not just
+    /// the records of one package name, so this query reads far more
+    /// repodata than [`Gateway::query`] does. It is built to keep that
+    /// affordable: records are scanned in batches and dropped again right
+    /// away instead of being kept in the gateway's cache, so only the
+    /// matches are retained. Prefer [`WhoNeedsQuery::stream`] over awaiting
+    /// the query if you can reduce the matches as they arrive, since for a
+    /// widely used package the results are the larger cost.
+    ///
+    /// Channel sources always use full repodata, regardless of the gateway's
+    /// sharding configuration, to avoid fetching a shard for every package.
+    ///
+    /// ```no_run
+    /// # use rattler_conda_types::{Channel, PackageName, Platform};
+    /// # use rattler_repodata_gateway::Gateway;
+    /// # async fn example(gateway: Gateway, channel: Channel) -> anyhow::Result<()> {
+    /// // Which packages of the channel depend on `polars`?
+    /// let dependents = gateway
+    ///     .who_needs(
+    ///         vec![channel],
+    ///         vec![Platform::Linux64, Platform::NoArch],
+    ///         PackageName::new_unchecked("polars"),
+    ///     )
+    ///     .await?;
+    ///
+    /// for dependent in dependents {
+    ///     println!(
+    ///         "{} references polars through the {} entry '{}'",
+    ///         dependent.record.package_record.name.as_normalized(),
+    ///         dependent.kind,
+    ///         dependent.dependency,
+    ///     );
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`PackageName`]: rattler_conda_types::PackageName
+    /// [`PackageRecord`]: rattler_conda_types::PackageRecord
+    /// [`GenericVirtualPackage`]: rattler_conda_types::GenericVirtualPackage
+    pub fn who_needs<AsSource, SourceIter, PlatformIter>(
+        &self,
+        sources: SourceIter,
+        platforms: PlatformIter,
+        target: impl Into<WhoNeedsTarget>,
+    ) -> WhoNeedsQuery
+    where
+        AsSource: Into<Source>,
+        SourceIter: IntoIterator<Item = AsSource>,
+        PlatformIter: IntoIterator<Item = Platform>,
+    {
+        WhoNeedsQuery::new(
+            self.inner.clone(),
+            sources.into_iter().map(Into::into).collect(),
+            platforms.into_iter().collect(),
+            target.into(),
+        )
+    }
+
+    /// Return the cached or freshly fetched CEP-6 notices for the given
+    /// channels.
+    ///
+    /// Fetch and parse failures are non-fatal and are retried after a short
+    /// cache interval.
+    pub async fn channel_notices<'a>(
+        &self,
+        channels: impl IntoIterator<Item = &'a Channel>,
+    ) -> Vec<ChannelNoticeResult> {
+        self.inner.get_channel_notices(channels, None).await
+    }
+
     /// Returns the [CEP-42] `channel_relations` declared by the given
     /// `(channel, platform)` subdirectory, or `None` if none were
     /// declared or the subdirectory doesn't exist.
@@ -204,7 +291,7 @@ impl Gateway {
     ) -> Result<Option<ChannelRelations>, GatewayError> {
         match self
             .inner
-            .get_or_create_subdir(channel, platform, None)
+            .get_or_create_subdir(channel, platform, None, true)
             .await
         {
             Ok(subdir) => Ok(subdir.channel_relations().cloned()),
@@ -274,6 +361,8 @@ impl Gateway {
         self.inner.subdirs.retain(|key, _| {
             key.0.base_url != channel.base_url || !subdirs.contains(key.1.as_str())
         });
+        self.inner.notices.remove(&channel.base_url);
+        self.inner.notice_fetch_locks.remove(&channel.base_url);
 
         #[cfg(not(target_arch = "wasm32"))]
         if mode == CacheClearMode::InMemoryAndDisk {
@@ -315,14 +404,27 @@ impl Gateway {
 }
 
 struct GatewayInner {
-    /// A map of subdirectories for each channel and platform.
-    subdirs: CoalescedMap<(Channel, Platform), Arc<Subdir>>,
+    /// Subdirectories keyed by channel, platform and whether sharding is enabled.
+    /// Full repodata scans must not reuse a sharded subdir from an ordinary query.
+    subdirs: CoalescedMap<(Channel, Platform, bool), Arc<Subdir>>,
 
     /// The client to use to fetch repodata.
     client: LazyClient,
 
+    /// A fetch implementation provided by the host JavaScript environment.
+    /// When set, it is used for all requests instead of the client.
+    #[cfg(target_arch = "wasm32")]
+    js_fetch: Option<crate::utils::js_fetch::JsFetcher>,
+
     /// The channel configuration
     channel_config: ChannelConfig,
+
+    /// In-memory notices cache, keyed by channel URL.
+    notices: dashmap::DashMap<rattler_conda_types::ChannelUrl, Arc<CachedChannelNotices>>,
+
+    /// Per-channel locks used to coalesce notice refreshes.
+    notice_fetch_locks:
+        dashmap::DashMap<rattler_conda_types::ChannelUrl, Arc<tokio::sync::Mutex<()>>>,
 
     /// The directory to store any cache
     #[cfg(not(target_arch = "wasm32"))]
@@ -335,8 +437,13 @@ struct GatewayInner {
     /// A cache for global run exports.
     subdir_run_exports_cache: Arc<SubdirRunExportsCache>,
 
-    /// A semaphore to limit the number of concurrent requests.
+    /// A semaphore to limit the number of concurrent HTTP requests.
     concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
+
+    /// A semaphore to limit the number of concurrent IO operations (e.g.
+    /// reading shard files from the on-disk cache).
+    #[cfg(not(target_arch = "wasm32"))]
+    io_concurrency_semaphore: Option<Arc<tokio::sync::Semaphore>>,
 }
 
 impl GatewayInner {
@@ -348,23 +455,36 @@ impl GatewayInner {
     /// coalesced, and they will all receive the same subdir. If an error
     /// occurs while creating the subdir all waiting tasks will also return an
     /// error.
+    ///
+    /// Set `allow_sharded` to false to force full repodata scans.
     #[instrument(skip(self, reporter, channel), fields(channel = %channel.base_url), err(level = Level::INFO))]
     async fn get_or_create_subdir(
         &self,
         channel: &Channel,
         platform: Platform,
         reporter: Option<Arc<dyn Reporter>>,
+        allow_sharded: bool,
     ) -> Result<Arc<Subdir>, GatewayError> {
-        let key = (channel.clone(), platform);
+        let url = channel.platform_url(platform);
+        let sharded_enabled = allow_sharded
+            && url.scheme() != "file"
+            && self.channel_config.get(&channel.base_url).sharded_enabled;
+        let key = (channel.clone(), platform, sharded_enabled);
         let channel_for_create = channel.clone();
         let reporter_for_create = reporter.clone();
 
         let subdir = self
             .subdirs
             .get_or_try_init(key, || async move {
-                let subdir = self
-                    .create_subdir(&channel_for_create, platform, reporter_for_create)
-                    .await?;
+                let subdir = SubdirBuilder::new(
+                    self,
+                    channel_for_create,
+                    platform,
+                    reporter_for_create,
+                    sharded_enabled,
+                )
+                .build()
+                .await?;
                 Ok(Arc::new(subdir))
             })
             .await
@@ -385,22 +505,6 @@ impl GatewayInner {
 
         Ok(subdir)
     }
-
-    async fn create_subdir(
-        &self,
-        channel: &Channel,
-        platform: Platform,
-        reporter: Option<Arc<dyn Reporter>>,
-    ) -> Result<Subdir, GatewayError> {
-        SubdirBuilder::new(self, channel.clone(), platform, reporter)
-            .build()
-            .await
-    }
-}
-
-fn force_sharded_repodata(url: &Url) -> bool {
-    matches!(url.scheme(), "http" | "https")
-        && matches!(url.host_str(), Some("fast.prefiks.dev" | "fast.prefix.dev"))
 }
 
 #[cfg(test)]
@@ -519,12 +623,20 @@ mod test {
                 "info": {
                     "subdir": "noarch",
                     "repodata_revisions": {
+                        "v1": {
+                            "message": "v1 layout is not modeled",
+                            "n_packages": 1
+                        },
                         "v4": {
+                            "message": "newer artifacts are available",
                             "n_packages": 2,
                             "oldest": 1768249989851,
                             "newest": 1773851561010
                         }
                     }
+                },
+                "v1": {
+                    "demo-2.0-0.conda": {}
                 },
                 "packages": {},
                 "packages.conda": {
@@ -575,12 +687,23 @@ mod test {
 
         assert_eq!(records.iter().map(RepoData::len).sum::<usize>(), 1);
         let messages = reporter.messages.lock().unwrap();
-        assert_eq!(messages.len(), 2);
+        assert_eq!(messages.len(), 4);
         assert_eq!(messages[0].subdir, "noarch");
         assert_eq!(messages[0].supported_revision, RepodataRevision::V3);
-        assert_eq!(messages[0].revision.revision, RepodataRevision::Unknown(4));
-        assert_eq!(messages[0].revision.n_packages, Some(2));
-        assert_eq!(messages[1], messages[0]);
+        assert_eq!(messages[0].revision, RepodataRevision::Unknown(1));
+        assert_eq!(messages[0].metadata.n_packages, Some(1));
+        assert_eq!(messages[1].revision, RepodataRevision::from(4));
+        assert_eq!(
+            serde_json::to_value(&messages[1].metadata).unwrap(),
+            serde_json::json!({
+                "message": "newer artifacts are available",
+                "n_packages": 2,
+                "oldest": 1768249989851i64,
+                "newest": 1773851561010i64
+            })
+        );
+        assert_eq!(messages[2], messages[0]);
+        assert_eq!(messages[3], messages[1]);
     }
 
     #[tokio::test]
@@ -649,6 +772,178 @@ mod test {
         assert_eq!(records.iter().map(RepoData::len).sum::<usize>(), 1);
         let messages = reporter.messages.lock().unwrap();
         assert!(messages.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_channel_notices_are_returned_and_reported() {
+        #[derive(Default)]
+        struct NoticeReporter(Mutex<Vec<String>>);
+
+        impl Reporter for Arc<NoticeReporter> {
+            fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
+                None
+            }
+
+            fn on_channel_notice(&self, notice: &crate::ChannelNoticeResult) {
+                self.0.lock().unwrap().push(notice.notice.id.clone());
+            }
+        }
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let noarch = tempdir.path().join("noarch");
+        fs_err::create_dir_all(&noarch).unwrap();
+        fs_err::write(noarch.join("repodata.json"), make_repodata("demo", "1.0")).unwrap();
+        fs_err::write(
+            tempdir.path().join("notices.json"),
+            r#"{"notices":[
+                {"id":"security-1","message":"Update demo","level":"critical","expires_at":"2099-01-01T00:00:00Z"},
+                {"id":42,"message":"malformed notice"}
+            ]}"#,
+        )
+        .unwrap();
+
+        let channel = Channel::try_from_directory(tempdir.path()).unwrap();
+        let reporter = Arc::new(NoticeReporter::default());
+        let output = Gateway::new()
+            .query(
+                vec![channel.clone()],
+                vec![Platform::NoArch],
+                vec![PackageName::from_str("demo").unwrap()],
+            )
+            .channel_notices(true)
+            .with_reporter(reporter.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(output.notices.len(), 1);
+        assert_eq!(output.notices[0].notice.id, "security-1");
+        assert_eq!(reporter.0.lock().unwrap().as_slice(), ["security-1"]);
+
+        let output = Gateway::new()
+            .query(
+                vec![channel],
+                vec![Platform::NoArch],
+                vec![PackageName::from_str("demo").unwrap()],
+            )
+            .await
+            .unwrap();
+        assert!(output.notices.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_channel_notices_refresh_at_expiration() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let channel = Channel::try_from_directory(tempdir.path()).unwrap();
+        let expiry = jiff::Timestamp::now() + jiff::SignedDuration::from_millis(500);
+        fs_err::write(
+            tempdir.path().join("notices.json"),
+            format!(r#"{{"notices":[{{"id":"old","message":"Old","expires_at":"{expiry}"}}]}}"#),
+        )
+        .unwrap();
+
+        let gateway = Gateway::new();
+        assert_eq!(
+            gateway.channel_notices([&channel]).await[0].notice.id,
+            "old"
+        );
+
+        tokio::time::sleep(std::time::Duration::from_millis(550)).await;
+        fs_err::write(
+            tempdir.path().join("notices.json"),
+            r#"{"notices":[{"id":"new","message":"New","expires_at":"2099-01-01T00:00:00Z"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            gateway.channel_notices([&channel]).await[0].notice.id,
+            "new"
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn test_channel_notice_requests_are_coalesced_and_size_limited() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_for_route = calls.clone();
+        let app = axum::Router::new().route(
+            "/notices.json",
+            axum::routing::get(move || {
+                let calls = calls_for_route.clone();
+                async move {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+                    r#"{"notices":[{"id":"one","message":"One","expires_at":"2099-01-01T00:00:00Z"}]}"#
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let channel = Channel::from_url(Url::parse(&format!("http://{address}/")).unwrap());
+        let gateway = Gateway::new();
+
+        let results = futures::future::join_all(
+            (0..8).map(|_| gateway.channel_notices(std::iter::once(&channel))),
+        )
+        .await;
+        assert!(results.iter().all(|notices| notices.len() == 1));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        server.abort();
+
+        let app = axum::Router::new().route(
+            "/notices.json",
+            axum::routing::get(|| async { "x".repeat(1024 * 1024 + 1) }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let channel = Channel::from_url(Url::parse(&format!("http://{address}/")).unwrap());
+        let gateway = Gateway::new();
+        assert!(gateway.channel_notices([&channel]).await.is_empty());
+        server.abort();
+    }
+
+    #[tokio::test]
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn test_channel_notices_respect_max_concurrent_requests() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let active = Arc::new(AtomicUsize::new(0));
+        let maximum = Arc::new(AtomicUsize::new(0));
+        let handler = {
+            let active = active.clone();
+            let maximum = maximum.clone();
+            move || {
+                let active = active.clone();
+                let maximum = maximum.clone();
+                async move {
+                    let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                    maximum.fetch_max(current, Ordering::SeqCst);
+                    tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+                    active.fetch_sub(1, Ordering::SeqCst);
+                    r#"{"notices":[]}"#
+                }
+            }
+        };
+        let app = axum::Router::new()
+            .route("/a/notices.json", axum::routing::get(handler.clone()))
+            .route("/b/notices.json", axum::routing::get(handler));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let root = Url::parse(&format!("http://{address}/")).unwrap();
+        let channels = [
+            Channel::from_url(root.join("a/").unwrap()),
+            Channel::from_url(root.join("b/").unwrap()),
+        ];
+        let gateway = Gateway::builder()
+            .with_max_concurrent_requests(1_usize)
+            .finish();
+
+        gateway.channel_notices(channels.iter()).await;
+        assert_eq!(maximum.load(Ordering::SeqCst), 1);
+        server.abort();
     }
 
     #[tokio::test]
@@ -1205,6 +1500,194 @@ mod test {
         )
     }
 
+    #[tokio::test]
+    async fn test_record_patch_is_query_local() {
+        fn names(output: &crate::RepoDataQueryOutput) -> std::collections::BTreeSet<String> {
+            output
+                .iter()
+                .flat_map(RepoData::iter)
+                .map(|record| record.package_record.name.as_normalized().to_string())
+                .collect()
+        }
+
+        let channel_dir = tempfile::tempdir().unwrap();
+        let subdir = channel_dir.path().join("linux-64");
+        fs_err::create_dir_all(&subdir).unwrap();
+        fs_err::write(
+            subdir.join("repodata.json"),
+            serde_json::json!({
+                "info": {"subdir": "linux-64"},
+                "packages": {
+                    "application-1.0-0.tar.bz2": {
+                        "name": "application",
+                        "version": "1.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": ["python"],
+                        "subdir": "linux-64"
+                    },
+                    "python-3.12.0-0.tar.bz2": {
+                        "name": "python",
+                        "version": "3.12.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "subdir": "linux-64"
+                    },
+                    "pip-25.0-0.tar.bz2": {
+                        "name": "pip",
+                        "version": "25.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "subdir": "linux-64"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let gateway = Gateway::new();
+        let channel = Channel::try_from_directory(channel_dir.path()).unwrap();
+        let application = || MatchSpec::from_str("application", Lenient).unwrap();
+
+        let unpatched = gateway
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![application()],
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+        assert_eq!(
+            names(&unpatched),
+            ["application", "python"]
+                .into_iter()
+                .map(String::from)
+                .collect()
+        );
+
+        let patched = gateway
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![application()],
+            )
+            .recursive(true)
+            .with_record_patch(|record| {
+                if record.package_record.name.as_normalized() != "python" {
+                    return None;
+                }
+                let mut record = record.clone();
+                record.package_record.depends.push("pip".to_string());
+                Some(record)
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            names(&patched),
+            ["application", "pip", "python"]
+                .into_iter()
+                .map(String::from)
+                .collect()
+        );
+
+        let unpatched_again = gateway
+            .query(vec![channel], vec![Platform::Linux64], vec![application()])
+            .recursive(true)
+            .await
+            .unwrap();
+        assert_eq!(
+            names(&unpatched_again),
+            ["application", "python"]
+                .into_iter()
+                .map(String::from)
+                .collect()
+        );
+        let python = unpatched_again
+            .iter()
+            .flat_map(RepoData::iter)
+            .find(|record| record.package_record.name.as_normalized() == "python")
+            .unwrap();
+        assert!(python.package_record.depends.is_empty());
+    }
+
+    /// Packages listed under `removed` are hidden from the records of a query
+    /// and reported through `RepoData::removed` for every fetched name.
+    #[tokio::test]
+    async fn test_removed_packages_are_reported() {
+        let channel_dir = tempfile::tempdir().unwrap();
+        let subdir = channel_dir.path().join("linux-64");
+        fs_err::create_dir_all(&subdir).unwrap();
+        fs_err::write(
+            subdir.join("repodata.json"),
+            serde_json::json!({
+                "info": {"subdir": "linux-64"},
+                "packages.conda": {
+                    "foo-1.0-0.conda": {
+                        "name": "foo",
+                        "version": "1.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "subdir": "linux-64"
+                    },
+                    "foo-2.0-0.conda": {
+                        "name": "foo",
+                        "version": "2.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "subdir": "linux-64"
+                    }
+                },
+                "removed": ["foo-2.0-0.conda", "foo-0.1-0.tar.bz2", "bar-1.0-0.conda"]
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let gateway = Gateway::new();
+        let channel = Channel::try_from_directory(channel_dir.path()).unwrap();
+        let output = gateway
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("foo", Lenient).unwrap()],
+            )
+            .await
+            .unwrap();
+        let repodata = &output[0];
+
+        let records: Vec<_> = repodata
+            .iter()
+            .map(|record| record.identifier.to_file_name())
+            .collect();
+        assert_eq!(records, ["foo-1.0-0.conda"]);
+
+        let removed_url = channel
+            .base_url
+            .url()
+            .join("linux-64/foo-2.0-0.conda")
+            .unwrap();
+        assert!(repodata.removed().contains(&removed_url));
+        assert_eq!(
+            repodata.removed().get(&removed_url).unwrap().identifier,
+            "foo-2.0-0.conda".parse().unwrap()
+        );
+
+        // Only names touched by the query are reported, so `bar` is absent.
+        let mut removed: Vec<_> = repodata
+            .removed()
+            .iter()
+            .map(|removed| removed.identifier.to_file_name())
+            .collect();
+        removed.sort();
+        assert_eq!(removed, ["foo-0.1-0.tar.bz2", "foo-2.0-0.conda"]);
+    }
+
     /// Integration test that verifies cache clearing actually works end-to-end.
     /// Creates a simple channel with a single package, queries it, modifies
     /// the source data, and verifies that memory-only cache clearing still
@@ -1404,26 +1887,37 @@ mod test {
 
     #[tokio::test]
     async fn test_ensure_run_exports_remote_conda_forge() {
-        // conda-forge's sharded repodata now embeds `run_exports` directly in the
-        // records. Disable sharded repodata so that the records are fetched from
-        // `repodata.json` (which does not contain `run_exports`). This ensures the
-        // records start out without `run_exports` and allows us to exercise
-        // `ensure_run_exports`.
-        let gateway = Gateway::builder()
-            .with_channel_config(crate::ChannelConfig {
-                default: SourceConfig {
-                    sharded_enabled: false,
-                    ..SourceConfig::default()
-                },
-                ..crate::ChannelConfig::default()
-            })
-            .finish();
+        // Serve a copy of the pinned conda-forge snapshot over HTTP so this test
+        // exercises the remote code path of `ensure_run_exports` without
+        // depending on live conda-forge data (which drifts and previously broke
+        // the record count assertion).
+        let channel_dir = tempfile::tempdir().unwrap();
+        for subdir in ["linux-64", "noarch"] {
+            let repodata = tools::fetch_test_conda_forge_repodata_async(subdir)
+                .await
+                .unwrap();
+            let subdir_dir = channel_dir.path().join(subdir);
+            std::fs::create_dir_all(&subdir_dir).unwrap();
+
+            // Remove the `base_url` so that the record urls (and with that the
+            // `run_exports.json` lookups) resolve relative to the local server
+            // instead of conda.anaconda.org.
+            let mut repodata: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(repodata).unwrap()).unwrap();
+            repodata["info"].as_object_mut().unwrap().remove("base_url");
+            std::fs::write(
+                subdir_dir.join("repodata.json"),
+                serde_json::to_string(&repodata).unwrap(),
+            )
+            .unwrap();
+        }
+
+        let server = SimpleChannelServer::new(channel_dir.path()).await;
+        let gateway = Gateway::new();
 
         let records = gateway
             .query(
-                vec![Channel::from_url(
-                    Url::parse("https://conda.anaconda.org/conda-forge/").unwrap(),
-                )],
+                vec![server.channel()],
                 vec![Platform::Linux64, Platform::NoArch],
                 vec![MatchSpec::from_str("openssl=3.*=*_1", Lenient).unwrap()].into_iter(),
             )
@@ -1432,7 +1926,7 @@ mod test {
             .unwrap();
 
         let total_records: usize = records.iter().map(RepoData::len).sum();
-        assert_eq!(total_records, 19);
+        assert_eq!(total_records, 3);
 
         let mut repodata_records = records
             .iter()
@@ -1441,12 +1935,55 @@ mod test {
 
         assert!(run_exports_missing(&repodata_records));
 
+        // Serve a `run_exports.json` that covers the matched records. The run
+        // exports carry a marker value that the real packages do not contain, so
+        // we can verify below that they were fetched from the served file rather
+        // than extracted from the packages themselves.
+        for subdir in ["linux-64", "noarch"] {
+            let mut packages = serde_json::Map::new();
+            let mut conda_packages = serde_json::Map::new();
+            for record in repodata_records
+                .iter()
+                .filter(|record| record.package_record.subdir == subdir)
+            {
+                let file_name = record.identifier.to_file_name();
+                let entry = serde_json::json!({
+                    "run_exports": { "weak": ["from-run-exports-json"] }
+                });
+                if file_name.ends_with(".conda") {
+                    conda_packages.insert(file_name, entry);
+                } else {
+                    packages.insert(file_name, entry);
+                }
+            }
+            let run_exports = serde_json::json!({
+                "packages": packages,
+                "packages.conda": conda_packages,
+            });
+            std::fs::write(
+                channel_dir.path().join(subdir).join("run_exports.json"),
+                serde_json::to_string(&run_exports).unwrap(),
+            )
+            .unwrap();
+        }
+
         gateway
             .ensure_run_exports(repodata_records.iter_mut(), None)
             .await
             .unwrap();
 
         assert!(run_exports_in_place(&repodata_records));
+
+        // The run exports must originate from the served `run_exports.json`, not
+        // from the package download fallback.
+        for record in &repodata_records {
+            assert_eq!(
+                record.package_record.run_exports.as_ref().unwrap().weak,
+                vec!["from-run-exports-json".to_string()],
+                "run_exports of {} should come from the served run_exports.json",
+                record.identifier
+            );
+        }
     }
 
     /// A mock `RepoDataSource` for testing custom source functionality.
@@ -1538,6 +2075,7 @@ mod test {
             license: None,
             license_family: None,
             timestamp: None,
+            indexed_timestamp: None,
             legacy_bz2_size: None,
             legacy_bz2_md5: None,
             purls: None,
@@ -1618,6 +2156,79 @@ mod test {
         assert_eq!(
             all_records[0].package_record.name.as_normalized(),
             "otherpkg"
+        );
+    }
+
+    /// Loads the `dummy` test channel's `linux-64` subdir as a `SparseRepoData`.
+    /// `foobar` depends on `bors`, which is used to exercise recursive queries.
+    fn dummy_sparse_repo_data() -> crate::sparse::SparseRepoData {
+        let channel_config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
+        let channel = Channel::from_str("dummy", &channel_config).unwrap();
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/channels/dummy/linux-64/repodata.json");
+        crate::sparse::SparseRepoData::from_file(channel, "linux-64", path, None).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_sparse_repodata_source() {
+        let gateway = Gateway::new();
+        let source = Arc::new(dummy_sparse_repo_data());
+
+        // Query the sparse repodata directly for `foobar`.
+        let records = gateway
+            .query(
+                vec![super::Source::SparseRepoData(vec![source.clone()])],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("foobar").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert!(!all_records.is_empty(), "should have foobar records");
+        assert!(
+            all_records
+                .iter()
+                .all(|r| r.package_record.name.as_normalized() == "foobar"),
+            "non-recursive query should only return foobar records"
+        );
+
+        // A recursive query should also pull in `bors`, `foobar`'s dependency.
+        let records = gateway
+            .query(
+                vec![super::Source::SparseRepoData(vec![source.clone()])],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("foobar").unwrap()].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert!(
+            all_records
+                .iter()
+                .any(|r| r.package_record.name.as_normalized() == "bors"),
+            "recursive query should also fetch foobar's dependency bors"
+        );
+
+        // A `SparseRepoData` only ever represents the one channel/subdir pair it was
+        // loaded from; other platforms should yield no records.
+        let records = gateway
+            .query(
+                vec![super::Source::SparseRepoData(vec![source])],
+                vec![Platform::Win64],
+                vec![PackageName::from_str("foobar").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert!(
+            all_records.is_empty(),
+            "querying a platform other than the sparse repodata's own subdir should be empty"
         );
     }
 
@@ -2814,6 +3425,46 @@ mod test {
         assert_eq!(results.len(), 2);
         assert!(!results[0].is_empty(), "conda-forge bucket non-empty");
         assert!(!results[1].is_empty(), "bioconda bucket non-empty");
+    }
+
+    /// Notices include channels discovered through CEP-42 relations.
+    #[tokio::test]
+    async fn test_cep42_discovered_channel_notices_are_returned() {
+        let dir = tempfile::tempdir().unwrap();
+        let cf_root = dir.path().join("conda-forge");
+        let bc_root = dir.path().join("bioconda");
+        write_test_subdir(&cf_root, "shared", "1.0.0", None, None);
+        write_test_subdir(&bc_root, "shared", "2.0.0", Some("../conda-forge"), None);
+        std::fs::write(
+            cf_root.join("notices.json"),
+            r#"{"notices":[{"id":"base","message":"Base notice"}]}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            bc_root.join("notices.json"),
+            r#"{"notices":[{"id":"declaring","message":"Declaring notice"}]}"#,
+        )
+        .unwrap();
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let bioconda = Channel::from_url(server.url().join("bioconda/").unwrap());
+        let output = Gateway::new()
+            .query(
+                [bioconda],
+                [Platform::Linux64],
+                [MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .channel_notices(true)
+            .execute()
+            .await
+            .unwrap();
+
+        let ids: std::collections::HashSet<_> = output
+            .notices
+            .iter()
+            .map(|notice| notice.notice.id.as_str())
+            .collect();
+        assert_eq!(ids, std::collections::HashSet::from(["base", "declaring"]));
     }
 
     /// `Disabled` ignores declared relations.

@@ -1,0 +1,70 @@
+---
+source: crates/rattler_conda_types/tests/matchspec_display_edge_cases.rs
+expression: cases.0
+---
+case      : foo
+legacy    : foo
+  reparse : same spec
+canonical : foo
+  reparse : same spec, stable
+
+case      : foo*
+legacy    : foo*
+  reparse : same spec
+canonical : foo*
+  reparse : same spec, stable
+
+case      : *
+legacy    : *
+  reparse : same spec
+canonical : *
+  reparse : same spec, stable
+
+case      : ^foo.*$
+legacy    : ^foo.*$
+  reparse : same spec
+canonical : ^foo.*$
+  reparse : same spec, stable
+
+case      : and
+legacy    : and
+  reparse : same spec
+canonical : and
+  reparse : same spec, stable
+
+case      : pandas
+legacy    : pandas
+  reparse : same spec
+canonical : pandas
+  reparse : same spec, stable
+
+case      : __linux
+legacy    : __linux
+  reparse : same spec
+canonical : __linux
+  reparse : same spec, stable
+
+case      : name = ^py(thon|py)[0-9]$
+legacy    : ^py(thon|py)[0-9]$
+  reparse : same spec
+canonical : refused: package-name matcher '^py(thon|py)[0-9]$' cannot be represented in canonical MatchSpec syntax
+
+case      : name = ^foo$bar$
+legacy    : ^foo$bar$
+  reparse : same spec
+canonical : refused: package-name matcher '^foo$bar$' cannot be represented in canonical MatchSpec syntax
+
+case      : name = py*:3
+legacy    : py*:3
+  reparse : DIVERGES: 3[namespace="py*"]
+canonical : refused: package-name matcher 'py*:3' cannot be represented in canonical MatchSpec syntax
+
+case      : name = py* 3
+legacy    : py* 3
+  reparse : rejected: missing range specifier for '3'. Did you mean '==3' or '3.*'?
+canonical : refused: package-name matcher 'py* 3' cannot be represented in canonical MatchSpec syntax
+
+case      : build = Exact("py*") (renders as a glob)
+legacy    : foo[build="py*"]
+  reparse : differs, renders identically
+canonical : refused: build matcher 'py*' cannot be represented in canonical MatchSpec syntax

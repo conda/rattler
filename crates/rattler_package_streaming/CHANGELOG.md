@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.5](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.4...rattler_package_streaming-v0.27.5) - 2026-09-04
+
+### Added
+
+- *(rattler-bin)* extend inspect with about, run exports, sizes and --json ([#2760](https://github.com/conda/rattler/pull/2760))
+
+### Other
+
+- extract packages on a blocking worker ([#2748](https://github.com/conda/rattler/pull/2748))
+
+## [0.27.4](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.3...rattler_package_streaming-v0.27.4) - 2026-08-27
+
+### Added
+
+- Add RepoDataRecord.from_package_archive method to allow installing local packages without a channel ([#2698](https://github.com/conda/rattler/pull/2698))
+
+## [0.27.3](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.2...rattler_package_streaming-v0.27.3) - 2026-08-26
+
+### Other
+
+- rename CEP 146 to CEP 48 ([#2717](https://github.com/conda/rattler/pull/2717))
+
+## [0.27.2](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.1...rattler_package_streaming-v0.27.2) - 2026-08-21
+
+### Fixed
+
+- recover merged CEP 48 PRs (#2674, #2673, #2670)
+
+## [0.27.1](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.0...rattler_package_streaming-v0.27.1) - 2026-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking
+
+## [0.27.0](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.26.9...rattler_package_streaming-v0.27.0) - 2026-08-11
+
+### Added
+
+- add PackageArchive for sparse reads from conda packages ([#2632](https://github.com/conda/rattler/pull/2632))
+
+## [0.26.9](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.26.8...rattler_package_streaming-v0.26.9) - 2026-07-24
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking
+
 ## [0.26.8](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.26.7...rattler_package_streaming-v0.26.8) - 2026-07-14
 
 ### Other

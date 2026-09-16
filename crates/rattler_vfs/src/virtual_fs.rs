@@ -157,7 +157,11 @@ pub struct VirtualFS {
 
 impl VirtualFS {
     pub fn new(metadata: Vec<MetadataNode>, mount_point: &Path) -> Self {
-        Self::with_platform(metadata, mount_point, Platform::current())
+        Self::with_platform(
+            metadata,
+            mount_point,
+            Platform::current().expect("host platform"),
+        )
     }
 
     pub(crate) fn with_platform(

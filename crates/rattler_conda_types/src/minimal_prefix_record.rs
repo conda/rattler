@@ -242,6 +242,7 @@ impl MinimalPrefixRecord {
             purls: None,
             run_exports: None,
             timestamp: None,
+            indexed_timestamp: None,
             track_features: Vec::new(),
             python_site_packages_path: None,
             extra_depends: std::collections::BTreeMap::new(),

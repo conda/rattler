@@ -1,0 +1,292 @@
+use std::{env, path::Path, time::Instant};
+
+use futures_util::TryStreamExt;
+use indexmap::IndexMap;
+use indicatif::{ProgressBar, ProgressStyle};
+use itertools::Itertools;
+use miette::{Context, IntoDiagnostic};
+use rattler_conda_types::{
+    Channel, ChannelConfig, PackageName, PackageRecord, Platform, Version, package::IndexJson,
+};
+use rattler_repodata_gateway::who_needs::{DependencyKind, Dependent, WhoNeedsTarget};
+use url::Url;
+
+use super::{QueryOutputFormat, print_url_lines};
+use crate::commands::gateway::{build_gateway, load_config};
+
+/// Show packages that depend on the given package (reverse dependencies).
+#[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler whoneeds numpy                      # packages that depend on numpy
+  rattler whoneeds __cuda                     # packages that depend on a virtual package
+  rattler whoneeds ./python-3.13.1-h123_0.conda   # packages that can use this exact package
+  rattler whoneeds https://conda.anaconda.org/conda-forge/noarch/polars-1.44.1-pyh8da0edf_0.conda
+  rattler whoneeds numpy --format urls        # print only the urls of the dependent packages"#)]
+pub struct Opt {
+    /// The package to find reverse dependencies for.
+    ///
+    /// Either a package name (numpy, __cuda), matching every dependency
+    /// that names the package; or a path or URL to a .conda/.tar.bz2
+    /// package, matching only dependents whose match spec matches the
+    /// package.
+    #[clap(required = true)]
+    package: String,
+
+    /// Channels to search in
+    #[clap(short, long, default_value = "conda-forge")]
+    channels: Vec<String>,
+
+    /// Platform to search for. Defaults to the platform of the current host.
+    #[clap(short, long)]
+    platform: Option<Platform>,
+
+    /// Maximum number of packages to display
+    #[clap(long, default_value = "100")]
+    limit: usize,
+
+    /// Show all packages (no limit)
+    #[clap(long)]
+    all: bool,
+
+    /// Output format (defaults to human-readable output)
+    #[clap(long, conflicts_with_all = ["limit", "all"])]
+    format: Option<QueryOutputFormat>,
+}
+
+/// Interprets the package argument as a package archive URL or path, or as
+/// a package name, and builds the corresponding target. Returns the target
+/// together with a human readable form of it.
+async fn resolve_target(
+    package: &str,
+    client: &reqwest_middleware::ClientWithMiddleware,
+) -> miette::Result<(WhoNeedsTarget, String)> {
+    let is_archive = package.ends_with(".conda") || package.ends_with(".tar.bz2");
+    let index_json: Option<IndexJson> = if is_archive && package.contains("://") {
+        let url = Url::parse(package)
+            .into_diagnostic()
+            .context("failed to parse the package URL")?;
+        Some(
+            rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url(
+                client.clone(),
+                url,
+            )
+            .await
+            .into_diagnostic()
+            .context("failed to read index.json from the package URL")?,
+        )
+    } else if is_archive {
+        Some(
+            rattler_package_streaming::seek::read_package_file(Path::new(package))
+                .into_diagnostic()
+                .context("failed to read index.json from the package file")?,
+        )
+    } else {
+        None
+    };
+
+    let Some(index_json) = index_json else {
+        let name: PackageName = package
+            .parse()
+            .into_diagnostic()
+            .context("failed to parse the package name")?;
+        let display = name.as_source().to_string();
+        return Ok((name.into(), display));
+    };
+
+    let record = PackageRecord::from_index_json(index_json, None, None, None)
+        .into_diagnostic()
+        .context("failed to convert the package's index.json into a record")?;
+    let display = format!(
+        "{} {} {}",
+        record.name.as_source(),
+        record.version,
+        record.build
+    );
+    Ok((record.into(), display))
+}
+
+pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
+    let channel_config =
+        ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
+
+    // Create HTTP client
+    let download_client = super::client::create_client_with_middleware(offline)?;
+
+    let (target, target_display) = resolve_target(&opt.package, &download_client).await?;
+
+    let platform = opt.platform.map_or_else(crate::host_platform, Ok)?;
+    eprintln!("Searching for packages that depend on '{target_display}' on {platform}");
+
+    // Determine the channels
+    let channels = opt
+        .channels
+        .into_iter()
+        .map(|channel_str| Channel::from_str(channel_str, &channel_config))
+        .collect::<Result<Vec<_>, _>>()
+        .into_diagnostic()?;
+
+    eprintln!(
+        "Channels: {}",
+        channels.iter().map(Channel::canonical_name).join(", ")
+    );
+
+    let config = load_config()?;
+    let gateway = build_gateway(download_client, &config, offline, true)?;
+
+    // Show progress while loading repodata
+    let pb = ProgressBar::new_spinner();
+    pb.enable_steady_tick(std::time::Duration::from_millis(100));
+    pb.set_style(ProgressStyle::with_template("{spinner:.green} {msg}").unwrap());
+    pb.set_message("Loading repodata...");
+
+    let start = Instant::now();
+    let mut stream = gateway
+        .who_needs(channels, [platform, Platform::NoArch], target)
+        .stream();
+
+    // All output modes reduce every dependent to something much smaller
+    // than the record it came from, so they consume the stream and drop
+    // each record as it arrives. A channel-wide query matches enough
+    // records that retaining them all would cost about a gigabyte.
+    if opt.format == Some(QueryOutputFormat::Urls) {
+        // The stream reports a record once per dependency kind through
+        // which it references the target, so the same url can arrive more
+        // than once. Only what is needed to sort and print is retained.
+        let mut records: Vec<(PackageName, Version, u64, Url)> = Vec::new();
+        while let Some(dependent) = stream
+            .try_next()
+            .await
+            .into_diagnostic()
+            .context("failed to compute reverse dependencies")?
+        {
+            let record = &dependent.record.package_record;
+            records.push((
+                record.name.clone(),
+                record.version.version().clone(),
+                record.build_number,
+                dependent.record.url.clone(),
+            ));
+        }
+        pb.finish_and_clear();
+
+        // Sort by name and then by version (newest first), like
+        // `rattler search --format urls`.
+        records.sort_unstable_by(|a, b| {
+            a.0.cmp(&b.0)
+                .then_with(|| b.1.cmp(&a.1))
+                .then_with(|| b.2.cmp(&a.2))
+                .then_with(|| a.3.cmp(&b.3))
+        });
+        records.dedup_by(|a, b| a.3 == b.3);
+
+        return print_url_lines(records.into_iter().map(|(_, _, _, url)| url));
+    }
+
+    if opt.format == Some(QueryOutputFormat::Json) {
+        let mut json_records = Vec::new();
+        while let Some(dependent) = stream
+            .try_next()
+            .await
+            .into_diagnostic()
+            .context("failed to compute reverse dependencies")?
+        {
+            json_records.push(serde_json::json!({
+                "name": dependent.record.package_record.name.as_normalized(),
+                "version": dependent.record.package_record.version.to_string(),
+                "build": dependent.record.package_record.build,
+                "subdir": dependent.record.package_record.subdir,
+                "channel": dependent.record.channel,
+                "dependency": &dependent.dependency,
+                "kind": dependent.kind.to_string(),
+            }));
+        }
+        pb.finish_and_clear();
+        let json_str = serde_json::to_string_pretty(&json_records).into_diagnostic()?;
+        println!("{json_str}");
+        return Ok(());
+    }
+
+    // Group by package name, keeping the record with the highest version
+    // per package as the representative shown in the output. Only one
+    // record per package name is kept, so the memory held here is bounded
+    // by the number of distinct packages rather than by matching records.
+    let mut record_count = 0usize;
+    let mut grouped: IndexMap<String, (Dependent, usize)> = IndexMap::new();
+    while let Some(dependent) = stream
+        .try_next()
+        .await
+        .into_diagnostic()
+        .context("failed to compute reverse dependencies")?
+    {
+        record_count += 1;
+        let key = dependent.record.package_record.name.as_normalized();
+        if let Some((best, count)) = grouped.get_mut(key) {
+            *count += 1;
+            if dependent.record.package_record.version > best.record.package_record.version {
+                *best = dependent;
+            }
+        } else {
+            grouped.insert(key.to_string(), (dependent, 1));
+        }
+    }
+
+    pb.finish_and_clear();
+
+    if grouped.is_empty() {
+        println!(
+            "No packages found that depend on '{target_display}' in {:?}",
+            start.elapsed()
+        );
+        return Ok(());
+    }
+
+    grouped.sort_keys();
+
+    let total_packages = grouped.len();
+    println!(
+        "Found {} package{} ({} record{}) that depend{} on '{}' in {:?}\n",
+        total_packages,
+        if total_packages == 1 { "" } else { "s" },
+        record_count,
+        if record_count == 1 { "" } else { "s" },
+        if total_packages == 1 { "s" } else { "" },
+        target_display,
+        start.elapsed()
+    );
+
+    let limit = if opt.all { usize::MAX } else { opt.limit };
+    for (name, (dependent, package_record_count)) in grouped.iter().take(limit) {
+        let record = &dependent.record.package_record;
+        let kind = match &dependent.kind {
+            DependencyKind::Depends => "via".to_string(),
+            DependencyKind::Constrains => "via constraint".to_string(),
+            DependencyKind::ExtraDepends(extra) => format!("via extra '{extra}'"),
+            DependencyKind::RunExport(_) => "via run export".to_string(),
+        };
+        println!(
+            "  {} {} {} ({} {}){}",
+            console::style(name).bold().green(),
+            console::style(&record.version).cyan(),
+            record.build,
+            kind,
+            console::style(&dependent.dependency).dim(),
+            if *package_record_count > 1 {
+                format!(" and {} more record{}", package_record_count - 1, {
+                    if *package_record_count == 2 { "" } else { "s" }
+                })
+            } else {
+                String::new()
+            }
+        );
+    }
+
+    if total_packages > limit {
+        println!(
+            "\n... and {} more package{} (use --all to show all)",
+            total_packages - limit,
+            if total_packages - limit == 1 { "" } else { "s" }
+        );
+    }
+
+    Ok(())
+}

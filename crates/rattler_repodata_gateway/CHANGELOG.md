@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.4](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.33.3...rattler_repodata_gateway-v0.33.4) - 2026-09-08
+
+### Added
+
+- report removed packages from repodata gateway queries ([#2751](https://github.com/conda/rattler/pull/2751))
+
+### Fixed
+
+- Automatically disable sharded in whoneeds queries ([#2776](https://github.com/conda/rattler/pull/2776))
+
+## [0.33.3](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.33.2...rattler_repodata_gateway-v0.33.3) - 2026-09-04
+
+### Added
+
+- add repodata whoneeds for reverse dependency lookup ([#2738](https://github.com/conda/rattler/pull/2738))
+
+## [0.33.2](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.33.1...rattler_repodata_gateway-v0.33.2) - 2026-08-27
+
+### Other
+
+- updated the following local packages: rattler_redaction, rattler_package_streaming, rattler_conda_types, rattler_config, rattler_networking, rattler_cache
+
+## [0.33.1](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.33.0...rattler_repodata_gateway-v0.33.1) - 2026-08-26
+
+### Fixed
+
+- prefer newest repodata revision ([#2720](https://github.com/conda/rattler/pull/2720))
+
+### Other
+
+- rename CEP 146 to CEP 48 ([#2717](https://github.com/conda/rattler/pull/2717))
+
+## [0.33.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.32.1...rattler_repodata_gateway-v0.33.0) - 2026-08-21
+
+### Added
+
+- *(js)* support custom fetch and record queries in the gateway ([#2687](https://github.com/conda/rattler/pull/2687))
+- Accept sparse repodata in solve ([#2627](https://github.com/conda/rattler/pull/2627))
+- *(py)* expose pip injection for solve APIs ([#2677](https://github.com/conda/rattler/pull/2677))
+- add the CEP 48 repodata wire model ([#2669](https://github.com/conda/rattler/pull/2669))
+
+## [0.32.1](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.32.0...rattler_repodata_gateway-v0.32.1) - 2026-08-15
+
+### Fixed
+
+- honor max-age without public cache directive ([#2664](https://github.com/conda/rattler/pull/2664))
+
+## [0.32.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.31.0...rattler_repodata_gateway-v0.32.0) - 2026-08-11
+
+### Added
+
+- add CEP-6 channel notice support ([#2639](https://github.com/conda/rattler/pull/2639))
+
+### Fixed
+
+- *(repodata-gateway)* limit concurrent shard cache reads ([#2163](https://github.com/conda/rattler/pull/2163))
+- *(repodata_gateway)* test remote run_exports against a local server ([#2648](https://github.com/conda/rattler/pull/2648))
+- Failing test ([#2647](https://github.com/conda/rattler/pull/2647))
+
+## [0.31.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.30.1...rattler_repodata_gateway-v0.31.0) - 2026-07-24
+
+### Added
+
+- let callers restrict which candidates a solve may pick ([#2609](https://github.com/conda/rattler/pull/2609))
+
 ## [0.30.1](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.30.0...rattler_repodata_gateway-v0.30.1) - 2026-07-14
 
 ### Other
