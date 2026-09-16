@@ -5,7 +5,7 @@
 //! filesystem itself uses — the order defined by the Win32 `PrjFileNameCompare`
 //! API. If a provider returns entries in any other order (for example plain
 //! Rust `str`/UTF-8 byte order), `ProjFS`'s streaming enumeration can skip or
-//! mis-report entries: it walks the provider's list assuming it is already in
+//! miss-report entries: it walks the provider's list assuming it is already in
 //! `PrjFileNameCompare` order and stops matching as soon as that assumption is
 //! violated. See issue #2581.
 //!
