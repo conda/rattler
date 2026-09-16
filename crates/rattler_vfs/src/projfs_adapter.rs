@@ -386,7 +386,7 @@ unsafe extern "system" fn start_dir_enum_cb<T: VfsOps>(
         // entries streamed back from a directory enumeration to be sorted the
         // way the filesystem itself orders them (case-insensitive, ordinal over
         // UTF-16 code units) — NOT plain `str::cmp`/UTF-8 byte order. Returning
-        // them in the wrong order makes ProjFS skip or mis-report entries.
+        // them in the wrong order makes ProjFS skip or misreport entries.
         // See crate::projfs_name_compare and issue #2581.
         entries.sort_by(|a, b| crate::projfs_name_compare::prj_file_name_compare(&a.0, &b.0));
 
