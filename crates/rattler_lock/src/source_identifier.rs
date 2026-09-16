@@ -280,6 +280,7 @@ fn compute_source_hash(data: &CondaSourceData) -> u64 {
                 sha256: _,
                 size: _,
                 timestamp: _,
+                indexed_timestamp: _,
                 track_features: _,
             } = &**full;
 

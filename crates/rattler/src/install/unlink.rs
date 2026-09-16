@@ -272,7 +272,7 @@ mod tests {
             Vec::<RepoDataRecord>::new().into_iter(),
             None,
             None, // ignored packages
-            Platform::current(),
+            Platform::current().expect("host platform"),
         )
         .unwrap();
 
@@ -339,7 +339,7 @@ mod tests {
             Vec::<RepoDataRecord>::new().into_iter(),
             None,
             None, // ignored packages
-            Platform::current(),
+            Platform::current().expect("host platform"),
         )
         .unwrap();
 

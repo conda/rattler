@@ -36,9 +36,9 @@ pub struct Opt {
     #[clap(short, long, default_value = "conda-forge")]
     channels: Vec<String>,
 
-    /// Platform to search for
-    #[clap(short, long, default_value_t = Platform::current())]
-    platform: Platform,
+    /// Platform to search for. Defaults to the platform of the current host.
+    #[clap(short, long)]
+    platform: Option<Platform>,
 
     /// Maximum number of packages to display
     #[clap(long, default_value = "100")]
@@ -114,10 +114,8 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
 
     let (target, target_display) = resolve_target(&opt.package, &download_client).await?;
 
-    eprintln!(
-        "Searching for packages that depend on '{}' on {}",
-        target_display, opt.platform
-    );
+    let platform = opt.platform.map_or_else(crate::host_platform, Ok)?;
+    eprintln!("Searching for packages that depend on '{target_display}' on {platform}");
 
     // Determine the channels
     let channels = opt
@@ -143,7 +141,7 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
 
     let start = Instant::now();
     let mut stream = gateway
-        .who_needs(channels, [opt.platform, Platform::NoArch], target)
+        .who_needs(channels, [platform, Platform::NoArch], target)
         .stream();
 
     // All output modes reduce every dependent to something much smaller

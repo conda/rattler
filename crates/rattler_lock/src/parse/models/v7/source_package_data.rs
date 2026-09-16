@@ -161,6 +161,7 @@ impl<'a> SourcePackageDataModel<'a> {
                 attestations_sha256: None,
                 size: self.size.into_owned(),
                 timestamp: None,
+                indexed_timestamp: None,
                 track_features: self.track_features.into_owned(),
                 run_exports: Some(self.run_exports.into_owned()),
                 python_site_packages_path: self.python_site_packages_path.into_owned(),

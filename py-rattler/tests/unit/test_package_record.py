@@ -6,6 +6,16 @@ from pathlib import Path
 from rattler import Channel, NoArchType, PackageName, PackageRecord, RepoData, VersionWithSource
 
 
+def test_indexed_timestamp() -> None:
+    record = PackageRecord(name="x", version="1", build="0", build_number=0, subdir="linux-64")
+    assert record.indexed_timestamp is None
+    epoch = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+    record.indexed_timestamp = epoch
+    assert record.indexed_timestamp == epoch
+    record.indexed_timestamp = None
+    assert record.indexed_timestamp is None
+
+
 def test_platform_arch() -> None:
     record = PackageRecord(name="x", version="1", build="0", build_number=0, subdir="linux-64")
     assert record.platform == "linux"

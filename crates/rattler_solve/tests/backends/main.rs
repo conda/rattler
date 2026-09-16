@@ -140,6 +140,7 @@ impl PackageBuilder {
                     license: None,
                     license_family: None,
                     timestamp: None,
+                    indexed_timestamp: None,
                     legacy_bz2_size: None,
                     legacy_bz2_md5: None,
                     purls: None,

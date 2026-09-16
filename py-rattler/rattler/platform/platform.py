@@ -7,7 +7,6 @@ from rattler.platform.arch import Arch
 
 PlatformLiteral = Literal[
     "noarch",
-    "unknown",
     "linux-32",
     "linux-64",
     "linux-aarch64",
@@ -105,7 +104,9 @@ class Platform(metaclass=PlatformSingleton):
     @classmethod
     def current(cls) -> Platform:
         """
-        Returns the current platform.
+        Returns the platform of the current host.
+
+        Raises `RuntimeError` when the host is not a known conda platform.
         """
         return cls._from_py_platform(PyPlatform.current())
 
@@ -120,7 +121,7 @@ class Platform(metaclass=PlatformSingleton):
         >>> next(Platform.all())
         Platform(noarch)
         >>> len(list(Platform.all()))
-        33
+        32
         >>>
         """
         return (cls._from_py_platform(p) for p in PyPlatform.all())

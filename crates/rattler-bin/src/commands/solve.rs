@@ -49,7 +49,7 @@ pub struct Opt {
 pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
-    let platform = opt.solver.platform;
+    let platform = opt.solver.platform()?;
 
     // All progress information goes to stderr so that stdout only contains the
     // solved package set.
