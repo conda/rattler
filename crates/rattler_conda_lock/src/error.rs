@@ -330,21 +330,16 @@ impl Label {
     }
 }
 
-/// An [`ErrorKind`] with the locations it applies to.
+/// The locations a diagnostic applies to: a primary model path, any related
+/// paths, and the source text they resolve against once a document has been
+/// consulted.
 ///
-/// Errors raised from a model carry model paths only. Parsing a
-/// [`crate::Document`], or passing a model error through
-/// [`crate::Document::locate`], adds the source text and byte spans.
-pub type Error = Diagnostic<ErrorKind>;
-
-/// A typed diagnostic that can be located in a CEP-37 document.
-///
-/// Conversion layers reuse this envelope with their own kind, so a
-/// [`crate::Document`] can attach source spans to errors it knows nothing
-/// about; see [`crate::Document::locate`].
+/// This is the part of a diagnostic that does not depend on what went wrong,
+/// so conversion layers with their own error kind — such as
+/// `rattler_lock::conda_lock::CondaLockError` — can embed it directly instead
+/// of parameterizing over the kind; see [`crate::Document::locate`].
 #[derive(Clone, Debug)]
-pub struct Diagnostic<K> {
-    pub(crate) kind: K,
+pub struct Labels {
     pub(crate) labels: Vec<Label>,
     pub(crate) source: Option<Arc<str>>,
     pub(crate) name: Option<Arc<str>>,
@@ -352,11 +347,10 @@ pub struct Diagnostic<K> {
     pub(crate) diagnostic_source: Option<Arc<miette::NamedSource<Arc<str>>>>,
 }
 
-impl<K> Diagnostic<K> {
-    /// Construct a diagnostic at a model path, without source information.
-    pub fn new(path: impl Into<NodePath>, kind: K) -> Self {
+impl Labels {
+    /// Start from a primary model path, without source information.
+    pub fn new(path: impl Into<NodePath>) -> Self {
         Self {
-            kind,
             labels: vec![Label {
                 path: path.into(),
                 message: None,
@@ -380,29 +374,6 @@ impl<K> Diagnostic<K> {
         self
     }
 
-    /// What went wrong.
-    pub fn kind(&self) -> &K {
-        &self.kind
-    }
-
-    /// Take the classification, dropping the locations.
-    pub fn into_kind(self) -> K {
-        self.kind
-    }
-
-    /// Reclassify without losing locations or source context. Conversion layers
-    /// use this to wrap a lock-file error in their own kind.
-    pub fn map_kind<T>(self, map: impl FnOnce(K) -> T) -> Diagnostic<T> {
-        Diagnostic {
-            kind: map(self.kind),
-            labels: self.labels,
-            source: self.source,
-            name: self.name,
-            #[cfg(feature = "miette")]
-            diagnostic_source: self.diagnostic_source,
-        }
-    }
-
     /// The primary model path. The root path denotes the whole document.
     pub fn path(&self) -> &NodePath {
         &self.labels[0].path
@@ -418,7 +389,7 @@ impl<K> Diagnostic<K> {
         self.labels[0].span.clone()
     }
 
-    /// Original YAML text, if this diagnostic has document context.
+    /// Original YAML text, if these labels have document context.
     pub fn source_text(&self) -> Option<&str> {
         self.source.as_deref()
     }
@@ -426,6 +397,50 @@ impl<K> Diagnostic<K> {
     /// Original file name, if the document was read from a path.
     pub fn source_name(&self) -> Option<&str> {
         self.name.as_deref()
+    }
+
+    /// Write the `file: path: ` prefix that precedes a diagnostic message, so
+    /// that every diagnostic carrying these labels renders the same way.
+    pub fn write_prefix(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(name) = self.source_name() {
+            write!(f, "{name}: ")?;
+        }
+        if !self.path().is_root() {
+            write!(f, "{}: ", self.path())?;
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "miette")]
+    pub(crate) fn source_code(&self) -> Option<&dyn miette::SourceCode> {
+        self.diagnostic_source
+            .as_deref()
+            .map(|source| source as &dyn miette::SourceCode)
+    }
+
+    /// The labels as miette spans, with `primary` explaining the primary label.
+    #[cfg(feature = "miette")]
+    pub(crate) fn spans(
+        &self,
+        primary: &dyn fmt::Display,
+    ) -> Box<dyn Iterator<Item = miette::LabeledSpan> + '_> {
+        let primary = primary.to_string();
+        Box::new(self.labels.iter().filter_map(move |label| {
+            let message = label.message.map_or_else(|| primary.clone(), str::to_owned);
+            label
+                .span
+                .clone()
+                .map(|span| miette::LabeledSpan::new_with_span(Some(message), span))
+        }))
+    }
+
+    /// Render these labels as a [`Report`] under the given message, for a
+    /// caller whose own error kind does not implement `miette::Diagnostic`.
+    pub fn report(&self, message: impl fmt::Display) -> Report {
+        Report {
+            message: message.to_string(),
+            labels: self.clone(),
+        }
     }
 
     pub(crate) fn with_primary_span(mut self, span: Option<Range<usize>>) -> Self {
@@ -453,36 +468,139 @@ impl<K> Diagnostic<K> {
     }
 }
 
-impl<K: fmt::Display> fmt::Display for Diagnostic<K> {
+/// A validation or parse failure: an [`ErrorKind`] plus the locations it
+/// applies to.
+///
+/// Errors raised from a model carry model paths only. Parsing a
+/// [`crate::Document`], or passing a model error through
+/// [`crate::Document::locate`], adds the source text and byte spans.
+#[derive(Clone, Debug)]
+pub struct Error {
+    pub(crate) kind: ErrorKind,
+    pub(crate) labels: Labels,
+}
+
+impl Error {
+    /// Construct an error at a model path, without source information.
+    pub fn new(path: impl Into<NodePath>, kind: ErrorKind) -> Self {
+        Self {
+            kind,
+            labels: Labels::new(path),
+        }
+    }
+
+    /// Add a related model path, for example the first of two duplicate entries.
+    #[must_use]
+    pub fn with_related_path(mut self, path: impl Into<NodePath>, message: &'static str) -> Self {
+        self.labels = self.labels.with_related_path(path, message);
+        self
+    }
+
+    /// What went wrong.
+    pub fn kind(&self) -> &ErrorKind {
+        &self.kind
+    }
+
+    /// Split into the classification and its locations, for conversion layers
+    /// that reclassify this error under their own kind while keeping its
+    /// labels; see `rattler_lock::conda_lock::CondaLockError`.
+    pub fn into_parts(self) -> (ErrorKind, Labels) {
+        (self.kind, self.labels)
+    }
+
+    /// The primary model path. The root path denotes the whole document.
+    pub fn path(&self) -> &NodePath {
+        self.labels.path()
+    }
+
+    /// Primary and related labels, the primary one first.
+    pub fn labels(&self) -> &[Label] {
+        self.labels.labels()
+    }
+
+    /// The span of the primary label, if source context is available.
+    pub fn span(&self) -> Option<Range<usize>> {
+        self.labels.span()
+    }
+
+    /// Original YAML text, if this diagnostic has document context.
+    pub fn source_text(&self) -> Option<&str> {
+        self.labels.source_text()
+    }
+
+    /// Original file name, if the document was read from a path.
+    pub fn source_name(&self) -> Option<&str> {
+        self.labels.source_name()
+    }
+
+    /// Render this error as a [`Report`], the way it renders through
+    /// `miette::Diagnostic` for the `miette` feature, without requiring that
+    /// feature at the call site.
+    pub fn report(&self) -> Report {
+        self.labels.report(&self.kind)
+    }
+
+    pub(crate) fn with_primary_span(mut self, span: Option<Range<usize>>) -> Self {
+        self.labels = self.labels.with_primary_span(span);
+        self
+    }
+
+    pub(crate) fn with_related_span(mut self, span: Option<Range<usize>>) -> Self {
+        self.labels = self.labels.with_related_span(span);
+        self
+    }
+
+    pub(crate) fn attach_source(&mut self, source: Arc<str>, name: Option<Arc<str>>) {
+        self.labels.attach_source(source, name);
+    }
+}
+
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(name) = self.source_name() {
-            write!(f, "{name}: ")?;
-        }
-        if !self.path().is_root() {
-            write!(f, "{}: ", self.path())?;
-        }
+        self.labels.write_prefix(f)?;
         write!(f, "{}", self.kind)
     }
 }
 
-impl<K: fmt::Display + fmt::Debug> std::error::Error for Diagnostic<K> {}
+impl std::error::Error for Error {}
 
 #[cfg(feature = "miette")]
-impl<K: fmt::Display + fmt::Debug> miette::Diagnostic for Diagnostic<K> {
+impl miette::Diagnostic for Error {
     fn source_code(&self) -> Option<&dyn miette::SourceCode> {
-        self.diagnostic_source
-            .as_deref()
-            .map(|source| source as &dyn miette::SourceCode)
+        self.labels.source_code()
     }
 
     fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
-        let primary = self.kind.to_string();
-        Some(Box::new(self.labels.iter().filter_map(move |label| {
-            let message = label.message.map_or_else(|| primary.clone(), str::to_owned);
-            label
-                .span
-                .clone()
-                .map(|span| miette::LabeledSpan::new_with_span(Some(message), span))
-        })))
+        Some(self.labels.spans(&self.kind))
+    }
+}
+
+/// A message plus [`Labels`], for callers whose own error kind does not
+/// implement `miette::Diagnostic` — for example `rattler_lock`, which has no
+/// `miette` dependency of its own and asks [`Labels::report`] or
+/// [`Error::report`] for one instead.
+#[derive(Clone, Debug)]
+pub struct Report {
+    message: String,
+    labels: Labels,
+}
+
+impl fmt::Display for Report {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.labels.write_prefix(f)?;
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for Report {}
+
+#[cfg(feature = "miette")]
+impl miette::Diagnostic for Report {
+    fn source_code(&self) -> Option<&dyn miette::SourceCode> {
+        self.labels.source_code()
+    }
+
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
+        Some(self.labels.spans(&self.message))
     }
 }

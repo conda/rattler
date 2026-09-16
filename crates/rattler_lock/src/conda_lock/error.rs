@@ -1,65 +1,88 @@
 //! Typed conversion diagnostics.
 
-use std::{fmt, ops::Deref};
+use std::fmt;
 
-use rattler_conda_lock::{Diagnostic, ErrorKind, NodePath};
+use rattler_conda_lock::{ErrorKind, Label, Labels, NodePath, Report};
 
 /// A conversion failure: a [`CondaLockErrorKind`] plus the CEP-37 model paths it
 /// applies to, and the source spans of those paths when the conversion started
 /// from a [`rattler_conda_lock::Document`].
-///
-/// Dereferences to the underlying [`Diagnostic`] for its labels, paths and
-/// source text.
 #[derive(Debug)]
-pub struct CondaLockError(Box<Diagnostic<CondaLockErrorKind>>);
+pub struct CondaLockError {
+    kind: CondaLockErrorKind,
+    labels: Labels,
+}
 
 impl CondaLockError {
     /// Construct a conversion error at a CEP-37 model path.
     pub fn new(path: impl Into<NodePath>, kind: CondaLockErrorKind) -> Self {
-        Self(Box::new(Diagnostic::new(path, kind)))
+        Self {
+            kind,
+            labels: Labels::new(path),
+        }
     }
 
     /// Add a related model path, for example the package a conflict came from.
     #[must_use]
-    pub fn with_related_path(self, path: impl Into<NodePath>, message: &'static str) -> Self {
-        Self(Box::new((*self.0).with_related_path(path, message)))
+    pub fn with_related_path(mut self, path: impl Into<NodePath>, message: &'static str) -> Self {
+        self.labels = self.labels.with_related_path(path, message);
+        self
     }
 
-    /// The underlying diagnostic, for example to render it with miette or to
-    /// pass it to [`rattler_conda_lock::Document::locate`].
-    pub fn into_diagnostic(self) -> Diagnostic<CondaLockErrorKind> {
-        *self.0
+    /// What went wrong.
+    pub fn kind(&self) -> &CondaLockErrorKind {
+        &self.kind
     }
-}
 
-impl Deref for CondaLockError {
-    type Target = Diagnostic<CondaLockErrorKind>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
+    /// The primary model path. The root path denotes the whole document.
+    pub fn path(&self) -> &NodePath {
+        self.labels.path()
     }
-}
 
-impl From<Diagnostic<CondaLockErrorKind>> for CondaLockError {
-    fn from(diagnostic: Diagnostic<CondaLockErrorKind>) -> Self {
-        Self(Box::new(diagnostic))
+    /// Primary and related labels, the primary one first.
+    pub fn labels(&self) -> &[Label] {
+        self.labels.labels()
+    }
+
+    /// The span of the primary label, if source context is available.
+    pub fn span(&self) -> Option<std::ops::Range<usize>> {
+        self.labels.span()
+    }
+
+    /// Render this error as a `miette` report, the way [`Document::locate`]
+    /// located errors from `rattler_conda_lock` render under its `miette`
+    /// feature.
+    ///
+    /// [`Document::locate`]: rattler_conda_lock::Document::locate
+    pub fn report(&self) -> Report {
+        self.labels.report(&self.kind)
+    }
+
+    pub(crate) fn labels_mut(&mut self) -> &mut Labels {
+        &mut self.labels
     }
 }
 
 impl From<rattler_conda_lock::Error> for CondaLockError {
     fn from(error: rattler_conda_lock::Error) -> Self {
-        Self(Box::new(error.map_kind(CondaLockErrorKind::LockFile)))
+        let (kind, labels) = error.into_parts();
+        Self {
+            kind: CondaLockErrorKind::LockFile(kind),
+            labels,
+        }
     }
 }
 
 impl fmt::Display for CondaLockError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.0, f)
+        self.labels.write_prefix(f)?;
+        write!(f, "{}", self.kind)
     }
 }
 
 impl std::error::Error for CondaLockError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.0.kind().source()
+        self.kind.source()
     }
 }
 
@@ -114,7 +137,7 @@ pub enum CondaLockErrorKind {
 
     /// The pixi lock-file builder rejected the imported data.
     #[error("cannot build a pixi lock file from this CEP-37 lock file")]
-    Builder(#[source] crate::ParseCondaLockError),
+    Builder(#[source] Box<crate::ParseCondaLockError>),
 
     /// Two selected categories hold different packages under one name, so the
     /// destination environment cannot contain both.
@@ -178,7 +201,7 @@ pub enum CondaLockErrorKind {
 
     /// A dependency is not a valid PEP 508 requirement.
     #[error("invalid Python requirement")]
-    InvalidRequirement(#[source] pep508_rs::Pep508Error),
+    InvalidRequirement(#[source] Box<pep508_rs::Pep508Error>),
 
     /// A dependency is not a valid conda `MatchSpec`.
     #[error("invalid conda dependency")]

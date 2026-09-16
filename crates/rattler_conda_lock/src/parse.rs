@@ -152,7 +152,7 @@ pub(crate) fn parse(source: &str) -> Result<(LockFile, SourceMap), Error> {
     let mut spans = SourceMap::new();
     index_spans(&raw, NodePath::root(), None, None, &mut spans)?;
     let lock_file = Parser { source }.lock_file(raw).map_err(|mut error| {
-        locate_labels(&mut error, &spans);
+        locate_labels(&mut error.labels, &spans);
         error
     })?;
     Ok((lock_file, spans))
@@ -473,10 +473,11 @@ mod tests {
             )
             .replace('\n', "\r\n");
         let document = Document::parse(&source).unwrap();
-        let error = document.locate(Error::new(
+        let mut error = Error::new(
             "metadata.custom_metadata.clé.with.dots",
             ErrorKind::InvalidUrl,
-        ));
+        );
+        document.locate(&mut error.labels);
         assert_eq!(&source[error.span().unwrap()], "héllo");
         let key = document
             .key_span("metadata.custom_metadata.clé.with.dots")
@@ -491,10 +492,8 @@ mod tests {
             "  sources: []\n  custom_metadata:\n    original: &value héllo\n    copied: *value",
         );
         let document = Document::parse(&source).unwrap();
-        let error = document.locate(Error::new(
-            "metadata.custom_metadata.copied",
-            ErrorKind::InvalidUrl,
-        ));
+        let mut error = Error::new("metadata.custom_metadata.copied", ErrorKind::InvalidUrl);
+        document.locate(&mut error.labels);
         assert_eq!(&source[error.span().unwrap()], "*value");
         assert!(
             error

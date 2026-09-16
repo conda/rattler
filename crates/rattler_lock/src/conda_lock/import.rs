@@ -74,8 +74,10 @@ impl LockFile {
         document: &Document,
         options: &ImportOptions,
     ) -> Result<Self, CondaLockError> {
-        import(document.lock_file(), options)
-            .map_err(|error| document.locate(error.into_diagnostic()).into())
+        import(document.lock_file(), options).map_err(|mut error| {
+            document.locate(error.labels_mut());
+            error
+        })
     }
 }
 
@@ -137,7 +139,10 @@ fn import(lock_file: &CepLockFile, options: &ImportOptions) -> Result<LockFile, 
     let mut builder = LockFile::builder()
         .with_platforms(platforms)
         .map_err(|error| {
-            CondaLockError::new(platforms_path.clone(), CondaLockErrorKind::Builder(error))
+            CondaLockError::new(
+                platforms_path.clone(),
+                CondaLockErrorKind::Builder(Box::new(error)),
+            )
         })?;
     let packages_path = NodePath::root().field("package");
     // The builder merges packages by artifact identity. Reject divergent records
@@ -152,7 +157,7 @@ fn import(lock_file: &CepLockFile, options: &ImportOptions) -> Result<LockFile, 
                 .map_err(|error| {
                     CondaLockError::new(
                         platforms_path.index(index),
-                        CondaLockErrorKind::Builder(error),
+                        CondaLockErrorKind::Builder(Box::new(error)),
                     )
                 })?;
         }
@@ -208,7 +213,7 @@ fn import(lock_file: &CepLockFile, options: &ImportOptions) -> Result<LockFile, 
             builder
                 .add_package(environment, &package.platform, converted)
                 .map_err(|error| {
-                    CondaLockError::new(path.clone(), CondaLockErrorKind::Builder(error))
+                    CondaLockError::new(path.clone(), CondaLockErrorKind::Builder(Box::new(error)))
                 })?;
         }
     }
@@ -381,7 +386,7 @@ fn convert(package: &Package, path: &NodePath) -> Result<LockedPackage, CondaLoc
                     Requirement::from_str(&format!("{name}{constraint}")).map_err(|error| {
                         CondaLockError::new(
                             dependency_path.clone(),
-                            CondaLockErrorKind::InvalidRequirement(error),
+                            CondaLockErrorKind::InvalidRequirement(Box::new(error)),
                         )
                     })?;
                 let dependency = python_spec(&requirement, &dependency_path)?;

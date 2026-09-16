@@ -91,7 +91,7 @@ mod serialize;
 mod validation;
 
 pub use document::Document;
-pub use error::{Diagnostic, Error, ErrorKind, Label, NodePath, ValueKind};
+pub use error::{Error, ErrorKind, Label, Labels, NodePath, Report, ValueKind};
 pub use model::{
     Channel, GitMetadata, Hashes, LockFile, Manager, Metadata, Package, PackageIdentity,
     PackageSource, TimeMetadata,

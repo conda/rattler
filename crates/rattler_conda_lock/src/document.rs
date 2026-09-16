@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, ops::Range, path::Path, str::FromStr, sync::Arc};
 
-use crate::error::{Diagnostic, ErrorKind, Label, NodePath};
+use crate::error::{ErrorKind, Label, Labels, NodePath};
 use crate::{Error, LockFile};
 
 #[derive(Clone, Debug)]
@@ -88,7 +88,7 @@ impl Document {
                     error: Arc::new(error),
                 },
             );
-            error.name = Some(name.clone());
+            error.labels.name = Some(name.clone());
             error
         })?;
         Self::parse_named(Arc::from(source), Some(name))
@@ -105,10 +105,10 @@ impl Document {
             name,
             spans,
         };
-        document
-            .lock_file
-            .validate()
-            .map_err(|error| document.locate(error))?;
+        document.lock_file.validate().map_err(|mut error| {
+            document.locate(&mut error.labels);
+            error
+        })?;
         Ok(document)
     }
 
@@ -158,34 +158,27 @@ impl Document {
     /// missing field still points at the mapping that lacks it.
     ///
     /// ```
-    /// use rattler_conda_lock::{Diagnostic, Document};
-    ///
-    /// // A caller-defined kind: this crate never reads the input files, so it
-    /// // cannot raise this error itself.
-    /// #[derive(Debug, thiserror::Error)]
-    /// #[error("input file is no longer present")]
-    /// struct MissingInput;
+    /// use rattler_conda_lock::{Document, Labels};
     ///
     /// # let source = "metadata:\n  content_hash: {}\n  channels: []\n  platforms: []\n  sources: [environment.yml]\npackage: []\n";
     /// let document = Document::parse(source)?;
     ///
-    /// let error = Diagnostic::new("metadata.sources[0]", MissingInput);
-    /// assert!(error.span().is_none());
+    /// let mut labels = Labels::new("metadata.sources[0]");
+    /// assert!(labels.span().is_none());
     ///
-    /// let error = document.locate(error);
-    /// assert_eq!(&source[error.span().unwrap()], "environment.yml");
+    /// document.locate(&mut labels);
+    /// assert_eq!(&source[labels.span().unwrap()], "environment.yml");
     /// # Ok::<(), rattler_conda_lock::Error>(())
     /// ```
-    pub fn locate<K>(&self, mut error: Diagnostic<K>) -> Diagnostic<K> {
-        locate_labels(&mut error, &self.spans);
-        error.attach_source(self.source.clone(), self.name.clone());
-        error
+    pub fn locate(&self, labels: &mut Labels) {
+        locate_labels(labels, &self.spans);
+        labels.attach_source(self.source.clone(), self.name.clone());
     }
 }
 
-pub(crate) fn locate_labels<K>(error: &mut Diagnostic<K>, spans: &SourceMap) {
+pub(crate) fn locate_labels(labels: &mut Labels, spans: &SourceMap) {
     let mut definitions = Vec::new();
-    for label in &mut error.labels {
+    for label in &mut labels.labels {
         if label.span.is_some() {
             continue;
         }
@@ -236,7 +229,7 @@ pub(crate) fn locate_labels<K>(error: &mut Diagnostic<K>, spans: &SourceMap) {
             }
         }
     }
-    error.labels.extend(definitions);
+    labels.labels.extend(definitions);
 }
 
 impl FromStr for LockFile {

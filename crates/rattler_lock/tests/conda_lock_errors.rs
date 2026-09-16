@@ -65,7 +65,7 @@ fn report(case: &str, source: &str, options: &ImportOptions) -> String {
     writeln!(out, "kind: {:?}", error.kind()).unwrap();
     GraphicalReportHandler::new_themed(GraphicalTheme::unicode_nocolor())
         .with_width(100)
-        .render_report(&mut out, &error.into_diagnostic())
+        .render_report(&mut out, &error.report())
         .unwrap();
     out
 }
