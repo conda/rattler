@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from rattler.config import Config
 from rattler.networking.middleware import (
     AddHeadersMiddleware,
     AuthenticationMiddleware,
@@ -47,9 +48,9 @@ class Client:
         """
         Construct py-rattler Client from PyClientWithMiddleware FFI object.
         """
-        client = cls.__new__(cls)
-        client._client = client
-        return client
+        instance = cls.__new__(cls)
+        instance._client = client
+        return instance
 
     def __repr__(self) -> str:
         """
@@ -101,6 +102,41 @@ class Client:
             headers=headers,
             user_agent=user_agent,
             timeout=timeout,
+        )
+
+    @staticmethod
+    def from_config(
+        config: Config,
+        max_retries: int = 3,
+        headers: dict[str, str] | None = None,
+        user_agent: str | None = None,
+        timeout: int | None = None,
+    ) -> Client:
+        """Build the standard client using networking settings from ``config``.
+
+        This applies certificate verification, HTTP/HTTPS proxies,
+        ``authentication-override-file``, mirrors, and per-bucket S3 options.
+        Explicit client options such as ``headers`` and ``timeout`` remain
+        available to the caller.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import Config
+        >>> client = Client.from_config(Config.from_toml("tls-no-verify = true"))
+        >>> client
+        Client()
+        >>>
+        ```
+        """
+        return Client._from_ffi_object(
+            PyClientWithMiddleware.from_config(
+                config._inner,
+                max_retries,
+                headers,
+                user_agent,
+                timeout,
+            )
         )
 
     @staticmethod

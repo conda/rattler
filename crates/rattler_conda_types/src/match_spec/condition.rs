@@ -9,6 +9,8 @@ use nom::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::ParseMatchSpecOptions;
+use crate::match_spec::format::{DisplayStyle, FormatError};
 use crate::match_spec::parse::matchspec_parser;
 
 /// Represents a condition in a match spec, which can be a match spec itself or a logical combination
@@ -24,11 +26,9 @@ pub enum MatchSpecCondition {
 
 impl Display for MatchSpecCondition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            MatchSpecCondition::MatchSpec(ms) => ms.fmt_in_condition(f),
-            MatchSpecCondition::And(lhs, rhs) => write!(f, "({lhs} and {rhs})"),
-            MatchSpecCondition::Or(lhs, rhs) => write!(f, "({lhs} or {rhs})"),
-        }
+        // The legacy dialect cannot fail; see `MatchSpecCondition::fmt_with`.
+        self.fmt_with(f, DisplayStyle::Legacy)
+            .map_err(FormatError::into_fmt_error)
     }
 }
 
@@ -37,80 +37,69 @@ fn ws(input: &str) -> IResult<&str, &str> {
     multispace0(input)
 }
 
-/// Check if the word-boundary delimiter `word` starts at byte position `pos` in `input`.
-/// A word boundary means the character before (if any) and after (if any) must be
-/// whitespace or a parenthesis.
-fn check_word_delimiter(input: &str, pos: usize, word: &str) -> bool {
-    let bytes = input.as_bytes();
-    // Check that the word actually matches at this position
-    if !input[pos..].starts_with(word) {
+/// Checks whether `word` starts at a condition-token boundary.
+fn check_word_delimiter(input: &str, position: usize, word: &str) -> bool {
+    let Some(remainder) = input.get(position..) else {
+        return false;
+    };
+    if !remainder.starts_with(word) {
         return false;
     }
-    let before_ok = pos == 0 || {
-        let b = bytes[pos - 1];
-        b.is_ascii_whitespace() || b == b'(' || b == b')'
-    };
-    let after_pos = pos + word.len();
-    let after_ok = after_pos >= bytes.len() || {
-        let b = bytes[after_pos];
-        b.is_ascii_whitespace() || b == b'(' || b == b')'
-    };
-    before_ok && after_ok
+
+    input[..position]
+        .chars()
+        .next_back()
+        .is_none_or(|character| character.is_whitespace() || matches!(character, '(' | ')'))
+        && remainder[word.len()..]
+            .chars()
+            .next()
+            .is_none_or(|character| character.is_whitespace() || matches!(character, '(' | ')'))
 }
 
-// Parse a matchspec by consuming until we hit a delimiter.
-// Correctly skips delimiters inside quoted strings and brackets.
+/// Consumes one `MatchSpec` leaf without splitting logical words inside quoted
+/// bracket fields. Iterating over characters keeps UTF-8 boundaries valid.
 fn matchspec_token(input: &str) -> IResult<&str, &str> {
-    let bytes = input.as_bytes();
-    let mut i = 0;
-    let mut bracket_depth: u32 = 0;
-    let mut in_double_quote = false;
-    let mut in_single_quote = false;
+    let mut characters = input.char_indices().peekable();
+    let mut end = input.len();
+    let mut bracket_depth = 0_u32;
+    let mut quote = None;
 
-    while i < bytes.len() {
-        let b = bytes[i];
-        match b {
-            b'\\' if in_double_quote || in_single_quote => {
-                // Skip the escaped character
-                i += 2;
-                continue;
+    while let Some((position, character)) = characters.next() {
+        if let Some(quote_character) = quote {
+            match character {
+                '\\' if characters.next().is_none() => {
+                    return Err(nom::Err::Error(nom::error::Error::new(
+                        input,
+                        nom::error::ErrorKind::Escaped,
+                    )));
+                }
+                '\\' => {}
+                character if character == quote_character => quote = None,
+                _ => {}
             }
-            b'"' if !in_single_quote => {
-                in_double_quote = !in_double_quote;
-            }
-            b'\'' if !in_double_quote => {
-                in_single_quote = !in_single_quote;
-            }
-            b'[' if !in_double_quote && !in_single_quote => {
-                bracket_depth += 1;
-            }
-            b']' if !in_double_quote && !in_single_quote => {
-                bracket_depth = bracket_depth.saturating_sub(1);
-            }
-            b'(' | b')' if !in_double_quote && !in_single_quote && bracket_depth == 0 => {
+            continue;
+        }
+
+        match character {
+            '\'' | '"' if bracket_depth > 0 => quote = Some(character),
+            '[' => bracket_depth += 1,
+            ']' => bracket_depth = bracket_depth.saturating_sub(1),
+            '(' | ')' if bracket_depth == 0 => {
+                end = position;
                 break;
             }
-            _ if !in_double_quote
-                && !in_single_quote
-                && bracket_depth == 0
-                && (check_word_delimiter(input, i, "and")
-                    || check_word_delimiter(input, i, "or")) =>
+            _ if bracket_depth == 0
+                && (check_word_delimiter(input, position, "and")
+                    || check_word_delimiter(input, position, "or")) =>
             {
+                end = position;
                 break;
             }
             _ => {}
         }
-        i += 1;
     }
 
-    if i == 0 {
-        return Err(nom::Err::Error(nom::error::Error::new(
-            input,
-            nom::error::ErrorKind::TakeUntil,
-        )));
-    }
-
-    let token = input[..i].trim();
+    let token = input[..end].trim();
     if token.is_empty() {
         return Err(nom::Err::Error(nom::error::Error::new(
             input,
@@ -118,14 +107,15 @@ fn matchspec_token(input: &str) -> IResult<&str, &str> {
         )));
     }
 
-    Ok((&input[i..], token))
+    Ok((&input[end..], token))
 }
 
-// Parse a matchspec
-fn matchspec(input: &str) -> IResult<&str, MatchSpecCondition> {
+fn matchspec(input: &str, options: ParseMatchSpecOptions) -> IResult<&str, MatchSpecCondition> {
     let (remaining, matchspec_str) = matchspec_token(input)?;
+    let mut leaf_options = options;
+    leaf_options.set_conditionals(false);
 
-    match matchspec_parser(matchspec_str, crate::ParseStrictness::Strict.into()) {
+    match matchspec_parser(matchspec_str, leaf_options) {
         Ok(parsed_matchspec) => Ok((
             remaining,
             MatchSpecCondition::MatchSpec(Box::new(parsed_matchspec)),
@@ -137,21 +127,35 @@ fn matchspec(input: &str) -> IResult<&str, MatchSpecCondition> {
     }
 }
 
-// Parse parenthesized condition
-fn parenthesized_condition(input: &str) -> IResult<&str, MatchSpecCondition> {
-    delimited((char('('), ws), parse_condition, (ws, char(')'))).parse(input)
+fn parenthesized_condition(
+    input: &str,
+    options: ParseMatchSpecOptions,
+) -> IResult<&str, MatchSpecCondition> {
+    delimited(
+        (char('('), ws),
+        |input| parse_condition_with_options(input, options),
+        (ws, char(')')),
+    )
+    .parse(input)
 }
 
-// Parse primary condition (matchspec or parenthesized)
-fn primary_condition(input: &str) -> IResult<&str, MatchSpecCondition> {
-    alt((parenthesized_condition, matchspec)).parse(input)
+fn primary_condition(
+    input: &str,
+    options: ParseMatchSpecOptions,
+) -> IResult<&str, MatchSpecCondition> {
+    alt((
+        |input| parenthesized_condition(input, options),
+        |input| matchspec(input, options),
+    ))
+    .parse(input)
 }
 
-// Parse AND expressions (higher precedence)
-fn and_condition(input: &str) -> IResult<&str, MatchSpecCondition> {
-    let (input, first) = primary_condition(input)?;
-    let (input, rest) =
-        nom::multi::many0(preceded((ws, tag("and"), ws), primary_condition)).parse(input)?;
+fn and_condition(input: &str, options: ParseMatchSpecOptions) -> IResult<&str, MatchSpecCondition> {
+    let (input, first) = primary_condition(input, options)?;
+    let (input, rest) = nom::multi::many0(preceded((ws, tag("and"), ws), |input| {
+        primary_condition(input, options)
+    }))
+    .parse(input)?;
 
     Ok((
         input,
@@ -161,11 +165,12 @@ fn and_condition(input: &str) -> IResult<&str, MatchSpecCondition> {
     ))
 }
 
-// Parse OR expressions (lower precedence)
-fn or_condition(input: &str) -> IResult<&str, MatchSpecCondition> {
-    let (input, first) = and_condition(input)?;
-    let (input, rest) =
-        nom::multi::many0(preceded((ws, tag("or"), ws), and_condition)).parse(input)?;
+fn or_condition(input: &str, options: ParseMatchSpecOptions) -> IResult<&str, MatchSpecCondition> {
+    let (input, first) = and_condition(input, options)?;
+    let (input, rest) = nom::multi::many0(preceded((ws, tag("or"), ws), |input| {
+        and_condition(input, options)
+    }))
+    .parse(input)?;
 
     Ok((
         input,
@@ -175,9 +180,16 @@ fn or_condition(input: &str) -> IResult<&str, MatchSpecCondition> {
     ))
 }
 
-// Parse the main condition
+pub(crate) fn parse_condition_with_options(
+    input: &str,
+    options: ParseMatchSpecOptions,
+) -> IResult<&str, MatchSpecCondition> {
+    or_condition(input, options)
+}
+
+#[cfg(test)]
 pub(crate) fn parse_condition(input: &str) -> IResult<&str, MatchSpecCondition> {
-    or_condition(input)
+    parse_condition_with_options(input, ParseMatchSpecOptions::strict())
 }
 
 #[cfg(test)]
