@@ -3,37 +3,81 @@ source: crates/rattler_lock/tests/conda_lock_errors.rs
 expression: all
 ---
 # package built from a source location
-kind:    SourcePackage
-display: package[1].source: source builds cannot be imported as immutable artifacts
-label:   package[1].source [<primary>] "source"
+kind: SourcePackage
+  × package[1].source: source builds cannot be imported as immutable artifacts
+    ╭─[conda-lock.yml:26:5]
+ 25 │       sha256: 3f07f990ac74f1e1691ba17ef8c14007f05846ab
+ 26 │     source:
+    ·     ───┬──
+    ·        ╰── source builds cannot be imported as immutable artifacts
+ 27 │       type: url
+    ╰────
 
 # url that is not a fetchable artifact
-kind:    NotAnArtifactUrl
-display: package[1].url: expected a direct artifact URL, not a source or local path
-label:   package[1].url [<primary>] "git+https://github.com/psf/requests.git"
+kind: NotAnArtifactUrl
+  × package[1].url: expected a direct artifact URL, not a source or local path
+    ╭─[conda-lock.yml:23:10]
+ 22 │     platform: linux-64
+ 23 │     url: git+https://github.com/psf/requests.git
+    ·          ───────────────────┬───────────────────
+    ·                             ╰── expected a direct artifact URL, not a source or local path
+ 24 │     hash:
+    ╰────
 
 # url that only survives normalization
-kind:    UnnormalizedUrl
-display: package[1].url: conda artifact URL cannot be preserved without URL normalization
-label:   package[1].url [<primary>] "https://Conda.Anaconda.org/conda-forge/linux-64/numpy-2.1.0-py312_0.conda"
+kind: UnnormalizedUrl
+  × package[1].url: conda artifact URL cannot be preserved without URL normalization
+    ╭─[conda-lock.yml:23:10]
+ 22 │     platform: linux-64
+ 23 │     url: https://Conda.Anaconda.org/conda-forge/linux-64/numpy-2.1.0-py312_0.conda
+    ·          ────────────────────────────────────┬────────────────────────────────────
+    ·                                              ╰── conda artifact URL cannot be preserved without URL normalization
+ 24 │     hash:
+    ╰────
 
 # url without an artifact file name
-kind:    MissingFileName
-display: package[1].url: expected a conda archive filename
-label:   package[1].url [<primary>] "https://conda.anaconda.org/conda-forge/linux-64/"
+kind: MissingFileName
+  × package[1].url: expected a conda archive filename
+    ╭─[conda-lock.yml:23:10]
+ 22 │     platform: linux-64
+ 23 │     url: https://conda.anaconda.org/conda-forge/linux-64/
+    ·          ────────────────────────┬───────────────────────
+    ·                                  ╰── expected a conda archive filename
+ 24 │     hash:
+    ╰────
 
 # url without a parsable archive name
-kind:    MissingFileName
-display: package[1].url: expected a conda archive filename
-label:   package[1].url [<primary>] "https://conda.anaconda.org/conda-forge/linux-64/numpy.conda"
+kind: MissingFileName
+  × package[1].url: expected a conda archive filename
+    ╭─[conda-lock.yml:23:10]
+ 22 │     platform: linux-64
+ 23 │     url: https://conda.anaconda.org/conda-forge/linux-64/numpy.conda
+    ·          ─────────────────────────────┬─────────────────────────────
+    ·                                       ╰── expected a conda archive filename
+ 24 │     hash:
+    ╰────
 
 # artifact subdir disagrees with the target
-kind:    SubdirMismatch
-display: package[1].url: artifact subdir disagrees with the selected platform
-label:   package[1].url [<primary>] "https://conda.anaconda.org/conda-forge/osx-64/numpy-2.1.0-py312_0.conda"
-label:   package[1].platform [selected platform] "linux-64"
+kind: SubdirMismatch
+  × package[1].url: artifact subdir disagrees with the selected platform
+    ╭─[conda-lock.yml:22:15]
+ 21 │     manager: conda
+ 22 │     platform: linux-64
+    ·               ────┬───
+    ·                   ╰── selected platform
+ 23 │     url: https://conda.anaconda.org/conda-forge/osx-64/numpy-2.1.0-py312_0.conda
+    ·          ───────────────────────────────────┬───────────────────────────────────
+    ·                                             ╰── artifact subdir disagrees with the selected platform
+ 24 │     hash:
+    ╰────
 
 # conda build string on a python artifact
-kind:    PythonBuildString
-display: package[1].build: Python artifacts cannot carry a conda build string
-label:   package[1].build [<primary>] "py_0"
+kind: PythonBuildString
+  × package[1].build: Python artifacts cannot carry a conda build string
+    ╭─[conda-lock.yml:26:12]
+ 25 │       sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ 26 │     build: py_0
+    ·            ──┬─
+    ·              ╰── Python artifacts cannot carry a conda build string
+ 27 │     optional: false
+    ╰────

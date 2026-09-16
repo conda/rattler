@@ -38,6 +38,12 @@ xxhash-rust = { workspace = true, features = ["xxh3"] }
 
 [dev-dependencies]
 insta = { workspace = true, features = ["yaml"] }
+# `fancy-no-syscall` renders without probing the terminal, so snapshots do not
+# depend on where the tests run.
+miette = { workspace = true, features = ["fancy-no-syscall"] }
+# Snapshot conversion diagnostics the way a caller with the `miette` feature
+# of rattler_conda_lock sees them.
+rattler_conda_lock = { workspace = true, features = ["miette"] }
 serde_json = { workspace = true }
 similar-asserts = { workspace = true }
 rstest = { workspace = true }

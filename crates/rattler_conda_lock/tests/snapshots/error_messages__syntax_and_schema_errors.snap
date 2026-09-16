@@ -3,62 +3,126 @@ source: crates/rattler_conda_lock/tests/error_messages.rs
 expression: report_all
 ---
 # not yaml
-kind:    Syntax { message: "unclosed bracket '[' at line 1, column 11" }
-display: unclosed bracket '[' at line 1, column 11
-label:   <document> [<primary>] <no span>
+kind: Syntax { message: "unclosed bracket '[' at line 1, column 11" }
+  × unclosed bracket '[' at line 1, column 11
 
 # two documents
-kind:    MultipleDocuments
-display: a lock file must contain exactly one YAML document
-label:   <document> [<primary>] ""
+kind: MultipleDocuments
+  × a lock file must contain exactly one YAML document
+    ╭─[conda-lock.yml:13:1]
+ 12 │ ---
+ 13 │ version: 1
+    · ▲
+    · ╰── a lock file must contain exactly one YAML document
+ 14 │ metadata:
+    ╰────
 
 # duplicate mapping key
-kind:    DuplicateKey { key: "sources" }
-display: metadata.sources: duplicate mapping key "sources"
-label:   metadata.sources [<primary>] "sources"
-label:   metadata.sources [first defined here] "sources"
+kind: DuplicateKey { key: "sources" }
+  × metadata.sources: duplicate mapping key "sources"
+   ╭─[conda-lock.yml:6:3]
+ 5 │   platforms: []
+ 6 │   sources: []
+   ·   ───┬───
+   ·      ╰── first defined here
+ 7 │   sources: []
+   ·   ───┬───
+   ·      ╰── duplicate mapping key "sources"
+ 8 │ package: []
+   ╰────
 
 # missing field
-kind:    MissingField { field: "sources" }
-display: metadata.sources: missing required field "sources"
-label:   metadata.sources [<primary>] "metadata"
+kind: MissingField { field: "sources" }
+  × metadata.sources: missing required field "sources"
+   ╭─[conda-lock.yml:2:1]
+ 1 │ version: 1
+ 2 │ metadata:
+   · ────┬───
+   ·     ╰── missing required field "sources"
+ 3 │   content_hash: {}
+   ╰────
 
 # unknown field
-kind:    UnknownField { field: "future" }
-display: metadata.future: unknown field "future"
-label:   metadata.future [<primary>] "true"
+kind: UnknownField { field: "future" }
+  × metadata.future: unknown field "future"
+   ╭─[conda-lock.yml:7:11]
+ 6 │   sources: []
+ 7 │   future: true
+   ·           ──┬─
+   ·             ╰── unknown field "future"
+ 8 │ package: []
+   ╰────
 
 # unsupported version
-kind:    UnsupportedVersion
-display: version: unsupported lock-file version; expected integer 1
-label:   version [<primary>] "2"
+kind: UnsupportedVersion
+  × version: unsupported lock-file version; expected integer 1
+   ╭─[conda-lock.yml:1:10]
+ 1 │ version: 2
+   ·          ┬
+   ·          ╰── unsupported lock-file version; expected integer 1
+ 2 │ metadata:
+   ╰────
 
 # expected a mapping
-kind:    UnexpectedType(Mapping)
-display: package[0]: expected a mapping
-label:   package[0] [<primary>] "just-a-string"
+kind: UnexpectedType(Mapping)
+  × package[0]: expected a mapping
+    ╭─[conda-lock.yml:11:5]
+ 10 │ package:
+ 11 │   - just-a-string
+    ·     ──────┬──────
+    ·           ╰── expected a mapping
+    ╰────
 
 # expected a sequence
-kind:    UnexpectedType(Sequence)
-display: metadata.channels: expected a sequence
-label:   metadata.channels [<primary>] "{"
+kind: UnexpectedType(Sequence)
+  × metadata.channels: expected a sequence
+   ╭─[conda-lock.yml:4:13]
+ 3 │   content_hash: {}
+ 4 │   channels: {}
+   ·             ┬
+   ·             ╰── expected a sequence
+ 5 │   platforms: []
+   ╰────
 
 # expected a string
-kind:    UnexpectedType(String)
-display: metadata.platforms[0]: expected a string
-label:   metadata.platforms[0] [<primary>] "["
+kind: UnexpectedType(String)
+  × metadata.platforms[0]: expected a string
+   ╭─[conda-lock.yml:5:15]
+ 4 │   channels: []
+ 5 │   platforms: [[nested]]
+   ·               ┬
+   ·               ╰── expected a string
+ 6 │   sources: []
+   ╰────
 
 # expected a boolean
-kind:    UnexpectedType(Boolean)
-display: package[0].optional: expected a boolean
-label:   package[0].optional [<primary>] "maybe"
+kind: UnexpectedType(Boolean)
+  × package[0].optional: expected a boolean
+    ╭─[conda-lock.yml:18:15]
+ 17 │       sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+ 18 │     optional: maybe
+    ·               ──┬──
+    ·                 ╰── expected a boolean
+    ╰────
 
 # unknown manager
-kind:    UnknownManager { found: "cargo" }
-display: package[0].manager: unknown package manager "cargo"; expected "conda" or "pip"
-label:   package[0].manager [<primary>] "cargo"
+kind: UnknownManager { found: "cargo" }
+  × package[0].manager: unknown package manager "cargo"; expected "conda" or "pip"
+    ╭─[conda-lock.yml:13:14]
+ 12 │     version: '3.13.1'
+ 13 │     manager: cargo
+    ·              ──┬──
+    ·                ╰── unknown package manager "cargo"; expected "conda" or "pip"
+ 14 │     platform: linux-64
+    ╰────
 
 # unsupported source type
-kind:    UnsupportedSourceType { found: "git" }
-display: package[0].source.type: unsupported package source type "git"; expected "url"
-label:   package[0].source.type [<primary>] "git"
+kind: UnsupportedSourceType { found: "git" }
+  × package[0].source.type: unsupported package source type "git"; expected "url"
+    ╭─[conda-lock.yml:20:13]
+ 19 │     source:
+ 20 │       type: git
+    ·             ─┬─
+    ·              ╰── unsupported package source type "git"; expected "url"
+ 21 │       url: https://example.org/repo.git
+    ╰────

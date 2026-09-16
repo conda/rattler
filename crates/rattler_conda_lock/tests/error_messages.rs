@@ -1,4 +1,5 @@
-//! Snapshots of every diagnostic this crate can raise while reading a document.
+//! Snapshots of every diagnostic this crate can raise while reading a document,
+//! rendered the way the `miette` feature presents them.
 //!
 //! These pin the pairing of [`ErrorKind`], model path and source span, so a
 //! refactor that moves a span to the wrong node, or drops the second label of a
@@ -6,9 +7,10 @@
 
 use std::fmt::Write as _;
 
+use miette::{GraphicalReportHandler, GraphicalTheme};
 use rattler_conda_lock::Document;
 
-/// Renders a diagnostic with everything a caller can act on.
+/// The kind a caller matches on, then the report a caller sees.
 fn report(case: &str, source: &str) -> String {
     let mut out = String::new();
     writeln!(out, "# {case}").unwrap();
@@ -16,24 +18,11 @@ fn report(case: &str, source: &str) -> String {
         writeln!(out, "parsed without error").unwrap();
         return out;
     };
-    writeln!(out, "kind:    {:?}", error.kind()).unwrap();
-    writeln!(out, "display: {error}").unwrap();
-    for label in error.labels() {
-        let excerpt = label.span().map_or("<no span>".to_owned(), |span| {
-            format!("{:?}", &source[span])
-        });
-        let message = label.message().unwrap_or("<primary>");
-        writeln!(
-            out,
-            "label:   {} [{message}] {excerpt}",
-            if label.path().is_root() {
-                "<document>"
-            } else {
-                label.path().as_str()
-            }
-        )
+    writeln!(out, "kind: {:?}", error.kind()).unwrap();
+    GraphicalReportHandler::new_themed(GraphicalTheme::unicode_nocolor())
+        .with_width(100)
+        .render_report(&mut out, &error)
         .unwrap();
-    }
     out
 }
 

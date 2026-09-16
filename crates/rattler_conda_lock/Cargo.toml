@@ -32,6 +32,11 @@ url = { workspace = true }
 [dev-dependencies]
 hex = { workspace = true }
 insta = { workspace = true }
+# `fancy-no-syscall` renders without probing the terminal, so snapshots do not
+# depend on where the tests run.
+miette = { workspace = true, features = ["fancy-no-syscall"] }
+# Snapshot the diagnostics the way a caller with the `miette` feature sees them.
+rattler_conda_lock = { path = ".", features = ["miette"] }
 rattler_digest = { workspace = true, default-features = false }
 rstest = { workspace = true }
 serde_yaml = { workspace = true }

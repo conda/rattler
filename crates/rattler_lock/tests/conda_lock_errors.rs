@@ -1,10 +1,11 @@
-//! Snapshots of the conversion diagnostics, including the CEP-37 source spans
-//! they resolve to. They pin which install-changing situations are refused and
-//! where the refusal points.
+//! Snapshots of the conversion diagnostics, rendered with miette so the CEP-37
+//! source spans they resolve to are visible. They pin which install-changing
+//! situations are refused and where the refusal points.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
+use miette::{GraphicalReportHandler, GraphicalTheme};
 use rattler_conda_lock::Document;
 use rattler_lock::LockFile;
 use rattler_lock::conda_lock::ImportOptions;
@@ -61,20 +62,11 @@ fn report(case: &str, source: &str, options: &ImportOptions) -> String {
         writeln!(out, "imported without error").unwrap();
         return out;
     };
-    writeln!(out, "kind:    {:?}", error.kind()).unwrap();
-    writeln!(out, "display: {error}").unwrap();
-    for label in error.labels() {
-        let excerpt = label.span().map_or("<no span>".to_owned(), |span| {
-            format!("{:?}", &source[span])
-        });
-        writeln!(
-            out,
-            "label:   {} [{}] {excerpt}",
-            label.path(),
-            label.message().unwrap_or("<primary>")
-        )
+    writeln!(out, "kind: {:?}", error.kind()).unwrap();
+    GraphicalReportHandler::new_themed(GraphicalTheme::unicode_nocolor())
+        .with_width(100)
+        .render_report(&mut out, &error.into_diagnostic())
         .unwrap();
-    }
     out
 }
 

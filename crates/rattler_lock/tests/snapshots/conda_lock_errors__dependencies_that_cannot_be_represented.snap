@@ -3,12 +3,27 @@ source: crates/rattler_lock/tests/conda_lock_errors.rs
 expression: all
 ---
 # poetry style alternatives
-kind:    AlternativeConstraints
-display: package[1].dependencies.typing-extensions: alternative version constraints cannot be represented in a Python requirement
-label:   package[1].dependencies.typing-extensions [<primary>] "'>=4.6.0,<4.7.0 || >4.7.0'"
+kind: AlternativeConstraints
+  × package[1].dependencies.typing-extensions: alternative version constraints cannot be
+  │ represented in a Python requirement
+    ╭─[conda-lock.yml:24:26]
+ 23 │     dependencies:
+ 24 │       typing-extensions: '>=4.6.0,<4.7.0 || >4.7.0'
+    ·                          ─────────────┬────────────
+    ·                                       ╰── alternative version constraints cannot be represented in a Python requirement
+ 25 │     url: https://files.pythonhosted.org/packages/ab/pydantic-2.5.1-py3-none-any.whl
+    ╰────
 
 # two dependencies with one normalized name
-kind:    AmbiguousDependencyName
-display: package[1].dependencies.libgcc: dependency names normalize to the same name
-label:   package[1].dependencies.libgcc [<primary>] "'>=13'"
-label:   package[1].dependencies.Libgcc [original dependency] "'>=14'"
+kind: AmbiguousDependencyName
+  × package[1].dependencies.libgcc: dependency names normalize to the same name
+    ╭─[conda-lock.yml:24:15]
+ 23 │     dependencies:
+ 24 │       libgcc: '>=13'
+    ·               ───┬──
+    ·                  ╰── dependency names normalize to the same name
+ 25 │       Libgcc: '>=14'
+    ·               ───┬──
+    ·                  ╰── original dependency
+ 26 │     url: https://conda.anaconda.org/conda-forge/linux-64/numpy-2.1.0-py312_0.conda
+    ╰────
