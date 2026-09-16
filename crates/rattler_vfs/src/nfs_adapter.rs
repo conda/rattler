@@ -919,9 +919,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn os_str_from_nfs_bytes_roundtrips_arbitrary_bytes() {
+        use std::os::unix::ffi::OsStrExt;
         // On Unix, filenames are arbitrary byte sequences.
         let name = os_str_from_nfs_bytes(b"lib\xff.so").unwrap();
-        use std::os::unix::ffi::OsStrExt;
         assert_eq!(name.as_bytes(), b"lib\xff.so");
     }
 }
