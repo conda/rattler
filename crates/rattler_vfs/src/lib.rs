@@ -1104,7 +1104,7 @@ async fn mount_nfs(
         "noacl,nolock,soft,timeo=100,retrans=3,vers=3,tcp,port={port},mountport={port},rsize=1048576"
     );
     if read_only {
-        opts.push_str(",ro");
+        opts.push_str(",actimeo=3600,ro");
     } else {
         opts.push_str(",wsize=1048576");
     }
