@@ -200,7 +200,6 @@ impl JsGateway {
     }
 
     pub async fn channel_notices(&self, channels: Vec<String>) -> Result<JsValue, JsError> {
-        // TODO: Dont hardcode
         let channel_config =
             rattler_conda_types::ChannelConfig::default_with_root_dir(PathBuf::from(""));
         let channels = channels
@@ -239,12 +238,6 @@ impl JsGateway {
         platforms: Vec<String>,
         channel_notices: bool,
     ) -> JsResult<JsValue> {
-        #[derive(Serialize)]
-        struct NamesOutput {
-            names: Vec<String>,
-            notices: Vec<Notice>,
-        }
-
         // TODO: Dont hardcode
         let channel_config =
             rattler_conda_types::ChannelConfig::default_with_root_dir(PathBuf::from(""));
@@ -265,6 +258,12 @@ impl JsGateway {
             .execute()
             .await?;
         self.emit_warnings(output.warnings);
+
+        #[derive(Serialize)]
+        struct NamesOutput {
+            names: Vec<String>,
+            notices: Vec<Notice>,
+        }
 
         Ok(serde_wasm_bindgen::to_value(&NamesOutput {
             names: output
@@ -291,12 +290,6 @@ impl JsGateway {
         )]
         recursive: bool,
     ) -> JsResult<JsValue> {
-        #[derive(Serialize)]
-        struct QueryOutput<'a> {
-            records: Vec<&'a RepoDataRecord>,
-            warnings: Vec<String>,
-        }
-
         // TODO: Dont hardcode
         let channel_config =
             rattler_conda_types::ChannelConfig::default_with_root_dir(PathBuf::from(""));
@@ -331,6 +324,12 @@ impl JsGateway {
             .map(ToString::to_string)
             .collect::<Vec<_>>();
         self.emit_warnings(output.warnings);
+
+        #[derive(Serialize)]
+        struct QueryOutput<'a> {
+            records: Vec<&'a RepoDataRecord>,
+            warnings: Vec<String>,
+        }
 
         let records = output
             .repodata
