@@ -242,6 +242,10 @@ pub fn copy_and_replace_textual_placeholder_offsets(
 /// value is the offset of the first newline plus one, or the file size when there is no newline.
 /// The first `shebang_length` bytes form the shebang region; a file without a shebang has an empty
 /// one.
+///
+/// Validating that reads the region and nothing beyond it, which is the bound the draft CEP
+/// promises consumers: the region is the first line, so its only newline is its last byte, unless
+/// it runs to end-of-file.
 fn validated_shebang_region_end(
     source_bytes: &[u8],
     shebang_length: Option<usize>,
@@ -259,13 +263,19 @@ fn validated_shebang_region_end(
     let len = shebang_length.ok_or_else(|| {
         OffsetReplaceError::inconsistent("file starts with #! but shebang_length is absent")
     })?;
-    let expected = source_bytes
-        .iter()
-        .position(|&c| c == b'\n')
-        .map_or(source_bytes.len(), |i| i + 1);
-    if len != expected {
+    let region = source_bytes.get(..len).ok_or_else(|| {
+        OffsetReplaceError::inconsistent(format!(
+            "shebang_length {len} is past the end of the file ({} bytes)",
+            source_bytes.len()
+        ))
+    })?;
+    let ends_the_line = match memchr::memchr(b'\n', region) {
+        Some(index) => index + 1 == len,
+        None => len == source_bytes.len(),
+    };
+    if !ends_the_line {
         return Err(OffsetReplaceError::inconsistent(format!(
-            "shebang_length {len} does not match the first newline position + 1 ({expected})"
+            "shebang_length {len} is not the length of the first line"
         )));
     }
     Ok(len)

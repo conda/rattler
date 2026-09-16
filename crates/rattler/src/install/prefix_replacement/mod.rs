@@ -215,6 +215,12 @@ struct CStringPatch<'a> {
 /// files. Returns [`OffsetReplaceError::InconsistentMetadata`] (having written nothing) when the
 /// metadata does not match the file, so the caller can fall back to search-based replacement.
 ///
+/// Nothing is searched: the only bytes inspected are the ones the metadata points at, namely the
+/// encoded placeholder at each recorded offset, the zero code unit at each recorded c-string
+/// terminator, and, when the file starts with `#!`, the `shebang_length` bytes of the first line
+/// that the installer's shebang rules transform. Everything else is copied without being looked
+/// at, which is what lets a consumer compute the patched size from the metadata alone.
+///
 /// [draft CEP]: https://github.com/conda/ceps/pull/179
 #[allow(clippy::too_many_arguments)]
 pub fn copy_and_replace_placeholders_with_offsets(
