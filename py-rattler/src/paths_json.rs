@@ -436,7 +436,10 @@ impl PyPrefixPlaceholder {
     /// for text-mode files and a `list[list[int]]` for binary-mode files (grouped by c-string).
     /// Occurrences inside the shebang region (see `shebang_length`) are excluded.
     #[getter]
-    pub fn experimental_offsets<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
+    pub fn experimental_offsets<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Option<Bound<'py, PyAny>>> {
         let Some(groups) = &self.inner.experimental_offsets else {
             return Ok(None);
         };

@@ -31,7 +31,7 @@ pub use {
     package_metadata::PackageMetadata,
     paths::{
         FileMode, InvalidOffsetsError, OffsetEncoding, OffsetGroup, OffsetRanges, PathType,
-        PathsEntry, PathsJson, PrefixPlaceholder, select_utf8_offset_ranges,
+        PathsEntry, PathsJson, PrefixPlaceholder, validate_offset_groups,
     },
     run_exports::RunExportsJson,
 };
