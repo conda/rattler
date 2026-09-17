@@ -38,7 +38,7 @@ mod prefix;
 #[cfg(feature = "s3")]
 mod s3;
 #[cfg(feature = "s3")]
-pub use s3::upload_package_to_s3;
+pub use s3::{upload_package_to_s3, upload_package_to_s3_with_attestation};
 
 pub use anaconda::AnacondaError;
 pub use cloudsmith::CloudsmithError;
