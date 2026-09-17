@@ -48,6 +48,7 @@ console = { workspace = true, features = ["windows-console-colors"] }
 dirs = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
+humantime = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }
 indicatif = { workspace = true }
 miette = { workspace = true }
