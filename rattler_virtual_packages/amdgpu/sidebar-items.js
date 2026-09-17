@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["amdgpu_info","detect_amdgpu_info","select_device"],"struct":["AmdGpuArchInfo","AmdGpuDevice","AmdGpuInfo","ParseAmdGpuArchError"]};
