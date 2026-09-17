@@ -375,6 +375,7 @@ async fn test_reindex_derives_authoritative_legacy_and_v3_stats_and_message_prec
             r#"{
                 "build": "0",
                 "build_number": 0,
+                "extra_depends": { "all": ["max[extras=[benchmark,serve]]"] },
                 "name": "legacy-stats",
                 "noarch": "generic",
                 "subdir": "noarch",
@@ -387,7 +388,7 @@ async fn test_reindex_derives_authoritative_legacy_and_v3_stats_and_message_prec
             r#"{
                 "build": "0",
                 "build_number": 0,
-                "extra_depends": { "docs": ["sphinx[when=\"python >=3.10\"]"] },
+                "flags": ["cuda"],
                 "name": "v3-stats",
                 "noarch": "generic",
                 "subdir": "noarch",
@@ -459,6 +460,11 @@ async fn test_reindex_derives_authoritative_legacy_and_v3_stats_and_message_prec
     .unwrap();
 
     let repodata: Value = serde_json::from_reader(File::open(repodata_path).unwrap()).unwrap();
+    assert_eq!(
+        repodata["packages"]["legacy-stats-1.0-0.tar.bz2"]["extra_depends"]["all"],
+        serde_json::json!(["max[extras=[benchmark, serve]]"])
+    );
+    assert!(repodata["v3"]["tar.bz2"]["v3-stats-1.0-0"].is_object());
     assert_eq!(
         repodata["info"]["repodata_revisions"],
         serde_json::json!({
