@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- Expose the Sigstore attestation sidecar hash through `PackageRecord.attestations_sha256`.
-
 ## [0.26.0] - 2026-09-10
 
 ### Highlights
