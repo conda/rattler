@@ -42,6 +42,20 @@
 //! * Backward compatible. Older version of lock-files should still be readable
 //!   by never versions of this crate.
 //!
+//! ## URL export policy
+//!
+//! Serializing a [`LockFile`] rejects credential-bearing URLs and **all query
+//! strings**, including non-secret and empty queries. URLs are rejected rather
+//! than silently rewritten. This applies to Serde serialization as well as
+//! [`LockFile::render_to_string`] and [`LockFile::to_path`]; the latter validates
+//! before creating or truncating the destination file.
+//!
+//! See [`LockFile::validate_urls_for_export`] for the full URL policy. Parsing
+//! remains permissive so legacy lockfiles can be inspected and migrated. An
+//! explicit [`LockFile::allow_unsafe_urls`] view provides lossless serialization
+//! when deliberately exporting otherwise rejected URLs; it does not disable
+//! validation on the original lockfile or persist an opt-out flag.
+//!
 //! ## Relation to conda-lock
 //!
 //! Initially the lock-file format was based on [`conda-lock`](https://github.com/conda/conda-lock)
@@ -81,6 +95,9 @@ use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
 mod builder;
 mod channel;
 mod conda;
+mod export;
+#[cfg(test)]
+mod export_tests;
 mod file_format_version;
 mod hash;
 pub mod options;
@@ -100,6 +117,7 @@ pub use conda::{
     CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, GitShallowSpec, InputHash,
     PackageBuildSource, PartialSourceMetadata, SourceMetadata, VariantValue,
 };
+pub use export::UrlExportError;
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
 pub use options::{PypiPrereleaseMode, SolveOptions};
@@ -604,13 +622,26 @@ impl LockFile {
         parse::from_str_with_base_directory(source, base_dir)
     }
 
-    /// Writes the conda lock to a file
+    /// Writes the conda lock to a file.
+    ///
+    /// Credential-bearing URLs and all query strings are rejected before the
+    /// destination is created or truncated. See [`Self::validate_urls_for_export`]
+    /// for the complete policy, or [`Self::allow_unsafe_urls`] for an explicit
+    /// serialization-only opt-out.
     pub fn to_path(&self, path: &Path) -> Result<(), std::io::Error> {
+        self.validate_urls_for_export()
+            .map_err(std::io::Error::other)?;
         let file = std::fs::File::create(path)?;
-        serde_yaml::to_writer(file, self).map_err(std::io::Error::other)
+        // Validation already ran before opening the file; keep writing streamed
+        // without validating twice or buffering the complete output in memory.
+        serde_yaml::to_writer(file, &self.allow_unsafe_urls()).map_err(std::io::Error::other)
     }
 
-    /// Writes the conda lock to a string
+    /// Writes the conda lock to a string.
+    ///
+    /// Credential-bearing URLs and all query strings are rejected, not stripped.
+    /// See [`Self::validate_urls_for_export`] for the complete policy, or
+    /// [`Self::allow_unsafe_urls`] for an explicit serialization-only opt-out.
     pub fn render_to_string(&self) -> Result<String, std::io::Error> {
         serde_yaml::to_string(self).map_err(std::io::Error::other)
     }
@@ -950,6 +981,13 @@ mod test {
 
     use super::{DEFAULT_ENVIRONMENT_NAME, LockFile};
 
+    // These legacy fixtures encode Git revisions in URL queries. Keep testing
+    // their lossless migration, but also require normal export to reject them.
+    fn render_legacy_query_lock(lock: &LockFile) -> String {
+        assert!(lock.render_to_string().is_err());
+        serde_yaml::to_string(&lock.allow_unsafe_urls()).unwrap()
+    }
+
     fn test_path() -> PathBuf {
         if cfg!(windows) {
             PathBuf::from("C:\\tmp\\some\\test\\path")
@@ -1011,7 +1049,13 @@ mod test {
             .join("../../test-data/conda-lock")
             .join(file_name);
         let conda_lock = LockFile::from_path(&path).unwrap();
-        insta::assert_yaml_snapshot!(file_name, conda_lock);
+        if file_name == "v4/path-based-lock.yml" {
+            assert!(conda_lock.render_to_string().is_err());
+            let conda_lock = conda_lock.allow_unsafe_urls();
+            insta::assert_yaml_snapshot!(file_name, conda_lock);
+        } else {
+            insta::assert_yaml_snapshot!(file_name, conda_lock);
+        }
     }
 
     #[rstest]
@@ -1041,8 +1085,15 @@ mod test {
         // Load the lock-file
         let conda_lock = LockFile::from_path(&path).unwrap();
 
+        let render = |lock: &LockFile| {
+            if path.ends_with("v4/path-based-lock.yml") {
+                render_legacy_query_lock(lock)
+            } else {
+                lock.render_to_string().unwrap()
+            }
+        };
         // Serialize the lock-file
-        let rendered_lock_file = conda_lock.render_to_string().unwrap();
+        let rendered_lock_file = render(&conda_lock);
 
         // Parse the rendered lock-file again
         let source_path = test_path();
@@ -1051,7 +1102,7 @@ mod test {
                 .unwrap();
 
         // And re-render again
-        let rerendered_lock_file = parsed_lock_file.render_to_string().unwrap();
+        let rerendered_lock_file = render(&parsed_lock_file);
 
         similar_asserts::assert_eq!(rendered_lock_file, rerendered_lock_file);
     }
@@ -2293,7 +2344,7 @@ packages:
     requires_python: '>=3.7'
 ";
         let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
-        let rendered = lock_file.render_to_string().unwrap();
+        let rendered = render_legacy_query_lock(&lock_file);
 
         // After roundtrip, the two entries should be collapsed to a single entry.
         // 2 selectors (one per env) + 1 package entry = 3 occurrences of the URL.
@@ -2307,7 +2358,7 @@ packages:
 
         // A second roundtrip must be stable.
         let reparsed = LockFile::from_str_with_base_directory(&rendered, None).unwrap();
-        let rerendered = reparsed.render_to_string().unwrap();
+        let rerendered = render_legacy_query_lock(&reparsed);
         similar_asserts::assert_eq!(rendered, rerendered);
     }
 
@@ -2364,7 +2415,7 @@ packages:
             .unwrap()
             .finish();
 
-        let rendered = lock_file.render_to_string().unwrap();
+        let rendered = render_legacy_query_lock(&lock_file);
 
         // The git URL should appear exactly 3 times: 2 selectors + 1 package entry.
         let url_str = "git+https://github.com/example/minimalloc.git";
@@ -2377,7 +2428,7 @@ packages:
 
         // Roundtrip must be stable.
         let reparsed = LockFile::from_str_with_base_directory(&rendered, None).unwrap();
-        let rerendered = reparsed.render_to_string().unwrap();
+        let rerendered = render_legacy_query_lock(&reparsed);
         similar_asserts::assert_eq!(rendered, rerendered);
     }
 

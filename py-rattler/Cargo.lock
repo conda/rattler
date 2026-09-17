@@ -4163,6 +4163,7 @@ dependencies = [
  "pep508_rs",
  "rattler_conda_types",
  "rattler_digest",
+ "rattler_redaction",
  "rattler_solve",
  "serde",
  "serde-untagged",
