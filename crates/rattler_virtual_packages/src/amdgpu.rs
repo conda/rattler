@@ -137,12 +137,32 @@ impl FromStr for AmdGpuArchInfo {
 }
 
 /// A single detected AMD GPU.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AmdGpuDevice {
     /// The ISA version of the device.
     pub arch: AmdGpuArchInfo,
     /// The number of compute units, if it could be determined.
     pub compute_units: Option<u32>,
+    /// The device's marketing name (`hipDeviceProp_t::name`), e.g. `"AMD Radeon RX 7800 XT"`.
+    ///
+    /// Only set for devices enumerated through the HIP runtime; the Linux KFD topology sysfs
+    /// this module also reads from has no equivalent, only the raw PCI device id.
+    pub name: Option<String>,
+}
+
+impl fmt::Display for AmdGpuDevice {
+    /// Renders as e.g. `"AMD Radeon RX 7800 XT (arch 11.0.1, 30 CUs)"`, or, when the marketing
+    /// name or compute-unit count is unavailable (only possible on the Linux KFD path), `"AMD
+    /// GPU (arch 11.0.1, CU count unknown)"`.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name.as_deref().unwrap_or("AMD GPU"))?;
+        write!(f, " (arch {}", self.arch)?;
+        match self.compute_units {
+            Some(1) => write!(f, ", 1 CU)"),
+            Some(compute_units) => write!(f, ", {compute_units} CUs)"),
+            None => write!(f, ", CU count unknown)"),
+        }
+    }
 }
 
 /// AMD GPU information detected from the system.
@@ -190,8 +210,8 @@ pub fn amdgpu_info() -> &'static AmdGpuInfo {
 fn info_from_devices(devices: &[AmdGpuDevice], present_without_devices: bool) -> AmdGpuInfo {
     let selected = select_device(devices);
     if let Some(device) = selected {
-        tracing::trace!(
-            ?device,
+        tracing::debug!(
+            %device,
             device_count = devices.len(),
             "selected AMD GPU for __amdgpu_arch"
         );
@@ -209,15 +229,27 @@ pub fn detect_amdgpu_info() -> AmdGpuInfo {
 
     let mut devices = linux::kfd_devices(Path::new(linux::KFD_TOPOLOGY_NODES));
     if devices.is_empty() {
-        if cfg!(target_env = "musl") {
-            tracing::trace!("KFD exposes no AMD GPUs and musl cannot load the HIP runtime");
-        } else {
-            tracing::trace!("KFD exposes no AMD GPUs; trying the HIP runtime");
-            devices = hip::devices();
-        }
+        devices = linux_hip_fallback();
     }
     let drm_present = devices.is_empty() && linux::drm_has_amdgpu(Path::new(linux::DRM_CLASS));
     info_from_devices(&devices, drm_present)
+}
+
+/// Falls back to HIP runtime enumeration when KFD exposes no devices, which covers `ROCm` on WSL
+/// where the KFD sysfs tree does not exist.
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+fn linux_hip_fallback() -> Vec<AmdGpuDevice> {
+    tracing::trace!("KFD exposes no AMD GPUs; trying the HIP runtime");
+    hip::devices()
+}
+
+/// Dynamic library loading is not available on musl: `libloading` itself would compile, but the
+/// statically-linked binaries this target produces have no dynamic loader to `dlopen` a driver
+/// library with, so the HIP runtime can never actually be reached. Skip compiling it altogether.
+#[cfg(all(target_os = "linux", target_env = "musl"))]
+fn linux_hip_fallback() -> Vec<AmdGpuDevice> {
+    tracing::trace!("KFD exposes no AMD GPUs and musl cannot load the HIP runtime");
+    Vec::new()
 }
 
 /// Detects AMD GPU information from the current system.
@@ -263,7 +295,7 @@ mod linux {
                 let path = entry.path().join("properties");
                 let properties = std::fs::read_to_string(&path).ok()?;
                 let device = parse_kfd_properties(&properties)?;
-                tracing::trace!(path = %path.display(), ?device, "found AMD GPU in KFD topology");
+                tracing::trace!(path = %path.display(), %device, "found AMD GPU in KFD topology");
                 Some(device)
             })
             .collect();
@@ -300,6 +332,7 @@ mod linux {
         Some(AmdGpuDevice {
             arch,
             compute_units,
+            name: None,
         })
     }
 
@@ -362,7 +395,9 @@ mod windows {
 /// Device enumeration through the HIP runtime.
 ///
 /// This is the only source of information on Windows, and the fallback on Linux when KFD is not
-/// available. Dynamic library loading is not supported on musl.
+/// available. Not compiled on musl: `libloading` itself would compile fine, but the
+/// statically-linked binaries that target produces have no dynamic loader to `dlopen` a driver
+/// library with, so it could never actually be reached.
 #[cfg(all(
     any(target_os = "linux", target_os = "windows"),
     not(target_env = "musl")
@@ -383,31 +418,39 @@ mod hip {
     /// full definition of the struct is needed.
     struct PropertiesLayout {
         symbol: &'static [u8],
+        name: usize,
         gcn_arch_name: usize,
         multi_processor_count: usize,
     }
 
     /// Struct revisions in order of preference. Runtimes before HIP 6.0 only export the unversioned
     /// symbol, which uses the `R0000` layout.
+    ///
+    /// `name` is `hipDeviceProp_t`'s first member in every revision, so its offset is 0
+    /// regardless of layout.
     const LAYOUTS: [PropertiesLayout; 3] = [
         PropertiesLayout {
             symbol: b"hipGetDevicePropertiesR0600\0",
+            name: 0,
             gcn_arch_name: 1160,
             multi_processor_count: 388,
         },
         PropertiesLayout {
             symbol: b"hipGetDevicePropertiesR0000\0",
+            name: 0,
             gcn_arch_name: 396,
             multi_processor_count: 336,
         },
         PropertiesLayout {
             symbol: b"hipGetDeviceProperties\0",
+            name: 0,
             gcn_arch_name: 396,
             multi_processor_count: 336,
         },
     ];
 
-    /// `gcnArchName` is a `char[256]`.
+    /// `name` and `gcnArchName` are both `char[256]`.
+    const NAME_LEN: usize = 256;
     const GCN_ARCH_NAME_LEN: usize = 256;
 
     /// Comfortably larger than any `hipDeviceProp_t` revision (the `R0600` layout is 1480 bytes).
@@ -462,11 +505,15 @@ mod hip {
                     std::slice::from_raw_parts(buffer.as_ptr().cast::<u8>(), PROPERTIES_BUFFER_LEN)
                 };
 
-                let name = &bytes[layout.gcn_arch_name..layout.gcn_arch_name + GCN_ARCH_NAME_LEN];
-                let name = &name[..name.iter().position(|&b| b == 0).unwrap_or(name.len())];
-                let name = std::str::from_utf8(name).ok()?;
-                let Some(arch) = AmdGpuArchInfo::from_target_id(name) else {
-                    tracing::debug!(device, name, "HIP reported an unparsable gcnArchName");
+                let target_id =
+                    &bytes[layout.gcn_arch_name..layout.gcn_arch_name + GCN_ARCH_NAME_LEN];
+                let target_id = &target_id[..target_id
+                    .iter()
+                    .position(|&b| b == 0)
+                    .unwrap_or(target_id.len())];
+                let target_id = std::str::from_utf8(target_id).ok()?;
+                let Some(arch) = AmdGpuArchInfo::from_target_id(target_id) else {
+                    tracing::debug!(device, target_id, "HIP reported an unparsable gcnArchName");
                     return None;
                 };
 
@@ -474,11 +521,21 @@ mod hip {
                 let count = c_int::from_ne_bytes(count.try_into().expect("slice is 4 bytes"));
                 let compute_units = u32::try_from(count).ok().filter(|&count| count > 0);
 
+                // The marketing name is purely cosmetic: a non-UTF-8 or empty value just leaves
+                // it unset rather than dropping the device.
+                let name = &bytes[layout.name..layout.name + NAME_LEN];
+                let name = &name[..name.iter().position(|&b| b == 0).unwrap_or(name.len())];
+                let name = std::str::from_utf8(name)
+                    .ok()
+                    .filter(|name| !name.is_empty())
+                    .map(str::to_owned);
+
                 let device = AmdGpuDevice {
                     arch,
                     compute_units,
+                    name,
                 };
-                tracing::trace!(name, ?device, "found AMD GPU through the HIP runtime");
+                tracing::debug!(target_id, %device, "found AMD GPU through the HIP runtime");
                 Some(device)
             })
             .collect()
@@ -634,6 +691,7 @@ mod test {
         let device = |arch, compute_units| AmdGpuDevice {
             arch,
             compute_units,
+            name: None,
         };
 
         // Framework Laptop 16: the newer integrated 780M (gfx1103, 12 CUs) loses to the discrete
@@ -684,12 +742,14 @@ mod test {
         let device = AmdGpuDevice {
             arch: arch(11, 0, 0),
             compute_units: Some(96),
+            name: None,
         };
+        let expected_arch = device.arch;
         assert_eq!(
             info_from_devices(&[device], false),
             AmdGpuInfo {
                 present: true,
-                arch_info: Some(device.arch)
+                arch_info: Some(expected_arch)
             }
         );
     }
@@ -743,6 +803,7 @@ device_id 5536
             Some(AmdGpuDevice {
                 arch: arch(11, 5, 1),
                 compute_units: Some(40),
+                name: None,
             })
         );
 
@@ -757,6 +818,7 @@ device_id 5536
             Some(AmdGpuDevice {
                 arch: arch(9, 0, 10),
                 compute_units: None,
+                name: None,
             })
         );
         assert_eq!(linux::parse_kfd_properties(""), None);
