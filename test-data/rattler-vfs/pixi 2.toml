@@ -1,0 +1,21 @@
+# Fixture environment for the rattler_vfs end-to-end mount test.
+#
+# This is NOT the environment the test *runs* in (that lives in the
+# `rattler-vfs` feature/environment of the repository-root `pixi.toml`). This
+# manifest defines the environment that the test *mounts*: its committed
+# `pixi.lock` is passed to `rattler mount` by `scripts/e2e/rattler-vfs-mount.nu`
+# (see the `fixture_lock` variable), which then asserts the mounted files
+# behave correctly.
+#
+# After changing dependencies here, regenerate the lock with `pixi lock` in
+# this directory and commit the updated `pixi.lock`.
+[workspace]
+name = "rattler-vfs-e2e"
+channels = ["https://prefix.dev/conda-forge"]
+platforms = ["linux-64", "osx-arm64", "win-64"]
+
+[dependencies]
+python = ">=3.11,<3.13"
+numpy = ">=1.26,<3"
+pip = ">=24,<27"
+pytest = ">=8"

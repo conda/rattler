@@ -764,7 +764,12 @@ pub(crate) async fn mount_nfs(
         "noacl,nolock,soft,timeo=100,retrans=3,vers=3,tcp,port={port},mountport={port},rsize=1048576"
     );
     if read_only {
-        opts.push_str(",ro");
+        // The read-only mount serves an immutable package set that never
+        // changes while the mount is live, so let the client cache attributes
+        // aggressively (actimeo) instead of periodically re-validating them
+        // with fresh GETATTR/LOOKUP round trips. Speeds up longer-running
+        // mounts that repeatedly stat the same metadata.
+        opts.push_str(",actimeo=3600,ro");
     } else {
         opts.push_str(",wsize=1048576");
     }

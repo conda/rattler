@@ -32,6 +32,7 @@
 //! virtual packages. See [`cuda::detect_cuda_version_via_libcuda`] as an
 //! example.
 
+pub mod amdgpu;
 pub mod cuda;
 pub mod defaults;
 pub mod libc;
@@ -222,6 +223,12 @@ pub enum VirtualPackage {
     /// Available CUDA compute capability
     CudaArch(CudaArch),
 
+    /// Available when an AMD GPU is present
+    AmdGpu(AmdGpu),
+
+    /// Available AMD GPU architecture
+    AmdGpuArch(AmdGpuArch),
+
     /// The CPU architecture
     Archspec(Archspec),
 }
@@ -259,6 +266,12 @@ pub struct VirtualPackages {
     /// Available CUDA compute capability
     pub cuda_arch: Option<CudaArch>,
 
+    /// Available when an AMD GPU is present
+    pub amdgpu: Option<AmdGpu>,
+
+    /// Available AMD GPU architecture
+    pub amdgpu_arch: Option<AmdGpuArch>,
+
     /// The CPU architecture
     pub archspec: Option<Archspec>,
 }
@@ -276,6 +289,8 @@ impl VirtualPackages {
             libc,
             cuda,
             cuda_arch,
+            amdgpu,
+            amdgpu_arch,
             archspec,
         } = self;
 
@@ -289,6 +304,8 @@ impl VirtualPackages {
             libc.map(VirtualPackage::LibC),
             cuda.map(VirtualPackage::Cuda),
             cuda_arch.map(VirtualPackage::CudaArch),
+            amdgpu.map(VirtualPackage::AmdGpu),
+            amdgpu_arch.map(VirtualPackage::AmdGpuArch),
             archspec.map(VirtualPackage::Archspec),
         ]
         .into_iter()
@@ -331,6 +348,22 @@ impl VirtualPackages {
             cuda_arch = None;
         }
 
+        let amdgpu = AmdGpu::detect(overrides.amdgpu.as_ref())?;
+        tracing::trace!(?amdgpu, "detected AMD GPU virtual package");
+        let mut amdgpu_arch = AmdGpuArch::detect(overrides.amdgpu_arch.as_ref())?;
+        tracing::trace!(
+            ?amdgpu_arch,
+            "detected AMD GPU architecture virtual package"
+        );
+
+        // Enforce CEP requirement: __amdgpu_arch must be absent when __amdgpu is absent
+        if amdgpu.is_none() {
+            if amdgpu_arch.is_some() {
+                tracing::debug!("dropping __amdgpu_arch because __amdgpu was not detected");
+            }
+            amdgpu_arch = None;
+        }
+
         Ok(Self {
             win: Windows::detect(overrides.win.as_ref())?,
             unix: Platform::current().is_some_and(Platform::is_unix),
@@ -341,6 +374,8 @@ impl VirtualPackages {
             libc: LibC::detect(overrides.libc.as_ref())?,
             cuda,
             cuda_arch,
+            amdgpu,
+            amdgpu_arch,
             archspec: Archspec::detect(overrides.archspec.as_ref())?,
         })
     }
@@ -365,7 +400,8 @@ impl VirtualPackages {
     /// - **Android** (`__android`): Version 0 (minimum supported API level)
     /// - **`LibC`** (`__glibc`): `glibc` with [`defaults::default_glibc_version`] (only for Linux
     ///   platforms)
-    /// - **CUDA** (`__cuda`): Not included (None)
+    /// - **CUDA** (`__cuda`, `__cuda_arch`): Not included (None)
+    /// - **AMD GPU** (`__amdgpu`, `__amdgpu_arch`): Not included (None)
     /// - **Archspec**: Platform-specific minimal architecture (e.g., `x86_64` for `osx-64`)
     pub fn detect_for_platform(
         platform: Platform,
@@ -391,6 +427,8 @@ impl VirtualPackages {
             libc: baseline_libc,
             cuda: _,
             cuda_arch: _,
+            amdgpu: _,
+            amdgpu_arch: _,
             archspec: baseline_archspec,
         } = Self::baseline_for_platform(platform);
 
@@ -486,6 +524,8 @@ impl VirtualPackages {
             libc,
             cuda: virtual_packages.cuda,
             cuda_arch: virtual_packages.cuda_arch,
+            amdgpu: virtual_packages.amdgpu,
+            amdgpu_arch: virtual_packages.amdgpu_arch,
             archspec,
         })
     }
@@ -496,10 +536,10 @@ impl VirtualPackages {
     /// Every slot a platform carries at all is filled with the value conda
     /// assumes for it, and every slot it cannot carry is left empty: a
     /// `win-64` baseline has no `__linux`, `__osx` or `__glibc`, and a
-    /// `linux-64` baseline has no `__win`. `__cuda` and `__cuda_arch` are
-    /// never part of a baseline - no platform is assumed to have a GPU - even
-    /// though both are valid on any platform once something detects or
-    /// declares them.
+    /// `linux-64` baseline has no `__win`. The GPU packages (`__cuda`,
+    /// `__cuda_arch`, `__amdgpu` and `__amdgpu_arch`) are never part of a
+    /// baseline - no platform is assumed to have a GPU - even though they are
+    /// valid on any platform once something detects or declares them.
     ///
     /// This is what [`VirtualPackages::detect_for_platform`] falls back to per
     /// slot when it cross-compiles, exposed on its own for callers that want
@@ -533,6 +573,8 @@ impl VirtualPackages {
             }),
             cuda: None,
             cuda_arch: None,
+            amdgpu: None,
+            amdgpu_arch: None,
             archspec: Archspec::from_platform(platform),
         }
     }
@@ -567,6 +609,8 @@ impl From<VirtualPackage> for GenericVirtualPackage {
             VirtualPackage::LibC(libc) => libc.into(),
             VirtualPackage::Cuda(cuda) => cuda.into(),
             VirtualPackage::CudaArch(cuda_arch) => cuda_arch.into(),
+            VirtualPackage::AmdGpu(amdgpu) => amdgpu.into(),
+            VirtualPackage::AmdGpuArch(amdgpu_arch) => amdgpu_arch.into(),
             VirtualPackage::Archspec(spec) => spec.into(),
         }
     }
@@ -647,6 +691,10 @@ pub struct VirtualPackageOverrides {
     pub cuda: Option<Override>,
     /// The override for the `cuda_arch` virtual package
     pub cuda_arch: Option<Override>,
+    /// The override for the amdgpu virtual package
+    pub amdgpu: Option<Override>,
+    /// The override for the `amdgpu_arch` virtual package
+    pub amdgpu_arch: Option<Override>,
     /// The override for the archspec virtual package
     pub archspec: Option<Override>,
 }
@@ -664,6 +712,8 @@ impl VirtualPackageOverrides {
             libc: Some(ov.clone()),
             cuda: Some(ov.clone()),
             cuda_arch: Some(ov.clone()),
+            amdgpu: Some(ov.clone()),
+            amdgpu_arch: Some(ov.clone()),
             archspec: Some(ov),
         }
     }
@@ -948,6 +998,127 @@ impl From<CudaArch> for GenericVirtualPackage {
 impl From<CudaArch> for VirtualPackage {
     fn from(cuda_arch: CudaArch) -> Self {
         VirtualPackage::CudaArch(cuda_arch)
+    }
+}
+
+/// AMD GPU presence virtual package description (`__amdgpu`).
+///
+/// This is a presence-only package like `__unix`: it is exposed when at least one AMD GPU is
+/// available through the host driver, and its version and build string are always `0`. The
+/// version deliberately carries no driver, kernel or `ROCm` version because no single such number
+/// describes compatibility across AMD GPU families and driver installation mechanisms.
+///
+/// The `CONDA_OVERRIDE_AMDGPU` override accepts `0` (force present) or the empty string (force
+/// absent).
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, Deserialize)]
+pub struct AmdGpu;
+
+impl AmdGpu {
+    /// Returns `Some` if an AMD GPU is available on the current platform.
+    pub fn current() -> Option<Self> {
+        amdgpu::amdgpu_info().present.then_some(Self)
+    }
+}
+
+impl EnvOverride for AmdGpu {
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVirtualPackageOverrideError> {
+        if env_var_value == "0" {
+            Ok(Self)
+        } else {
+            Err(ParseVirtualPackageOverrideError::validation_error(format!(
+                "invalid __amdgpu override '{env_var_value}': the version of the __amdgpu virtual package is always '0'; set the override to '0' to force it on or to an empty string to force it off"
+            )))
+        }
+    }
+
+    fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
+        Ok(Self::current())
+    }
+
+    const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_AMDGPU";
+}
+
+impl From<AmdGpu> for GenericVirtualPackage {
+    fn from(_: AmdGpu) -> Self {
+        GenericVirtualPackage {
+            name: PackageName::new_unchecked("__amdgpu"),
+            version: Version::major(0),
+            build_string: "0".into(),
+        }
+    }
+}
+
+impl From<AmdGpu> for VirtualPackage {
+    fn from(amdgpu: AmdGpu) -> Self {
+        VirtualPackage::AmdGpu(amdgpu)
+    }
+}
+
+/// AMD GPU architecture virtual package description (`__amdgpu_arch`).
+///
+/// ## Format
+///
+/// * Version: the AMDGPU ISA version `{major}.{minor}.{stepping}` (e.g. `9.0.10` for `gfx90a`,
+///   `11.5.1` for `gfx1151`)
+/// * Build string: always `"0"` per CEP specification
+///
+/// On systems with several AMD GPUs this describes the device with the most compute units, ties
+/// broken by the highest ISA version. This preferentially selects a discrete GPU over an
+/// integrated one. Unlike `__cuda_arch` it is *not* a minimum: version ordering does not imply
+/// binary compatibility between AMDGPU architectures.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
+pub struct AmdGpuArch {
+    /// The ISA version, formatted as `{major}.{minor}.{stepping}`.
+    pub version: Version,
+}
+
+impl AmdGpuArch {
+    /// Returns the AMD GPU architecture selected for the current platform.
+    ///
+    /// Returns `None` if no AMD GPU device could be enumerated, even when [`AmdGpu::current`]
+    /// reports one as present.
+    pub fn current() -> Option<Self> {
+        amdgpu::amdgpu_info().arch_info.map(Self::from)
+    }
+}
+
+impl From<amdgpu::AmdGpuArchInfo> for AmdGpuArch {
+    fn from(arch_info: amdgpu::AmdGpuArchInfo) -> Self {
+        Self {
+            version: arch_info.to_version(),
+        }
+    }
+}
+
+impl EnvOverride for AmdGpuArch {
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVirtualPackageOverrideError> {
+        // CEP requires exactly "major.minor.stepping" where all three are decimal integers
+        let arch_info = amdgpu::AmdGpuArchInfo::from_str(env_var_value)
+            .map_err(|err| ParseVirtualPackageOverrideError::validation_error(err.to_string()))?;
+        Ok(Self::from(arch_info))
+    }
+
+    fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
+        Ok(Self::current())
+    }
+
+    const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_AMDGPU_ARCH";
+}
+
+impl From<AmdGpuArch> for GenericVirtualPackage {
+    fn from(amdgpu_arch: AmdGpuArch) -> Self {
+        GenericVirtualPackage {
+            name: PackageName::new_unchecked("__amdgpu_arch"),
+            version: amdgpu_arch.version,
+            // Build string is always "0" per CEP specification
+            build_string: "0".into(),
+        }
+    }
+}
+
+impl From<AmdGpuArch> for VirtualPackage {
+    fn from(amdgpu_arch: AmdGpuArch) -> Self {
+        VirtualPackage::AmdGpuArch(amdgpu_arch)
     }
 }
 
@@ -1625,12 +1796,14 @@ mod test {
 
     #[test]
     fn baseline_assumes_no_gpu() {
-        // Both CUDA slots are valid on any platform, but nothing is assumed to
+        // The GPU slots are valid on any platform, but nothing is assumed to
         // have a GPU -- they only appear once something detects or declares them.
         for platform in [Platform::Linux64, Platform::Win64, Platform::OsxArm64] {
             let baseline = VirtualPackages::baseline_for_platform(platform);
             assert!(baseline.cuda.is_none(), "{platform}");
             assert!(baseline.cuda_arch.is_none(), "{platform}");
+            assert!(baseline.amdgpu.is_none(), "{platform}");
+            assert!(baseline.amdgpu_arch.is_none(), "{platform}");
         }
     }
 
@@ -1938,5 +2111,91 @@ mod test {
             packages.cuda_arch.is_none(),
             "cuda_arch should be None when cuda is disabled via empty string"
         );
+    }
+
+    #[test]
+    fn amdgpu_override_is_presence_only() {
+        // `0` forces the package on, the empty string forces it off, anything
+        // else is rejected because the version carries no information.
+        assert_eq!(
+            AmdGpu::detect(Some(&Override::String("0".to_string()))).unwrap(),
+            Some(AmdGpu)
+        );
+        assert_eq!(
+            AmdGpu::detect(Some(&Override::String(String::new()))).unwrap(),
+            None
+        );
+        assert!(AmdGpu::detect(Some(&Override::String("1".to_string()))).is_err());
+        assert!(AmdGpu::detect(Some(&Override::String("6.2".to_string()))).is_err());
+
+        let generic: GenericVirtualPackage = AmdGpu.into();
+        assert_eq!(generic.name.as_normalized(), "__amdgpu");
+        assert_eq!(generic.version, Version::major(0));
+        assert_eq!(generic.build_string, "0");
+    }
+
+    #[test]
+    fn amdgpu_arch_override_requires_isa_version() {
+        let arch = AmdGpuArch::parse_version("9.0.10").unwrap();
+        assert_eq!(arch.version, Version::from_str("9.0.10").unwrap());
+        // Components are decimal integers; leading zeros normalize away.
+        assert_eq!(
+            AmdGpuArch::parse_version("11.05.1").unwrap().version,
+            Version::from_str("11.5.1").unwrap()
+        );
+
+        for invalid in ["gfx90a", "9.0", "9", "9.0.10.0", "9.0.a"] {
+            assert!(AmdGpuArch::parse_version(invalid).is_err(), "{invalid:?}");
+        }
+
+        let env_var_name = format!("{}_{}", AmdGpuArch::DEFAULT_ENV_NAME, "test123");
+        temp_env::with_var(&env_var_name, Some("11.0.0"), || {
+            let arch = AmdGpuArch::detect(Some(&Override::EnvVar(env_var_name.clone())))
+                .unwrap()
+                .expect("override should apply");
+            assert_eq!(arch.version, Version::from_str("11.0.0").unwrap());
+        });
+
+        let generic: GenericVirtualPackage = arch.into();
+        assert_eq!(generic.name.as_normalized(), "__amdgpu_arch");
+        assert_eq!(generic.build_string, "0");
+    }
+
+    #[test]
+    fn amdgpu_arch_requires_amdgpu() {
+        // __amdgpu_arch must be absent when __amdgpu is absent, even when
+        // explicitly overridden.
+        let overrides = VirtualPackageOverrides {
+            amdgpu: Some(Override::String(String::new())),
+            amdgpu_arch: Some(Override::String("11.0.0".to_string())),
+            ..Default::default()
+        };
+        let packages = VirtualPackages::detect(&overrides, None).unwrap();
+        assert!(packages.amdgpu.is_none());
+        assert!(packages.amdgpu_arch.is_none());
+
+        // Both overridden: both present with the given architecture.
+        let overrides = VirtualPackageOverrides {
+            amdgpu: Some(Override::String("0".to_string())),
+            amdgpu_arch: Some(Override::String("11.0.0".to_string())),
+            ..Default::default()
+        };
+        let packages = VirtualPackages::detect(&overrides, None).unwrap();
+        assert_eq!(packages.amdgpu, Some(AmdGpu));
+        assert_eq!(
+            packages.amdgpu_arch.map(|arch| arch.version),
+            Some(Version::from_str("11.0.0").unwrap())
+        );
+
+        // Presence forced on while the arch is forced off: __amdgpu without
+        // __amdgpu_arch is a valid combination (e.g. a driver without HIP).
+        let overrides = VirtualPackageOverrides {
+            amdgpu: Some(Override::String("0".to_string())),
+            amdgpu_arch: Some(Override::String(String::new())),
+            ..Default::default()
+        };
+        let packages = VirtualPackages::detect(&overrides, None).unwrap();
+        assert_eq!(packages.amdgpu, Some(AmdGpu));
+        assert!(packages.amdgpu_arch.is_none());
     }
 }

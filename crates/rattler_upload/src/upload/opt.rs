@@ -411,6 +411,14 @@ pub struct S3Opts {
     #[clap(flatten)]
     pub credentials: rattler_s3::clap::S3CredentialsOpts,
 
+    /// Publish an attestation sidecar alongside the package.
+    ///
+    /// The file must contain the complete sidecar as a non-empty JSON array of
+    /// Sigstore bundles. Attestations can only be uploaded with a single
+    /// package.
+    #[arg(long)]
+    pub attestation: Option<PathBuf>,
+
     /// Replace files if it already exists.
     #[arg(long)]
     pub force: bool,
