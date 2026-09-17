@@ -43,6 +43,9 @@ enum OciMiddlewareError {
     #[error("Invalid OCI URL '{0}': {1}")]
     InvalidUrl(Url, &'static str),
 
+    #[error("sharded repodata is not supported by the current OCI channel layout")]
+    ShardedRepodataUnavailable,
+
     #[error("OCI registry requested authentication")]
     AuthenticationRequired(Vec<Challenge>),
 }
@@ -458,6 +461,26 @@ fn version_build_tag(tag: &str) -> String {
         .replace('=', "__eq__")
 }
 
+/// Whether `url` is the sharded repodata index or one of its content-addressed
+/// shards. Keep this narrow: other `.msgpack.zst` paths may be valid OCI
+/// repository names.
+fn is_sharded_repodata(url: &Url) -> bool {
+    let Some(mut segments) = url.path_segments() else {
+        return false;
+    };
+    let Some(filename) = segments.next_back() else {
+        return false;
+    };
+    if filename == "repodata_shards.msgpack.zst" {
+        return true;
+    }
+
+    filename
+        .strip_suffix(".msgpack.zst")
+        .is_some_and(|digest| digest.len() == 64 && digest.bytes().all(|b| b.is_ascii_hexdigit()))
+        && segments.next_back() == Some("shards")
+}
+
 impl OCIUrl {
     pub fn manifest_url(&self) -> Result<Url, ParseError> {
         format!(
@@ -533,6 +556,13 @@ impl OCIUrl {
             } else if filename.ends_with(".zst") {
                 res.media_type = "application/vnd.conda.repodata.v1+json+zst".to_string();
             }
+        } else if is_sharded_repodata(url) {
+            // The current OCI channel layout does not define a mapping for
+            // sharded repodata. Answer the gateway's probe without touching the
+            // network so it falls back to `repodata.json`. Falling through would
+            // turn the filename into a repository name; ghcr.io reports that
+            // missing repository as `403 DENIED` rather than a degradable 404.
+            return Err(OciMiddlewareError::ShardedRepodataUnavailable);
         }
 
         // OCI image names cannot start with `_`, so we prefix it with `zzz`
@@ -643,7 +673,7 @@ impl Middleware for OciMiddleware {
 
         let oci_url = match OCIUrl::new(req.url()) {
             Ok(url) => url,
-            Err(e) => return Err(reqwest_middleware::Error::Middleware(e.into())),
+            Err(e) => return lookup_error_to_response(e, req.url()),
         };
 
         let expected_sha256 = req
@@ -701,6 +731,10 @@ fn lookup_error_to_response(
         OciMiddlewareError::ManifestRequestFailed(StatusCode::NOT_FOUND) => {
             Ok(create_404_response(url, "Manifest not found"))
         }
+        OciMiddlewareError::ShardedRepodataUnavailable => Ok(create_404_response(
+            url,
+            "sharded repodata is not supported by the current OCI channel layout",
+        )),
         _ => Err(reqwest_middleware::Error::Middleware(error.into())),
     }
 }
@@ -710,8 +744,9 @@ mod tests {
     use sha2::{Digest, Sha256};
 
     use super::{
-        Authentication, OciAction, RegistryAuth, StatusCode, credentials_header, parse_challenges,
-        registry_auth_from_challenges, registry_auth_from_probe, token_url,
+        Authentication, OCIUrl, OciAction, OciMiddlewareError, RegistryAuth, StatusCode, Url,
+        credentials_header, parse_challenges, registry_auth_from_challenges,
+        registry_auth_from_probe, token_url,
     };
     use crate::{Challenge, OciMiddleware};
 
@@ -857,6 +892,72 @@ mod tests {
             ),
             Some(RegistryAuth::TokenExchange { .. })
         ));
+    }
+
+    /// Sharded repodata is reported as unavailable before any network request,
+    /// while unrelated `.msgpack.zst` repositories and compressed
+    /// `repodata.json` variants keep resolving normally.
+    #[test]
+    fn sharded_repodata_is_unavailable_but_other_zstd_artifacts_are_not() {
+        for filename in [
+            "repodata_shards.msgpack.zst",
+            "shards/0000000000000000000000000000000000000000000000000000000000000000.msgpack.zst",
+        ] {
+            let url: Url =
+                format!("oci://ghcr.io/channel-mirrors/conda-forge/osx-arm64/{filename}")
+                    .parse()
+                    .unwrap();
+            assert!(
+                matches!(
+                    OCIUrl::new(&url),
+                    Err(OciMiddlewareError::ShardedRepodataUnavailable)
+                ),
+                "{filename} must be reported as unavailable, not turned into a repository name"
+            );
+        }
+
+        for filename in ["metadata.msgpack.zst", "shards/not-a-digest.msgpack.zst"] {
+            let url: Url =
+                format!("oci://ghcr.io/channel-mirrors/conda-forge/osx-arm64/{filename}")
+                    .parse()
+                    .unwrap();
+            OCIUrl::new(&url).unwrap_or_else(|_| panic!("{filename} may be a valid repository"));
+        }
+
+        let url: Url = "oci://ghcr.io/channel-mirrors/conda-forge/osx-arm64/repodata.json.zst"
+            .parse()
+            .unwrap();
+        let oci_url = OCIUrl::new(&url).expect("compressed repodata is published as a layer");
+        assert_eq!(
+            oci_url.path,
+            "channel-mirrors/conda-forge/osx-arm64/repodata.json"
+        );
+        assert_eq!(
+            oci_url.media_type,
+            "application/vnd.conda.repodata.v1+json+zst"
+        );
+    }
+
+    /// The middleware answers the gateway's sharded probe with a 404 it can
+    /// degrade from. Without this the filename becomes a repository ghcr.io
+    /// does not have, and its `403 DENIED` aborts the whole solve.
+    #[cfg(any(feature = "rustls", feature = "native-tls"))]
+    #[tokio::test]
+    async fn test_oci_middleware_sharded_repodata_is_404() {
+        let client = reqwest::Client::new();
+        let middleware = OciMiddleware::new(client.clone());
+
+        let client_with_middleware = reqwest_middleware::ClientBuilder::new(client)
+            .with(middleware)
+            .build();
+
+        let response = client_with_middleware
+            .get("oci://ghcr.io/channel-mirrors/conda-forge/osx-arm64/repodata_shards.msgpack.zst")
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 404);
     }
 
     // test pulling an image from OCI registry
