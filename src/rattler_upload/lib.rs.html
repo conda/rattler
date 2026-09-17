@@ -75,22 +75,23 @@
 <a href=#73 id=73 data-nosnippet>73</a>                    .<span class="kw">await
 <a href=#74 id=74 data-nosnippet>74</a>                    </span>.into_diagnostic()<span class="question-mark">?</span>,
 <a href=#75 id=75 data-nosnippet>75</a>            };
-<a href=#76 id=76 data-nosnippet>76</a>            upload::upload_package_to_s3(
+<a href=#76 id=76 data-nosnippet>76</a>            upload::upload_package_to_s3_with_attestation(
 <a href=#77 id=77 data-nosnippet>77</a>                s3_opts.channel,
 <a href=#78 id=78 data-nosnippet>78</a>                credentials,
 <a href=#79 id=79 data-nosnippet>79</a>                <span class="kw-2">&amp;</span>args.package_files,
-<a href=#80 id=80 data-nosnippet>80</a>                s3_opts.force,
-<a href=#81 id=81 data-nosnippet>81</a>            )
-<a href=#82 id=82 data-nosnippet>82</a>            .<span class="kw">await
-<a href=#83 id=83 data-nosnippet>83</a>        </span>}
-<a href=#84 id=84 data-nosnippet>84</a>        ServerType::CondaForge(conda_forge_opts) =&gt; {
-<a href=#85 id=85 data-nosnippet>85</a>            <span class="kw">let </span>conda_forge_data = CondaForgeData::from(conda_forge_opts);
-<a href=#86 id=86 data-nosnippet>86</a>            upload::conda_forge::upload_packages_to_conda_forge(
-<a href=#87 id=87 data-nosnippet>87</a>                <span class="kw-2">&amp;</span>args.package_files,
-<a href=#88 id=88 data-nosnippet>88</a>                conda_forge_data,
-<a href=#89 id=89 data-nosnippet>89</a>            )
-<a href=#90 id=90 data-nosnippet>90</a>            .<span class="kw">await
-<a href=#91 id=91 data-nosnippet>91</a>        </span>}
-<a href=#92 id=92 data-nosnippet>92</a>    }
-<a href=#93 id=93 data-nosnippet>93</a>}
+<a href=#80 id=80 data-nosnippet>80</a>                s3_opts.attestation.as_deref(),
+<a href=#81 id=81 data-nosnippet>81</a>                s3_opts.force,
+<a href=#82 id=82 data-nosnippet>82</a>            )
+<a href=#83 id=83 data-nosnippet>83</a>            .<span class="kw">await
+<a href=#84 id=84 data-nosnippet>84</a>        </span>}
+<a href=#85 id=85 data-nosnippet>85</a>        ServerType::CondaForge(conda_forge_opts) =&gt; {
+<a href=#86 id=86 data-nosnippet>86</a>            <span class="kw">let </span>conda_forge_data = CondaForgeData::from(conda_forge_opts);
+<a href=#87 id=87 data-nosnippet>87</a>            upload::conda_forge::upload_packages_to_conda_forge(
+<a href=#88 id=88 data-nosnippet>88</a>                <span class="kw-2">&amp;</span>args.package_files,
+<a href=#89 id=89 data-nosnippet>89</a>                conda_forge_data,
+<a href=#90 id=90 data-nosnippet>90</a>            )
+<a href=#91 id=91 data-nosnippet>91</a>            .<span class="kw">await
+<a href=#92 id=92 data-nosnippet>92</a>        </span>}
+<a href=#93 id=93 data-nosnippet>93</a>    }
+<a href=#94 id=94 data-nosnippet>94</a>}
 </code></pre></div></section></main></body></html>

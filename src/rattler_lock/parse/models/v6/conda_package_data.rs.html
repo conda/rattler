@@ -172,71 +172,72 @@
 <a href=#170 id=170 data-nosnippet>170</a>        <span class="kw">let </span>(derived_arch, derived_platform) = derived_fields::derive_arch_and_platform(<span class="kw-2">&amp;</span>subdir);
 <a href=#171 id=171 data-nosnippet>171</a>
 <a href=#172 id=172 data-nosnippet>172</a>        <span class="kw">let </span>package_record = PackageRecord {
-<a href=#173 id=173 data-nosnippet>173</a>            build,
-<a href=#174 id=174 data-nosnippet>174</a>            build_number,
-<a href=#175 id=175 data-nosnippet>175</a>            constrains: value.constrains.into_owned(),
-<a href=#176 id=176 data-nosnippet>176</a>            depends: value.depends.into_owned(),
-<a href=#177 id=177 data-nosnippet>177</a>            extra_depends: value.extra_depends.into_owned(),
-<a href=#178 id=178 data-nosnippet>178</a>            features: value.features.into_owned(),
-<a href=#179 id=179 data-nosnippet>179</a>            flags: value.flags.into_owned(),
-<a href=#180 id=180 data-nosnippet>180</a>            legacy_bz2_md5: value.legacy_bz2_md5,
-<a href=#181 id=181 data-nosnippet>181</a>            legacy_bz2_size: value.legacy_bz2_size.into_owned(),
-<a href=#182 id=182 data-nosnippet>182</a>            license: value.license.into_owned(),
-<a href=#183 id=183 data-nosnippet>183</a>            license_family: value.license_family.into_owned(),
-<a href=#184 id=184 data-nosnippet>184</a>            md5: value.md5,
-<a href=#185 id=185 data-nosnippet>185</a>            name: value
-<a href=#186 id=186 data-nosnippet>186</a>                .name
-<a href=#187 id=187 data-nosnippet>187</a>                .map(Cow::into_owned)
-<a href=#188 id=188 data-nosnippet>188</a>                .or(derived.name)
-<a href=#189 id=189 data-nosnippet>189</a>                .ok_or_else(|| ConversionError::Missing(<span class="string">"name"</span>.to_string()))<span class="question-mark">?</span>,
-<a href=#190 id=190 data-nosnippet>190</a>            noarch,
-<a href=#191 id=191 data-nosnippet>191</a>            arch: derived_arch,
-<a href=#192 id=192 data-nosnippet>192</a>            platform: derived_platform,
-<a href=#193 id=193 data-nosnippet>193</a>            purls: value.purls.into_owned(),
-<a href=#194 id=194 data-nosnippet>194</a>            sha256: value.sha256,
-<a href=#195 id=195 data-nosnippet>195</a>            size: value.size.into_owned(),
-<a href=#196 id=196 data-nosnippet>196</a>            subdir,
-<a href=#197 id=197 data-nosnippet>197</a>            timestamp: value.timestamp.map(Into::into),
-<a href=#198 id=198 data-nosnippet>198</a>            indexed_timestamp: <span class="prelude-val">None</span>,
-<a href=#199 id=199 data-nosnippet>199</a>            track_features: value.track_features.into_owned(),
-<a href=#200 id=200 data-nosnippet>200</a>            version: value
-<a href=#201 id=201 data-nosnippet>201</a>                .version
-<a href=#202 id=202 data-nosnippet>202</a>                .map(Cow::into_owned)
-<a href=#203 id=203 data-nosnippet>203</a>                .or(derived.version)
-<a href=#204 id=204 data-nosnippet>204</a>                .ok_or_else(|| ConversionError::Missing(<span class="string">"version"</span>.to_string()))<span class="question-mark">?</span>,
-<a href=#205 id=205 data-nosnippet>205</a>            run_exports: <span class="prelude-val">None</span>,
-<a href=#206 id=206 data-nosnippet>206</a>            python_site_packages_path: value.python_site_packages_path.into_owned(),
-<a href=#207 id=207 data-nosnippet>207</a>        };
-<a href=#208 id=208 data-nosnippet>208</a>
-<a href=#209 id=209 data-nosnippet>209</a>        <span class="kw">if </span>value
-<a href=#210 id=210 data-nosnippet>210</a>            .location
-<a href=#211 id=211 data-nosnippet>211</a>            .file_name()
-<a href=#212 id=212 data-nosnippet>212</a>            .is_some_and(|name| CondaArchiveIdentifier::try_from_filename(name).is_some())
-<a href=#213 id=213 data-nosnippet>213</a>        {
-<a href=#214 id=214 data-nosnippet>214</a>            <span class="kw">let </span>file_name = value
-<a href=#215 id=215 data-nosnippet>215</a>                .location
-<a href=#216 id=216 data-nosnippet>216</a>                .file_name()
-<a href=#217 id=217 data-nosnippet>217</a>                .expect(<span class="string">"if checked this"</span>)
-<a href=#218 id=218 data-nosnippet>218</a>                .to_owned();
-<a href=#219 id=219 data-nosnippet>219</a>            <span class="prelude-val">Ok</span>(LegacyCondaPackageData::Binary(LegacyCondaBinaryData {
-<a href=#220 id=220 data-nosnippet>220</a>                location: value.location,
-<a href=#221 id=221 data-nosnippet>221</a>                file_name,
-<a href=#222 id=222 data-nosnippet>222</a>                channel: value
-<a href=#223 id=223 data-nosnippet>223</a>                    .channel
-<a href=#224 id=224 data-nosnippet>224</a>                    .map(Cow::into_owned)
-<a href=#225 id=225 data-nosnippet>225</a>                    .map(|m| m.map(ChannelUrl::from))
-<a href=#226 id=226 data-nosnippet>226</a>                    .unwrap_or(derived.channel),
-<a href=#227 id=227 data-nosnippet>227</a>                package_record,
-<a href=#228 id=228 data-nosnippet>228</a>            }))
-<a href=#229 id=229 data-nosnippet>229</a>        } <span class="kw">else </span>{
-<a href=#230 id=230 data-nosnippet>230</a>            <span class="prelude-val">Ok</span>(LegacyCondaPackageData::Source(LegacyCondaSourceData {
-<a href=#231 id=231 data-nosnippet>231</a>                package_record,
-<a href=#232 id=232 data-nosnippet>232</a>                location: value.location,
-<a href=#233 id=233 data-nosnippet>233</a>                variants: value.variants.map(Cow::into_owned).unwrap_or_default(),
-<a href=#234 id=234 data-nosnippet>234</a>                package_build_source: value.package_build_source,
-<a href=#235 id=235 data-nosnippet>235</a>                sources: value.sources,
-<a href=#236 id=236 data-nosnippet>236</a>            }))
-<a href=#237 id=237 data-nosnippet>237</a>        }
-<a href=#238 id=238 data-nosnippet>238</a>    }
-<a href=#239 id=239 data-nosnippet>239</a>}
+<a href=#173 id=173 data-nosnippet>173</a>            attestations_sha256: <span class="prelude-val">None</span>,
+<a href=#174 id=174 data-nosnippet>174</a>            build,
+<a href=#175 id=175 data-nosnippet>175</a>            build_number,
+<a href=#176 id=176 data-nosnippet>176</a>            constrains: value.constrains.into_owned(),
+<a href=#177 id=177 data-nosnippet>177</a>            depends: value.depends.into_owned(),
+<a href=#178 id=178 data-nosnippet>178</a>            extra_depends: value.extra_depends.into_owned(),
+<a href=#179 id=179 data-nosnippet>179</a>            features: value.features.into_owned(),
+<a href=#180 id=180 data-nosnippet>180</a>            flags: value.flags.into_owned(),
+<a href=#181 id=181 data-nosnippet>181</a>            legacy_bz2_md5: value.legacy_bz2_md5,
+<a href=#182 id=182 data-nosnippet>182</a>            legacy_bz2_size: value.legacy_bz2_size.into_owned(),
+<a href=#183 id=183 data-nosnippet>183</a>            license: value.license.into_owned(),
+<a href=#184 id=184 data-nosnippet>184</a>            license_family: value.license_family.into_owned(),
+<a href=#185 id=185 data-nosnippet>185</a>            md5: value.md5,
+<a href=#186 id=186 data-nosnippet>186</a>            name: value
+<a href=#187 id=187 data-nosnippet>187</a>                .name
+<a href=#188 id=188 data-nosnippet>188</a>                .map(Cow::into_owned)
+<a href=#189 id=189 data-nosnippet>189</a>                .or(derived.name)
+<a href=#190 id=190 data-nosnippet>190</a>                .ok_or_else(|| ConversionError::Missing(<span class="string">"name"</span>.to_string()))<span class="question-mark">?</span>,
+<a href=#191 id=191 data-nosnippet>191</a>            noarch,
+<a href=#192 id=192 data-nosnippet>192</a>            arch: derived_arch,
+<a href=#193 id=193 data-nosnippet>193</a>            platform: derived_platform,
+<a href=#194 id=194 data-nosnippet>194</a>            purls: value.purls.into_owned(),
+<a href=#195 id=195 data-nosnippet>195</a>            sha256: value.sha256,
+<a href=#196 id=196 data-nosnippet>196</a>            size: value.size.into_owned(),
+<a href=#197 id=197 data-nosnippet>197</a>            subdir,
+<a href=#198 id=198 data-nosnippet>198</a>            timestamp: value.timestamp.map(Into::into),
+<a href=#199 id=199 data-nosnippet>199</a>            indexed_timestamp: <span class="prelude-val">None</span>,
+<a href=#200 id=200 data-nosnippet>200</a>            track_features: value.track_features.into_owned(),
+<a href=#201 id=201 data-nosnippet>201</a>            version: value
+<a href=#202 id=202 data-nosnippet>202</a>                .version
+<a href=#203 id=203 data-nosnippet>203</a>                .map(Cow::into_owned)
+<a href=#204 id=204 data-nosnippet>204</a>                .or(derived.version)
+<a href=#205 id=205 data-nosnippet>205</a>                .ok_or_else(|| ConversionError::Missing(<span class="string">"version"</span>.to_string()))<span class="question-mark">?</span>,
+<a href=#206 id=206 data-nosnippet>206</a>            run_exports: <span class="prelude-val">None</span>,
+<a href=#207 id=207 data-nosnippet>207</a>            python_site_packages_path: value.python_site_packages_path.into_owned(),
+<a href=#208 id=208 data-nosnippet>208</a>        };
+<a href=#209 id=209 data-nosnippet>209</a>
+<a href=#210 id=210 data-nosnippet>210</a>        <span class="kw">if </span>value
+<a href=#211 id=211 data-nosnippet>211</a>            .location
+<a href=#212 id=212 data-nosnippet>212</a>            .file_name()
+<a href=#213 id=213 data-nosnippet>213</a>            .is_some_and(|name| CondaArchiveIdentifier::try_from_filename(name).is_some())
+<a href=#214 id=214 data-nosnippet>214</a>        {
+<a href=#215 id=215 data-nosnippet>215</a>            <span class="kw">let </span>file_name = value
+<a href=#216 id=216 data-nosnippet>216</a>                .location
+<a href=#217 id=217 data-nosnippet>217</a>                .file_name()
+<a href=#218 id=218 data-nosnippet>218</a>                .expect(<span class="string">"if checked this"</span>)
+<a href=#219 id=219 data-nosnippet>219</a>                .to_owned();
+<a href=#220 id=220 data-nosnippet>220</a>            <span class="prelude-val">Ok</span>(LegacyCondaPackageData::Binary(LegacyCondaBinaryData {
+<a href=#221 id=221 data-nosnippet>221</a>                location: value.location,
+<a href=#222 id=222 data-nosnippet>222</a>                file_name,
+<a href=#223 id=223 data-nosnippet>223</a>                channel: value
+<a href=#224 id=224 data-nosnippet>224</a>                    .channel
+<a href=#225 id=225 data-nosnippet>225</a>                    .map(Cow::into_owned)
+<a href=#226 id=226 data-nosnippet>226</a>                    .map(|m| m.map(ChannelUrl::from))
+<a href=#227 id=227 data-nosnippet>227</a>                    .unwrap_or(derived.channel),
+<a href=#228 id=228 data-nosnippet>228</a>                package_record,
+<a href=#229 id=229 data-nosnippet>229</a>            }))
+<a href=#230 id=230 data-nosnippet>230</a>        } <span class="kw">else </span>{
+<a href=#231 id=231 data-nosnippet>231</a>            <span class="prelude-val">Ok</span>(LegacyCondaPackageData::Source(LegacyCondaSourceData {
+<a href=#232 id=232 data-nosnippet>232</a>                package_record,
+<a href=#233 id=233 data-nosnippet>233</a>                location: value.location,
+<a href=#234 id=234 data-nosnippet>234</a>                variants: value.variants.map(Cow::into_owned).unwrap_or_default(),
+<a href=#235 id=235 data-nosnippet>235</a>                package_build_source: value.package_build_source,
+<a href=#236 id=236 data-nosnippet>236</a>                sources: value.sources,
+<a href=#237 id=237 data-nosnippet>237</a>            }))
+<a href=#238 id=238 data-nosnippet>238</a>        }
+<a href=#239 id=239 data-nosnippet>239</a>    }
+<a href=#240 id=240 data-nosnippet>240</a>}
 </code></pre></div></section></main></body></html>

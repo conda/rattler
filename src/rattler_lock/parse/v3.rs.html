@@ -225,83 +225,84 @@
 <a href=#223 id=223 data-nosnippet>223</a>                                    |id| id.to_file_name(),
 <a href=#224 id=224 data-nosnippet>224</a>                                ),
 <a href=#225 id=225 data-nosnippet>225</a>                                package_record: PackageRecord {
-<a href=#226 id=226 data-nosnippet>226</a>                                    arch: value.arch.or(derived_arch),
-<a href=#227 id=227 data-nosnippet>227</a>                                    build,
-<a href=#228 id=228 data-nosnippet>228</a>                                    build_number,
-<a href=#229 id=229 data-nosnippet>229</a>                                    constrains: value.constrains,
-<a href=#230 id=230 data-nosnippet>230</a>                                    depends: value.dependencies,
-<a href=#231 id=231 data-nosnippet>231</a>                                    extra_depends: std::collections::BTreeMap::new(),
-<a href=#232 id=232 data-nosnippet>232</a>                                    features: value.features,
-<a href=#233 id=233 data-nosnippet>233</a>                                    flags: Vec::new(),
-<a href=#234 id=234 data-nosnippet>234</a>                                    legacy_bz2_md5: <span class="prelude-val">None</span>,
-<a href=#235 id=235 data-nosnippet>235</a>                                    legacy_bz2_size: <span class="prelude-val">None</span>,
-<a href=#236 id=236 data-nosnippet>236</a>                                    license: value.license,
-<a href=#237 id=237 data-nosnippet>237</a>                                    license_family: value.license_family,
-<a href=#238 id=238 data-nosnippet>238</a>                                    md5,
-<a href=#239 id=239 data-nosnippet>239</a>                                    name: PackageName::new_unchecked(value.name),
-<a href=#240 id=240 data-nosnippet>240</a>                                    noarch: value.noarch.unwrap_or(derived_noarch),
-<a href=#241 id=241 data-nosnippet>241</a>                                    platform: derived_platform,
-<a href=#242 id=242 data-nosnippet>242</a>                                    sha256,
-<a href=#243 id=243 data-nosnippet>243</a>                                    size: value.size,
-<a href=#244 id=244 data-nosnippet>244</a>                                    subdir: subdir.to_string(),
-<a href=#245 id=245 data-nosnippet>245</a>                                    timestamp: value.timestamp.map(Into::into),
-<a href=#246 id=246 data-nosnippet>246</a>                                    indexed_timestamp: <span class="prelude-val">None</span>,
-<a href=#247 id=247 data-nosnippet>247</a>                                    track_features: value.track_features,
-<a href=#248 id=248 data-nosnippet>248</a>                                    version: value.version,
-<a href=#249 id=249 data-nosnippet>249</a>                                    purls: value.purls.is_empty().not().then_some(value.purls),
-<a href=#250 id=250 data-nosnippet>250</a>                                    python_site_packages_path: value.python_site_packages_path,
-<a href=#251 id=251 data-nosnippet>251</a>                                    run_exports: <span class="prelude-val">None</span>,
-<a href=#252 id=252 data-nosnippet>252</a>                                },
-<a href=#253 id=253 data-nosnippet>253</a>                                location,
-<a href=#254 id=254 data-nosnippet>254</a>                            })
-<a href=#255 id=255 data-nosnippet>255</a>                            .into(),
-<a href=#256 id=256 data-nosnippet>256</a>                        ))
-<a href=#257 id=257 data-nosnippet>257</a>                        .<span class="number">0</span>,
-<a href=#258 id=258 data-nosnippet>258</a>                )
-<a href=#259 id=259 data-nosnippet>259</a>            }
-<a href=#260 id=260 data-nosnippet>260</a>            LockedPackageKindV3::Pypi(pkg) =&gt; PackageIndex(
-<a href=#261 id=261 data-nosnippet>261</a>                packages
-<a href=#262 id=262 data-nosnippet>262</a>                    .insert_full(LockedPackage::Pypi(PypiPackageData::from(
-<a href=#263 id=263 data-nosnippet>263</a>                        PypiDistributionData {
-<a href=#264 id=264 data-nosnippet>264</a>                            name: pep508_rs::PackageName::new(pkg.name)<span class="question-mark">?</span>,
-<a href=#265 id=265 data-nosnippet>265</a>                            version: pkg.version,
-<a href=#266 id=266 data-nosnippet>266</a>                            requires_dist: pkg.requires_dist,
-<a href=#267 id=267 data-nosnippet>267</a>                            requires_python: pkg.requires_python,
-<a href=#268 id=268 data-nosnippet>268</a>                            location: Verbatim::new(UrlOrPath::Url(pkg.url)),
-<a href=#269 id=269 data-nosnippet>269</a>                            hash: pkg.hash,
-<a href=#270 id=270 data-nosnippet>270</a>                            index_url: <span class="prelude-val">None</span>,
-<a href=#271 id=271 data-nosnippet>271</a>                        },
-<a href=#272 id=272 data-nosnippet>272</a>                    )))
-<a href=#273 id=273 data-nosnippet>273</a>                    .<span class="number">0</span>,
-<a href=#274 id=274 data-nosnippet>274</a>            ),
-<a href=#275 id=275 data-nosnippet>275</a>        };
-<a href=#276 id=276 data-nosnippet>276</a>
-<a href=#277 id=277 data-nosnippet>277</a>        per_platform
-<a href=#278 id=278 data-nosnippet>278</a>            .entry(package.platform)
-<a href=#279 id=279 data-nosnippet>279</a>            .or_default()
-<a href=#280 id=280 data-nosnippet>280</a>            .insert(pkg);
-<a href=#281 id=281 data-nosnippet>281</a>    }
-<a href=#282 id=282 data-nosnippet>282</a>
-<a href=#283 id=283 data-nosnippet>283</a>    <span class="kw">let </span>packages: Vec&lt;LockedPackage&gt; = packages.into_iter().collect();
-<a href=#284 id=284 data-nosnippet>284</a>    <span class="kw">let </span>(platforms, environment_packages) = create_platforms_and_packages(per_platform, <span class="kw-2">&amp;</span>packages)<span class="question-mark">?</span>;
-<a href=#285 id=285 data-nosnippet>285</a>    <span class="comment">// Construct the default environment
-<a href=#286 id=286 data-nosnippet>286</a>    </span><span class="kw">let </span>default_environment = EnvironmentData {
-<a href=#287 id=287 data-nosnippet>287</a>        channels: lock_file.metadata.channels,
-<a href=#288 id=288 data-nosnippet>288</a>        indexes: <span class="prelude-val">None</span>,
-<a href=#289 id=289 data-nosnippet>289</a>        packages: environment_packages,
-<a href=#290 id=290 data-nosnippet>290</a>        options: SolveOptions::default(),
-<a href=#291 id=291 data-nosnippet>291</a>    };
-<a href=#292 id=292 data-nosnippet>292</a>
-<a href=#293 id=293 data-nosnippet>293</a>    <span class="prelude-val">Ok</span>(LockFile {
-<a href=#294 id=294 data-nosnippet>294</a>        inner: Arc::new(LockFileInner {
-<a href=#295 id=295 data-nosnippet>295</a>            version,
-<a href=#296 id=296 data-nosnippet>296</a>            platforms,
-<a href=#297 id=297 data-nosnippet>297</a>            packages,
-<a href=#298 id=298 data-nosnippet>298</a>            environment_lookup: [(DEFAULT_ENVIRONMENT_NAME.to_string(), EnvironmentIndex(<span class="number">0</span>))]
-<a href=#299 id=299 data-nosnippet>299</a>                .into_iter()
-<a href=#300 id=300 data-nosnippet>300</a>                .collect(),
-<a href=#301 id=301 data-nosnippet>301</a>            environments: <span class="macro">vec!</span>[default_environment],
-<a href=#302 id=302 data-nosnippet>302</a>        }),
-<a href=#303 id=303 data-nosnippet>303</a>    })
-<a href=#304 id=304 data-nosnippet>304</a>}
+<a href=#226 id=226 data-nosnippet>226</a>                                    attestations_sha256: <span class="prelude-val">None</span>,
+<a href=#227 id=227 data-nosnippet>227</a>                                    arch: value.arch.or(derived_arch),
+<a href=#228 id=228 data-nosnippet>228</a>                                    build,
+<a href=#229 id=229 data-nosnippet>229</a>                                    build_number,
+<a href=#230 id=230 data-nosnippet>230</a>                                    constrains: value.constrains,
+<a href=#231 id=231 data-nosnippet>231</a>                                    depends: value.dependencies,
+<a href=#232 id=232 data-nosnippet>232</a>                                    extra_depends: std::collections::BTreeMap::new(),
+<a href=#233 id=233 data-nosnippet>233</a>                                    features: value.features,
+<a href=#234 id=234 data-nosnippet>234</a>                                    flags: Vec::new(),
+<a href=#235 id=235 data-nosnippet>235</a>                                    legacy_bz2_md5: <span class="prelude-val">None</span>,
+<a href=#236 id=236 data-nosnippet>236</a>                                    legacy_bz2_size: <span class="prelude-val">None</span>,
+<a href=#237 id=237 data-nosnippet>237</a>                                    license: value.license,
+<a href=#238 id=238 data-nosnippet>238</a>                                    license_family: value.license_family,
+<a href=#239 id=239 data-nosnippet>239</a>                                    md5,
+<a href=#240 id=240 data-nosnippet>240</a>                                    name: PackageName::new_unchecked(value.name),
+<a href=#241 id=241 data-nosnippet>241</a>                                    noarch: value.noarch.unwrap_or(derived_noarch),
+<a href=#242 id=242 data-nosnippet>242</a>                                    platform: derived_platform,
+<a href=#243 id=243 data-nosnippet>243</a>                                    sha256,
+<a href=#244 id=244 data-nosnippet>244</a>                                    size: value.size,
+<a href=#245 id=245 data-nosnippet>245</a>                                    subdir: subdir.to_string(),
+<a href=#246 id=246 data-nosnippet>246</a>                                    timestamp: value.timestamp.map(Into::into),
+<a href=#247 id=247 data-nosnippet>247</a>                                    indexed_timestamp: <span class="prelude-val">None</span>,
+<a href=#248 id=248 data-nosnippet>248</a>                                    track_features: value.track_features,
+<a href=#249 id=249 data-nosnippet>249</a>                                    version: value.version,
+<a href=#250 id=250 data-nosnippet>250</a>                                    purls: value.purls.is_empty().not().then_some(value.purls),
+<a href=#251 id=251 data-nosnippet>251</a>                                    python_site_packages_path: value.python_site_packages_path,
+<a href=#252 id=252 data-nosnippet>252</a>                                    run_exports: <span class="prelude-val">None</span>,
+<a href=#253 id=253 data-nosnippet>253</a>                                },
+<a href=#254 id=254 data-nosnippet>254</a>                                location,
+<a href=#255 id=255 data-nosnippet>255</a>                            })
+<a href=#256 id=256 data-nosnippet>256</a>                            .into(),
+<a href=#257 id=257 data-nosnippet>257</a>                        ))
+<a href=#258 id=258 data-nosnippet>258</a>                        .<span class="number">0</span>,
+<a href=#259 id=259 data-nosnippet>259</a>                )
+<a href=#260 id=260 data-nosnippet>260</a>            }
+<a href=#261 id=261 data-nosnippet>261</a>            LockedPackageKindV3::Pypi(pkg) =&gt; PackageIndex(
+<a href=#262 id=262 data-nosnippet>262</a>                packages
+<a href=#263 id=263 data-nosnippet>263</a>                    .insert_full(LockedPackage::Pypi(PypiPackageData::from(
+<a href=#264 id=264 data-nosnippet>264</a>                        PypiDistributionData {
+<a href=#265 id=265 data-nosnippet>265</a>                            name: pep508_rs::PackageName::new(pkg.name)<span class="question-mark">?</span>,
+<a href=#266 id=266 data-nosnippet>266</a>                            version: pkg.version,
+<a href=#267 id=267 data-nosnippet>267</a>                            requires_dist: pkg.requires_dist,
+<a href=#268 id=268 data-nosnippet>268</a>                            requires_python: pkg.requires_python,
+<a href=#269 id=269 data-nosnippet>269</a>                            location: Verbatim::new(UrlOrPath::Url(pkg.url)),
+<a href=#270 id=270 data-nosnippet>270</a>                            hash: pkg.hash,
+<a href=#271 id=271 data-nosnippet>271</a>                            index_url: <span class="prelude-val">None</span>,
+<a href=#272 id=272 data-nosnippet>272</a>                        },
+<a href=#273 id=273 data-nosnippet>273</a>                    )))
+<a href=#274 id=274 data-nosnippet>274</a>                    .<span class="number">0</span>,
+<a href=#275 id=275 data-nosnippet>275</a>            ),
+<a href=#276 id=276 data-nosnippet>276</a>        };
+<a href=#277 id=277 data-nosnippet>277</a>
+<a href=#278 id=278 data-nosnippet>278</a>        per_platform
+<a href=#279 id=279 data-nosnippet>279</a>            .entry(package.platform)
+<a href=#280 id=280 data-nosnippet>280</a>            .or_default()
+<a href=#281 id=281 data-nosnippet>281</a>            .insert(pkg);
+<a href=#282 id=282 data-nosnippet>282</a>    }
+<a href=#283 id=283 data-nosnippet>283</a>
+<a href=#284 id=284 data-nosnippet>284</a>    <span class="kw">let </span>packages: Vec&lt;LockedPackage&gt; = packages.into_iter().collect();
+<a href=#285 id=285 data-nosnippet>285</a>    <span class="kw">let </span>(platforms, environment_packages) = create_platforms_and_packages(per_platform, <span class="kw-2">&amp;</span>packages)<span class="question-mark">?</span>;
+<a href=#286 id=286 data-nosnippet>286</a>    <span class="comment">// Construct the default environment
+<a href=#287 id=287 data-nosnippet>287</a>    </span><span class="kw">let </span>default_environment = EnvironmentData {
+<a href=#288 id=288 data-nosnippet>288</a>        channels: lock_file.metadata.channels,
+<a href=#289 id=289 data-nosnippet>289</a>        indexes: <span class="prelude-val">None</span>,
+<a href=#290 id=290 data-nosnippet>290</a>        packages: environment_packages,
+<a href=#291 id=291 data-nosnippet>291</a>        options: SolveOptions::default(),
+<a href=#292 id=292 data-nosnippet>292</a>    };
+<a href=#293 id=293 data-nosnippet>293</a>
+<a href=#294 id=294 data-nosnippet>294</a>    <span class="prelude-val">Ok</span>(LockFile {
+<a href=#295 id=295 data-nosnippet>295</a>        inner: Arc::new(LockFileInner {
+<a href=#296 id=296 data-nosnippet>296</a>            version,
+<a href=#297 id=297 data-nosnippet>297</a>            platforms,
+<a href=#298 id=298 data-nosnippet>298</a>            packages,
+<a href=#299 id=299 data-nosnippet>299</a>            environment_lookup: [(DEFAULT_ENVIRONMENT_NAME.to_string(), EnvironmentIndex(<span class="number">0</span>))]
+<a href=#300 id=300 data-nosnippet>300</a>                .into_iter()
+<a href=#301 id=301 data-nosnippet>301</a>                .collect(),
+<a href=#302 id=302 data-nosnippet>302</a>            environments: <span class="macro">vec!</span>[default_environment],
+<a href=#303 id=303 data-nosnippet>303</a>        }),
+<a href=#304 id=304 data-nosnippet>304</a>    })
+<a href=#305 id=305 data-nosnippet>305</a>}
 </code></pre></div></section></main></body></html>
