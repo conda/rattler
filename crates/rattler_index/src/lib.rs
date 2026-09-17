@@ -1,5 +1,11 @@
 //! Indexing of packages in a output folder to create up to date repodata.json
 //! files
+//!
+//! Channel indexing assigns `indexed_timestamp` to newly published archives.
+//! Existing publication timestamps, including legacy missing values, are
+//! preserved when reindexing, even with `force` enabled. Archive readers do not
+//! assign publication timestamps. Build timestamps in the future or later than
+//! publication are flagged with warnings.
 #![deny(missing_docs)]
 
 pub mod cache;
@@ -760,12 +766,37 @@ async fn index_subdir_inner(
     } else {
         read_existing_repodata(&op, &format!("{subdir}/{REPODATA}"), &metadata.repodata).await?
     };
+    // Keep publication history separate from reusable archive metadata. A
+    // present entry with no timestamp is a legacy publication, not a new one.
+    // Include raw records (patches may remove packages), but let published
+    // records win, including intentional corrections and missing values.
+    let mut indexed_timestamps: HashMap<_, _> = package_source
+        .packages
+        .iter()
+        .map(|(filename, package)| (filename.clone(), package.record.indexed_timestamp))
+        .collect();
     let existing_repodata = if repodata_patch.is_some() {
         let published =
             read_existing_repodata(&op, &format!("{subdir}/{REPODATA}"), &metadata.repodata)
                 .await?;
+        indexed_timestamps.extend(
+            published
+                .packages
+                .iter()
+                .map(|(filename, package)| (filename.clone(), package.record.indexed_timestamp)),
+        );
         merge_patch_repodata(package_source, published)
     } else {
+        // When patches are disabled, packages previously hidden by a removal
+        // patch may only have publication history in the old raw repodata.
+        let raw_path = format!("{subdir}/{REPODATA_FROM_PACKAGES}");
+        let raw_metadata = RepodataFileMetadata::new(&op, &raw_path, precondition_checks).await?;
+        let raw = read_existing_repodata(&op, &raw_path, &raw_metadata).await?;
+        for (filename, package) in raw.packages {
+            indexed_timestamps
+                .entry(filename)
+                .or_insert(package.record.indexed_timestamp);
+        }
         package_source
     };
 
@@ -930,7 +961,25 @@ async fn index_subdir_inner(
         ..V3Packages::default()
     };
     let latest_revision = latest_repodata_revision(&repodata_revisions);
-    for (filename, package) in registered_packages {
+    let indexed_at = jiff::Timestamp::now().into();
+    for (filename, mut package) in registered_packages {
+        // Assign only after extraction/cache lookup, using the history freshly
+        // read on this attempt. A concurrent publisher's timestamp therefore
+        // takes precedence over any work performed before a retry.
+        package.record.indexed_timestamp = indexed_timestamps
+            .get(&filename)
+            .copied()
+            .unwrap_or(Some(indexed_at));
+        if let Some(timestamp) = package.record.timestamp {
+            if timestamp > indexed_at {
+                tracing::warn!(%filename, %subdir, ?timestamp, "Package build timestamp is in the future");
+            }
+            if let Some(indexed_timestamp) = package.record.indexed_timestamp
+                && timestamp > indexed_timestamp
+            {
+                tracing::warn!(%filename, %subdir, ?timestamp, ?indexed_timestamp, "Package build timestamp is later than its indexed timestamp");
+            }
+        }
         let revision =
             package_revision_assignment.assign(package.repodata_revision, latest_revision);
         insert_package_record_by_revision(
