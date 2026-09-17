@@ -202,6 +202,7 @@ class PackageRecord:
         python_site_packages_path: Optional[str] = None,
         extra_depends: Optional[Dict[str, List[str]]] = None,
         flags: Optional[List[str]] = None,
+        attestations_sha256: Optional[bytes] = None,
     ) -> None:
         if isinstance(subdir, str):
             try:
@@ -263,6 +264,8 @@ class PackageRecord:
             self._record.extra_depends = extra_depends
         if flags is not None:
             self._record.flags = flags
+        if attestations_sha256 is not None:
+            self._record.attestations_sha256 = attestations_sha256
 
     @property
     def arch(self) -> Optional[str]:
@@ -746,6 +749,15 @@ class PackageRecord:
     @sha256.setter
     def sha256(self, value: Optional[bytes]) -> None:
         self._record.sha256 = value
+
+    @property
+    def attestations_sha256(self) -> Optional[bytes]:
+        """The SHA256 hash of the package's Sigstore attestation sidecar, if advertised."""
+        return self._record.attestations_sha256
+
+    @attestations_sha256.setter
+    def attestations_sha256(self, value: Optional[bytes]) -> None:
+        self._record.attestations_sha256 = value
 
     @property
     def size(self) -> Optional[int]:

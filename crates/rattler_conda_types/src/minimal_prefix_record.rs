@@ -221,6 +221,7 @@ impl MinimalPrefixRecord {
     /// This creates a `PackageRecord` with only the essential fields filled in.
     pub fn to_package_record(&self) -> PackageRecord {
         PackageRecord {
+            attestations_sha256: None,
             name: self.name.clone(),
             version: self.version.clone(),
             build: self.build.clone(),
