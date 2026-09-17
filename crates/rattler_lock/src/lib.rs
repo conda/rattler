@@ -46,9 +46,10 @@
 //!
 //! Initially the lock-file format was based on [`conda-lock`](https://github.com/conda/conda-lock)
 //! but over time significant changes have been made compared to the original
-//! conda-lock format. Conda-lock files (e.g. `conda-lock.yml` files) can still
-//! be parsed by this crate but the serialization format changed significantly.
-//! This means files created by this crate are not compatible with conda-lock.
+//! conda-lock format. The default serializer writes pixi lockfiles, not CEP-37.
+//! Use [`conda_lock`] for explicit, fallible conversion between CEP-37 and pixi,
+//! or [`rattler_conda_lock`] for source-aware CEP-37 reading and writing.
+//! The historical parser remains available for older lockfile formats.
 //!
 //! Conda-lock stores a lot of metadata to be able to verify if the lock-file is
 //! still valid given the sources/inputs. For example conda-lock contains a
@@ -81,6 +82,7 @@ use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
 mod builder;
 mod channel;
 mod conda;
+pub mod conda_lock;
 mod file_format_version;
 mod hash;
 pub mod options;
