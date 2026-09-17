@@ -73,10 +73,11 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
                     .await
                     .into_diagnostic()?,
             };
-            upload::upload_package_to_s3(
+            upload::upload_package_to_s3_with_attestation(
                 s3_opts.channel,
                 credentials,
                 &args.package_files,
+                s3_opts.attestation.as_deref(),
                 s3_opts.force,
             )
             .await
