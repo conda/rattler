@@ -21,6 +21,10 @@ SolveStrategy = Literal["highest", "lowest", "lowest-direct"]
 """Defines the strategy to use when multiple versions of a package are available during solving."""
 
 
+TimestampPolicy = Literal["allow-missing", "require-timestamp", "require-indexed-timestamp"]
+"""Timestamp selection and missing metadata policy for cutoff filtering."""
+
+
 async def solve(
     sources: Sequence[Union[Channel, str, RepoDataSource, SparseRepoData]],
     specs: Sequence[MatchSpec | str],
@@ -37,6 +41,7 @@ async def solve(
     channel_relations: Optional[ChannelRelationsMode] = None,
     channel_relations_max_depth: Optional[int] = None,
     add_pip_as_python_dependency: bool = False,
+    timestamp_policy: TimestampPolicy = "require-timestamp",
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -72,6 +77,12 @@ async def solve(
         timeout:    The maximum time the solver is allowed to run.
         exclude_newer: Exclude any record that is newer than the given datetime,
             or newer than the cutoff produced by subtracting a timedelta from now.
+            Records exactly at the cutoff are included.
+        timestamp_policy: Applies when `exclude_newer` is set. `"require-timestamp"`
+            (default) prefers `indexed_timestamp`, falls back to build `timestamp`,
+            and rejects records missing both. `"allow-missing"` uses the same
+            precedence but includes missing timestamps. `"require-indexed-timestamp"`
+            uses only `indexed_timestamp` and rejects records without it.
         strategy: The strategy to use when multiple versions of a package are available.
 
             * `"highest"`: Select the highest compatible version of all packages.
@@ -129,6 +140,7 @@ async def solve(
             if isinstance(exclude_newer, datetime.timedelta)
             else None,
             strategy=strategy,
+            timestamp_policy=timestamp_policy,
             constraints=[
                 constraint._match_spec
                 if isinstance(constraint, MatchSpec)
@@ -157,6 +169,7 @@ async def solve_with_sparse_repodata(
     constraints: Optional[Sequence[MatchSpec | str]] = None,
     package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA,
     add_pip_as_python_dependency: bool = False,
+    timestamp_policy: TimestampPolicy = "require-timestamp",
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -192,6 +205,12 @@ async def solve_with_sparse_repodata(
         timeout:    The maximum time the solver is allowed to run.
         exclude_newer: Exclude any record that is newer than the given datetime,
             or newer than the cutoff produced by subtracting a timedelta from now.
+            Records exactly at the cutoff are included.
+        timestamp_policy: Applies when `exclude_newer` is set. `"require-timestamp"`
+            (default) prefers `indexed_timestamp`, falls back to build `timestamp`,
+            and rejects records missing both. `"allow-missing"` uses the same
+            precedence but includes missing timestamps. `"require-indexed-timestamp"`
+            uses only `indexed_timestamp` and rejects records without it.
         strategy: The strategy to use when multiple versions of a package are available.
 
             * `"highest"`: Select the highest compatible version of all packages.
@@ -235,6 +254,7 @@ async def solve_with_sparse_repodata(
             if isinstance(exclude_newer, datetime.timedelta)
             else None,
             strategy=strategy,
+            timestamp_policy=timestamp_policy,
             add_pip_as_python_dependency=add_pip_as_python_dependency,
             constraints=[
                 constraint._match_spec
