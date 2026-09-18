@@ -469,16 +469,24 @@ impl Installer {
         self
     }
 
-    /// Sets the policy for verifying the Sigstore attestations of the packages
-    /// that are installed.
+    /// Sets the policy for verifying the Sigstore attestations of packages
+    /// installed or relinked by the transaction.
     ///
     /// Attestations are discovered through the `attestations_sha256` field of
     /// the package records, fetched from the channel and verified against the
-    /// package `sha256` while the package itself is being downloaded. With
-    /// [`rattler_sigstore::VerificationPolicy::Require`] a package whose
+    /// package `sha256`. All affected records are verified before the
+    /// transaction updates package metadata, runs pre-unlink actions, removes
+    /// packages, or links packages. With
+    /// [`rattler_sigstore::VerificationPolicy::Require`], a package whose
     /// attestations do not verify fails the installation with
-    /// [`InstallerError::AttestationRejected`] before anything is linked. With
-    /// [`rattler_sigstore::VerificationPolicy::Warn`] problems are logged.
+    /// [`InstallerError::AttestationRejected`] before those changes begin.
+    /// With [`rattler_sigstore::VerificationPolicy::Warn`], problems are
+    /// logged and the transaction continues.
+    ///
+    /// Unchanged packages and packages that are only removed are not verified.
+    /// This preflight guarantee is specific to attestation verification; other
+    /// installation failures can still occur after the transaction starts
+    /// modifying the prefix.
     ///
     /// Defaults to [`rattler_sigstore::VerificationPolicy::Disabled`].
     #[cfg(feature = "sigstore")]
@@ -625,6 +633,20 @@ impl Installer {
             }
         }
 
+        let downloader = self.downloader.unwrap_or_default();
+
+        // Verify the complete set before any transaction operation can mutate
+        // installed package metadata or files. This prevents one rejected
+        // package from leaving a replacement or multi-package transaction
+        // partially applied.
+        #[cfg(feature = "sigstore")]
+        verify_transaction_attestations(
+            transaction.installed_packages(),
+            &self.attestation_policy,
+            &downloader,
+        )
+        .await?;
+
         // Create a mapping from package names to requested specs
         let spec_mapping = self
             .requested_specs
@@ -655,7 +677,6 @@ impl Installer {
             .into_prefix_record(&prefix)
             .map_err(InstallerError::FailedToDetectInstalledPackages)?;
 
-        let downloader = self.downloader.unwrap_or_default();
         let package_cache = self.package_cache.unwrap_or_else(|| {
             PackageCache::new(
                 default_cache_dir()
@@ -747,9 +768,6 @@ impl Installer {
             pending_unlink_futures.push(op);
         }
 
-        #[cfg(feature = "sigstore")]
-        let attestation_policy = &self.attestation_policy;
-
         let mut pending_link_futures = FuturesUnordered::new();
         // Execute the operations (install) in the transaction.
         for (operation_idx, operation) in transaction
@@ -785,8 +803,6 @@ impl Installer {
                     let reporter = reporter.clone();
                     let package_cache = package_cache.clone();
                     let concurrent_requests_semaphore = concurrent_requests_semaphore.clone();
-                    #[cfg(feature = "sigstore")]
-                    let attestation_policy = attestation_policy.clone();
                     tokio::spawn(async move {
                         let populate_cache_report = reporter.clone().map(|r| {
                             let cache_index = r.on_populate_cache_start(operation_idx, &record);
@@ -800,16 +816,6 @@ impl Installer {
                             concurrent_requests_semaphore,
                         );
 
-                        // Verify the attestations of the package while it is
-                        // being fetched. Verification only needs the sha256
-                        // from the record, which the cache checks against the
-                        // downloaded bytes.
-                        #[cfg(feature = "sigstore")]
-                        let (cache_metadata, ()) = futures::try_join!(
-                            populate_cache,
-                            verify_attestations(&record, &attestation_policy, &downloader)
-                        )?;
-                        #[cfg(not(feature = "sigstore"))]
                         let cache_metadata = populate_cache.await?;
                         if let Some((reporter, index)) = populate_cache_report {
                             reporter.on_populate_cache_complete(index);
@@ -1071,6 +1077,28 @@ async fn verify_attestations(
     Ok(())
 }
 
+/// Verifies every package that will be installed or relinked before the
+/// transaction starts mutating the prefix.
+#[cfg(feature = "sigstore")]
+async fn verify_transaction_attestations<'a>(
+    records: impl IntoIterator<Item = &'a RepoDataRecord>,
+    policy: &rattler_sigstore::VerificationPolicy,
+    downloader: &LazyClient,
+) -> Result<(), InstallerError> {
+    if !policy.is_enabled() {
+        return Ok(());
+    }
+
+    let mut pending = FuturesUnordered::new();
+    for record in records {
+        pending.push(verify_attestations(record, policy, downloader));
+    }
+    while let Some(result) = pending.next().await {
+        result?;
+    }
+    Ok(())
+}
+
 /// Updates only the `requested_specs` fields in a conda-meta JSON file.
 /// This performs a targeted update without overwriting other
 /// metadata.
@@ -1307,6 +1335,28 @@ mod tests {
         }
     }
 
+    /// Returns a record for a different version/build of the same package.
+    #[cfg(feature = "sigstore")]
+    fn replacement_record(record: &RepoDataRecord, version: &str, build: &str) -> RepoDataRecord {
+        let mut replacement = record.clone();
+        replacement.package_record.version = version.parse().unwrap();
+        replacement.package_record.build = build.to_string();
+        replacement.identifier = format!(
+            "{}-{version}-{build}.conda",
+            replacement.package_record.name.as_normalized()
+        )
+        .parse()
+        .unwrap();
+        replacement
+    }
+
+    #[cfg(feature = "sigstore")]
+    fn require_attestations() -> rattler_sigstore::VerificationPolicy {
+        rattler_sigstore::VerificationPolicy::Require(rattler_sigstore::VerificationConfig::new(
+            rattler_sigstore::Publisher::new(),
+        ))
+    }
+
     /// Gets the conda-meta file path for a given `RepoDataRecord`
     fn get_meta_file_path(
         prefix: &Prefix,
@@ -1493,6 +1543,83 @@ mod tests {
             updated_record.requested_specs.is_empty(),
             "requested_specs should be empty when not provided"
         );
+    }
+
+    #[cfg(feature = "sigstore")]
+    #[tokio::test]
+    async fn required_attestation_rejection_preserves_replaced_package() {
+        let (_temp_dir, target_prefix) = create_test_environment();
+        let installed = create_dummy_repo_record();
+        install_and_verify_success(Installer::new(), &target_prefix, installed.clone()).await;
+
+        let replacement = replacement_record(&installed, "0.2.0", "h4616a5c_1");
+        let result = Installer::new()
+            .with_attestation_policy(require_attestations())
+            .install(&target_prefix, vec![replacement.clone()])
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(InstallerError::AttestationRejected(_, _))
+        ));
+        assert!(get_meta_file_path(&target_prefix, &installed).exists());
+        assert!(!get_meta_file_path(&target_prefix, &replacement).exists());
+    }
+
+    #[cfg(feature = "sigstore")]
+    #[tokio::test]
+    async fn required_attestation_rejection_preserves_multi_package_transaction() {
+        let (_temp_dir, target_prefix) = create_test_environment();
+        let first_installed = create_dummy_repo_record();
+        install_and_verify_success(Installer::new(), &target_prefix, first_installed.clone()).await;
+
+        // Add a second installed record. Its empty path list is sufficient for
+        // checking that its package metadata is not removed by the rejected
+        // transaction.
+        let mut second_installed = first_installed.clone();
+        second_installed.package_record.name = PackageName::new_unchecked("other");
+        second_installed.identifier = "other-0.1.0-h4616a5c_0.conda".parse().unwrap();
+        PrefixRecord::from_repodata_record(second_installed.clone(), Vec::new())
+            .write_to_path(get_meta_file_path(&target_prefix, &second_installed), true)
+            .unwrap();
+
+        let first_replacement = replacement_record(&first_installed, "0.2.0", "h4616a5c_1");
+        let second_replacement = replacement_record(&second_installed, "0.2.0", "h4616a5c_1");
+        let result = Installer::new()
+            .with_attestation_policy(require_attestations())
+            .install(
+                &target_prefix,
+                vec![first_replacement.clone(), second_replacement.clone()],
+            )
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(InstallerError::AttestationRejected(_, _))
+        ));
+        assert!(get_meta_file_path(&target_prefix, &first_installed).exists());
+        assert!(get_meta_file_path(&target_prefix, &second_installed).exists());
+        assert!(!get_meta_file_path(&target_prefix, &first_replacement).exists());
+        assert!(!get_meta_file_path(&target_prefix, &second_replacement).exists());
+    }
+
+    #[cfg(feature = "sigstore")]
+    #[tokio::test]
+    async fn required_attestations_skip_unchanged_packages() {
+        let (_temp_dir, target_prefix) = create_test_environment();
+        let installed = create_dummy_repo_record();
+        install_and_verify_success(Installer::new(), &target_prefix, installed.clone()).await;
+
+        // The record has no advertised attestation, but it is already present
+        // and the transaction does not install or relink it.
+        let result = Installer::new()
+            .with_attestation_policy(require_attestations())
+            .install(&target_prefix, vec![installed.clone()])
+            .await
+            .unwrap();
+
+        assert!(result.transaction.operations.is_empty());
+        assert!(get_meta_file_path(&target_prefix, &installed).exists());
     }
 
     #[tokio::test]
