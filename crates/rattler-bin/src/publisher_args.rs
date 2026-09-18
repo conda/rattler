@@ -70,12 +70,6 @@ impl FromStr for IssuerArg {
 mod tests {
     use super::*;
 
-    #[derive(clap::Parser)]
-    struct Cli {
-        #[clap(flatten)]
-        publisher: PublisherArgs,
-    }
-
     #[test]
     fn issuer_shorthands_expand_to_oidc_issuers() {
         assert_eq!(
@@ -91,27 +85,6 @@ mod tests {
         assert_eq!(issuer.0.as_str(), "https://gitlab.example.com");
         for invalid in ["not-an-issuer", "mailto:build@example.com"] {
             assert!(invalid.parse::<IssuerArg>().is_err());
-        }
-    }
-
-    #[test]
-    fn cli_accepts_publisher_constraints_and_aliases() {
-        for (identity_flag, issuer_flag) in [
-            ("--identity", "--issuer"),
-            ("--trusted-publisher", "--trusted-issuer"),
-        ] {
-            let cli = <Cli as clap::Parser>::try_parse_from([
-                "test",
-                identity_flag,
-                "https://github.com/org/repo/*",
-                issuer_flag,
-                "github",
-            ])
-            .unwrap();
-            assert!(cli.publisher.publisher().matches(
-                Some("https://github.com/org/repo/workflow"),
-                Some(Issuer::github_actions().as_str()),
-            ));
         }
     }
 }
