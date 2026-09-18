@@ -14,10 +14,12 @@ default = ["rustls"]
 native-tls = [
   "rattler_networking/native-tls",
   "rattler_repodata_gateway/native-tls",
+  "rattler_sigstore/native-tls",
 ]
 rustls = [
   "rattler_networking/rustls",
   "rattler_repodata_gateway/rustls",
+  "rattler_sigstore/rustls",
   "reqwest/rustls",
 ]
 vendored-openssl = ["openssl", "openssl/vendored"]
@@ -33,7 +35,9 @@ rattler_s3 = { path = "../crates/rattler_s3", features = ["serde"] }
 rattler = { path = "../crates/rattler", default-features = false, features = [
   "indicatif",
   "rattler_config",
+  "sigstore",
 ] }
+rattler_sigstore = { path = "../crates/rattler_sigstore", default-features = false }
 rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", default-features = false, features = [
   "sparse",
   "gateway",
