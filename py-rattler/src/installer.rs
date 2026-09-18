@@ -13,7 +13,7 @@ use std::collections::HashSet;
 use crate::match_spec::PyMatchSpec;
 use crate::{
     config::PyConfig, error::PyRattlerError, networking::client::PyClientWithMiddleware,
-    platform::PyPlatform, record::PyRecord,
+    platform::PyPlatform, record::PyRecord, sigstore::PyVerificationPolicy,
 };
 
 /// A [`Reporter`] implementation that delegates progress events to a Python object. The Python object should implement the following methods:
@@ -214,7 +214,7 @@ impl Reporter for PyReporter {
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
-#[pyo3(signature = (records, target_prefix, execute_link_scripts=None, show_progress=false, platform=None, client=None, cache_dir=None, installed_packages=None, reinstall_packages=None, ignored_packages=None, requested_specs=None, reporter=None, alternative_target_prefix=None, config=None))]
+#[pyo3(signature = (records, target_prefix, execute_link_scripts=None, show_progress=false, platform=None, client=None, cache_dir=None, installed_packages=None, reinstall_packages=None, ignored_packages=None, requested_specs=None, reporter=None, alternative_target_prefix=None, config=None, attestation_policy=None))]
 pub fn py_install<'a>(
     py: Python<'a>,
     records: Vec<Bound<'a, PyAny>>,
@@ -231,6 +231,7 @@ pub fn py_install<'a>(
     reporter: Option<Py<PyAny>>,
     alternative_target_prefix: Option<PathBuf>,
     config: Option<PyConfig>,
+    attestation_policy: Option<PyVerificationPolicy>,
 ) -> PyResult<Bound<'a, PyAny>> {
     let dependencies = records
         .into_iter()
@@ -317,6 +318,10 @@ pub fn py_install<'a>(
 
         if let Some(alternative_target_prefix) = alternative_target_prefix {
             installer.set_alternative_target_prefix(alternative_target_prefix);
+        }
+
+        if let Some(attestation_policy) = attestation_policy {
+            installer.set_attestation_policy(attestation_policy.inner);
         }
 
         // TODO: Return the installation result to python

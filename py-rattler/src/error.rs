@@ -85,6 +85,8 @@ pub enum PyRattlerError {
     #[error(transparent)]
     InstallerError(#[from] rattler::install::InstallerError),
     #[error(transparent)]
+    AttestationError(#[from] rattler_sigstore::SigstoreError),
+    #[error(transparent)]
     ParseExplicitEnvironmentSpecError(
         #[from] rattler_conda_types::ParseExplicitEnvironmentSpecError,
     ),
@@ -201,6 +203,9 @@ impl From<PyRattlerError> for PyErr {
             }
             PyRattlerError::InstallerError(err) => {
                 crate::exceptions::InstallerError::new_err(pretty_print_error(&err))
+            }
+            PyRattlerError::AttestationError(err) => {
+                crate::exceptions::AttestationError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::ParseExplicitEnvironmentSpecError(err) => {
                 crate::exceptions::ParseExplicitEnvironmentSpecError::new_err(pretty_print_error(
