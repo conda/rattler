@@ -2360,6 +2360,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "fuser"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "80a5eca878900c2e39e9e52fd797954b7fc39eeefc8558257114bfea6a698fcf"
+dependencies = [
+ "bitflags 2.13.2",
+ "libc",
+ "log",
+ "memchr",
+ "nix 0.30.1",
+ "num_enum",
+ "page_size",
+ "parking_lot",
+ "pkg-config",
+ "ref-cast",
+ "smallvec",
+ "zerocopy",
+]
+
+[[package]]
 name = "futures"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3571,9 +3591,9 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "libredox"
-version = "0.1.24"
+version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6480ccc157a1389bb2e4891b24751b0f798ba640d22386f23143fbcc89da195a"
+checksum = "8d8f1ea3f21fd3405dcaf6c9b5c1630af9afc422d9073ea39c5f6d6c772e08ed"
 dependencies = [
  "libc",
 ]
@@ -3700,6 +3720,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "memoffset"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
+dependencies = [
+ "autocfg",
+]
+
+[[package]]
 name = "miette"
 version = "7.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3808,23 +3837,24 @@ dependencies = [
 
 [[package]]
 name = "multiversion"
-version = "0.9.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4ca4bea16ffc3f443cf7d866912118196bfef4c6a1556ca00f9f9b00bb43f7c"
+checksum = "7edb7f0ff51249dfda9ab96b5823695e15a052dc15074c9dbf3d118afaf2c201"
 dependencies = [
  "multiversion-macros",
+ "target-features",
 ]
 
 [[package]]
 name = "multiversion-macros"
-version = "0.9.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d416831a7317ef4b08bee00b69cbbb9c8763da7959a7026244d6266869f9c83"
+checksum = "b093064383341eb3271f42e381cb8f10a01459478446953953c75d24bd339fc0"
 dependencies = [
  "proc-macro2",
  "quote",
- "rustversion",
- "syn 3.0.6",
+ "syn 2.0.119",
+ "target-features",
 ]
 
 [[package]]
@@ -3855,6 +3885,51 @@ name = "netrc-rs"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ea2970fbbc8c785e8246234a7bd004ed66cd1ed1a35ec73669a92545e419b836"
+
+[[package]]
+name = "nfs3_macros"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06d8fb377e6efeb91911a8ed962a69615535e167e675025a2be8fa109751426a"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "nfs3_server"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fa1515f86cd0b985e3ca7b8004d39a07e70298911cf39f09e403684c32bac8a"
+dependencies = [
+ "anyhow",
+ "nfs3_types",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "nfs3_types"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5d5ab1a9fdfeab2f03b36b6300dea4ea3806e6a057cb479628b41d65e356b94"
+dependencies = [
+ "nfs3_macros",
+]
+
+[[package]]
+name = "nix"
+version = "0.30.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74523f3a35e05aba87a1d978330aef40f67b0304ac79c1c00b294c9830543db6"
+dependencies = [
+ "bitflags 2.13.2",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+ "memoffset",
+]
 
 [[package]]
 name = "nix"
@@ -4017,6 +4092,28 @@ checksum = "91df4bbde75afed763b708b7eee1e8e7651e02d97f6d5dd763e89367e957b23b"
 dependencies = [
  "hermit-abi",
  "libc",
+]
+
+[[package]]
+name = "num_enum"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d0bca838442ec211fa11de3a8b0e0e8f3a4522575b5c4c06ed722e005036f26"
+dependencies = [
+ "num_enum_derive",
+ "rustversion",
+]
+
+[[package]]
+name = "num_enum_derive"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
+dependencies = [
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -5032,6 +5129,7 @@ dependencies = [
 name = "rattler-bin"
 version = "0.4.0"
 dependencies = [
+ "anyhow",
  "astral-reqwest-middleware",
  "astral-reqwest-retry",
  "clap",
@@ -5054,6 +5152,7 @@ dependencies = [
  "rattler_conda_types",
  "rattler_config",
  "rattler_index",
+ "rattler_lock",
  "rattler_menuinst",
  "rattler_networking",
  "rattler_package_streaming",
@@ -5061,6 +5160,7 @@ dependencies = [
  "rattler_shell",
  "rattler_solve",
  "rattler_upload",
+ "rattler_vfs",
  "rattler_virtual_packages",
  "regex",
  "reqwest",
@@ -5136,6 +5236,7 @@ dependencies = [
  "itertools 0.15.0",
  "jiff",
  "lazy-regex",
+ "memchr",
  "memmap2",
  "nom 8.0.0",
  "nom-language",
@@ -5485,7 +5586,7 @@ name = "rattler_pty"
 version = "0.2.16"
 dependencies = [
  "libc",
- "nix",
+ "nix 0.31.3",
  "signal-hook",
  "tokio",
 ]
@@ -5695,6 +5796,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_vfs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "astral-reqwest-middleware",
+ "fuser",
+ "hex",
+ "libc",
+ "memchr",
+ "memmap2",
+ "nfs3_server",
+ "nfs3_types",
+ "rattler",
+ "rattler_cache",
+ "rattler_conda_types",
+ "rattler_lock",
+ "rattler_networking",
+ "reflink-copy",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "windows 0.62.2",
+]
+
+[[package]]
 name = "rattler_virtual_packages"
 version = "7.0.0"
 dependencies = [
@@ -5746,10 +5876,11 @@ dependencies = [
 
 [[package]]
 name = "redox_users"
-version = "0.5.3"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60dc65c0ff1a7ae1294b0c67b9f14baf70b644404010370171787bfac1038fc0"
+checksum = "a4e608c6638b9c18977b00b475ac1f28d14e84b27d8d42f70e0bf1e3dec127ac"
 dependencies = [
+ "getrandom 0.2.17",
  "libredox",
  "thiserror 2.0.20",
 ]
@@ -7151,6 +7282,12 @@ dependencies = [
  "libc",
  "xattr",
 ]
+
+[[package]]
+name = "target-features"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1bbb9f3c5c463a01705937a24fdabc5047929ac764b2d5b9cf681c1f5041ed5"
 
 [[package]]
 name = "target-tuple"
