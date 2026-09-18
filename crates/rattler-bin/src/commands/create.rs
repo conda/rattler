@@ -35,7 +35,7 @@ pub struct Opt {
 
     #[cfg(feature = "sigstore")]
     #[clap(flatten)]
-    attestations: crate::attestation_args::AttestationArgs,
+    attestations: crate::attestation_args::AttestationPolicyArgs,
 
     /// Target prefix (environment path) for package installation
     #[clap(

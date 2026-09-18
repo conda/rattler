@@ -32,7 +32,8 @@ use crate::{
 #[clap(after_help = r#"Examples:
   rattler solve python numpy                 # print the solved environment as a table
   rattler solve python --format json         # print the solved records as JSON
-  rattler solve python --format urls         # print only the urls of the solved packages"#)]
+  rattler solve python --format urls         # print only the urls of the solved packages
+  rattler solve python --verify-attestations require --issuer github --identity 'https://github.com/org/*'"#)]
 pub struct Opt {
     /// Package specs to solve.
     #[clap(required = true)]
@@ -40,6 +41,10 @@ pub struct Opt {
 
     #[clap(flatten)]
     solver: SolverArgs,
+
+    #[cfg(feature = "sigstore")]
+    #[clap(flatten)]
+    attestations: crate::attestation_args::AttestationPolicyArgs,
 
     /// Output format (defaults to human-readable output)
     #[clap(long)]
@@ -64,7 +69,7 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
     let download_client = super::client::create_client_with_middleware(offline)?;
 
     let config = load_config()?;
-    let gateway = build_gateway(download_client, &config, offline, true)?;
+    let gateway = build_gateway(download_client.clone(), &config, offline, true)?;
 
     let start_load_repo_data = Instant::now();
     let repo_data = wrap_in_async_progress(
@@ -145,6 +150,11 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
         }
         return Ok(());
     }
+
+    #[cfg(feature = "sigstore")]
+    opt.attestations
+        .verify_records(&solved_packages, &download_client)
+        .await?;
 
     match opt.format {
         Some(QueryOutputFormat::Json) => {

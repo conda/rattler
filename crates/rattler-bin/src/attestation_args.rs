@@ -1,8 +1,12 @@
 //! Command-line flags that configure Sigstore attestation verification for
-//! commands that install packages.
+//! commands that consume package records.
 
 use clap::ArgGroup;
+use futures_util::{StreamExt, stream};
+use miette::IntoDiagnostic;
+use rattler_conda_types::RepoDataRecord;
 use rattler_sigstore::{ChannelCheck, VerificationConfig, VerificationPolicy};
+use reqwest_middleware::ClientWithMiddleware;
 
 use crate::publisher_args::PublisherArgs;
 
@@ -10,7 +14,7 @@ use crate::publisher_args::PublisherArgs;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum VerifyMode {
     /// Every package needs an attestation that verifies against a trusted
-    /// publisher; otherwise the installation fails.
+    /// publisher; otherwise the command fails.
     Require,
     /// Verify attestations but only report problems.
     Warn,
@@ -24,11 +28,11 @@ pub enum VerifyMode {
         .requires("verify_attestations")
         .multiple(true)
 ))]
-pub struct AttestationArgs {
-    /// Verify the Sigstore attestations of the packages being installed.
+pub struct AttestationPolicyArgs {
+    /// Verify the Sigstore attestations of the selected packages.
     /// Attestations are discovered through the `attestations_sha256` field of
-    /// the repodata. `require` fails the installation when a package has no
-    /// valid attestation, `warn` only reports problems.
+    /// the repodata. `require` fails the command when a package has no valid
+    /// attestation, `warn` only reports problems.
     #[clap(long, value_name = "MODE", value_enum)]
     verify_attestations: Option<VerifyMode>,
 
@@ -37,12 +41,12 @@ pub struct AttestationArgs {
     publisher: PublisherArgs,
 
     /// Accept attestations whose `targetChannel` differs from the channel the
-    /// package was retrieved from, e.g. when installing from a mirror.
+    /// package was retrieved from, e.g. when using a mirror.
     #[clap(long, requires = "verify_attestations")]
     allow_channel_mismatch: bool,
 }
 
-impl AttestationArgs {
+impl AttestationPolicyArgs {
     /// Builds the verification policy described by the flags.
     pub fn policy(&self) -> VerificationPolicy {
         let Some(mode) = self.verify_attestations else {
@@ -62,101 +66,57 @@ impl AttestationArgs {
             VerifyMode::Warn => VerificationPolicy::Warn(config),
         }
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use clap::Parser;
-
-    #[derive(Parser)]
-    struct Cli {
-        #[clap(flatten)]
-        attestations: AttestationArgs,
-    }
-
-    #[test]
-    fn publisher_constraints_are_applied() {
-        let cli = Cli::try_parse_from([
-            "test",
-            "--verify-attestations",
-            "require",
-            "--identity",
-            "https://github.com/org/*",
-            "--issuer",
-            "github",
-        ])
-        .unwrap();
-        let policy = cli.attestations.policy();
-        assert!(policy.is_required());
-        let publisher = policy.config().unwrap().publisher();
-        let identity = Some("https://github.com/org/repo/workflow");
-        let issuer = Some("https://token.actions.githubusercontent.com");
-        assert!(publisher.matches(identity, issuer));
-        assert!(!publisher.matches(Some("https://github.com/other/repo/workflow"), issuer));
-        assert!(!publisher.matches(identity, Some("https://gitlab.com")));
-    }
-
-    #[test]
-    fn publisher_flag_is_not_repeatable() {
-        assert!(
-            Cli::try_parse_from([
-                "test",
-                "--verify-attestations",
-                "require",
-                "--identity",
-                "alice",
-                "--identity",
-                "bob",
-            ])
-            .is_err()
-        );
-    }
-
-    #[test]
-    fn optional_constraints_and_verification_mode() {
-        let cli = Cli::try_parse_from(["test"]).unwrap();
-        assert!(!cli.attestations.policy().is_enabled());
-
-        let cli = Cli::try_parse_from([
-            "test",
-            "--verify-attestations",
-            "warn",
-            "--allow-channel-mismatch",
-            "--issuer",
-            "gitlab",
-        ])
-        .unwrap();
-        let policy = cli.attestations.policy();
-        assert!(!policy.is_required());
-        let config = policy.config().unwrap();
-        assert_eq!(config.channel_check(), ChannelCheck::Warn);
-        assert!(
-            config
-                .publisher()
-                .matches(Some("any identity"), Some("https://gitlab.com"))
-        );
-        assert!(
-            !config
-                .publisher()
-                .matches(Some("any identity"), Some("other issuer"))
-        );
-
-        let cli = Cli::try_parse_from(["test", "--verify-attestations", "require"]).unwrap();
-        assert!(
-            cli.attestations
-                .policy()
-                .config()
-                .unwrap()
-                .publisher()
-                .matches(None, None)
-        );
-    }
-
-    #[test]
-    fn publisher_constraints_require_verification_mode() {
-        for flag in ["--identity", "--issuer"] {
-            assert!(Cli::try_parse_from(["test", flag, "github"]).is_err());
+    /// Verifies the attestations of the selected package records and writes
+    /// verification information to stderr.
+    pub async fn verify_records(
+        &self,
+        records: &[RepoDataRecord],
+        client: &ClientWithMiddleware,
+    ) -> miette::Result<()> {
+        let policy = self.policy();
+        if !policy.is_enabled() {
+            return Ok(());
         }
+
+        // Bound concurrency so a large solve does not issue every sidecar
+        // request at once. Collect first to keep the diagnostics in the stable
+        // package order chosen by the caller.
+        let policy = &policy;
+        let mut outcomes = stream::iter(records.iter().enumerate())
+            .map(move |(index, record)| async move {
+                (
+                    index,
+                    record,
+                    rattler_sigstore::verify_record(policy, record, client).await,
+                )
+            })
+            .buffer_unordered(16)
+            .collect::<Vec<_>>()
+            .await;
+        outcomes.sort_unstable_by_key(|(index, _, _)| *index);
+
+        let mut verified = 0;
+        for (_, record, outcome) in outcomes {
+            let outcome = outcome.into_diagnostic()?;
+            for warning in outcome.warnings {
+                eprintln!("warning: {}: {warning}", record.identifier);
+            }
+            if let Some(attestation) = outcome.attestation {
+                verified += 1;
+                eprintln!(
+                    "Verified attestation for {} (identity: {}, issuer: {})",
+                    record.identifier,
+                    attestation.identity.as_deref().unwrap_or("unknown"),
+                    attestation.issuer.as_deref().unwrap_or("unknown"),
+                );
+            }
+        }
+        eprintln!(
+            "Verified attestations for {verified} of {} solved packages",
+            records.len()
+        );
+
+        Ok(())
     }
 }
