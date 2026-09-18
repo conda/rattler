@@ -316,6 +316,9 @@ pub async fn verify_record(
     if !policy.is_enabled() {
         return Ok(VerificationOutcome::default());
     }
+    if let Some(err) = record_metadata_error(record) {
+        return lenient(policy, err);
+    }
     let trusted_root = match production_trusted_root().await {
         Ok(root) => root,
         Err(err) => return lenient(policy, err),
@@ -333,14 +336,15 @@ pub async fn verify_record_with_trusted_root(
     let Some(config) = policy.config() else {
         return Ok(VerificationOutcome::default());
     };
-    let filename = record.identifier.to_file_name();
+    if let Some(err) = record_metadata_error(record) {
+        return lenient(policy, err);
+    }
 
     let sidecar = match fetch_sidecar(client, record, config.max_sidecar_size()).await {
         Ok(Some(sidecar)) => sidecar,
-        Ok(None) => {
-            let err = SigstoreError::NoAttestationsAdvertised(filename);
-            return lenient(policy, err);
-        }
+        // The metadata check above established that the record advertises a
+        // sidecar.
+        Ok(None) => unreachable!("record metadata changed during verification"),
         Err(err) => return lenient(policy, err),
     };
 
@@ -355,6 +359,19 @@ pub async fn verify_record_with_trusted_root(
         Ok(outcome) => Ok(outcome),
         Err(err) => lenient(policy, err),
     }
+}
+
+/// Returns an error for record metadata that makes attestation verification
+/// impossible, without loading the trusted root or fetching a sidecar.
+fn record_metadata_error(record: &RepoDataRecord) -> Option<SigstoreError> {
+    let filename = record.identifier.to_file_name();
+    if record.package_record.attestations_sha256.is_none() {
+        return Some(SigstoreError::NoAttestationsAdvertised(filename));
+    }
+    if record.package_record.sha256.is_none() {
+        return Some(SigstoreError::MissingPackageSha256(filename));
+    }
+    None
 }
 
 /// Verifies the bundles of `sidecar` and picks the first one matching `publisher`.
