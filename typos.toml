@@ -19,3 +19,5 @@ strat = "strat"
 haa = "haa"
 intoto = "intoto"
 certifi = "certifi"
+ACCES = "ACCES"     # NFS3ERR_ACCES / libc::EACCES
+NFS3ERR_ACCES = "NFS3ERR_ACCES"
