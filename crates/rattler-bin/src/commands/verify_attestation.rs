@@ -1,6 +1,6 @@
 //! Verify a Sigstore attestation sidecar against a conda package archive.
 
-use std::{ffi::OsString, path::Path, str::FromStr};
+use std::{ffi::OsString, path::Path};
 
 use console::style;
 use futures_util::StreamExt;
@@ -9,14 +9,15 @@ use rattler_conda_types::{RepoDataRecord, package::DistArchiveIdentifier};
 use rattler_package_streaming::fs::repodata_record_from_package_archive;
 use rattler_redaction::Redact;
 use rattler_sigstore::{
-    ChannelCheck, DEFAULT_MAX_SIDECAR_SIZE, Issuer, Publisher, RejectedAttestation, SigstoreError,
-    fetch_bundles, mutable_sidecar_url, production_trusted_root, verify_bundles,
+    ChannelCheck, DEFAULT_MAX_SIDECAR_SIZE, RejectedAttestation, SigstoreError, fetch_bundles,
+    mutable_sidecar_url, production_trusted_root, verify_bundles,
 };
 use reqwest_middleware::ClientWithMiddleware;
 use tokio::io::AsyncWriteExt;
 use url::Url;
 
 use super::{client::create_client_with_middleware, package_source::PackageSource};
+use crate::publisher_args::PublisherArgs;
 
 /// Verify Sigstore attestations for a conda package.
 #[derive(Debug, clap::Parser)]
@@ -40,48 +41,9 @@ pub struct Opt {
     #[clap(long, value_name = "URL")]
     channel: Option<Url>,
 
-    /// Required signing certificate identity (Subject Alternative Name).
-    ///
-    /// `*` matches any sequence of characters. For example,
-    /// `https://github.com/org/repo/*` accepts every workflow and ref in a
-    /// GitHub repository.
-    #[clap(long, value_name = "PATTERN")]
-    identity: Option<String>,
-
-    /// Required OIDC issuer for the signing certificate.
-    ///
-    /// Accepts an exact issuer URL, or `github` and `gitlab` as shorthands for
-    /// the GitHub Actions and GitLab CI issuers.
-    #[clap(long, value_name = "ISSUER")]
-    issuer: Option<IssuerArg>,
-}
-
-#[derive(Debug, Clone)]
-struct IssuerArg(Issuer);
-
-impl FromStr for IssuerArg {
-    type Err = String;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        let issuer = match value {
-            "github" => Issuer::github_actions(),
-            "gitlab" => Issuer::gitlab(),
-            url => {
-                let parsed = Url::parse(url).map_err(|err| {
-                    format!(
-                        "invalid issuer {url:?}: expected `github`, `gitlab`, or an issuer URL ({err})"
-                    )
-                })?;
-                if !matches!(parsed.scheme(), "http" | "https") || !parsed.has_host() {
-                    return Err(format!(
-                        "invalid issuer {url:?}: expected `github`, `gitlab`, or an HTTP(S) issuer URL"
-                    ));
-                }
-                Issuer::new(url)
-            }
-        };
-        Ok(Self(issuer))
-    }
+    /// Signing certificate publisher constraints.
+    #[clap(flatten)]
+    publisher: PublisherArgs,
 }
 
 /// Verify the attestation sidecar selected by [`Opt`].
@@ -116,13 +78,7 @@ pub async fn verify_attestation(opt: Opt, offline: bool) -> miette::Result<()> {
     )
     .into_diagnostic()?;
 
-    let mut publisher = Publisher::new();
-    if let Some(identity) = opt.identity {
-        publisher = publisher.with_identity(identity);
-    }
-    if let Some(issuer) = opt.issuer {
-        publisher = publisher.with_issuer(issuer.0);
-    }
+    let publisher = opt.publisher.publisher();
     verification.verified.retain(|attestation| {
         let matches = publisher.matches(
             attestation.identity.as_deref(),
@@ -307,45 +263,6 @@ async fn download_package(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn issuer_shorthands_expand_to_oidc_issuers() {
-        assert_eq!(
-            "github".parse::<IssuerArg>().unwrap().0,
-            Issuer::github_actions()
-        );
-        assert_eq!("gitlab".parse::<IssuerArg>().unwrap().0, Issuer::gitlab());
-    }
-
-    #[test]
-    fn issuer_accepts_explicit_urls() {
-        let issuer = "https://gitlab.example.com".parse::<IssuerArg>().unwrap();
-        assert_eq!(issuer.0.as_str(), "https://gitlab.example.com");
-        for invalid in ["not-an-issuer", "mailto:build@example.com"] {
-            assert!(invalid.parse::<IssuerArg>().is_err());
-        }
-    }
-
-    #[test]
-    fn cli_accepts_publisher_constraints() {
-        let opt = <Opt as clap::Parser>::try_parse_from([
-            "verify-attestation",
-            "package.conda",
-            "--identity",
-            "https://github.com/org/repo/*",
-            "--issuer",
-            "github",
-        ])
-        .unwrap();
-        assert_eq!(
-            opt.identity.as_deref(),
-            Some("https://github.com/org/repo/*")
-        );
-        assert_eq!(
-            opt.issuer.unwrap().0.as_str(),
-            Issuer::github_actions().as_str()
-        );
-    }
 
     #[test]
     fn default_remote_attestation_appends_sigs_before_the_query() {

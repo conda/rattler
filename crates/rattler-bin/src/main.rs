@@ -9,6 +9,8 @@ use crate::{commands::exec, writer::IndicatifWriter};
 
 mod commands;
 mod exclude_newer;
+#[cfg(feature = "sigstore")]
+mod publisher_args;
 mod solver_args;
 mod writer;
 
