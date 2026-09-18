@@ -1,7 +1,10 @@
 //! Command-line flags that configure Sigstore attestation verification for
 //! commands that install packages.
 
-use rattler_sigstore::{ChannelCheck, Issuer, Publisher, VerificationConfig, VerificationPolicy};
+use clap::ArgGroup;
+use rattler_sigstore::{ChannelCheck, VerificationConfig, VerificationPolicy};
+
+use crate::publisher_args::PublisherArgs;
 
 /// How strictly attestations are verified.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -15,6 +18,12 @@ pub enum VerifyMode {
 
 /// Flatten this into a command's options with `#[clap(flatten)]`.
 #[derive(Debug, Default, clap::Args)]
+#[clap(group(
+    ArgGroup::new("publisher_constraints")
+        .args(["identity", "issuer"])
+        .requires("verify_attestations")
+        .multiple(true)
+))]
 pub struct AttestationArgs {
     /// Verify the Sigstore attestations of the packages being installed.
     /// Attestations are discovered through the `attestations_sha256` field of
@@ -23,23 +32,9 @@ pub struct AttestationArgs {
     #[clap(long, value_name = "MODE", value_enum)]
     verify_attestations: Option<VerifyMode>,
 
-    /// The identity (certificate subject alternative name) an attestation
-    /// must be signed by, e.g.
-    /// `https://github.com/org/repo/.github/workflows/build.yml@refs/heads/main`.
-    /// `*` matches any sequence of characters. This constraint applies to all
-    /// packages, regardless of channel. Without this flag any identity is accepted,
-    /// subject to `--trusted-issuer` when supplied.
-    #[clap(
-        long = "trusted-publisher",
-        value_name = "IDENTITY",
-        requires = "verify_attestations"
-    )]
-    trusted_publisher: Option<String>,
-
-    /// The OIDC issuer the signing identity must come from, e.g.
-    /// `https://token.actions.githubusercontent.com` for GitHub Actions.
-    #[clap(long, value_name = "URL", requires = "verify_attestations")]
-    trusted_issuer: Option<String>,
+    /// Signing certificate publisher constraints.
+    #[clap(flatten)]
+    publisher: PublisherArgs,
 
     /// Accept attestations whose `targetChannel` differs from the channel the
     /// package was retrieved from, e.g. when installing from a mirror.
@@ -54,20 +49,13 @@ impl AttestationArgs {
             return VerificationPolicy::Disabled;
         };
 
-        let mut publisher = Publisher::new();
-        if let Some(identity) = &self.trusted_publisher {
-            publisher = publisher.with_identity(identity.as_str());
-        }
-        if let Some(issuer) = &self.trusted_issuer {
-            publisher = publisher.with_issuer(Issuer::new(issuer));
-        }
-
-        let config =
-            VerificationConfig::new(publisher).with_channel_check(if self.allow_channel_mismatch {
+        let config = VerificationConfig::new(self.publisher.publisher()).with_channel_check(
+            if self.allow_channel_mismatch {
                 ChannelCheck::Warn
             } else {
                 ChannelCheck::Require
-            });
+            },
+        );
 
         match mode {
             VerifyMode::Require => VerificationPolicy::Require(config),
@@ -88,15 +76,15 @@ mod tests {
     }
 
     #[test]
-    fn one_publisher_requires_both_identity_and_issuer() {
+    fn publisher_constraints_are_applied() {
         let cli = Cli::try_parse_from([
             "test",
             "--verify-attestations",
             "require",
-            "--trusted-publisher",
+            "--identity",
             "https://github.com/org/*",
-            "--trusted-issuer",
-            "https://token.actions.githubusercontent.com",
+            "--issuer",
+            "github",
         ])
         .unwrap();
         let policy = cli.attestations.policy();
@@ -116,9 +104,9 @@ mod tests {
                 "test",
                 "--verify-attestations",
                 "require",
-                "--trusted-publisher",
+                "--identity",
                 "alice",
-                "--trusted-publisher",
+                "--identity",
                 "bob",
             ])
             .is_err()
@@ -135,8 +123,8 @@ mod tests {
             "--verify-attestations",
             "warn",
             "--allow-channel-mismatch",
-            "--trusted-issuer",
-            "https://gitlab.com",
+            "--issuer",
+            "gitlab",
         ])
         .unwrap();
         let policy = cli.attestations.policy();
@@ -163,5 +151,12 @@ mod tests {
                 .publisher()
                 .matches(None, None)
         );
+    }
+
+    #[test]
+    fn publisher_constraints_require_verification_mode() {
+        for flag in ["--identity", "--issuer"] {
+            assert!(Cli::try_parse_from(["test", flag, "github"]).is_err());
+        }
     }
 }
