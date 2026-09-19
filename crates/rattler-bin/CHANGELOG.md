@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1](https://github.com/conda/rattler/compare/rattler-bin-v0.4.0...rattler-bin-v0.4.1) - 2026-09-19
+
+### Added
+
+- Add duration support and cutoff support for exclude-newer ([#2801](https://github.com/conda/rattler/pull/2801))
+
 ## [0.4.0](https://github.com/conda/rattler/compare/rattler-bin-v0.3.0...rattler-bin-v0.4.0) - 2026-09-17
 
 ### Added
