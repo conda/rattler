@@ -15,6 +15,7 @@ try:
         GatewayError,
         GatewayWarning,
         InstallerError,
+        AttestationError,
         InvalidChannelError,
         InvalidHeaderNameError,
         InvalidHeaderValueError,
@@ -87,6 +88,9 @@ except ImportError:
 
     class InstallerError(Exception):  # type: ignore[no-redef]
         """An error that can occur when installing a package"""
+
+    class AttestationError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when verifying a Sigstore attestation"""
 
     class InvalidChannelError(Exception):  # type: ignore[no-redef]
         """Error that can occur when parsing a channel."""
@@ -171,6 +175,7 @@ __all__ = [
     "GatewayError",
     "GatewayWarning",
     "InstallerError",
+    "AttestationError",
     "InvalidChannelError",
     "InvalidHeaderNameError",
     "InvalidHeaderValueError",

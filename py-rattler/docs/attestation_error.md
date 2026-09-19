@@ -1,0 +1,3 @@
+# AttestationError
+
+::: rattler.exceptions.AttestationError

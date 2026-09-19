@@ -89,6 +89,7 @@ nav:
           - fetch: fetch_repo_data.md
           - solve: solver.md
           - install: installer.md
+          - Sigstore attestations: sigstore.md
           - index: index_.md
       - channel:
           - ChannelConfig: channel_config.md
@@ -150,6 +151,7 @@ nav:
           - PathModificationBehavior: path_modification_behavior.md
       - exceptions:
           - ActivationError: activation_error.md
+          - AttestationError: attestation_error.md
           - CacheDirError: cache_dir_error.md
           - DetectVirtualPackageError: detect_virtual_package_error.md
           - EnvironmentCreationError: environment_creation_error.md
