@@ -2056,6 +2056,7 @@ mod test {
         }
 
         let package_record = PackageRecord {
+            attestations_sha256: None,
             name: PackageName::from_str(name).unwrap(),
             version: VersionWithSource::from_str(version).unwrap(),
             build: "0".to_string(),
@@ -2075,6 +2076,7 @@ mod test {
             license: None,
             license_family: None,
             timestamp: None,
+            indexed_timestamp: None,
             legacy_bz2_size: None,
             legacy_bz2_md5: None,
             purls: None,

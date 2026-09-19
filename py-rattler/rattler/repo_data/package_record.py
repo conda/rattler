@@ -202,6 +202,7 @@ class PackageRecord:
         python_site_packages_path: Optional[str] = None,
         extra_depends: Optional[Dict[str, List[str]]] = None,
         flags: Optional[List[str]] = None,
+        attestations_sha256: Optional[bytes] = None,
     ) -> None:
         if isinstance(subdir, str):
             try:
@@ -263,6 +264,8 @@ class PackageRecord:
             self._record.extra_depends = extra_depends
         if flags is not None:
             self._record.flags = flags
+        if attestations_sha256 is not None:
+            self._record.attestations_sha256 = attestations_sha256
 
     @property
     def arch(self) -> Optional[str]:
@@ -748,6 +751,15 @@ class PackageRecord:
         self._record.sha256 = value
 
     @property
+    def attestations_sha256(self) -> Optional[bytes]:
+        """The SHA256 hash of the package's Sigstore attestation sidecar, if advertised."""
+        return self._record.attestations_sha256
+
+    @attestations_sha256.setter
+    def attestations_sha256(self, value: Optional[bytes]) -> None:
+        self._record.attestations_sha256 = value
+
+    @property
     def size(self) -> Optional[int]:
         """
         Optionally the size of the package archive in bytes.
@@ -835,9 +847,23 @@ class PackageRecord:
     @timestamp.setter
     def timestamp(self, value: Optional[datetime.datetime]) -> None:
         if value is not None:
+            # Convert Python's Unix seconds to the Rust binding's Unix milliseconds.
             self._record.timestamp = int(value.timestamp() * 1000)
         else:
             self._record.timestamp = None
+
+    @property
+    def indexed_timestamp(self) -> Optional[datetime.datetime]:
+        """Server-assigned time when this artifact first entered the channel index."""
+        value = self._record.indexed_timestamp
+        if value is None:
+            return None
+        return datetime.datetime.fromtimestamp(value / 1000.0, tz=datetime.timezone.utc)
+
+    @indexed_timestamp.setter
+    def indexed_timestamp(self, value: Optional[datetime.datetime]) -> None:
+        # Convert Python's Unix seconds to the Rust binding's Unix milliseconds.
+        self._record.indexed_timestamp = None if value is None else int(value.timestamp() * 1000)
 
     @property
     def track_features(self) -> List[str]:

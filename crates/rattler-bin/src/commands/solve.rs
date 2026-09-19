@@ -49,7 +49,7 @@ pub struct Opt {
 pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
-    let platform = opt.solver.platform;
+    let platform = opt.solver.platform()?;
 
     // All progress information goes to stderr so that stdout only contains the
     // solved package set.
@@ -59,6 +59,7 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
     let constraints = opt.solver.constraints()?;
 
     let channels = opt.solver.channels(&channel_config)?;
+    let exclude_newer = opt.solver.exclude_newer(&channel_config)?;
 
     let download_client = super::client::create_client_with_middleware(offline)?;
 
@@ -115,7 +116,7 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
         timeout: opt.solver.timeout(),
         strategy: opt.solver.strategy(),
         channel_priority: opt.solver.channel_priority(),
-        exclude_newer: opt.solver.exclude_newer(),
+        exclude_newer,
         ..SolverTask::from_iter(&repo_data)
     };
 

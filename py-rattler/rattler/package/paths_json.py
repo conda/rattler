@@ -690,6 +690,33 @@ class FileMode:
         """
         return self._inner is None
 
+    @property
+    def mode(self) -> Literal["binary", "text", "unknown"]:
+        """
+        The file mode as a string.
+
+        Examples
+        --------
+        ```python
+        >>> FileMode("text").mode
+        'text'
+        >>> FileMode("binary").mode
+        'binary'
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
+        ... )
+        >>> paths_json.paths[-1].prefix_placeholder.file_mode.mode
+        'text'
+        >>>
+        ```
+        """
+        if self.binary:
+            return "binary"
+        elif self.text:
+            return "text"
+        else:
+            return "unknown"
+
     @classmethod
     def _from_py_file_mode(cls, py_file_mode: PyFileMode) -> FileMode:
         file_mode = cls.__new__(cls)

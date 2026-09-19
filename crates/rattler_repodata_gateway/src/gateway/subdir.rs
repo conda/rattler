@@ -257,6 +257,7 @@ mod tests {
         }
 
         let package_record = PackageRecord {
+            attestations_sha256: None,
             arch: None,
             build: "0".to_string(),
             build_number: 0,
@@ -278,6 +279,7 @@ mod tests {
             size: None,
             subdir: "linux-64".to_string(),
             timestamp: None,
+            indexed_timestamp: None,
             track_features: Vec::new(),
             version: VersionWithSource::from_str("1.0").unwrap(),
             purls: None,

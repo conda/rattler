@@ -1,6 +1,6 @@
 [package]
 name = "rattler-bin"
-version = "0.3.0"
+version = "0.4.0"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust binary for common Conda operations"
@@ -48,6 +48,7 @@ console = { workspace = true, features = ["windows-console-colors"] }
 dirs = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
+humantime = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }
 indicatif = { workspace = true }
 miette = { workspace = true }

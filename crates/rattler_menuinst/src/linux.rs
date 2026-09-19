@@ -288,11 +288,9 @@ impl LinuxMenu {
             .unwrap_or(true)
             .then(|| {
                 // create a bash activation script and emit it into the script
-                let activator = Activator::from_path(
-                    &self.prefix,
-                    shell::Bash::default(),
-                    Platform::current(),
-                )?;
+                let platform = Platform::current().ok_or(MenuInstError::UnknownHostPlatform)?;
+                let activator =
+                    Activator::from_path(&self.prefix, shell::Bash::default(), platform)?;
                 let activation_variables = ActivationVariables {
                     path_modification_behavior: PathModificationBehavior::Prepend,
                     ..Default::default()
@@ -827,7 +825,7 @@ mod tests {
         let placeholders = super::BaseMenuItemPlaceholders::new(
             fake_prefix.prefix(),
             fake_prefix.prefix(),
-            rattler_conda_types::Platform::current(),
+            rattler_conda_types::Platform::current().expect("host platform"),
         );
 
         let linux_menu = LinuxMenu::new_with_directories(
@@ -875,7 +873,7 @@ mod tests {
         let placeholders = super::BaseMenuItemPlaceholders::new(
             fake_prefix.prefix(),
             fake_prefix.prefix(),
-            rattler_conda_types::Platform::current(),
+            rattler_conda_types::Platform::current().expect("host platform"),
         );
 
         let linux_menu = LinuxMenu::new_with_directories(
@@ -905,7 +903,7 @@ mod tests {
         let placeholders = super::BaseMenuItemPlaceholders::new(
             fake_prefix.prefix(),
             fake_prefix.prefix(),
-            rattler_conda_types::Platform::current(),
+            rattler_conda_types::Platform::current().expect("host platform"),
         );
 
         let linux_menu = LinuxMenu::new_with_directories(
@@ -938,7 +936,7 @@ mod tests {
         let placeholders = super::BaseMenuItemPlaceholders::new(
             fake_prefix.prefix(),
             fake_prefix.prefix(),
-            rattler_conda_types::Platform::current(),
+            rattler_conda_types::Platform::current().expect("host platform"),
         );
 
         let linux_menu = LinuxMenu::new_with_directories(
@@ -974,7 +972,7 @@ mod tests {
         let placeholders = super::BaseMenuItemPlaceholders::new(
             fake_prefix.prefix(),
             fake_prefix.prefix(),
-            rattler_conda_types::Platform::current(),
+            rattler_conda_types::Platform::current().expect("host platform"),
         );
 
         let linux_menu = LinuxMenu::new_with_directories(

@@ -547,6 +547,14 @@ pub struct PackageRecord {
     /// the package is `noarch`.
     pub arch: Option<String>,
 
+    /// The SHA256 hash of the Sigstore attestation sidecar served alongside the
+    /// package (see the conda CEP on distribution of Sigstore attestations). The
+    /// sidecar is served at `<package_url>.sigs.<attestations_sha256>` and
+    /// contains a JSON array of Sigstore bundles. If this is `None` no
+    /// attestations are advertised for the package.
+    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
+    pub attestations_sha256: Option<Sha256Hash>,
+
     /// The build string of the package
     pub build: String,
 
@@ -580,6 +588,12 @@ pub struct PackageRecord {
     /// Plain string flags used to select package variants.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub flags: Vec<Flag>,
+
+    /// When this artifact first entered the channel index (CEP-0047).
+    /// Assigned by the channel server or indexer, in Unix milliseconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde_as(as = "Option<crate::utils::serde::StrictTimestampMs>")]
+    pub indexed_timestamp: Option<crate::utils::TimestampMs>,
 
     /// A deprecated md5 hash
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
@@ -646,7 +660,7 @@ pub struct PackageRecord {
     #[serde(default)]
     pub subdir: String,
 
-    /// The date this entry was created.
+    /// The start of the package build, as supplied by the package builder.
     pub timestamp: Option<crate::utils::TimestampMs>,
 
     /// Track features are nowadays only used to downweight packages (ie. give
@@ -781,14 +795,6 @@ impl PackageRecord {
     /// Returns true if package `run_exports` is some.
     pub fn has_run_exports(&self) -> bool {
         self.run_exports.is_some()
-    }
-
-    /// Returns the timestamp used by indexing operations.
-    ///
-    /// This currently returns the package build timestamp. A future index
-    /// timestamp can change this method without changing its callers.
-    pub fn timestamp_for_indexing(&self) -> Option<TimestampMs> {
-        self.timestamp
     }
 }
 
@@ -926,6 +932,7 @@ impl PackageRecord {
     /// minimum values.
     pub fn new(name: PackageName, version: impl Into<VersionWithSource>, build: String) -> Self {
         Self {
+            attestations_sha256: None,
             arch: None,
             build,
             build_number: 0,
@@ -945,8 +952,9 @@ impl PackageRecord {
             extra_depends: BTreeMap::new(),
             sha256: None,
             size: None,
-            subdir: Platform::current().to_string(),
+            subdir: Platform::current().unwrap_or(Platform::NoArch).to_string(),
             timestamp: None,
+            indexed_timestamp: None,
             track_features: vec![],
             version: version.into(),
             purls: None,
@@ -1187,6 +1195,7 @@ impl PackageRecord {
         };
 
         Ok(PackageRecord {
+            attestations_sha256: None,
             arch: index.arch,
             build: index.build,
             build_number: index.build_number,
@@ -1208,6 +1217,7 @@ impl PackageRecord {
             size,
             subdir,
             timestamp: index.timestamp,
+            indexed_timestamp: None,
             track_features: index.track_features,
             version: index.version,
             purls: index.purls,
@@ -1271,6 +1281,49 @@ mod test {
         // serialize to json
         let json = serde_json::to_string_pretty(&repodata).unwrap();
         insta::assert_snapshot!(json);
+    }
+
+    #[test]
+    fn test_attestations_sha256() {
+        let raw = r#"{
+            "name": "foo",
+            "version": "1.0",
+            "build": "h1234_0",
+            "build_number": 0,
+            "subdir": "noarch",
+            "attestations_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        }"#;
+        let record: PackageRecord = serde_json::from_str(raw).unwrap();
+        let hash = record.attestations_sha256.expect("hash should be parsed");
+        assert_eq!(
+            hex::encode(hash),
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        );
+
+        // Round-trips through serialization and is omitted when absent.
+        let json = serde_json::to_value(&record).unwrap();
+        assert_eq!(
+            json["attestations_sha256"],
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        );
+        let record: PackageRecord = serde_json::from_str(
+            r#"{"name": "foo", "version": "1.0", "build": "h1234_0", "build_number": 0, "subdir": "noarch"}"#,
+        )
+        .unwrap();
+        assert!(record.attestations_sha256.is_none());
+        let json = serde_json::to_value(&record).unwrap();
+        assert!(json.get("attestations_sha256").is_none());
+
+        // A value that is not a valid SHA256 hex string is rejected.
+        let raw = r#"{
+            "name": "foo",
+            "version": "1.0",
+            "build": "h1234_0",
+            "build_number": 0,
+            "subdir": "noarch",
+            "attestations_sha256": "not-a-hash"
+        }"#;
+        assert!(serde_json::from_str::<PackageRecord>(raw).is_err());
     }
 
     // See https://github.com/conda/ceps/blob/main/cep-0042.md
@@ -1614,19 +1667,51 @@ mod test {
     }
 
     #[test]
-    fn test_package_record_timestamp_for_indexing() {
-        let timestamp = crate::utils::TimestampMs::from_timestamp_millis(
-            jiff::Timestamp::from_millisecond(1_700_000_000_000).unwrap(),
-        );
+    fn indexed_timestamp_uses_strict_milliseconds_and_survives_patches() {
         let mut record = PackageRecord::new(
             crate::PackageName::new_unchecked("demo"),
             crate::Version::major(1),
-            "0".to_string(),
+            "0".into(),
         );
-
-        assert_eq!(record.timestamp_for_indexing(), None);
-        record.timestamp = Some(timestamp);
-        assert_eq!(record.timestamp_for_indexing(), Some(timestamp));
+        assert!(
+            serde_json::to_value(&record)
+                .unwrap()
+                .get("indexed_timestamp")
+                .is_none()
+        );
+        for millis in [0, 1, -1, 1_700_000_000_123] {
+            let mut value = serde_json::to_value(&record).unwrap();
+            value["indexed_timestamp"] = millis.into();
+            record = serde_json::from_value(value).unwrap();
+            assert_eq!(record.indexed_timestamp.unwrap().timestamp_millis(), millis);
+            let patch = serde_json::from_value(
+                serde_json::json!({"depends": ["python"], "indexed_timestamp": 99}),
+            )
+            .unwrap();
+            record.apply_patch(&patch);
+            assert_eq!(
+                serde_json::to_value(&record).unwrap()["indexed_timestamp"],
+                millis
+            );
+        }
+        // Even a legacy seconds-marked value must serialize as milliseconds here.
+        record.indexed_timestamp = Some(crate::utils::TimestampMs::from_timestamp_seconds(
+            jiff::Timestamp::from_second(1).unwrap(),
+        ));
+        assert_eq!(
+            serde_json::to_value(&record).unwrap()["indexed_timestamp"],
+            1000
+        );
+        let mut value = serde_json::to_value(&record).unwrap();
+        value["indexed_timestamp"] = serde_json::Value::Null;
+        assert!(
+            serde_json::from_value::<PackageRecord>(value.clone())
+                .unwrap()
+                .indexed_timestamp
+                .is_none()
+        );
+        value["indexed_timestamp"] = i64::MAX.into();
+        assert!(serde_json::from_value::<PackageRecord>(value).is_err());
     }
 
     #[test]

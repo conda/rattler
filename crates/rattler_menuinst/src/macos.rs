@@ -10,7 +10,7 @@ use fs_err::File;
 use plist::{Dictionary, Value};
 use rattler_conda_types::{Platform, menuinst::MacOsTracker};
 use rattler_shell::{
-    activation::{ActivationError, ActivationVariables, Activator, PathModificationBehavior},
+    activation::{ActivationVariables, Activator, PathModificationBehavior},
     shell,
 };
 use sha2::{Digest as _, Sha256};
@@ -709,7 +709,7 @@ impl MacOSMenu {
         Ok(())
     }
 
-    fn command(&self) -> Result<String, ActivationError> {
+    fn command(&self) -> Result<String, MenuInstError> {
         let mut lines = vec!["#!/bin/sh".to_string()];
 
         if self.command.terminal.unwrap_or(false) {
@@ -734,8 +734,8 @@ impl MacOSMenu {
         // Run a cached activation
         if self.command.activate.unwrap_or(false) {
             // create a bash activation script and emit it into the script
-            let activator =
-                Activator::from_path(&self.prefix, shell::Bash::default(), Platform::current())?;
+            let platform = Platform::current().ok_or(MenuInstError::UnknownHostPlatform)?;
+            let activator = Activator::from_path(&self.prefix, shell::Bash::default(), platform)?;
             let activation_variables = ActivationVariables {
                 path_modification_behavior: PathModificationBehavior::Prepend,
                 ..Default::default()
@@ -1043,7 +1043,7 @@ mod tests {
         let placeholders = super::BaseMenuItemPlaceholders::new(
             fake_prefix.prefix(),
             fake_prefix.prefix(),
-            rattler_conda_types::Platform::current(),
+            rattler_conda_types::Platform::current().expect("host platform"),
         );
 
         let item = fake_prefix.schema.menu_items[0].clone();

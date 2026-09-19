@@ -53,7 +53,7 @@ fn detect(cache_dir: Option<&std::path::Path>) -> miette::Result<Vec<String>> {
 #[derive(Debug, Serialize)]
 struct Info {
     version: &'static str,
-    platform: Platform,
+    platform: Option<Platform>,
     tls_backend: Vec<&'static str>,
     cache_dir: Option<PathBuf>,
     auth_storage: Option<PathBuf>,
@@ -104,7 +104,13 @@ pub fn info(opt: Opt) -> miette::Result<()> {
     }
 
     print_field("Rattler version", info.version);
-    print_field("Platform", info.platform);
+    print_field(
+        "Platform",
+        info.platform.map_or_else(
+            || console::style("<unknown>".to_string()).dim().to_string(),
+            |platform| platform.to_string(),
+        ),
+    );
     print_list(
         "TLS backend",
         &info
