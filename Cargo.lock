@@ -5005,6 +5005,7 @@ dependencies = [
  "rattler_networking",
  "rattler_package_streaming",
  "rattler_shell",
+ "rattler_sigstore",
  "rayon",
  "reflink-copy",
  "regex",
