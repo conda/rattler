@@ -25,6 +25,8 @@ pub mod search;
 pub mod shell_hook;
 pub mod solve;
 pub mod table;
+#[cfg(feature = "sigstore")]
+pub mod verify_attestation;
 pub mod virtual_packages;
 pub mod whoneeds;
 
