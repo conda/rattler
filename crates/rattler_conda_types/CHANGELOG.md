@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.54.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.53.0...rattler_conda_types-v0.54.0) - 2026-09-19
+
+### Added
+
+- Add attestations to PackageRecord and rattler-index/upload ([#2773](https://github.com/conda/rattler/pull/2773))
+
 ## [0.53.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.52.1...rattler_conda_types-v0.53.0) - 2026-09-17
 
 ### Added

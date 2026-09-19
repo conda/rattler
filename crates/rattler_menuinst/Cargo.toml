@@ -1,7 +1,7 @@
 [package]
 exclude = ["**/snapshots/**", "test-data/**"]
 name = "rattler_menuinst"
-version = "0.3.0"
+version = "0.3.1"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "Install menu entries for a Conda package"

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0](https://github.com/conda/rattler/compare/rattler_upload-v0.10.9...rattler_upload-v0.11.0) - 2026-09-19
+
+### Added
+
+- Add attestations to PackageRecord and rattler-index/upload ([#2773](https://github.com/conda/rattler/pull/2773))
+
+### Fixed
+
+- respect force option when uploading to Quetz ([#2816](https://github.com/conda/rattler/pull/2816))
+
 ## [0.10.9](https://github.com/conda/rattler/compare/rattler_upload-v0.10.8...rattler_upload-v0.10.9) - 2026-09-17
 
 ### Other

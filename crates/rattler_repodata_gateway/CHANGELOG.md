@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.6](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.33.5...rattler_repodata_gateway-v0.33.6) - 2026-09-19
+
+### Added
+
+- Add attestations to PackageRecord and rattler-index/upload ([#2773](https://github.com/conda/rattler/pull/2773))
+
 ## [0.33.5](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.33.4...rattler_repodata_gateway-v0.33.5) - 2026-09-17
 
 ### Added
