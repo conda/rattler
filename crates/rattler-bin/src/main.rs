@@ -79,6 +79,7 @@ enum Command {
     Upload(Box<rattler_upload::upload::opt::UploadOpts>),
     List(commands::list::Opt),
     Exec(commands::exec::Opt),
+    Skill(commands::skill::Opt),
 }
 
 /// Entry point of the `rattler` cli.
@@ -160,6 +161,7 @@ async fn async_main() -> miette::Result<()> {
             rattler_upload::upload_from_args(*opts).await
         }
         Command::Exec(opts) => exec::exec(opts, offline).await,
+        Command::Skill(opts) => commands::skill::skill(opts),
     }
 }
 

@@ -23,6 +23,7 @@ pub mod progress;
 pub mod run;
 pub mod search;
 pub mod shell_hook;
+pub mod skill;
 pub mod solve;
 pub mod table;
 pub mod virtual_packages;
