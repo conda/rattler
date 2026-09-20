@@ -121,6 +121,12 @@ fn regex_constraint_parser(
     }
 }
 
+/// Returns true if the character can be part of the version of a constraint,
+/// including the `*` used for glob patterns.
+fn is_version_character(c: char) -> bool {
+    c.is_alphanumeric() || matches!(c, '!' | '-' | '_' | '.' | '*' | '+')
+}
+
 /// Parses an any constraint. This matches "*" and ".*".
 fn any_constraint_parser(
     strictness: ParseStrictness,
@@ -131,6 +137,13 @@ fn any_constraint_parser(
         // `*.*` is not allowed in strict mode
         if trailing.is_some() && strictness == ParseStrictness::Strict {
             return Err(nom::Err::Failure(ParseConstraintError::InvalidGlob));
+        }
+
+        // Only a glob that stands on its own is an "any" constraint. If the glob is
+        // followed by more version characters (e.g. `*3.1`) this is a glob pattern
+        // which is handled by the logical constraint parser.
+        if remaining.starts_with(is_version_character) {
+            return Err(nom::Err::Error(ParseConstraintError::ExpectedVersion));
         }
 
         Ok((remaining, Constraint::Any))
@@ -160,9 +173,9 @@ fn logical_constraint_parser(
         // Take everything that looks like a version and use that to parse the version.
         // Any error means no characters were detected that belong to the
         // version.
-        let (rest, version_str) = take_while1::<_, _, (&str, ErrorKind)>(|c: char| {
-            c.is_alphanumeric() || matches!(c, '!' | '-' | '_' | '.' | '*' | '+')
-        })(input)
+        let (rest, version_str) = take_while1::<_, _, (&str, ErrorKind)>(is_version_character)(
+            input,
+        )
         .map_err(|_err| {
             nom::Err::Error(ParseConstraintError::InvalidVersion(ParseVersionError {
                 kind: ParseVersionErrorKind::Empty,
@@ -256,6 +269,16 @@ fn logical_constraint_parser(
                     }
                 };
             }
+        }
+
+        // Conda turns a version that contains a glob which is not part of a trailing
+        // wildcard (e.g. `*3.1` or `1.*.3`) into a regular expression. Those are not
+        // supported here. Without this check the version itself fails to parse which
+        // hides the actual reason from the user.
+        if contains_non_trailing_glob(version_str) {
+            return Err(nom::Err::Failure(
+                ParseConstraintError::RegexConstraintsNotSupported,
+            ));
         }
 
         // Parse the string as a version
@@ -373,6 +396,21 @@ pub(crate) fn looks_like_infinite_starts_with(input: &str) -> bool {
     false
 }
 
+/// Returns true if the input contains a glob that is not part of a trailing
+/// wildcard pattern. E.g. `*3.1` and `1.*.3` do, but `3.1*`, `3.1.*` and
+/// `2023.*.*` don't.
+fn contains_non_trailing_glob(input: &str) -> bool {
+    let Some(first_glob) = input.find('*') else {
+        return false;
+    };
+
+    // Everything from the first glob onwards must consist of globs only, e.g `*`,
+    // `.*` or `.*.*` (and possibly a trailing `.`, see `looks_like_infinite_starts_with`).
+    let tail = &input[first_glob..];
+    let tail = tail.strip_suffix('.').unwrap_or(tail);
+    !tail.split('.').all(|segment| segment == "*")
+}
+
 /// Returns true if the input is `*` or a sequence of `.*`.
 pub(crate) fn is_star_or_star_dot_star(input: &str) -> bool {
     if input == "*" {
@@ -416,6 +454,17 @@ fn flatten_version_specs(operator: LogicalOperator, args: Vec<VersionSpec>) -> V
     }
 }
 
+/// Parses a standalone `*` (and the legacy `*.*`) into [`VersionSpec::Any`], even in
+/// strict mode. A glob that is followed by more version characters (e.g. `*3.1`) is a
+/// glob pattern instead, which is left to the constraint parser.
+fn any_version_spec_term(input: &str) -> IResult<&str, VersionSpec, ParseConstraintError> {
+    let (rest, _) = terminated(char('*'), opt(tag(".*"))).parse(input)?;
+    if rest.starts_with(is_version_character) {
+        return Err(nom::Err::Error(ParseConstraintError::ExpectedVersion));
+    }
+    Ok((rest, VersionSpec::Any))
+}
+
 /// Parses a single term: either a parenthesized group or a constraint parsed
 /// directly into a [`VersionSpec`].
 fn version_spec_term(
@@ -428,8 +477,7 @@ fn version_spec_term(
             move |i| version_spec_or_group(strictness, i),
             preceded(multispace0, char(')')),
         ),
-        // `*` (and the legacy `*.*`) is always `Any`, even in strict mode.
-        map(terminated(char('*'), opt(tag(".*"))), |_| VersionSpec::Any),
+        any_version_spec_term,
         map(constraint_parser(strictness), VersionSpec::from),
     ))
     .parse(input)
@@ -650,6 +698,37 @@ mod test {
             constraint_parser(strictness)("*"),
             Ok(("", Constraint::Any))
         );
+    }
+
+    #[rstest]
+    fn parse_non_trailing_glob_constraint(#[values(Lenient, Strict)] strictness: ParseStrictness) {
+        // A glob that is not trailing the version (e.g. `*3.1`) is a glob pattern that
+        // conda turns into a regular expression, which is not supported here.
+        assert_eq!(
+            constraint_parser(strictness)("*3.1"),
+            Err(nom::Err::Failure(
+                ParseConstraintError::RegexConstraintsNotSupported
+            ))
+        );
+        assert_eq!(
+            constraint_parser(strictness)("1.*.3"),
+            Err(nom::Err::Failure(
+                ParseConstraintError::RegexConstraintsNotSupported
+            ))
+        );
+    }
+
+    #[test]
+    fn test_contains_non_trailing_glob() {
+        assert!(contains_non_trailing_glob("*3.1"));
+        assert!(contains_non_trailing_glob("1.*.3"));
+        assert!(contains_non_trailing_glob("1.*a"));
+
+        assert!(!contains_non_trailing_glob("3.1"));
+        assert!(!contains_non_trailing_glob("3.1*"));
+        assert!(!contains_non_trailing_glob("3.1.*"));
+        assert!(!contains_non_trailing_glob("2023.*.*"));
+        assert!(!contains_non_trailing_glob("0.2.18.*."));
     }
 
     #[rstest]

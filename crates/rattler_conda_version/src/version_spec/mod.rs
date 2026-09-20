@@ -624,6 +624,54 @@ mod tests {
     }
 
     #[test]
+    fn issue_2679() {
+        // A glob that does not trail the version is a glob pattern which conda maps to
+        // a regular expression. Those are not supported, but the error should say so.
+        for strictness in [ParseStrictness::Lenient, ParseStrictness::Strict] {
+            assert_matches!(
+                VersionSpec::from_str("*3.1", strictness).unwrap_err(),
+                ParseVersionSpecError::InvalidConstraint(
+                    ParseConstraintError::RegexConstraintsNotSupported
+                )
+            );
+            assert_matches!(
+                VersionSpec::from_str(">=*3.1", strictness).unwrap_err(),
+                ParseVersionSpecError::InvalidConstraint(
+                    ParseConstraintError::RegexConstraintsNotSupported
+                )
+            );
+        }
+
+        // A glob that trails the version is still a "starts with" constraint and a
+        // lone glob is still "any".
+        assert_eq!(
+            VersionSpec::from_str("3.1*", ParseStrictness::Lenient).unwrap(),
+            VersionSpec::StrictRange(
+                StrictRangeOperator::StartsWith,
+                StrictVersion::from(Version::from_str("3.1").unwrap())
+            )
+        );
+        assert_eq!(
+            VersionSpec::from_str("*", ParseStrictness::Strict).unwrap(),
+            VersionSpec::Any
+        );
+        assert_eq!(
+            VersionSpec::from_str("*.*", ParseStrictness::Strict).unwrap(),
+            VersionSpec::Any
+        );
+        assert_eq!(
+            VersionSpec::from_str("*,<2", ParseStrictness::Strict).unwrap(),
+            VersionSpec::Group(
+                LogicalOperator::And,
+                vec![
+                    VersionSpec::Any,
+                    VersionSpec::Range(RangeOperator::Less, Version::from_str("2").unwrap())
+                ]
+            )
+        );
+    }
+
+    #[test]
     fn issue_bracket_printing() {
         let v = VersionSpec::from_str("(>=1,<2)|>3", ParseStrictness::Lenient).unwrap();
         assert_eq!(format!("{v}"), ">=1,<2|>3");
