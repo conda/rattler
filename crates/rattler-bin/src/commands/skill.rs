@@ -6,18 +6,16 @@
 //! the per-command examples that are generated from the clap command tree at
 //! runtime, so they can never drift from the actual CLI.
 
-use std::{fmt::Write as _, path::PathBuf};
+use std::fmt::Write as _;
 
 use clap::CommandFactory;
-use miette::{Context, IntoDiagnostic};
 
 use crate::Opt as CommandArgs;
 
 /// The handwritten part of the skill. `{version}` is replaced at runtime.
 const PREAMBLE: &str = include_str!("skill_preamble.md");
 
-/// The skill directory name, which the agent skills specification requires to
-/// match the `name` in the frontmatter.
+/// The skill name used in the frontmatter and as the command path prefix.
 const SKILL_NAME: &str = "rattler";
 
 /// Subcommands that are not useful for an agent and are left out.
@@ -27,34 +25,15 @@ const SKIPPED_COMMANDS: &[&str] = &["help", "completion", "skill"];
 ///
 /// The output follows the agent skills specification (agentskills.io) and can
 /// be installed into any coding agent that supports skills, for example with
-/// `rattler skill --output .claude/skills`.
+/// `rattler skill > .claude/skills/rattler/SKILL.md`.
 #[derive(Debug, clap::Parser)]
 #[clap(after_help = r#"Examples:
-  rattler skill                                # print the skill to stdout
-  rattler skill --output .claude/skills        # write .claude/skills/rattler/SKILL.md"#)]
-pub struct Opt {
-    /// Directory to write the skill into as `<DIR>/rattler/SKILL.md` instead
-    /// of printing it to stdout.
-    #[clap(short, long, value_name = "DIR")]
-    output: Option<PathBuf>,
-}
+  rattler skill                                          # print the skill to stdout
+  rattler skill > .claude/skills/rattler/SKILL.md        # install it for Claude Code"#)]
+pub struct Opt {}
 
-pub fn skill(opt: Opt) -> miette::Result<()> {
-    let skill = render();
-    match opt.output {
-        Some(dir) => {
-            let dir = dir.join(SKILL_NAME);
-            let path = dir.join("SKILL.md");
-            std::fs::create_dir_all(&dir)
-                .into_diagnostic()
-                .wrap_err("failed to create the skill directory")?;
-            std::fs::write(&path, skill)
-                .into_diagnostic()
-                .wrap_err("failed to write the skill")?;
-            eprintln!("Wrote {}", path.display());
-        }
-        None => print!("{skill}"),
-    }
+pub fn skill(_opt: Opt) -> miette::Result<()> {
+    print!("{}", render());
     Ok(())
 }
 
