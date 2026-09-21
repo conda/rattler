@@ -51,26 +51,20 @@ rattler create -c conda-forge -p ./env python numpy
 rattler run -p ./env python -c "import numpy; print(numpy.__version__)"
 ```
 
-Run a tool once without keeping an environment (the package is guessed from
-the command name, use `--spec` to override):
+Run a tool once without keeping an environment:
 
 ```bash
 rattler exec ruff check .
-rattler exec --spec python=3.12 python --version
 ```
 
-Look inside a package without installing it:
+Private channels and uploads (`auth` and `upload` are shared with pixi and
+rattler-build, so credentials stored here are picked up by those tools too):
 
 ```bash
-rattler inspect https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda --json
-rattler fetch-file ./numpy-2.1.0-py312h1234_0.conda info/index.json
-rattler extract ./numpy-2.1.0-py312h1234_0.conda --destination ./numpy-src
-rattler compare-packages ./old.conda ./new.conda
+rattler auth login prefix.dev --token pfx_xxx
+rattler auth login anaconda.org --conda-token xxx
+rattler auth status
+rattler upload prefix -c my-channel ./mypkg-1.0-h123_0.conda
 ```
 
-Understand a channel:
-
-```bash
-rattler search 'numpy*' -c conda-forge --platform osx-arm64
-rattler whoneeds openssl --format urls | head
-```
+The examples below are the same ones `rattler <command> --help` prints.
