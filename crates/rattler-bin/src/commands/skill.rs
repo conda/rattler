@@ -1,150 +1,201 @@
-//! PROTOTYPE: generate an agent skill (SKILL.md) from the clap command tree.
-use std::fmt::Write as _;
+//! `rattler skill`: print an agent skill (`SKILL.md`) that teaches coding
+//! agents how to use the `rattler` CLI.
+//!
+//! The skill is a hybrid: a handwritten preamble with the guidance clap cannot
+//! express (`skill_preamble.md`), followed by a compact command reference and
+//! the per-command examples that are generated from the clap command tree at
+//! runtime, so they can never drift from the actual CLI.
+
+use std::{fmt::Write as _, path::PathBuf};
 
 use clap::CommandFactory;
+use miette::{Context, IntoDiagnostic};
 
 use crate::Opt as CommandArgs;
 
-/// Print an agent skill (SKILL.md) describing the `rattler` CLI.
-#[derive(clap::Parser, Debug)]
-pub struct Opt {}
+/// The handwritten part of the skill. `{version}` is replaced at runtime.
+const PREAMBLE: &str = include_str!("skill_preamble.md");
 
-pub fn skill(_opt: Opt) -> miette::Result<()> {
-    let mut cmd = CommandArgs::command().name("rattler").bin_name("rattler");
-    cmd.build();
-    let mut out = String::new();
+/// The skill directory name, which the agent skills specification requires to
+/// match the `name` in the frontmatter.
+const SKILL_NAME: &str = "rattler";
 
-    // --- frontmatter (agentskills.io spec) ---
-    let about = cmd
-        .get_long_about()
-        .or(cmd.get_about())
-        .map(ToString::to_string)
-        .unwrap_or_default();
-    writeln!(out, "---").unwrap();
-    writeln!(out, "name: rattler").unwrap();
-    writeln!(
-        out,
-        "description: \"Use the `rattler` CLI to solve, create, inspect and manipulate conda environments and packages. {about} Use when the user mentions rattler, conda packages, .conda/.tar.bz2 archives, repodata or conda channels.\""
-    )
-    .unwrap();
-    writeln!(out, "---\n").unwrap();
+/// Subcommands that are not useful for an agent and are left out.
+const SKIPPED_COMMANDS: &[&str] = &["help", "completion", "skill"];
 
-    writeln!(
-        out,
-        "# rattler CLI (v{})\n",
-        cmd.get_version().unwrap_or("?")
-    )
-    .unwrap();
-    writeln!(
-        out,
-        "Run `rattler <command> --help` for the authoritative flags of the installed version.\n"
-    )
-    .unwrap();
+/// Print an agent skill (SKILL.md) describing how to use the `rattler` CLI.
+///
+/// The output follows the agent skills specification (agentskills.io) and can
+/// be installed into any coding agent that supports skills, for example with
+/// `rattler skill --output .claude/skills`.
+#[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler skill                                # print the skill to stdout
+  rattler skill --output .claude/skills        # write .claude/skills/rattler/SKILL.md"#)]
+pub struct Opt {
+    /// Directory to write the skill into as `<DIR>/rattler/SKILL.md` instead
+    /// of printing it to stdout.
+    #[clap(short, long, value_name = "DIR")]
+    output: Option<PathBuf>,
+}
 
-    writeln!(out, "## Global options\n").unwrap();
-    for arg in cmd.get_arguments().filter(|a| a.is_global_set()) {
-        write_arg(&mut out, arg);
+pub fn skill(opt: Opt) -> miette::Result<()> {
+    let skill = render();
+    match opt.output {
+        Some(dir) => {
+            let dir = dir.join(SKILL_NAME);
+            let path = dir.join("SKILL.md");
+            std::fs::create_dir_all(&dir)
+                .into_diagnostic()
+                .wrap_err("failed to create the skill directory")?;
+            std::fs::write(&path, skill)
+                .into_diagnostic()
+                .wrap_err("failed to write the skill")?;
+            eprintln!("Wrote {}", path.display());
+        }
+        None => print!("{skill}"),
     }
-
-    writeln!(out, "\n## Commands\n").unwrap();
-    for sub in cmd.get_subcommands() {
-        write_command(&mut out, "rattler", sub);
-    }
-    print!("{out}");
     Ok(())
 }
 
-fn write_arg(out: &mut String, arg: &clap::Arg) {
-    let mut names = Vec::new();
-    if let Some(s) = arg.get_short() {
-        names.push(format!("-{s}"));
-    }
-    if let Some(l) = arg.get_long() {
-        names.push(format!("--{l}"));
-    }
-    let mut name = if names.is_empty() {
-        format!("<{}>", arg.get_id().to_string().to_uppercase())
-    } else {
-        names.join(", ")
-    };
-    if arg.get_action().takes_values() && !names.is_empty() {
-        let vn = arg
-            .get_value_names()
-            .and_then(|v| v.first().map(ToString::to_string))
-            .unwrap_or_else(|| arg.get_id().to_string().to_uppercase());
-        name.push_str(&format!(" <{vn}>"));
-    }
-    let help = arg
-        .get_long_help()
-        .or(arg.get_help())
-        .map(|h| h.to_string().replace('\n', " "))
-        .unwrap_or_default();
-    let mut extra = Vec::new();
-    let possible: Vec<_> = arg
-        .get_possible_values()
-        .iter()
-        .filter(|p| !p.is_hide_set())
-        .map(|p| format!("`{}`", p.get_name()))
-        .collect();
-    if !possible.is_empty() {
-        extra.push(format!("one of {}", possible.join(", ")));
-    }
-    let defaults: Vec<_> = arg
-        .get_default_values()
-        .iter()
-        .map(|d| d.to_string_lossy().to_string())
-        .collect();
-    if !defaults.is_empty() {
-        extra.push(format!("default `{}`", defaults.join(",")));
-    }
-    if let Some(env) = arg.get_env() {
-        extra.push(format!("env `{}`", env.to_string_lossy()));
-    }
-    let extra = if extra.is_empty() {
-        String::new()
-    } else {
-        format!(" ({})", extra.join("; "))
-    };
-    writeln!(out, "- `{name}` — {help}{extra}").unwrap();
-}
+/// Renders the complete skill document.
+fn render() -> String {
+    let mut cmd = CommandArgs::command().name(SKILL_NAME).bin_name(SKILL_NAME);
+    cmd.build();
 
-/// Render one (sub)command and recurse into its nested subcommands.
-fn write_command(out: &mut String, parent: &str, sub: &clap::Command) {
-    // Skip commands that are useless to an agent.
-    if sub.is_hide_set() || matches!(sub.get_name(), "help" | "completion" | "skill") {
-        return;
+    let mut out = PREAMBLE.replace("{version}", cmd.get_version().unwrap_or("unknown"));
+
+    let commands = collect_commands(&cmd);
+
+    out.push_str("\n## Commands\n\n");
+    out.push_str("| Command | Description |\n|---|---|\n");
+    for (path, sub) in &commands {
+        let about = sub
+            .get_about()
+            .map(|about| about.to_string().replace('|', "\\|"))
+            .unwrap_or_default();
+        writeln!(out, "| `{path}` | {about} |").unwrap();
     }
-    let path = format!("{parent} {}", sub.get_name());
-    let about = sub
-        .get_long_about()
-        .or(sub.get_about())
-        .map(ToString::to_string)
-        .unwrap_or_default();
-    writeln!(out, "### `{path}`\n").unwrap();
-    writeln!(out, "{about}\n").unwrap();
-    let mut usage = sub.clone();
-    writeln!(out, "```\n{}\n```\n", usage.render_usage()).unwrap();
-    let args: Vec<_> = sub
-        .get_arguments()
-        .filter(|a| !a.is_hide_set() && !a.is_global_set() && a.get_id() != "help")
-        .collect();
-    if !args.is_empty() {
-        for arg in args {
-            write_arg(out, arg);
+
+    out.push_str("\n## Global options\n\n");
+    for arg in cmd.get_arguments().filter(|arg| arg.is_global_set()) {
+        let mut names = Vec::new();
+        if let Some(short) = arg.get_short() {
+            names.push(format!("-{short}"));
         }
-        writeln!(out).unwrap();
+        if let Some(long) = arg.get_long() {
+            names.push(format!("--{long}"));
+        }
+        let help = arg.get_help().map(ToString::to_string).unwrap_or_default();
+        writeln!(out, "- `{}`: {help}", names.join(", ")).unwrap();
     }
-    if let Some(after) = sub.get_after_help().or(sub.get_after_long_help()) {
-        // The existing `after_help` blocks are all "Examples:\n  ..." – reuse them.
-        let text = after.to_string();
+
+    out.push_str("\n## Examples\n");
+    for (path, sub) in &commands {
+        let Some(examples) = sub.get_after_help().or(sub.get_after_long_help()) else {
+            continue;
+        };
+        // The `after_help` blocks are written as "Examples:\n  <command>  # <comment>".
+        let text = examples.to_string();
         let body = text.trim_start_matches("Examples:").trim();
-        writeln!(out, "Examples:\n\n```bash").unwrap();
+        writeln!(out, "\n### `{path}`\n\n```bash").unwrap();
         for line in body.lines() {
             writeln!(out, "{}", line.trim()).unwrap();
         }
-        writeln!(out, "```\n").unwrap();
+        out.push_str("```\n");
     }
-    for nested in sub.get_subcommands() {
-        write_command(out, &path, nested);
+
+    out
+}
+
+/// Flattens the (nested) subcommands of `cmd` into `(path, command)` pairs in
+/// definition order, e.g. `("rattler auth login", ...)`, leaving out hidden
+/// commands and the ones in [`SKIPPED_COMMANDS`].
+fn collect_commands(cmd: &clap::Command) -> Vec<(String, &clap::Command)> {
+    fn walk<'a>(parent: &str, cmd: &'a clap::Command, out: &mut Vec<(String, &'a clap::Command)>) {
+        for sub in cmd.get_subcommands() {
+            if sub.is_hide_set() || SKIPPED_COMMANDS.contains(&sub.get_name()) {
+                continue;
+            }
+            let path = format!("{parent} {}", sub.get_name());
+            out.push((path.clone(), sub));
+            walk(&path, sub, out);
+        }
+    }
+
+    let mut out = Vec::new();
+    walk(SKILL_NAME, cmd, &mut out);
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::*;
+
+    /// The agent skills specification recommends keeping a `SKILL.md` under
+    /// 500 lines because the whole file is loaded into the agent's context.
+    #[test]
+    fn test_skill_is_short() {
+        let skill = render();
+        let lines = skill.lines().count();
+        assert!(lines < 500, "the skill is {lines} lines long");
+    }
+
+    #[test]
+    fn test_skill_has_frontmatter() {
+        let skill = render();
+        let mut lines = skill.lines();
+        assert_eq!(lines.next(), Some("---"));
+        assert_eq!(lines.next(), Some("name: rattler"));
+        assert!(lines.next().is_some_and(|l| l.starts_with("description: ")));
+        assert_eq!(lines.next(), Some("---"));
+        assert!(!skill.contains("{version}"));
+    }
+
+    /// Every user-facing command is listed, and the ones we leave out are not.
+    #[test]
+    fn test_skill_lists_all_commands() {
+        let skill = render();
+        for command in [
+            "rattler solve",
+            "rattler create",
+            "rattler auth login",
+            "rattler exec",
+        ] {
+            assert!(
+                skill.contains(&format!("| `{command}` |")),
+                "{command} missing"
+            );
+        }
+        for command in SKIPPED_COMMANDS {
+            assert!(!skill.contains(&format!("| `rattler {command}` |")));
+        }
+    }
+
+    /// Every `rattler ...` example in the skill, handwritten or generated,
+    /// must parse with the current CLI so the examples cannot drift.
+    #[test]
+    fn test_skill_examples_parse() {
+        let skill = render();
+        let mut in_code_block = false;
+        for line in skill.lines() {
+            if line.starts_with("```") {
+                in_code_block = !in_code_block;
+                continue;
+            }
+            if !in_code_block || !line.starts_with("rattler ") {
+                continue;
+            }
+            let words = shlex::split(line).unwrap_or_else(|| panic!("cannot split {line:?}"));
+            // Only the rattler invocation itself, not what it is piped into.
+            let args = words
+                .iter()
+                .take_while(|word| !matches!(word.as_str(), "|" | ">" | ">>"))
+                .map(String::as_str);
+            CommandArgs::try_parse_from(args)
+                .unwrap_or_else(|err| panic!("example {line:?} does not parse: {err}"));
+        }
     }
 }

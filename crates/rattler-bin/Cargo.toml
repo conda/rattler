@@ -92,3 +92,4 @@ regex = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+shlex = { workspace = true }
