@@ -103,14 +103,18 @@ macro_rules! impl_package_record {
                 AsRef::<PackageRecord>::as_ref(self).build.to_string()
             }
 
+            /// Validates the build string against CEP26 before assignment.
             #[wasm_bindgen::prelude::wasm_bindgen(setter)]
-            pub fn set_build(&mut self, build: String) {
-                // Unchecked: `PackageRecord.build` is not always a CEP26 conda
-                // build string. Wheel records carry the wheel tag (e.g.
-                // `py3-none-any`) verbatim, and source packages have an empty
-                // build.
+            pub fn set_build(&mut self, build: String) -> crate::JsResult<()> {
                 AsMut::<PackageRecord>::as_mut(self).build =
-                    rattler_conda_types::package::BuildString::new_unchecked(build);
+                    rattler_conda_types::package::BuildString::new(build)?;
+                Ok(())
+            }
+
+            /// Assigns an existing build string without revalidating or consuming it.
+            #[wasm_bindgen::prelude::wasm_bindgen(js_name = "setBuildString")]
+            pub fn set_build_string(&mut self, build: &crate::build_string::JsBuildString) {
+                AsMut::<PackageRecord>::as_mut(self).build = build.inner.clone();
             }
 
             /// The build number of the package.
