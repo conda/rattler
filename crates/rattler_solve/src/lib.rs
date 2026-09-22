@@ -354,6 +354,14 @@ pub enum ChannelPriority {
     /// For a given package, candidates from higher-priority channel's are exhausted
     /// before falling back to the next channel, regardless of the version.
     Flexible,
+
+    /// Like [`ChannelPriority::Disabled`], the package version takes
+    /// precedence over the channel. Unlike it, the channel order still breaks
+    /// ties between candidates with the same version, before the build number
+    /// is compared. This matches conda's documented sort order when its
+    /// channel priority is set to disabled. Only supported by the resolvo
+    /// backend.
+    VersionFirst,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// Represents a dependency resolution task, to be solved by one of the backends

@@ -145,6 +145,15 @@ impl super::SolverImpl for Solver {
             ]));
         }
 
+        // libsolv's candidate policy always consults the repo priority before
+        // the version, so the version-first ordering (version, then channel,
+        // then build number) cannot be expressed through repo priorities.
+        if task.channel_priority == ChannelPriority::VersionFirst {
+            return Err(SolveError::UnsupportedOperations(vec![
+                "version-first channel priority".to_string(),
+            ]));
+        }
+
         for spec in task.specs.iter().chain(task.constraints.iter()) {
             ensure_matchspec_flags_supported(spec)?;
         }

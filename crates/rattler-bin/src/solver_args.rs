@@ -141,6 +141,11 @@ pub enum ChannelPriority {
 
     /// Packages can come from any channel, the version takes precedence.
     Disabled,
+
+    /// Packages can come from any channel and the version takes precedence,
+    /// but the channel order still breaks ties between candidates with the
+    /// same version, like conda's disabled channel priority.
+    VersionFirst,
 }
 
 impl From<ChannelPriority> for rattler_solve::ChannelPriority {
@@ -149,6 +154,7 @@ impl From<ChannelPriority> for rattler_solve::ChannelPriority {
             ChannelPriority::Strict => rattler_solve::ChannelPriority::Strict,
             ChannelPriority::Flexible => rattler_solve::ChannelPriority::Flexible,
             ChannelPriority::Disabled => rattler_solve::ChannelPriority::Disabled,
+            ChannelPriority::VersionFirst => rattler_solve::ChannelPriority::VersionFirst,
         }
     }
 }

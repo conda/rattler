@@ -513,9 +513,13 @@ impl<'a> CondaDependencyProvider<'a> {
                 let candidates = records.entry(package_name).or_default();
                 candidates.candidates.push(solvable_id);
 
-                // Only [`ChannelPriority::Flexible`] consults channel ranks.
-                if channel_priority == ChannelPriority::Flexible
-                    && !channel_order.contains_key(&record.channel)
+                // Flexible and version-first channel priority both consult
+                // channel ranks: flexible sorts on them before the version,
+                // version-first uses them only to break version ties.
+                if matches!(
+                    channel_priority,
+                    ChannelPriority::Flexible | ChannelPriority::VersionFirst
+                ) && !channel_order.contains_key(&record.channel)
                 {
                     let next_rank = channel_order.len() as u32;
                     channel_order.insert(record.channel.clone(), next_rank);
