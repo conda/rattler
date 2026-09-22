@@ -144,19 +144,16 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaBinaryData {
 
     fn try_from(value: CondaPackageDataModel<'a>) -> Result<Self, Self::Error> {
         let derived = LocationDerivedFields::new(&value.location);
-        // The lockfile may omit the build string or leave it empty; in either
-        // case fall back to deriving it from the filename so that binary
-        // packages always carry a build identifier.
+        // Only derive omitted builds; preserve explicit legacy values verbatim.
         let build = value
             .build
             .map(Cow::into_owned)
-            .filter(|b| !b.is_empty())
             .or_else(|| derived.build.clone().map(BuildString::new_unchecked))
             .ok_or_else(|| ConversionError::Missing("build".to_string()))?;
-        let build_str = build.to_string();
+        let build_str = build.as_str();
         let build_number = value
             .build_number
-            .or_else(|| derived_fields::derive_build_number_from_build(&build_str))
+            .or_else(|| derived_fields::derive_build_number_from_build(build_str))
             .unwrap_or(0);
         let subdir = value
             .subdir
@@ -167,7 +164,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaBinaryData {
             || {
                 derived_fields::derive_noarch_type(
                     derived.subdir.as_deref().unwrap_or(&subdir),
-                    derived.build.as_deref().unwrap_or(&build_str),
+                    derived.build.as_deref().unwrap_or(build_str),
                 )
             },
             Cow::into_owned,
@@ -256,12 +253,12 @@ impl<'a> From<&'a CondaBinaryData> for CondaPackageDataModel<'a> {
     fn from(value: &'a CondaBinaryData) -> Self {
         let package_record = &value.package_record;
         let derived = LocationDerivedFields::new(&value.location);
-        let build_str = package_record.build.to_string();
+        let build_str = package_record.build.as_str();
         let derived_build_number =
-            derived_fields::derive_build_number_from_build(&build_str).unwrap_or(0);
+            derived_fields::derive_build_number_from_build(build_str).unwrap_or(0);
         let derived_noarch = derived_fields::derive_noarch_type(
             derived.subdir.as_deref().unwrap_or(&package_record.subdir),
-            derived.build.as_deref().unwrap_or(&build_str),
+            derived.build.as_deref().unwrap_or(build_str),
         );
 
         let normalized_channel = value
@@ -331,6 +328,27 @@ fn strip_trailing_slash(url: &Url) -> Cow<'_, Url> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explicit_builds_roundtrip() {
+        for build in ["", "0", "py_0"] {
+            let input = format!(
+                "conda: https://example.com/noarch/demo-1.0-py_0.conda\nbuild: {build:?}\n"
+            );
+            let model: CondaPackageDataModel<'_> = serde_yaml::from_str(&input).unwrap();
+            let binary = CondaBinaryData::try_from(model).unwrap();
+            assert_eq!(binary.package_record.build, build);
+            let yaml = serde_yaml::to_string(&CondaPackageDataModel::from(&binary)).unwrap();
+            let model: CondaPackageDataModel<'_> = serde_yaml::from_str(&yaml).unwrap();
+            assert_eq!(
+                CondaBinaryData::try_from(model)
+                    .unwrap()
+                    .package_record
+                    .build,
+                build
+            );
+        }
+    }
 
     #[rstest::rstest]
     #[case(0)]

@@ -15,7 +15,7 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::{
     Flag, NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, UrlOrPath, VersionWithSource,
     WhlPackageRecord,
-    package::{BuildString, DistArchiveIdentifier, IndexJson, PackageFile},
+    package::{DistArchiveIdentifier, IndexJson, PackageFile},
     prefix_record::{Link, LinkType},
     utils::TimestampMs,
 };
@@ -23,6 +23,7 @@ use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 use url::Url;
 
 use crate::{
+    build_string::PyBuildString,
     error::PyRattlerError,
     no_arch_type::PyNoArchType,
     package_name::PyPackageName,
@@ -184,7 +185,7 @@ impl PyRecord {
     pub fn create(
         name: PyPackageName,
         version: (PyVersion, String),
-        build: String,
+        build: PyBuildString,
         build_number: u64,
         subdir: String,
         arch: Option<String>,
@@ -192,11 +193,7 @@ impl PyRecord {
         noarch: Option<PyNoArchType>,
         python_site_packages_path: Option<String>,
     ) -> Self {
-        // Deliberately unchecked: `PackageRecord.build` is not always a CEP26
-        // conda build string. Wheel records (`WhlPackageRecord`) carry the
-        // wheel tag (e.g. `py3-none-any`) verbatim, and source packages have
-        // an empty build.
-        let build = BuildString::new_unchecked(build);
+        let build = build.inner;
         let noarch = noarch.map(Into::into);
         Self {
             inner: RecordInner::Package(Arc::new(PackageRecord {
@@ -384,10 +381,8 @@ impl PyRecord {
     }
 
     #[setter]
-    pub fn set_build(&mut self, build: String) {
-        // Unchecked for the same reason as `create`: wheel records store the
-        // wheel tag in this field, which is not a valid CEP26 build string.
-        self.as_package_record_mut().build = BuildString::new_unchecked(build);
+    pub fn set_build(&mut self, build: PyBuildString) {
+        self.as_package_record_mut().build = build.inner;
     }
 
     /// The build number of the package.

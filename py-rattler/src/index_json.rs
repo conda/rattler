@@ -10,15 +10,15 @@ use pyo3::{
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::{
     Flag, PackageUrl, RepodataRevision, VersionWithSource,
-    package::{BuildString, IndexJson, PackageFile},
+    package::{IndexJson, PackageFile},
     utils::TimestampMs,
 };
 use rattler_package_streaming::seek::read_package_file;
 use url::Url;
 
 use crate::{
-    error::PyRattlerError, networking::client::PyClientWithMiddleware, no_arch_type::PyNoArchType,
-    package_name::PyPackageName, version::PyVersion,
+    build_string::PyBuildString, error::PyRattlerError, networking::client::PyClientWithMiddleware,
+    no_arch_type::PyNoArchType, package_name::PyPackageName, version::PyVersion,
 };
 
 #[pyclass(from_py_object)]
@@ -138,10 +138,8 @@ impl PyIndexJson {
     }
 
     #[setter]
-    pub fn set_build(&mut self, build: String) -> PyResult<()> {
-        self.inner.build =
-            BuildString::new(build).map_err(|err| PyValueError::new_err(err.to_string()))?;
-        Ok(())
+    pub fn set_build(&mut self, build: PyBuildString) {
+        self.inner.build = build.inner;
     }
 
     /// The build number of the package. This is also included in the build string.

@@ -5,6 +5,7 @@ import datetime
 
 from rattler import VersionWithSource
 from rattler.match_spec.match_spec import MatchSpec
+from rattler.package.build_string import BuildString
 from rattler.package.no_arch_type import NoArchType, NoArchLiteral
 from rattler.package.package_name import PackageName
 from rattler.platform.platform import Platform
@@ -183,7 +184,7 @@ class PackageRecord:
         self,
         name: str | PackageName,
         version: str | VersionWithSource,
-        build: str,
+        build: str | BuildString,
         build_number: int,
         subdir: str | Platform,
         arch: Optional[str] = None,
@@ -231,7 +232,7 @@ class PackageRecord:
         self._record = PyRecord.create(
             name._name,
             (version._version, version._source),
-            build,
+            BuildString._to_py(build),
             build_number,
             str(subdir),
             str(arch) if arch is not None else None,
@@ -299,7 +300,9 @@ class PackageRecord:
     @property
     def build(self) -> str:
         """
-        The build string of the package.
+        The build string of the package. Assigning a string validates it against
+        CEP26. Pass ``BuildString.new_unchecked(value)`` to preserve a non-conforming
+        value explicitly. Reading existing metadata does not validate it.
 
         Examples
         --------
@@ -319,8 +322,8 @@ class PackageRecord:
         return self._record.build
 
     @build.setter
-    def build(self, value: str) -> None:
-        self._record.build = value
+    def build(self, value: str | BuildString) -> None:
+        self._record.build = BuildString._to_py(value)
 
     @property
     def build_number(self) -> int:
@@ -418,7 +421,7 @@ class PackageRecord:
         >>> record = PackageRecord(
         ...     name="requests",
         ...     version="2.28.0",
-        ...     build="py3-none-any",
+        ...     build=BuildString.new_unchecked("py3-none-any"),
         ...     build_number=0,
         ...     subdir="noarch",
         ... )

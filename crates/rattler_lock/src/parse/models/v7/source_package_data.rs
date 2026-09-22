@@ -137,7 +137,7 @@ impl<'a> SourcePackageDataModel<'a> {
             let subdir = subdir.into_owned();
             let build = self
                 .build
-                .map_or_else(|| BuildString::new_unchecked("0"), Cow::into_owned);
+                .map_or_else(|| BuildString::new_unchecked(""), Cow::into_owned);
             let (arch, platform) = derived_fields::derive_arch_and_platform(&subdir);
             SourceMetadata::Full(Box::new(PackageRecord {
                 name: name.clone(),
@@ -214,10 +214,8 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 conda_source: identifier,
                 version: Some(Cow::Borrowed(&full.version)),
                 subdir: Some(Cow::Borrowed(&full.subdir)),
-                // `"0"` is the placeholder build string; omit it so reading
-                // and rewriting a lock-file is stable.
-                build: (!full.build.is_empty() && full.build != "0")
-                    .then_some(Cow::Borrowed(&full.build)),
+                // Preserve legacy empty builds; an explicit "0" is not an empty build.
+                build: (!full.build.is_empty()).then_some(Cow::Borrowed(&full.build)),
                 build_number: full.build_number,
                 noarch: full.noarch,
                 variants,
@@ -271,6 +269,34 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 build_packages: Vec::new(),
                 host_packages: Vec::new(),
             },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_builds_roundtrip() {
+        for build in [None, Some(""), Some("0"), Some("py_0")] {
+            let mut input = String::from(
+                "conda_source: 'demo[abcd1234] @ .'\nversion: '1.0'\nsubdir: noarch\n",
+            );
+            if let Some(build) = build {
+                input.push_str(&format!("build: {build:?}\n"));
+            }
+            let model: SourcePackageDataModel<'_> = serde_yaml::from_str(&input).unwrap();
+            let (_, source) = model.into_parts().unwrap();
+            assert_eq!(source.record().unwrap().build, build.unwrap_or(""));
+            let yaml = serde_yaml::to_string(&SourcePackageDataModel::from(&source)).unwrap();
+            let model: SourcePackageDataModel<'_> = serde_yaml::from_str(&yaml).unwrap();
+            let (_, decoded) = model.into_parts().unwrap();
+            assert_eq!(
+                decoded.record().unwrap().build,
+                source.record().unwrap().build
+            );
+            assert_eq!(decoded.identifier_hash, source.identifier_hash);
         }
     }
 }

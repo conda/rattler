@@ -25,6 +25,7 @@ from rattler.config import Config, RunPostLinkScripts, TlsRootCerts
 from rattler.networking import Client, fetch_repo_data
 from rattler.virtual_package import GenericVirtualPackage, VirtualPackage, VirtualPackageOverrides, Override
 from rattler.package import (
+    BuildString,
     PackageName,
     AboutJson,
     RunExportsJson,
@@ -60,6 +61,7 @@ __version__ = _get_rattler_version()
 del _get_rattler_version
 
 __all__ = [
+    "BuildString",
     "Version",
     "VersionSpec",
     "VersionWithSource",
