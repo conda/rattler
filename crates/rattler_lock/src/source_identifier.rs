@@ -268,6 +268,7 @@ fn compute_source_hash(data: &CondaSourceData) -> u64 {
                 // run_exports, etc. are not identifying.
                 name: _,
                 arch: _,
+                attestations_sha256: _,
                 platform: _,
                 features: _,
                 legacy_bz2_md5: _,
@@ -280,6 +281,7 @@ fn compute_source_hash(data: &CondaSourceData) -> u64 {
                 sha256: _,
                 size: _,
                 timestamp: _,
+                indexed_timestamp: _,
                 track_features: _,
             } = &**full;
 

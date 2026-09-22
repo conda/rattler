@@ -5,7 +5,7 @@ use rattler_conda_types::{ChannelRelations, PackageName, RepoDataRecord, Repodat
 
 use super::GatewayError;
 use crate::Reporter;
-use crate::sparse::empty_repodata_revisions;
+use crate::sparse::{RemovedPackage, empty_repodata_revisions};
 use coalesced_map::{CoalescedGetError, CoalescedMap};
 
 /// Records for a single package, with precomputed unique dependency strings
@@ -19,6 +19,10 @@ use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub struct PackageRecords {
     /// All repodata records for this package.
     pub records: Vec<Arc<RepoDataRecord>>,
+
+    /// Packages of this name that the subdirectory lists as removed. These
+    /// never appear in `records`.
+    pub removed: Vec<RemovedPackage>,
 
     /// Unique base dependency strings across all records.
     pub unique_base_deps: Arc<[String]>,
@@ -158,6 +162,33 @@ impl SubdirData {
             })
     }
 
+    /// Fetches the records for `name` without inserting them into the
+    /// long-lived per-name cache. A previously cached entry is still reused.
+    /// Used by streaming scans (e.g. the gateway's `who_needs` query) that
+    /// visit every package of a subdir exactly once and would otherwise
+    /// permanently fill the cache with millions of records.
+    pub async fn fetch_package_records_uncached(
+        &self,
+        name: &PackageName,
+        reporter: Option<&dyn Reporter>,
+    ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
+        if let Some(cached) = self.records.get(name) {
+            return Ok(cached.records);
+        }
+        Ok(self
+            .client
+            .fetch_package_records(name, reporter)
+            .await?
+            .records)
+    }
+
+    /// The number of package names currently held in the per-name record
+    /// cache.
+    #[cfg(test)]
+    pub(crate) fn cached_package_count(&self) -> usize {
+        self.records.len()
+    }
+
     pub fn package_names(&self) -> Vec<String> {
         self.client.package_names()
     }
@@ -226,6 +257,7 @@ mod tests {
         }
 
         let package_record = PackageRecord {
+            attestations_sha256: None,
             arch: None,
             build: BuildString::new_unchecked("0"),
             build_number: 0,
@@ -247,6 +279,7 @@ mod tests {
             size: None,
             subdir: "linux-64".to_string(),
             timestamp: None,
+            indexed_timestamp: None,
             track_features: Vec::new(),
             version: VersionWithSource::from_str("1.0").unwrap(),
             purls: None,

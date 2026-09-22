@@ -24,8 +24,8 @@ env:
   DEFAULT_FEATURES: s3
 
 jobs:
-  e2e-minio-test:
-    name: E2E Upload/Index/Download [Minio]
+  e2e-rustfs-test:
+    name: E2E Upload/Index/Download [RustFS]
     runs-on: ubuntu-latest
 
     env:
@@ -43,9 +43,9 @@ jobs:
 
       - uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
         with:
-          environments: minio
+          environments: rustfs
 
-      - run: pixi run -vv e2e-s3-minio
+      - run: pixi run -vv e2e-s3-rustfs
 
   # TODO: add cloudflare R2 integration tests here as well
   e2e-aws-s3-test:

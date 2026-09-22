@@ -38,22 +38,27 @@ jobs:
           ref: main # We checkout the main branch to check for the commit
       - name: Check main branch
         if: ${{ inputs.sha }}
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
         run: |
           # Fetch the main branch since a shallow checkout is used by default
           git fetch origin main --unshallow
-          if ! git branch --contains ${{ inputs.sha }} | grep -E '(^|\s)main$'; then
+          if ! git branch --contains "$INPUT_SHA" | grep -E '(^|\s)main$'; then
             echo "The specified sha is not on the main branch" >&2
             exit 1
           fi
       - name: Check tag consistency
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          # Switch to the commit we want to release
-          git checkout ${{ inputs.sha }}
+          # Switch to the commit we want to release (stay on the current commit if no sha was given)
+          git checkout "${INPUT_SHA:-HEAD}"
           cd js-rattler
           version=$(npm pkg get version --workspaces=false | tr -d \")
-          if [ "${{ inputs.tag }}" != "${version}" ]; then
+          if [ "$INPUT_TAG" != "${version}" ]; then
             echo "The input tag does not match the version from package.js:" >&2
-            echo "${{ inputs.tag }}" >&2
+            echo "$INPUT_TAG" >&2
             echo "${version}" >&2
             exit 1
           else
@@ -128,10 +133,12 @@ jobs:
         with:
           ref: ${{ inputs.sha }}
       - name: git tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
           git config user.email "hi@prefix.dev"
           git config user.name "Prefix.dev Release CI"
-          git tag -m "js-rattler-v${{ inputs.tag }}" "js-rattler-v${{ inputs.tag }}"
+          git tag -m "js-rattler-v$INPUT_TAG" "js-rattler-v$INPUT_TAG"
           # If there is duplicate tag, this will fail. The publish to npm action will have been a noop (due to skip
           # existing), so we make a non-destructive exit here
           git push --tags

@@ -501,6 +501,36 @@ macro_rules! impl_package_record {
                 });
             }
 
+            /// Server-assigned first index time (CEP-0047).
+            #[wasm_bindgen::prelude::wasm_bindgen(
+                getter,
+                js_name = "indexedTimestamp",
+                unchecked_return_type = "Date | undefined"
+            )]
+            pub fn indexed_timestamp(&self) -> Option<js_sys::Date> {
+                AsRef::<PackageRecord>::as_ref(self)
+                    .indexed_timestamp
+                    .map(|ts| {
+                        js_sys::Date::new(&wasm_bindgen::JsValue::from_f64(
+                            ts.timestamp_millis() as f64
+                        ))
+                    })
+            }
+
+            #[wasm_bindgen::prelude::wasm_bindgen(setter, js_name = "indexedTimestamp")]
+            pub fn set_indexed_timestamp(
+                &mut self,
+                #[wasm_bindgen::prelude::wasm_bindgen(unchecked_param_type = "Date | undefined")]
+                timestamp: Option<js_sys::Date>,
+            ) {
+                AsMut::<PackageRecord>::as_mut(self).indexed_timestamp =
+                    timestamp.and_then(|date| {
+                        jiff::Timestamp::from_millisecond(date.get_time() as i64)
+                            .ok()
+                            .map(Into::into)
+                    });
+            }
+
             /// Track features are nowadays only used to downweight packages (ie. give
             /// them less priority). To that effect, the package is downweighted
             /// by the number of `track_features`.

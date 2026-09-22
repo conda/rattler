@@ -26,5 +26,6 @@ export declare type PackageRecordJson = {
     size?: number;
     noarch?: NoArchType;
     timestamp?: number;
+    indexed_timestamp?: number;
     track_features?: string;
 };

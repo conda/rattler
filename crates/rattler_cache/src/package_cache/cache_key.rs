@@ -115,7 +115,11 @@ impl CacheKey {
         let Ok(version) = self.version.parse::<VersionWithSource>() else {
             return false;
         };
-        let mut record = PackageRecord::new(name, version, self.build_string.clone());
+        let mut record = PackageRecord::new(
+            name,
+            version,
+            BuildString::new_unchecked(&self.build_string),
+        );
         record.sha256 = self.sha256;
         record.md5 = self.md5;
         spec.matches(&record)

@@ -8,6 +8,7 @@ use crate::channel::PyChannel;
 use crate::match_spec::PyMatchSpec;
 use crate::package_name::PyPackageName;
 use crate::record::PyRecord;
+use crate::repo_data::gateway::PyRemovedPackage;
 use crate::repo_data::{PyRepodataRevisionMetadata, repodata_revisions_to_python};
 use parking_lot::RwLock;
 use pyo3::exceptions::PyValueError;
@@ -210,6 +211,29 @@ impl PySparseRepoData {
             };
             Ok(sparse
                 .load_matching_records(owned_specs.iter(), package_format_selection.into())?
+                .into_iter()
+                .map(Into::into)
+                .collect::<Vec<_>>())
+        })
+    }
+
+    /// Returns the packages listed under the `removed` key, for a single
+    /// package name or for the whole file when no name is given.
+    #[pyo3(signature = (package_name=None))]
+    pub fn load_removed(
+        &self,
+        py: Python<'_>,
+        package_name: Option<&PyPackageName>,
+    ) -> PyResult<Vec<PyRemovedPackage>> {
+        let inner = self.inner.clone();
+        let name = package_name.map(|package_name| package_name.inner.clone());
+        py.detach(move || {
+            let lock = inner.read();
+            let Some(sparse) = lock.as_ref() else {
+                return Err(PyValueError::new_err("I/O operation on closed file."));
+            };
+            Ok(sparse
+                .load_removed(name.as_ref())?
                 .into_iter()
                 .map(Into::into)
                 .collect::<Vec<_>>())

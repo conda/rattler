@@ -1,10 +1,6 @@
-use std::{
-    collections::HashSet,
-    future::{Future, IntoFuture},
-    sync::Arc,
-};
+use std::{collections::HashSet, future::IntoFuture, sync::Arc};
 
-use futures::{FutureExt, StreamExt, select_biased, stream::FuturesUnordered};
+use futures::{StreamExt, select_biased, stream::FuturesUnordered};
 use rattler_conda_types::{
     Channel, ChannelUrl, MatchSpec, Matches, PackageName, PackageNameMatcher, Platform,
     RepoDataRecord,
@@ -13,6 +9,7 @@ use url::Url;
 
 use super::{
     BarrierCell, ChannelNoticeResult, GatewayError, GatewayInner, GatewayWarning, RepoData,
+    boxed::{BoxFuture, box_future},
     channel_expander::{ChannelExpander, ChannelRelationsMode, ChannelRelationsWarning},
     channel_relations::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
     local_subdir::LocalSubdirClient,
@@ -674,6 +671,7 @@ impl QueryExecutor {
                     },
                     PackageRecords {
                         records,
+                        removed: Vec::new(),
                         unique_base_deps,
                         unique_extra_deps,
                     },
@@ -901,11 +899,13 @@ impl QueryExecutor {
         }
     }
 
-    /// Add matching records to the slot indicated by `target`.
+    /// Add matching records to the slot indicated by `target`. Removed
+    /// packages are added unfiltered: they describe the fetched name, not a
+    /// spec match.
     fn accumulate_records(
         &mut self,
         target: AccumulateTarget,
-        records: Vec<Arc<RepoDataRecord>>,
+        pkg: PackageRecords,
         request: &PendingRequest,
     ) {
         let result = match target {
@@ -915,6 +915,11 @@ impl QueryExecutor {
                 .expect("direct-url fetch spawned without a direct-url bucket"),
             AccumulateTarget::Subdir(idx) => &mut self.subdir_handles[idx].data,
         };
+
+        let PackageRecords {
+            records, removed, ..
+        } = pkg;
+        result.removed.extend(removed);
 
         match &request.specs {
             SourceSpecs::Transitive => {
@@ -1016,7 +1021,7 @@ impl QueryExecutor {
                         self.queue_dependencies(&pkg, &request);
                     }
 
-                    self.accumulate_records(target, pkg.records, &request);
+                    self.accumulate_records(target, pkg, &request);
                 }
 
                 // Handle any CEP-6 notices that were fetched
@@ -1245,7 +1250,7 @@ async fn fetch_subdir_with_policy(
     policy: FetchErrorPolicy,
 ) -> Result<(Arc<Subdir>, Option<ChannelRelationsWarning>), GatewayError> {
     match gateway
-        .get_or_create_subdir(channel, platform, reporter)
+        .get_or_create_subdir(channel, platform, reporter, true)
         .await
     {
         Ok(subdir) => Ok((subdir, None)),
@@ -1321,22 +1326,6 @@ fn spawn_one_package_fetch(
             Subdir::NotFound => Ok((target, request, PackageRecords::default())),
         }
     }));
-}
-
-#[cfg(target_arch = "wasm32")]
-type BoxFuture<T> = futures::future::LocalBoxFuture<'static, T>;
-
-#[cfg(target_arch = "wasm32")]
-fn box_future<T, F: Future<Output = T> + 'static>(future: F) -> BoxFuture<T> {
-    future.boxed_local()
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-type BoxFuture<T> = futures::future::BoxFuture<'static, T>;
-
-#[cfg(not(target_arch = "wasm32"))]
-fn box_future<T, F: Future<Output = T> + Send + 'static>(future: F) -> BoxFuture<T> {
-    future.boxed()
 }
 
 /// Result type for pending record fetches.

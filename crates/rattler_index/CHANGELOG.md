@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.6](https://github.com/conda/rattler/compare/rattler_index-v0.31.5...rattler_index-v0.31.6) - 2026-09-17
+
+### Added
+
+- *(rattler_conda_types)* Add indexed_timestamp ([#2790](https://github.com/conda/rattler/pull/2790))
+
+### Fixed
+
+- keep v3-only extra dependencies in legacy repodata ([#2809](https://github.com/conda/rattler/pull/2809))
+
+## [0.31.5](https://github.com/conda/rattler/compare/rattler_index-v0.31.4...rattler_index-v0.31.5) - 2026-09-04
+
+### Other
+
+- update Cargo.lock dependencies
+
 ## [0.31.4](https://github.com/conda/rattler/compare/rattler_index-v0.31.3...rattler_index-v0.31.4) - 2026-08-27
 
 ### Other
