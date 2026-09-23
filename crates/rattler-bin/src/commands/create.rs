@@ -21,6 +21,11 @@ use crate::{
 /// Resolves and installs the specified packages into a target prefix,
 /// pulling from the configured channels.
 #[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler create python numpy                          # install into ./.prefix from conda-forge
+  rattler create -p ./env -c conda-forge python=3.12   # choose the prefix and the channel
+  rattler create python --dry-run --platform linux-64  # show the transaction without installing
+  rattler create python --constraint "numpy<2"         # constrain a package without requiring it"#)]
 pub struct Opt {
     /// Package specs to install
     #[clap(required = true)]
