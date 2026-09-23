@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ChannelCheck","VerificationPolicy"],"struct":["Identity","Issuer","Publisher","VerificationConfig"]};

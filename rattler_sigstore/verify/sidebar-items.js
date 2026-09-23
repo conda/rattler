@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CONDA_PUBLISH_PREDICATE_TYPE"],"fn":["production_trusted_root","verify_bundles","verify_record","verify_record_with_trusted_root"],"struct":["BundleVerification","CondaPublishPredicate","RejectedAttestation","VerificationOutcome","VerifiedAttestation"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_MAX_SIDECAR_SIZE","SIDECAR_SUFFIX"],"fn":["fetch_bundles","fetch_sidecar","mutable_sidecar_url","parse_bundles","parse_sidecar","sidecar_url","sidecar_url_for_record"],"struct":["AttestationSidecar"]};
