@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ChannelPriority","SolveError","SolveStrategy"],"mod":["libsolv_c","resolvo"],"struct":["CancellationToken","ExcludeNewer","RepoDataIter","SolverTask"],"trait":["IntoRepoData","SolverImpl","SolverRepoData"]};
+window.SIDEBAR_ITEMS = {"enum":["ChannelPriority","SolveError","SolveStrategy","TimestampExclusionReason","TimestampPolicy"],"mod":["libsolv_c","resolvo"],"struct":["CancellationToken","ExcludeNewer","RepoDataIter","SolverTask"],"trait":["IntoRepoData","SolverImpl","SolverRepoData"]};
