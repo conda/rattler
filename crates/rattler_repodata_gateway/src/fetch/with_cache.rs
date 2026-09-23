@@ -888,12 +888,21 @@ fn validate_cached_state(
                 );
                 return ValidatedCacheState::Mismatched(cache_state);
             }
+            Some(
+                CacheControl { no_store: true, .. }
+                | CacheControl {
+                    cachability: Some(Cachability::NoCache),
+                    ..
+                },
+            ) => {
+                tracing::debug!("Cache-Control requires revalidation. Assuming out of date...");
+                return ValidatedCacheState::OutOfDate(cache_state);
+            }
             Some(CacheControl {
-                cachability: Some(Cachability::Public),
                 max_age: Some(duration),
                 ..
             }) => {
-                if cache_age > duration {
+                if cache_age >= duration {
                     tracing::debug!(
                         "Cache is {} old but can at most be {} old. Assuming out of date...",
                         humantime::format_duration(cache_age),
@@ -959,7 +968,11 @@ mod test {
         DownloadReporter, Reporter,
         fetch::{
             FetchRepoDataError, RepoDataNotFoundError,
-            with_cache::{CacheResult, CachedRepoData, FetchRepoDataOptions, fetch_repo_data},
+            cache::{CacheHeaders, RepoDataState},
+            with_cache::{
+                CacheResult, CachedRepoData, FetchRepoDataOptions, ValidatedCacheState,
+                fetch_repo_data, validate_cached_state,
+            },
         },
         utils::{Encoding, simple_channel_server::SimpleChannelServer},
     };
@@ -1005,6 +1018,57 @@ mod test {
         assert_eq!(
             super::normalize_subdir_url(Url::parse("http://localhost/channels/empty/").unwrap()),
             Url::parse("http://localhost/channels/empty/").unwrap(),
+        );
+    }
+
+    fn validate_cache_with_cache_control(cache_control: &str) -> ValidatedCacheState {
+        let cache_dir = TempDir::new().unwrap();
+        let cache_key = "test-cache";
+        let repo_data_path = cache_dir.path().join(format!("{cache_key}.json"));
+        std::fs::write(&repo_data_path, "{}").unwrap();
+        let metadata = std::fs::metadata(&repo_data_path).unwrap();
+        let subdir_url = Url::parse("https://example.com/channel/linux-64/").unwrap();
+
+        RepoDataState {
+            url: subdir_url.join("repodata.json").unwrap(),
+            cache_headers: CacheHeaders {
+                etag: None,
+                last_modified: None,
+                cache_control: Some(cache_control.to_string()),
+            },
+            cache_last_modified: metadata.modified().unwrap(),
+            cache_size: metadata.len(),
+            blake2_hash: None,
+            has_zst: None,
+            has_bz2: None,
+        }
+        .to_path(&cache_dir.path().join(format!("{cache_key}.info.json")))
+        .unwrap();
+
+        validate_cached_state(cache_dir.path(), &subdir_url, cache_key)
+    }
+
+    #[test]
+    fn test_cache_control_max_age_does_not_require_public() {
+        assert_matches!(
+            validate_cache_with_cache_control("max-age=30, must-revalidate"),
+            ValidatedCacheState::UpToDate(_)
+        );
+        assert_matches!(
+            validate_cache_with_cache_control("private, max-age=30"),
+            ValidatedCacheState::UpToDate(_)
+        );
+    }
+
+    #[test]
+    fn test_cache_control_revalidation_directives_are_not_fresh() {
+        assert_matches!(
+            validate_cache_with_cache_control("no-cache, max-age=30"),
+            ValidatedCacheState::OutOfDate(_)
+        );
+        assert_matches!(
+            validate_cache_with_cache_control("no-store, max-age=30"),
+            ValidatedCacheState::OutOfDate(_)
         );
     }
 

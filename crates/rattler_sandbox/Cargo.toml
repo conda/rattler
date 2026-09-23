@@ -1,7 +1,7 @@
 [package]
 exclude = ["tests/**"]
 name = "rattler_sandbox"
-version = "0.2.26"
+version = "0.2.30"
 description = "A crate to run executables in a sandbox"
 categories.workspace = true
 homepage.workspace = true
@@ -25,7 +25,7 @@ tokio = { workspace = true, optional = true, features = ["process"]}
 birdcage = "0.8"
 
 [dev-dependencies]
-libtest-mimic = "0.8"
+libtest-mimic = "=0.8.2"
 
 [[test]]
 name = "integration_test"

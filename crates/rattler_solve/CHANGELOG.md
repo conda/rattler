@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [9.0.8](https://github.com/conda/rattler/compare/rattler_solve-v9.0.7...rattler_solve-v9.0.8) - 2026-09-17
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_libsolv_c, rattler_cache
+
+## [9.0.7](https://github.com/conda/rattler/compare/rattler_solve-v9.0.6...rattler_solve-v9.0.7) - 2026-09-08
+
+### Other
+
+- updated the following local packages: rattler_libsolv_c
+
+## [9.0.6](https://github.com/conda/rattler/compare/rattler_solve-v9.0.5...rattler_solve-v9.0.6) - 2026-09-04
+
+### Other
+
+- updated the following local packages: rattler_cache
+
+## [9.0.5](https://github.com/conda/rattler/compare/rattler_solve-v9.0.4...rattler_solve-v9.0.5) - 2026-08-27
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [9.0.4](https://github.com/conda/rattler/compare/rattler_solve-v9.0.3...rattler_solve-v9.0.4) - 2026-08-26
+
+### Other
+
+- speed up Resolvo candidate ordering ([#2711](https://github.com/conda/rattler/pull/2711))
+
+## [9.0.3](https://github.com/conda/rattler/compare/rattler_solve-v9.0.2...rattler_solve-v9.0.3) - 2026-08-21
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_cache
+
+## [9.0.2](https://github.com/conda/rattler/compare/rattler_solve-v9.0.1...rattler_solve-v9.0.2) - 2026-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_cache
+
+## [9.0.1](https://github.com/conda/rattler/compare/rattler_solve-v9.0.0...rattler_solve-v9.0.1) - 2026-08-11
+
+### Fixed
+
+- *(rattler_solve)* rate candidates by their most restrictive requirement ([#2649](https://github.com/conda/rattler/pull/2649))
+
 ## [9.0.0](https://github.com/conda/rattler/compare/rattler_solve-v8.0.0...rattler_solve-v9.0.0) - 2026-07-28
 
 ### Fixed

@@ -5,15 +5,18 @@ use std::sync::Arc;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyAnyMethods;
-use pyo3::{Borrowed, Bound, FromPyObject, PyAny, PyErr, PyResult, Python, pyclass, pymethods};
+use pyo3::{
+    Borrowed, Bound, FromPyObject, PyAny, PyErr, PyRef, PyResult, Python, pyclass, pymethods,
+};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::{CacheAction, FetchRepoDataOptions, Variant};
 use rattler_repodata_gateway::{
     CacheClearMode, ChannelConfig, ChannelNoticeResult, ChannelRelationsMode, Gateway,
-    GatewayWarning, Source, SourceConfig, SubdirSelection,
+    GatewayWarning, RemovedPackage, Source, SourceConfig, SubdirSelection,
 };
 use url::Url;
 
+use crate::config::PyConfig;
 use crate::error::PyRattlerError;
 use crate::match_spec::PyMatchSpec;
 use crate::networking::client::PyClientWithMiddleware;
@@ -22,6 +25,7 @@ use crate::platform::PyPlatform;
 use crate::record::PyRecord;
 use crate::repo_data::PyChannelRelations;
 use crate::repo_data::source::PyRepoDataSource;
+use crate::repo_data::sparse::PySparseRepoData;
 use crate::{PyChannel, Wrap};
 
 #[pyclass(from_py_object)]
@@ -60,6 +64,33 @@ impl From<ChannelNoticeResult> for PyChannelNotice {
             created_at: notice.created_at.map(|timestamp| timestamp.to_string()),
             expires_at: notice.expires_at.map(|timestamp| timestamp.to_string()),
             interval: notice.interval,
+        }
+    }
+}
+
+/// A package that a channel lists as removed, see [`RemovedPackage`].
+#[pyclass(get_all, from_py_object)]
+#[derive(Clone)]
+pub struct PyRemovedPackage {
+    url: String,
+    file_name: String,
+    name: String,
+    version: String,
+    build: String,
+    channel: Option<String>,
+}
+
+impl From<RemovedPackage> for PyRemovedPackage {
+    fn from(value: RemovedPackage) -> Self {
+        let file_name = value.identifier.to_file_name();
+        let identifier = value.identifier.identifier;
+        Self {
+            url: value.url.to_string(),
+            file_name,
+            name: identifier.name,
+            version: identifier.version,
+            build: identifier.build_string,
+            channel: value.channel,
         }
     }
 }
@@ -146,12 +177,18 @@ pub(crate) fn emit_gateway_warnings(warnings: Vec<GatewayWarning>) -> PyResult<(
 ///
 /// Accepts either:
 /// - A `PyChannel` object (wrapped Channel)
+/// - A `PySparseRepoData` object
 /// - Any object implementing the `RepoDataSource` protocol
 ///   (has `fetch_package_records` and `package_names` methods)
 pub fn py_object_to_source(obj: Bound<'_, PyAny>) -> PyResult<Source> {
     // First try to extract as PyChannel
     if let Ok(channel) = obj.extract::<PyChannel>() {
         return Ok(Source::from(channel.inner));
+    }
+
+    // Then try to extract as SparseRepoData
+    if let Ok(sparse) = obj.extract::<PyRef<'_, PySparseRepoData>>() {
+        return Ok(Source::from(sparse.as_source()?));
     }
 
     // Check if it implements the RepoDataSource protocol
@@ -163,7 +200,7 @@ pub fn py_object_to_source(obj: Bound<'_, PyAny>) -> PyResult<Source> {
     }
 
     Err(PyTypeError::new_err(
-        "Expected Channel or object implementing RepoDataSource protocol \
+        "Expected Channel, SparseRepoData, or object implementing RepoDataSource protocol \
          (with fetch_package_records and package_names methods)",
     ))
 }
@@ -205,6 +242,35 @@ impl PyGateway {
             // Set a default client if no client is provided to
             // make sure a default user-agent is set.
             gateway.set_client(PyClientWithMiddleware::new(None, None, None, None)?);
+        }
+
+        Ok(Self {
+            inner: gateway.finish(),
+            show_progress,
+        })
+    }
+
+    /// Build a gateway using repodata and concurrency settings from a shared
+    /// rattler configuration. If no client is supplied, a config-aware
+    /// standard client is constructed as well.
+    #[staticmethod]
+    #[pyo3(signature = (config, cache_dir=None, client=None, show_progress=false))]
+    pub fn from_config(
+        config: &PyConfig,
+        cache_dir: Option<PathBuf>,
+        client: Option<PyClientWithMiddleware>,
+        show_progress: bool,
+    ) -> PyResult<Self> {
+        let client = match client {
+            Some(client) => client,
+            None => PyClientWithMiddleware::from_config(config, 3, None, None, None)?,
+        };
+        let mut gateway = Gateway::builder()
+            .with_config(&config.inner)
+            .with_client(client);
+
+        if let Some(cache_dir) = cache_dir {
+            gateway.set_cache_dir(cache_dir);
         }
 
         Ok(Self {
@@ -317,21 +383,67 @@ impl PyGateway {
             emit_gateway_warnings(output.warnings)?;
 
             // Convert the records into a list of lists (Arc clone, not deep copy)
-            let records = output
+            // and the removed packages into a parallel list of lists.
+            let (records, removed): (Vec<Vec<PyRecord>>, Vec<Vec<PyRemovedPackage>>) = output
                 .repodata
                 .into_iter()
                 .map(|r| {
-                    r.iter_arc()
+                    let records = r
+                        .iter_arc()
                         .map(|arc| PyRecord::from(arc.clone()))
-                        .collect::<Vec<_>>()
+                        .collect::<Vec<_>>();
+                    let mut removed = r
+                        .removed()
+                        .iter()
+                        .cloned()
+                        .map(PyRemovedPackage::from)
+                        .collect::<Vec<_>>();
+                    removed.sort_by(|a, b| a.file_name.cmp(&b.file_name));
+                    (records, removed)
                 })
-                .collect::<Vec<_>>();
+                .unzip();
             let notices = output
                 .notices
                 .into_iter()
                 .map(PyChannelNotice::from)
                 .collect::<Vec<_>>();
-            Ok((records, notices))
+            Ok((records, removed, notices))
+        })
+    }
+
+    /// Computes the reverse dependencies of `target` in the given sources
+    /// and platforms entirely in Rust, converting only the matching records
+    /// to Python. The scan streams over the repodata package by package:
+    /// scanned records are neither materialized as Python objects nor
+    /// inserted into the gateway's long-lived record cache, so peak memory
+    /// is bounded by the in-flight scans instead of the complete repodata.
+    pub fn who_needs<'a>(
+        &self,
+        py: Python<'a>,
+        sources: Vec<Bound<'a, PyAny>>,
+        platforms: Vec<PyPlatform>,
+        target: &Bound<'a, PyAny>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let rust_sources: Vec<Source> = sources
+            .into_iter()
+            .map(py_object_to_source)
+            .collect::<PyResult<_>>()?;
+        let target = crate::who_needs::extract_who_needs_target(target)?;
+
+        let mut query =
+            self.inner
+                .who_needs(rust_sources, platforms.into_iter().map(|p| p.inner), target);
+        if self.show_progress {
+            query = query
+                .with_reporter(rattler_repodata_gateway::IndicatifReporter::builder().finish());
+        }
+
+        future_into_py(py, async move {
+            let dependents = query.execute().await.map_err(PyRattlerError::from)?;
+            Ok(dependents
+                .into_iter()
+                .map(crate::who_needs::PyDependent::from)
+                .collect::<Vec<_>>())
         })
     }
 
@@ -360,11 +472,14 @@ impl PyGateway {
         // Separate channels and custom sources
         let mut channels: Vec<rattler_conda_types::Channel> = Vec::new();
         let mut custom_sources: Vec<Arc<dyn rattler_repodata_gateway::RepoDataSource>> = Vec::new();
+        let mut sparse_sources: Vec<Arc<rattler_repodata_gateway::sparse::SparseRepoData>> =
+            Vec::new();
 
         for source in rust_sources {
             match source {
                 Source::Channel(channel) => channels.push(channel),
                 Source::Custom(custom) => custom_sources.push(custom),
+                Source::SparseRepoData(sparse) => sparse_sources.extend(sparse),
             }
         }
 

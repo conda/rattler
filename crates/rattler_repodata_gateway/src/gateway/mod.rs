@@ -1,4 +1,5 @@
 mod barrier_cell;
+mod boxed;
 mod builder;
 mod channel_config;
 mod channel_expander;
@@ -19,11 +20,12 @@ mod source;
 mod subdir;
 mod subdir_builder;
 mod warning;
+mod who_needs_query;
 
 use std::{collections::HashSet, sync::Arc};
 
 use crate::reporter::report_unsupported_repodata_revisions;
-use crate::{Reporter, gateway::subdir_builder::SubdirBuilder};
+use crate::{Reporter, gateway::subdir_builder::SubdirBuilder, who_needs::WhoNeedsTarget};
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
@@ -40,14 +42,14 @@ pub use query::{NamesQuery, NamesQueryOutput, RepoDataQuery, RepoDataQueryOutput
 use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, ChannelRelations, MatchSpec, Platform, RepoDataRecord};
 use rattler_networking::LazyClient;
-pub use repo_data::RepoData;
+pub use repo_data::{RemovedPackages, RepoData};
 use run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
 pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
 pub use source::{RepoDataSource, Source};
 use subdir::Subdir;
 use tracing::{Level, instrument};
-use url::Url;
 pub use warning::GatewayWarning;
+pub use who_needs_query::WhoNeedsQuery;
 
 /// Central access point for high level queries about
 /// [`rattler_conda_types::RepoDataRecord`]s from different channels.
@@ -192,6 +194,76 @@ impl Gateway {
         )
     }
 
+    /// Finds the packages that depend on `target` — its reverse
+    /// dependencies — in the given sources and platforms.
+    ///
+    /// A package is reported when one of its `depends`, `constrains`,
+    /// `extra_depends`, or run export entries references the target; each
+    /// result records which of those it was. What counts as a reference
+    /// depends on the target: a [`PackageName`] matches every dependency on
+    /// that name, while a concrete [`PackageRecord`] or
+    /// [`GenericVirtualPackage`] only matches dependencies whose match spec
+    /// accepts it. See [`WhoNeedsTarget`].
+    ///
+    /// Answering this needs every record of the queried platforms, not just
+    /// the records of one package name, so this query reads far more
+    /// repodata than [`Gateway::query`] does. It is built to keep that
+    /// affordable: records are scanned in batches and dropped again right
+    /// away instead of being kept in the gateway's cache, so only the
+    /// matches are retained. Prefer [`WhoNeedsQuery::stream`] over awaiting
+    /// the query if you can reduce the matches as they arrive, since for a
+    /// widely used package the results are the larger cost.
+    ///
+    /// Channel sources always use full repodata, regardless of the gateway's
+    /// sharding configuration, to avoid fetching a shard for every package.
+    ///
+    /// ```no_run
+    /// # use rattler_conda_types::{Channel, PackageName, Platform};
+    /// # use rattler_repodata_gateway::Gateway;
+    /// # async fn example(gateway: Gateway, channel: Channel) -> anyhow::Result<()> {
+    /// // Which packages of the channel depend on `polars`?
+    /// let dependents = gateway
+    ///     .who_needs(
+    ///         vec![channel],
+    ///         vec![Platform::Linux64, Platform::NoArch],
+    ///         PackageName::new_unchecked("polars"),
+    ///     )
+    ///     .await?;
+    ///
+    /// for dependent in dependents {
+    ///     println!(
+    ///         "{} references polars through the {} entry '{}'",
+    ///         dependent.record.package_record.name.as_normalized(),
+    ///         dependent.kind,
+    ///         dependent.dependency,
+    ///     );
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`PackageName`]: rattler_conda_types::PackageName
+    /// [`PackageRecord`]: rattler_conda_types::PackageRecord
+    /// [`GenericVirtualPackage`]: rattler_conda_types::GenericVirtualPackage
+    pub fn who_needs<AsSource, SourceIter, PlatformIter>(
+        &self,
+        sources: SourceIter,
+        platforms: PlatformIter,
+        target: impl Into<WhoNeedsTarget>,
+    ) -> WhoNeedsQuery
+    where
+        AsSource: Into<Source>,
+        SourceIter: IntoIterator<Item = AsSource>,
+        PlatformIter: IntoIterator<Item = Platform>,
+    {
+        WhoNeedsQuery::new(
+            self.inner.clone(),
+            sources.into_iter().map(Into::into).collect(),
+            platforms.into_iter().collect(),
+            target.into(),
+        )
+    }
+
     /// Return the cached or freshly fetched CEP-6 notices for the given
     /// channels.
     ///
@@ -219,7 +291,7 @@ impl Gateway {
     ) -> Result<Option<ChannelRelations>, GatewayError> {
         match self
             .inner
-            .get_or_create_subdir(channel, platform, None)
+            .get_or_create_subdir(channel, platform, None, true)
             .await
         {
             Ok(subdir) => Ok(subdir.channel_relations().cloned()),
@@ -332,11 +404,17 @@ impl Gateway {
 }
 
 struct GatewayInner {
-    /// A map of subdirectories for each channel and platform.
-    subdirs: CoalescedMap<(Channel, Platform), Arc<Subdir>>,
+    /// Subdirectories keyed by channel, platform and whether sharding is enabled.
+    /// Full repodata scans must not reuse a sharded subdir from an ordinary query.
+    subdirs: CoalescedMap<(Channel, Platform, bool), Arc<Subdir>>,
 
     /// The client to use to fetch repodata.
     client: LazyClient,
+
+    /// A fetch implementation provided by the host JavaScript environment.
+    /// When set, it is used for all requests instead of the client.
+    #[cfg(target_arch = "wasm32")]
+    js_fetch: Option<crate::utils::js_fetch::JsFetcher>,
 
     /// The channel configuration
     channel_config: ChannelConfig,
@@ -377,23 +455,36 @@ impl GatewayInner {
     /// coalesced, and they will all receive the same subdir. If an error
     /// occurs while creating the subdir all waiting tasks will also return an
     /// error.
+    ///
+    /// Set `allow_sharded` to false to force full repodata scans.
     #[instrument(skip(self, reporter, channel), fields(channel = %channel.base_url), err(level = Level::INFO))]
     async fn get_or_create_subdir(
         &self,
         channel: &Channel,
         platform: Platform,
         reporter: Option<Arc<dyn Reporter>>,
+        allow_sharded: bool,
     ) -> Result<Arc<Subdir>, GatewayError> {
-        let key = (channel.clone(), platform);
+        let url = channel.platform_url(platform);
+        let sharded_enabled = allow_sharded
+            && url.scheme() != "file"
+            && self.channel_config.get(&channel.base_url).sharded_enabled;
+        let key = (channel.clone(), platform, sharded_enabled);
         let channel_for_create = channel.clone();
         let reporter_for_create = reporter.clone();
 
         let subdir = self
             .subdirs
             .get_or_try_init(key, || async move {
-                let subdir = self
-                    .create_subdir(&channel_for_create, platform, reporter_for_create)
-                    .await?;
+                let subdir = SubdirBuilder::new(
+                    self,
+                    channel_for_create,
+                    platform,
+                    reporter_for_create,
+                    sharded_enabled,
+                )
+                .build()
+                .await?;
                 Ok(Arc::new(subdir))
             })
             .await
@@ -414,22 +505,6 @@ impl GatewayInner {
 
         Ok(subdir)
     }
-
-    async fn create_subdir(
-        &self,
-        channel: &Channel,
-        platform: Platform,
-        reporter: Option<Arc<dyn Reporter>>,
-    ) -> Result<Subdir, GatewayError> {
-        SubdirBuilder::new(self, channel.clone(), platform, reporter)
-            .build()
-            .await
-    }
-}
-
-fn force_sharded_repodata(url: &Url) -> bool {
-    matches!(url.scheme(), "http" | "https")
-        && matches!(url.host_str(), Some("fast.prefiks.dev" | "fast.prefix.dev"))
 }
 
 #[cfg(test)]
@@ -548,12 +623,20 @@ mod test {
                 "info": {
                     "subdir": "noarch",
                     "repodata_revisions": {
+                        "v1": {
+                            "message": "v1 layout is not modeled",
+                            "n_packages": 1
+                        },
                         "v4": {
+                            "message": "newer artifacts are available",
                             "n_packages": 2,
                             "oldest": 1768249989851,
                             "newest": 1773851561010
                         }
                     }
+                },
+                "v1": {
+                    "demo-2.0-0.conda": {}
                 },
                 "packages": {},
                 "packages.conda": {
@@ -604,12 +687,23 @@ mod test {
 
         assert_eq!(records.iter().map(RepoData::len).sum::<usize>(), 1);
         let messages = reporter.messages.lock().unwrap();
-        assert_eq!(messages.len(), 2);
+        assert_eq!(messages.len(), 4);
         assert_eq!(messages[0].subdir, "noarch");
         assert_eq!(messages[0].supported_revision, RepodataRevision::V3);
-        assert_eq!(messages[0].revision.revision, RepodataRevision::Unknown(4));
-        assert_eq!(messages[0].revision.n_packages, Some(2));
-        assert_eq!(messages[1], messages[0]);
+        assert_eq!(messages[0].revision, RepodataRevision::Unknown(1));
+        assert_eq!(messages[0].metadata.n_packages, Some(1));
+        assert_eq!(messages[1].revision, RepodataRevision::from(4));
+        assert_eq!(
+            serde_json::to_value(&messages[1].metadata).unwrap(),
+            serde_json::json!({
+                "message": "newer artifacts are available",
+                "n_packages": 2,
+                "oldest": 1768249989851i64,
+                "newest": 1773851561010i64
+            })
+        );
+        assert_eq!(messages[2], messages[0]);
+        assert_eq!(messages[3], messages[1]);
     }
 
     #[tokio::test]
@@ -1406,6 +1500,194 @@ mod test {
         )
     }
 
+    #[tokio::test]
+    async fn test_record_patch_is_query_local() {
+        fn names(output: &crate::RepoDataQueryOutput) -> std::collections::BTreeSet<String> {
+            output
+                .iter()
+                .flat_map(RepoData::iter)
+                .map(|record| record.package_record.name.as_normalized().to_string())
+                .collect()
+        }
+
+        let channel_dir = tempfile::tempdir().unwrap();
+        let subdir = channel_dir.path().join("linux-64");
+        fs_err::create_dir_all(&subdir).unwrap();
+        fs_err::write(
+            subdir.join("repodata.json"),
+            serde_json::json!({
+                "info": {"subdir": "linux-64"},
+                "packages": {
+                    "application-1.0-0.tar.bz2": {
+                        "name": "application",
+                        "version": "1.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": ["python"],
+                        "subdir": "linux-64"
+                    },
+                    "python-3.12.0-0.tar.bz2": {
+                        "name": "python",
+                        "version": "3.12.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "subdir": "linux-64"
+                    },
+                    "pip-25.0-0.tar.bz2": {
+                        "name": "pip",
+                        "version": "25.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "subdir": "linux-64"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let gateway = Gateway::new();
+        let channel = Channel::try_from_directory(channel_dir.path()).unwrap();
+        let application = || MatchSpec::from_str("application", Lenient).unwrap();
+
+        let unpatched = gateway
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![application()],
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+        assert_eq!(
+            names(&unpatched),
+            ["application", "python"]
+                .into_iter()
+                .map(String::from)
+                .collect()
+        );
+
+        let patched = gateway
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![application()],
+            )
+            .recursive(true)
+            .with_record_patch(|record| {
+                if record.package_record.name.as_normalized() != "python" {
+                    return None;
+                }
+                let mut record = record.clone();
+                record.package_record.depends.push("pip".to_string());
+                Some(record)
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            names(&patched),
+            ["application", "pip", "python"]
+                .into_iter()
+                .map(String::from)
+                .collect()
+        );
+
+        let unpatched_again = gateway
+            .query(vec![channel], vec![Platform::Linux64], vec![application()])
+            .recursive(true)
+            .await
+            .unwrap();
+        assert_eq!(
+            names(&unpatched_again),
+            ["application", "python"]
+                .into_iter()
+                .map(String::from)
+                .collect()
+        );
+        let python = unpatched_again
+            .iter()
+            .flat_map(RepoData::iter)
+            .find(|record| record.package_record.name.as_normalized() == "python")
+            .unwrap();
+        assert!(python.package_record.depends.is_empty());
+    }
+
+    /// Packages listed under `removed` are hidden from the records of a query
+    /// and reported through `RepoData::removed` for every fetched name.
+    #[tokio::test]
+    async fn test_removed_packages_are_reported() {
+        let channel_dir = tempfile::tempdir().unwrap();
+        let subdir = channel_dir.path().join("linux-64");
+        fs_err::create_dir_all(&subdir).unwrap();
+        fs_err::write(
+            subdir.join("repodata.json"),
+            serde_json::json!({
+                "info": {"subdir": "linux-64"},
+                "packages.conda": {
+                    "foo-1.0-0.conda": {
+                        "name": "foo",
+                        "version": "1.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "subdir": "linux-64"
+                    },
+                    "foo-2.0-0.conda": {
+                        "name": "foo",
+                        "version": "2.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "subdir": "linux-64"
+                    }
+                },
+                "removed": ["foo-2.0-0.conda", "foo-0.1-0.tar.bz2", "bar-1.0-0.conda"]
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let gateway = Gateway::new();
+        let channel = Channel::try_from_directory(channel_dir.path()).unwrap();
+        let output = gateway
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("foo", Lenient).unwrap()],
+            )
+            .await
+            .unwrap();
+        let repodata = &output[0];
+
+        let records: Vec<_> = repodata
+            .iter()
+            .map(|record| record.identifier.to_file_name())
+            .collect();
+        assert_eq!(records, ["foo-1.0-0.conda"]);
+
+        let removed_url = channel
+            .base_url
+            .url()
+            .join("linux-64/foo-2.0-0.conda")
+            .unwrap();
+        assert!(repodata.removed().contains(&removed_url));
+        assert_eq!(
+            repodata.removed().get(&removed_url).unwrap().identifier,
+            "foo-2.0-0.conda".parse().unwrap()
+        );
+
+        // Only names touched by the query are reported, so `bar` is absent.
+        let mut removed: Vec<_> = repodata
+            .removed()
+            .iter()
+            .map(|removed| removed.identifier.to_file_name())
+            .collect();
+        removed.sort();
+        assert_eq!(removed, ["foo-0.1-0.tar.bz2", "foo-2.0-0.conda"]);
+    }
+
     /// Integration test that verifies cache clearing actually works end-to-end.
     /// Creates a simple channel with a single package, queries it, modifies
     /// the source data, and verifies that memory-only cache clearing still
@@ -1774,6 +2056,7 @@ mod test {
         }
 
         let package_record = PackageRecord {
+            attestations_sha256: None,
             name: PackageName::from_str(name).unwrap(),
             version: VersionWithSource::from_str(version).unwrap(),
             build: "0".to_string(),
@@ -1793,6 +2076,7 @@ mod test {
             license: None,
             license_family: None,
             timestamp: None,
+            indexed_timestamp: None,
             legacy_bz2_size: None,
             legacy_bz2_md5: None,
             purls: None,
@@ -1873,6 +2157,79 @@ mod test {
         assert_eq!(
             all_records[0].package_record.name.as_normalized(),
             "otherpkg"
+        );
+    }
+
+    /// Loads the `dummy` test channel's `linux-64` subdir as a `SparseRepoData`.
+    /// `foobar` depends on `bors`, which is used to exercise recursive queries.
+    fn dummy_sparse_repo_data() -> crate::sparse::SparseRepoData {
+        let channel_config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
+        let channel = Channel::from_str("dummy", &channel_config).unwrap();
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/channels/dummy/linux-64/repodata.json");
+        crate::sparse::SparseRepoData::from_file(channel, "linux-64", path, None).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_sparse_repodata_source() {
+        let gateway = Gateway::new();
+        let source = Arc::new(dummy_sparse_repo_data());
+
+        // Query the sparse repodata directly for `foobar`.
+        let records = gateway
+            .query(
+                vec![super::Source::SparseRepoData(vec![source.clone()])],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("foobar").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert!(!all_records.is_empty(), "should have foobar records");
+        assert!(
+            all_records
+                .iter()
+                .all(|r| r.package_record.name.as_normalized() == "foobar"),
+            "non-recursive query should only return foobar records"
+        );
+
+        // A recursive query should also pull in `bors`, `foobar`'s dependency.
+        let records = gateway
+            .query(
+                vec![super::Source::SparseRepoData(vec![source.clone()])],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("foobar").unwrap()].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert!(
+            all_records
+                .iter()
+                .any(|r| r.package_record.name.as_normalized() == "bors"),
+            "recursive query should also fetch foobar's dependency bors"
+        );
+
+        // A `SparseRepoData` only ever represents the one channel/subdir pair it was
+        // loaded from; other platforms should yield no records.
+        let records = gateway
+            .query(
+                vec![super::Source::SparseRepoData(vec![source])],
+                vec![Platform::Win64],
+                vec![PackageName::from_str("foobar").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert!(
+            all_records.is_empty(),
+            "querying a platform other than the sparse repodata's own subdir should be empty"
         );
     }
 

@@ -44,6 +44,8 @@ impl From<Arc<tokio::sync::Semaphore>> for MaxConcurrency {
 pub struct GatewayBuilder {
     channel_config: ChannelConfig,
     client: Option<LazyClient>,
+    #[cfg(target_arch = "wasm32")]
+    js_fetch: Option<crate::utils::js_fetch::JsFetcher>,
     #[cfg(not(target_arch = "wasm32"))]
     cache: Option<std::path::PathBuf>,
     #[cfg(not(target_arch = "wasm32"))]
@@ -69,6 +71,25 @@ impl GatewayBuilder {
     /// Set the client to use for fetching repodata.
     pub fn set_client(&mut self, client: impl Into<LazyClient>) -> &mut Self {
         self.client = Some(client.into());
+        self
+    }
+
+    /// Set a `fetch`-like JavaScript function to use for all requests
+    /// instead of the client. Only needed when the host must route the
+    /// gateway's traffic through its own HTTP stack; see [`crate::JsFetcher`].
+    #[cfg(target_arch = "wasm32")]
+    #[must_use]
+    pub fn with_js_fetch(mut self, fetch: js_sys::Function) -> Self {
+        self.set_js_fetch(fetch);
+        self
+    }
+
+    /// Set a `fetch`-like JavaScript function to use for all requests
+    /// instead of the client. Only needed when the host must route the
+    /// gateway's traffic through its own HTTP stack; see [`crate::JsFetcher`].
+    #[cfg(target_arch = "wasm32")]
+    pub fn set_js_fetch(&mut self, fetch: js_sys::Function) -> &mut Self {
+        self.js_fetch = Some(crate::utils::js_fetch::JsFetcher::new(fetch));
         self
     }
 
@@ -223,6 +244,8 @@ impl GatewayBuilder {
             inner: Arc::new(GatewayInner {
                 subdirs: CoalescedMap::new(),
                 client,
+                #[cfg(target_arch = "wasm32")]
+                js_fetch: self.js_fetch,
                 channel_config: self.channel_config,
                 notices: dashmap::DashMap::new(),
                 notice_fetch_locks: dashmap::DashMap::new(),

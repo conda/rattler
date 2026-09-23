@@ -5,7 +5,6 @@ use crate::{
     GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord, RepodataRevision,
     VersionSpec, build_spec::BuildNumberSpec,
 };
-use itertools::Itertools;
 use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 use rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -20,6 +19,8 @@ use crate::ChannelConfig;
 
 /// Experimental conditionals for match specs.
 pub mod condition;
+/// The single renderer behind every textual representation of a match spec.
+pub(crate) mod format;
 /// Match a given string either by exact match, glob or regex
 pub mod matcher;
 /// Match package names either by exact match, glob or regex
@@ -27,9 +28,9 @@ pub mod package_name_matcher;
 /// Parse a match spec from a string
 pub mod parse;
 
+use format::{DisplayContext, FormatError, SpecView};
 use matcher::StringMatcher;
 use package_name_matcher::PackageNameMatcher;
-use parse::escape_bracket_value;
 
 /// A [`MatchSpec`] is, fundamentally, a query language for conda packages. Any of the fields that
 /// comprise a [`crate::PackageRecord`] can be used to compose a [`MatchSpec`].
@@ -45,36 +46,12 @@ use parse::escape_bracket_value;
 /// the positional argument. Conda has historically had several string representations for equivalent
 /// `MatchSpecs`.
 ///
-/// A series of rules are now followed for creating the canonical string representation of a
-/// `MatchSpec` instance. The canonical string representation can generically be
-/// represented by
-///
-/// (channel(/subdir):(namespace):)name(version(build))[key1=value1,key2=value2]
-///
-/// where `()` indicate optional fields.
-///
-/// The rules for constructing a canonical string representation are:
-///
-/// 1. `name` (i.e. "package name") is required, but its value can be '*'. Its position is always
-///    outside the key-value brackets.
-/// 2. If `version` is an exact version, it goes outside the key-value brackets and is prepended
-///    by `==`. If `version` is a "fuzzy" value (e.g. `1.11.*`), it goes outside the key-value
-///    brackets with the `.*` left off and is prepended by `=`. Otherwise `version` is included
-///    inside key-value brackets.
-/// 3. If `version` is an exact version, and `build` is an exact value, `build` goes outside
-///    key-value brackets prepended by a `=`.  Otherwise, `build` goes inside key-value brackets.
-///    `build_string` is an alias for `build`.
-/// 4. The `namespace` position is being held for a future feature. It is currently ignored.
-/// 5. If `channel` is included and is an exact value, a `::` separator is used between `channel`
-///    and `name`.  `channel` can either be a canonical channel name or a channel url.  In the
-///    canonical string representation, the canonical channel name will always be used.
-/// 6. If `channel` is an exact value and `subdir` is an exact value, `subdir` is appended to
-///    `channel` with a `/` separator.  Otherwise, `subdir` is included in the key-value brackets.
-/// 7. Key-value brackets can be delimited by comma, space, or comma+space.  Value can optionally
-///    be wrapped in single or double quotes, but must be wrapped if `value` contains a comma,
-///    space, or equal sign.  The canonical format uses comma delimiters and single quotes.
-/// 8. When constructing a `MatchSpec` instance from a string, any key-value pair given
-///    inside the key-value brackets overrides any matching parameter given outside the brackets.
+/// [`Display`] preserves a historic, positional representation for backwards
+/// compatibility. It is not a stable serialization format. Use
+/// [`MatchSpec::to_canonical_string`] for deterministic, unambiguous output:
+/// the package name is first, every populated non-name field is represented
+/// in a single bracket section, and the same spec always renders to the same
+/// string.
 ///
 /// When `MatchSpec` attribute values are simple strings, the are interpreted using the
 /// following conventions:
@@ -176,229 +153,80 @@ pub struct MatchSpec {
     pub track_features: Option<Vec<String>>,
 }
 
+/// An error returned when a [`MatchSpec`] cannot be represented canonically.
+#[derive(Debug, Clone, Eq, PartialEq, thiserror::Error)]
+#[non_exhaustive]
+pub enum CanonicalMatchSpecError {
+    /// A `when` condition contains a nested `when` condition, which `MatchSpec`
+    /// grammar cannot represent.
+    #[error("nested `when` conditions cannot be represented in canonical MatchSpec syntax")]
+    NestedWhen,
+
+    /// An extra cannot be represented by the canonical extras grammar.
+    #[error("extra '{0}' cannot be represented in canonical MatchSpec syntax")]
+    UnrepresentableExtra(String),
+
+    /// A flag matcher cannot be represented by the canonical flags grammar.
+    #[error("flag matcher '{0}' cannot be represented in canonical MatchSpec syntax")]
+    UnrepresentableFlag(String),
+
+    /// A track feature contains a delimiter used by the canonical grammar.
+    #[error("track feature '{0}' cannot be represented in canonical MatchSpec syntax")]
+    UnrepresentableTrackFeature(String),
+
+    /// A package-name matcher would be parsed as a bracket field section.
+    #[error("package-name matcher '{0}' cannot be represented in canonical MatchSpec syntax")]
+    UnrepresentableName(String),
+
+    /// A scalar contains both quote delimiters in forms the legacy parser
+    /// cannot distinguish without changing its escape semantics.
+    #[error("scalar '{0}' cannot be represented in canonical MatchSpec syntax")]
+    UnrepresentableScalar(String),
+
+    /// A build matcher would parse as a different matcher variant or value.
+    #[error("build matcher '{0}' cannot be represented in canonical MatchSpec syntax")]
+    UnrepresentableBuild(String),
+
+    /// An explicit empty channel-platform selector cannot be distinguished from
+    /// an omitted selector by the parser.
+    #[error("an explicit empty channel-platform selector cannot be represented canonically")]
+    EmptyChannelPlatforms,
+
+    /// A condition leaf would be tokenized as a logical expression.
+    #[error("condition leaf '{0}' cannot be represented in canonical MatchSpec syntax")]
+    UnrepresentableConditionLeaf(String),
+}
+
 impl Display for MatchSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let Some(channel) = &self.channel {
-            let name = channel.name();
-            write!(f, "{name}")?;
-
-            if let Some(subdir) = &self.subdir {
-                write!(f, "/{subdir}")?;
-            }
-        }
-
-        if let Some(namespace) = &self.namespace {
-            write!(f, ":{namespace}:")?;
-        } else if self.channel.is_some() || self.subdir.is_some() {
-            write!(f, "::")?;
-        }
-
-        write!(f, "{}", self.name)?;
-
-        if let Some(version) = &self.version {
-            write!(f, " {version}")?;
-        } else if self.build.is_some() {
-            write!(f, " *")?;
-        }
-
-        if let Some(build) = &self.build {
-            write!(f, " {build}")?;
-        }
-
-        let mut keys = Vec::new();
-
-        if let Some(extras) = &self.extras {
-            keys.push(format!("extras=[{}]", extras.iter().format(", ")));
-        }
-
-        if let Some(flags) = &self.flags {
-            keys.push(format!("flags=[{}]", flags.iter().format(", ")));
-        }
-
-        if let Some(md5) = &self.md5 {
-            keys.push(format!("md5=\"{}\"", hex::encode(md5)));
-        }
-
-        if let Some(sha256) = &self.sha256 {
-            keys.push(format!("sha256=\"{}\"", hex::encode(sha256)));
-        }
-
-        if let Some(build_number) = &self.build_number {
-            keys.push(format!("build_number=\"{build_number}\""));
-        }
-
-        if let Some(file_name) = &self.file_name {
-            keys.push(format!("fn=\"{file_name}\""));
-        }
-
-        if let Some(url) = &self.url {
-            keys.push(format!("url=\"{url}\""));
-        }
-
-        if let Some(license) = &self.license {
-            keys.push(format!("license=\"{license}\""));
-        }
-
-        if let Some(license_family) = &self.license_family {
-            keys.push(format!("license_family=\"{license_family}\""));
-        }
-
-        if let Some(track_features) = &self.track_features {
-            keys.push(format!(
-                "track_features=\"{}\"",
-                track_features.iter().format(" ")
-            ));
-        }
-
-        if let Some(condition) = &self.condition {
-            let condition_str = condition.to_string();
-            keys.push(format!("when=\"{}\"", escape_bracket_value(&condition_str)));
-        }
-
-        if !keys.is_empty() {
-            write!(f, "[{}]", keys.join(", "))?;
-        }
-
-        Ok(())
+        // The legacy dialect cannot fail; see `SpecView::fmt`.
+        SpecView::from(self)
+            .fmt(f, DisplayContext::LEGACY)
+            .map_err(FormatError::into_fmt_error)
     }
 }
 
 impl MatchSpec {
-    /// Renders this match spec for inclusion inside a `when=` condition value.
+    /// Returns the stable, square-bracket representation of this match spec.
     ///
-    /// Uses the compact `{name}{operator}{version}` form when this is a simple
-    /// name+version query (and the version's rendering starts with one of the
-    /// version-constraint operator characters). Otherwise emits all constraints
-    /// using the bracket syntax `name[key="value", ...]`. Never emits a `when=`
-    /// key — nested conditions are not allowed.
-    pub(crate) fn fmt_in_condition(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        debug_assert!(
-            self.condition.is_none(),
-            "MatchSpec inside a `when=` condition must not itself carry a `when` clause",
-        );
-
-        write!(f, "{}", self.name)?;
-
-        if self.is_simple_for_condition() {
-            if let Some(version) = &self.version {
-                write!(f, "{version}")?;
-            }
-            return Ok(());
-        }
-
-        let mut keys = Vec::new();
-
-        if let Some(version) = &self.version {
-            keys.push(format!(
-                "version=\"{}\"",
-                escape_bracket_value(&version.to_string())
-            ));
-        }
-
-        if let Some(build) = &self.build {
-            keys.push(format!(
-                "build=\"{}\"",
-                escape_bracket_value(&build.to_string())
-            ));
-        }
-
-        if let Some(build_number) = &self.build_number {
-            keys.push(format!("build_number=\"{build_number}\""));
-        }
-
-        if let Some(channel) = &self.channel {
-            keys.push(format!("channel=\"{}\"", channel.name()));
-        }
-
-        if let Some(subdir) = &self.subdir {
-            keys.push(format!("subdir=\"{subdir}\""));
-        }
-
-        if let Some(namespace) = &self.namespace {
-            keys.push(format!("namespace=\"{namespace}\""));
-        }
-
-        if let Some(extras) = &self.extras {
-            keys.push(format!("extras=[{}]", extras.iter().format(", ")));
-        }
-
-        if let Some(flags) = &self.flags {
-            keys.push(format!("flags=[{}]", flags.iter().format(", ")));
-        }
-
-        if let Some(md5) = &self.md5 {
-            keys.push(format!("md5=\"{}\"", hex::encode(md5)));
-        }
-
-        if let Some(sha256) = &self.sha256 {
-            keys.push(format!("sha256=\"{}\"", hex::encode(sha256)));
-        }
-
-        if let Some(file_name) = &self.file_name {
-            keys.push(format!("fn=\"{file_name}\""));
-        }
-
-        if let Some(url) = &self.url {
-            keys.push(format!("url=\"{url}\""));
-        }
-
-        if let Some(license) = &self.license {
-            keys.push(format!("license=\"{license}\""));
-        }
-
-        if let Some(license_family) = &self.license_family {
-            keys.push(format!("license_family=\"{license_family}\""));
-        }
-
-        if let Some(track_features) = &self.track_features {
-            keys.push(format!(
-                "track_features=\"{}\"",
-                track_features.iter().format(" ")
-            ));
-        }
-
-        if !keys.is_empty() {
-            write!(f, "[{}]", keys.join(", "))?;
-        }
-
-        Ok(())
-    }
-
-    /// Returns true if this match spec can be emitted as the compact
-    /// `{name}{operator}{version}` form inside a `when=` condition.
-    fn is_simple_for_condition(&self) -> bool {
-        if !matches!(self.name, PackageNameMatcher::Exact(_)) {
-            return false;
-        }
-        if self.build.is_some()
-            || self.build_number.is_some()
-            || self.file_name.is_some()
-            || self.extras.is_some()
-            || self.flags.is_some()
-            || self.channel.is_some()
-            || self.subdir.is_some()
-            || self.namespace.is_some()
-            || self.md5.is_some()
-            || self.sha256.is_some()
-            || self.url.is_some()
-            || self.license.is_some()
-            || self.license_family.is_some()
-            || self.track_features.is_some()
-        {
-            return false;
-        }
-        match &self.version {
-            None => true,
-            // The compact form requires the rendered version to start with a
-            // version-constraint operator character so the parser can split
-            // `{name}` from `{version}`. This excludes e.g. `StartsWith`
-            // (renders `1.2.*`) and the wildcard `Any` (`*`).
-            Some(v) => v
-                .to_string()
-                .chars()
-                .next()
-                .is_some_and(|c| matches!(c, '>' | '<' | '=' | '!' | '~')),
-        }
+    /// The package name comes first; every other populated field is emitted
+    /// in a single bracket section, in this order: `version`, `build`,
+    /// `build_number`, `fn`, `extras`, `flags`, `channel`, `subdir`,
+    /// `namespace`, `md5`, `sha256`, `url`, `license`, `license_family`,
+    /// `when`, and `track_features`. Unlike [`Display`], nothing is
+    /// positional besides the name.
+    ///
+    /// States the grammar cannot represent are refused while rendering, with
+    /// the error attributed to the offending field as the matching
+    /// [`CanonicalMatchSpecError`] variant. Round-trip fidelity is enforced
+    /// by the property tests in `tests/matchspec_proptest.rs`.
+    ///
+    /// Channel and package URLs are reduced to what another user can fetch:
+    /// userinfo, a `/t/<token>/` path prefix, the query string, and any
+    /// fragment other than a package digest are removed. URLs carrying such
+    /// data therefore do not round-trip with exact equality.
+    pub fn to_canonical_string(&self) -> Result<String, CanonicalMatchSpecError> {
+        format::to_canonical_string(self)
     }
 
     /// Returns the repodata revision required to represent this matchspec.
@@ -503,43 +331,10 @@ pub struct NamelessMatchSpec {
 
 impl Display for NamelessMatchSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match &self.version {
-            Some(version) => write!(f, "{version}")?,
-            None => write!(f, "*")?,
-        }
-
-        if let Some(build) = &self.build {
-            write!(f, " {build}")?;
-        }
-
-        let mut keys = Vec::new();
-
-        if let Some(flags) = &self.flags {
-            keys.push(format!("flags=[{}]", flags.iter().format(", ")));
-        }
-
-        if let Some(md5) = &self.md5 {
-            keys.push(format!("md5=\"{}\"", hex::encode(md5)));
-        }
-
-        if let Some(sha256) = &self.sha256 {
-            keys.push(format!("sha256=\"{}\"", hex::encode(sha256)));
-        }
-
-        if let Some(license_family) = &self.license_family {
-            keys.push(format!("license_family=\"{license_family}\""));
-        }
-
-        if let Some(condition) = &self.condition {
-            let condition_str = condition.to_string();
-            keys.push(format!("when=\"{}\"", escape_bracket_value(&condition_str)));
-        }
-
-        if !keys.is_empty() {
-            write!(f, "[{}]", keys.join(", "))?;
-        }
-
-        Ok(())
+        // The legacy dialect cannot fail; see `SpecView::fmt`.
+        SpecView::from(self)
+            .fmt(f, DisplayContext::LEGACY)
+            .map_err(FormatError::into_fmt_error)
     }
 }
 
@@ -602,9 +397,11 @@ where
 
     match s {
         Some(str_val) => {
-            let config = ChannelConfig::default_with_root_dir(
-                std::env::current_dir().expect("Could not determine current directory"),
-            );
+            // The root directory only resolves relative path channels. With
+            // an empty-root fallback those fail with an error instead of
+            // panicking when the current directory is unavailable.
+            let config =
+                ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap_or_default());
 
             Channel::from_str(str_val, &config)
                 .map(|channel| Some(Arc::new(channel)))

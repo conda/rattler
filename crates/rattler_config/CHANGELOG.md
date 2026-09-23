@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.5](https://github.com/conda/rattler/compare/rattler_config-v0.7.4...rattler_config-v0.7.5) - 2026-09-17
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.7.4](https://github.com/conda/rattler/compare/rattler_config-v0.7.3...rattler_config-v0.7.4) - 2026-08-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.7.3](https://github.com/conda/rattler/compare/rattler_config-v0.7.2...rattler_config-v0.7.3) - 2026-08-26
+
+### Other
+
+- rename CEP 146 to CEP 48 ([#2717](https://github.com/conda/rattler/pull/2717))
+
+## [0.7.2](https://github.com/conda/rattler/compare/rattler_config-v0.7.1...rattler_config-v0.7.2) - 2026-08-21
+
+### Added
+
+- add the CEP 48 repodata wire model ([#2669](https://github.com/conda/rattler/pull/2669))
+
+## [0.7.1](https://github.com/conda/rattler/compare/rattler_config-v0.7.0...rattler_config-v0.7.1) - 2026-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.7.0](https://github.com/conda/rattler/compare/rattler_config-v0.6.2...rattler_config-v0.7.0) - 2026-08-11
+
+### Added
+
+- add a shared config layer read by all rattler-based tools ([#2645](https://github.com/conda/rattler/pull/2645))
+- add CEP-6 channel notice support ([#2639](https://github.com/conda/rattler/pull/2639))
+
 ## [0.6.2](https://github.com/conda/rattler/compare/rattler_config-v0.6.1...rattler_config-v0.6.2) - 2026-07-24
 
 ### Other

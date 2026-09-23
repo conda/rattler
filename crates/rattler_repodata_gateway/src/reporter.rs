@@ -5,7 +5,7 @@ use futures::{Stream, TryStreamExt};
 #[cfg(feature = "gateway")]
 use rattler_conda_types::{Channel, RepodataRevisions};
 #[cfg(feature = "sparse")]
-use rattler_conda_types::{RepodataRevision, RepodataRevisionInfo};
+use rattler_conda_types::{RepodataRevision, RepodataRevisionMetadata};
 #[cfg(feature = "gateway")]
 use rattler_redaction::Redact;
 use url::Url;
@@ -15,13 +15,13 @@ use crate::utils::BodyStreamExt;
 /// The newest repodata revision understood by this version of rattler.
 ///
 /// Revision `3` is the current top-level `v3` map implemented by rattler.
-/// Newer revisions are intentionally ignored by older clients, but we still
-/// surface their metadata for user-facing warnings.
+/// Revisions other than the legacy and current `v3` layouts are
+/// intentionally ignored, but we still surface their metadata for warnings.
 #[cfg(feature = "sparse")]
 pub const SUPPORTED_REPODATA_REVISION: RepodataRevision = RepodataRevision::V3;
 
-/// A structured message indicating that a channel contains repodata newer than
-/// this client understands.
+/// A structured message indicating that a channel contains a repodata layout
+/// this client does not understand.
 #[cfg(feature = "sparse")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnsupportedRepodataRevision {
@@ -34,8 +34,11 @@ pub struct UnsupportedRepodataRevision {
     /// The newest revision supported by this client.
     pub supported_revision: RepodataRevision,
 
-    /// Metadata for the unsupported revision advertised by the channel.
-    pub revision: RepodataRevisionInfo,
+    /// Unsupported revision advertised by the channel.
+    pub revision: RepodataRevision,
+
+    /// Wire metadata advertised for the unsupported revision.
+    pub metadata: RepodataRevisionMetadata,
 }
 
 #[cfg(feature = "sparse")]
@@ -43,11 +46,11 @@ impl std::fmt::Display for UnsupportedRepodataRevision {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{} contains repodata revision {}, but this client only supports up to {}",
-            self.channel, self.revision.revision, self.supported_revision
+            "{} contains unsupported repodata revision {}; the newest supported revision is {}",
+            self.channel, self.revision, self.supported_revision
         )?;
 
-        if let Some(n_packages) = self.revision.n_packages {
+        if let Some(n_packages) = self.metadata.n_packages {
             write!(f, " ({n_packages} packages may be unavailable)")?;
         }
 
@@ -91,8 +94,8 @@ pub trait Reporter: Send + Sync {
     /// Returns a reporter for downloading files.
     fn download_reporter(&self) -> Option<&dyn DownloadReporter>;
 
-    /// Called when a channel advertises a repodata revision newer than this
-    /// client supports.
+    /// Called when a channel advertises a repodata revision layout this client
+    /// does not support.
     #[cfg(feature = "sparse")]
     fn on_unsupported_repodata_revision(&self, _message: &UnsupportedRepodataRevision) {}
 
@@ -120,12 +123,13 @@ pub(crate) fn report_unsupported_repodata_revisions(
 
     let channel = channel.base_url.url().clone().redact().to_string();
     for (&revision, metadata) in revisions {
-        if revision > SUPPORTED_REPODATA_REVISION {
+        if !matches!(revision, RepodataRevision::Legacy | RepodataRevision::V3) {
             reporter.on_unsupported_repodata_revision(&UnsupportedRepodataRevision {
                 channel: channel.clone(),
                 subdir: subdir.to_string(),
                 supported_revision: SUPPORTED_REPODATA_REVISION,
-                revision: RepodataRevisionInfo::from_metadata(revision, metadata.clone()),
+                revision,
+                metadata: metadata.clone(),
             });
         }
     }

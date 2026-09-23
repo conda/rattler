@@ -1,6 +1,6 @@
 [package]
 name = "rattler_upload"
-version = "0.10.1"
+version = "0.10.9"
 edition.workspace = true
 authors = [
   "Wolf Vollprecht <w.vollprecht@gmail.com>",
@@ -81,3 +81,4 @@ sha2 = { workspace = true }
 
 [dev-dependencies]
 axum = { workspace = true }
+opendal = { workspace = true, default-features = false, features = ["services-fs"] }

@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5](https://github.com/conda/rattler/compare/rattler_git-v0.3.4...rattler_git-v0.3.5) - 2026-09-17
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.3.4](https://github.com/conda/rattler/compare/rattler_git-v0.3.3...rattler_git-v0.3.4) - 2026-08-27
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.3.3](https://github.com/conda/rattler/compare/rattler_git-v0.3.2...rattler_git-v0.3.3) - 2026-08-26
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.3.2](https://github.com/conda/rattler/compare/rattler_git-v0.3.1...rattler_git-v0.3.2) - 2026-08-21
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.3.1](https://github.com/conda/rattler/compare/rattler_git-v0.3.0...rattler_git-v0.3.1) - 2026-08-15
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.3.0](https://github.com/conda/rattler/compare/rattler_git-v0.2.1...rattler_git-v0.3.0) - 2026-08-11
+
+### Fixed
+
+- *(rattler_git)* harden LFS checkouts and add path filters ([#2640](https://github.com/conda/rattler/pull/2640))
+
 ## [0.2.1](https://github.com/conda/rattler/compare/rattler_git-v0.2.0...rattler_git-v0.2.1) - 2026-07-24
 
 ### Other

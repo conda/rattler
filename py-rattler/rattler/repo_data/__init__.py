@@ -11,7 +11,10 @@ from rattler.repo_data.gateway import (
     GatewayQueryResult,
     SourceConfig,
 )
+from rattler.repo_data.who_needs import Dependent
 from rattler.repo_data.source import RepoDataSource
+from rattler.repo_data.removed_package import RemovedPackage
+from rattler.repo_data.revisions import RepodataRevisionMetadata
 
 __all__ = [
     "ChannelInfo",
@@ -20,6 +23,7 @@ __all__ = [
     "PackageRecord",
     "RepoData",
     "PatchInstructions",
+    "RemovedPackage",
     "RepoDataRecord",
     "WhlPackageRecord",
     "SparseRepoData",
@@ -29,4 +33,6 @@ __all__ = [
     "SourceConfig",
     "PackageFormatSelection",
     "RepoDataSource",
+    "Dependent",
+    "RepodataRevisionMetadata",
 ]

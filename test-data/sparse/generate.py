@@ -73,9 +73,21 @@ write_conda(
                 {
                     "paths_version": 1,
                     "paths": [
-                        {"_path": "bin/first-file.txt", "path_type": "hardlink", "size_in_bytes": 19},
-                        {"_path": "lib/blob.bin", "path_type": "hardlink", "size_in_bytes": 150000},
-                        {"_path": "share/last-file.txt", "path_type": "hardlink", "size_in_bytes": 18},
+                        {
+                            "_path": "bin/first-file.txt",
+                            "path_type": "hardlink",
+                            "size_in_bytes": 19,
+                        },
+                        {
+                            "_path": "lib/blob.bin",
+                            "path_type": "hardlink",
+                            "size_in_bytes": 150000,
+                        },
+                        {
+                            "_path": "share/last-file.txt",
+                            "path_type": "hardlink",
+                            "size_in_bytes": 18,
+                        },
                     ],
                 }
             ).encode(),

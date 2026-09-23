@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [7.0.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v6.0.0...rattler_virtual_packages-v7.0.0) - 2026-09-17
+
+### Other
+
+- [**breaking**] remove Platform::Unknown, make Platform::current() return Option ([#2786](https://github.com/conda/rattler/pull/2786))
+
+## [6.0.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v5.1.1...rattler_virtual_packages-v6.0.0) - 2026-08-27
+
+### Added
+
+- default `__glibc` to 2.39 on `linux-riscv64` ([#2731](https://github.com/conda/rattler/pull/2731))
+
+## [5.1.1](https://github.com/conda/rattler/compare/rattler_virtual_packages-v5.1.0...rattler_virtual_packages-v5.1.1) - 2026-08-26
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [5.1.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v5.0.1...rattler_virtual_packages-v5.1.0) - 2026-08-21
+
+### Added
+
+- expose the per-platform baseline ([#2713](https://github.com/conda/rattler/pull/2713))
+
+## [5.0.1](https://github.com/conda/rattler/compare/rattler_virtual_packages-v5.0.0...rattler_virtual_packages-v5.0.1) - 2026-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [5.0.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v4.1.0...rattler_virtual_packages-v5.0.0) - 2026-08-11
+
+### Added
+
+- Introduce default versions for virtual packages ([#2646](https://github.com/conda/rattler/pull/2646))
+
+### Other
+
+- speed up CUDA virtual package detection ([#2568](https://github.com/conda/rattler/pull/2568))
+
 ## [4.1.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v4.0.0...rattler_virtual_packages-v4.1.0) - 2026-07-28
 
 ### Added

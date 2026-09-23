@@ -7,6 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/conda/rattler/compare/rattler-bin-v0.3.0...rattler-bin-v0.4.0) - 2026-09-17
+
+### Added
+
+- *(rattler-bin)* [**breaking**] add output formats to solve and list ([#2780](https://github.com/conda/rattler/pull/2780))
+
+### Fixed
+
+- *(rattler-bin)* HTTP timeouts and retries, S3 config, safer downloads, list fixes ([#2779](https://github.com/conda/rattler/pull/2779))
+
+### Other
+
+- [**breaking**] remove Platform::Unknown, make Platform::current() return Option ([#2786](https://github.com/conda/rattler/pull/2786))
+
+## [0.3.0](https://github.com/conda/rattler/compare/rattler-bin-v0.2.13...rattler-bin-v0.3.0) - 2026-09-08
+
+### Added
+
+- *(rattler-bin)* [**breaking**] add output formats to search and whoneeds ([#2767](https://github.com/conda/rattler/pull/2767))
+- Support remote URLs in inject, fetch-file, and inspect commands ([#2538](https://github.com/conda/rattler/pull/2538))
+
+### Fixed
+
+- Automatically disable sharded in whoneeds queries ([#2776](https://github.com/conda/rattler/pull/2776))
+
+### Other
+
+- *(rattler-bin)* share gateway construction and table rendering ([#2775](https://github.com/conda/rattler/pull/2775))
+- *(rattler-bin)* CLI output snapshot tests, dependency cleanup, solve warnings ([#2766](https://github.com/conda/rattler/pull/2766))
+
+## [0.2.13](https://github.com/conda/rattler/compare/rattler-bin-v0.2.12...rattler-bin-v0.2.13) - 2026-09-04
+
+### Added
+
+- add repodata whoneeds for reverse dependency lookup ([#2738](https://github.com/conda/rattler/pull/2738))
+- *(rattler-bin)* extend inspect with about, run exports, sizes and --json ([#2760](https://github.com/conda/rattler/pull/2760))
+- *(rattler-bin)* add --constraint flag to rattler solve ([#2761](https://github.com/conda/rattler/pull/2761))
+- *(rattler-bin)* add `compare-packages`, `search --urls-only` ([#2752](https://github.com/conda/rattler/pull/2752))
+
+### Other
+
+- *(rattler-bin)* honor configured download concurrency ([#2762](https://github.com/conda/rattler/pull/2762))
+- extract packages on a blocking worker ([#2748](https://github.com/conda/rattler/pull/2748))
+
+## [0.2.12](https://github.com/conda/rattler/compare/rattler-bin-v0.2.11...rattler-bin-v0.2.12) - 2026-08-27
+
+### Added
+
+- add `rattler info` subcommand ([#2732](https://github.com/conda/rattler/pull/2732))
+
+## [0.2.11](https://github.com/conda/rattler/compare/rattler-bin-v0.2.10...rattler-bin-v0.2.11) - 2026-08-26
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming, rattler_solve, rattler_repodata_gateway, rattler_index, rattler_networking, rattler_cache, rattler_shell, rattler_menuinst, rattler, rattler_upload, rattler_virtual_packages
+
+## [0.2.10](https://github.com/conda/rattler/compare/rattler-bin-v0.2.9...rattler-bin-v0.2.10) - 2026-08-21
+
+### Fixed
+
+- resolve build backends from conda-forge without a version pin ([#2689](https://github.com/conda/rattler/pull/2689))
+
+## [0.2.9](https://github.com/conda/rattler/compare/rattler-bin-v0.2.8...rattler-bin-v0.2.9) - 2026-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_repodata_gateway, rattler_package_streaming, rattler_cache, rattler_shell, rattler_menuinst, rattler, rattler_solve, rattler_index, rattler_upload, rattler_virtual_packages
+
+## [0.2.8](https://github.com/conda/rattler/compare/rattler-bin-v0.2.7...rattler-bin-v0.2.8) - 2026-08-11
+
+### Added
+
+- Improve `rattler solve` output ([#2644](https://github.com/conda/rattler/pull/2644))
+
+### Fixed
+
+- follow the OCI registry's WWW-Authenticate challenge ([#2628](https://github.com/conda/rattler/pull/2628))
+
+### Other
+
+- speed up CUDA virtual package detection ([#2568](https://github.com/conda/rattler/pull/2568))
+- unblock pixi setup and source package builds ([#2642](https://github.com/conda/rattler/pull/2642))
+
 ## [0.2.7](https://github.com/conda/rattler/compare/rattler-bin-v0.2.6...rattler-bin-v0.2.7) - 2026-08-03
 
 ### Other

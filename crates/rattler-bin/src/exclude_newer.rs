@@ -2,45 +2,143 @@
 //! their timestamp.
 
 use jiff::{Timestamp, civil::Date, tz::TimeZone};
-use std::fmt;
-use std::str::FromStr;
+use std::{fmt, str::FromStr, time::Duration};
 
-/// A wrapper around a jiff `Timestamp` that is used to exclude packages after a
-/// certain point in time.
+/// A point in time or an age used to exclude newer packages.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct ExcludeNewer(pub Timestamp);
+pub enum ExcludeNewer {
+    Timestamp(Timestamp),
+    Duration(Duration),
+}
 
-impl From<ExcludeNewer> for Timestamp {
-    fn from(value: ExcludeNewer) -> Self {
-        value.0
+impl ExcludeNewer {
+    pub fn into_solver(self, now: Timestamp) -> rattler_solve::ExcludeNewer {
+        match self {
+            Self::Timestamp(timestamp) => rattler_solve::ExcludeNewer::from_datetime(timestamp),
+            Self::Duration(duration) => {
+                rattler_solve::ExcludeNewer::from_duration_with_now(duration, now)
+            }
+        }
+    }
+
+    pub fn apply_to_channel(
+        self,
+        exclude_newer: rattler_solve::ExcludeNewer,
+        channel: impl Into<String>,
+        now: Timestamp,
+    ) -> rattler_solve::ExcludeNewer {
+        match self {
+            Self::Timestamp(timestamp) => exclude_newer.with_channel_cutoff(channel, timestamp),
+            Self::Duration(duration) => {
+                exclude_newer.with_channel_duration_with_now(channel, duration, now)
+            }
+        }
+    }
+
+    pub fn apply_to_package(
+        self,
+        exclude_newer: rattler_solve::ExcludeNewer,
+        package: rattler_conda_types::PackageName,
+        now: Timestamp,
+    ) -> rattler_solve::ExcludeNewer {
+        match self {
+            Self::Timestamp(timestamp) => exclude_newer.with_package_cutoff(package, timestamp),
+            Self::Duration(duration) => {
+                exclude_newer.with_package_duration_with_now(package, duration, now)
+            }
+        }
     }
 }
 
-impl From<ExcludeNewer> for rattler_solve::ExcludeNewer {
-    fn from(value: ExcludeNewer) -> Self {
-        rattler_solve::ExcludeNewer::from_datetime(value.0)
+/// A named channel or package and its cutoff override.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NamedCutoff {
+    pub name: String,
+    pub cutoff: ExcludeNewer,
+}
+
+#[derive(Debug)]
+pub struct ParseExcludeNewerError;
+
+impl fmt::Display for ParseExcludeNewerError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "expected an RFC 3339 timestamp, a date, or a duration (for example, 3d)"
+        )
     }
 }
+
+impl std::error::Error for ParseExcludeNewerError {}
+
+#[derive(Debug)]
+pub struct ParseNamedCutoffError(String);
+
+impl fmt::Display for ParseNamedCutoffError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::error::Error for ParseNamedCutoffError {}
 
 impl FromStr for ExcludeNewer {
-    type Err = jiff::Error;
+    type Err = ParseExcludeNewerError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Try parsing as full timestamp first
         if let Ok(timestamp) = s.parse::<Timestamp>() {
-            return Ok(ExcludeNewer(timestamp));
+            return Ok(ExcludeNewer::Timestamp(timestamp));
         }
-        // Fall back to date-only (use start of next day in UTC)
-        let date = s.parse::<Date>()?;
-        let next_day = date.tomorrow()?;
-        let timestamp = next_day.at(0, 0, 0, 0).to_zoned(TimeZone::UTC)?.timestamp();
-        Ok(ExcludeNewer(timestamp))
+        // For a date-only value, use the start of the next day in UTC so that
+        // packages from the entire specified day are included.
+        if let Ok(date) = s.parse::<Date>() {
+            let next_day = date
+                .tomorrow()
+                .map_err(|_date_error| ParseExcludeNewerError)?;
+            let timestamp = next_day
+                .at(0, 0, 0, 0)
+                .to_zoned(TimeZone::UTC)
+                .map_err(|_timezone_error| ParseExcludeNewerError)?
+                .timestamp();
+            return Ok(ExcludeNewer::Timestamp(timestamp));
+        }
+
+        humantime::parse_duration(s)
+            .map(ExcludeNewer::Duration)
+            .map_err(|_duration_error| ParseExcludeNewerError)
+    }
+}
+
+impl FromStr for NamedCutoff {
+    type Err = ParseNamedCutoffError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (name, cutoff) = s.rsplit_once('=').ok_or_else(|| {
+            ParseNamedCutoffError("expected NAME=CUTOFF (for example, conda-forge=3d)".to_string())
+        })?;
+        if name.is_empty() || cutoff.is_empty() {
+            return Err(ParseNamedCutoffError(
+                "the name and cutoff must both be non-empty".to_string(),
+            ));
+        }
+
+        let cutoff = cutoff
+            .parse()
+            .map_err(|error: ParseExcludeNewerError| ParseNamedCutoffError(error.to_string()))?;
+        Ok(Self {
+            name: name.to_string(),
+            cutoff,
+        })
     }
 }
 
 impl fmt::Display for ExcludeNewer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        match self {
+            ExcludeNewer::Timestamp(timestamp) => timestamp.fmt(f),
+            ExcludeNewer::Duration(duration) => humantime::format_duration(*duration).fmt(f),
+        }
     }
 }
 
@@ -52,8 +150,8 @@ mod tests {
     fn test_parse_rfc3339() {
         let exclude_newer = ExcludeNewer::from_str("2006-12-02T02:07:43Z").unwrap();
         assert_eq!(
-            exclude_newer.0,
-            "2006-12-02T02:07:43Z".parse::<Timestamp>().unwrap()
+            exclude_newer,
+            ExcludeNewer::Timestamp("2006-12-02T02:07:43Z".parse::<Timestamp>().unwrap())
         );
     }
 
@@ -62,8 +160,8 @@ mod tests {
         // When parsing a date, we should get midnight of the next day
         let exclude_newer = ExcludeNewer::from_str("2006-12-02").unwrap();
         assert_eq!(
-            exclude_newer.0,
-            "2006-12-03T00:00:00Z".parse::<Timestamp>().unwrap()
+            exclude_newer,
+            ExcludeNewer::Timestamp("2006-12-03T00:00:00Z".parse::<Timestamp>().unwrap())
         );
     }
 
@@ -71,5 +169,16 @@ mod tests {
     fn test_display() {
         let exclude_newer = ExcludeNewer::from_str("2006-12-02T02:07:43Z").unwrap();
         assert_eq!(exclude_newer.to_string(), "2006-12-02T02:07:43Z");
+    }
+
+    #[test]
+    fn test_parse_named_cutoff() {
+        assert_eq!(
+            NamedCutoff::from_str("conda-forge=3d").unwrap(),
+            NamedCutoff {
+                name: "conda-forge".to_string(),
+                cutoff: ExcludeNewer::Duration(Duration::from_secs(3 * 24 * 60 * 60)),
+            }
+        );
     }
 }

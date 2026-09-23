@@ -5,6 +5,7 @@ from rattler.repo_data import (
     ChannelNotice,
     ChannelRelations,
     PackageRecord,
+    RemovedPackage,
     RepoData,
     RepoDataRecord,
     WhlPackageRecord,
@@ -16,8 +17,11 @@ from rattler.repo_data import (
     SourceConfig,
     PackageFormatSelection,
     RepoDataSource,
+    RepodataRevisionMetadata,
+    Dependent,
 )
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
+from rattler.config import Config, RunPostLinkScripts, TlsRootCerts
 from rattler.networking import Client, fetch_repo_data
 from rattler.virtual_package import GenericVirtualPackage, VirtualPackage, VirtualPackageOverrides, Override
 from rattler.package import (
@@ -68,8 +72,12 @@ __all__ = [
     "Channel",
     "ChannelConfig",
     "ChannelPriority",
+    "Config",
+    "RunPostLinkScripts",
+    "TlsRootCerts",
     "Client",
     "PatchInstructions",
+    "RemovedPackage",
     "RepoDataRecord",
     "WhlPackageRecord",
     "RepoData",
@@ -114,6 +122,8 @@ __all__ = [
     "GatewayQueryResult",
     "SourceConfig",
     "RepoDataSource",
+    "Dependent",
+    "RepodataRevisionMetadata",
     "NoArchType",
     "NoArchLiteral",
     "Link",

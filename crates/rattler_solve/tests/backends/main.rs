@@ -119,6 +119,7 @@ impl PackageBuilder {
                     archive_type: DistArchiveType::Conda(CondaArchiveType::Conda),
                 },
                 package_record: PackageRecord {
+                    attestations_sha256: None,
                     name: name.parse().unwrap(),
                     version: Version::from_str("0.0.0").unwrap().into(),
                     build: "h123456_0".to_string(),
@@ -139,6 +140,7 @@ impl PackageBuilder {
                     license: None,
                     license_family: None,
                     timestamp: None,
+                    indexed_timestamp: None,
                     legacy_bz2_size: None,
                     legacy_bz2_md5: None,
                     purls: None,
@@ -1319,7 +1321,7 @@ mod resolvo {
         │  └─ conflicting-extras[extra1]
         ├─ conflicting-extras[extra2] can be installed with any of the following options:
         │  └─ conflicting-extras[extra2]
-        └─ conflicting-extras * cannot be installed because there are no viable options:
+        └─ conflicting-extras [extras=[extra1, extra2]] cannot be installed because there are no viable options:
            └─ conflicting-extras 1 would require
               ├─ bar >=2, which can be installed with any of the following options:
               │  └─ bar 2
@@ -1346,7 +1348,7 @@ mod resolvo {
         │  └─ conflicting-extras[extra1]
         ├─ bar >=2 can be installed with any of the following options:
         │  └─ bar 2
-        └─ conflicting-extras * cannot be installed because there are no viable options:
+        └─ conflicting-extras [extras=[extra1]] cannot be installed because there are no viable options:
            └─ conflicting-extras 1 would require
               └─ bar <2, which cannot be installed because there are no viable options:
                  └─ bar 1, which conflicts with the versions reported above.

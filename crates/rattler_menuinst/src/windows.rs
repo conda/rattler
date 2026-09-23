@@ -160,8 +160,8 @@ impl WindowsMenu {
 
         if self.command.activate.unwrap_or_default() {
             // create a bash activation script and emit it into the script
-            let activator =
-                Activator::from_path(&self.prefix, shell::CmdExe, Platform::current()).unwrap();
+            let platform = Platform::current().ok_or(MenuInstError::UnknownHostPlatform)?;
+            let activator = Activator::from_path(&self.prefix, shell::CmdExe, platform)?;
             let activation_variables = ActivationVariables {
                 path_modification_behavior: PathModificationBehavior::Prepend,
                 ..Default::default()

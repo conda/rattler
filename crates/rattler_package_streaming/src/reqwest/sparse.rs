@@ -8,7 +8,7 @@
 use std::path::Path;
 
 use rattler_conda_types::package::{CondaArchiveType, PackageFile};
-use rattler_redaction::{DEFAULT_REDACTION_STR, redact_known_secrets_from_url};
+use rattler_redaction::{DEFAULT_REDACTION_STR, redact_url_for_display};
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::instrument;
 use url::Url;
@@ -21,7 +21,7 @@ use crate::archive::PackageArchive;
 ///
 /// Only the bytes needed to reach the target file are downloaded. Errors if
 /// the URL is not a `.conda` archive or the server does not support ranges.
-#[instrument(skip_all, fields(url = %redact_known_secrets_from_url(&url, DEFAULT_REDACTION_STR).as_ref().unwrap_or(&url), path = %target_path.display()))]
+#[instrument(skip_all, fields(url = %redact_url_for_display(&url, DEFAULT_REDACTION_STR).as_ref().unwrap_or(&url), path = %target_path.display()))]
 pub async fn fetch_file_from_remote_sparse(
     client: ClientWithMiddleware,
     url: Url,

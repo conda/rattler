@@ -7,9 +7,15 @@ use rattler_conda_types::{Platform, Version};
 
 /// The default `glibc` version to use when the version cannot be detected.
 ///
-/// This is the `glibc` version that ships with RHEL 8 and Debian 10.
-pub fn default_glibc_version() -> Version {
-    "2.28".parse().unwrap()
+/// This is the `glibc` version that ships with RHEL 8 and Debian 10, except for
+/// platforms that never had a `glibc` that old: `riscv64` support only landed in
+/// `glibc` 2.27 upstream, and conda-forge builds for `linux-riscv64` against
+/// 2.39, so assuming 2.28 there makes every package look uninstallable.
+pub fn default_glibc_version(platform: Platform) -> Version {
+    match platform {
+        Platform::LinuxRiscv64 => "2.39".parse().unwrap(),
+        _ => "2.28".parse().unwrap(),
+    }
 }
 
 /// The default Linux kernel version to use when the version cannot be

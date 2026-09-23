@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.0](https://github.com/conda/rattler/compare/rattler_shell-v0.27.17...rattler_shell-v0.28.0) - 2026-09-17
+
+### Other
+
+- [**breaking**] remove Platform::Unknown, make Platform::current() return Option ([#2786](https://github.com/conda/rattler/pull/2786))
+
+## [0.27.17](https://github.com/conda/rattler/compare/rattler_shell-v0.27.16...rattler_shell-v0.27.17) - 2026-08-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.27.16](https://github.com/conda/rattler/compare/rattler_shell-v0.27.15...rattler_shell-v0.27.16) - 2026-08-26
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.27.15](https://github.com/conda/rattler/compare/rattler_shell-v0.27.14...rattler_shell-v0.27.15) - 2026-08-21
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.27.14](https://github.com/conda/rattler/compare/rattler_shell-v0.27.13...rattler_shell-v0.27.14) - 2026-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.27.13](https://github.com/conda/rattler/compare/rattler_shell-v0.27.12...rattler_shell-v0.27.13) - 2026-08-11
+
+### Fixed
+
+- *(shell)* escape env var values in activation script ([#2621](https://github.com/conda/rattler/pull/2621))
+
 ## [0.27.12](https://github.com/conda/rattler/compare/rattler_shell-v0.27.11...rattler_shell-v0.27.12) - 2026-08-03
 
 ### Other

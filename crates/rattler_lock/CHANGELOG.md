@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.0](https://github.com/conda/rattler/compare/rattler_lock-v0.32.7...rattler_lock-v0.33.0) - 2026-09-17
+
+### Added
+
+- *(rattler_conda_types)* Add indexed_timestamp ([#2790](https://github.com/conda/rattler/pull/2790))
+
+### Other
+
+- [**breaking**] remove Platform::Unknown, make Platform::current() return Option ([#2786](https://github.com/conda/rattler/pull/2786))
+
+## [0.32.7](https://github.com/conda/rattler/compare/rattler_lock-v0.32.6...rattler_lock-v0.32.7) - 2026-09-08
+
+### Other
+
+- updated the following local packages: rattler_solve
+
+## [0.32.6](https://github.com/conda/rattler/compare/rattler_lock-v0.32.5...rattler_lock-v0.32.6) - 2026-09-04
+
+### Other
+
+- updated the following local packages: rattler_solve
+
+## [0.32.5](https://github.com/conda/rattler/compare/rattler_lock-v0.32.4...rattler_lock-v0.32.5) - 2026-08-27
+
+### Other
+
+- updated the following local packages: rattler_solve, rattler_conda_types
+
+## [0.32.4](https://github.com/conda/rattler/compare/rattler_lock-v0.32.3...rattler_lock-v0.32.4) - 2026-08-26
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.32.3](https://github.com/conda/rattler/compare/rattler_lock-v0.32.2...rattler_lock-v0.32.3) - 2026-08-21
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.32.2](https://github.com/conda/rattler/compare/rattler_lock-v0.32.1...rattler_lock-v0.32.2) - 2026-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.32.1](https://github.com/conda/rattler/compare/rattler_lock-v0.32.0...rattler_lock-v0.32.1) - 2026-08-11
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
 ## [0.32.0](https://github.com/conda/rattler/compare/rattler_lock-v0.31.7...rattler_lock-v0.32.0) - 2026-08-03
 
 ### Added

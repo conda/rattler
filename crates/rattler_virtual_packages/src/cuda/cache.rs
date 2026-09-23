@@ -16,6 +16,8 @@
 //! file or use the `CONDA_OVERRIDE_CUDA*` variables to bypass it.
 
 use super::{CudaArchInfo, CudaDetectionMethod, CudaInfo, CudaInfoSources, DetectedCudaInfo};
+#[cfg(target_os = "windows")]
+use crate::win;
 use rattler_conda_types::Version;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -376,35 +378,15 @@ fn device_fingerprint() -> Option<DeviceFingerprint> {
 #[cfg(target_os = "windows")]
 fn windows_nvidia_device_ids() -> Option<Vec<String>> {
     use windows_sys::Win32::Devices::DeviceAndDriverInstallation::{
-        CM_GETIDLIST_FILTER_ENUMERATOR, CM_GETIDLIST_FILTER_PRESENT, CM_Get_Device_ID_List_SizeW,
-        CM_Get_Device_ID_ListW, CR_SUCCESS,
+        CM_GETIDLIST_FILTER_ENUMERATOR, CM_GETIDLIST_FILTER_PRESENT,
     };
 
     // Only enumerate devices that are currently present on the PCI bus.
-    let filter: Vec<u16> = "PCI".encode_utf16().chain(std::iter::once(0)).collect();
-    let flags = CM_GETIDLIST_FILTER_ENUMERATOR | CM_GETIDLIST_FILTER_PRESENT;
-
-    let mut len: u32 = 0;
-    if unsafe { CM_Get_Device_ID_List_SizeW(&mut len, filter.as_ptr(), flags) } != CR_SUCCESS {
-        return None;
-    }
-
-    let mut buffer = vec![0u16; len as usize];
-    if unsafe { CM_Get_Device_ID_ListW(filter.as_ptr(), buffer.as_mut_ptr(), len, flags) }
-        != CR_SUCCESS
-    {
-        return None;
-    }
-
-    // The buffer is a sequence of null terminated strings, terminated by an empty string.
-    Some(
-        buffer
-            .split(|&c| c == 0)
-            .filter(|segment| !segment.is_empty())
-            .map(String::from_utf16_lossy)
-            .filter(|id| is_nvidia_pci_device_id(id))
-            .collect(),
-    )
+    let ids = win::device_instance_ids(
+        "PCI",
+        CM_GETIDLIST_FILTER_ENUMERATOR | CM_GETIDLIST_FILTER_PRESENT,
+    )?;
+    Some(ids.filter(|id| is_nvidia_pci_device_id(id)).collect())
 }
 
 /// Returns true if `id` is the Plug and Play device id of an NVIDIA PCI device.

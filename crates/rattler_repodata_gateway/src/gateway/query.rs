@@ -1,10 +1,6 @@
-use std::{
-    collections::HashSet,
-    future::{Future, IntoFuture},
-    sync::Arc,
-};
+use std::{collections::HashSet, future::IntoFuture, sync::Arc};
 
-use futures::{FutureExt, StreamExt, select_biased, stream::FuturesUnordered};
+use futures::{StreamExt, select_biased, stream::FuturesUnordered};
 use rattler_conda_types::{
     Channel, ChannelUrl, MatchSpec, Matches, PackageName, PackageNameMatcher, Platform,
     RepoDataRecord,
@@ -13,12 +9,16 @@ use url::Url;
 
 use super::{
     BarrierCell, ChannelNoticeResult, GatewayError, GatewayInner, GatewayWarning, RepoData,
+    boxed::{BoxFuture, box_future},
     channel_expander::{ChannelExpander, ChannelRelationsMode, ChannelRelationsWarning},
     channel_relations::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
+    local_subdir::LocalSubdirClient,
     source::{CustomSourceClient, Source},
-    subdir::{PackageRecords, Subdir, SubdirData},
+    subdir::{PackageRecords, Subdir, SubdirData, extract_unique_deps_split},
 };
 use crate::Reporter;
+
+type RecordPatch = dyn Fn(&RepoDataRecord) -> Option<RepoDataRecord> + Send + Sync;
 
 /// Result of a successful [`RepoDataQuery::execute`].
 ///
@@ -136,6 +136,9 @@ pub struct RepoDataQuery {
     /// Whether to recursively fetch dependencies
     recursive: bool,
 
+    /// A query-local patch applied to repodata records.
+    record_patch: Option<Arc<RecordPatch>>,
+
     /// The reporter to use by the query.
     reporter: Option<Arc<dyn Reporter>>,
 
@@ -236,6 +239,7 @@ impl RepoDataQuery {
             specs,
 
             recursive: false,
+            record_patch: None,
             reporter: None,
             channel_notices: false,
             channel_relations_mode: ChannelRelationsMode::default(),
@@ -284,6 +288,25 @@ impl RepoDataQuery {
         Self { recursive, ..self }
     }
 
+    /// Applies a query-local patch to repodata records.
+    ///
+    /// The patch runs after records are retrieved, including from the gateway
+    /// cache, and before recursive dependency discovery. Returning `Some`
+    /// replaces the record for this query, while returning `None` reuses the
+    /// original record. Replacement records are never written to the gateway
+    /// cache. Patches must preserve record identity fields such as the package
+    /// name, identifier, and URL.
+    #[must_use]
+    pub fn with_record_patch(
+        self,
+        patch: impl Fn(&RepoDataRecord) -> Option<RepoDataRecord> + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            record_patch: Some(Arc::new(patch)),
+            ..self
+        }
+    }
+
     /// Sets the reporter to use for this query.
     ///
     /// The reporter is notified of important evens during the execution of the
@@ -314,6 +337,7 @@ struct QueryExecutor {
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     gateway: Arc<GatewayInner>,
     recursive: bool,
+    record_patch: Option<Arc<RecordPatch>>,
     reporter: Option<Arc<dyn Reporter>>,
 
     // Specs categorized at construction
@@ -420,6 +444,7 @@ impl QueryExecutor {
             platforms,
             specs,
             recursive,
+            record_patch,
             reporter,
             channel_notices,
             channel_relations_mode,
@@ -536,6 +561,40 @@ impl QueryExecutor {
                         });
                         (SubdirKind::Custom, fut)
                     }
+                    Source::SparseRepoData(sparse_list) => {
+                        // Each entry represents a different subdir, so find the one
+                        // matching the requested platform; if none matches, treat it
+                        // as having no records, same as a channel that doesn't
+                        // publish a given subdir.
+                        let matching = sparse_list
+                            .iter()
+                            .find(|sparse| platform.as_str() == sparse.subdir())
+                            .cloned();
+                        let url = matching
+                            .as_ref()
+                            .or_else(|| sparse_list.first())
+                            .map(|sparse| sparse.channel.base_url.clone());
+                        let kind = match url {
+                            Some(url) => SubdirKind::Channel { url, platform },
+                            None => SubdirKind::Custom,
+                        };
+                        let subdir = match matching {
+                            Some(sparse) => Arc::new(Subdir::Found(SubdirData::from_client(
+                                LocalSubdirClient::new(sparse),
+                            ))),
+                            None => Arc::new(Subdir::NotFound),
+                        };
+                        let b = barrier.clone();
+                        let fut = box_future(async move {
+                            b.set(subdir.clone()).expect("subdir was set twice");
+                            Ok(PendingSubdirOk {
+                                subdir,
+                                kind_url_and_platform: None,
+                                warning: None,
+                            })
+                        });
+                        (kind, fut)
+                    }
                 };
 
                 subdir_handles.push(SubdirHandle {
@@ -551,6 +610,7 @@ impl QueryExecutor {
         Ok(Self {
             gateway,
             recursive,
+            record_patch,
             reporter,
             direct_url_specs,
             direct_url_result,
@@ -611,6 +671,7 @@ impl QueryExecutor {
                     },
                     PackageRecords {
                         records,
+                        removed: Vec::new(),
                         unique_base_deps,
                         unique_extra_deps,
                     },
@@ -709,6 +770,28 @@ impl QueryExecutor {
                 }
             }
         }
+    }
+
+    /// Apply the query-local record patch and rebuild derived dependency data.
+    fn patch_package_records(&self, mut pkg: PackageRecords) -> PackageRecords {
+        let Some(patch) = &self.record_patch else {
+            return pkg;
+        };
+
+        let mut changed = false;
+        for record in &mut pkg.records {
+            if let Some(patched) = patch(record.as_ref()) {
+                *record = Arc::new(patched);
+                changed = true;
+            }
+        }
+
+        if changed {
+            (pkg.unique_base_deps, pkg.unique_extra_deps) =
+                extract_unique_deps_split(pkg.records.iter().map(AsRef::as_ref));
+        }
+
+        pkg
     }
 
     /// Walk the deps of newly-active extras against records that have
@@ -816,11 +899,13 @@ impl QueryExecutor {
         }
     }
 
-    /// Add matching records to the slot indicated by `target`.
+    /// Add matching records to the slot indicated by `target`. Removed
+    /// packages are added unfiltered: they describe the fetched name, not a
+    /// spec match.
     fn accumulate_records(
         &mut self,
         target: AccumulateTarget,
-        records: Vec<Arc<RepoDataRecord>>,
+        pkg: PackageRecords,
         request: &PendingRequest,
     ) {
         let result = match target {
@@ -830,6 +915,11 @@ impl QueryExecutor {
                 .expect("direct-url fetch spawned without a direct-url bucket"),
             AccumulateTarget::Subdir(idx) => &mut self.subdir_handles[idx].data,
         };
+
+        let PackageRecords {
+            records, removed, ..
+        } = pkg;
+        result.removed.extend(removed);
 
         match &request.specs {
             SourceSpecs::Transitive => {
@@ -916,6 +1006,7 @@ impl QueryExecutor {
                 // Handle any records that were fetched
                 records = self.pending_records.select_next_some() => {
                     let (target, request, pkg) = records?;
+                    let pkg = self.patch_package_records(pkg);
 
                     if self.recursive {
                         let entry =
@@ -930,7 +1021,7 @@ impl QueryExecutor {
                         self.queue_dependencies(&pkg, &request);
                     }
 
-                    self.accumulate_records(target, pkg.records, &request);
+                    self.accumulate_records(target, pkg, &request);
                 }
 
                 // Handle any CEP-6 notices that were fetched
@@ -1159,7 +1250,7 @@ async fn fetch_subdir_with_policy(
     policy: FetchErrorPolicy,
 ) -> Result<(Arc<Subdir>, Option<ChannelRelationsWarning>), GatewayError> {
     match gateway
-        .get_or_create_subdir(channel, platform, reporter)
+        .get_or_create_subdir(channel, platform, reporter, true)
         .await
     {
         Ok(subdir) => Ok((subdir, None)),
@@ -1235,22 +1326,6 @@ fn spawn_one_package_fetch(
             Subdir::NotFound => Ok((target, request, PackageRecords::default())),
         }
     }));
-}
-
-#[cfg(target_arch = "wasm32")]
-type BoxFuture<T> = futures::future::LocalBoxFuture<'static, T>;
-
-#[cfg(target_arch = "wasm32")]
-fn box_future<T, F: Future<Output = T> + 'static>(future: F) -> BoxFuture<T> {
-    future.boxed_local()
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-type BoxFuture<T> = futures::future::BoxFuture<'static, T>;
-
-#[cfg(not(target_arch = "wasm32"))]
-fn box_future<T, F: Future<Output = T> + Send + 'static>(future: F) -> BoxFuture<T> {
-    future.boxed()
 }
 
 /// Result type for pending record fetches.

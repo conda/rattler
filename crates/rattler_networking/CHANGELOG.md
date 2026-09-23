@@ -18,6 +18,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `Authentication::OAuth` has three new optional Rust fields, `issuer_url`, `scopes`, and `oidc`. Downstream struct literals must initialize them (use `None` for legacy/unknown metadata), and exhaustive field patterns must include them or `..`. This is a source API change requiring a breaking release, not a credential-file migration.
 
+## [0.30.9](https://github.com/conda/rattler/compare/rattler_networking-v0.30.8...rattler_networking-v0.30.9) - 2026-09-17
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.30.8](https://github.com/conda/rattler/compare/rattler_networking-v0.30.7...rattler_networking-v0.30.8) - 2026-08-27
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.30.7](https://github.com/conda/rattler/compare/rattler_networking-v0.30.6...rattler_networking-v0.30.7) - 2026-08-26
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.30.6](https://github.com/conda/rattler/compare/rattler_networking-v0.30.5...rattler_networking-v0.30.6) - 2026-08-21
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.30.5](https://github.com/conda/rattler/compare/rattler_networking-v0.30.4...rattler_networking-v0.30.5) - 2026-08-15
+
+### Fixed
+
+- *(rattler_networking)* retry a digest-addressed OCI blob 404 through the manifest ([#2653](https://github.com/conda/rattler/pull/2653))
+
+## [0.30.4](https://github.com/conda/rattler/compare/rattler_networking-v0.30.3...rattler_networking-v0.30.4) - 2026-08-11
+
+### Fixed
+
+- *(rattler_networking)* report a missing OCI manifest as a 404 instead of erroring ([#2651](https://github.com/conda/rattler/pull/2651))
+- follow the OCI registry's WWW-Authenticate challenge ([#2628](https://github.com/conda/rattler/pull/2628))
+
 ## [0.30.3](https://github.com/conda/rattler/compare/rattler_networking-v0.30.2...rattler_networking-v0.30.3) - 2026-07-24
 
 ### Other

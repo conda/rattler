@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.78...rattler_menuinst-v0.3.0) - 2026-09-17
+
+### Other
+
+- [**breaking**] remove Platform::Unknown, make Platform::current() return Option ([#2786](https://github.com/conda/rattler/pull/2786))
+
+## [0.2.78](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.77...rattler_menuinst-v0.2.78) - 2026-09-04
+
+### Fixed
+
+- *(menuinst)* resolve `..` before checking link_in_bundle containment ([#2758](https://github.com/conda/rattler/pull/2758))
+
+## [0.2.77](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.76...rattler_menuinst-v0.2.77) - 2026-08-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.76](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.75...rattler_menuinst-v0.2.76) - 2026-08-26
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.75](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.74...rattler_menuinst-v0.2.75) - 2026-08-21
+
+### Other
+
+- *(ci)* Pin dependencies ([#2691](https://github.com/conda/rattler/pull/2691))
+
+## [0.2.74](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.73...rattler_menuinst-v0.2.74) - 2026-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.73](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.72...rattler_menuinst-v0.2.73) - 2026-08-11
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
 ## [0.2.72](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.71...rattler_menuinst-v0.2.72) - 2026-08-03
 
 ### Other

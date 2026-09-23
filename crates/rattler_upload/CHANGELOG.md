@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.9](https://github.com/conda/rattler/compare/rattler_upload-v0.10.8...rattler_upload-v0.10.9) - 2026-09-17
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.10.8](https://github.com/conda/rattler/compare/rattler_upload-v0.10.7...rattler_upload-v0.10.8) - 2026-09-08
+
+### Other
+
+- updated the following local packages: rattler_solve
+
+## [0.10.7](https://github.com/conda/rattler/compare/rattler_upload-v0.10.6...rattler_upload-v0.10.7) - 2026-09-04
+
+### Other
+
+- updated the following local packages: rattler_package_streaming, rattler_solve
+
+## [0.10.6](https://github.com/conda/rattler/compare/rattler_upload-v0.10.5...rattler_upload-v0.10.6) - 2026-08-27
+
+### Other
+
+- updated the following local packages: rattler_redaction, rattler_package_streaming, rattler_solve, rattler_conda_types, rattler_config, rattler_networking, rattler_s3
+
+## [0.10.5](https://github.com/conda/rattler/compare/rattler_upload-v0.10.4...rattler_upload-v0.10.5) - 2026-08-26
+
+### Other
+
+- updated the following local packages: rattler_redaction, rattler_conda_types, rattler_config, rattler_package_streaming, rattler_solve, rattler_networking, rattler_s3
+
+## [0.10.4](https://github.com/conda/rattler/compare/rattler_upload-v0.10.3...rattler_upload-v0.10.4) - 2026-08-21
+
+### Other
+
+- updated the following local packages: rattler_redaction, rattler_conda_types, rattler_config, rattler_package_streaming, rattler_networking, rattler_solve, rattler_s3
+
+## [0.10.3](https://github.com/conda/rattler/compare/rattler_upload-v0.10.2...rattler_upload-v0.10.3) - 2026-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_config, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.10.2](https://github.com/conda/rattler/compare/rattler_upload-v0.10.1...rattler_upload-v0.10.2) - 2026-08-11
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_solve, rattler_s3
+
 ## [0.10.1](https://github.com/conda/rattler/compare/rattler_upload-v0.10.0...rattler_upload-v0.10.1) - 2026-07-28
 
 ### Other
