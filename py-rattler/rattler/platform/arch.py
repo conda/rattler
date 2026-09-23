@@ -1,27 +1,30 @@
 from __future__ import annotations
 
+from rattler._enum import StrEnum
 from rattler.rattler import PyArch
 
-from typing import Literal
 
-ArchLiteral = Literal[
-    "x86",
-    "x86_64",
-    "aarch64",
-    "armv6l",
-    "armv7l",
-    "armv7a",
-    "loongarch64",
-    "ppc64le",
-    "ppc64",
-    "s390x",
-    "riscv32",
-    "riscv64",
-]
+class ArchName(StrEnum):
+    X86 = "x86"
+    X86_64 = "x86_64"
+    AARCH64 = "aarch64"
+    ARMV6L = "armv6l"
+    ARMV7L = "armv7l"
+    ARMV7A = "armv7a"
+    LOONGARCH64 = "loongarch64"
+    PPC64LE = "ppc64le"
+    PPC64 = "ppc64"
+    S390X = "s390x"
+    RISCV32 = "riscv32"
+    RISCV64 = "riscv64"
+
+
+# Compatibility alias for the former Literal type.
+ArchLiteral = ArchName
 
 
 class Arch:
-    def __init__(self, value: ArchLiteral) -> None:
+    def __init__(self, value: ArchName) -> None:
         self._inner = PyArch(value)
 
     @classmethod
@@ -38,7 +41,7 @@ class Arch:
         Examples
         --------
         ```python
-        >>> str(Arch("x86_64"))
+        >>> str(Arch(ArchName.X86_64))
         'x86_64'
         >>>
         ```
@@ -52,7 +55,7 @@ class Arch:
         Examples
         --------
         ```python
-        >>> Arch("aarch64")
+        >>> Arch(ArchName.AARCH64)
         Arch(aarch64)
         >>>
         ```

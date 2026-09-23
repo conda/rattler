@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, List, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from rattler.platform.platform import Platform
     from rattler.package.package_name import PackageName
+    from rattler.platform.platform import Platform
     from rattler.repo_data.record import RepoDataRecord
 
 
@@ -32,6 +32,7 @@ class RepoDataSource(Protocol):
     -------
     ```python
     from rattler import Platform, PackageName, RepoDataRecord
+    from rattler.platform import PlatformName
 
     class MyCustomSource:
         async def fetch_package_records(
@@ -48,7 +49,7 @@ class RepoDataSource(Protocol):
     gateway = Gateway()
     records = await gateway.query(
         sources=[channel, MyCustomSource()],  # Mix channels and custom sources
-        platforms=["linux-64"],
+        platforms=[PlatformName.LINUX_64],
         specs=["numpy"],
     )
     ```

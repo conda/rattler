@@ -1,46 +1,53 @@
 from __future__ import annotations
+
 from collections.abc import Iterator
-from typing import Any, Dict, Literal, Tuple, Optional
+from typing import Any, Dict, Optional, Tuple
 
-from rattler.rattler import PyPlatform
+from rattler._enum import StrEnum
 from rattler.platform.arch import Arch
+from rattler.rattler import PyPlatform
 
-PlatformLiteral = Literal[
-    "noarch",
-    "linux-32",
-    "linux-64",
-    "linux-aarch64",
-    "linux-armv6l",
-    "linux-armv7l",
-    "linux-loongarch64",
-    "linux-ppc64le",
-    "linux-ppc64",
-    "linux-ppc",
-    "linux-s390x",
-    "linux-riscv32",
-    "linux-riscv64",
-    "freebsd-32",
-    "freebsd-64",
-    "freebsd-arm64",
-    "osx-64",
-    "osx-arm64",
-    "ios-arm64",
-    "iossimulator-arm64",
-    "iossimulator-64",
-    "android-aarch64",
-    "android-armv7a",
-    "android-64",
-    "android-32",
-    "win-32",
-    "win-64",
-    "win-arm64",
-    "emscripten-wasm32",
-    "emscripten-wasm64",
-    "wasi-wasm32",
-    "zos-z",
-]
-"""The set of platform names that can be used to construct a
-[`Platform`][rattler.platform.platform.Platform]."""
+
+class PlatformName(StrEnum):
+    """The set of platform names that can be used to construct a
+    [`Platform`][rattler.platform.platform.Platform]."""
+
+    NOARCH = "noarch"
+    LINUX_32 = "linux-32"
+    LINUX_64 = "linux-64"
+    LINUX_AARCH64 = "linux-aarch64"
+    LINUX_ARMV6L = "linux-armv6l"
+    LINUX_ARMV7L = "linux-armv7l"
+    LINUX_LOONGARCH64 = "linux-loongarch64"
+    LINUX_PPC64LE = "linux-ppc64le"
+    LINUX_PPC64 = "linux-ppc64"
+    LINUX_PPC = "linux-ppc"
+    LINUX_S390X = "linux-s390x"
+    LINUX_RISCV32 = "linux-riscv32"
+    LINUX_RISCV64 = "linux-riscv64"
+    FREEBSD_32 = "freebsd-32"
+    FREEBSD_64 = "freebsd-64"
+    FREEBSD_ARM64 = "freebsd-arm64"
+    OSX_64 = "osx-64"
+    OSX_ARM64 = "osx-arm64"
+    IOS_ARM64 = "ios-arm64"
+    IOSSIMULATOR_ARM64 = "iossimulator-arm64"
+    IOSSIMULATOR_64 = "iossimulator-64"
+    ANDROID_AARCH64 = "android-aarch64"
+    ANDROID_ARMV7A = "android-armv7a"
+    ANDROID_64 = "android-64"
+    ANDROID_32 = "android-32"
+    WIN_32 = "win-32"
+    WIN_64 = "win-64"
+    WIN_ARM64 = "win-arm64"
+    EMSCRIPTEN_WASM32 = "emscripten-wasm32"
+    EMSCRIPTEN_WASM64 = "emscripten-wasm64"
+    WASI_WASM32 = "wasi-wasm32"
+    ZOS_Z = "zos-z"
+
+
+# Compatibility alias for the former Literal type.
+PlatformLiteral = PlatformName
 
 
 class PlatformSingleton(type):
@@ -49,7 +56,7 @@ class PlatformSingleton(type):
     def __init__(cls, *args: Tuple[Any], **kwargs: Dict[Any, Any]) -> None:
         cls._instances = {}
 
-    def __call__(cls, platform: str, *args: Tuple[Any], **kwargs: Dict[Any, Any]) -> Platform:
+    def __call__(cls, platform: PlatformName, *args: Tuple[Any], **kwargs: Dict[Any, Any]) -> Platform:
         try:
             return cls._instances[platform]
         except KeyError:
@@ -61,7 +68,7 @@ class PlatformSingleton(type):
 
 
 class Platform(metaclass=PlatformSingleton):
-    def __init__(self, value: PlatformLiteral | str):
+    def __init__(self, value: PlatformName):
         self._inner = PyPlatform(value)
 
     @classmethod
@@ -82,7 +89,7 @@ class Platform(metaclass=PlatformSingleton):
         Examples
         --------
         ```python
-        >>> str(Platform("linux-64"))
+        >>> str(Platform(PlatformName.LINUX_64))
         'linux-64'
         >>>
         ```
@@ -96,7 +103,7 @@ class Platform(metaclass=PlatformSingleton):
         Examples
         --------
         ```python
-        >>> Platform("linux-64")
+        >>> Platform(PlatformName.LINUX_64)
         Platform(linux-64)
         >>>
         ```
@@ -136,9 +143,9 @@ class Platform(metaclass=PlatformSingleton):
         Examples
         --------
         ```python
-        >>> Platform("linux-64").is_linux
+        >>> Platform(PlatformName.LINUX_64).is_linux
         True
-        >>> Platform("osx-64").is_linux
+        >>> Platform(PlatformName.OSX_64).is_linux
         False
         >>>
         ```
@@ -153,9 +160,9 @@ class Platform(metaclass=PlatformSingleton):
         Examples
         --------
         ```python
-        >>> Platform("osx-64").is_osx
+        >>> Platform(PlatformName.OSX_64).is_osx
         True
-        >>> Platform("linux-64").is_osx
+        >>> Platform(PlatformName.LINUX_64).is_osx
         False
         >>>
         ```
@@ -170,9 +177,9 @@ class Platform(metaclass=PlatformSingleton):
         Examples
         --------
         ```python
-        >>> Platform("win-64").is_windows
+        >>> Platform(PlatformName.WIN_64).is_windows
         True
-        >>> Platform("linux-64").is_windows
+        >>> Platform(PlatformName.LINUX_64).is_windows
         False
         >>>
         ```
@@ -187,9 +194,9 @@ class Platform(metaclass=PlatformSingleton):
         Examples
         --------
         ```python
-        >>> Platform("linux-64").is_unix
+        >>> Platform(PlatformName.LINUX_64).is_unix
         True
-        >>> Platform("win-64").is_unix
+        >>> Platform(PlatformName.WIN_64).is_unix
         False
         >>>
         ```
@@ -204,9 +211,9 @@ class Platform(metaclass=PlatformSingleton):
         Examples
         --------
         ```python
-        >>> Platform("linux-64").arch
+        >>> Platform(PlatformName.LINUX_64).arch
         Arch(x86_64)
-        >>> Platform("linux-aarch64").arch
+        >>> Platform(PlatformName.LINUX_AARCH64).arch
         Arch(aarch64)
         >>>
         ```
@@ -222,7 +229,7 @@ class Platform(metaclass=PlatformSingleton):
         Examples
         --------
         ```python
-        >>> Platform("linux-64").only_platform
+        >>> Platform(PlatformName.LINUX_64).only_platform
         'linux'
         >>>
         ```

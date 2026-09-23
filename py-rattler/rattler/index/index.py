@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 import os
 import sys
-from typing import TYPE_CHECKING, Any, Literal, Optional, TypedDict
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Optional, TypedDict
 
 if TYPE_CHECKING:
     if sys.version_info >= (3, 10):
@@ -12,9 +12,20 @@ if TYPE_CHECKING:
     else:
         from typing_extensions import TypeAlias
 
+from rattler._enum import StrEnum
 from rattler.config import Config
 from rattler.platform import Platform
 from rattler.rattler import py_index_fs, py_index_s3
+
+
+class S3AddressingStyle(StrEnum):
+    PATH = "path"
+    VIRTUAL_HOST = "virtual-host"
+
+
+class PackageRevisionAssignment(StrEnum):
+    FROM_INDEX_JSON = "from-index-json"
+    LATEST = "latest"
 
 
 @dataclass
@@ -37,11 +48,13 @@ class S3Credentials:
     session_token: Optional[str] = None
 
     # Defines how to address the bucket, either using virtual-hosted-style or path-style.
-    addressing_style: Literal["path", "virtual-host"] = "virtual-host"
+    addressing_style: S3AddressingStyle = S3AddressingStyle.VIRTUAL_HOST
 
 
-RepodataRevisionSelection: TypeAlias = Literal["v3"]
-"""A repodata layout revision supported by the indexer."""
+class RepodataRevisionSelection(StrEnum):
+    """A repodata layout revision supported by the indexer."""
+
+    V3 = "v3"
 
 
 class RepodataRevisionWithMessage(TypedDict):
@@ -66,7 +79,7 @@ RepodataRevisionInput: TypeAlias = (
 RepodataRevisions: TypeAlias = Sequence[RepodataRevisionInput]
 """Revisions to advertise when indexing a channel.
 
-For example: ``[{"revision": "v3", "message": "v3 packages"}]``.
+For example: ``[{"revision": RepodataRevisionSelection.V3, "message": "v3 packages"}]``.
 The legacy layout is implicit and cannot be selected. Package counts and timestamps
 are derived by the indexer and cannot be supplied.
 """
@@ -86,12 +99,12 @@ def _repodata_revisions_to_dicts(
     if isinstance(revisions, Mapping):
         raise TypeError(
             "repodata_revisions no longer accepts a vN-keyed metadata mapping; "
-            'use a sequence such as ["v3"] or [{"revision": "v3", "message": "v3 packages"}]'
+            'use a sequence such as [RepodataRevisionSelection.V3] or [{"revision": RepodataRevisionSelection.V3, "message": "v3 packages"}]'
         )
     if isinstance(revisions, (str, bytes)) or not isinstance(revisions, Sequence):
         raise TypeError(
             "repodata_revisions must be a sequence of revision selections, "
-            'for example ["v3"] or [{"revision": "v3", "message": "v3 packages"}]'
+            'for example [RepodataRevisionSelection.V3] or [{"revision": RepodataRevisionSelection.V3, "message": "v3 packages"}]'
         )
 
     result: list[dict[str, Any]] = []
@@ -137,7 +150,7 @@ async def index_fs(
     write_zst: Optional[bool] = None,
     write_shards: Optional[bool] = None,
     repodata_revisions: Optional[RepodataRevisions] = None,
-    package_revision_assignment: Optional[Literal["from-index-json", "latest"]] = None,
+    package_revision_assignment: Optional[PackageRevisionAssignment] = None,
     force: bool = False,
     max_parallel: int | None = None,
     config: Optional[Config] = None,
@@ -158,9 +171,9 @@ async def index_fs(
                    matching ``index-config`` value or defaults to True.
         write_shards: Whether to write sharded repodata. When omitted, uses
                       the matching ``index-config`` value or defaults to True.
-        repodata_revisions: Revisions to advertise. Pass revision strings or mappings with
+        repodata_revisions: Revisions to advertise. Pass revision enum members or mappings with
                             `revision` and optional `message`, for example
-                            `[{"revision": "v3", "message": "v3 packages"}]`. The legacy layout is implicit.
+                            `[{"revision": RepodataRevisionSelection.V3, "message": "v3 packages"}]`. The legacy layout is implicit.
                             Package counts and timestamps are computed by the indexer.
         package_revision_assignment: Whether to assign packages to the revision required by their
                                      `index.json`, or to the latest advertised revision. When
@@ -176,7 +189,7 @@ async def index_fs(
     --------
     ```python
     >>> import asyncio
-    >>> asyncio.run(index_fs(channel_directory, repodata_revisions=[{"revision": "v3", "message": "v3 packages"}]))  # doctest: +SKIP
+    >>> asyncio.run(index_fs(channel_directory, repodata_revisions=[{"revision": RepodataRevisionSelection.V3, "message": "v3 packages"}]))  # doctest: +SKIP
     ```
     """
     await py_index_fs(
@@ -201,7 +214,7 @@ async def index_s3(
     write_zst: Optional[bool] = None,
     write_shards: Optional[bool] = None,
     repodata_revisions: Optional[RepodataRevisions] = None,
-    package_revision_assignment: Optional[Literal["from-index-json", "latest"]] = None,
+    package_revision_assignment: Optional[PackageRevisionAssignment] = None,
     force: bool = False,
     max_parallel: int | None = None,
     precondition_checks: bool = True,
@@ -225,9 +238,9 @@ async def index_s3(
                    matching ``index-config`` value or defaults to True.
         write_shards: Whether to write sharded repodata. When omitted, uses
                       the matching ``index-config`` value or defaults to True.
-        repodata_revisions: Revisions to advertise. Pass revision strings or mappings with
+        repodata_revisions: Revisions to advertise. Pass revision enum members or mappings with
                             `revision` and optional `message`, for example
-                            `[{"revision": "v3", "message": "v3 packages"}]`. The legacy layout is implicit.
+                            `[{"revision": RepodataRevisionSelection.V3, "message": "v3 packages"}]`. The legacy layout is implicit.
                             Package counts and timestamps are computed by the indexer.
         package_revision_assignment: Whether to assign packages to the revision required by their
                                      `index.json`, or to the latest advertised revision. When
@@ -244,7 +257,7 @@ async def index_s3(
     --------
     ```python
     >>> import asyncio
-    >>> asyncio.run(index_s3(channel_url, repodata_revisions=[{"revision": "v3", "message": "v3 packages"}]))  # doctest: +SKIP
+    >>> asyncio.run(index_s3(channel_url, repodata_revisions=[{"revision": RepodataRevisionSelection.V3, "message": "v3 packages"}]))  # doctest: +SKIP
     ```
     """
     await py_index_s3(

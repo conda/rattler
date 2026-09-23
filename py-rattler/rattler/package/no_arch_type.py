@@ -1,9 +1,19 @@
 from __future__ import annotations
+
 from typing import Literal, Optional
 
+from rattler._enum import StrEnum
 from rattler.rattler import PyNoArchType
 
-NoArchLiteral = Optional[Literal["python", "generic", True]]
+
+class NoArchKind(StrEnum):
+    """The kind of architecture-independent package."""
+
+    PYTHON = "python"
+    GENERIC = "generic"
+
+
+NoArchLiteral = Optional[NoArchKind | Literal[True]]
 """The values accepted by the [`NoArchType`][rattler.package.no_arch_type.NoArchType]
 constructor. `None` means the package is architecture specific, and `True` is an
 alias for `"generic"`."""
@@ -38,9 +48,9 @@ class NoArchType:
     def generic(self) -> bool:
         """
         Return whether this NoArchType is 'generic'
-        >>> NoArchType('generic').generic
+        >>> NoArchType(NoArchKind.GENERIC).generic
         True
-        >>> NoArchType('generic').python
+        >>> NoArchType(NoArchKind.GENERIC).python
         False
         >>>
         """
@@ -62,9 +72,9 @@ class NoArchType:
     def python(self) -> bool:
         """
         Return whether this NoArchType is 'python'
-        >>> NoArchType('python').python
+        >>> NoArchType(NoArchKind.PYTHON).python
         True
-        >>> NoArchType('python').generic
+        >>> NoArchType(NoArchKind.PYTHON).generic
         False
         >>>
         """
@@ -77,9 +87,9 @@ class NoArchType:
         Examples
         --------
         ```python
-        >>> hash(NoArchType("python")) == hash(NoArchType("python"))
+        >>> hash(NoArchType(NoArchKind.PYTHON)) == hash(NoArchType(NoArchKind.PYTHON))
         True
-        >>> hash(NoArchType("python")) == hash(NoArchType("generic"))
+        >>> hash(NoArchType(NoArchKind.PYTHON)) == hash(NoArchType(NoArchKind.GENERIC))
         False
         >>>
         ```
@@ -93,13 +103,13 @@ class NoArchType:
         Examples
         --------
         ```python
-        >>> NoArchType("python") == NoArchType("generic")
+        >>> NoArchType(NoArchKind.PYTHON) == NoArchType(NoArchKind.GENERIC)
         False
-        >>> NoArchType("python") == NoArchType("python")
+        >>> NoArchType(NoArchKind.PYTHON) == NoArchType(NoArchKind.PYTHON)
         True
-        >>> NoArchType("generic") == NoArchType("generic")
+        >>> NoArchType(NoArchKind.GENERIC) == NoArchType(NoArchKind.GENERIC)
         True
-        >>> NoArchType("python") == "python"
+        >>> NoArchType(NoArchKind.PYTHON) == "python"
         False
         >>>
         ```
@@ -116,9 +126,9 @@ class NoArchType:
         Examples
         --------
         ```python
-        >>> NoArchType("python") != NoArchType("python")
+        >>> NoArchType(NoArchKind.PYTHON) != NoArchType(NoArchKind.PYTHON)
         False
-        >>> NoArchType("python") != "python"
+        >>> NoArchType(NoArchKind.PYTHON) != "python"
         True
         >>>
         ```
@@ -135,7 +145,7 @@ class NoArchType:
         Examples
         --------
         ```python
-        >>> p = NoArchType("python")
+        >>> p = NoArchType(NoArchKind.PYTHON)
         >>> p
         NoArchType("python")
         >>>

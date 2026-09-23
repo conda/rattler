@@ -1,25 +1,35 @@
 from __future__ import annotations
 
+
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
+from rattler._enum import StrEnum
 from rattler.channel import ChannelConfig
 from rattler.rattler import PyConfig
 
-TlsRootCerts = Literal["webpki", "system"]
-"""Which root certificates to use for HTTPS connections.
 
-* `'webpki'`: use the bundled Mozilla root certificates.
-* `'system'`: use the system's native certificate store.
-"""
+class TlsRootCerts(StrEnum):
+    """Which root certificates to use for HTTPS connections.
 
-RunPostLinkScripts = Literal["insecure", "false"]
-"""Whether to run a package's post-link scripts.
+    * `'webpki'`: use the bundled Mozilla root certificates.
+    * `'system'`: use the system's native certificate store.
+    """
 
-* `'insecure'`: run them. Named "insecure" because they are arbitrary code.
-* `'false'`: do not run them.
-"""
+    WEBPKI = "webpki"
+    SYSTEM = "system"
+
+
+class RunPostLinkScripts(StrEnum):
+    """Whether to run a package's post-link scripts.
+
+    * `'insecure'`: run them. Named "insecure" because they are arbitrary code.
+    * `'false'`: do not run them.
+    """
+
+    INSECURE = "insecure"
+    FALSE = "false"
 
 
 class Config:
@@ -255,11 +265,12 @@ class Config:
         --------
         ```python
         >>> Config.from_toml('tls-root-certs = "webpki"').tls_root_certs
-        'webpki'
+        <TlsRootCerts.WEBPKI: 'webpki'>
         >>>
         ```
         """
-        return self._inner.tls_root_certs
+        value = self._inner.tls_root_certs
+        return TlsRootCerts(value) if value is not None else None
 
     @property
     def mirrors(self) -> Dict[str, List[str]]:
@@ -373,11 +384,12 @@ class Config:
         --------
         ```python
         >>> Config.from_toml('run-post-link-scripts = "insecure"').run_post_link_scripts
-        'insecure'
+        <RunPostLinkScripts.INSECURE: 'insecure'>
         >>>
         ```
         """
-        return self._inner.run_post_link_scripts
+        value = self._inner.run_post_link_scripts
+        return RunPostLinkScripts(value) if value is not None else None
 
     @property
     def allow_symbolic_links(self) -> Optional[bool]:

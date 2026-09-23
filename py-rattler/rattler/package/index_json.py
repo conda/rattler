@@ -1,6 +1,7 @@
 from __future__ import annotations
-import os
+
 import datetime
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
@@ -398,10 +399,11 @@ class IndexJson:
         ... )
         >>> idx_json.noarch
         NoArchType(None)
-        >>> idx_json.noarch = NoArchType("python")
+        >>> from rattler.package import NoArchKind
+        >>> idx_json.noarch = NoArchType(NoArchKind.PYTHON)
         >>> idx_json.noarch
         NoArchType("python")
-        >>> idx_json.noarch = "generic"
+        >>> idx_json.noarch = NoArchKind.GENERIC
         >>> idx_json.noarch
         NoArchType("generic")
         >>> idx_json.noarch = None

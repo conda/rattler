@@ -6,18 +6,19 @@ from pathlib import Path
 import pytest
 
 from rattler import (
-    solve,
-    ChannelPriority,
-    RepoDataRecord,
     Channel,
+    ChannelPriority,
     Gateway,
-    SparseRepoData,
     MatchSpec,
-    solve_with_sparse_repodata,
     PackageFormatSelection,
+    RepoDataRecord,
+    SparseRepoData,
+    solve,
+    solve_with_sparse_repodata,
 )
-
+from rattler.platform.platform import PlatformName
 from rattler.solver import TimestampPolicy
+from rattler.solver.solver import SolveStrategy
 
 
 @pytest.mark.asyncio
@@ -25,7 +26,7 @@ async def test_solve(gateway: Gateway, conda_forge_channel: Channel) -> None:
     solved_data = await solve(
         [conda_forge_channel],
         ["python", "sqlite"],
-        platforms=["linux-64"],
+        platforms=[PlatformName.LINUX_64],
         gateway=gateway,
     )
 
@@ -45,7 +46,7 @@ async def test_solve_exclude_newer(gateway: Gateway, dummy_channel: Channel) -> 
     solved_data = await solve(
         [dummy_channel],
         ["foo"],
-        platforms=["linux-64"],
+        platforms=[PlatformName.LINUX_64],
         gateway=gateway,
     )
 
@@ -58,7 +59,7 @@ async def test_solve_exclude_newer(gateway: Gateway, dummy_channel: Channel) -> 
     solved_data = await solve(
         [dummy_channel],
         ["foo"],
-        platforms=["linux-64"],
+        platforms=[PlatformName.LINUX_64],
         gateway=gateway,
         exclude_newer=datetime.datetime.fromisoformat("2021-01-01"),
     )
@@ -74,9 +75,9 @@ async def test_solve_lowest(gateway: Gateway, dummy_channel: Channel) -> None:
     solved_data = await solve(
         [dummy_channel],
         ["foobar"],
-        platforms=["linux-64"],
+        platforms=[PlatformName.LINUX_64],
         gateway=gateway,
-        strategy="lowest",
+        strategy=SolveStrategy.LOWEST,
     )
 
     assert isinstance(solved_data, list)
@@ -94,9 +95,9 @@ async def test_solve_lowest_direct(gateway: Gateway, dummy_channel: Channel) -> 
     solved_data = await solve(
         [dummy_channel],
         ["foobar"],
-        platforms=["linux-64"],
+        platforms=[PlatformName.LINUX_64],
         gateway=gateway,
-        strategy="lowest-direct",
+        strategy=SolveStrategy.LOWEST_DIRECT,
     )
 
     assert isinstance(solved_data, list)
@@ -116,7 +117,7 @@ async def test_solve_channel_priority_disabled(
     solved_data = await solve(
         [conda_forge_channel, pytorch_channel],
         ["pytorch-cpu ==0.4.1 py36_cpu_1"],
-        platforms=["linux-64"],
+        platforms=[PlatformName.LINUX_64],
         gateway=gateway,
         channel_priority=ChannelPriority.Disabled,
     )
@@ -136,7 +137,7 @@ async def test_solve_constraints(gateway: Gateway, dummy_channel: Channel) -> No
         [dummy_channel],
         ["foobar"],
         constraints=["bors <=1", "nonexisting"],
-        platforms=["linux-64"],
+        platforms=[PlatformName.LINUX_64],
         gateway=gateway,
     )
 
@@ -228,13 +229,13 @@ async def test_solve_adds_pip_to_cached_python(tmp_path: Path) -> None:
     without_pip = await solve(
         [channel],
         ["application"],
-        platforms=["noarch"],
+        platforms=[PlatformName.NOARCH],
         gateway=gateway,
     )
     with_pip = await solve(
         [channel],
         ["application"],
-        platforms=["noarch"],
+        platforms=[PlatformName.NOARCH],
         gateway=gateway,
         add_pip_as_python_dependency=True,
     )
@@ -314,7 +315,7 @@ async def test_solve_accepts_sparse_repodata_as_source() -> None:
     solved_data = await solve(
         [linux64_data],
         ["foobar"],
-        platforms=["linux-64"],
+        platforms=[PlatformName.LINUX_64],
     )
 
     assert isinstance(solved_data, list)
@@ -330,7 +331,7 @@ async def test_conditional_root_requirement_satisfied(gateway: Gateway, dummy_ch
     solved_data = await solve(
         [dummy_channel],
         [MatchSpec('foo[when="__unix"]')],
-        platforms=["linux-64"],
+        platforms=[PlatformName.LINUX_64],
         gateway=gateway,
         virtual_packages=[GenericVirtualPackage(PackageName("__unix"), Version("0"), "0")],
     )
@@ -350,7 +351,7 @@ async def test_conditional_root_requirement_not_satisfied(gateway: Gateway, dumm
     solved_data = await solve(
         [dummy_channel],
         [MatchSpec('foo[when="__win"]')],
-        platforms=["linux-64"],
+        platforms=[PlatformName.LINUX_64],
         gateway=gateway,
         virtual_packages=[GenericVirtualPackage(PackageName("__unix"), Version("0"), "0")],
     )
@@ -369,7 +370,7 @@ async def test_conditional_root_requirement_with_logic(gateway: Gateway, dummy_c
     solved_data = await solve(
         [dummy_channel],
         [MatchSpec('foo[when="__unix and __linux"]')],
-        platforms=["linux-64"],
+        platforms=[PlatformName.LINUX_64],
         gateway=gateway,
         virtual_packages=[
             GenericVirtualPackage(PackageName("__unix"), Version("0"), "0"),
@@ -513,7 +514,12 @@ async def test_solve_with_sparse_repodata_with_wheels() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("sparse", [False, True])
 @pytest.mark.parametrize(
-    "policy,expected", [("allow-missing", "3"), ("require-timestamp", "2"), ("require-indexed-timestamp", "1")]
+    "policy,expected",
+    [
+        (TimestampPolicy.ALLOW_MISSING, "3"),
+        (TimestampPolicy.REQUIRE_TIMESTAMP, "2"),
+        (TimestampPolicy.REQUIRE_INDEXED_TIMESTAMP, "1"),
+    ],
 )
 async def test_timestamp_policy(tmp_path: Path, sparse: bool, policy: TimestampPolicy, expected: str) -> None:
     cutoff = datetime.datetime(2026, 3, 23, tzinfo=datetime.timezone.utc)
@@ -541,5 +547,7 @@ async def test_timestamp_policy(tmp_path: Path, sparse: bool, policy: TimestampP
     if sparse:
         result = await solve_with_sparse_repodata(["foo"], [repodata], exclude_newer=cutoff, timestamp_policy=policy)
     else:
-        result = await solve([repodata], ["foo"], platforms=["noarch"], exclude_newer=cutoff, timestamp_policy=policy)
+        result = await solve(
+            [repodata], ["foo"], platforms=[PlatformName.NOARCH], exclude_newer=cutoff, timestamp_policy=policy
+        )
     assert str(result[0].version) == expected

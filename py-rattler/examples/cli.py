@@ -8,9 +8,9 @@ from typing import List, Optional
 
 from rattler.channel import Channel, ChannelConfig
 from rattler.install import install
-from rattler.lock import LockFile, LockChannel, LockPlatform
+from rattler.lock import LockChannel, LockFile, LockPlatform
 from rattler.match_spec import MatchSpec
-from rattler.platform import Platform, PlatformLiteral
+from rattler.platform import Platform, PlatformName
 from rattler.solver import solve
 
 
@@ -18,7 +18,7 @@ async def create_environment(
     prefix: Path,
     dependencies: List[str],
     channel_strs: List[str],
-    platform_str: Optional[PlatformLiteral],
+    platform_str: Optional[PlatformName],
     lockfile: Optional[Path],
 ) -> None:
     if prefix.exists():
@@ -27,7 +27,7 @@ async def create_environment(
     match_specs = [MatchSpec(dep) for dep in dependencies]
     channels = [Channel(channel, ChannelConfig()) for channel in channel_strs]
     selected_platform = Platform(platform_str) if platform_str else Platform.current()
-    platforms = [Platform("noarch"), selected_platform]
+    platforms = [Platform(PlatformName.NOARCH), selected_platform]
 
     try:
         print("Solving dependencies...")
@@ -67,7 +67,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Create a Conda environment from scratch using py-rattler.")
     parser.add_argument("--prefix", type=Path, required=True, help="Environment path.")
     parser.add_argument("dependencies", nargs="+", help="Dependencies (e.g., 'python=3.11').")
-    parser.add_argument("--platform", help="Target platform (e.g., 'linux-64').")
+    parser.add_argument("--platform", type=PlatformName, help="Target platform (e.g., 'linux-64').")
     parser.add_argument("--channel", action="append", default=["conda-forge"], help="Channels to use.")
     parser.add_argument("--lockfile", type=Path, help="Save lock file to path.")
     args = parser.parse_args()

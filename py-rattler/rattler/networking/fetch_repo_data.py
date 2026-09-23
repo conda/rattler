@@ -1,31 +1,44 @@
 from __future__ import annotations
+
 import warnings
 from dataclasses import dataclass
-from typing import Callable, List, Literal, Optional, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, List, Optional, Union
 
+from rattler._enum import StrEnum
 from rattler.networking.client import Client
-from rattler.rattler import py_fetch_repo_data, PyFetchRepoDataOptions
+from rattler.rattler import PyFetchRepoDataOptions, py_fetch_repo_data
 from rattler.repo_data.sparse import SparseRepoData
 
 if TYPE_CHECKING:
     import os
+
     from rattler.channel import Channel
     from rattler.platform import Platform
 
 
-CacheAction = Literal["cache-or-fetch", "use-cache-only", "force-cache-only", "no-cache"]
-"""How the repodata cache should be used. `cache-or-fetch` validates the cache and
-re-fetches when it is stale, `use-cache-only` never hits the network and errors if
-nothing is cached, `force-cache-only` uses whatever is cached even if it is stale,
-and `no-cache` always re-fetches."""
+class CacheAction(StrEnum):
+    """How the repodata cache should be used. `cache-or-fetch` validates the cache and
+    re-fetches when it is stale, `use-cache-only` never hits the network and errors if
+    nothing is cached, `force-cache-only` uses whatever is cached even if it is stale,
+    and `no-cache` always re-fetches."""
 
-Variant = Literal["after-patches", "from-packages", "current"]
-"""Which repodata variant to fetch from the channel."""
+    CACHE_OR_FETCH = "cache-or-fetch"
+    USE_CACHE_ONLY = "use-cache-only"
+    FORCE_CACHE_ONLY = "force-cache-only"
+    NO_CACHE = "no-cache"
+
+
+class Variant(StrEnum):
+    """Which repodata variant to fetch from the channel."""
+
+    AFTER_PATCHES = "after-patches"
+    FROM_PACKAGES = "from-packages"
+    CURRENT = "current"
 
 
 @dataclass
 class FetchRepoDataOptions:
-    cache_action: CacheAction = "cache-or-fetch"
+    cache_action: CacheAction = CacheAction.CACHE_OR_FETCH
     """How to interact with the cache.
 
     * `'cache-or-fetch'` (default): Use the cache if its up to date or fetch from the URL if there is no valid cached value.
@@ -34,7 +47,7 @@ class FetchRepoDataOptions:
     * `'no-cache'`: Do not use the cache even if there is an up to date entry
     """
 
-    variant: Variant = "after-patches"
+    variant: Variant = Variant.AFTER_PATCHES
     """Which type of repodata to download
 
     * `'after-patches'` (default): Fetch the `repodata.json` file. This `repodata.json` has repodata patches applied.

@@ -1,3 +1,7 @@
+from rattler.repo_data.who_needs import RunExportKind
+from rattler.repo_data.who_needs import DependencyKind
+from rattler.repo_data.gateway import ChannelNoticeLevel
+from rattler.repo_data.gateway import ChannelRelationsMode
 from rattler.repo_data.package_record import PackageRecord
 from rattler.repo_data.repo_data import ChannelInfo, ChannelRelations, RepoData
 from rattler.repo_data.patch_instructions import PatchInstructions
@@ -17,6 +21,10 @@ from rattler.repo_data.removed_package import RemovedPackage
 from rattler.repo_data.revisions import RepodataRevisionMetadata
 
 __all__ = [
+    "RunExportKind",
+    "DependencyKind",
+    "ChannelNoticeLevel",
+    "ChannelRelationsMode",
     "ChannelInfo",
     "ChannelRelations",
     "ChannelNotice",

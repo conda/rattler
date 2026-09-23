@@ -1,3 +1,4 @@
+from rattler.networking.fetch_repo_data import Variant
 from rattler.networking.client import Client
 from rattler.networking.fetch_repo_data import fetch_repo_data, CacheAction, FetchRepoDataOptions
 from rattler.networking.middleware import (
@@ -11,6 +12,7 @@ from rattler.networking.middleware import (
 )
 
 __all__ = [
+    "Variant",
     "fetch_repo_data",
     "FetchRepoDataOptions",
     "CacheAction",

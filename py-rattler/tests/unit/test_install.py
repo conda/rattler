@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from rattler import Channel, Config, Gateway, install, solve
+from rattler.platform.platform import PlatformName
 
 
 @pytest.mark.asyncio
@@ -28,7 +29,7 @@ async def test_install(gateway: Gateway, conda_forge_channel: Channel, tmp_path:
     solved_data = await solve(
         [conda_forge_channel],
         ["conda-forge-pinning"],
-        platforms=["noarch"],
+        platforms=[PlatformName.NOARCH],
         gateway=gateway,
     )
 
@@ -47,7 +48,7 @@ async def test_reinstall(gateway: Gateway, conda_forge_channel: Channel, tmp_pat
     solved_data = await solve(
         [conda_forge_channel],
         ["conda-forge-pinning"],
-        platforms=["noarch"],
+        platforms=[PlatformName.NOARCH],
         gateway=gateway,
     )
 

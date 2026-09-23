@@ -1,15 +1,29 @@
 from __future__ import annotations
 
-from typing import Any, Literal, Optional, Union
 
+from typing import Any, Optional, Union
+
+from rattler._enum import StrEnum
 from rattler.package.package_name import PackageName
 from rattler.rattler import PyDependent
 from rattler.repo_data.package_record import PackageRecord
 from rattler.repo_data.record import RepoDataRecord
 from rattler.virtual_package.generic import GenericVirtualPackage
 
-DependencyKind = Literal["depends", "constrains", "extra_depends", "run_export"]
-RunExportKind = Literal["weak", "strong", "noarch", "weak_constrains", "strong_constrains"]
+
+class DependencyKind(StrEnum):
+    DEPENDS = "depends"
+    CONSTRAINS = "constrains"
+    EXTRA_DEPENDS = "extra_depends"
+    RUN_EXPORT = "run_export"
+
+
+class RunExportKind(StrEnum):
+    WEAK = "weak"
+    STRONG = "strong"
+    NOARCH = "noarch"
+    WEAK_CONSTRAINS = "weak_constrains"
+    STRONG_CONSTRAINS = "strong_constrains"
 
 
 class Dependent:
@@ -36,7 +50,7 @@ class Dependent:
     @property
     def kind(self) -> DependencyKind:
         """The field of the record the dependency comes from."""
-        return self._dependent.kind
+        return DependencyKind(self._dependent.kind)
 
     @property
     def run_export_kind(self) -> Optional[RunExportKind]:
@@ -44,7 +58,8 @@ class Dependent:
         The run export field the dependency comes from, for `run_export`
         kinds.
         """
-        return self._dependent.run_export_kind
+        value = self._dependent.run_export_kind
+        return RunExportKind(value) if value is not None else None
 
     @property
     def extra(self) -> Optional[str]:

@@ -4,6 +4,7 @@ import random
 from pathlib import Path
 
 from rattler import Channel, NoArchType, PackageName, PackageRecord, RepoData, VersionWithSource
+from rattler.package.no_arch_type import NoArchKind
 
 
 def test_indexed_timestamp() -> None:
@@ -36,7 +37,7 @@ def test_platform_arch_unknown_subdir() -> None:
 
 def test_noarch_python() -> None:
     record = PackageRecord(
-        name="x", version="1", build="0", build_number=0, subdir="noarch", noarch=NoArchType("python")
+        name="x", version="1", build="0", build_number=0, subdir="noarch", noarch=NoArchType(NoArchKind.PYTHON)
     )
     assert record.noarch.python
     assert not record.noarch.generic
@@ -51,7 +52,7 @@ def test_noarch_none() -> None:
 
 
 def test_noarch_literal_python() -> None:
-    record = PackageRecord(name="x", version="1", build="0", build_number=0, subdir="noarch", noarch="python")
+    record = PackageRecord(name="x", version="1", build="0", build_number=0, subdir="noarch", noarch=NoArchKind.PYTHON)
     assert record.noarch.python
     assert not record.noarch.generic
     assert not record.noarch.none
@@ -88,7 +89,7 @@ def test_package_record_setters_and_serialization() -> None:
     record.license = "MIT"
     record.license_family = "MIT_Family"
     record.md5 = b"1234" * 4
-    record.noarch = NoArchType("python")
+    record.noarch = NoArchType(NoArchKind.PYTHON)
     record.platform = "linux"
     record.sha256 = b"5678" * 8
     record.attestations_sha256 = b"abcd" * 8

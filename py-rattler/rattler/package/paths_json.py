@@ -1,17 +1,32 @@
 from __future__ import annotations
+
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional, Literal
+from typing import TYPE_CHECKING, List, Optional
+
+from rattler._enum import StrEnum
 from rattler.rattler import (
-    PyPathsJson,
+    PyFileMode,
     PyPathsEntry,
+    PyPathsJson,
     PyPathType,
     PyPrefixPlaceholder,
-    PyFileMode,
 )
 
 if TYPE_CHECKING:
     from rattler.networking.client import Client
+
+
+class PathTypeName(StrEnum):
+    HARDLINK = "hardlink"
+    SOFTLINK = "softlink"
+    DIRECTORY = "directory"
+
+
+class FileModeName(StrEnum):
+    BINARY = "binary"
+    TEXT = "text"
+    UNKNOWN = "unknown"
 
 
 class PathsJson:
@@ -140,7 +155,7 @@ class PathsJson:
         ... )
         >>> paths_json.paths
         [PathsEntry(relative_path="Lib/site-packages/conda-22.9.0-py3.8.egg-info/PKG-INFO", no_link=False, path_type=PathType(hardlink=True), prefix_placeholder="None", sha256="1323efbd9b3abb527b06435392b39de11710eb3a814e87a8174230c8f5a0826a", size_in_bytes=1229), ...]
-        >>> paths_json.paths = [PathsEntry(relative_path="new/path", no_link=True, path_type=PathType("softlink"), prefix_placeholder=None, sha256=None, size_in_bytes=None)]
+        >>> paths_json.paths = [PathsEntry(relative_path="new/path", no_link=True, path_type=PathType(PathTypeName.SOFTLINK), prefix_placeholder=None, sha256=None, size_in_bytes=None)]
         >>> len(paths_json.paths)
         1
         >>>
@@ -232,7 +247,7 @@ class PathsEntry:
         >>> entry = PathsEntry(
         ...     relative_path="lib/file.txt",
         ...     no_link=False,
-        ...     path_type=PathType("hardlink"),
+        ...     path_type=PathType(PathTypeName.HARDLINK),
         ...     prefix_placeholder=None,
         ...     sha256=None,
         ...     size_in_bytes=None
@@ -245,12 +260,12 @@ class PathsEntry:
         True
         >>>
         >>> # Create an entry with prefix placeholder
-        >>> placeholder = PrefixPlaceholder(FileMode("text"), "/old/prefix")
+        >>> placeholder = PrefixPlaceholder(FileMode(FileModeName.TEXT), "/old/prefix")
         >>> sha256 = bytes.fromhex("c609c2f1a8594abf959388e559d76241e51b0216faa7b37f529255eb1fc2c5eb")
         >>> entry = PathsEntry(
         ...     relative_path="bin/script",
         ...     no_link=False,
-        ...     path_type=PathType("hardlink"),
+        ...     path_type=PathType(PathTypeName.HARDLINK),
         ...     prefix_placeholder=placeholder,
         ...     sha256=sha256,
         ...     size_in_bytes=1234
@@ -332,7 +347,7 @@ class PathsEntry:
         >>> entry = paths_json.paths[0]
         >>> entry.path_type
         PathType(hardlink=True)
-        >>> new_type = PathType("softlink")
+        >>> new_type = PathType(PathTypeName.SOFTLINK)
         >>> entry.path_type = new_type
         >>> entry.path_type
         PathType(softlink=True)
@@ -359,10 +374,10 @@ class PathsEntry:
         ... )
         >>> entry = paths_json.paths[0]
         >>> entry.prefix_placeholder
-        >>> new_placeholder = PrefixPlaceholder(FileMode("text"), "placeholder")
+        >>> new_placeholder = PrefixPlaceholder(FileMode(FileModeName.TEXT), "placeholder")
         >>> entry.prefix_placeholder = new_placeholder
         >>> entry.prefix_placeholder
-        PrefixPlaceholder(file_mode=FileMode("text"), placeholder="placeholder")
+        PrefixPlaceholder(file_mode=FileMode(FileModeName.TEXT), placeholder="placeholder")
         >>>
         ```
         """
@@ -457,7 +472,7 @@ class PathType:
 
     _inner: PyPathType
 
-    def __init__(self, path_type: Literal["hardlink", "softlink", "directory"]) -> None:
+    def __init__(self, path_type: PathTypeName) -> None:
         self._inner = PyPathType(path_type)
 
     @property
@@ -561,9 +576,9 @@ class PrefixPlaceholder:
         Examples
         --------
         ```python
-        >>> placeholder = PrefixPlaceholder(FileMode("text"), "placeholder")
+        >>> placeholder = PrefixPlaceholder(FileMode(FileModeName.TEXT), "placeholder")
         >>> placeholder
-        PrefixPlaceholder(file_mode=FileMode("text"), placeholder="placeholder")
+        PrefixPlaceholder(file_mode=FileMode(FileModeName.TEXT), placeholder="placeholder")
         >>>
         ```
         """
@@ -582,7 +597,7 @@ class PrefixPlaceholder:
         ... )
         >>> entry = paths_json.paths[-1]
         >>> entry.prefix_placeholder.file_mode
-        FileMode("text")
+        FileMode(FileModeName.TEXT)
         >>>
         ```
         """
@@ -629,7 +644,7 @@ class FileMode:
 
     _inner: PyFileMode | None = None
 
-    def __init__(self, file_mode: Literal["binary", "text"]) -> None:
+    def __init__(self, file_mode: FileModeName) -> None:
         self._inner = PyFileMode(file_mode)
 
     @property
@@ -691,31 +706,31 @@ class FileMode:
         return self._inner is None
 
     @property
-    def mode(self) -> Literal["binary", "text", "unknown"]:
+    def mode(self) -> FileModeName:
         """
         The file mode as a string.
 
         Examples
         --------
         ```python
-        >>> FileMode("text").mode
-        'text'
-        >>> FileMode("binary").mode
-        'binary'
+        >>> FileMode(FileModeName.TEXT).mode
+        <FileModeName.TEXT: 'text'>
+        >>> FileMode(FileModeName.BINARY).mode
+        <FileModeName.BINARY: 'binary'>
         >>> paths_json = PathsJson.from_path(
         ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> paths_json.paths[-1].prefix_placeholder.file_mode.mode
-        'text'
+        <FileModeName.TEXT: 'text'>
         >>>
         ```
         """
         if self.binary:
-            return "binary"
+            return FileModeName.BINARY
         elif self.text:
-            return "text"
+            return FileModeName.TEXT
         else:
-            return "unknown"
+            return FileModeName.UNKNOWN
 
     @classmethod
     def _from_py_file_mode(cls, py_file_mode: PyFileMode) -> FileMode:
@@ -729,8 +744,8 @@ class FileMode:
         Returns a representation of the FileMode.
         """
         if self.binary:
-            return 'FileMode("binary")'
+            return "FileMode(FileModeName.BINARY)"
         elif self.text:
-            return 'FileMode("text")'
+            return "FileMode(FileModeName.TEXT)"
         else:
             return "FileMode()"

@@ -13,6 +13,8 @@ preview = ["pixi-build"]
 [exclude-newer]
 # TODO: remove 29.06.2026
 pixi-build-python = "0d"
+# Build 4 fixes parsing arm64e.x1 slices in the current macOS SDK.
+tapi = "0d"
 
 [package]
 name = "py-rattler"
@@ -20,6 +22,9 @@ name = "py-rattler"
 [package.build.backend]
 name = "pixi-build-python"
 version = ">=0.7.0"
+[package.build-dependencies]
+tapi = { version = ">=1600.0.11.8", build-number = ">=4", when = "__osx" }
+
 [package.host-dependencies]
 maturin = ">=1.14.0,<2"
 [package.build.config]

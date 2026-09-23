@@ -3,15 +3,16 @@ from __future__ import annotations
 import os
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Iterable, List, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Iterable, List, Optional, Union
 
+from rattler._enum import StrEnum
 from rattler.channel.channel import Channel
 from rattler.config import Config
 from rattler.match_spec.match_spec import MatchSpec
 from rattler.networking.client import Client
 from rattler.networking.fetch_repo_data import CacheAction
 from rattler.package.package_name import PackageName
-from rattler.platform.platform import Platform, PlatformLiteral
+from rattler.platform.platform import Platform, PlatformName
 from rattler.rattler import PyChannelNotice, PyGateway, PyMatchSpec, PySourceConfig
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.removed_package import RemovedPackage
@@ -24,28 +25,38 @@ if TYPE_CHECKING:
     from rattler.virtual_package.generic import GenericVirtualPackage
 
 
-ChannelRelationsMode = Literal["disabled", "warn", "strict"]
-"""How a gateway query should handle [CEP-42] `channel_relations`:
+class ChannelNoticeLevel(StrEnum):
+    INFO = "info"
+    WARNING = "warning"
+    CRITICAL = "critical"
 
-* `'disabled'`: ignore declared relations; use only the user-supplied
-  channels. Setting ``channel_relations_max_depth=0`` has the same effect.
-* `'warn'` (default): follow relations recursively but tolerate problems:
-  cycles, malformed metadata (non-``../`` references, self-relations,
-  ``base==overrides``), depth-exceeded chains, and failed discovery fetches
-  surface via Python's standard :mod:`warnings` module as
-  :class:`rattler.exceptions.GatewayWarning` (a ``UserWarning`` subclass)
-  rather than aborting. **Deviates from CEP-42**, which mandates aborting
-  on cycles and malformed metadata.
-* `'strict'`: follow relations recursively and abort on any violation,
-  raising :class:`GatewayError`. CEP-42 compliant.
 
-Custom :class:`RepoDataSource` instances passed in ``sources`` are not subject
-to CEP-42 reordering — they keep their caller-specified position. Discovered
-transitive channels are slotted next to the user channel that introduced them,
-in CEP-42 priority order.
+class ChannelRelationsMode(StrEnum):
+    """How a gateway query should handle [CEP-42] `channel_relations`:
 
-[CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
-"""
+    * `'disabled'`: ignore declared relations; use only the user-supplied
+      channels. Setting ``channel_relations_max_depth=0`` has the same effect.
+    * `'warn'` (default): follow relations recursively but tolerate problems:
+      cycles, malformed metadata (non-``../`` references, self-relations,
+      ``base==overrides``), depth-exceeded chains, and failed discovery fetches
+      surface via Python's standard :mod:`warnings` module as
+      :class:`rattler.exceptions.GatewayWarning` (a ``UserWarning`` subclass)
+      rather than aborting. **Deviates from CEP-42**, which mandates aborting
+      on cycles and malformed metadata.
+    * `'strict'`: follow relations recursively and abort on any violation,
+      raising :class:`GatewayError`. CEP-42 compliant.
+
+    Custom :class:`RepoDataSource` instances passed in ``sources`` are not subject
+    to CEP-42 reordering — they keep their caller-specified position. Discovered
+    transitive channels are slotted next to the user channel that introduced them,
+    in CEP-42 priority order.
+
+    [CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
+    """
+
+    DISABLED = "disabled"
+    WARN = "warn"
+    STRICT = "strict"
 
 
 class _RepoDataSourceAdapter:
@@ -95,7 +106,7 @@ class SourceConfig:
     jlap_enabled: Optional[bool] = None
     """Deprecated: JLAP support has been removed. This field is ignored."""
 
-    cache_action: CacheAction = "cache-or-fetch"
+    cache_action: CacheAction = CacheAction.CACHE_OR_FETCH
     """How to interact with the cache.
 
     * `'cache-or-fetch'` (default): Use the cache if its up to date or fetch from the URL if there is no valid cached value.
@@ -139,7 +150,7 @@ class ChannelNotice:
     channel: str
     id: str
     message: str
-    level: Literal["info", "warning", "critical"]
+    level: ChannelNoticeLevel
     created_at: Optional[str]
     expires_at: Optional[str]
     interval: Optional[int]
@@ -150,7 +161,7 @@ class ChannelNotice:
             channel=notice.channel,
             id=notice.id,
             message=notice.message,
-            level=notice.level,
+            level=ChannelNoticeLevel(notice.level),
             created_at=notice.created_at,
             expires_at=notice.expires_at,
             interval=notice.interval,
@@ -293,7 +304,7 @@ class Gateway:
     async def query(
         self,
         sources: Iterable[Union[Channel, str, RepoDataSource]],
-        platforms: Iterable[Platform | PlatformLiteral],
+        platforms: Iterable[Platform | PlatformName],
         specs: Iterable[MatchSpec | PackageName | str],
         recursive: bool = True,
         channel_relations: Optional[ChannelRelationsMode] = None,
@@ -332,7 +343,7 @@ class Gateway:
             channel_relations_max_depth: Maximum recursion depth when following
                                          ``channel_relations``. ``None`` uses the
                                          default (10). ``0`` behaves like
-                                         ``channel_relations="disabled"``.
+                                         ``channel_relations=ChannelRelationsMode.DISABLED``.
             channel_notices: Whether to fetch CEP-6 notices for this query.
 
         Returns:
@@ -341,7 +352,7 @@ class Gateway:
             ``channel_relations`` are followed (the default) and a channel declares
             relations, extra entries for the transitively discovered channels are
             inserted next to the channel that referenced them, with a declared ``base``
-            placed before it. Pass ``channel_relations="disabled"`` (or
+            placed before it. Pass ``channel_relations=ChannelRelationsMode.DISABLED`` (or
             ``channel_relations_max_depth=0``) to guarantee a strict one-to-one,
             positional correspondence with `sources`.
 
@@ -385,7 +396,7 @@ class Gateway:
     async def who_needs(
         self,
         sources: Iterable[Union[Channel, str, RepoDataSource]],
-        platforms: Iterable[Platform | PlatformLiteral],
+        platforms: Iterable[Platform | PlatformName],
         target: Union[str, PackageName, "PackageRecord", "GenericVirtualPackage"],
     ) -> List[Dependent]:
         """Returns the reverse dependencies of `target` in the given sources.
@@ -429,7 +440,7 @@ class Gateway:
     async def names(
         self,
         sources: Iterable[Union[Channel, str, RepoDataSource]],
-        platforms: Iterable[Platform | PlatformLiteral],
+        platforms: Iterable[Platform | PlatformName],
         channel_relations: Optional[ChannelRelationsMode] = None,
         channel_relations_max_depth: Optional[int] = None,
         channel_notices: bool = False,
@@ -495,7 +506,7 @@ class Gateway:
     async def channel_relations(
         self,
         channel: Channel | str,
-        platform: Platform | PlatformLiteral,
+        platform: Platform | PlatformName,
     ) -> Optional[ChannelRelations]:
         """Returns the CEP-42 ``channel_relations`` declared by the given
         ``(channel, platform)`` subdirectory, or ``None`` if none were declared
@@ -519,7 +530,7 @@ class Gateway:
     def clear_repodata_cache(
         self,
         channel: Channel | str,
-        subdirs: Optional[Iterable[Platform | PlatformLiteral]] = None,
+        subdirs: Optional[Iterable[Platform | PlatformName]] = None,
         clear_disk: bool = False,
     ) -> None:
         """

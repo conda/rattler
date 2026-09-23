@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from rattler import Channel, Config, Gateway, SourceConfig, SparseRepoData
+from rattler.platform.platform import PlatformName
 
 
 @pytest.mark.asyncio
@@ -28,7 +29,7 @@ async def test_removed_packages(tmp_path: Path) -> None:
     channel = Channel(str(tmp_path))
 
     # The gateway hides removed records and reports them for every fetched name.
-    result = await Gateway().query([channel], ["noarch"], ["demo"])
+    result = await Gateway().query([channel], [PlatformName.NOARCH], ["demo"])
     assert [record.file_name for record in result[0]] == ["demo-1.0-0.tar.bz2"]
     assert len(result.removed) == 1
     (removed,) = result.removed[0]
@@ -47,7 +48,10 @@ async def test_removed_packages(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_single_record_in_recursive_query(gateway: Gateway, conda_forge_channel: Channel) -> None:
     subdirs = await gateway.query(
-        [conda_forge_channel], ["linux-64", "noarch"], ["python ==3.10.0 h543edf9_1_cpython"], recursive=True
+        [conda_forge_channel],
+        [PlatformName.LINUX_64, PlatformName.NOARCH],
+        ["python ==3.10.0 h543edf9_1_cpython"],
+        recursive=True,
     )
 
     python_records = [record for subdir in subdirs for record in subdir if record.name == "python"]
@@ -98,11 +102,11 @@ async def test_channel_notices(tmp_path: Path) -> None:
     assert notices[0].level == "critical"
     assert notices[0].expires_at == "2099-01-01T00:00:00Z"
 
-    result = await gateway.query([channel], ["noarch"], ["demo"], channel_notices=True)
+    result = await gateway.query([channel], [PlatformName.NOARCH], ["demo"], channel_notices=True)
     assert result.repodata is result
     assert result.notices == notices
 
-    names = await gateway.names([channel], ["noarch"], channel_notices=True)
+    names = await gateway.names([channel], [PlatformName.NOARCH], channel_notices=True)
     assert names.names is names
     assert names.notices == notices
 
@@ -159,7 +163,7 @@ async def test_gateway_from_config_applies_mirrors_and_repodata_config() -> None
         """)
         gateway = Gateway.from_config(config)
 
-        records = await gateway.query([Channel("https://upstream.invalid/channel")], ["noarch"], ["demo"])
+        records = await gateway.query([Channel("https://upstream.invalid/channel")], [PlatformName.NOARCH], ["demo"])
 
         assert records == [[]]
         assert requested_paths == ["/mirror/noarch/repodata.json"]

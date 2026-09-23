@@ -1,21 +1,40 @@
 from __future__ import annotations
 
 from os import PathLike
-from typing import AsyncIterator, Dict, Iterable, List, Literal, Optional, Tuple
+from typing import AsyncIterator, Dict, Iterable, List, Optional, Tuple
 
+from rattler._enum import StrEnum
 from rattler.networking.client import Client
 from rattler.package.about_json import AboutJson
 from rattler.package.index_json import IndexJson
 from rattler.package.paths_json import PathsJson
 from rattler.package.run_exports_json import RunExportsJson
 from rattler.rattler import PyArchiveEntry, PyPackageArchive
+from rattler.rattler import download_and_extract as py_download_and_extract
 from rattler.rattler import download_bytes as py_download_bytes
 from rattler.rattler import download_to_path as py_download_to_path
 from rattler.rattler import download_to_writer as py_download_to_writer
-from rattler.rattler import download_and_extract as py_download_and_extract
 from rattler.rattler import extract as py_extract
 from rattler.rattler import extract_tar_bz2 as py_extract_tar_bz2
 from rattler.rattler import fetch_raw_package_file_from_url as py_fetch_raw_package_file_from_url
+
+
+class SparsePolicy(StrEnum):
+    PREFER = "prefer"
+    REQUIRE = "require"
+    DISABLE = "disable"
+
+
+class ArchiveAccess(StrEnum):
+    SPARSE = "sparse"
+    LOCAL = "local"
+    SPOOLED = "spooled"
+    UNKNOWN = "unknown"
+
+
+class ArchiveSection(StrEnum):
+    INFO = "info"
+    PKG = "pkg"
 
 
 def extract(path: PathLike[str], dest: PathLike[str]) -> Tuple[bytes, bytes]:
@@ -170,13 +189,13 @@ class PackageArchive:
         client: Client,
         url: str,
         *,
-        sparse: Literal["prefer", "require", "disable"] = "prefer",
+        sparse: SparsePolicy = SparsePolicy.PREFER,
         max_spool_size: Optional[int] = None,
     ) -> PackageArchive:
         """
         Opens a remote package archive.
 
-        `sparse="prefer"` uses range requests when possible and otherwise
+        `sparse=SparsePolicy.PREFER` uses range requests when possible and otherwise
         spools one full download. Use `"require"` to reject servers without
         range support, or `"disable"` to skip the range probe. Setting
         `max_spool_size` limits any fallback download.
@@ -198,9 +217,9 @@ class PackageArchive:
         return PackageArchive(await PyPackageArchive.from_path(path))
 
     @property
-    def access(self) -> Literal["sparse", "local", "spooled", "unknown"]:
+    def access(self) -> ArchiveAccess:
         """How the archive is accessed."""
-        return self._inner.access()
+        return ArchiveAccess(self._inner.access())
 
     async def read_file(self, path: str) -> Optional[bytes]:
         """
@@ -269,7 +288,7 @@ class PackageArchive:
             return None
         return RunExportsJson._from_py_run_exports_json(value)
 
-    async def list_files(self, section: Literal["info", "pkg"] = "pkg") -> List[str]:
+    async def list_files(self, section: ArchiveSection = ArchiveSection.PKG) -> List[str]:
         """
         Lists the paths of all files (including symbolic links) in one
         section.
@@ -282,13 +301,13 @@ class PackageArchive:
         --------
         ```python
         # Usually free: the info section tends to sit in the cached tail.
-        for path in await pkg.list_files("info"):
+        for path in await pkg.list_files(ArchiveSection.INFO):
             print(path)
         ```
         """
         return await self._inner.list_files(section)
 
-    async def stream(self, section: Literal["info", "pkg"] = "pkg") -> AsyncIterator[ArchiveEntry]:
+    async def stream(self, section: ArchiveSection = ArchiveSection.PKG) -> AsyncIterator[ArchiveEntry]:
         """
         Streams the tar entries of one section of the package.
 
@@ -301,7 +320,7 @@ class PackageArchive:
         Examples
         --------
         ```python
-        async for entry in pkg.stream("pkg"):
+        async for entry in pkg.stream(ArchiveSection.PKG):
             if entry.name.endswith(".so"):
                 data = await entry.read()  # read before advancing
             # entries that are not read are skipped cheaply
@@ -312,4 +331,4 @@ class PackageArchive:
             yield ArchiveEntry(entry)
 
     def __repr__(self) -> str:
-        return f"PackageArchive(access={self.access!r})"
+        return f"PackageArchive(access={self.access.value!r})"

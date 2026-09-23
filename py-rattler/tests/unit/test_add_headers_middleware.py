@@ -9,6 +9,7 @@ from xprocess import ProcessStarter
 from rattler import Channel, ChannelConfig, fetch_repo_data
 from rattler.networking import AddHeadersMiddleware, Client
 from rattler.platform import Platform
+from rattler.platform.platform import PlatformName
 
 
 @pytest.fixture(scope="module")
@@ -62,7 +63,7 @@ async def test_add_headers_middleware_with_bearer_auth(
 
     client = Client([AddHeadersMiddleware(header_callback)])
     chan = Channel(repo, ChannelConfig(f"http://localhost:{port}/"))
-    plat = Platform("noarch")
+    plat = Platform(PlatformName.NOARCH)
 
     result = await fetch_repo_data(
         channels=[chan],
@@ -97,7 +98,7 @@ async def test_add_headers_middleware_wrong_token_fails(
 
     client = Client([AddHeadersMiddleware(header_callback)])
     chan = Channel(repo, ChannelConfig(f"http://localhost:{port}/"))
-    plat = Platform("noarch")
+    plat = Platform(PlatformName.NOARCH)
 
     # This should fail because the token is wrong
     with pytest.raises(Exception):

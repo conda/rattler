@@ -3,16 +3,15 @@
 import tempfile
 from pathlib import Path
 
-
 from rattler import (
+    LockChannel,
     LockFile,
     LockPlatform,
-    LockChannel,
-    Platform,
     PackageRecord,
+    Platform,
     RepoDataRecord,
 )
-
+from rattler.platform.platform import PlatformName
 
 # Path to test data relative to the repo root
 TEST_DATA_DIR = Path(__file__).parent.parent.parent.parent / "test-data"
@@ -34,14 +33,14 @@ class TestLockPlatformCreation:
         """Test creating a LockPlatform with just a name."""
         platform = LockPlatform("linux-64")
         assert platform.name == "linux-64"
-        assert platform.subdir == Platform("linux-64")
+        assert platform.subdir == Platform(PlatformName.LINUX_64)
         assert platform.virtual_packages == []
 
     def test_platform_with_explicit_subdir(self) -> None:
         """Test creating a LockPlatform with name and explicit subdir."""
-        platform = LockPlatform("linux-64", subdir=Platform("linux-64"))
+        platform = LockPlatform("linux-64", subdir=Platform(PlatformName.LINUX_64))
         assert platform.name == "linux-64"
-        assert platform.subdir == Platform("linux-64")
+        assert platform.subdir == Platform(PlatformName.LINUX_64)
         assert platform.virtual_packages == []
 
     def test_platform_with_virtual_packages(self) -> None:
@@ -56,11 +55,11 @@ class TestLockPlatformCreation:
         virtual_packages = ["__glibc=2.31"]
         platform = LockPlatform(
             "linux-64",
-            subdir=Platform("linux-64"),
+            subdir=Platform(PlatformName.LINUX_64),
             virtual_packages=virtual_packages,
         )
         assert platform.name == "linux-64"
-        assert platform.subdir == Platform("linux-64")
+        assert platform.subdir == Platform(PlatformName.LINUX_64)
         assert platform.virtual_packages == virtual_packages
 
     def test_platform_with_empty_virtual_packages(self) -> None:
@@ -101,7 +100,7 @@ class TestLockFileCreation:
 
     def test_lockfile_with_single_platform_explicit_subdir(self) -> None:
         """Test creating a LockFile with a single platform (explicit subdir)."""
-        platform = LockPlatform("linux-64", subdir=Platform("linux-64"))
+        platform = LockPlatform("linux-64", subdir=Platform(PlatformName.LINUX_64))
         lock_file = LockFile([platform])
 
         platforms = lock_file.platforms()
@@ -123,7 +122,7 @@ class TestLockFileCreation:
         virtual_packages = ["__glibc=2.31", "__cuda=11.0"]
         platform = LockPlatform(
             "linux-64",
-            subdir=Platform("linux-64"),
+            subdir=Platform(PlatformName.LINUX_64),
             virtual_packages=virtual_packages,
         )
         lock_file = LockFile([platform])
@@ -139,7 +138,7 @@ class TestLockFileCreation:
         p1 = LockPlatform("linux-64")
 
         # Platform with explicit subdir
-        p2 = LockPlatform("osx-arm64", subdir=Platform("osx-arm64"))
+        p2 = LockPlatform("osx-arm64", subdir=Platform(PlatformName.OSX_ARM64))
 
         # Platform with virtual packages
         p3 = LockPlatform("win-64", virtual_packages=["__win=10.0"])
@@ -147,7 +146,7 @@ class TestLockFileCreation:
         # Platform with all fields
         p4 = LockPlatform(
             "osx-64",
-            subdir=Platform("osx-64"),
+            subdir=Platform(PlatformName.OSX_64),
             virtual_packages=["__osx=10.15"],
         )
 
@@ -226,7 +225,7 @@ class TestLockFileRoundTrip:
 
     def test_roundtrip_platform_with_explicit_subdir(self) -> None:
         """Test round-tripping a LockFile with explicit subdir."""
-        platform = LockPlatform("linux-64", subdir=Platform("linux-64"))
+        platform = LockPlatform("linux-64", subdir=Platform(PlatformName.LINUX_64))
         lock_file = LockFile([platform])
 
         parsed = self._roundtrip(lock_file)
@@ -250,7 +249,7 @@ class TestLockFileRoundTrip:
         virtual_packages = ["__glibc=2.31"]
         platform = LockPlatform(
             "linux-64",
-            subdir=Platform("linux-64"),
+            subdir=Platform(PlatformName.LINUX_64),
             virtual_packages=virtual_packages,
         )
         lock_file = LockFile([platform])
@@ -264,7 +263,7 @@ class TestLockFileRoundTrip:
         p1 = LockPlatform("linux-64")
 
         # Platform with explicit subdir
-        p2 = LockPlatform("osx-arm64", subdir=Platform("osx-arm64"))
+        p2 = LockPlatform("osx-arm64", subdir=Platform(PlatformName.OSX_ARM64))
 
         # Platform with virtual packages
         p3 = LockPlatform("win-64", virtual_packages=["__win=10.0"])
@@ -272,7 +271,7 @@ class TestLockFileRoundTrip:
         # Platform with all fields
         p4 = LockPlatform(
             "osx-64",
-            subdir=Platform("osx-64"),
+            subdir=Platform(PlatformName.OSX_64),
             virtual_packages=["__osx=10.15"],
         )
 

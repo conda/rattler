@@ -19,22 +19,24 @@ from time import perf_counter
 from typing import cast
 
 from rattler.networking import Client
+from rattler.networking.fetch_repo_data import CacheAction
 from rattler.platform import Platform
+from rattler.platform.platform import PlatformName
 from rattler.repo_data import Dependent, Gateway, SourceConfig
 
 CONDA_FORGE_PLATFORMS = [
-    Platform("linux-64"),
-    Platform("linux-aarch64"),
-    Platform("linux-armv7l"),
-    Platform("linux-ppc64le"),
-    Platform("linux-riscv64"),
-    Platform("linux-s390x"),
-    Platform("osx-64"),
-    Platform("osx-arm64"),
-    Platform("win-32"),
-    Platform("win-64"),
-    Platform("win-arm64"),
-    Platform("noarch"),
+    Platform(PlatformName.LINUX_64),
+    Platform(PlatformName.LINUX_AARCH64),
+    Platform(PlatformName.LINUX_ARMV7L),
+    Platform(PlatformName.LINUX_PPC64LE),
+    Platform(PlatformName.LINUX_RISCV64),
+    Platform(PlatformName.LINUX_S390X),
+    Platform(PlatformName.OSX_64),
+    Platform(PlatformName.OSX_ARM64),
+    Platform(PlatformName.WIN_32),
+    Platform(PlatformName.WIN_64),
+    Platform(PlatformName.WIN_ARM64),
+    Platform(PlatformName.NOARCH),
 ]
 TARGETS = ("python", "polars")
 
@@ -72,7 +74,7 @@ async def main() -> None:
 
     gateway = Gateway(
         default_config=SourceConfig(
-            cache_action="cache-or-fetch",
+            cache_action=CacheAction.CACHE_OR_FETCH,
         ),
         client=Client.default_client(user_agent="pixi-browse-whoneeds-reproducer"),
         show_progress=False,

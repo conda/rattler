@@ -1,16 +1,16 @@
 from __future__ import annotations
-from enum import Enum
 
-from typing import Iterable, Optional
-from pathlib import Path
 import os
-from rattler.platform.platform import Platform, PlatformLiteral
+from enum import Enum
+from pathlib import Path
+from typing import Iterable, Optional
 
+from rattler.platform.platform import Platform, PlatformName
 from rattler.rattler import (
+    PyActivationResult,
     PyActivationVariables,
     PyActivator,
     PyShellEnum,
-    PyActivationResult,
 )
 
 
@@ -95,7 +95,7 @@ def activate(
     prefix: Path,
     activation_variables: ActivationVariables,
     shell: Optional[Shell] = None,
-    platform: Optional[Platform | PlatformLiteral] = None,
+    platform: Optional[Platform | PlatformName] = None,
 ) -> ActivationResult:
     """
     Return an ActivationResult object that contains the new PATH environment variable

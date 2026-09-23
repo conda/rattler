@@ -1,7 +1,10 @@
-import pytest
 from pathlib import Path
+
+import pytest
+
 from rattler.explicit_environment import ExplicitEnvironmentSpec
 from rattler.platform import Platform
+from rattler.platform.platform import PlatformName
 
 test_env = """# This file may be used to create an environment using:
 # $ conda create --name <env> --file <this file>
@@ -21,7 +24,7 @@ def test_parse_explicit_environment_from_str() -> None:
     spec = ExplicitEnvironmentSpec.from_str(test_env)
 
     assert spec.platform is not None
-    assert spec.platform == Platform("linux-64")
+    assert spec.platform == Platform(PlatformName.LINUX_64)
     assert len(spec.packages) == 7
 
     assert (
@@ -53,7 +56,7 @@ http://repo.anaconda.com/pkgs/main/win-64/python-3.9.0-h1234.tar.bz2"""
 
     spec = ExplicitEnvironmentSpec.from_path(env_file)
     assert spec.platform is not None
-    assert spec.platform == Platform("win-64")
+    assert spec.platform == Platform(PlatformName.WIN_64)
     assert len(spec.packages) == 1
 
 

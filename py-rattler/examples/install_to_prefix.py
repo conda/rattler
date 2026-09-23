@@ -2,14 +2,13 @@
 
 import asyncio
 from pathlib import Path
-from typing import get_args
 
-from rattler import install as rattler_install
-from rattler import LockFile, Platform
-from rattler.platform.platform import PlatformLiteral
-from rattler.networking import Client, MirrorMiddleware, AuthenticationMiddleware
 import typer
 
+from rattler import LockFile, Platform
+from rattler import install as rattler_install
+from rattler.networking import AuthenticationMiddleware, Client, MirrorMiddleware
+from rattler.platform.platform import PlatformName
 
 app = typer.Typer()
 
@@ -56,13 +55,13 @@ def install(
     """
     Installs a pixi.lock file to a custom prefix.
     """
-    if platform not in get_args(PlatformLiteral):
-        raise ValueError(f"Invalid platform {platform}. Must be one of {get_args(PlatformLiteral)}")
+    if platform not in tuple(p.value for p in PlatformName):
+        raise ValueError(f"Invalid platform {platform}. Must be one of {tuple(p.value for p in PlatformName)}")
     asyncio.run(
         _install(
             lock_file_path=lock_file_path,
             environment_name=environment_name,
-            platform=Platform(platform),
+            platform=Platform(PlatformName(platform)),
             target_prefix=target_prefix,
         )
     )

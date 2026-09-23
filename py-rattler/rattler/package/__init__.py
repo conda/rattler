@@ -1,3 +1,6 @@
+from rattler.package.paths_json import FileModeName
+from rattler.package.paths_json import PathTypeName
+from rattler.package.no_arch_type import NoArchKind
 from rattler.package.package_name import PackageName
 from rattler.package.about_json import AboutJson
 from rattler.package.run_exports_json import RunExportsJson
@@ -12,6 +15,9 @@ from rattler.package.index_json import IndexJson
 from rattler.package.no_arch_type import NoArchType, NoArchLiteral
 
 __all__ = [
+    "FileModeName",
+    "PathTypeName",
+    "NoArchKind",
     "PackageName",
     "AboutJson",
     "RunExportsJson",

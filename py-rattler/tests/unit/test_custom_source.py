@@ -14,6 +14,7 @@ from rattler import (
     RepoDataSource,
     solve,
 )
+from rattler.platform.platform import PlatformName
 
 
 class MockRepoDataSource(RepoDataSource):
@@ -97,7 +98,7 @@ async def test_custom_source_query() -> None:
     gateway = Gateway()
     results = await gateway.query(
         sources=[source],
-        platforms=["linux-64"],
+        platforms=[PlatformName.LINUX_64],
         specs=["test-package"],
         recursive=False,
     )
@@ -120,7 +121,7 @@ async def test_custom_source_names() -> None:
     gateway = Gateway()
     names = await gateway.names(
         sources=[source],
-        platforms=["linux-64"],
+        platforms=[PlatformName.LINUX_64],
     )
 
     assert sorted(n.normalized for n in names) == ["bar", "foo"]
@@ -138,7 +139,7 @@ async def test_mixed_sources_query(conda_forge_channel: Channel) -> None:
     gateway = Gateway()
     results = await gateway.query(
         sources=[conda_forge_channel, custom_source],
-        platforms=["linux-64"],
+        platforms=[PlatformName.LINUX_64],
         specs=["custom-only-pkg"],
         recursive=False,
     )
@@ -155,7 +156,7 @@ async def test_custom_source_empty_results() -> None:
     gateway = Gateway()
     results = await gateway.query(
         sources=[source],
-        platforms=["linux-64"],
+        platforms=[PlatformName.LINUX_64],
         specs=["nonexistent-package"],
         recursive=False,
     )
@@ -176,7 +177,7 @@ async def test_custom_source_multiple_platforms() -> None:
     gateway = Gateway()
     results = await gateway.query(
         sources=[source],
-        platforms=["linux-64", "noarch"],
+        platforms=[PlatformName.LINUX_64, PlatformName.NOARCH],
         specs=["multi-plat"],
         recursive=False,
     )
@@ -202,7 +203,7 @@ def test_invalid_source_type() -> None:
         asyncio.run(
             gateway.query(
                 sources=[NotASource()],  # type: ignore[list-item]
-                platforms=["linux-64"],
+                platforms=[PlatformName.LINUX_64],
                 specs=["test"],
                 recursive=False,
             )
@@ -225,7 +226,7 @@ async def test_custom_source_with_solve() -> None:
     solved = await solve(
         sources=[source],
         specs=["my-package"],
-        platforms=["linux-64"],
+        platforms=[PlatformName.LINUX_64],
     )
 
     assert len(solved) == 1
@@ -280,7 +281,7 @@ async def test_custom_source_backed_by_sparse_repodata() -> None:
     gateway = Gateway()
     results = await gateway.query(
         sources=[source],
-        platforms=["linux-64"],
+        platforms=[PlatformName.LINUX_64],
         specs=["foobar"],
         recursive=False,
     )
@@ -293,7 +294,7 @@ async def test_custom_source_backed_by_sparse_repodata() -> None:
     solved = await solve(
         sources=[source],
         specs=["foobar"],
-        platforms=["linux-64"],
+        platforms=[PlatformName.LINUX_64],
     )
 
     # Snapshot of solved packages with subdir prefix

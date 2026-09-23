@@ -1,7 +1,9 @@
 from __future__ import annotations
-import os
-from typing import List, TYPE_CHECKING, Literal, Optional
 
+import os
+from typing import TYPE_CHECKING, List, Optional
+
+from rattler._enum import StrEnum
 from rattler.package.paths_json import FileMode
 from rattler.rattler import PyPrefixPaths, PyPrefixPathsEntry, PyPrefixPathType
 
@@ -12,20 +14,22 @@ else:
     BasePathLike = os.PathLike
 
 
+class PrefixPathTypeName(StrEnum):
+    HARDLINK = "hardlink"
+    SOFTLINK = "softlink"
+    DIRECTORY = "directory"
+    PYC_FILE = "pyc_file"
+    WINDOWS_PYTHON_ENTRY_POINT_SCRIPT = "windows_python_entry_point_script"
+    WINDOWS_PYTHON_ENTRY_POINT_EXE = "windows_python_entry_point_exe"
+    UNIX_PYTHON_ENTRY_POINT = "unix_python_entry_point"
+
+
 class PrefixPathType:
     _inner: PyPrefixPathType
 
     def __init__(
         self,
-        path_type: Literal[
-            "hardlink",
-            "softlink",
-            "directory",
-            "pyc_file",
-            "windows_python_entry_point_script",
-            "windows_python_entry_point_exe",
-            "unix_python_entry_point",
-        ],
+        path_type: PrefixPathTypeName,
     ) -> None:
         """
         Create a new PrefixPathType instance.
@@ -38,7 +42,7 @@ class PrefixPathType:
         Examples
         --------
         ```python
-        >>> path_type = PrefixPathType("hardlink")
+        >>> path_type = PrefixPathType(PrefixPathTypeName.HARDLINK)
         >>> path_type.hardlink
         True
         >>>

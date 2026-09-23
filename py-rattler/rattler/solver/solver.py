@@ -1,47 +1,57 @@
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING, List, Literal, Optional, Sequence, Union
+from typing import TYPE_CHECKING, List, Optional, Sequence, Union
 
+from rattler._enum import StrEnum
 from rattler.channel.channel import Channel
 from rattler.channel.channel_priority import ChannelPriority
 from rattler.match_spec.match_spec import MatchSpec
-from rattler.platform.platform import Platform, PlatformLiteral
+from rattler.platform.platform import Platform, PlatformName
 from rattler.rattler import PyMatchSpec, py_solve, py_solve_with_sparse_repodata
 from rattler.repo_data.gateway import ChannelRelationsMode, Gateway, _convert_sources
 from rattler.repo_data.record import RepoDataRecord
-from rattler.repo_data.sparse import SparseRepoData, PackageFormatSelection
+from rattler.repo_data.sparse import PackageFormatSelection, SparseRepoData
 from rattler.virtual_package.generic import GenericVirtualPackage
 from rattler.virtual_package.virtual_package import VirtualPackage
 
 if TYPE_CHECKING:
     from rattler.repo_data.source import RepoDataSource
 
-SolveStrategy = Literal["highest", "lowest", "lowest-direct"]
-"""Defines the strategy to use when multiple versions of a package are available during solving."""
+
+class SolveStrategy(StrEnum):
+    """Defines the strategy to use when multiple versions of a package are available during solving."""
+
+    HIGHEST = "highest"
+    LOWEST = "lowest"
+    LOWEST_DIRECT = "lowest-direct"
 
 
-TimestampPolicy = Literal["allow-missing", "require-timestamp", "require-indexed-timestamp"]
-"""Timestamp selection and missing metadata policy for cutoff filtering."""
+class TimestampPolicy(StrEnum):
+    """Timestamp selection and missing metadata policy for cutoff filtering."""
+
+    ALLOW_MISSING = "allow-missing"
+    REQUIRE_TIMESTAMP = "require-timestamp"
+    REQUIRE_INDEXED_TIMESTAMP = "require-indexed-timestamp"
 
 
 async def solve(
     sources: Sequence[Union[Channel, str, RepoDataSource, SparseRepoData]],
     specs: Sequence[MatchSpec | str],
     gateway: Gateway = Gateway(),
-    platforms: Optional[Sequence[Platform | PlatformLiteral]] = None,
+    platforms: Optional[Sequence[Platform | PlatformName]] = None,
     locked_packages: Optional[Sequence[RepoDataRecord]] = None,
     pinned_packages: Optional[Sequence[RepoDataRecord]] = None,
     virtual_packages: Optional[Sequence[GenericVirtualPackage | VirtualPackage]] = None,
     timeout: Optional[datetime.timedelta] = None,
     channel_priority: ChannelPriority = ChannelPriority.Strict,
     exclude_newer: Optional[datetime.datetime | datetime.timedelta] = None,
-    strategy: SolveStrategy = "highest",
+    strategy: SolveStrategy = SolveStrategy.HIGHEST,
     constraints: Optional[Sequence[MatchSpec | str]] = None,
     channel_relations: Optional[ChannelRelationsMode] = None,
     channel_relations_max_depth: Optional[int] = None,
     add_pip_as_python_dependency: bool = False,
-    timestamp_policy: TimestampPolicy = "require-timestamp",
+    timestamp_policy: TimestampPolicy = TimestampPolicy.REQUIRE_TIMESTAMP,
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -100,7 +110,7 @@ async def solve(
             ``"disabled"`` to solve against exactly the given sources, or
             ``"strict"`` to raise on malformed relation metadata.
         channel_relations_max_depth: Maximum recursion depth when following
-            ``channel_relations``. ``0`` behaves like ``channel_relations="disabled"``.
+            ``channel_relations``. ``0`` behaves like ``channel_relations=ChannelRelationsMode.DISABLED``.
         add_pip_as_python_dependency: Add `pip` as a dependency of Python 2 and 3
             package records before solving.
 
@@ -108,7 +118,7 @@ async def solve(
         Resolved list of `RepoDataRecord`s.
     """
 
-    platforms = platforms if platforms is not None else [Platform.current(), Platform("noarch")]
+    platforms = platforms if platforms is not None else [Platform.current(), Platform(PlatformName.NOARCH)]
 
     return [
         RepoDataRecord._from_py_record(solved_package)
@@ -165,11 +175,11 @@ async def solve_with_sparse_repodata(
     timeout: Optional[datetime.timedelta] = None,
     channel_priority: ChannelPriority = ChannelPriority.Strict,
     exclude_newer: Optional[datetime.datetime | datetime.timedelta] = None,
-    strategy: SolveStrategy = "highest",
+    strategy: SolveStrategy = SolveStrategy.HIGHEST,
     constraints: Optional[Sequence[MatchSpec | str]] = None,
     package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA,
     add_pip_as_python_dependency: bool = False,
-    timestamp_policy: TimestampPolicy = "require-timestamp",
+    timestamp_policy: TimestampPolicy = TimestampPolicy.REQUIRE_TIMESTAMP,
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s

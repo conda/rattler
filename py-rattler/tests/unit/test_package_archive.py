@@ -4,7 +4,7 @@ import threading
 
 import pytest
 
-from rattler.package_streaming import PackageArchive
+from rattler.package_streaming import ArchiveSection, PackageArchive, SparsePolicy
 
 
 @pytest.fixture
@@ -44,10 +44,10 @@ async def test_typed_metadata(conda_package: str) -> None:
 async def test_stream(conda_package: str) -> None:
     archive = await PackageArchive.from_path(conda_package)
 
-    names = [entry.name async for entry in archive.stream("info")]
+    names = [entry.name async for entry in archive.stream(ArchiveSection.INFO)]
     assert "info/index.json" in names
 
-    async for entry in archive.stream("pkg"):
+    async for entry in archive.stream(ArchiveSection.PKG):
         if entry.name == "clobber":
             assert await entry.read() == b"clobber-fd-1\n"
             break
@@ -61,7 +61,7 @@ async def test_tar_bz2(tar_bz2_package: str) -> None:
     assert files["info/index.json"] is not None
     assert files["clobber.txt"] is not None
 
-    names = [entry.name async for entry in archive.stream("pkg")]
+    names = [entry.name async for entry in archive.stream(ArchiveSection.PKG)]
     assert "clobber.txt" in names
     assert not any(name.startswith("info/") for name in names)
 
@@ -69,9 +69,9 @@ async def test_tar_bz2(tar_bz2_package: str) -> None:
 @pytest.mark.asyncio
 async def test_list_files(conda_package: str) -> None:
     archive = await PackageArchive.from_path(conda_package)
-    info = await archive.list_files("info")
+    info = await archive.list_files(ArchiveSection.INFO)
     assert "info/index.json" in info
-    content = await archive.list_files("pkg")
+    content = await archive.list_files(ArchiveSection.PKG)
     assert content == ["clobber"]
 
 
@@ -85,7 +85,7 @@ async def test_run_exports_json_absent(conda_package: str) -> None:
 async def test_symlinks_surfaced_not_followed(test_data_dir: str) -> None:
     archive = await PackageArchive.from_path(os.path.join(test_data_dir, "sparse/symlink-test-1.0.0-0.conda"))
 
-    files = await archive.list_files("pkg")
+    files = await archive.list_files(ArchiveSection.PKG)
     assert "lib/liblink.so" in files and "lib/libreal.so.1" in files
     assert "lib/libhard.so" in files
 
@@ -93,7 +93,7 @@ async def test_symlinks_surfaced_not_followed(test_data_dir: str) -> None:
     with pytest.raises(OSError, match="links are not followed"):
         await archive.read_file("lib/liblink.so")
 
-    async for entry in archive.stream("pkg"):
+    async for entry in archive.stream(ArchiveSection.PKG):
         if entry.name == "lib/liblink.so":
             assert entry.is_link and entry.is_symlink
             assert not entry.is_hardlink and not entry.is_file
@@ -101,7 +101,7 @@ async def test_symlinks_surfaced_not_followed(test_data_dir: str) -> None:
             with pytest.raises(OSError, match="links are not followed"):
                 await entry.read()
 
-    async for entry in archive.stream("pkg"):
+    async for entry in archive.stream(ArchiveSection.PKG):
         if entry.name == "lib/libhard.so":
             assert entry.is_link and entry.is_hardlink
             assert not entry.is_symlink and not entry.is_file
@@ -149,7 +149,7 @@ async def test_remote_fallback_policy(conda_package: str) -> None:
 
         url = f"http://127.0.0.1:{server.server_port}/{os.path.basename(conda_package)}"
         with pytest.raises(OSError, match="does not support sparse"):
-            await PackageArchive.from_url(Client(), url, sparse="require")
+            await PackageArchive.from_url(Client(), url, sparse=SparsePolicy.REQUIRE)
         with pytest.raises(OSError, match="exceeds the configured 1 byte limit"):
             await PackageArchive.from_url(Client(), url, max_spool_size=1)
     finally:

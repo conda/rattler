@@ -1,14 +1,16 @@
 from __future__ import annotations
-import os
-from typing import Dict, List, Optional, TYPE_CHECKING
+
 import datetime
+import os
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from rattler import VersionWithSource
 from rattler.match_spec.match_spec import MatchSpec
-from rattler.package.no_arch_type import NoArchType, NoArchLiteral
+from rattler.package.no_arch_type import NoArchLiteral, NoArchType
 from rattler.package.package_name import PackageName
+from rattler.platform import PlatformName
 from rattler.platform.platform import Platform
-from rattler.rattler import PyRecord, ParsePlatformError
+from rattler.rattler import ParsePlatformError, PyRecord
 
 if TYPE_CHECKING:
     import networkx as nx
@@ -206,8 +208,8 @@ class PackageRecord:
     ) -> None:
         if isinstance(subdir, str):
             try:
-                subdir = Platform(subdir)
-            except ParsePlatformError:
+                subdir = Platform(PlatformName(subdir))
+            except (ParsePlatformError, ValueError):
                 # if the string is not a valid platform, we just keep it as a string
                 pass
 
@@ -679,7 +681,8 @@ class PackageRecord:
         ... )
         >>> record.noarch
         NoArchType("python")
-        >>> record.noarch = NoArchType("generic")
+        >>> from rattler.package import NoArchKind
+        >>> record.noarch = NoArchType(NoArchKind.GENERIC)
         >>> record.noarch
         NoArchType("generic")
         >>> record.noarch = NoArchType(None)
