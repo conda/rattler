@@ -21,7 +21,10 @@ use openidconnect::{
         CoreResponseType, CoreSubjectIdentifierType,
     },
 };
-use rattler_networking::Authentication;
+use rattler_networking::{
+    Authentication,
+    authentication_storage::authentication::{OAuthOidcMetadata, is_oidc_scope},
+};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use url::Url;
@@ -333,7 +336,26 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
         revocation_endpoint: endpoints.revocation_endpoint,
         client_id: config.client_id,
         issuer_url: Some(config.issuer_url),
-        scopes: Some(tokens.scopes),
+        scopes: Some(
+            tokens
+                .scopes
+                .iter()
+                .filter(|scope| !is_oidc_scope(scope))
+                .cloned()
+                .collect(),
+        ),
+        oidc: Some(OAuthOidcMetadata {
+            requested_scopes: config
+                .scopes
+                .iter()
+                .chain(tokens.scopes.iter())
+                .filter(|scope| is_oidc_scope(scope))
+                .cloned()
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect(),
+            id_token_verified: tokens.authenticated_as.is_some(),
+        }),
     })
 }
 
@@ -995,6 +1017,20 @@ mod tests {
         let auth = super::perform_oauth_login(config).await.unwrap();
         assert_eq!(auth.oauth_scopes().unwrap(), ["custom:read"]);
         assert_eq!(auth.oauth_issuer_url(), Some(issuer));
+        let oidc = auth.oauth_oidc_metadata().unwrap();
+        assert_eq!(
+            oidc.requested_scopes,
+            ["offline_access", "openid", "profile"]
+        );
+        // Requesting OIDC scopes does not itself prove session capabilities.
+        assert!(!oidc.id_token_verified);
+        assert!(matches!(
+            auth,
+            rattler_networking::Authentication::OAuth {
+                refresh_token: None,
+                ..
+            }
+        ));
         discovery.assert_async().await;
         jwks.assert_async().await;
         device.assert_async().await;

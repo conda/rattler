@@ -138,11 +138,6 @@ impl AuthenticationStorage {
 
     /// Store the given authentication information for the given host
     pub fn store(&self, host: &str, authentication: &Authentication) -> Result<()> {
-        {
-            let mut cache = self.cache.lock().unwrap();
-            cache.insert(host.to_string(), Some(authentication.clone()));
-        }
-
         for backend in &self.backends {
             #[allow(unused_variables)]
             if let Err(error) = backend.store(host, authentication) {
@@ -159,14 +154,57 @@ impl AuthenticationStorage {
                     tracing::warn!("Error storing credentials from backend: {}", error);
                 }
             } else {
+                self.cache
+                    .lock()
+                    .unwrap()
+                    .insert(host.to_string(), Some(authentication.clone()));
                 return Ok(());
             }
         }
 
         Err(anyhow!(
-            "All backends failed to store credentials. Checked the following backends: {:?}",
-            self.backends
+            "All authentication storage backends failed to store credentials"
         ))
+    }
+
+    /// Read credentials without hiding backend errors or trusting the best-effort
+    /// cache. Use before modifying grants: an unreadable entry is not absent.
+    pub fn get_strict(&self, host: &str) -> Result<Option<Authentication>> {
+        for backend in &self.backends {
+            if let Some(auth) = backend.get(host)? {
+                self.cache
+                    .lock()
+                    .unwrap()
+                    .insert(host.to_owned(), Some(auth.clone()));
+                return Ok(Some(auth));
+            }
+        }
+        self.cache.lock().unwrap().insert(host.to_owned(), None);
+        Ok(None)
+    }
+
+    /// Strict HTTP credential lookup with the same host/wildcard precedence as
+    /// normal lookup. Returns the original key for safe credential updates.
+    /// Unlike middleware lookup, any backend read failure is returned.
+    pub fn get_by_url_with_host_strict(
+        &self,
+        url: &Url,
+    ) -> Result<Option<(String, Authentication)>> {
+        let Some(host) = url.host_str() else {
+            return Ok(None);
+        };
+        if let Some(auth) = self.get_strict(host)? {
+            return Ok(Some((host.to_owned(), auth)));
+        }
+        let mut domain = url.domain();
+        while let Some(value) = domain {
+            let key = format!("*.{value}");
+            if let Some(auth) = self.get_strict(&key)? {
+                return Ok(Some((key, auth)));
+            }
+            domain = value.split_once('.').map(|(_, rest)| rest);
+        }
+        Ok(None)
     }
 
     /// Retrieve the authentication information for the given host

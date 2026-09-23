@@ -20,6 +20,7 @@ fn auth(claims: Value) -> Authentication {
         client_id: "rattler".into(),
         issuer_url: None,
         scopes: None,
+        oidc: None,
     }
 }
 
@@ -41,6 +42,7 @@ fn opaque_grant(config: &OAuthConfig, expiry: Option<i64>) -> Authentication {
         client_id: config.client_id.clone(),
         issuer_url: Some(config.issuer_url.clone()),
         scopes: Some(config.scopes.iter().cloned().collect()),
+        oidc: None,
     }
 }
 

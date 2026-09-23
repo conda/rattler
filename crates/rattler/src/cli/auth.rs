@@ -16,12 +16,26 @@
 //! JWT access tokens. Legacy JWT credentials use claim metadata as a fallback;
 //! a legacy opaque grant without scope metadata cannot be safely extended and
 //! produces an actionable error rather than silently losing permissions.
+//!
+//! Use `auth login HOST --oauth --replace` to intentionally replace a grant,
+//! including switching issuer/client or replacing unknown legacy credentials.
+//! Only defaults and explicit additions are requested in replacement mode;
+//! the old grant is retained until authorization and persistence succeed.
+//! Automatic command authorization never enables replacement.
+//!
+//! Standard OIDC request scopes are remembered separately from resource
+//! permissions: providers need not echo `openid`, `profile`, or `offline_access`
+//! in access-token scopes. ID-token verification and refresh-token availability
+//! describe separate session capabilities, not resource-server authorization.
 
 #[cfg(feature = "oauth")]
 pub mod oauth;
 
 #[cfg(all(test, feature = "oauth"))]
 mod scope_tests;
+
+#[cfg(all(test, feature = "oauth"))]
+mod review_regression_tests;
 
 use base64::{
     Engine as _,
@@ -114,6 +128,16 @@ struct LoginArgs {
         help_heading = "OAuth/OIDC Authentication"
     )]
     oauth_scopes: Vec<String>,
+
+    /// Replace the existing OAuth grant instead of carrying its permissions forward.
+    /// Use explicitly when switching issuer/client; credentials change only on success.
+    #[cfg(feature = "oauth")]
+    #[clap(
+        long = "replace",
+        requires = "oauth",
+        help_heading = "OAuth/OIDC Authentication"
+    )]
+    oauth_replace: bool,
 
     /// OAuth redirect URI (defaults to a random localhost port). Set
     /// this when the OAuth client on the `IdP` side is registered with
@@ -407,32 +431,27 @@ async fn login_oauth_and_store<F, Fut>(
     host: &str,
     storage: &AuthenticationStorage,
     config: oauth::OAuthConfig,
+    replace: bool,
     login: F,
 ) -> Result<(), AuthenticationCLIError>
 where
     F: FnOnce(oauth::OAuthConfig) -> Fut,
     Fut: std::future::Future<Output = Result<Authentication, oauth::OAuthError>>,
 {
-    let mut key = normalize_login_host(host);
-    let mut current = storage.get(&key)?;
-    // Match the normal credential lookup order, but propagate read failures
-    // rather than interpreting unavailable credentials as a missing grant.
-    let lookup_url = Url::parse(&format!("https://{key}"))?;
-    let mut domain = lookup_url.domain();
-    while current.is_none() {
-        let Some(value) = domain else { break };
-        let wildcard_key = format!("*.{value}");
-        current = storage.get(&wildcard_key)?;
-        if current.is_some() {
-            key = wildcard_key;
-        }
-        domain = value.split_once('.').map(|(_, rest)| rest);
+    let host_key = normalize_login_host(host);
+    let lookup_url = Url::parse(&format!("https://{host_key}"))?;
+    let entry = storage.get_by_url_with_host_strict(&lookup_url)?;
+    let (key, current) = entry.map_or((host_key, None), |(key, auth)| (key, Some(auth)));
+    if replace {
+        eprintln!(
+            "Replacing the stored OAuth grant for {key}; previous permissions will not be carried forward."
+        );
     }
     // Explicit OAuth login may replace a different authentication scheme. Only
     // an existing OAuth grant participates in incremental scope preservation.
     let current = current
         .as_ref()
-        .filter(|auth| matches!(auth, Authentication::OAuth { .. }));
+        .filter(|auth| !replace && matches!(auth, Authentication::OAuth { .. }));
     let auth = oauth::reauthorize_with_login(config, current, login).await?;
     storage.store(&key, &auth)?;
     eprintln!("Credentials stored for {key}.");
@@ -546,8 +565,14 @@ async fn login_with_offline(
                 callback_page: None,
             };
 
-            return login_oauth_and_store(&args.host, &storage, config, oauth::perform_oauth_login)
-                .await;
+            return login_oauth_and_store(
+                &args.host,
+                &storage,
+                config,
+                args.oauth_replace,
+                oauth::perform_oauth_login,
+            )
+            .await;
         }
     }
 
@@ -1301,6 +1326,8 @@ mod tests {
             #[cfg(feature = "oauth")]
             oauth_scopes: vec![],
             #[cfg(feature = "oauth")]
+            oauth_replace: false,
+            #[cfg(feature = "oauth")]
             oauth_redirect_uri: None,
             user_agent: None,
         }
@@ -1763,6 +1790,7 @@ mod tests {
                     client_id: "rattler".into(),
                     issuer_url: None,
                     scopes: None,
+                    oidc: None,
                 },
             )
             .unwrap();
@@ -1889,6 +1917,7 @@ mod tests {
             client_id: "rattler".into(),
             issuer_url: None,
             scopes: None,
+            oidc: None,
         };
         // Write directly to each backend so both end up holding the entry —
         // `storage.store()` stops at the first successful backend.

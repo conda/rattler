@@ -11,6 +11,7 @@ fn grant(config: &oauth::OAuthConfig) -> Authentication {
         client_id: config.client_id.clone(),
         issuer_url: Some(config.issuer_url.clone()),
         scopes: Some(config.scopes.iter().cloned().collect()),
+        oidc: None,
     }
 }
 
@@ -71,6 +72,7 @@ async fn explicit_login_unions_defaults_existing_and_custom_scopes_and_keeps_key
             &format!("https://{host}/"),
             &storage,
             config,
+            false,
             |config| async move {
                 assert_eq!(config.flow, oauth::OAuthFlow::DeviceCode);
                 for scope in [
@@ -108,7 +110,7 @@ async fn explicit_login_still_runs_when_permissions_are_already_granted() {
     let config = oauth_config_for_host("prefix.dev", &["custom:read"]).unwrap();
     storage.store("prefix.dev", &grant(&config)).unwrap();
     let called = std::cell::Cell::new(false);
-    login_oauth_and_store("prefix.dev", &storage, config, |config| {
+    login_oauth_and_store("prefix.dev", &storage, config, false, |config| {
         called.set(true);
         async move { Ok(grant(&config)) }
     })
@@ -125,15 +127,20 @@ async fn failed_or_partial_consent_never_replaces_stored_credentials() {
             grant(&oauth_config_for_host("prefix.dev", &["previous:permission"]).unwrap());
         storage.store("prefix.dev", &current).unwrap();
         let config = oauth_config_for_host("prefix.dev", &["custom:read"]).unwrap();
-        let result =
-            login_oauth_and_store("prefix.dev", &storage, config, |mut config| async move {
+        let result = login_oauth_and_store(
+            "prefix.dev",
+            &storage,
+            config,
+            false,
+            |mut config| async move {
                 if !partial {
                     return Err(oauth::OAuthError::Authorization("access_denied".into()));
                 }
                 config.scopes.remove("previous:permission");
                 Ok(grant(&config))
-            })
-            .await;
+            },
+        )
+        .await;
         assert!(result.is_err());
         assert_eq!(storage.get("prefix.dev").unwrap(), Some(current));
     }

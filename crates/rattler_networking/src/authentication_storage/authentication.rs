@@ -11,6 +11,25 @@ use base64::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// OIDC session metadata, distinct from an access token's resource permissions.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
+pub struct OAuthOidcMetadata {
+    /// OIDC scopes requested at login, not claims about resource authorization.
+    pub requested_scopes: Vec<String>,
+    /// Whether an ID token was verified during the last interactive login.
+    /// This does not establish the validity of the current access token.
+    pub id_token_verified: bool,
+}
+
+/// Standard OIDC scopes describe identity/refresh capabilities, not necessarily
+/// permissions included in an access token's `scope` response field.
+pub fn is_oidc_scope(scope: &str) -> bool {
+    matches!(
+        scope,
+        "openid" | "profile" | "email" | "address" | "phone" | "offline_access"
+    )
+}
+
 /// The different Authentication methods that are supported in the conda
 /// ecosystem
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
@@ -58,6 +77,10 @@ pub enum Authentication {
         /// `None` means unknown; `Some(vec![])` is a known empty grant.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scopes: Option<Vec<String>>,
+        /// OIDC request/session metadata. Refresh capability is represented by
+        /// `refresh_token`, not by requiring `offline_access` in token scopes.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        oidc: Option<OAuthOidcMetadata>,
     },
 }
 
@@ -106,6 +129,34 @@ impl Authentication {
                 .as_str()
                 .map(str::to_owned)
         })
+    }
+
+    /// OIDC request metadata, including OIDC scopes found in older mixed-scope
+    /// records. Legacy access-token claims do not prove ID-token verification.
+    pub fn oauth_oidc_metadata(&self) -> Option<OAuthOidcMetadata> {
+        let Self::OAuth { oidc, .. } = self else {
+            return None;
+        };
+        let scopes = self.oauth_scopes();
+        if oidc.is_none() && scopes.is_none() {
+            return None;
+        }
+        let mut metadata = oidc.clone().unwrap_or(OAuthOidcMetadata {
+            requested_scopes: Vec::new(),
+            id_token_verified: false,
+        });
+        metadata.requested_scopes.extend(
+            scopes
+                .into_iter()
+                .flatten()
+                .filter(|scope| is_oidc_scope(scope)),
+        );
+        metadata
+            .requested_scopes
+            .retain(|scope| is_oidc_scope(scope));
+        metadata.requested_scopes.sort();
+        metadata.requested_scopes.dedup();
+        Some(metadata)
     }
 
     /// Known granted scopes, with an unverified JWT fallback for old records.

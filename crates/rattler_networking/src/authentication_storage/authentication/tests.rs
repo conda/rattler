@@ -24,6 +24,8 @@ fn opaque_grant_metadata_round_trips_including_empty_grants() {
         let mut value = legacy("opaque");
         value["OAuth"]["issuer_url"] = json!("https://issuer.example");
         value["OAuth"]["scopes"] = scopes.clone();
+        value["OAuth"]["oidc"] =
+            json!({"requested_scopes":["openid", "offline_access"], "id_token_verified":true});
         let auth: Authentication = serde_json::from_value(value.clone()).unwrap();
         assert_eq!(
             auth.oauth_issuer_url().as_deref(),
@@ -33,6 +35,7 @@ fn opaque_grant_metadata_round_trips_including_empty_grants() {
             serde_json::to_value(auth.oauth_scopes().unwrap()).unwrap(),
             scopes
         );
+        assert!(auth.oauth_oidc_metadata().unwrap().id_token_verified);
         assert_eq!(serde_json::to_value(auth).unwrap(), value);
     }
 }

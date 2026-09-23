@@ -20,7 +20,8 @@
 //!     offline: bool,
 //! ) -> Result<Authentication, Box<dyn std::error::Error>> {
 //!     let issuer = "https://prefix.dev";
-//!     let (_, entry) = storage.get_by_url_with_host(issuer)?;
+//!     let url = url::Url::parse(issuer)?;
+//!     let entry = storage.get_by_url_with_host_strict(&url)?;
 //!     let key = entry.as_ref().map(|(key, _)| key.as_str()).unwrap_or("prefix.dev");
 //!     let (_, current) = if offline {
 //!         storage.get_by_url(issuer)?
@@ -38,7 +39,9 @@
 //!     };
 //!     let config = oauth_config_for_host("prefix.dev", &["basilisk:query"]).unwrap();
 //!     let authorized = ensure_oauth_scopes(config, current.as_ref(), interaction).await?;
-//!     storage.store(key, &authorized)?;
+//!     if current.as_ref() != Some(&authorized) {
+//!         storage.store(key, &authorized)?;
+//!     }
 //!     Ok(authorized)
 //! }
 //! ```
@@ -49,7 +52,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use rattler_networking::Authentication;
+use rattler_networking::{Authentication, authentication_storage::authentication::is_oidc_scope};
 
 use super::{OAuthConfig, OAuthError, perform_oauth_login};
 
@@ -72,11 +75,13 @@ pub enum EnsureScopesError {
     AuthorizationRequired,
     /// An unknown existing grant cannot safely be replaced without losing access.
     #[error(
-        "Cannot determine the existing OAuth grant; credentials are unchanged. Use credentials with known granted-scope metadata, or explicitly log out and authorize all desired permissions again"
+        "Cannot determine the existing OAuth grant; credentials are unchanged. Use credentials with known granted-scope metadata, or explicitly use auth login --oauth --replace with all desired permissions"
     )]
     UnknownGrant,
     /// The caller must not replace another issuer's or client's credentials.
-    #[error("Stored OAuth credentials do not belong to the requested issuer and client")]
+    #[error(
+        "Stored OAuth credentials belong to another issuer or client. To intentionally replace them, use explicit auth login --oauth --replace; automatic scope upgrades cannot switch clients"
+    )]
     DifferentClient,
     /// Reject partial consent rather than silently dropping prior permissions.
     #[error(
@@ -92,6 +97,10 @@ pub enum EnsureScopesError {
 ///
 /// `config.scopes` is the command's desired scope set. Authorization requests
 /// include the union of these scopes and every scope in the existing grant.
+/// Standard OIDC scopes are requested and remembered but are not required in
+/// access-token scope metadata. Only resource permissions are checked for
+/// completeness and cached-token reuse. This does not guarantee availability
+/// of a refresh token or verified identity; those are separate capabilities.
 /// A fresh matching token is reused without opening a browser. Use
 /// [`super::OAuthFlow::Auto`] for browser login with device-code fallback.
 ///
@@ -161,16 +170,20 @@ where
         if !same_issuer(&grant.issuer, &config.issuer_url) || grant.client_id != config.client_id {
             return Err(EnsureScopesError::DifferentClient);
         }
-        if reuse_current && grant.is_fresh() && config.scopes.is_subset(&grant.scopes) {
+        if reuse_current
+            && grant.is_fresh()
+            && resource_scopes(&config.scopes).is_subset(&grant.scopes)
+        {
             return Ok(current.clone());
         }
         config.scopes.extend(grant.scopes);
+        config.scopes.extend(grant.oidc_scopes);
     }
     if interaction == OAuthInteraction::Deny {
         return Err(EnsureScopesError::AuthorizationRequired);
     }
 
-    let requested = config.scopes.clone();
+    let requested = resource_scopes(&config.scopes);
     let issuer = config.issuer_url.clone();
     let client_id = config.client_id.clone();
     let updated = login(config).await?;
@@ -194,10 +207,19 @@ fn same_issuer(left: &str, right: &str) -> bool {
         .is_some_and(|(left, right)| left == right)
 }
 
+fn resource_scopes(scopes: &HashSet<String>) -> HashSet<String> {
+    scopes
+        .iter()
+        .filter(|scope| !is_oidc_scope(scope))
+        .cloned()
+        .collect()
+}
+
 struct Grant {
     issuer: String,
     client_id: String,
     scopes: HashSet<String>,
+    oidc_scopes: HashSet<String>,
     expires_at: Option<i64>,
 }
 
@@ -218,6 +240,7 @@ fn grant(auth: &Authentication) -> Option<Grant> {
         access_token,
         client_id,
         expires_at,
+        oidc,
         ..
     } = auth
     else {
@@ -225,10 +248,25 @@ fn grant(auth: &Authentication) -> Option<Grant> {
     };
     let token_expiry = super::super::jwt_claims(access_token)
         .and_then(|claims| claims.get("exp").and_then(serde_json::Value::as_i64));
+    let scopes: HashSet<_> = auth.oauth_scopes()?.into_iter().collect();
+    let mut oidc_scopes: HashSet<_> = scopes
+        .iter()
+        .filter(|scope| is_oidc_scope(scope))
+        .cloned()
+        .collect();
+    if let Some(oidc) = oidc {
+        oidc_scopes.extend(
+            oidc.requested_scopes
+                .iter()
+                .filter(|scope| is_oidc_scope(scope))
+                .cloned(),
+        );
+    }
     Some(Grant {
         issuer: auth.oauth_issuer_url()?,
         client_id: client_id.clone(),
-        scopes: auth.oauth_scopes()?.into_iter().collect(),
+        scopes: resource_scopes(&scopes),
+        oidc_scopes,
         expires_at: match (*expires_at, token_expiry) {
             (Some(stored), Some(token)) => Some(stored.min(token)),
             (stored, token) => stored.or(token),

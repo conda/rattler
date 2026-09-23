@@ -149,7 +149,13 @@ pub(crate) async fn maybe_refresh_oauth(
 
     // Capture legacy JWT metadata before rotating away the old access token.
     let issuer_url = auth.oauth_issuer_url();
-    let scopes = auth.oauth_scopes();
+    let scopes = auth.oauth_scopes().map(|scopes| {
+        scopes
+            .into_iter()
+            .filter(|scope| !crate::authentication_storage::authentication::is_oidc_scope(scope))
+            .collect()
+    });
+    let oidc = auth.oauth_oidc_metadata();
     let Authentication::OAuth {
         access_token: _,
         ref refresh_token,
@@ -253,8 +259,17 @@ pub(crate) async fn maybe_refresh_oauth(
         issuer_url,
         scopes: token_response
             .scope
-            .map(|scope| scope.split_ascii_whitespace().map(str::to_owned).collect())
+            .map(|scope| {
+                scope
+                    .split_ascii_whitespace()
+                    .filter(|scope| {
+                        !crate::authentication_storage::authentication::is_oidc_scope(scope)
+                    })
+                    .map(str::to_owned)
+                    .collect()
+            })
             .or(scopes),
+        oidc,
     };
 
     if let Err(e) = storage.store(matched_key, &refreshed) {
@@ -291,6 +306,7 @@ mod tests {
             client_id: "client-id".to_string(),
             issuer_url: None,
             scopes: None,
+            oidc: None,
         }
     }
 
@@ -306,6 +322,7 @@ mod tests {
             client_id: "client-id".to_string(),
             issuer_url: None,
             scopes: None,
+            oidc: None,
         }
     }
 
@@ -374,12 +391,26 @@ mod tests {
             .await;
             let mut expired = expired_oauth(token_endpoint);
             if let Authentication::OAuth {
-                issuer_url, scopes, ..
+                issuer_url,
+                scopes,
+                oidc,
+                ..
             } = &mut expired
             {
                 *issuer_url = Some("https://issuer.example".into());
                 *scopes = Some(vec!["custom:read".into(), "custom:write".into()]);
+                *oidc = Some(
+                    crate::authentication_storage::authentication::OAuthOidcMetadata {
+                        requested_scopes: vec![
+                            "email".into(),
+                            "offline_access".into(),
+                            "openid".into(),
+                        ],
+                        id_token_verified: true,
+                    },
+                );
             }
+            let expected_oidc = expired.oauth_oidc_metadata();
             let storage = auth_storage("issuer.example", &expired);
             let refreshed = maybe_refresh_oauth(&storage, expired, "issuer.example")
                 .await
@@ -391,6 +422,7 @@ mod tests {
                 .map(str::to_owned)
                 .collect();
             assert_eq!(refreshed.oauth_scopes(), Some(expected));
+            assert_eq!(refreshed.oauth_oidc_metadata(), expected_oidc);
             assert_eq!(
                 refreshed.oauth_issuer_url().as_deref(),
                 Some("https://issuer.example")
@@ -411,8 +443,7 @@ mod tests {
         .await;
         let mut expired = expired_oauth(token_endpoint);
         if let Authentication::OAuth { access_token, .. } = &mut expired {
-            let claims =
-                json!({"iss":"https://issuer.example", "scope":"custom:read custom:write"});
+            let claims = json!({"iss":"https://issuer.example", "scope":"openid email custom:read custom:write"});
             *access_token = format!(
                 "e30.{}.signature",
                 URL_SAFE_NO_PAD.encode(serde_json::to_vec(&claims).unwrap())
@@ -431,6 +462,9 @@ mod tests {
             refreshed.oauth_issuer_url().as_deref(),
             Some("https://issuer.example")
         );
+        let oidc = refreshed.oauth_oidc_metadata().unwrap();
+        assert_eq!(oidc.requested_scopes, ["email", "openid"]);
+        assert!(!oidc.id_token_verified);
         assert!(
             matches!(refreshed, Authentication::OAuth { access_token, scopes: Some(_), issuer_url: Some(_), .. } if access_token == "opaque")
         );
@@ -573,6 +607,7 @@ mod tests {
             client_id: "client-id".to_string(),
             issuer_url: None,
             scopes: None,
+            oidc: None,
         };
         let storage = auth_storage(host, &expired);
 

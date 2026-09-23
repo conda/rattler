@@ -522,6 +522,7 @@ mod tests {
                 client_id: "client-id".to_string(),
                 issuer_url: None,
                 scopes: None,
+                oidc: None,
             },
         )?;
 
@@ -597,6 +598,7 @@ mod tests {
                 client_id: "client-id".to_string(),
                 issuer_url: None,
                 scopes: None,
+                oidc: None,
             },
         )?;
 
