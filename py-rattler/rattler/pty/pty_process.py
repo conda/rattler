@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import BinaryIO, Optional
+from typing import BinaryIO
 
 # Try to import PTY classes - they may not be available on Windows or without pty feature
 try:
@@ -79,7 +79,7 @@ class PtyProcess:
 
     _inner: PyPtyProcess
 
-    def __init__(self, command: list[str], options: Optional[PtyProcessOptions] = None) -> None:
+    def __init__(self, command: list[str], options: PtyProcessOptions | None = None) -> None:
         """
         Create a new PTY process with the given command.
 
@@ -142,7 +142,7 @@ class PtyProcess:
         """
         return self._inner.child_pid
 
-    def status(self) -> Optional[str]:
+    def status(self) -> str | None:
         """
         Check the status of the child process (non-blocking).
 
@@ -231,7 +231,7 @@ class PtyProcess:
         return os.fdopen(fd, "r+b", buffering=0)
 
     @property
-    def kill_timeout(self) -> Optional[float]:
+    def kill_timeout(self) -> float | None:
         """
         Get the kill timeout in seconds.
 
@@ -253,7 +253,7 @@ class PtyProcess:
         return self._inner.get_kill_timeout()
 
     @kill_timeout.setter
-    def kill_timeout(self, timeout: Optional[float]) -> None:
+    def kill_timeout(self, timeout: float | None) -> None:
         """
         Set the kill timeout in seconds.
 

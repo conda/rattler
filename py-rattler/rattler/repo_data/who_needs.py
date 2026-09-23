@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal
 
 from rattler.package.package_name import PackageName
 from rattler.rattler import PyDependent
@@ -39,7 +39,7 @@ class Dependent:
         return self._dependent.kind
 
     @property
-    def run_export_kind(self) -> Optional[RunExportKind]:
+    def run_export_kind(self) -> RunExportKind | None:
         """
         The run export field the dependency comes from, for `run_export`
         kinds.
@@ -47,7 +47,7 @@ class Dependent:
         return self._dependent.run_export_kind
 
     @property
-    def extra(self) -> Optional[str]:
+    def extra(self) -> str | None:
         """
         The name of the optional feature the dependency comes from, for
         `extra_depends` kinds. The reference only applies when that extra
@@ -66,7 +66,7 @@ class Dependent:
 
 
 def _target_to_py(
-    target: Union[str, PackageName, PackageRecord, GenericVirtualPackage],
+    target: str | PackageName | PackageRecord | GenericVirtualPackage,
 ) -> Any:
     """Converts a who_needs target into its inner PyO3 object."""
     if isinstance(target, str):

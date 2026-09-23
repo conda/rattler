@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from rattler.rattler import (
     PyAddHeadersMiddleware,
@@ -9,8 +9,8 @@ from rattler.rattler import (
     PyMirrorMiddleware,
     PyOciMiddleware,
     PyRetryMiddleware,
-    PyS3Middleware,
     PyS3Config,
+    PyS3Middleware,
 )
 
 
@@ -217,7 +217,7 @@ class S3Middleware:
 
     def __init__(self, config: dict[str, S3Config] | None = None) -> None:
         if config is None:
-            config = dict()
+            config = {}
         self._middleware = PyS3Middleware({k: v._config for k, v in config.items()})
 
     def __repr__(self) -> str:

@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from typing import Union, Optional
-
 from rattler.rattler import PyVersion
-
 from rattler.version import Version
 
 
@@ -28,7 +25,7 @@ class VersionWithSource(Version):
 
     _source: str
 
-    def __init__(self, version: Union[str, Version]):
+    def __init__(self, version: str | Version):
         if not isinstance(version, (str, Version)):
             raise TypeError(
                 "VersionWithSource constructor received unsupported type "
@@ -44,7 +41,7 @@ class VersionWithSource(Version):
             self._version = version._version
 
     @classmethod
-    def _from_py_version(cls, py_version: PyVersion, source: Optional[str] = None) -> VersionWithSource:
+    def _from_py_version(cls, py_version: PyVersion, source: str | None = None) -> VersionWithSource:
         """Construct Rattler version from FFI PyVersion object."""
         version = cls.__new__(cls)
         version._version = py_version

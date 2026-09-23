@@ -6,17 +6,16 @@ from pathlib import Path
 import pytest
 
 from rattler import (
-    solve,
-    ChannelPriority,
-    RepoDataRecord,
     Channel,
+    ChannelPriority,
     Gateway,
-    SparseRepoData,
     MatchSpec,
-    solve_with_sparse_repodata,
     PackageFormatSelection,
+    RepoDataRecord,
+    SparseRepoData,
+    solve,
+    solve_with_sparse_repodata,
 )
-
 from rattler.solver import TimestampPolicy
 
 
@@ -124,7 +123,7 @@ async def test_solve_channel_priority_disabled(
     assert isinstance(solved_data, list)
     assert isinstance(solved_data[0], RepoDataRecord)
     assert (
-        list(filter(lambda r: r.file_name.startswith("pytorch-cpu-0.4.1-py36_cpu_1"), solved_data))[0].channel
+        next(r for r in solved_data if r.file_name.startswith("pytorch-cpu-0.4.1-py36_cpu_1")).channel
         == pytorch_channel.base_url
     )
     assert len(solved_data) == 32

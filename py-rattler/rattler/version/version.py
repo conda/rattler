@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional, Tuple, Union
-
-from rattler.rattler import PyVersion, InvalidVersionError
+from rattler.rattler import InvalidVersionError, PyVersion
 
 
 class Version:
@@ -35,7 +33,7 @@ class Version:
         return version
 
     @property
-    def epoch(self) -> Optional[str]:
+    def epoch(self) -> str | None:
         """
         Gets the epoch of the version or `None` if the epoch was not defined.
 
@@ -225,7 +223,7 @@ class Version:
         """
         return self._version.has_local()
 
-    def segments(self) -> List[List[Union[str, int]]]:
+    def segments(self) -> list[list[str | int]]:
         """
         Returns a list of segments of the version. It does not contain
         the local segment of the version.
@@ -241,7 +239,7 @@ class Version:
         """
         return self._version.segments()
 
-    def local_segments(self) -> List[List[Union[str, int]]]:
+    def local_segments(self) -> list[list[str | int]]:
         """
         Returns a list of local segments of the version. It does not
         contain the non-local segment of the version.
@@ -257,7 +255,7 @@ class Version:
         """
         return self._version.local_segments()
 
-    def as_major_minor(self) -> Optional[Tuple[int, int]]:
+    def as_major_minor(self) -> tuple[int, int] | None:
         """
         Returns the major and minor segments from the version.
         Requires a minimum of 2 segments in version to be split

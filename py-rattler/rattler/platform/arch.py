@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from rattler.rattler import PyArch
-
 from typing import Literal
+
+from rattler.rattler import PyArch
 
 ArchLiteral = Literal[
     "x86",

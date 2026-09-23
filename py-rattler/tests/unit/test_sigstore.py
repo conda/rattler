@@ -8,8 +8,8 @@ from rattler import (
     Publisher,
     RepoDataRecord,
     TrustedRoot,
-    VerificationPolicy,
     VerificationMode,
+    VerificationPolicy,
     install,
     verify_attestation,
 )

@@ -2,6 +2,7 @@ try:
     from rattler.rattler import (
         ActivationError,
         ActivationScriptFormatError,
+        AttestationError,
         AuthenticationStorageError,
         CacheDirError,
         CanonicalMatchSpecError,
@@ -15,7 +16,6 @@ try:
         GatewayError,
         GatewayWarning,
         InstallerError,
-        AttestationError,
         InvalidChannelError,
         InvalidHeaderNameError,
         InvalidHeaderValueError,
@@ -162,6 +162,7 @@ except ImportError:
 __all__ = [
     "ActivationError",
     "ActivationScriptFormatError",
+    "AttestationError",
     "AuthenticationStorageError",
     "CacheDirError",
     "CanonicalMatchSpecError",
@@ -175,7 +176,6 @@ __all__ = [
     "GatewayError",
     "GatewayWarning",
     "InstallerError",
-    "AttestationError",
     "InvalidChannelError",
     "InvalidHeaderNameError",
     "InvalidHeaderValueError",

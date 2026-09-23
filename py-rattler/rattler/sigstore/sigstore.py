@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 from urllib.parse import urlsplit
 
 from rattler.networking import Client
@@ -60,8 +59,8 @@ class Issuer:
 class Publisher:
     """Signing certificate constraints applied to every verified package."""
 
-    identity: Optional[str] = None
-    issuer: Optional[Issuer] = None
+    identity: str | None = None
+    issuer: Issuer | None = None
 
 
 class TrustedRoot:
@@ -126,7 +125,7 @@ class VerificationPolicy:
         self,
         inner: PyVerificationPolicy,
         mode: VerificationMode,
-        publisher: Optional[Publisher],
+        publisher: Publisher | None,
         channel_check: ChannelCheck,
         max_sidecar_size: int,
     ) -> None:
@@ -150,7 +149,7 @@ class VerificationPolicy:
     @classmethod
     def warn(
         cls,
-        publisher: Optional[Publisher] = None,
+        publisher: Publisher | None = None,
         *,
         channel_check: ChannelCheck = ChannelCheck.REQUIRE,
         max_sidecar_size: int = DEFAULT_MAX_SIDECAR_SIZE,
@@ -162,7 +161,7 @@ class VerificationPolicy:
     @classmethod
     def require(
         cls,
-        publisher: Optional[Publisher] = None,
+        publisher: Publisher | None = None,
         *,
         channel_check: ChannelCheck = ChannelCheck.REQUIRE,
         max_sidecar_size: int = DEFAULT_MAX_SIDECAR_SIZE,
@@ -195,7 +194,7 @@ class VerificationPolicy:
         return self._mode
 
     @property
-    def publisher(self) -> Optional[Publisher]:
+    def publisher(self) -> Publisher | None:
         return self._publisher
 
     @property
@@ -220,10 +219,10 @@ class VerifiedAttestation:
     """A Sigstore bundle that passed signature, CEP 27, and publisher checks."""
 
     index: int
-    identity: Optional[str]
-    issuer: Optional[str]
-    integrated_time: Optional[str]
-    target_channel: Optional[str]
+    identity: str | None
+    issuer: str | None
+    integrated_time: str | None
+    target_channel: str | None
     warnings: list[str]
 
 
@@ -231,7 +230,7 @@ class VerifiedAttestation:
 class VerificationOutcome:
     """The result of applying a verification policy to one package record."""
 
-    attestation: Optional[VerifiedAttestation]
+    attestation: VerifiedAttestation | None
     warnings: list[str]
 
     @property
@@ -257,8 +256,8 @@ class VerificationOutcome:
 async def verify_attestation(
     record: RepoDataRecord,
     policy: VerificationPolicy,
-    client: Optional[Client] = None,
-    trusted_root: Optional[TrustedRoot] = None,
+    client: Client | None = None,
+    trusted_root: TrustedRoot | None = None,
 ) -> VerificationOutcome:
     """Discover and verify the Sigstore attestations advertised by ``record``.
 
