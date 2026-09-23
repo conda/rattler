@@ -4,6 +4,7 @@ import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
+from rattler.package.build_string import BuildString
 from rattler.package.no_arch_type import NoArchLiteral, NoArchType
 from rattler.package.package_name import PackageName
 from rattler.rattler import PyIndexJson
@@ -145,7 +146,8 @@ class IndexJson:
     @property
     def build(self) -> str:
         """
-        The build string of the package.
+        The build string of the package. String assignments are validated against
+        CEP26; pass ``BuildString.new_unchecked(value)`` to skip validation explicitly.
 
         Examples
         --------
@@ -161,8 +163,8 @@ class IndexJson:
         return self._inner.build
 
     @build.setter
-    def build(self, value: str) -> None:
-        self._inner.build = value
+    def build(self, value: str | BuildString) -> None:
+        self._inner.build = BuildString._to_py(value)
 
     @property
     def build_number(self) -> int:

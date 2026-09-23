@@ -6,7 +6,7 @@ use clap::ValueEnum;
 use miette::IntoDiagnostic;
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
-    ParseMatchSpecOptions, Platform, RepoDataRecord, SolverResult, Version,
+    ParseMatchSpecOptions, Platform, RepoDataRecord, SolverResult, Version, package::BuildString,
 };
 use rattler_solve::{IntoRepoData, SolveError, SolverImpl, SolverTask, libsolv_c, resolvo};
 use rattler_virtual_packages::{VirtualPackageOverrides, VirtualPackages};
@@ -212,7 +212,8 @@ impl SolverArgs {
                         .get(1)
                         .map_or(Version::from_str("0"), |s| Version::from_str(s))
                         .into_diagnostic()?,
-                    build_string: (*elems.get(2).unwrap_or(&"")).to_string(),
+                    build_string: BuildString::new(*elems.get(2).unwrap_or(&"0"))
+                        .into_diagnostic()?,
                 })
             })
             .collect()
@@ -291,6 +292,31 @@ impl SolverArgs {
             records.retain(|r| specs.iter().any(|s| s.matches(&r.package_record)));
         } else if self.only_deps {
             records.retain(|r| !specs.iter().any(|s| s.matches(&r.package_record)));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[derive(Parser)]
+    struct Opt {
+        #[clap(flatten)]
+        solver: SolverArgs,
+    }
+
+    #[test]
+    fn virtual_package_build_strings() {
+        for (input, expected) in [("__cuda=12", "0"), ("__archspec=1=x86_64", "x86_64")] {
+            let opt = Opt::parse_from(["rattler", "--virtual-package", input]);
+            let packages = opt.solver.virtual_packages().unwrap();
+            assert_eq!(packages[0].build_string, expected);
+        }
+        for input in ["__cuda=12=", "__cuda=12=invalid-build"] {
+            let opt = Opt::parse_from(["rattler", "--virtual-package", input]);
+            assert!(opt.solver.virtual_packages().is_err());
         }
     }
 }

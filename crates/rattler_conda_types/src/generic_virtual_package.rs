@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{PackageName, Version};
+use crate::{PackageName, Version, package::BuildString};
 use std::fmt::{Display, Formatter};
 
 /// A `GenericVirtualPackage` is a Conda package description that contains a `name` and a
-/// `version` and a `build_string`.
+/// `version` and a `build_string`. Virtual packages without a build identifier
+/// (e.g. `__cuda`) carry the build string `"0"`.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct GenericVirtualPackage {
     /// The name of the package
@@ -13,17 +14,18 @@ pub struct GenericVirtualPackage {
     /// The version of the package
     pub version: Version,
 
-    /// The build identifier of the package.
-    pub build_string: String,
+    /// The build identifier of the package. `"0"` when the virtual package
+    /// has no build identifier.
+    pub build_string: BuildString,
 }
 
 impl Display for GenericVirtualPackage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}={}", &self.name.as_normalized(), &self.version)?;
-        if self.build_string.is_empty() {
-            return Ok(());
+        if !self.build_string.is_empty() {
+            write!(f, "={}", &self.build_string)?;
         }
-        write!(f, "={}", &self.build_string)
+        Ok(())
     }
 }
 
@@ -49,7 +51,10 @@ impl<'de> Deserialize<'de> for GenericVirtualPackage {
             .unwrap_or("0")
             .parse()
             .map_err(serde::de::Error::custom)?;
-        let build_string = parts.next().unwrap_or("").to_string();
+        let build_string = parts.next().map_or_else(
+            || BuildString::new_unchecked("0"),
+            BuildString::new_unchecked,
+        );
 
         Ok(GenericVirtualPackage {
             name,
@@ -68,7 +73,7 @@ mod tests {
         let p = GenericVirtualPackage {
             name: "foo".parse().unwrap(),
             version: "1.2.3".parse().unwrap(),
-            build_string: "py_0".to_string(),
+            build_string: BuildString::new("py_0").unwrap(),
         };
         let s = serde_json::to_string(&p).unwrap();
         assert_eq!(s, "\"foo=1.2.3=py_0\"");
@@ -78,15 +83,16 @@ mod tests {
         let p = GenericVirtualPackage {
             name: "foo".parse().unwrap(),
             version: "1.2.3".parse().unwrap(),
-            build_string: "".to_string(),
+            build_string: BuildString::new_unchecked("0"),
         };
         let s = serde_json::to_string(&p).unwrap();
-        assert_eq!(s, "\"foo=1.2.3\"");
+        assert_eq!(s, "\"foo=1.2.3=0\"");
         let p2: GenericVirtualPackage = serde_json::from_str(&s).unwrap();
         assert_eq!(p, p2);
 
+        // A missing version and build string default to "0".
         let p2: GenericVirtualPackage = serde_json::from_str("\"__cuda\"").unwrap();
         let s = serde_json::to_string(&p2).unwrap();
-        assert_eq!(s, "\"__cuda=0\"");
+        assert_eq!(s, "\"__cuda=0=0\"");
     }
 }

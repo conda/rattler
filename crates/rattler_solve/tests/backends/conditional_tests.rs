@@ -22,7 +22,7 @@ pub(super) fn solve_conditional_dependencies<T: SolverImpl + Default>() {
     let unix_virtual = GenericVirtualPackage {
         name: "__unix".parse().unwrap(),
         version: Version::from_str("0").unwrap(),
-        build_string: "0".to_string(),
+        build_string: BuildString::new("0").unwrap(),
     };
 
     run_solver_cases::<T>(&[
@@ -83,7 +83,7 @@ pub(super) fn solve_complex_conditional_dependencies<T: SolverImpl + Default>() 
     let unix_virtual = GenericVirtualPackage {
         name: "__unix".parse().unwrap(),
         version: Version::from_str("0").unwrap(),
-        build_string: "0".to_string(),
+        build_string: BuildString::new("0").unwrap(),
     };
 
     run_solver_cases::<T>(&[
@@ -157,7 +157,7 @@ pub(super) fn solve_conditional_root_requirement_satisfied<T: SolverImpl + Defau
     let unix_virtual = GenericVirtualPackage {
         name: "__unix".parse().unwrap(),
         version: Version::from_str("0").unwrap(),
-        build_string: "0".to_string(),
+        build_string: BuildString::new("0").unwrap(),
     };
 
     SolverCase::new("conditional root spec includes package when condition satisfied")
@@ -178,7 +178,7 @@ pub(super) fn solve_conditional_root_requirement_not_satisfied<T: SolverImpl + D
     let unix_virtual = GenericVirtualPackage {
         name: "__unix".parse().unwrap(),
         version: Version::from_str("0").unwrap(),
-        build_string: "0".to_string(),
+        build_string: BuildString::new("0").unwrap(),
     };
 
     SolverCase::new("conditional root spec excludes package when condition not satisfied")
@@ -198,12 +198,12 @@ pub(super) fn solve_conditional_root_requirement_with_logic<T: SolverImpl + Defa
     let unix_virtual = GenericVirtualPackage {
         name: "__unix".parse().unwrap(),
         version: Version::from_str("0").unwrap(),
-        build_string: "0".to_string(),
+        build_string: BuildString::new("0").unwrap(),
     };
     let linux_virtual = GenericVirtualPackage {
         name: "__linux".parse().unwrap(),
         version: Version::from_str("0").unwrap(),
-        build_string: "0".to_string(),
+        build_string: BuildString::new("0").unwrap(),
     };
 
     SolverCase::new(
@@ -245,19 +245,19 @@ pub(super) fn rattler_issue_1917_platform_conditionals<T: SolverImpl + Default>(
     let osx_virtual = GenericVirtualPackage {
         name: "__osx".parse().unwrap(),
         version: Version::from_str("15.6.1").unwrap(),
-        build_string: "0".to_string(),
+        build_string: BuildString::new("0").unwrap(),
     };
 
     let linux_virtual = GenericVirtualPackage {
         name: "__linux".parse().unwrap(),
         version: Version::from_str("0").unwrap(),
-        build_string: "0".to_string(),
+        build_string: BuildString::new("0").unwrap(),
     };
 
     let win_virtual = GenericVirtualPackage {
         name: "__win".parse().unwrap(),
         version: Version::from_str("0").unwrap(),
-        build_string: "0".to_string(),
+        build_string: BuildString::new("0").unwrap(),
     };
 
     run_solver_cases::<T>(&[
@@ -337,7 +337,7 @@ pub(super) fn rattler_issue_1917_version_conditionals<T: SolverImpl + Default>()
     let osx_virtual = GenericVirtualPackage {
         name: "__osx".parse().unwrap(),
         version: Version::from_str("15.6.1").unwrap(),
-        build_string: "0".to_string(),
+        build_string: BuildString::new("0").unwrap(),
     };
 
     run_solver_cases::<T>(&[

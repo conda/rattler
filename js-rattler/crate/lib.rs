@@ -1,3 +1,4 @@
+mod build_string;
 mod error;
 mod gateway;
 mod noarch_type;

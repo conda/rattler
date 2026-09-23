@@ -17,6 +17,24 @@ Rattler is written in Rust and tries to provide a clean API to its functionaliti
 
 This package provides bindings to the native Rust library compiled to WASM.
 
+## Build strings
+
+Assigning a string to `PackageRecord.build` validates CEP26: 1–64 ASCII letters,
+digits, underscores, dots or plus signs. Invalid values throw an error with code
+`PARSE_BUILD_STRING` and leave the record unchanged.
+
+```ts
+import { BuildString } from "@conda-org/rattler";
+
+record.build = "py_0";
+record.build = new BuildString("py_0");
+record.build = BuildString.newUnchecked("py3-none-any"); // Explicitly skip validation.
+```
+
+BuildString objects can be reused after assignment. Reading `record.build` still
+returns a string. Construction from JSON and repodata loading remain unchecked
+so legacy values, including empty strings, round-trip unchanged.
+
 ## Development
 
 This project uses [pixi](https://pixi.sh) to manage the development environment and tasks.

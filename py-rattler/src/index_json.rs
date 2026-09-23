@@ -17,8 +17,8 @@ use rattler_package_streaming::seek::read_package_file;
 use url::Url;
 
 use crate::{
-    error::PyRattlerError, networking::client::PyClientWithMiddleware, no_arch_type::PyNoArchType,
-    package_name::PyPackageName, version::PyVersion,
+    build_string::PyBuildString, error::PyRattlerError, networking::client::PyClientWithMiddleware,
+    no_arch_type::PyNoArchType, package_name::PyPackageName, version::PyVersion,
 };
 
 #[pyclass(from_py_object)]
@@ -134,12 +134,12 @@ impl PyIndexJson {
     /// The build string of the package.
     #[getter]
     pub fn build(&self) -> String {
-        self.inner.build.clone()
+        self.inner.build.to_string()
     }
 
     #[setter]
-    pub fn set_build(&mut self, build: String) {
-        self.inner.build = build;
+    pub fn set_build(&mut self, build: PyBuildString) {
+        self.inner.build = build.inner;
     }
 
     /// The build number of the package. This is also included in the build string.

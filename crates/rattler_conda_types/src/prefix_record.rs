@@ -273,13 +273,16 @@ impl PrefixRecord {
     }
 
     /// Return the canonical file name for a `PrefixRecord`. Takes the form of
-    /// `<package_name>-<version>-<build>.json`.
+    /// `<package_name>-<version>-<build>.json`. The three segments are always
+    /// present so that the file name can be parsed back by splitting on the
+    /// last two `-` characters.
     pub fn file_name(&self) -> String {
+        let record = &self.repodata_record.package_record;
         format!(
             "{}-{}-{}.json",
-            self.repodata_record.package_record.name.as_normalized(),
-            self.repodata_record.package_record.version,
-            self.repodata_record.package_record.build
+            record.name.as_normalized(),
+            record.version,
+            record.build,
         )
     }
 
@@ -467,6 +470,52 @@ mod test {
         let path = get_test_data_dir().join("conda-meta").join(path_name);
         let prefix_record = super::PrefixRecord::from_path(path).unwrap();
         insta::assert_yaml_snapshot!(path_name.replace('.', "_"), prefix_record);
+    }
+
+    /// The canonical conda-meta file name must always contain three
+    /// `-`-separated segments because `MinimalPrefixRecord::from_path` parses
+    /// the name, version and build back out of the file name by splitting on
+    /// the last two `-` characters.
+    #[test]
+    fn test_file_name_round_trips() {
+        use std::str::FromStr;
+
+        use itertools::Itertools;
+
+        use crate::{
+            PackageName, PackageRecord, RepoDataRecord, Version,
+            package::{BuildString, DistArchiveIdentifier},
+        };
+
+        let record = super::PrefixRecord::from_repodata_record(
+            RepoDataRecord {
+                package_record: PackageRecord::new(
+                    PackageName::new_unchecked("foo-bar"),
+                    Version::from_str("1.0").unwrap(),
+                    BuildString::new_unchecked("0"),
+                ),
+                identifier: "foo-bar-1.0-py37_0.conda"
+                    .parse::<DistArchiveIdentifier>()
+                    .unwrap(),
+                url: url::Url::parse("https://example.com/foo-bar-1.0.conda").unwrap(),
+                channel: None,
+            },
+            Vec::new(),
+        );
+
+        let file_name = record.file_name();
+        assert_eq!(file_name, "foo-bar-1.0-0.json");
+
+        // Parse it back the same way `MinimalPrefixRecord::from_path` does.
+        let (build, version, name) = file_name
+            .strip_suffix(".json")
+            .unwrap()
+            .rsplitn(3, '-')
+            .next_tuple()
+            .unwrap();
+        assert_eq!(name, "foo-bar");
+        assert_eq!(version, "1.0");
+        assert_eq!(build, "0");
     }
 
     #[test]

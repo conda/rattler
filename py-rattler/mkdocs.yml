@@ -119,6 +119,7 @@ nav:
       - networking:
           - Client: client.md
       - package:
+          - BuildString: build_string.md
           - PackageName: package_name.md
       - platform:
           - Arch: arch.md

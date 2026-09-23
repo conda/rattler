@@ -2183,7 +2183,7 @@ packages:
     fn builder_deduplicates_conda_source_packages() {
         use std::collections::BTreeMap;
 
-        use rattler_conda_types::{PackageName, PackageRecord};
+        use rattler_conda_types::{PackageName, PackageRecord, package::BuildString};
 
         use crate::{
             CondaPackageData, CondaSourceData, PlatformData, SourceData, SourceMetadata, UrlOrPath,
@@ -2204,7 +2204,7 @@ packages:
                 let mut r = PackageRecord::new(
                     PackageName::new_unchecked("my-source-pkg"),
                     version,
-                    "py_0".to_string(),
+                    BuildString::new("py_0").unwrap(),
                 );
                 r.subdir = "noarch".to_string();
                 r
@@ -2388,7 +2388,8 @@ packages:
         };
 
         use rattler_conda_types::{
-            PackageName, PackageRecord, Version, package::DistArchiveIdentifier,
+            PackageName, PackageRecord, Version,
+            package::{BuildString, DistArchiveIdentifier},
         };
         use url::Url;
 
@@ -2410,7 +2411,7 @@ packages:
                     ..PackageRecord::new(
                         PackageName::new_unchecked(name),
                         Version::from_str(version).unwrap(),
-                        "build0".into(),
+                        BuildString::new("build0").unwrap(),
                     )
                 },
                 location: Url::parse(&format!(

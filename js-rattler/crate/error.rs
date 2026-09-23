@@ -1,3 +1,4 @@
+use rattler_conda_types::package::BuildStringError;
 use rattler_conda_types::version_spec::ParseVersionSpecError;
 use rattler_conda_types::{
     InvalidPackageNameError, ParseChannelError, ParseMatchSpecError, ParsePlatformError,
@@ -12,6 +13,8 @@ use wasm_bindgen::{JsCast, JsValue};
 pub enum JsError {
     #[error(transparent)]
     InvalidVersion(#[from] ParseVersionError),
+    #[error(transparent)]
+    InvalidBuildString(#[from] BuildStringError),
     #[error(transparent)]
     VersionExtendError(#[from] VersionExtendError),
     #[error(transparent)]
@@ -47,6 +50,7 @@ impl JsError {
     fn code(&self) -> &'static str {
         match self {
             JsError::InvalidVersion(_) => "PARSE_VERSION",
+            JsError::InvalidBuildString(_) => "PARSE_BUILD_STRING",
             JsError::VersionExtendError(_) => "VERSION_EXTEND",
             JsError::VersionBumpError(_) => "VERSION_BUMP",
             JsError::ParseVersionSpecError(_) => "PARSE_VERSION_SPEC",

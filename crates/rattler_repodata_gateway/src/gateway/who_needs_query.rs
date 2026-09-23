@@ -478,7 +478,7 @@ mod tests {
         let cuda = rattler_conda_types::GenericVirtualPackage {
             name: PackageName::from_str("__cuda").unwrap(),
             version: rattler_conda_types::Version::from_str("12.5").unwrap(),
-            build_string: "0".to_string(),
+            build_string: rattler_conda_types::package::BuildString::new_unchecked("0"),
         };
         insta::assert_snapshot!(
             who_needs_dummy("dummy", Platform::Linux64, cuda.into()).await,

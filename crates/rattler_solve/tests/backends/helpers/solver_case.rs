@@ -313,7 +313,7 @@ impl PackageFingerprint {
         Self {
             name: record.package_record.name.as_normalized().to_string(),
             version: record.package_record.version.as_str().to_string(),
-            build: record.package_record.build.clone(),
+            build: record.package_record.build.to_string(),
             build_number: record.package_record.build_number,
             channel: record.channel.clone(),
             subdir: record.package_record.subdir.clone(),
@@ -322,9 +322,10 @@ impl PackageFingerprint {
     }
 
     fn matches(&self, record: &RepoDataRecord) -> bool {
+        let record_build = record.package_record.build.as_str();
         self.name == record.package_record.name.as_normalized()
             && self.version == record.package_record.version.as_str()
-            && self.build == record.package_record.build
+            && self.build == record_build
             && self.build_number == record.package_record.build_number
             && self.channel == record.channel
             && self.subdir == record.package_record.subdir
@@ -338,13 +339,16 @@ pub trait IntoPkgMatcher {
 
 impl IntoPkgMatcher for &RepoDataRecord {
     fn into_pkg_matcher(self) -> PkgMatcher {
+        let name = self.package_record.name.as_normalized();
+        let version = &self.package_record.version;
+        let build = &self.package_record.build;
+        let display = if build.is_empty() {
+            format!("{name}={version}")
+        } else {
+            format!("{name}={version}={build}")
+        };
         PkgMatcher {
-            display: format!(
-                "{}={}={}",
-                self.package_record.name.as_normalized(),
-                self.package_record.version,
-                self.package_record.build
-            ),
+            display,
             kind: MatcherKind::Exact {
                 fingerprint: PackageFingerprint::new(self),
             },
@@ -437,12 +441,14 @@ fn format_records(records: &[RepoDataRecord]) -> String {
     records
         .iter()
         .map(|record| {
-            format!(
-                "{}={}={}",
-                record.package_record.name.as_normalized(),
-                record.package_record.version,
-                record.package_record.build
-            )
+            let name = record.package_record.name.as_normalized();
+            let version = &record.package_record.version;
+            let build = &record.package_record.build;
+            if build.is_empty() {
+                format!("{name}={version}")
+            } else {
+                format!("{name}={version}={build}")
+            }
         })
         .collect::<Vec<_>>()
         .join(", ")

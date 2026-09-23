@@ -336,7 +336,7 @@ fn run_export_fields(run_exports: &RunExportsJson) -> [(&[String], RunExportKind
 mod tests {
     use rattler_conda_types::{
         Version,
-        package::{DistArchiveIdentifier, RunExportsJson},
+        package::{BuildString, DistArchiveIdentifier, RunExportsJson},
     };
     use url::Url;
 
@@ -360,7 +360,7 @@ mod tests {
         let mut package_record = PackageRecord::new(
             name.parse().unwrap(),
             version.parse::<Version>().unwrap(),
-            build.to_string(),
+            BuildString::new_unchecked(build),
         );
         package_record.depends = depends.into_iter().map(String::from).collect();
         package_record.constrains = constrains.into_iter().map(String::from).collect();
@@ -432,7 +432,7 @@ mod tests {
         PackageRecord::new(
             name.parse().unwrap(),
             version.parse::<Version>().unwrap(),
-            build.to_string(),
+            BuildString::new_unchecked(build),
         )
     }
 
@@ -570,7 +570,7 @@ mod tests {
         let cuda = |version: &str| GenericVirtualPackage {
             name: "__cuda".parse().unwrap(),
             version: version.parse().unwrap(),
-            build_string: "0".to_string(),
+            build_string: BuildString::new_unchecked("0"),
         };
         let result = dependents(&records, cuda("12.4"));
         assert_eq!(names(&result), vec!["cuda-tool"]);

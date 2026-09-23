@@ -147,7 +147,7 @@ fn compare_metadata(left: &IndexJson, right: &IndexJson) -> bool {
         left.version.to_string(),
         right.version.to_string(),
     );
-    compare("build", left.build.clone(), right.build.clone());
+    compare("build", left.build.to_string(), right.build.to_string());
     compare(
         "build_number",
         left.build_number.to_string(),

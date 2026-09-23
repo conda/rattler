@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `BuildString` with a validating constructor, `newUnchecked()` and `toString()`.
+
+### Changed
+
+- Assigning a string to `PackageRecord.build` now validates CEP26 and throws `PARSE_BUILD_STRING` for invalid values. Pass a `BuildString.newUnchecked(value)` object to bypass validation explicitly. Reading builds still returns strings; JSON and repodata loading remain unchecked for compatibility.
+
 ## [0.4.0] - 2026-08-19
 
 ### Highlights

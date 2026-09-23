@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from rattler.version import Version
-from rattler.package import PackageName
+from rattler.package import BuildString, PackageName
 
 from rattler.rattler import PyGenericVirtualPackage
 
@@ -9,7 +9,7 @@ from rattler.rattler import PyGenericVirtualPackage
 class GenericVirtualPackage:
     _generic_virtual_package: PyGenericVirtualPackage
 
-    def __init__(self, name: PackageName, version: Version, build_string: str) -> None:
+    def __init__(self, name: PackageName, version: Version, build_string: str | BuildString) -> None:
         if not isinstance(name, PackageName):
             raise TypeError(
                 "GenericVirtualPackage constructor received unsupported type "
@@ -22,13 +22,9 @@ class GenericVirtualPackage:
                 f" {type(version).__name__!r} for the `version` parameter"
             )
 
-        if not isinstance(build_string, str):
-            raise TypeError(
-                "GenericVirtualPackage constructor received unsupported type "
-                f" {type(build_string).__name__!r} for the `build_string` parameter"
-            )
-
-        self._generic_virtual_package = PyGenericVirtualPackage(name._name, version._version, build_string)
+        self._generic_virtual_package = PyGenericVirtualPackage(
+            name._name, version._version, BuildString._to_py(build_string)
+        )
 
     @property
     def name(self) -> PackageName:

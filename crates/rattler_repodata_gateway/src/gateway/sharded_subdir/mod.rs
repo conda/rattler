@@ -630,7 +630,7 @@ mod tests {
             PackageRecord::new(
                 PackageName::new_unchecked("foo"),
                 Version::from_str(version).unwrap(),
-                "0".to_string(),
+                rattler_conda_types::package::BuildString::new_unchecked("0"),
             )
         };
         let identifier =

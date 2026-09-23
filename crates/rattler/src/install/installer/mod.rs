@@ -1042,7 +1042,7 @@ fn update_requested_specs_in_json(
 /// interpolated into `conda-meta` paths (GHSA-h672-p7h7-97v9).
 fn ensure_record_path_safe(record: &PackageRecord) -> Result<(), InstallerError> {
     ensure_safe_path_component(record.name.as_normalized())
-        .and_then(|()| ensure_safe_path_component(&record.build))
+        .and_then(|()| ensure_safe_path_component(record.build.as_str()))
         .map_err(InstallerError::UnsafePackageRecord)
 }
 
@@ -1166,7 +1166,10 @@ mod tests {
 
     use super::*;
     use rattler_conda_types::{
-        MatchSpec, PackageName, ParseStrictness::Strict, package::IndexJson, prefix::Prefix,
+        MatchSpec, PackageName,
+        ParseStrictness::Strict,
+        package::{BuildString, IndexJson},
+        prefix::Prefix,
     };
     use rattler_package_streaming::seek::read_package_file;
     use tempfile::TempDir;
@@ -1180,7 +1183,7 @@ mod tests {
             PackageRecord::new(
                 PackageName::new_unchecked(name),
                 "1.0".parse::<VersionWithSource>().unwrap(),
-                build.to_string(),
+                BuildString::new_unchecked(build),
             )
         };
 
