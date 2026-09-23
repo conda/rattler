@@ -1,5 +1,36 @@
-from rattler.version import Version, VersionSpec, VersionWithSource
+from rattler.channel import Channel, ChannelConfig, ChannelPriority
+from rattler.config import Config, RunPostLinkScripts, TlsRootCerts
+from rattler.index import index
+from rattler.install import InstallerReporter, install
+from rattler.lock import (
+    CondaLockedBinaryPackage,
+    CondaLockedPackage,
+    CondaLockedSourcePackage,
+    Environment,
+    LockChannel,
+    LockedPackage,
+    LockFile,
+    LockPlatform,
+    PackageHashes,
+    PypiLockedPackage,
+)
 from rattler.match_spec import MatchSpec, NamelessMatchSpec
+from rattler.networking import Client, fetch_repo_data
+from rattler.package import (
+    AboutJson,
+    FileMode,
+    IndexJson,
+    NoArchLiteral,
+    NoArchType,
+    PackageName,
+    PathsEntry,
+    PathsJson,
+    PathType,
+    PrefixPlaceholder,
+    RunExportsJson,
+)
+from rattler.platform import Platform
+from rattler.prefix import Link, LinkType, PrefixPaths, PrefixPathsEntry, PrefixPathType, PrefixRecord
 from rattler.repo_data import (
     ChannelInfo,
     ChannelNotice,
@@ -20,41 +51,6 @@ from rattler.repo_data import (
     SparseRepoData,
     WhlPackageRecord,
 )
-from rattler.channel import Channel, ChannelConfig, ChannelPriority
-from rattler.config import Config, RunPostLinkScripts, TlsRootCerts
-from rattler.networking import Client, fetch_repo_data
-from rattler.virtual_package import GenericVirtualPackage, Override, VirtualPackage, VirtualPackageOverrides
-from rattler.package import (
-    AboutJson,
-    FileMode,
-    IndexJson,
-    NoArchLiteral,
-    NoArchType,
-    PackageName,
-    PathsEntry,
-    PathsJson,
-    PathType,
-    PrefixPlaceholder,
-    RunExportsJson,
-)
-from rattler.prefix import Link, LinkType, PrefixPaths, PrefixPathsEntry, PrefixPathType, PrefixRecord
-from rattler.platform import Platform
-from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version
-from rattler.install import InstallerReporter, install
-from rattler.index import index
-from rattler.lock import (
-    CondaLockedBinaryPackage,
-    CondaLockedPackage,
-    CondaLockedSourcePackage,
-    Environment,
-    LockChannel,
-    LockedPackage,
-    LockFile,
-    LockPlatform,
-    PackageHashes,
-    PypiLockedPackage,
-)
-from rattler.solver import solve, solve_with_sparse_repodata
 from rattler.sigstore import (
     ChannelCheck,
     Issuer,
@@ -65,6 +61,10 @@ from rattler.sigstore import (
     VerifiedAttestation,
     verify_attestation,
 )
+from rattler.solver import solve, solve_with_sparse_repodata
+from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version
+from rattler.version import Version, VersionSpec, VersionWithSource
+from rattler.virtual_package import GenericVirtualPackage, Override, VirtualPackage, VirtualPackageOverrides
 
 __version__ = _get_rattler_version()
 del _get_rattler_version

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from abc import ABC
 
-from rattler import PackageRecord, RepoDataRecord, Version
 from rattler.lock.hash import PackageHashes
 from rattler.match_spec import MatchSpec
 from rattler.rattler import PyLockedPackage
+from rattler.repo_data.package_record import PackageRecord
+from rattler.repo_data.record import RepoDataRecord
+from rattler.version import Version
 
 
 class LockedPackage(ABC):

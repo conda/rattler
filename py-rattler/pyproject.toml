@@ -61,7 +61,6 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "examples/**" = ["B008"] # Function-call defaults are part of the Typer CLI definitions
-"rattler/__init__.py" = ["I001"] # Import order avoids cycles while building the public API
 "tests/**" = [
   "B017",  # Bindings can expose exception types that vary across platforms
   "RUF012", # Test-local process starter classes use mutable class attributes as configuration
