@@ -9,6 +9,8 @@ use crate::{commands::exec, writer::IndicatifWriter};
 
 mod commands;
 mod exclude_newer;
+#[cfg(feature = "sigstore")]
+mod publisher_args;
 mod solver_args;
 mod writer;
 
@@ -69,6 +71,8 @@ enum Command {
     Whoneeds(commands::whoneeds::Opt),
     ShellHook(commands::shell_hook::Opt),
     VirtualPackages(commands::virtual_packages::Opt),
+    #[cfg(feature = "sigstore")]
+    VerifyAttestation(commands::verify_attestation::Opt),
     InstallMenu(commands::menu::InstallOpt),
     RemoveMenu(commands::menu::RemoveOpt),
     Run(commands::run::Opt),
@@ -144,6 +148,10 @@ async fn async_main() -> miette::Result<()> {
         Command::List(opts) => commands::list::list(opts).await,
         Command::ShellHook(opts) => commands::shell_hook::shell_hook(opts).await,
         Command::VirtualPackages(opts) => commands::virtual_packages::virtual_packages(opts),
+        #[cfg(feature = "sigstore")]
+        Command::VerifyAttestation(opts) => {
+            commands::verify_attestation::verify_attestation(opts, offline).await
+        }
         Command::InstallMenu(opts) => commands::menu::install_menu(opts).await,
         Command::RemoveMenu(opts) => commands::menu::remove_menu(opts).await,
         Command::Run(opts) => commands::run::run(opts).await,
