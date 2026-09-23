@@ -159,8 +159,9 @@ impl Installer {
         self
     }
 
-    /// Sets a limit on the number of concurrent package downloads and extractions. This
-    /// is used to avoid overwhelming a server or saturating the network.
+    /// Sets a limit on the number of concurrent package downloads and extractions.
+    /// Attestation verification shares this limit, including trusted-root retrieval.
+    /// This avoids overwhelming a server or saturating the network.
     #[must_use]
     pub fn with_max_concurrent_requests(self, limit: usize) -> Self {
         Self {
@@ -179,6 +180,7 @@ impl Installer {
     }
 
     /// Sets a semaphore that limits concurrent package downloads and extractions.
+    /// Attestation verification shares this semaphore.
     #[must_use]
     pub fn with_concurrent_requests_semaphore(self, semaphore: Arc<Semaphore>) -> Self {
         Self {
@@ -634,6 +636,9 @@ impl Installer {
         }
 
         let downloader = self.downloader.unwrap_or_default();
+        let io_semaphore = self
+            .io_semaphore
+            .unwrap_or_else(|| Arc::new(Semaphore::new(100)));
 
         // Verify the complete set before any transaction operation can mutate
         // installed package metadata or files. This prevents one rejected
@@ -644,6 +649,8 @@ impl Installer {
             transaction.installed_packages(),
             &self.attestation_policy,
             &downloader,
+            &io_semaphore,
+            self.concurrent_requests_semaphore.as_deref(),
         )
         .await?;
 
@@ -699,9 +706,7 @@ impl Installer {
         // Construct a driver.
         let driver = InstallDriver::builder()
             .execute_link_scripts(self.execute_link_scripts)
-            .with_io_concurrency_semaphore(
-                self.io_semaphore.unwrap_or(Arc::new(Semaphore::new(100))),
-            )
+            .with_io_concurrency_semaphore(io_semaphore)
             .with_prefix_records(
                 transaction
                     .unchanged_packages()
@@ -1054,10 +1059,14 @@ async fn verify_attestations(
     record: &RepoDataRecord,
     policy: &rattler_sigstore::VerificationPolicy,
     downloader: &LazyClient,
+    io_semaphore: &Semaphore,
+    concurrent_requests_semaphore: Option<&Semaphore>,
 ) -> Result<(), InstallerError> {
     if !policy.is_enabled() {
         return Ok(());
     }
+    let _permits =
+        attestation_io_permits(record, io_semaphore, concurrent_requests_semaphore).await;
     let outcome = rattler_sigstore::verify_record(policy, record, downloader.client())
         .await
         .map_err(|err| {
@@ -1077,6 +1086,45 @@ async fn verify_attestations(
     Ok(())
 }
 
+/// Shares the installer's permits with verification, including trusted-root
+/// retrieval. Local sidecars also acquire an IO permit. Permits remain held
+/// through body consumption and verification and are released on cancellation.
+#[cfg(feature = "sigstore")]
+async fn attestation_io_permits<'a>(
+    record: &RepoDataRecord,
+    io_semaphore: &'a Semaphore,
+    concurrent_requests_semaphore: Option<&'a Semaphore>,
+) -> (
+    Option<tokio::sync::SemaphorePermit<'a>>,
+    Option<tokio::sync::SemaphorePermit<'a>>,
+) {
+    // These records fail locally before any trusted-root or sidecar IO.
+    if record.package_record.attestations_sha256.is_none() || record.package_record.sha256.is_none()
+    {
+        return (None, None);
+    }
+    let request_permit = match concurrent_requests_semaphore {
+        Some(semaphore) => Some(
+            semaphore
+                .acquire()
+                .await
+                .expect("semaphore should not be closed"),
+        ),
+        None => None,
+    };
+    let io_permit = if record.url.scheme() == "file" {
+        Some(
+            io_semaphore
+                .acquire()
+                .await
+                .expect("semaphore should not be closed"),
+        )
+    } else {
+        None
+    };
+    (request_permit, io_permit)
+}
+
 /// Verifies every package that will be installed or relinked before the
 /// transaction starts mutating the prefix.
 #[cfg(feature = "sigstore")]
@@ -1084,6 +1132,8 @@ async fn verify_transaction_attestations<'a>(
     records: impl IntoIterator<Item = &'a RepoDataRecord>,
     policy: &rattler_sigstore::VerificationPolicy,
     downloader: &LazyClient,
+    io_semaphore: &Semaphore,
+    concurrent_requests_semaphore: Option<&Semaphore>,
 ) -> Result<(), InstallerError> {
     if !policy.is_enabled() {
         return Ok(());
@@ -1091,7 +1141,13 @@ async fn verify_transaction_attestations<'a>(
 
     let mut pending = FuturesUnordered::new();
     for record in records {
-        pending.push(verify_attestations(record, policy, downloader));
+        pending.push(verify_attestations(
+            record,
+            policy,
+            downloader,
+            io_semaphore,
+            concurrent_requests_semaphore,
+        ));
     }
     while let Some(result) = pending.next().await {
         result?;
@@ -1543,6 +1599,92 @@ mod tests {
             updated_record.requested_specs.is_empty(),
             "requested_specs should be empty when not provided"
         );
+    }
+
+    #[cfg(feature = "sigstore")]
+    #[tokio::test]
+    async fn attestation_verification_shares_concurrency_limits() {
+        for local in [false, true] {
+            let mut record = create_dummy_repo_record();
+            record.package_record.sha256 =
+                Some(rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(b"package"));
+            record.url = Url::parse(if local {
+                "file:///channel/test.conda"
+            } else {
+                "https://example.org/channel/test.conda"
+            })
+            .unwrap();
+            record.package_record.attestations_sha256 = record.package_record.sha256;
+            assert!(record.package_record.attestations_sha256.is_some());
+
+            // An unrelated operation already holds one of the three permits.
+            // HTTP must not need an IO permit, even when none are available.
+            let requests = Semaphore::new(if local { 10 } else { 3 });
+            let io = Semaphore::new(if local { 3 } else { 0 });
+            let shared = if local { &io } else { &requests };
+            let external_permit = shared.acquire().await.unwrap();
+            let mut pending = FuturesUnordered::new();
+            for _ in 0..4 {
+                pending.push(attestation_io_permits(&record, &io, Some(&requests)));
+            }
+
+            let first = pending.next().await.unwrap();
+            let second = pending.next().await.unwrap();
+            assert!(futures::poll!(pending.next()).is_pending());
+            assert_eq!(shared.available_permits(), 0);
+
+            // Releasing an external permit admits exactly one more operation.
+            drop(external_permit);
+            let third = pending.next().await.unwrap();
+            assert!(futures::poll!(pending.next()).is_pending());
+            drop(first);
+            let fourth = pending.next().await.unwrap();
+            drop((second, third, fourth, pending));
+            assert_eq!(requests.available_permits(), if local { 10 } else { 3 });
+            assert_eq!(io.available_permits(), if local { 3 } else { 0 });
+        }
+    }
+
+    #[cfg(feature = "sigstore")]
+    #[tokio::test]
+    async fn attestation_verification_releases_permits_on_cancellation() {
+        let mut record = create_dummy_repo_record();
+        record.package_record.sha256 =
+            Some(rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(b"package"));
+        record.url = Url::parse("file:///channel/test.conda").unwrap();
+        record.package_record.attestations_sha256 = record.package_record.sha256;
+        let requests = Semaphore::new(1);
+        let io = Semaphore::new(0);
+        let mut pending = Box::pin(attestation_io_permits(&record, &io, Some(&requests)));
+        assert!(futures::poll!(&mut pending).is_pending());
+        assert_eq!(requests.available_permits(), 0);
+        drop(pending);
+        assert_eq!(requests.available_permits(), 1);
+    }
+
+    #[cfg(feature = "sigstore")]
+    #[tokio::test]
+    async fn attestation_metadata_errors_do_not_wait_for_permits() {
+        let mut record = create_dummy_repo_record();
+        record.package_record.sha256 =
+            Some(rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(b"package"));
+        let requests = Semaphore::new(0);
+        let io = Semaphore::new(0);
+        for missing_sha256 in [false, true] {
+            if missing_sha256 {
+                record.package_record.attestations_sha256 = record.package_record.sha256;
+                record.package_record.sha256 = None;
+            }
+            let downloader = LazyClient::default();
+            let policy = require_attestations();
+            let verification =
+                verify_attestations(&record, &policy, &downloader, &io, Some(&requests));
+            futures::pin_mut!(verification);
+            assert!(matches!(
+                futures::poll!(verification),
+                std::task::Poll::Ready(Err(InstallerError::AttestationRejected(..)))
+            ));
+        }
     }
 
     #[cfg(feature = "sigstore")]
