@@ -4,9 +4,17 @@ from typing import Literal, Optional
 from rattler.rattler import PyNoArchType
 
 NoArchLiteral = Optional[Literal["python", "generic", True]]
+"""The values accepted by the [`NoArchType`][rattler.package.no_arch_type.NoArchType]
+constructor. `None` means the package is architecture specific, and `True` is an
+alias for `"generic"`."""
 
 
 class NoArchType:
+    """
+    Describes whether a package is architecture independent, and if so whether
+    it is a `python` or a `generic` noarch package.
+    """
+
     _noarch: PyNoArchType
 
     def __init__(self, noarch: NoArchLiteral = None) -> None:
