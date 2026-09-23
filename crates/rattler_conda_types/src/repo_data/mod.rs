@@ -1676,7 +1676,7 @@ mod test {
         let mut record = PackageRecord::new(
             crate::PackageName::new_unchecked("demo"),
             crate::Version::major(1),
-            BuildString::new_unchecked("0"),
+            "0".parse::<BuildString>().unwrap(),
         );
         assert!(
             serde_json::to_value(&record)
@@ -1890,7 +1890,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("zebra"),
                 Version::major(1),
-                BuildString::new_unchecked("h123"),
+                "h123".parse::<BuildString>().unwrap(),
             ),
         );
         packages.insert(
@@ -1898,7 +1898,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("apple"),
                 Version::major(2),
-                BuildString::new_unchecked("h456"),
+                "h456".parse::<BuildString>().unwrap(),
             ),
         );
         packages.insert(
@@ -1906,7 +1906,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("mango"),
                 Version::major(1),
-                BuildString::new_unchecked("h789"),
+                "h789".parse::<BuildString>().unwrap(),
             ),
         );
         packages.insert(
@@ -1914,7 +1914,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("banana"),
                 Version::major(3),
-                BuildString::new_unchecked("habc"),
+                "habc".parse::<BuildString>().unwrap(),
             ),
         );
 
@@ -1924,7 +1924,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("xray"),
                 Version::major(1),
-                BuildString::new_unchecked("h111"),
+                "h111".parse::<BuildString>().unwrap(),
             ),
         );
         conda_packages.insert(
@@ -1932,7 +1932,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("alpha"),
                 Version::major(2),
-                BuildString::new_unchecked("h222"),
+                "h222".parse::<BuildString>().unwrap(),
             ),
         );
         conda_packages.insert(
@@ -1940,7 +1940,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("omega"),
                 Version::major(3),
-                BuildString::new_unchecked("h333"),
+                "h333".parse::<BuildString>().unwrap(),
             ),
         );
 

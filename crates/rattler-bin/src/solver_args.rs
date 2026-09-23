@@ -212,7 +212,10 @@ impl SolverArgs {
                         .get(1)
                         .map_or(Version::from_str("0"), |s| Version::from_str(s))
                         .into_diagnostic()?,
-                    build_string: BuildString::new(*elems.get(2).unwrap_or(&"0"))
+                    build_string: elems
+                        .get(2)
+                        .unwrap_or(&"0")
+                        .parse::<BuildString>()
                         .into_diagnostic()?,
                 })
             })

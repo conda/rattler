@@ -570,7 +570,7 @@ mod tests {
         let cuda = |version: &str| GenericVirtualPackage {
             name: "__cuda".parse().unwrap(),
             version: version.parse().unwrap(),
-            build_string: BuildString::new_unchecked("0"),
+            build_string: "0".parse::<BuildString>().unwrap(),
         };
         let result = dependents(&records, cuda("12.4"));
         assert_eq!(names(&result), vec!["cuda-tool"]);

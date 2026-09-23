@@ -2204,7 +2204,7 @@ packages:
                 let mut r = PackageRecord::new(
                     PackageName::new_unchecked("my-source-pkg"),
                     version,
-                    BuildString::new("py_0").unwrap(),
+                    "py_0".parse::<BuildString>().unwrap(),
                 );
                 r.subdir = "noarch".to_string();
                 r
@@ -2411,7 +2411,7 @@ packages:
                     ..PackageRecord::new(
                         PackageName::new_unchecked(name),
                         Version::from_str(version).unwrap(),
-                        BuildString::new("build0").unwrap(),
+                        "build0".parse::<BuildString>().unwrap(),
                     )
                 },
                 location: Url::parse(&format!(

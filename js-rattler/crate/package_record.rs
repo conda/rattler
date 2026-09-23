@@ -106,8 +106,7 @@ macro_rules! impl_package_record {
             /// Validates the build string against CEP26 before assignment.
             #[wasm_bindgen::prelude::wasm_bindgen(setter)]
             pub fn set_build(&mut self, build: String) -> crate::JsResult<()> {
-                AsMut::<PackageRecord>::as_mut(self).build =
-                    rattler_conda_types::package::BuildString::new(build)?;
+                AsMut::<PackageRecord>::as_mut(self).build = build.parse()?;
                 Ok(())
             }
 

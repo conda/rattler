@@ -17,7 +17,7 @@ impl JsBuildString {
     #[wasm_bindgen(constructor)]
     pub fn new(value: String) -> JsResult<Self> {
         Ok(Self {
-            inner: BuildString::new(value)?,
+            inner: value.parse::<BuildString>()?,
         })
     }
 

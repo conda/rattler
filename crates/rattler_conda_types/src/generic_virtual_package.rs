@@ -21,11 +21,13 @@ pub struct GenericVirtualPackage {
 
 impl Display for GenericVirtualPackage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}={}", &self.name.as_normalized(), &self.version)?;
-        if !self.build_string.is_empty() {
-            write!(f, "={}", &self.build_string)?;
-        }
-        Ok(())
+        write!(
+            f,
+            "{}={}={}",
+            self.name.as_normalized(),
+            self.version,
+            self.build_string
+        )
     }
 }
 
@@ -39,7 +41,7 @@ impl Serialize for GenericVirtualPackage {
 impl<'de> Deserialize<'de> for GenericVirtualPackage {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let s = String::deserialize(deserializer)?;
-        let mut parts = s.split('=');
+        let mut parts = s.splitn(3, '=');
 
         let name = parts
             .next()
@@ -51,10 +53,9 @@ impl<'de> Deserialize<'de> for GenericVirtualPackage {
             .unwrap_or("0")
             .parse()
             .map_err(serde::de::Error::custom)?;
-        let build_string = parts.next().map_or_else(
-            || BuildString::new_unchecked("0"),
-            BuildString::new_unchecked,
-        );
+        // Like BuildString's serde implementation, preserve legacy metadata
+        // without CEP26 validation. Checked construction uses FromStr instead.
+        let build_string = BuildString::new_unchecked(parts.next().unwrap_or("0"));
 
         Ok(GenericVirtualPackage {
             name,
@@ -69,11 +70,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn legacy_builds_roundtrip() {
+        for build in ["", "py3-none-any", "legacy=build"] {
+            let json = serde_json::to_string(&format!("foo=1.2.3={build}")).unwrap();
+            let package: GenericVirtualPackage = serde_json::from_str(&json).unwrap();
+            assert_eq!(package.build_string.as_str(), build);
+            assert_eq!(serde_json::to_string(&package).unwrap(), json);
+        }
+    }
+
+    #[test]
     fn test_serde() {
         let p = GenericVirtualPackage {
             name: "foo".parse().unwrap(),
             version: "1.2.3".parse().unwrap(),
-            build_string: BuildString::new("py_0").unwrap(),
+            build_string: "py_0".parse::<BuildString>().unwrap(),
         };
         let s = serde_json::to_string(&p).unwrap();
         assert_eq!(s, "\"foo=1.2.3=py_0\"");
@@ -83,7 +94,7 @@ mod tests {
         let p = GenericVirtualPackage {
             name: "foo".parse().unwrap(),
             version: "1.2.3".parse().unwrap(),
-            build_string: BuildString::new_unchecked("0"),
+            build_string: "0".parse::<BuildString>().unwrap(),
         };
         let s = serde_json::to_string(&p).unwrap();
         assert_eq!(s, "\"foo=1.2.3=0\"");

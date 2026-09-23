@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 
 /// Errors that can occur when constructing or modifying a [`BuildString`].
@@ -32,7 +34,7 @@ pub enum BuildStringError {
 
 /// A conda build string.
 ///
-/// `BuildString` is an opaque newtype around a `String`. [`BuildString::new`]
+/// `BuildString` is an opaque newtype around a `String`. [`FromStr`]
 /// performs strict CEP26 validation (allowed characters, length, non-empty);
 /// [`BuildString::new_unchecked`] skips validation. Packages without a
 /// meaningful build string (e.g. virtual packages without a build identifier)
@@ -51,17 +53,6 @@ pub struct BuildString(String);
 impl BuildString {
     /// Maximum byte length of a build string allowed by CEP26.
     pub const MAX_LEN: usize = 64;
-
-    /// Construct a `BuildString` with CEP26 validation.
-    ///
-    /// Returns `Err(...)` if `value` is empty, contains a disallowed
-    /// character, or exceeds the maximum length. Packages without a
-    /// meaningful build string should use `"0"` instead.
-    pub fn new(value: impl Into<String>) -> Result<Self, BuildStringError> {
-        let value = value.into();
-        Self::validate(&value)?;
-        Ok(Self(value))
-    }
 
     /// Construct a `BuildString` without validation.
     ///
@@ -133,6 +124,17 @@ impl BuildString {
     }
 }
 
+impl FromStr for BuildString {
+    type Err = BuildStringError;
+
+    /// Parse a build string with CEP26 validation. Packages without a meaningful
+    /// build string should use `"0"` rather than an empty value.
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::validate(value)?;
+        Ok(Self(value.to_owned()))
+    }
+}
+
 impl std::fmt::Display for BuildString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -192,8 +194,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn new_rejects_invalid_character() {
-        let err = BuildString::new("py-37_0").unwrap_err();
+    fn parse_rejects_invalid_character() {
+        let err = "py-37_0".parse::<BuildString>().unwrap_err();
         assert!(matches!(
             err,
             BuildStringError::InvalidCharacter { character: '-' }
@@ -201,9 +203,9 @@ mod tests {
     }
 
     #[test]
-    fn new_rejects_too_long() {
+    fn parse_rejects_too_long() {
         let input = "a".repeat(65);
-        let err = BuildString::new(&input).unwrap_err();
+        let err = input.parse::<BuildString>().unwrap_err();
         assert!(matches!(
             err,
             BuildStringError::TooLong {
@@ -214,15 +216,15 @@ mod tests {
     }
 
     #[test]
-    fn new_rejects_empty() {
-        let err = BuildString::new("").unwrap_err();
+    fn parse_rejects_empty() {
+        let err = "".parse::<BuildString>().unwrap_err();
         assert!(matches!(err, BuildStringError::Empty));
     }
 
     #[test]
-    fn new_accepts_max_length() {
+    fn parse_accepts_max_length() {
         let input = "a".repeat(64);
-        let bs = BuildString::new(&input).unwrap();
+        let bs = input.parse::<BuildString>().unwrap();
         assert_eq!(bs.len(), 64);
     }
 
@@ -234,28 +236,29 @@ mod tests {
 
     #[test]
     fn append_concatenates_and_validates_length() {
-        let mut bs = BuildString::new("py").unwrap();
-        bs.append(BuildString::new("h12345ab_0").unwrap()).unwrap();
+        let mut bs = "py".parse::<BuildString>().unwrap();
+        bs.append("h12345ab_0".parse::<BuildString>().unwrap())
+            .unwrap();
         assert_eq!(bs.as_str(), "pyh12345ab_0");
     }
 
     #[test]
     fn append_accepts_str() {
-        let mut bs = BuildString::new("py").unwrap();
+        let mut bs = "py".parse::<BuildString>().unwrap();
         bs.append("h12345ab_0").unwrap();
         assert_eq!(bs.as_str(), "pyh12345ab_0");
     }
 
     #[test]
     fn append_empty_is_noop() {
-        let mut bs = BuildString::new("py").unwrap();
+        let mut bs = "py".parse::<BuildString>().unwrap();
         bs.append("").unwrap();
         assert_eq!(bs.as_str(), "py");
     }
 
     #[test]
     fn append_rejects_overflow() {
-        let mut bs = BuildString::new("a".repeat(60)).unwrap();
+        let mut bs = "a".repeat(60).parse::<BuildString>().unwrap();
         let err = bs.append("h12345").unwrap_err();
         assert!(matches!(err, BuildStringError::TooLong { .. }));
         assert_eq!(bs.len(), 60, "value must be unchanged after failure");
@@ -263,7 +266,7 @@ mod tests {
 
     #[test]
     fn append_rejects_invalid_chars_in_other() {
-        let mut bs = BuildString::new("py").unwrap();
+        let mut bs = "py".parse::<BuildString>().unwrap();
         let err = bs.append("-bad").unwrap_err();
         assert!(matches!(
             err,
@@ -274,21 +277,21 @@ mod tests {
 
     #[test]
     fn prepend_concatenates_in_order() {
-        let mut bs = BuildString::new("h12345ab_0").unwrap();
+        let mut bs = "h12345ab_0".parse::<BuildString>().unwrap();
         bs.prepend("py").unwrap();
         assert_eq!(bs.as_str(), "pyh12345ab_0");
     }
 
     #[test]
     fn prepend_empty_is_noop() {
-        let mut bs = BuildString::new("py").unwrap();
+        let mut bs = "py".parse::<BuildString>().unwrap();
         bs.prepend("").unwrap();
         assert_eq!(bs.as_str(), "py");
     }
 
     #[test]
     fn equality_against_strings() {
-        let bs = BuildString::new("pyhd8ed1ab_0").unwrap();
+        let bs = "pyhd8ed1ab_0".parse::<BuildString>().unwrap();
         assert_eq!(bs, "pyhd8ed1ab_0");
         assert_eq!(bs, String::from("pyhd8ed1ab_0"));
         assert_eq!("pyhd8ed1ab_0", bs);
@@ -297,14 +300,14 @@ mod tests {
 
     #[test]
     fn into_string() {
-        let bs = BuildString::new("pyhd8ed1ab_0").unwrap();
+        let bs = "pyhd8ed1ab_0".parse::<BuildString>().unwrap();
         let s: String = bs.into();
         assert_eq!(s, "pyhd8ed1ab_0");
     }
 
     #[test]
     fn serde_roundtrip() {
-        let bs = BuildString::new("py36h1af98f8_2").unwrap();
+        let bs = "py36h1af98f8_2".parse::<BuildString>().unwrap();
         let json = serde_json::to_string(&bs).unwrap();
         assert_eq!(json, "\"py36h1af98f8_2\"");
         let parsed: BuildString = serde_json::from_str(&json).unwrap();

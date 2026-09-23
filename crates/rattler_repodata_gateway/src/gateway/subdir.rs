@@ -259,7 +259,7 @@ mod tests {
         let package_record = PackageRecord {
             attestations_sha256: None,
             arch: None,
-            build: BuildString::new_unchecked("0"),
+            build: "0".parse::<BuildString>().unwrap(),
             build_number: 0,
             constrains: Vec::new(),
             depends: deps.iter().map(|s| (*s).to_string()).collect(),

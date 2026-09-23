@@ -1851,7 +1851,7 @@ mod tests {
         let mut record = PackageRecord::new(
             PackageName::from_str("numpy").unwrap(),
             Version::from_str("1.24.0").unwrap(),
-            BuildString::new("py310h1234_0").unwrap(),
+            "py310h1234_0".parse::<BuildString>().unwrap(),
         );
         record.license_family = Some("MIT".to_string());
 

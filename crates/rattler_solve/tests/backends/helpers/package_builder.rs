@@ -37,7 +37,7 @@ impl PackageBuilder {
                     attestations_sha256: None,
                     name: name.parse().unwrap(),
                     version: Version::from_str("0.0.0").unwrap().into(),
-                    build: BuildString::new("h123456_0").unwrap(),
+                    build: "h123456_0".parse::<BuildString>().unwrap(),
                     build_number: 0,
                     subdir: "linux-64".to_string(),
                     md5: Some(dummy_md5_hash()),

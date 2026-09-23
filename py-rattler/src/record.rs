@@ -373,11 +373,12 @@ impl PyRecord {
         self.as_package_record_mut().arch = arch;
     }
 
-    /// The build string of the package. Returns an empty string when the
-    /// package has no build (e.g. a source package without a built artifact).
+    /// The build string of the package, preserving legacy values without validation.
     #[getter]
-    pub fn build(&self) -> String {
-        self.as_package_record().build.to_string()
+    pub fn build(&self) -> PyBuildString {
+        PyBuildString {
+            inner: self.as_package_record().build.clone(),
+        }
     }
 
     #[setter]

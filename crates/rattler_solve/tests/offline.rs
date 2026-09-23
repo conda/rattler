@@ -33,7 +33,7 @@ fn remote_record(version: &str, sha256: Option<rattler_digest::Sha256Hash>) -> R
     let mut package_record = PackageRecord::new(
         PackageName::new_unchecked("clobber-python"),
         VersionWithSource::from(Version::from_str(version).unwrap()),
-        BuildString::new_unchecked("cpython"),
+        "cpython".parse::<BuildString>().unwrap(),
     );
     package_record.sha256 = sha256;
 
@@ -80,7 +80,7 @@ async fn test_offline_solve_installs_from_the_cache_alone() {
     let mut cached_record = PackageRecord::new(
         PackageName::new_unchecked("clobber-python"),
         "0.1.0".parse::<VersionWithSource>().unwrap(),
-        BuildString::new_unchecked("cpython"),
+        "cpython".parse::<BuildString>().unwrap(),
     );
     cached_record.sha256 = Some(sha256);
     cache

@@ -73,7 +73,7 @@ class PackageRecord:
         >>> record.version
         VersionWithSource(version="1.7.1", source="1.7.1")
         >>> record.build
-        'pyh0701188_6'
+        BuildString('pyh0701188_6')
         >>>
         ```
         """
@@ -298,9 +298,10 @@ class PackageRecord:
         self._record.arch = value
 
     @property
-    def build(self) -> str:
+    def build(self) -> BuildString:
         """
-        The build string of the package. Assigning a string validates it against
+        The build string of the package as a ``BuildString``. Use ``str(record.build)``
+        to get its text. Assigning a string validates it against
         CEP26. Pass ``BuildString.new_unchecked(value)`` to preserve a non-conforming
         value explicitly. Reading existing metadata does not validate it.
 
@@ -312,14 +313,14 @@ class PackageRecord:
         ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
         >>> record.build
-        'hcfcfb64_0'
+        BuildString('hcfcfb64_0')
         >>> record.build = "new_build_1"
         >>> record.build
-        'new_build_1'
+        BuildString('new_build_1')
         >>>
         ```
         """
-        return self._record.build
+        return BuildString._from_py_build_string(self._record.build)
 
     @build.setter
     def build(self, value: str | BuildString) -> None:

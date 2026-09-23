@@ -22,8 +22,13 @@ class BuildString:
     @classmethod
     def new_unchecked(cls, value: str) -> BuildString:
         """Construct a build string without validation, preserving the value verbatim."""
+        return cls._from_py_build_string(PyBuildString.new_unchecked(value))
+
+    @classmethod
+    def _from_py_build_string(cls, value: PyBuildString) -> BuildString:
+        """Wrap an existing build string without revalidating legacy metadata."""
         result = cls.__new__(cls)
-        result._build = PyBuildString.new_unchecked(value)
+        result._build = value
         return result
 
     @staticmethod

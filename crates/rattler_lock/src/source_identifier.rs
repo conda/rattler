@@ -514,7 +514,7 @@ mod tests {
         let mut package_record = PackageRecord::new(
             name.clone(),
             VersionWithSource::from_str("0.23.0").unwrap(),
-            BuildString::new("py310h3ca6f64_0").unwrap(),
+            "py310h3ca6f64_0".parse::<BuildString>().unwrap(),
         );
         package_record.subdir = "linux-64".to_string();
 
@@ -550,7 +550,7 @@ mod tests {
         let mut package_record = PackageRecord::new(
             name.clone(),
             VersionWithSource::from_str("0.23.0").unwrap(),
-            BuildString::new("py310h3ca6f64_0").unwrap(),
+            "py310h3ca6f64_0".parse::<BuildString>().unwrap(),
         );
         package_record.subdir = "linux-aarch64".to_string();
 
@@ -604,7 +604,7 @@ mod tests {
             let mut package_record = PackageRecord::new(
                 pkg_name,
                 VersionWithSource::from_str(version).unwrap(),
-                BuildString::new(build).unwrap(),
+                build.parse::<BuildString>().unwrap(),
             );
             package_record.subdir = subdir.to_string();
 
@@ -716,7 +716,7 @@ mod tests {
             let mut package_record = PackageRecord::new(
                 name,
                 VersionWithSource::from_str("1.0.0").unwrap(),
-                rattler_conda_types::package::BuildString::new("pyhbf21a9e_0").unwrap(),
+                "pyhbf21a9e_0".parse().unwrap(),
             );
             package_record.subdir = "noarch".to_string();
 
@@ -798,7 +798,7 @@ mod tests {
         let mut package_record = PackageRecord::new(
             name.clone(),
             VersionWithSource::from_str("1.0.0").unwrap(),
-            BuildString::new("h0000000_0").unwrap(),
+            "h0000000_0".parse::<BuildString>().unwrap(),
         );
         package_record.subdir = "linux-64".to_string();
 
@@ -859,7 +859,7 @@ mod tests {
         let mut package_record = PackageRecord::new(
             name.clone(),
             VersionWithSource::from_str("1.0.0").unwrap(),
-            BuildString::new("h0000000_0").unwrap(),
+            "h0000000_0".parse::<BuildString>().unwrap(),
         );
         package_record.subdir = "linux-64".to_string();
 
@@ -921,7 +921,7 @@ mod tests {
             let mut record = PackageRecord::new(
                 PackageName::from_str(name).unwrap(),
                 Version::from_str("1.0.0").unwrap(),
-                BuildString::new("build0").unwrap(),
+                "build0".parse::<BuildString>().unwrap(),
             );
             record.subdir = "linux-64".to_string();
             CondaBinaryData {
@@ -942,7 +942,7 @@ mod tests {
             let mut record = PackageRecord::new(
                 PackageName::from_str("my-pkg").unwrap(),
                 Version::from_str("0.1.0").unwrap(),
-                BuildString::new("py_0").unwrap(),
+                "py_0".parse::<BuildString>().unwrap(),
             );
             record.subdir = "noarch".to_string();
             CondaSourceData::full(

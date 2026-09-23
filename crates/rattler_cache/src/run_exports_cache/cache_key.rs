@@ -109,7 +109,7 @@ mod tests {
         let record = PackageRecord::new(
             PackageName::new_unchecked("demo"),
             "1.0".parse::<VersionWithSource>().unwrap(),
-            BuildString::new_unchecked("py39h6fdeb60_14"),
+            "py39h6fdeb60_14".parse::<BuildString>().unwrap(),
         );
         let key = CacheKey::create(&record, "demo-1.0-0.tar.bz2").unwrap();
         assert!(key.to_path_segment().is_ok());

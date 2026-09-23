@@ -7,18 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- `BuildString` validates conda build strings against CEP26. Use
-  `BuildString.new_unchecked(value)` for legacy values or wheel tags.
-
-### Changed
-
-- `PackageRecord` construction and build assignment, `IndexJson.build` assignment,
-  and `GenericVirtualPackage` construction now validate plain-string builds.
-  They also accept `BuildString` objects without revalidating them. Getters still
-  return strings, and reading existing metadata remains unchecked.
-
 ## [0.26.0] - 2026-09-10
 
 ### Highlights

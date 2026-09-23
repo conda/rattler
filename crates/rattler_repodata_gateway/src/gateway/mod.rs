@@ -2060,7 +2060,7 @@ mod test {
             attestations_sha256: None,
             name: PackageName::from_str(name).unwrap(),
             version: VersionWithSource::from_str(version).unwrap(),
-            build: BuildString::new("0").unwrap(),
+            build: "0".parse::<BuildString>().unwrap(),
             build_number: 0,
             subdir: subdir.to_string(),
             md5: None,

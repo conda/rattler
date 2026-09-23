@@ -124,7 +124,7 @@ impl PackageBuilder {
                     attestations_sha256: None,
                     name: name.parse().unwrap(),
                     version: Version::from_str("0.0.0").unwrap().into(),
-                    build: BuildString::new("h123456_0").unwrap(),
+                    build: "h123456_0".parse::<BuildString>().unwrap(),
                     build_number: 0,
                     subdir: "linux-64".to_string(),
                     md5: Some(dummy_md5_hash()),
@@ -420,7 +420,7 @@ macro_rules! solver_backend_tests {
                     virtual_packages: vec![GenericVirtualPackage {
                         name: rattler_conda_types::PackageName::new_unchecked("__unix"),
                         version: Version::from_str("0").unwrap(),
-                        build_string: BuildString::new("0").unwrap(),
+                        build_string: "0".parse::<BuildString>().unwrap(),
                     }],
                     ..SimpleSolveTask::default()
                 },
@@ -577,7 +577,7 @@ macro_rules! solver_backend_tests {
                     virtual_packages: vec![GenericVirtualPackage {
                         name: "__cuda".parse().unwrap(),
                         version: Version::from_str("1").unwrap(),
-                        build_string: BuildString::new("0").unwrap(),
+                        build_string: "0".parse::<BuildString>().unwrap(),
                     }],
                     ..SimpleSolveTask::default()
                 },
@@ -1206,7 +1206,7 @@ mod resolvo {
             // package direct_url: Some(url.clone()),
             "_libgcc_mutex".parse().unwrap(),
             VersionWithSource::from_str("0.1").unwrap(),
-            BuildString::new("0").unwrap(),
+            "0".parse::<BuildString>().unwrap(),
         );
         let repo_data: Vec<RepoDataRecord> = vec![RepoDataRecord {
             package_record: package_record.clone(),

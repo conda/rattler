@@ -68,7 +68,9 @@ impl PyGenericVirtualPackage {
     /// The build identifier of the package. Detected virtual packages without
     /// a build identifier (e.g. `__cuda`) use `"0"`.
     #[getter]
-    pub fn build_string(&self) -> String {
-        self.inner.build_string.to_string()
+    pub fn build_string(&self) -> PyBuildString {
+        PyBuildString {
+            inner: self.inner.build_string.clone(),
+        }
     }
 }

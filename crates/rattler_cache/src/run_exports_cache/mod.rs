@@ -427,7 +427,7 @@ mod test {
         let mut pkg_record = PackageRecord::new(
             PackageName::from_str("ros-noetic-rosbridge-suite").unwrap(),
             Version::from_str("0.11.14").unwrap(),
-            BuildString::new("py39h6fdeb60_14").unwrap(),
+            "py39h6fdeb60_14".parse::<BuildString>().unwrap(),
         );
         pkg_record.sha256 = Some(
             parse_digest_from_hex::<Sha256>(
@@ -471,7 +471,7 @@ mod test {
         let pkg_record = PackageRecord::new(
             PackageName::from_str("zlib").unwrap(),
             Version::from_str("1.3.1").unwrap(),
-            BuildString::new("hb9d3cd8_2").unwrap(),
+            "hb9d3cd8_2".parse::<BuildString>().unwrap(),
         );
 
         let cache_key = CacheKey::create(&pkg_record, "zlib-1.3.1-hb9d3cd8_2.conda").unwrap();
@@ -613,13 +613,13 @@ mod test {
         let tar_record = PackageRecord::new(
             PackageName::from_str("conda").unwrap(),
             Version::from_str("22.9.0").unwrap(),
-            BuildString::new("py310h5588dad_2").unwrap(),
+            "py310h5588dad_2".parse::<BuildString>().unwrap(),
         );
 
         let conda_record = PackageRecord::new(
             PackageName::from_str("conda").unwrap(),
             Version::from_str("22.11.1").unwrap(),
-            BuildString::new("py38haa244fe_1").unwrap(),
+            "py38haa244fe_1".parse::<BuildString>().unwrap(),
         );
 
         test_flaky_package_cache(tar_bz2, &tar_record, Middleware::FailTheFirstTwoRequests).await;
@@ -635,7 +635,7 @@ mod test {
         let mut pkg_record = PackageRecord::new(
             PackageName::from_str("ros-noetic-rosbridge-suite").unwrap(),
             Version::from_str("0.11.14").unwrap(),
-            BuildString::new("py39h6fdeb60_14").unwrap(),
+            "py39h6fdeb60_14".parse::<BuildString>().unwrap(),
         );
         pkg_record.sha256 = Some(
             parse_digest_from_hex::<Sha256>(
@@ -713,7 +713,7 @@ mod test {
         let pkg_record = PackageRecord::new(
             PackageName::from_str("zlib").unwrap(),
             Version::from_str("1.3.1").unwrap(),
-            BuildString::new("hb9d3cd8_2").unwrap(),
+            "hb9d3cd8_2".parse::<BuildString>().unwrap(),
         );
 
         let cache_key = CacheKey::create(&pkg_record, "zlib-1.3.1-hb9d3cd8_2.conda").unwrap();

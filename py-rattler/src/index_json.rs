@@ -133,8 +133,10 @@ impl PyIndexJson {
 
     /// The build string of the package.
     #[getter]
-    pub fn build(&self) -> String {
-        self.inner.build.to_string()
+    pub fn build(&self) -> PyBuildString {
+        PyBuildString {
+            inner: self.inner.build.clone(),
+        }
     }
 
     #[setter]

@@ -67,7 +67,7 @@ class GenericVirtualPackage:
         return Version._from_py_version(self._generic_virtual_package.version)
 
     @property
-    def build_string(self) -> str:
+    def build_string(self) -> BuildString:
         """
         Returns the build identifier of the package.
 
@@ -78,11 +78,11 @@ class GenericVirtualPackage:
         >>> from rattler.version.version import Version
         >>> gvp = GenericVirtualPackage(PackageName("__archspec"), Version("1"), "x86_64")
         >>> gvp.build_string
-        'x86_64'
+        BuildString('x86_64')
         >>>
         ```
         """
-        return self._generic_virtual_package.build_string
+        return BuildString._from_py_build_string(self._generic_virtual_package.build_string)
 
     @classmethod
     def _from_py_generic_virtual_package(

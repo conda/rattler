@@ -144,7 +144,7 @@ class IndexJson:
         self._inner.arch = value
 
     @property
-    def build(self) -> str:
+    def build(self) -> BuildString:
         """
         The build string of the package. String assignments are validated against
         CEP26; pass ``BuildString.new_unchecked(value)`` to skip validation explicitly.
@@ -156,11 +156,11 @@ class IndexJson:
         ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
         ... )
         >>> idx_json.build
-        'py38haa244fe_1'
+        BuildString('py38haa244fe_1')
         >>>
         ```
         """
-        return self._inner.build
+        return BuildString._from_py_build_string(self._inner.build)
 
     @build.setter
     def build(self, value: str | BuildString) -> None:

@@ -18,7 +18,7 @@ def test_load_prefix_record() -> None:
         Path(__file__).parent / ".." / ".." / ".." / "test-data" / "conda-meta" / "tk-8.6.12-h8ffe710_0.json"
     )
     assert r.arch == "x86_64"
-    assert r.build == "h8ffe710_0"
+    assert str(r.build) == "h8ffe710_0"
     assert r.build_number == 0
     assert r.channel == "https://conda.anaconda.org/conda-forge/win-64"
     assert len(r.constrains) == 0

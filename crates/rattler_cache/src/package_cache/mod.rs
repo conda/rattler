@@ -2021,7 +2021,7 @@ mod test {
         let mut record = PackageRecord::new(
             PackageName::new_unchecked("clobber-python"),
             "0.1.0".parse::<VersionWithSource>().unwrap(),
-            BuildString::new_unchecked("cpython"),
+            "cpython".parse::<BuildString>().unwrap(),
         );
         record.sha256 = Some(compute_file_digest::<Sha256>(&package_path).unwrap());
 
@@ -2064,7 +2064,7 @@ mod test {
         let mut package_record = PackageRecord::new(
             PackageName::new_unchecked("clobber-python"),
             "0.1.0".parse::<VersionWithSource>().unwrap(),
-            BuildString::new_unchecked("cpython"),
+            "cpython".parse::<BuildString>().unwrap(),
         );
         package_record.sha256 = Some(compute_file_digest::<Sha256>(&package_path).unwrap());
 
@@ -2122,7 +2122,7 @@ mod test {
         let mut record = PackageRecord::new(
             PackageName::new_unchecked("clobber-python"),
             "0.1.0".parse::<VersionWithSource>().unwrap(),
-            BuildString::new_unchecked("cpython"),
+            "cpython".parse::<BuildString>().unwrap(),
         );
         record.sha256 = Some(compute_file_digest::<Sha256>(&package_path).unwrap());
 
@@ -2177,7 +2177,7 @@ mod test {
             package_record: PackageRecord::new(
                 PackageName::new_unchecked("clobber-python"),
                 "0.1.0".parse::<VersionWithSource>().unwrap(),
-                BuildString::new_unchecked("cpython"),
+                "cpython".parse::<BuildString>().unwrap(),
             ),
             url: record_url,
             channel: None,
@@ -2204,7 +2204,7 @@ mod test {
         let mut record = PackageRecord::new(
             PackageName::new_unchecked("clobber-python"),
             "0.1.0".parse::<VersionWithSource>().unwrap(),
-            BuildString::new_unchecked("cpython"),
+            "cpython".parse::<BuildString>().unwrap(),
         );
         record.sha256 = Some(compute_file_digest::<Sha256>(&package_path).unwrap());
 
@@ -2726,7 +2726,7 @@ mod test {
             let mut record = PackageRecord::new(
                 PackageName::new_unchecked("clobber-python"),
                 "0.1.0".parse::<VersionWithSource>().unwrap(),
-                BuildString::new_unchecked("cpython"),
+                "cpython".parse::<BuildString>().unwrap(),
             );
             record.sha256 = Some(compute_file_digest::<Sha256>(archive).unwrap());
             record

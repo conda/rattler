@@ -492,7 +492,7 @@ mod test {
                 package_record: PackageRecord::new(
                     PackageName::new_unchecked("foo-bar"),
                     Version::from_str("1.0").unwrap(),
-                    BuildString::new_unchecked("0"),
+                    "0".parse::<BuildString>().unwrap(),
                 ),
                 identifier: "foo-bar-1.0-py37_0.conda"
                     .parse::<DistArchiveIdentifier>()

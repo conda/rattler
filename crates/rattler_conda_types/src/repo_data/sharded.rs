@@ -65,7 +65,7 @@ pub struct ShardedSubdirInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{PackageName, Version};
+    use crate::{PackageName, Version, package::BuildString};
 
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -87,7 +87,7 @@ mod tests {
             let record = PackageRecord::new(
                 PackageName::new_unchecked("multi"),
                 Version::major(1),
-                crate::package::BuildString::new_unchecked(format!("h_{n}")),
+                format!("h_{n}").parse::<BuildString>().unwrap(),
             );
             (key, record)
         };

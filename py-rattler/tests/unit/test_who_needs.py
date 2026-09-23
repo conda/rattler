@@ -103,7 +103,7 @@ async def test_who_needs_multi_platform(gateway: Gateway, conda_forge_channel: C
         return (
             record.name.normalized,
             str(record.version),
-            record.build,
+            str(record.build),
             record.subdir,
             dependent.dependency,
             dependent.kind,

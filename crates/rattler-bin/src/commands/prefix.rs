@@ -621,7 +621,7 @@ mod tests {
         let mut record = PackageRecord::new(
             PackageName::new_unchecked("win-only-noarch-package"),
             Version::from_str("0.0.1").unwrap(),
-            BuildString::new_unchecked("h123456"),
+            "h123456".parse::<BuildString>().unwrap(),
         );
         record.subdir = Platform::NoArch.to_string();
         record.depends = vec!["__win".to_string()];
@@ -640,7 +640,7 @@ mod tests {
                 package_record: PackageRecord::new(
                     PackageName::new_unchecked("my-package"),
                     Version::from_str("0.0.1").unwrap(),
-                    BuildString::new_unchecked("h123456"),
+                    "h123456".parse::<BuildString>().unwrap(),
                 ),
                 identifier: "my-package-0.0.1-h123456.conda".parse().unwrap(),
                 url: Url::parse("https://example.com/my-package-0.0.1-h123456.conda").unwrap(),

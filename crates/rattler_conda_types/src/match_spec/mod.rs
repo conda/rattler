@@ -820,7 +820,7 @@ mod tests {
             ..PackageRecord::new(
                 PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
-                BuildString::new("foo_bar_py310_1").unwrap(),
+                "foo_bar_py310_1".parse::<BuildString>().unwrap(),
             )
         };
 
@@ -895,7 +895,7 @@ mod tests {
             ..PackageRecord::new(
                 PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
-                BuildString::new("foo_bar_py310_1").unwrap(),
+                "foo_bar_py310_1".parse::<BuildString>().unwrap(),
             )
         };
         assert!(spec.matches(&matching_record));
@@ -980,7 +980,7 @@ mod tests {
             package_record: PackageRecord::new(
                 PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
-                BuildString::new_unchecked("0"),
+                "0".parse::<BuildString>().unwrap(),
             ),
             identifier: "mamba-1.0-py37_0.conda"
                 .parse::<DistArchiveIdentifier>()
@@ -1016,7 +1016,7 @@ mod tests {
             package_record: PackageRecord::new(
                 PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
-                BuildString::new_unchecked("0"),
+                "0".parse::<BuildString>().unwrap(),
             ),
             identifier: "mamba-1.0-py37_0.conda"
                 .parse::<DistArchiveIdentifier>()
@@ -1045,7 +1045,7 @@ mod tests {
             package_record: PackageRecord::new(
                 PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
-                BuildString::new_unchecked("0"),
+                "0".parse::<BuildString>().unwrap(),
             ),
             identifier: "mamba-1.0-py37_0.conda"
                 .parse::<DistArchiveIdentifier>()
@@ -1116,7 +1116,7 @@ mod tests {
         let virtual_package = crate::GenericVirtualPackage {
             name: PackageName::new_unchecked("foo"),
             version: Version::from_str("1.0").unwrap(),
-            build_string: crate::package::BuildString::new("py37_0").unwrap(),
+            build_string: "py37_0".parse::<BuildString>().unwrap(),
         };
 
         let spec = MatchSpec::from_str(spec_str, Strict).unwrap();
@@ -1199,17 +1199,17 @@ mod tests {
         assert!(spec.matches(&PackageRecord::new(
             PackageName::from_str("foo").unwrap(),
             Version::from_str("13.0").unwrap(),
-            BuildString::new_unchecked("0"),
+            "0".parse::<BuildString>().unwrap(),
         )));
         assert!(!spec.matches(&PackageRecord::new(
             PackageName::from_str("foo").unwrap(),
             Version::from_str("11.0").unwrap(),
-            BuildString::new_unchecked("0"),
+            "0".parse::<BuildString>().unwrap(),
         )));
         assert!(spec.matches(&PackageRecord::new(
             PackageName::from_str("foo-bar").unwrap(),
             Version::from_str("12.0").unwrap(),
-            BuildString::new_unchecked("0"),
+            "0".parse::<BuildString>().unwrap(),
         )));
 
         let spec = MatchSpec::from_str(
@@ -1223,13 +1223,13 @@ mod tests {
         assert!(!spec.matches(&PackageRecord::new(
             PackageName::from_str("foo-bar").unwrap(),
             Version::from_str("12.0").unwrap(),
-            BuildString::new_unchecked("0"),
+            "0".parse::<BuildString>().unwrap(),
         )));
         assert!(spec.matches(&{
             let mut record = PackageRecord::new(
                 PackageName::from_str("foo-bar").unwrap(),
                 Version::from_str("12.0").unwrap(),
-                BuildString::new_unchecked("0"),
+                "0".parse::<BuildString>().unwrap(),
             );
             record.license = Some("MIT".into());
             record
