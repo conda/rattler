@@ -57,6 +57,9 @@ type ExtendedCoreProviderMetadata = ProviderMetadata<
 
 use super::DEFAULT_USER_AGENT;
 
+mod scopes;
+pub use scopes::{EnsureScopesError, OAuthInteraction, ensure_oauth_scopes};
+
 /// Generic OIDC scopes used when no host-specific defaults apply.
 pub const DEFAULT_OAUTH_SCOPES: &[&str] = &["openid", "profile", "offline_access"];
 

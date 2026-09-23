@@ -276,7 +276,6 @@ const PREFIX_DEV_OAUTH_SCOPES: &[&str] = &[
     "offline_access",
     "channel:read",
     "channel:upload",
-    "basilisk:query",
 ];
 
 /// Built-in OAuth defaults for a known host.
@@ -309,6 +308,33 @@ fn default_oauth_config_for_host(host: &str) -> Option<DefaultOAuthConfig> {
             .map(|&s| s.to_string())
             .collect(),
         redirect_uri: None,
+    })
+}
+
+/// Construct trusted host defaults for command-triggered OAuth authorization.
+///
+/// Commands supply required scopes (for example `basilisk:query`) and call
+/// [`oauth::ensure_oauth_scopes`]. Only generic identity scopes are added here;
+/// existing channel permissions are preserved by incremental authorization,
+/// not newly requested for an audit-only login. Unlike explicit login, this uses
+/// browser-first authorization with device-code fallback. This only selects
+/// defaults; it does not inspect credentials, open a browser, or write storage.
+#[cfg(feature = "oauth")]
+pub fn oauth_config_for_host(host: &str, required_scopes: &[&str]) -> Option<oauth::OAuthConfig> {
+    let defaults = default_oauth_config_for_host(host)?;
+    Some(oauth::OAuthConfig {
+        issuer_url: defaults.issuer_url,
+        client_id: defaults.client_id,
+        client_secret: None,
+        flow: oauth::OAuthFlow::Auto,
+        scopes: oauth::DEFAULT_OAUTH_SCOPES
+            .iter()
+            .chain(required_scopes.iter())
+            .map(|scope| (*scope).to_owned())
+            .collect(),
+        redirect_uri: defaults.redirect_uri,
+        user_agent: None,
+        callback_page: None,
     })
 }
 
@@ -1536,7 +1562,6 @@ mod tests {
                 "offline_access",
                 "channel:read",
                 "channel:upload",
-                "basilisk:query",
             ]
             .into_iter()
             .map(ToString::to_string)

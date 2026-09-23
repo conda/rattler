@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- prefix.dev OAuth logins now request Basilisk query access while retaining channel access. Pixi users must upgrade to the eventual Pixi release containing this change, then run `pixi auth logout prefix.dev` and `pixi auth login prefix.dev` to update existing credentials.
+- Add command-triggered incremental OAuth authorization via `oauth_config_for_host` and `ensure_oauth_scopes`. Consumers such as `pixi audit` can request `basilisk:query` on demand while preserving existing channel permissions, without requiring logout. Normal prefix.dev login scopes are unchanged; consumers must wire the helper into their command and persist credentials only after successful authorization.
 
 ## [0.48.1](https://github.com/conda/rattler/compare/rattler-v0.48.0...rattler-v0.48.1) - 2026-08-03
 

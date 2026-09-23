@@ -1,0 +1,217 @@
+//! Incremental authorization for commands needing additional OAuth permissions.
+//!
+//! JWT claims here are unverified UX hints, not an authorization boundary. The
+//! resource server must still validate every access token. This module neither
+//! reads nor writes credential storage: callers refresh credentials first, then
+//! persist the returned grant only after this operation succeeds.
+//!
+//! A command integration can use the following pattern. The resource URL must
+//! be trusted separately; never send this token to an arbitrary audit mirror.
+//!
+//! ```no_run
+//! use std::io::{self, IsTerminal};
+//! use rattler::cli::auth::{oauth_config_for_host, oauth::{ensure_oauth_scopes, OAuthInteraction}};
+//! use rattler_networking::{Authentication, AuthenticationStorage};
+//!
+//! async fn authorize_audit(
+//!     storage: &AuthenticationStorage,
+//!     offline: bool,
+//! ) -> Result<Authentication, Box<dyn std::error::Error>> {
+//!     let issuer = "https://prefix.dev";
+//!     let (_, entry) = storage.get_by_url_with_host(issuer)?;
+//!     let key = entry.as_ref().map(|(key, _)| key.as_str()).unwrap_or("prefix.dev");
+//!     let (_, current) = if offline {
+//!         storage.get_by_url(issuer)?
+//!     } else {
+//!         storage.get_by_url_refreshed(issuer).await?
+//!     };
+//!     // Refresh failure must not discard the old grant's permission list.
+//!     let current = current.or_else(|| entry.as_ref().map(|(_, auth)| auth.clone()));
+//!     let interaction = if !offline && std::env::var_os("CI").is_none()
+//!         && io::stdin().is_terminal() && io::stderr().is_terminal()
+//!     {
+//!         OAuthInteraction::Allow
+//!     } else {
+//!         OAuthInteraction::Deny
+//!     };
+//!     let config = oauth_config_for_host("prefix.dev", &["basilisk:query"]).unwrap();
+//!     let authorized = ensure_oauth_scopes(config, current.as_ref(), interaction).await?;
+//!     storage.store(key, &authorized)?;
+//!     Ok(authorized)
+//! }
+//! ```
+
+use std::{
+    collections::HashSet,
+    future::Future,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+use rattler_networking::Authentication;
+use serde_json::Value;
+
+use super::{OAuthConfig, OAuthError, perform_oauth_login};
+
+/// Whether a command may start browser/device authorization.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OAuthInteraction {
+    /// The caller has established that an interactive login is appropriate.
+    Allow,
+    /// CI, noninteractive, or offline execution must not start authorization.
+    Deny,
+}
+
+/// Incremental-authorization errors deliberately contain no credentials.
+#[derive(Debug, thiserror::Error)]
+pub enum EnsureScopesError {
+    /// Interactive authorization is required, but forbidden by the caller.
+    #[error(
+        "Additional OAuth authorization is required; rerun the command in an interactive terminal, or provision a token granting the required scopes for CI"
+    )]
+    AuthorizationRequired,
+    /// An unknown existing grant cannot safely be replaced without losing access.
+    #[error("Cannot determine the existing OAuth grant; leaving credentials unchanged")]
+    UnknownGrant,
+    /// The caller must not replace another issuer's or client's credentials.
+    #[error("Stored OAuth credentials do not belong to the requested issuer and client")]
+    DifferentClient,
+    /// Reject partial consent rather than silently dropping prior permissions.
+    #[error(
+        "OAuth authorization did not return a usable token with all requested permissions; leaving credentials unchanged"
+    )]
+    IncompleteGrant,
+    /// Authorization failed or the user declined it.
+    #[error(transparent)]
+    OAuth(#[from] OAuthError),
+}
+
+/// Ensure a command's requested scopes, prompting at most once if permitted.
+///
+/// `config.scopes` is the command's desired scope set. Authorization requests
+/// include the union of these scopes and every scope in the existing grant.
+/// A fresh matching token is reused without opening a browser. Use
+/// [`super::OAuthFlow::Auto`] for browser login with device-code fallback.
+///
+/// Pass credentials obtained via `AuthenticationStorage::get_by_url_refreshed`
+/// so normal expiry can be handled silently first. On success, persist the
+/// result under the original storage key before making the API call. On any
+/// error (including cancellation or partial consent), do not overwrite or
+/// delete the old credentials. The function does not retry a rejected API call.
+///
+/// Callers must choose `Deny` in CI/noninteractive/offline contexts and must
+/// only construct configurations from trusted issuer/client settings, never
+/// blindly from an arbitrary resource server's authentication challenge.
+pub async fn ensure_oauth_scopes(
+    config: OAuthConfig,
+    current: Option<&Authentication>,
+    interaction: OAuthInteraction,
+) -> Result<Authentication, EnsureScopesError> {
+    ensure_with_login(config, current, interaction, perform_oauth_login).await
+}
+
+async fn ensure_with_login<F, Fut>(
+    mut config: OAuthConfig,
+    current: Option<&Authentication>,
+    interaction: OAuthInteraction,
+    login: F,
+) -> Result<Authentication, EnsureScopesError>
+where
+    F: FnOnce(OAuthConfig) -> Fut,
+    Fut: Future<Output = Result<Authentication, OAuthError>>,
+{
+    if config.scopes.is_empty() {
+        config.scopes.extend(
+            super::DEFAULT_OAUTH_SCOPES
+                .iter()
+                .map(|scope| (*scope).to_owned()),
+        );
+    }
+    if let Some(current) = current {
+        let grant = grant(current).ok_or(EnsureScopesError::UnknownGrant)?;
+        if grant.issuer != config.issuer_url || grant.client_id != config.client_id {
+            return Err(EnsureScopesError::DifferentClient);
+        }
+        if grant.is_fresh() && config.scopes.is_subset(&grant.scopes) {
+            return Ok(current.clone());
+        }
+        config.scopes.extend(grant.scopes);
+    }
+    if interaction == OAuthInteraction::Deny {
+        return Err(EnsureScopesError::AuthorizationRequired);
+    }
+
+    let requested = config.scopes.clone();
+    let issuer = config.issuer_url.clone();
+    let client_id = config.client_id.clone();
+    let updated = login(config).await?;
+    let grant = grant(&updated).ok_or(EnsureScopesError::IncompleteGrant)?;
+    if grant.issuer != issuer
+        || grant.client_id != client_id
+        || !grant.is_fresh()
+        || !requested.is_subset(&grant.scopes)
+    {
+        return Err(EnsureScopesError::IncompleteGrant);
+    }
+    Ok(updated)
+}
+
+struct Grant {
+    issuer: String,
+    client_id: String,
+    scopes: HashSet<String>,
+    expires_at: i64,
+}
+
+impl Grant {
+    fn is_fresh(&self) -> bool {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        self.expires_at > 0 && self.expires_at as u64 > now.saturating_add(30)
+    }
+}
+
+fn scope_claim(value: &Value) -> Option<HashSet<String>> {
+    match value {
+        Value::String(scopes) => Some(scopes.split_ascii_whitespace().map(str::to_owned).collect()),
+        Value::Array(scopes) => scopes
+            .iter()
+            .map(|scope| scope.as_str().map(str::to_owned))
+            .collect(),
+        _ => None,
+    }
+}
+
+fn grant(auth: &Authentication) -> Option<Grant> {
+    let Authentication::OAuth {
+        access_token,
+        client_id,
+        expires_at,
+        ..
+    } = auth
+    else {
+        return None;
+    };
+    let claims = super::super::jwt_claims(access_token)?;
+    // Missing/malformed scope metadata must not be interpreted as an empty
+    // grant: requesting only new scopes could discard unknown old permissions.
+    let mut scopes = None;
+    for name in ["scope", "scp"] {
+        if let Some(value) = claims.get(name) {
+            scopes
+                .get_or_insert_with(HashSet::new)
+                .extend(scope_claim(value)?);
+        }
+    }
+    let token_expiry = claims.get("exp")?.as_i64()?;
+    Some(Grant {
+        issuer: claims.get("iss")?.as_str()?.to_owned(),
+        client_id: client_id.clone(),
+        scopes: scopes?,
+        expires_at: expires_at.map_or(token_expiry, |expiry| expiry.min(token_expiry)),
+    })
+}
+
+#[cfg(test)]
+mod tests;
