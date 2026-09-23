@@ -516,6 +516,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rattler.solver.solver.TimestampPolicy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TimestampPolicy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rattler.solver.solver.solve" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3819,6 +3830,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rattler.solver.solver.TimestampPolicy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TimestampPolicy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rattler.solver.solver.solve" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3866,6 +3888,14 @@
 
 
 <h1 id="solve">solve<a class="headerlink" href="#solve" title="Permanent link">#</a></h1>
+<p><code>exclude_newer</code> accepts a fixed datetime or a minimum age (<code>timedelta</code>). By
+default, filtering uses the channel's <code>indexed_timestamp</code>, falls back to the
+build <code>timestamp</code>, and excludes records missing both. Records exactly at the
+cutoff remain eligible.</p>
+<p>Use <code>timestamp_policy="allow-missing"</code> to include records missing both timestamps,
+or <code>timestamp_policy="require-indexed-timestamp"</code> to require publication metadata
+without falling back to build time. The policy applies only when <code>exclude_newer</code>
+is set and is shared by all packages and channels.</p>
 
 
 <div class="doc doc-object doc-module">
@@ -3918,6 +3948,34 @@
 
 </div>
 
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="rattler.solver.solver.TimestampPolicy" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">TimestampPolicy</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
+  </span>
+
+<a href="#rattler.solver.solver.TimestampPolicy" class="headerlink" title="Permanent link">#</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">TimestampPolicy</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="s2">&quot;allow-missing&quot;</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="s2">&quot;require-timestamp&quot;</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="s2">&quot;require-indexed-timestamp&quot;</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="p">]</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Timestamp selection and missing metadata policy for cutoff filtering.</p>
+
+    </div>
+
+</div>
+
 
 
 
@@ -3949,7 +4007,8 @@
 </span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="n">channel_relations</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">channel_relations_max_depth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="n">add_pip_as_python_dependency</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="p">)</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    <span class="n">timestamp_policy</span><span class="o">=</span><span class="s2">&quot;require-timestamp&quot;</span><span class="p">,</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4146,11 +4205,37 @@ that should be present in the environment.</p>
             <td>
               <div class="doc-md-description">
                 <p>Exclude any record that is newer than the given datetime,
-or newer than the cutoff produced by subtracting a timedelta from now.</p>
+or newer than the cutoff produced by subtracting a timedelta from now.
+Records exactly at the cutoff are included.</p>
               </div>
             </td>
             <td>
                   <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>timestamp_policy</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="TimestampPolicy
+
+
+  
+      module-attribute
+   (rattler.solver.solver.TimestampPolicy)" href="#rattler.solver.solver.TimestampPolicy">TimestampPolicy</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Applies when <code>exclude_newer</code> is set. <code>"require-timestamp"</code>
+(default) prefers <code>indexed_timestamp</code>, falls back to build <code>timestamp</code>,
+and rejects records missing both. <code>"allow-missing"</code> uses the same
+precedence but includes missing timestamps. <code>"require-indexed-timestamp"</code>
+uses only <code>indexed_timestamp</code> and rejects records without it.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;require-timestamp&#39;</code>
             </td>
           </tr>
           <tr class="doc-section-item">
@@ -4315,7 +4400,8 @@ package records before solving.</p>
 </span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">constraints</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">package_format_selection</span><span class="o">=</span><span class="n">PackageFormatSelection</span><span class="o">.</span><span class="n">PREFER_CONDA</span><span class="p">,</span>
 </span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">add_pip_as_python_dependency</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="p">)</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="n">timestamp_policy</span><span class="o">=</span><span class="s2">&quot;require-timestamp&quot;</span><span class="p">,</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4476,11 +4562,37 @@ repodata.</p>
             <td>
               <div class="doc-md-description">
                 <p>Exclude any record that is newer than the given datetime,
-or newer than the cutoff produced by subtracting a timedelta from now.</p>
+or newer than the cutoff produced by subtracting a timedelta from now.
+Records exactly at the cutoff are included.</p>
               </div>
             </td>
             <td>
                   <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>timestamp_policy</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="TimestampPolicy
+
+
+  
+      module-attribute
+   (rattler.solver.solver.TimestampPolicy)" href="#rattler.solver.solver.TimestampPolicy">TimestampPolicy</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Applies when <code>exclude_newer</code> is set. <code>"require-timestamp"</code>
+(default) prefers <code>indexed_timestamp</code>, falls back to build <code>timestamp</code>,
+and rejects records missing both. <code>"allow-missing"</code> uses the same
+precedence but includes missing timestamps. <code>"require-indexed-timestamp"</code>
+uses only <code>indexed_timestamp</code> and rejects records without it.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;require-timestamp&#39;</code>
             </td>
           </tr>
           <tr class="doc-section-item">
