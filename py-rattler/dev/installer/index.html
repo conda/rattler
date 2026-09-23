@@ -14,7 +14,7 @@
         <link rel="prev" href="../solver/">
       
       
-        <link rel="next" href="../index_/">
+        <link rel="next" href="../sigstore/">
       
       
         
@@ -773,6 +773,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sigstore/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sigstore attestations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -3490,6 +3518,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../attestation_error/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AttestationError
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../cache_dir_error/" class="md-nav__link">
         
   
@@ -4822,7 +4878,8 @@ package_name:
 </span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">reporter</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="n">alternative_target_prefix</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">config</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="p">)</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="n">attestation_policy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -5112,6 +5169,24 @@ arbitrary code. It is therefor discouraged to enable executing link scripts.</p>
                   <code>None</code>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>attestation_policy</code>
+            </td>
+            <td>
+                  <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="VerificationPolicy (rattler.sigstore.VerificationPolicy)" href="../sigstore/#rattler.sigstore.VerificationPolicy">VerificationPolicy</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Sigstore policy for packages installed, replaced, or relinked by
+    this transaction. Required verification runs before package metadata or files
+    are changed. Unchanged and removal-only packages are not verified.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -5218,16 +5293,16 @@ arbitrary code. It is therefor discouraged to enable executing link scripts.</p>
           
             
             <a
-              href="../index_/"
+              href="../sigstore/"
               class="md-footer__link md-footer__link--next"
-              aria-label="Next: index"
+              aria-label="Next: Sigstore attestations"
             >
               <div class="md-footer__title">
                 <span class="md-footer__direction">
                   Next
                 </span>
                 <div class="md-ellipsis">
-                  index
+                  Sigstore attestations
                 </div>
               </div>
               <div class="md-footer__button md-icon">
