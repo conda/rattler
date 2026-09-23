@@ -24,16 +24,30 @@ use crate::{
     solver_args::SolverArgs,
 };
 
+/// The examples shown by `rattler solve --help` and in `rattler skill`.
+///
+/// The attestation example only applies when the `sigstore` feature is enabled,
+/// because the `--verify-attestations` flag does not exist otherwise.
+#[cfg(feature = "sigstore")]
+const EXAMPLES: &str = r#"Examples:
+  rattler solve python numpy                 # print the solved environment as a table
+  rattler solve python --format json         # print the solved records as JSON
+  rattler solve python --format urls         # print only the urls of the solved packages
+  rattler solve python --verify-attestations require --issuer github --identity 'https://github.com/org/*'"#;
+
+/// The examples shown by `rattler solve --help` and in `rattler skill`.
+#[cfg(not(feature = "sigstore"))]
+const EXAMPLES: &str = r#"Examples:
+  rattler solve python numpy                 # print the solved environment as a table
+  rattler solve python --format json         # print the solved records as JSON
+  rattler solve python --format urls         # print only the urls of the solved packages"#;
+
 /// Solve a conda environment without installing it.
 ///
 /// Resolves the specified package specs for a target platform and prints the
 /// resulting package set.
 #[derive(Debug, clap::Parser)]
-#[clap(after_help = r#"Examples:
-  rattler solve python numpy                 # print the solved environment as a table
-  rattler solve python --format json         # print the solved records as JSON
-  rattler solve python --format urls         # print only the urls of the solved packages
-  rattler solve python --verify-attestations require --issuer github --identity 'https://github.com/org/*'"#)]
+#[clap(after_help = EXAMPLES)]
 pub struct Opt {
     /// Package specs to solve.
     #[clap(required = true)]
