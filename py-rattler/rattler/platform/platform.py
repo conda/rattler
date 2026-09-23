@@ -39,6 +39,8 @@ PlatformLiteral = Literal[
     "wasi-wasm32",
     "zos-z",
 ]
+"""The set of platform names that can be used to construct a
+[`Platform`][rattler.platform.platform.Platform]."""
 
 
 class PlatformSingleton(type):

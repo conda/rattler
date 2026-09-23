@@ -14,7 +14,13 @@ if TYPE_CHECKING:
 
 
 CacheAction = Literal["cache-or-fetch", "use-cache-only", "force-cache-only", "no-cache"]
+"""How the repodata cache should be used. `cache-or-fetch` validates the cache and
+re-fetches when it is stale, `use-cache-only` never hits the network and errors if
+nothing is cached, `force-cache-only` uses whatever is cached even if it is stale,
+and `no-cache` always re-fetches."""
+
 Variant = Literal["after-patches", "from-packages", "current"]
+"""Which repodata variant to fetch from the channel."""
 
 
 @dataclass

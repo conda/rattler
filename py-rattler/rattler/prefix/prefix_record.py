@@ -10,6 +10,10 @@ from pathlib import Path
 
 
 class LinkType(Enum):
+    """
+    The method that was used to link a package file into a prefix.
+    """
+
     HARDLINK = ("hardlink",)
     COPY = ("copy",)
     SOFTLINK = ("softlink",)
@@ -17,6 +21,12 @@ class LinkType(Enum):
 
 
 class Link:
+    """
+    Describes how a package was linked into a prefix: the path it was linked
+    from and the [`LinkType`][rattler.prefix.prefix_record.LinkType] that was
+    used.
+    """
+
     _inner: PyLink
 
     def __init__(self, path: os.PathLike[str], type: Optional[LinkType]) -> None:
