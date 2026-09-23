@@ -185,14 +185,26 @@ pub fn link_file(
         // Detect file type from the content
         let file_type = FileType::detect(source.as_ref());
 
-        // Open the destination file, replacing rather than overwriting an existing one (see
-        // `remove_existing_destination`)
-        remove_existing_destination(&destination_path)?;
-        let destination = BufWriter::with_capacity(
-            50 * 1024,
-            fs::File::create(&destination_path)
-                .map_err(LinkFileError::FailedToOpenDestinationFile)?,
-        );
+        // Open the destination file. An existing file is replaced rather than truncated: in a
+        // shared prefix it may belong to another user, and then setting its permissions below
+        // would fail after the content has already been written (see
+        // `remove_existing_destination`). `create_new` detects this in the same syscall, so a
+        // fresh install does not pay for it.
+        let create_destination = || {
+            fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&destination_path)
+        };
+        let destination = match create_destination() {
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                remove_existing_destination(&destination_path)?;
+                create_destination()
+            }
+            result => result,
+        }
+        .map_err(LinkFileError::FailedToOpenDestinationFile)?;
+        let destination = BufWriter::with_capacity(50 * 1024, destination);
         let mut destination_writer = HashingWriter::<_, rattler_digest::Sha256>::new(destination);
 
         // Convert back-slashes (\) on windows with forward-slashes (/) to avoid problems with
@@ -573,18 +585,23 @@ fn symlink_to_destination(
     }
 }
 
-/// Copy the specified file from the source (or cached) directory. If the file already exists it is
-/// removed and the operation is retried.
+/// Copy the specified file from the source (or cached) directory. If an existing file cannot be
+/// overwritten it is removed and the copy is retried.
 fn copy_to_destination(
     source_path: &Path,
     destination_path: &Path,
 ) -> Result<LinkMethod, LinkFileError> {
-    // `fs::copy` never fails with `AlreadyExists`: it overwrites an existing file in place and
-    // then sets its permissions, which requires owning (or being able to write) that file. Remove
-    // it first so the file is replaced instead.
-    remove_existing_destination(destination_path)?;
-    fs::copy(source_path, destination_path)
-        .map_err(|e| LinkFileError::FailedToLink(LinkMethod::Copy, e))?;
+    // `fs::copy` overwrites an existing file in place and then sets its permissions, which
+    // requires owning (or being able to write) that file. If that is denied, replace the file
+    // instead (see `remove_existing_destination`).
+    match fs::copy(source_path, destination_path) {
+        Err(e) if e.kind() == ErrorKind::PermissionDenied => {
+            remove_existing_destination(destination_path)?;
+            fs::copy(source_path, destination_path)
+        }
+        result => result,
+    }
+    .map_err(|e| LinkFileError::FailedToLink(LinkMethod::Copy, e))?;
 
     // Copy file modification times, fs::copy transfers file permissions automatically
     let metadata =
@@ -596,7 +613,7 @@ fn copy_to_destination(
     Ok(LinkMethod::Copy)
 }
 
-/// Removes a file or symlink that already exists at `destination_path`, so that it is replaced
+/// Removes a file or symlink that exists at `destination_path`, so that it is replaced
 /// rather than overwritten in place. Replacing only requires write access to the directory, while
 /// overwriting a file and setting its permissions and timestamps requires owning it. This matters
 /// in shared prefixes, where the file may belong to another user of the same group.
