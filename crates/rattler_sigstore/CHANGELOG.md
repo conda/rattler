@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
 - better readme ([#118](https://github.com/conda/rattler/pull/118))
 - replace zulip with discord ([#116](https://github.com/conda/rattler/pull/116))
-- move all conda types to seperate crate
+- move all conda types to separate crate
 
 ### Fixed
 
