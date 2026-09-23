@@ -8,6 +8,7 @@ from rattler.networking.client import Client
 from rattler.platform.platform import Platform
 from rattler.prefix.prefix_record import PrefixRecord
 from rattler.repo_data.record import RepoDataRecord
+from rattler.sigstore import VerificationPolicy
 
 from rattler.rattler import py_install
 
@@ -291,6 +292,7 @@ async def install(
     reporter: Optional[InstallerReporter] = None,
     alternative_target_prefix: Optional[str | os.PathLike[str]] = None,
     config: Optional[Config] = None,
+    attestation_policy: Optional[VerificationPolicy] = None,
 ) -> None:
     """
     Create an environment by downloading and linking the `dependencies` in
@@ -361,6 +363,9 @@ async def install(
         config: Shared rattler configuration. Applies link-type preferences,
                 download concurrency, link-script execution, and—when ``client``
                 is omitted—the networking settings used for package downloads.
+        attestation_policy: Sigstore policy for packages installed, replaced, or relinked by
+                this transaction. Required verification runs before package metadata or files
+                are changed. Unchanged and removal-only packages are not verified.
     """
 
     if config is not None and client is None:
@@ -381,4 +386,5 @@ async def install(
         reporter=reporter,
         alternative_target_prefix=str(alternative_target_prefix) if alternative_target_prefix is not None else None,
         config=config._inner if config is not None else None,
+        attestation_policy=attestation_policy._inner if attestation_policy is not None else None,
     )
