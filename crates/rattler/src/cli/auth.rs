@@ -1,7 +1,41 @@
 //! This module contains CLI common entrypoint for authentication.
+//!
+//! OAuth scopes are additive. For example:
+//!
+//! ```text
+//! rattler auth login prefix.dev --oauth --oauth-scope custom:read --oauth-scope custom:write
+//! ```
+//!
+//! This requests the host's normal login scopes, all known existing OAuth
+//! permissions, and the custom additions. The provider must allow these scopes
+//! for the configured client. Explicit login always reauthorizes using the
+//! selected flow; it does not skip login when cached permissions suffice.
+//! Cancellation or incomplete consent leaves the previous credentials intact.
+//!
+//! Granted scopes are retained from the token response, supporting opaque and
+//! JWT access tokens. Legacy JWT credentials use claim metadata as a fallback;
+//! a legacy opaque grant without scope metadata cannot be safely extended and
+//! produces an actionable error rather than silently losing permissions.
+//!
+//! Use `auth login HOST --oauth --replace` to intentionally replace a grant,
+//! including switching issuer/client or replacing unknown legacy credentials.
+//! Only defaults and explicit additions are requested in replacement mode;
+//! the old grant is retained until authorization and persistence succeed.
+//! Automatic command authorization never enables replacement.
+//!
+//! Standard OIDC request scopes are remembered separately from resource
+//! permissions: providers need not echo `openid`, `profile`, or `offline_access`
+//! in access-token scopes. ID-token verification and refresh-token availability
+//! describe separate session capabilities, not resource-server authorization.
 
 #[cfg(feature = "oauth")]
 pub mod oauth;
+
+#[cfg(all(test, feature = "oauth"))]
+mod scope_tests;
+
+#[cfg(all(test, feature = "oauth"))]
+mod review_regression_tests;
 
 use base64::{
     Engine as _,
@@ -86,7 +120,7 @@ struct LoginArgs {
     #[clap(long, requires = "oauth", value_parser = ["device-code", "auth-code", "auto"], help_heading = "OAuth/OIDC Authentication")]
     oauth_flow: Option<String>,
 
-    /// Additional OAuth scopes to request (repeatable)
+    /// Add OAuth scopes to the default and existing permissions (repeatable)
     #[cfg(feature = "oauth")]
     #[clap(
         long = "oauth-scope",
@@ -94,6 +128,16 @@ struct LoginArgs {
         help_heading = "OAuth/OIDC Authentication"
     )]
     oauth_scopes: Vec<String>,
+
+    /// Replace the existing OAuth grant instead of carrying its permissions forward.
+    /// Use explicitly when switching issuer/client; credentials change only on success.
+    #[cfg(feature = "oauth")]
+    #[clap(
+        long = "replace",
+        requires = "oauth",
+        help_heading = "OAuth/OIDC Authentication"
+    )]
+    oauth_replace: bool,
 
     /// OAuth redirect URI (defaults to a random localhost port). Set
     /// this when the OAuth client on the `IdP` side is registered with
@@ -244,6 +288,11 @@ pub enum AuthenticationCLIError {
     #[cfg(feature = "oauth")]
     #[error(transparent)]
     OAuthError(#[from] oauth::OAuthError),
+
+    /// Scope extension could not safely preserve or obtain the requested grant.
+    #[cfg(feature = "oauth")]
+    #[error(transparent)]
+    OAuthScopes(#[from] oauth::EnsureScopesError),
 }
 
 /// Normalize a user-supplied host into its canonical hostname form.
@@ -268,7 +317,7 @@ fn normalize_login_host(host: &str) -> String {
         .unwrap_or_else(|| host.trim_end_matches('/').to_string())
 }
 
-/// prefix.dev's default channel scopes
+/// prefix.dev's default OAuth scopes.
 #[cfg(feature = "oauth")]
 const PREFIX_DEV_OAUTH_SCOPES: &[&str] = &[
     "openid",
@@ -311,6 +360,33 @@ fn default_oauth_config_for_host(host: &str) -> Option<DefaultOAuthConfig> {
     })
 }
 
+/// Construct trusted host defaults for command-triggered OAuth authorization.
+///
+/// Commands supply required scopes (for example `basilisk:query`) and call
+/// [`oauth::ensure_oauth_scopes`]. Only generic identity scopes are added here;
+/// existing channel permissions are preserved by incremental authorization,
+/// not newly requested for an audit-only login. Unlike explicit login, this uses
+/// browser-first authorization with device-code fallback. This only selects
+/// defaults; it does not inspect credentials, open a browser, or write storage.
+#[cfg(feature = "oauth")]
+pub fn oauth_config_for_host(host: &str, required_scopes: &[&str]) -> Option<oauth::OAuthConfig> {
+    let defaults = default_oauth_config_for_host(host)?;
+    Some(oauth::OAuthConfig {
+        issuer_url: defaults.issuer_url,
+        client_id: defaults.client_id,
+        client_secret: None,
+        flow: oauth::OAuthFlow::Auto,
+        scopes: oauth::DEFAULT_OAUTH_SCOPES
+            .iter()
+            .chain(required_scopes.iter())
+            .map(|scope| (*scope).to_owned())
+            .collect(),
+        redirect_uri: defaults.redirect_uri,
+        user_agent: None,
+        callback_page: None,
+    })
+}
+
 /// Returns the built-in OAuth config for an implicit (flag-less) login —
 /// i.e. when the user passed no explicit auth method and the host ships
 /// an out-of-the-box OAuth configuration. The presence of `Some` is the
@@ -328,6 +404,58 @@ fn default_oauth_for_login(args: &LoginArgs) -> Option<DefaultOAuthConfig> {
     }
 
     default_oauth_config_for_host(&args.host)
+}
+
+#[cfg(feature = "oauth")]
+fn login_oauth_scopes(
+    defaults: Option<&DefaultOAuthConfig>,
+    additions: &[String],
+) -> std::collections::HashSet<String> {
+    let mut scopes: std::collections::HashSet<String> = defaults.map_or_else(
+        || {
+            oauth::DEFAULT_OAUTH_SCOPES
+                .iter()
+                .map(|s| (*s).to_owned())
+                .collect()
+        },
+        |defaults| defaults.scopes.iter().cloned().collect(),
+    );
+    scopes.extend(additions.iter().cloned());
+    scopes
+}
+
+/// Use the same authorization implementation as before, but preserve the grant
+/// and original key. Read failures and failed consent must never overwrite it.
+#[cfg(feature = "oauth")]
+async fn login_oauth_and_store<F, Fut>(
+    host: &str,
+    storage: &AuthenticationStorage,
+    config: oauth::OAuthConfig,
+    replace: bool,
+    login: F,
+) -> Result<(), AuthenticationCLIError>
+where
+    F: FnOnce(oauth::OAuthConfig) -> Fut,
+    Fut: std::future::Future<Output = Result<Authentication, oauth::OAuthError>>,
+{
+    let host_key = normalize_login_host(host);
+    let lookup_url = Url::parse(&format!("https://{host_key}"))?;
+    let entry = storage.get_by_url_with_host_strict(&lookup_url)?;
+    let (key, current) = entry.map_or((host_key, None), |(key, auth)| (key, Some(auth)));
+    if replace {
+        eprintln!(
+            "Replacing the stored OAuth grant for {key}; previous permissions will not be carried forward."
+        );
+    }
+    // Explicit OAuth login may replace a different authentication scheme. Only
+    // an existing OAuth grant participates in incremental scope preservation.
+    let current = current
+        .as_ref()
+        .filter(|auth| !replace && matches!(auth, Authentication::OAuth { .. }));
+    let auth = oauth::reauthorize_with_login(config, current, login).await?;
+    storage.store(&key, &auth)?;
+    eprintln!("Credentials stored for {key}.");
+    Ok(())
 }
 
 fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
@@ -424,16 +552,7 @@ async fn login_with_offline(
                 .oauth_redirect_uri
                 .or_else(|| host_default.as_ref().and_then(|c| c.redirect_uri.clone()));
 
-            let scopes: std::collections::HashSet<String> = if !args.oauth_scopes.is_empty() {
-                args.oauth_scopes.into_iter().collect()
-            } else if let Some(default) = host_default {
-                default.scopes.into_iter().collect()
-            } else {
-                oauth::DEFAULT_OAUTH_SCOPES
-                    .iter()
-                    .map(|&s| s.to_string())
-                    .collect()
-            };
+            let scopes = login_oauth_scopes(host_default.as_ref(), &args.oauth_scopes);
 
             let config = oauth::OAuthConfig {
                 issuer_url,
@@ -446,13 +565,14 @@ async fn login_with_offline(
                 callback_page: None,
             };
 
-            let auth = oauth::perform_oauth_login(config).await?;
-            // Normalize the host so that `prefix.dev` and `prefix.dev/` (and
-            // any `https://...` form) write to the same storage key
-            let host = normalize_login_host(&args.host);
-            storage.store(&host, &auth)?;
-            eprintln!("Credentials stored for {host}.");
-            return Ok(());
+            return login_oauth_and_store(
+                &args.host,
+                &storage,
+                config,
+                args.oauth_replace,
+                oauth::perform_oauth_login,
+            )
+            .await;
         }
     }
 
@@ -1021,6 +1141,7 @@ fn print_authentication_status(
             token_endpoint,
             revocation_endpoint,
             client_id,
+            ..
         } => {
             let metadata = token_metadata(access_token);
             // OAuth's `expires_at` always refers to the short-lived ACCESS
@@ -1204,6 +1325,8 @@ mod tests {
             oauth_flow: None,
             #[cfg(feature = "oauth")]
             oauth_scopes: vec![],
+            #[cfg(feature = "oauth")]
+            oauth_replace: false,
             #[cfg(feature = "oauth")]
             oauth_redirect_uri: None,
             user_agent: None,
@@ -1524,7 +1647,22 @@ mod tests {
         let prefix = default_oauth_config_for_host("prefix.dev").unwrap();
         assert_eq!(prefix.issuer_url, "https://prefix.dev");
         assert_eq!(prefix.client_id, "rattler");
-        assert!(prefix.scopes.iter().any(|s| s == "channel:upload"));
+        assert_eq!(
+            prefix
+                .scopes
+                .into_iter()
+                .collect::<std::collections::HashSet<_>>(),
+            [
+                "openid",
+                "profile",
+                "offline_access",
+                "channel:read",
+                "channel:upload",
+            ]
+            .into_iter()
+            .map(ToString::to_string)
+            .collect()
+        );
     }
 
     #[cfg(feature = "oauth")]
@@ -1650,6 +1788,9 @@ mod tests {
                     // this test stays hermetic (no HTTP needed).
                     revocation_endpoint: None,
                     client_id: "rattler".into(),
+                    issuer_url: None,
+                    scopes: None,
+                    oidc: None,
                 },
             )
             .unwrap();
@@ -1774,6 +1915,9 @@ mod tests {
             token_endpoint: format!("{}/token", server.url()),
             revocation_endpoint: Some(format!("{}/revoke", server.url())),
             client_id: "rattler".into(),
+            issuer_url: None,
+            scopes: None,
+            oidc: None,
         };
         // Write directly to each backend so both end up holding the entry —
         // `storage.store()` stops at the first successful backend.

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Strict credential lookup APIs distinguish missing credentials from backend failures and bypass the best-effort lookup cache. Existing middleware reads remain best-effort.
+- Separate OIDC request/session metadata from access-token resource permissions; preserve it during refresh, including legacy mixed-scope migration.
+- Failed credential writes no longer replace the cached grant or include backend debug representations in the final storage error.
+- OAuth credentials retain issuer and granted-scope metadata, including across refresh. Existing credential files remain readable; legacy JWT metadata is recovered before token rotation where possible.
+
+### Breaking
+
+- `Authentication::OAuth` has three new optional Rust fields, `issuer_url`, `scopes`, and `oidc`. Downstream struct literals must initialize them (use `None` for legacy/unknown metadata), and exhaustive field patterns must include them or `..`. This is a source API change requiring a breaking release, not a credential-file migration.
+
 ## [0.30.9](https://github.com/conda/rattler/compare/rattler_networking-v0.30.8...rattler_networking-v0.30.9) - 2026-09-17
 
 ### Other

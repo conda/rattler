@@ -12,6 +12,7 @@ struct TokenRefreshResponse {
     access_token: String,
     refresh_token: Option<String>,
     expires_in: Option<i64>,
+    scope: Option<String>,
 }
 
 /// Number of seconds before `expires_at` at which a token is considered
@@ -146,6 +147,15 @@ pub(crate) async fn maybe_refresh_oauth(
         }
     };
 
+    // Capture legacy JWT metadata before rotating away the old access token.
+    let issuer_url = auth.oauth_issuer_url();
+    let scopes = auth.oauth_scopes().map(|scopes| {
+        scopes
+            .into_iter()
+            .filter(|scope| !crate::authentication_storage::authentication::is_oidc_scope(scope))
+            .collect()
+    });
+    let oidc = auth.oauth_oidc_metadata();
     let Authentication::OAuth {
         access_token: _,
         ref refresh_token,
@@ -153,6 +163,7 @@ pub(crate) async fn maybe_refresh_oauth(
         ref token_endpoint,
         ref revocation_endpoint,
         ref client_id,
+        ..
     } = auth
     else {
         return auth_outcome(auth);
@@ -245,6 +256,20 @@ pub(crate) async fn maybe_refresh_oauth(
         token_endpoint: token_endpoint.clone(),
         revocation_endpoint: revocation_endpoint.clone(),
         client_id: client_id.clone(),
+        issuer_url,
+        scopes: token_response
+            .scope
+            .map(|scope| {
+                scope
+                    .split_ascii_whitespace()
+                    .filter(|scope| {
+                        !crate::authentication_storage::authentication::is_oidc_scope(scope)
+                    })
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .or(scopes),
+        oidc,
     };
 
     if let Err(e) = storage.store(matched_key, &refreshed) {
@@ -279,6 +304,9 @@ mod tests {
             token_endpoint,
             revocation_endpoint: None,
             client_id: "client-id".to_string(),
+            issuer_url: None,
+            scopes: None,
+            oidc: None,
         }
     }
 
@@ -292,6 +320,9 @@ mod tests {
             token_endpoint,
             revocation_endpoint: None,
             client_id: "client-id".to_string(),
+            issuer_url: None,
+            scopes: None,
+            oidc: None,
         }
     }
 
@@ -344,6 +375,99 @@ mod tests {
         let addr = listener.local_addr().unwrap();
         tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
         format!("http://{addr}/token")
+    }
+
+    #[tokio::test]
+    async fn refresh_preserves_or_updates_grant_metadata_without_requesting_scopes() {
+        for response_scope in [None, Some("custom:read"), Some("")] {
+            let token_endpoint = spawn_token_endpoint_with_form(move |form| {
+                assert!(!form.contains_key("scope"));
+                let mut response = json!({"access_token":"new-opaque", "expires_in":3600});
+                if let Some(scope) = response_scope {
+                    response["scope"] = json!(scope);
+                }
+                (StatusCode::OK, Json(response))
+            })
+            .await;
+            let mut expired = expired_oauth(token_endpoint);
+            if let Authentication::OAuth {
+                issuer_url,
+                scopes,
+                oidc,
+                ..
+            } = &mut expired
+            {
+                *issuer_url = Some("https://issuer.example".into());
+                *scopes = Some(vec!["custom:read".into(), "custom:write".into()]);
+                *oidc = Some(
+                    crate::authentication_storage::authentication::OAuthOidcMetadata {
+                        requested_scopes: vec![
+                            "email".into(),
+                            "offline_access".into(),
+                            "openid".into(),
+                        ],
+                        id_token_verified: true,
+                    },
+                );
+            }
+            let expected_oidc = expired.oauth_oidc_metadata();
+            let storage = auth_storage("issuer.example", &expired);
+            let refreshed = maybe_refresh_oauth(&storage, expired, "issuer.example")
+                .await
+                .authentication
+                .unwrap();
+            let expected: Vec<String> = response_scope
+                .unwrap_or("custom:read custom:write")
+                .split_ascii_whitespace()
+                .map(str::to_owned)
+                .collect();
+            assert_eq!(refreshed.oauth_scopes(), Some(expected));
+            assert_eq!(refreshed.oauth_oidc_metadata(), expected_oidc);
+            assert_eq!(
+                refreshed.oauth_issuer_url().as_deref(),
+                Some("https://issuer.example")
+            );
+            assert_eq!(storage.get("issuer.example").unwrap(), Some(refreshed));
+        }
+    }
+
+    #[tokio::test]
+    async fn refresh_migrates_legacy_jwt_metadata_before_rotating_to_opaque_token() {
+        use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+        let token_endpoint = spawn_token_endpoint(|| {
+            (
+                StatusCode::OK,
+                Json(json!({"access_token":"opaque", "expires_in":3600})),
+            )
+        })
+        .await;
+        let mut expired = expired_oauth(token_endpoint);
+        if let Authentication::OAuth { access_token, .. } = &mut expired {
+            let claims = json!({"iss":"https://issuer.example", "scope":"openid email custom:read custom:write"});
+            *access_token = format!(
+                "e30.{}.signature",
+                URL_SAFE_NO_PAD.encode(serde_json::to_vec(&claims).unwrap())
+            );
+        }
+        let storage = auth_storage("issuer.example", &expired);
+        let refreshed = maybe_refresh_oauth(&storage, expired, "issuer.example")
+            .await
+            .authentication
+            .unwrap();
+        assert_eq!(
+            refreshed.oauth_scopes().unwrap(),
+            ["custom:read", "custom:write"]
+        );
+        assert_eq!(
+            refreshed.oauth_issuer_url().as_deref(),
+            Some("https://issuer.example")
+        );
+        let oidc = refreshed.oauth_oidc_metadata().unwrap();
+        assert_eq!(oidc.requested_scopes, ["email", "openid"]);
+        assert!(!oidc.id_token_verified);
+        assert!(
+            matches!(refreshed, Authentication::OAuth { access_token, scopes: Some(_), issuer_url: Some(_), .. } if access_token == "opaque")
+        );
     }
 
     #[tokio::test]
@@ -423,6 +547,9 @@ mod tests {
             let success_count = success_count.clone();
             let invalid_grant_count = invalid_grant_count.clone();
             move |form| {
+                // Omitting scope preserves the originally granted channel and
+                // Basilisk access (RFC 6749 section 6).
+                assert!(!form.contains_key("scope"));
                 let presented = form.get("refresh_token").cloned().unwrap_or_default();
                 let mut valid = valid_refresh_token.lock().unwrap();
                 if presented == *valid {
@@ -478,6 +605,9 @@ mod tests {
             token_endpoint: "http://127.0.0.1:0/token".to_string(),
             revocation_endpoint: None,
             client_id: "client-id".to_string(),
+            issuer_url: None,
+            scopes: None,
+            oidc: None,
         };
         let storage = auth_storage(host, &expired);
 
