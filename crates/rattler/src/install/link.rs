@@ -2,22 +2,30 @@
 //! See [`link_file`] for more information.
 use fs_err as fs;
 use memmap2::Mmap;
-use once_cell::sync::Lazy;
 use rattler_conda_types::Platform;
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_digest::Sha256;
 use rattler_digest::{HashingWriter, Sha256Hash};
 use reflink_copy::reflink;
-use regex::Regex;
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Formatter;
 use std::fs::Permissions;
-use std::io::{BufWriter, ErrorKind, Read, Seek, Write};
+use std::io::{BufWriter, ErrorKind, Read, Seek};
 use std::path::{Path, PathBuf};
 
 use super::apple_codesign::{AppleCodeSignBehavior, codesign};
+use super::prefix_replacement;
 use super::{ExternalSymlinkPolicy, Prefix};
+
+// The prefix replacement functions used to live here. They are re-exported so that the public
+// paths stay what they were, and documented in [`prefix_replacement`].
+pub use prefix_replacement::{
+    OffsetReplaceError, copy_and_replace_cstring_placeholder,
+    copy_and_replace_cstring_placeholder_offsets, copy_and_replace_placeholders,
+    copy_and_replace_placeholders_with_offsets, copy_and_replace_textual_placeholder,
+    copy_and_replace_textual_placeholder_offsets,
+};
 
 /// Describes the method to "link" a file from the source directory (or the cache directory) to the
 /// destination directory.
@@ -176,6 +184,8 @@ pub fn link_file(
     let link_method = if let Some(PrefixPlaceholder {
         file_mode,
         placeholder,
+        experimental_offsets: offsets,
+        experimental_shebang_length: shebang_length,
     }) = path_json_entry.prefix_placeholder.as_ref()
     {
         // Memory map the source file. This provides us with easy access to a continuous stream of
@@ -214,16 +224,66 @@ pub fn link_file(
             Cow::Borrowed(target_prefix)
         };
 
-        // Replace the prefix placeholder in the file with the new placeholder
-        copy_and_replace_placeholders(
-            source.as_ref(),
-            &mut destination_writer,
-            placeholder,
-            &target_prefix,
-            &target_platform,
-            *file_mode,
-        )
-        .map_err(|err| LinkFileError::IoError(String::from("replacing placeholders"), err))?;
+        // depending on the availability of the offsets
+        match offsets {
+            Some(offsets) => {
+                // The offsets/`shebang_length` come from the (untrusted) `paths.json`. If they are
+                // inconsistent with the file contents we do not fail the install: we fall back to
+                // the search-based path with a warning. The offset function guarantees it wrote
+                // nothing before reporting an inconsistency, so the fallback reuses the same
+                // (empty) destination.
+                match copy_and_replace_placeholders_with_offsets(
+                    source.as_ref(),
+                    &mut destination_writer,
+                    placeholder,
+                    &target_prefix,
+                    &target_platform,
+                    *file_mode,
+                    offsets,
+                    *shebang_length,
+                ) {
+                    Ok(()) => {}
+                    Err(OffsetReplaceError::InconsistentMetadata(reason)) => {
+                        tracing::warn!(
+                            "prefix replacement offsets for '{}' are inconsistent ({reason}); \
+                             falling back to search-based replacement",
+                            path_json_entry.relative_path.display()
+                        );
+                        copy_and_replace_placeholders(
+                            source.as_ref(),
+                            &mut destination_writer,
+                            placeholder,
+                            &target_prefix,
+                            &target_platform,
+                            *file_mode,
+                        )
+                        .map_err(|err| {
+                            LinkFileError::IoError(String::from("replacing placeholders"), err)
+                        })?;
+                    }
+                    Err(OffsetReplaceError::Io(err)) => {
+                        return Err(LinkFileError::IoError(
+                            String::from("replacing placeholders"),
+                            err,
+                        ));
+                    }
+                }
+            }
+            None => {
+                // Replace the prefix placeholder in the file with the new placeholder
+                copy_and_replace_placeholders(
+                    source.as_ref(),
+                    &mut destination_writer,
+                    placeholder,
+                    &target_prefix,
+                    &target_platform,
+                    *file_mode,
+                )
+                .map_err(|err| {
+                    LinkFileError::IoError(String::from("replacing placeholders"), err)
+                })?;
+            }
+        }
 
         let (mut file, current_hash) = destination_writer.finalize();
 
@@ -237,14 +297,16 @@ pub fn link_file(
 
         let metadata = fs::symlink_metadata(&source_path)
             .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+
+        let executable = has_executable_permissions(&metadata.permissions());
+
         // (re)sign the binary if the file is executable or is a Mach-O binary (e.g., dylib)
         // This is required for all macOS and iOS platforms because prefix replacement modifies
         // the binary content, which invalidates existing signatures. We need to preserve
         // entitlements. On arm64 an invalid signature does not just emit a warning, the binary
         // is killed on load, so iOS (device and simulator) binaries need this just as much as
         // macOS ones.
-        if (has_executable_permissions(&metadata.permissions())
-            || file_type == Some(FileType::MachO))
+        if (executable || file_type == Some(FileType::MachO))
             && (target_platform.is_osx() || target_platform.is_ios())
             && *file_mode == FileMode::Binary
         {
@@ -611,271 +673,6 @@ fn copy_symlink_target_to_destination(
     copy_to_destination(&resolved, destination_path)
 }
 
-/// Given the contents of a file copy it to the `destination` and in the process replace the
-/// `prefix_placeholder` text with the `target_prefix` text.
-///
-/// This switches to more specialized functions that handle the replacement of either
-/// textual and binary placeholders, the [`FileMode`] enum switches between the two functions.
-/// See both [`copy_and_replace_cstring_placeholder`] and [`copy_and_replace_textual_placeholder`]
-pub fn copy_and_replace_placeholders(
-    source_bytes: &[u8],
-    mut destination: impl Write,
-    prefix_placeholder: &str,
-    target_prefix: &str,
-    target_platform: &Platform,
-    file_mode: FileMode,
-) -> Result<(), std::io::Error> {
-    match file_mode {
-        FileMode::Text => {
-            copy_and_replace_textual_placeholder(
-                source_bytes,
-                destination,
-                prefix_placeholder,
-                target_prefix,
-                target_platform,
-            )?;
-        }
-        FileMode::Binary => {
-            // conda does not replace the prefix in the binary files on windows
-            // DLLs are loaded quite differently anyways (there is no rpath, for example).
-            if target_platform.is_windows() {
-                destination.write_all(source_bytes)?;
-            } else {
-                copy_and_replace_cstring_placeholder(
-                    source_bytes,
-                    destination,
-                    prefix_placeholder,
-                    target_prefix,
-                )?;
-            }
-        }
-    }
-    Ok(())
-}
-
-static SHEBANG_REGEX: Lazy<Regex> = Lazy::new(|| {
-    // ^(#!      pretty much the whole match string
-    // (?:[ ]*)  allow spaces between #! and beginning of
-    //           the executable path
-    // (/(?:\\ |[^ \n\r\t])*)  the executable is the next
-    //                         text block without an
-    //                         escaped space or non-space
-    //                         whitespace character
-    // (.*))$    the rest of the line can contain option
-    //           flags and end whole_shebang group
-    Regex::new(r"^(#!(?:[ ]*)(/(?:\\ |[^ \n\r\t])*)(.*))$").unwrap()
-});
-
-static PYTHON_REGEX: Lazy<Regex> = Lazy::new(|| {
-    // Match string starting with `python`, and optional version number
-    // followed by optional flags.
-    // python matches the string `python`
-    // (?:\d+(?:\.\d+)*)? matches an optional version number
-    Regex::new(r"^python(?:\d+(?:\.\d+)?)?$").unwrap()
-});
-
-/// Finds if the shebang line length is valid.
-fn is_valid_shebang_length(shebang: &str, platform: &Platform) -> bool {
-    const MAX_SHEBANG_LENGTH_LINUX: usize = 127;
-    const MAX_SHEBANG_LENGTH_MACOS: usize = 512;
-
-    // Android uses the Linux kernel and therefore inherits its shebang limit;
-    // iOS shares the XNU kernel with macOS.
-    if platform.is_linux() || platform.is_android() {
-        shebang.len() <= MAX_SHEBANG_LENGTH_LINUX
-    } else if platform.is_osx() || platform.is_ios() {
-        shebang.len() <= MAX_SHEBANG_LENGTH_MACOS
-    } else {
-        true
-    }
-}
-
-/// Convert a shebang to use `/usr/bin/env` to find the executable.
-/// This is useful for long shebangs or shebangs with spaces.
-fn convert_shebang_to_env(shebang: Cow<'_, str>) -> Cow<'_, str> {
-    if let Some(captures) = SHEBANG_REGEX.captures(&shebang) {
-        let path = &captures[2];
-        let exe_name = path.rsplit_once('/').map_or(path, |(_, f)| f);
-        if PYTHON_REGEX.is_match(exe_name) {
-            Cow::Owned(format!(
-                "#!/bin/sh\n'''exec' \"{}\"{} \"$0\" \"$@\" #'''",
-                path, &captures[3]
-            ))
-        } else {
-            Cow::Owned(format!("#!/usr/bin/env {}{}", exe_name, &captures[3]))
-        }
-    } else {
-        shebang
-    }
-}
-
-/// Long shebangs and shebangs with spaces are invalid.
-/// Long shebangs are longer than 127 on Linux or 512 on macOS characters.
-/// Shebangs with spaces are replaced with a shebang that uses `/usr/bin/env` to find the executable.
-/// This function replaces long shebangs with a shebang that uses `/usr/bin/env` to find the
-/// executable.
-fn replace_shebang<'a>(
-    shebang: Cow<'a, str>,
-    old_new: (&str, &str),
-    platform: &Platform,
-) -> Cow<'a, str> {
-    // If the new shebang would contain a space, return a `#!/usr/bin/env` shebang
-    assert!(
-        shebang.starts_with("#!"),
-        "Shebang does not start with #! ({shebang})",
-    );
-
-    if old_new.1.contains(' ') {
-        // Doesn't matter if we don't replace anything
-        if !shebang.contains(old_new.0) {
-            return shebang;
-        }
-        // we convert the shebang without spaces to a new shebang, and only then replace
-        // which is relevant for the Python case
-        let new_shebang = convert_shebang_to_env(shebang).replace(old_new.0, old_new.1);
-        return new_shebang.into();
-    }
-
-    let shebang: Cow<'_, str> = shebang.replace(old_new.0, old_new.1).into();
-
-    if !shebang.starts_with("#!") {
-        tracing::warn!("Shebang does not start with #! ({})", shebang);
-        return shebang;
-    }
-
-    if is_valid_shebang_length(&shebang, platform) {
-        shebang
-    } else {
-        convert_shebang_to_env(shebang)
-    }
-}
-
-/// Given the contents of a file copy it to the `destination` and in the process replace the
-/// `prefix_placeholder` text with the `target_prefix` text.
-///
-/// This is a text based version where the complete string is replaced. This works fine for text
-/// files but will not work correctly for binary files where the length of the string is often
-/// important. See [`copy_and_replace_cstring_placeholder`] when you are dealing with binary
-/// content.
-pub fn copy_and_replace_textual_placeholder(
-    mut source_bytes: &[u8],
-    mut destination: impl Write,
-    prefix_placeholder: &str,
-    target_prefix: &str,
-    target_platform: &Platform,
-) -> Result<(), std::io::Error> {
-    // Get the prefixes as bytes
-    let old_prefix = prefix_placeholder.as_bytes();
-    let new_prefix = target_prefix.as_bytes();
-
-    // check if we have a shebang. We need to handle it differently because it has a maximum length
-    // that can be exceeded in very long target prefix's.
-    if target_platform.is_unix() && source_bytes.starts_with(b"#!") {
-        // extract first line
-        let (first, rest) =
-            source_bytes.split_at(source_bytes.iter().position(|&c| c == b'\n').unwrap_or(0));
-        let first_line = String::from_utf8_lossy(first);
-        let new_shebang = replace_shebang(
-            first_line,
-            (prefix_placeholder, target_prefix),
-            target_platform,
-        );
-        // let replaced = first_line.replace(prefix_placeholder, target_prefix);
-        destination.write_all(new_shebang.as_bytes())?;
-        source_bytes = rest;
-    }
-
-    let mut last_match = 0;
-
-    for index in memchr::memmem::find_iter(source_bytes, old_prefix) {
-        destination.write_all(&source_bytes[last_match..index])?;
-        destination.write_all(new_prefix)?;
-        last_match = index + old_prefix.len();
-    }
-
-    // Write remaining bytes
-    if last_match < source_bytes.len() {
-        destination.write_all(&source_bytes[last_match..])?;
-    }
-
-    Ok(())
-}
-
-/// Given the contents of a file, copies it to the `destination` and in the process replace any
-/// binary c-style string that contains the text `prefix_placeholder` with a binary compatible
-/// c-string where the `prefix_placeholder` text is replaced with the `target_prefix` text.
-///
-/// The length of the input will match the output.
-///
-/// This function replaces binary c-style strings. If you want to simply find-and-replace text in a
-/// file instead use the [`copy_and_replace_textual_placeholder`] function.
-pub fn copy_and_replace_cstring_placeholder(
-    mut source_bytes: &[u8],
-    mut destination: impl Write,
-    prefix_placeholder: &str,
-    target_prefix: &str,
-) -> Result<(), std::io::Error> {
-    // Get the prefixes as bytes
-    let old_prefix = prefix_placeholder.as_bytes();
-    let new_prefix = target_prefix.as_bytes();
-
-    if new_prefix.len() > old_prefix.len() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "target prefix cannot be longer than the placeholder prefix",
-        ));
-    }
-
-    let finder = memchr::memmem::Finder::new(old_prefix);
-
-    loop {
-        if let Some(index) = finder.find(source_bytes) {
-            // write all bytes up to the old prefix, followed by the new prefix.
-            destination.write_all(&source_bytes[..index])?;
-
-            // Find the end of the c-style string. The null terminator basically.
-            let mut end = index + old_prefix.len();
-            while end < source_bytes.len() && source_bytes[end] != b'\0' {
-                end += 1;
-            }
-
-            let mut out = Vec::new();
-            let mut old_bytes = &source_bytes[index..end];
-            let old_len = old_bytes.len();
-
-            // replace all occurrences of the old prefix with the new prefix
-            while let Some(index) = finder.find(old_bytes) {
-                out.write_all(&old_bytes[..index])?;
-                out.write_all(new_prefix)?;
-                old_bytes = &old_bytes[index + old_prefix.len()..];
-            }
-            out.write_all(old_bytes)?;
-            // write everything up to the old length
-            if out.len() > old_len {
-                destination.write_all(&out[..old_len])?;
-            } else {
-                destination.write_all(&out)?;
-            }
-
-            // Compute the padding required when replacing the old prefix(es) with the new one. If the old
-            // prefix is longer than the new one we need to add padding to ensure that the entire part
-            // will hold the same number of bytes. We do this by adding '\0's (e.g. null terminators). This
-            // ensures that the text will remain a valid null-terminated string.
-            let padding = old_len.saturating_sub(out.len());
-            destination.write_all(&vec![0; padding])?;
-
-            // Continue with the rest of the bytes.
-            source_bytes = &source_bytes[end..];
-        } else {
-            // The old prefix was not found in the (remaining) source bytes.
-            // Write the rest of the bytes
-            destination.write_all(source_bytes)?;
-
-            return Ok(());
-        }
-    }
-}
-
 fn symlink(source_path: &Path, destination_path: &Path) -> std::io::Result<()> {
     #[cfg(windows)]
     return fs_err::os::windows::fs::symlink_file(source_path, destination_path);
@@ -931,11 +728,8 @@ impl FileType {
 #[cfg(test)]
 mod test {
     use super::ExternalSymlinkPolicy;
-    use super::PYTHON_REGEX;
     use fs_err as fs;
     use rattler_conda_types::Platform;
-    use rstest::rstest;
-    use std::io::Cursor;
 
     /// Patched files must receive `modification_time` rather than preserving
     /// the source file's mtime. Without this, Python reuses stale .pyc files
@@ -971,6 +765,8 @@ mod test {
             prefix_placeholder: Some(PrefixPlaceholder {
                 file_mode: FileMode::Text,
                 placeholder: "/old/placeholder/path".to_string(),
+                experimental_offsets: None,
+                experimental_shebang_length: None,
             }),
             sha256: None,
             size_in_bytes: None,
@@ -1123,213 +919,6 @@ mod test {
             !target_dir.path().join("missing-link").exists(),
             "no destination file should have been created"
         );
-    }
-
-    #[rstest]
-    #[case("Hello, cruel world!", "cruel", "fabulous", "Hello, fabulous world!")]
-    #[case(
-        "prefix_placeholder",
-        "prefix_placeholder",
-        "target_prefix",
-        "target_prefix"
-    )]
-    pub fn test_copy_and_replace_textual_placeholder(
-        #[case] input: &str,
-        #[case] prefix_placeholder: &str,
-        #[case] target_prefix: &str,
-        #[case] expected_output: &str,
-    ) {
-        let mut output = Cursor::new(Vec::new());
-        super::copy_and_replace_textual_placeholder(
-            input.as_bytes(),
-            &mut output,
-            prefix_placeholder,
-            target_prefix,
-            &Platform::Linux64,
-        )
-        .unwrap();
-        assert_eq!(
-            &String::from_utf8_lossy(&output.into_inner()),
-            expected_output
-        );
-    }
-
-    #[rstest]
-    #[case(
-        b"12345Hello, fabulous world!\x006789",
-        "fabulous",
-        "cruel",
-        b"12345Hello, cruel world!\x00\x00\x00\x006789"
-    )]
-    pub fn test_copy_and_replace_binary_placeholder(
-        #[case] input: &[u8],
-        #[case] prefix_placeholder: &str,
-        #[case] target_prefix: &str,
-        #[case] expected_output: &[u8],
-    ) {
-        assert_eq!(
-            expected_output.len(),
-            input.len(),
-            "input and expected output must have the same length"
-        );
-        let mut output = Cursor::new(Vec::new());
-        super::copy_and_replace_cstring_placeholder(
-            input,
-            &mut output,
-            prefix_placeholder,
-            target_prefix,
-        )
-        .unwrap();
-        assert_eq!(&output.into_inner(), expected_output);
-    }
-
-    #[rstest]
-    #[case(b"short\x00", "short", "verylong")]
-    #[case(b"short1234\x00", "short", "verylong")]
-    pub fn test_shorter_binary_placeholder(
-        #[case] input: &[u8],
-        #[case] prefix_placeholder: &str,
-        #[case] target_prefix: &str,
-    ) {
-        assert!(target_prefix.len() > prefix_placeholder.len());
-
-        let mut output = Cursor::new(Vec::new());
-        let result = super::copy_and_replace_cstring_placeholder(
-            input,
-            &mut output,
-            prefix_placeholder,
-            target_prefix,
-        );
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn replace_binary_path_var() {
-        let input =
-            b"beginrandomdataPATH=/placeholder/etc/share:/placeholder/bin/:\x00somemoretext";
-        let mut output = Cursor::new(Vec::new());
-        super::copy_and_replace_cstring_placeholder(input, &mut output, "/placeholder", "/target")
-            .unwrap();
-        let out = &output.into_inner();
-        assert_eq!(out, b"beginrandomdataPATH=/target/etc/share:/target/bin/:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00somemoretext");
-        assert_eq!(out.len(), input.len());
-    }
-
-    #[test]
-    fn test_replace_shebang() {
-        let shebang_with_spaces = "#!/path/placeholder/executable -o test -x".into();
-        let replaced = super::replace_shebang(
-            shebang_with_spaces,
-            ("placeholder", "with space"),
-            &Platform::Linux64,
-        );
-        assert_eq!(replaced, "#!/usr/bin/env executable -o test -x");
-    }
-
-    #[test]
-    fn test_replace_long_shebang() {
-        let short_shebang = "#!/path/to/executable -x 123".into();
-        let replaced = super::replace_shebang(short_shebang, ("", ""), &Platform::Linux64);
-        assert_eq!(replaced, "#!/path/to/executable -x 123");
-
-        let shebang = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong/executable -o test -x";
-        let replaced = super::replace_shebang(shebang.into(), ("", ""), &Platform::Linux64);
-        assert_eq!(replaced, "#!/usr/bin/env executable -o test -x");
-
-        let replaced = super::replace_shebang(shebang.into(), ("", ""), &Platform::Osx64);
-        assert_eq!(replaced, shebang);
-
-        let shebang_with_escapes = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooo\\ oooooo\\ oooooo\\ oooooooooooooooooooooooooooooooooooong/exe\\ cutable -o test -x";
-        let replaced =
-            super::replace_shebang(shebang_with_escapes.into(), ("", ""), &Platform::Linux64);
-        assert_eq!(replaced, "#!/usr/bin/env exe\\ cutable -o test -x");
-
-        let shebang = "#!    /this/is/looooooooooooooooooooooooooooooooooooooooooooo\\ \\ ooooooo\\ oooooo\\ oooooo\\ ooooooooooooooooo\\ ooooooooooooooooooong/exe\\ cutable -o \"te  st\" -x";
-        let replaced = super::replace_shebang(shebang.into(), ("", ""), &Platform::Linux64);
-        assert_eq!(replaced, "#!/usr/bin/env exe\\ cutable -o \"te  st\" -x");
-
-        let shebang = "#!/usr/bin/env perl";
-        let replaced = super::replace_shebang(
-            shebang.into(),
-            ("/placeholder", "/with space"),
-            &Platform::Linux64,
-        );
-        assert_eq!(replaced, shebang);
-
-        let shebang = "#!/placeholder/perl";
-        let replaced = super::replace_shebang(
-            shebang.into(),
-            ("/placeholder", "/with space"),
-            &Platform::Linux64,
-        );
-        assert_eq!(replaced, "#!/usr/bin/env perl");
-    }
-
-    #[test]
-    fn replace_python_shebang() {
-        let short_shebang = "#!/path/to/python3.12".into();
-        let replaced = super::replace_shebang(
-            short_shebang,
-            ("/path/to", "/new/prefix/with spaces/bin"),
-            &Platform::Linux64,
-        );
-        insta::assert_snapshot!(replaced);
-
-        let short_shebang = "#!/path/to/python3.12 -x 123".into();
-        let replaced = super::replace_shebang(
-            short_shebang,
-            ("/path/to", "/new/prefix/with spaces/bin"),
-            &Platform::Linux64,
-        );
-        insta::assert_snapshot!(replaced);
-    }
-
-    #[test]
-    fn test_replace_long_prefix_in_text_file() {
-        let test_data_dir =
-            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test-data");
-        let test_file = test_data_dir.join("shebang_test.txt");
-        let prefix_placeholder = "/this/is/placeholder";
-        let mut target_prefix = "/super/long/".to_string();
-        for _ in 0..15 {
-            target_prefix.push_str("verylongstring/");
-        }
-        let input = fs::read(test_file).unwrap();
-        let mut output = Cursor::new(Vec::new());
-        super::copy_and_replace_textual_placeholder(
-            &input,
-            &mut output,
-            prefix_placeholder,
-            &target_prefix,
-            &Platform::Linux64,
-        )
-        .unwrap();
-
-        let output = output.into_inner();
-        let replaced = String::from_utf8_lossy(&output);
-        insta::assert_snapshot!(replaced);
-    }
-
-    #[test]
-    fn test_python_regex() {
-        // Test the regex
-        let test_strings = vec!["python", "python3", "python3.12", "python2.7"];
-
-        for s in test_strings {
-            assert!(PYTHON_REGEX.is_match(s));
-        }
-
-        let no_match_strings = vec![
-            "python3.12.1",
-            "python3.12.1.1",
-            "foo",
-            "foo3.2",
-            "pythondoc",
-        ];
-
-        for s in no_match_strings {
-            assert!(!PYTHON_REGEX.is_match(s));
-        }
     }
 
     #[test]

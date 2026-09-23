@@ -29,7 +29,10 @@ pub use {
     no_link::NoLink,
     no_softlink::NoSoftlink,
     package_metadata::PackageMetadata,
-    paths::{FileMode, PathType, PathsEntry, PathsJson, PrefixPlaceholder},
+    paths::{
+        FileMode, InvalidOffsetsError, OffsetEncoding, OffsetGroup, OffsetRanges, PathType,
+        PathsEntry, PathsJson, PrefixPlaceholder, validate_offset_groups,
+    },
     run_exports::RunExportsJson,
 };
 
