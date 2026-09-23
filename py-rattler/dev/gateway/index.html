@@ -4504,7 +4504,7 @@ gateway itself to methods that accepts it.</p>
                 <code>cache_dir</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="os.PathLike">PathLike</span>[<span title="str">str</span>]]</code>
+                  <code><span title="os.PathLike">PathLike</span>[<span title="str">str</span>] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4521,12 +4521,12 @@ gateway itself to methods that accepts it.</p>
                 <code>default_config</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="SourceConfig
+                  <code><a class="autorefs autorefs-internal" title="SourceConfig
 
 
   
       dataclass
-   (rattler.repo_data.gateway.SourceConfig)" href="#rattler.repo_data.gateway.SourceConfig">SourceConfig</a>]</code>
+   (rattler.repo_data.gateway.SourceConfig)" href="#rattler.repo_data.gateway.SourceConfig">SourceConfig</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4542,12 +4542,12 @@ gateway itself to methods that accepts it.</p>
                 <code>per_channel_config</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="dict">dict</span>[<span title="str">str</span>, <a class="autorefs autorefs-internal" title="SourceConfig
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <a class="autorefs autorefs-internal" title="SourceConfig
 
 
   
       dataclass
-   (rattler.repo_data.gateway.SourceConfig)" href="#rattler.repo_data.gateway.SourceConfig">SourceConfig</a>]]</code>
+   (rattler.repo_data.gateway.SourceConfig)" href="#rattler.repo_data.gateway.SourceConfig">SourceConfig</a>] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4581,7 +4581,7 @@ gateway itself to methods that accepts it.</p>
                 <code>client</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="Client (rattler.networking.client.Client)" href="../client/#rattler.networking.Client">Client</a>]</code>
+                  <code><a class="autorefs autorefs-internal" title="Client (rattler.networking.client.Client)" href="../client/#rattler.networking.Client">Client</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4803,12 +4803,12 @@ already been fetched by a <code>query</code> this is free.</p>
                 <code>subdirs</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="typing.Iterable">Iterable</span>[<a class="autorefs autorefs-internal" title="Platform (rattler.platform.platform.Platform)" href="../platform/#rattler.platform.platform.Platform">Platform</a> | <a class="autorefs autorefs-internal" title="PlatformLiteral
+                  <code><span title="collections.abc.Iterable">Iterable</span>[<a class="autorefs autorefs-internal" title="Platform (rattler.platform.platform.Platform)" href="../platform/#rattler.platform.platform.Platform">Platform</a> | <a class="autorefs autorefs-internal" title="PlatformLiteral
 
 
   
       module-attribute
-   (rattler.platform.platform.PlatformLiteral)" href="../platform/#rattler.platform.platform.PlatformLiteral">PlatformLiteral</a>]]</code>
+   (rattler.platform.platform.PlatformLiteral)" href="../platform/#rattler.platform.platform.PlatformLiteral">PlatformLiteral</a>] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4935,7 +4935,7 @@ authentication settings too.</p>
                 <code>sources</code>
             </td>
             <td>
-                  <code><span title="typing.Iterable">Iterable</span>[<span title="typing.Union">Union</span>[<a class="autorefs autorefs-internal" title="Channel (rattler.channel.channel.Channel)" href="../channel/#rattler.channel.channel.Channel">Channel</a>, <span title="str">str</span>, <a class="autorefs autorefs-internal" title="RepoDataSource (rattler.repo_data.source.RepoDataSource)" href="../repo_data_source/#rattler.repo_data.source.RepoDataSource">RepoDataSource</a>]]</code>
+                  <code><span title="collections.abc.Iterable">Iterable</span>[<a class="autorefs autorefs-internal" title="Channel (rattler.channel.channel.Channel)" href="../channel/#rattler.channel.channel.Channel">Channel</a> | <span title="str">str</span> | <a class="autorefs autorefs-internal" title="RepoDataSource (rattler.repo_data.source.RepoDataSource)" href="../repo_data_source/#rattler.repo_data.source.RepoDataSource">RepoDataSource</a>]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4952,7 +4952,7 @@ authentication settings too.</p>
                 <code>platforms</code>
             </td>
             <td>
-                  <code><span title="typing.Iterable">Iterable</span>[<a class="autorefs autorefs-internal" title="Platform (rattler.platform.platform.Platform)" href="../platform/#rattler.platform.platform.Platform">Platform</a> | <a class="autorefs autorefs-internal" title="PlatformLiteral
+                  <code><span title="collections.abc.Iterable">Iterable</span>[<a class="autorefs autorefs-internal" title="Platform (rattler.platform.platform.Platform)" href="../platform/#rattler.platform.platform.Platform">Platform</a> | <a class="autorefs autorefs-internal" title="PlatformLiteral
 
 
   
@@ -4973,12 +4973,12 @@ authentication settings too.</p>
                 <code>channel_relations</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="ChannelRelationsMode
+                  <code><a class="autorefs autorefs-internal" title="ChannelRelationsMode
 
 
   
       module-attribute
-   (rattler.repo_data.gateway.ChannelRelationsMode)" href="#rattler.repo_data.gateway.ChannelRelationsMode">ChannelRelationsMode</a>]</code>
+   (rattler.repo_data.gateway.ChannelRelationsMode)" href="#rattler.repo_data.gateway.ChannelRelationsMode">ChannelRelationsMode</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4995,7 +4995,7 @@ authentication settings too.</p>
                 <code>channel_relations_max_depth</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="int">int</span>]</code>
+                  <code><span title="int">int</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5120,7 +5120,7 @@ is needed for custom sources, it must be implemented within the source itself.</
                 <code>sources</code>
             </td>
             <td>
-                  <code><span title="typing.Iterable">Iterable</span>[<span title="typing.Union">Union</span>[<a class="autorefs autorefs-internal" title="Channel (rattler.channel.channel.Channel)" href="../channel/#rattler.channel.channel.Channel">Channel</a>, <span title="str">str</span>, <a class="autorefs autorefs-internal" title="RepoDataSource (rattler.repo_data.source.RepoDataSource)" href="../repo_data_source/#rattler.repo_data.source.RepoDataSource">RepoDataSource</a>]]</code>
+                  <code><span title="collections.abc.Iterable">Iterable</span>[<a class="autorefs autorefs-internal" title="Channel (rattler.channel.channel.Channel)" href="../channel/#rattler.channel.channel.Channel">Channel</a> | <span title="str">str</span> | <a class="autorefs autorefs-internal" title="RepoDataSource (rattler.repo_data.source.RepoDataSource)" href="../repo_data_source/#rattler.repo_data.source.RepoDataSource">RepoDataSource</a>]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5137,7 +5137,7 @@ is needed for custom sources, it must be implemented within the source itself.</
                 <code>platforms</code>
             </td>
             <td>
-                  <code><span title="typing.Iterable">Iterable</span>[<a class="autorefs autorefs-internal" title="Platform (rattler.platform.platform.Platform)" href="../platform/#rattler.platform.platform.Platform">Platform</a> | <a class="autorefs autorefs-internal" title="PlatformLiteral
+                  <code><span title="collections.abc.Iterable">Iterable</span>[<a class="autorefs autorefs-internal" title="Platform (rattler.platform.platform.Platform)" href="../platform/#rattler.platform.platform.Platform">Platform</a> | <a class="autorefs autorefs-internal" title="PlatformLiteral
 
 
   
@@ -5158,7 +5158,7 @@ is needed for custom sources, it must be implemented within the source itself.</
                 <code>specs</code>
             </td>
             <td>
-                  <code><span title="typing.Iterable">Iterable</span>[<a class="autorefs autorefs-internal" title="MatchSpec (rattler.match_spec.match_spec.MatchSpec)" href="../match_spec/#rattler.match_spec.match_spec.MatchSpec">MatchSpec</a> | <a class="autorefs autorefs-internal" title="PackageName (rattler.package.package_name.PackageName)" href="../package_name/#rattler.package.package_name.PackageName">PackageName</a> | <span title="str">str</span>]</code>
+                  <code><span title="collections.abc.Iterable">Iterable</span>[<a class="autorefs autorefs-internal" title="MatchSpec (rattler.match_spec.match_spec.MatchSpec)" href="../match_spec/#rattler.match_spec.match_spec.MatchSpec">MatchSpec</a> | <a class="autorefs autorefs-internal" title="PackageName (rattler.package.package_name.PackageName)" href="../package_name/#rattler.package.package_name.PackageName">PackageName</a> | <span title="str">str</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5190,12 +5190,12 @@ is needed for custom sources, it must be implemented within the source itself.</
                 <code>channel_relations</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="ChannelRelationsMode
+                  <code><a class="autorefs autorefs-internal" title="ChannelRelationsMode
 
 
   
       module-attribute
-   (rattler.repo_data.gateway.ChannelRelationsMode)" href="#rattler.repo_data.gateway.ChannelRelationsMode">ChannelRelationsMode</a>]</code>
+   (rattler.repo_data.gateway.ChannelRelationsMode)" href="#rattler.repo_data.gateway.ChannelRelationsMode">ChannelRelationsMode</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5214,7 +5214,7 @@ is needed for custom sources, it must be implemented within the source itself.</
                 <code>channel_relations_max_depth</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="int">int</span>]</code>
+                  <code><span title="int">int</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5431,7 +5431,7 @@ every package name in the channel.</p>
                 <code>sources</code>
             </td>
             <td>
-                  <code><span title="typing.Iterable">Iterable</span>[<span title="typing.Union">Union</span>[<a class="autorefs autorefs-internal" title="Channel (rattler.channel.channel.Channel)" href="../channel/#rattler.channel.channel.Channel">Channel</a>, <span title="str">str</span>, <a class="autorefs autorefs-internal" title="RepoDataSource (rattler.repo_data.source.RepoDataSource)" href="../repo_data_source/#rattler.repo_data.source.RepoDataSource">RepoDataSource</a>]]</code>
+                  <code><span title="collections.abc.Iterable">Iterable</span>[<a class="autorefs autorefs-internal" title="Channel (rattler.channel.channel.Channel)" href="../channel/#rattler.channel.channel.Channel">Channel</a> | <span title="str">str</span> | <a class="autorefs autorefs-internal" title="RepoDataSource (rattler.repo_data.source.RepoDataSource)" href="../repo_data_source/#rattler.repo_data.source.RepoDataSource">RepoDataSource</a>]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5448,7 +5448,7 @@ every package name in the channel.</p>
                 <code>platforms</code>
             </td>
             <td>
-                  <code><span title="typing.Iterable">Iterable</span>[<a class="autorefs autorefs-internal" title="Platform (rattler.platform.platform.Platform)" href="../platform/#rattler.platform.platform.Platform">Platform</a> | <a class="autorefs autorefs-internal" title="PlatformLiteral
+                  <code><span title="collections.abc.Iterable">Iterable</span>[<a class="autorefs autorefs-internal" title="Platform (rattler.platform.platform.Platform)" href="../platform/#rattler.platform.platform.Platform">Platform</a> | <a class="autorefs autorefs-internal" title="PlatformLiteral
 
 
   
@@ -5469,7 +5469,7 @@ every package name in the channel.</p>
                 <code>target</code>
             </td>
             <td>
-                  <code><span title="typing.Union">Union</span>[<span title="str">str</span>, <a class="autorefs autorefs-internal" title="PackageName (rattler.package.package_name.PackageName)" href="../package_name/#rattler.package.package_name.PackageName">PackageName</a>, &#39;PackageRecord&#39;, &#39;GenericVirtualPackage&#39;]</code>
+                  <code><span title="str">str</span> | <a class="autorefs autorefs-internal" title="PackageName (rattler.package.package_name.PackageName)" href="../package_name/#rattler.package.package_name.PackageName">PackageName</a> | <a class="autorefs autorefs-internal" title="PackageRecord (rattler.repo_data.package_record.PackageRecord)" href="../package_record/#rattler.repo_data.package_record.PackageRecord">PackageRecord</a> | <a class="autorefs autorefs-internal" title="GenericVirtualPackage (rattler.virtual_package.generic.GenericVirtualPackage)" href="../generic_virtual_package/#rattler.virtual_package.generic.GenericVirtualPackage">GenericVirtualPackage</a></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5495,7 +5495,7 @@ every package name in the channel.</p>
       <tbody>
           <tr class="doc-section-item">
             <td>
-                  <code><span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="Dependent (rattler.repo_data.who_needs.Dependent)" href="../who_needs/#rattler.repo_data.who_needs.Dependent">Dependent</a>]</code>
+                  <code><span title="list">list</span>[<a class="autorefs autorefs-internal" title="Dependent (rattler.repo_data.who_needs.Dependent)" href="../who_needs/#rattler.repo_data.who_needs.Dependent">Dependent</a>]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5505,7 +5505,7 @@ every package name in the channel.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
-                  <code><span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="Dependent (rattler.repo_data.who_needs.Dependent)" href="../who_needs/#rattler.repo_data.who_needs.Dependent">Dependent</a>]</code>
+                  <code><span title="list">list</span>[<a class="autorefs autorefs-internal" title="Dependent (rattler.repo_data.who_needs.Dependent)" href="../who_needs/#rattler.repo_data.who_needs.Dependent">Dependent</a>]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5591,7 +5591,7 @@ every package name in the channel.</p>
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><span title="list">list</span>[<span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code></p>
+              Bases: <code><span title="list">list</span>[<span title="list">list</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code></p>
 
 
 

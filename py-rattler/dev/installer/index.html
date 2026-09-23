@@ -4927,7 +4927,7 @@ arbitrary code. It is therefor discouraged to enable executing link scripts.</p>
                 <code>records</code>
             </td>
             <td>
-                  <code><span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]</code>
+                  <code><span title="list">list</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4960,7 +4960,7 @@ arbitrary code. It is therefor discouraged to enable executing link scripts.</p>
                 <code>cache_dir</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="os.PathLike">PathLike</span>[<span title="str">str</span>]]</code>
+                  <code><span title="os.PathLike">PathLike</span>[<span title="str">str</span>] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4977,7 +4977,7 @@ arbitrary code. It is therefor discouraged to enable executing link scripts.</p>
                 <code>installed_packages</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="PrefixRecord (rattler.prefix.prefix_record.PrefixRecord)" href="../prefix_record/#rattler.prefix.prefix_record.PrefixRecord">PrefixRecord</a>]]</code>
+                  <code><span title="list">list</span>[<a class="autorefs autorefs-internal" title="PrefixRecord (rattler.prefix.prefix_record.PrefixRecord)" href="../prefix_record/#rattler.prefix.prefix_record.PrefixRecord">PrefixRecord</a>] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4997,7 +4997,7 @@ arbitrary code. It is therefor discouraged to enable executing link scripts.</p>
                 <code>reinstall_packages</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="set">set</span>[<span title="str">str</span>]]</code>
+                  <code><span title="set">set</span>[<span title="str">str</span>] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5013,7 +5013,7 @@ arbitrary code. It is therefor discouraged to enable executing link scripts.</p>
                 <code>ignored_packages</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="set">set</span>[<span title="str">str</span>]]</code>
+                  <code><span title="set">set</span>[<span title="str">str</span>] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5030,7 +5030,7 @@ arbitrary code. It is therefor discouraged to enable executing link scripts.</p>
                 <code>platform</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="Platform (rattler.platform.platform.Platform)" href="../platform/#rattler.platform.platform.Platform">Platform</a>]</code>
+                  <code><a class="autorefs autorefs-internal" title="Platform (rattler.platform.platform.Platform)" href="../platform/#rattler.platform.platform.Platform">Platform</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5047,7 +5047,7 @@ arbitrary code. It is therefor discouraged to enable executing link scripts.</p>
                 <code>execute_link_scripts</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="bool">bool</span>]</code>
+                  <code><span title="bool">bool</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5083,7 +5083,7 @@ arbitrary code. It is therefor discouraged to enable executing link scripts.</p>
                 <code>client</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="Client (rattler.networking.client.Client)" href="../client/#rattler.networking.Client">Client</a>]</code>
+                  <code><a class="autorefs autorefs-internal" title="Client (rattler.networking.client.Client)" href="../client/#rattler.networking.Client">Client</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5100,7 +5100,7 @@ arbitrary code. It is therefor discouraged to enable executing link scripts.</p>
                 <code>requested_specs</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="MatchSpec (rattler.match_spec.MatchSpec)" href="../match_spec/#rattler.match_spec.match_spec.MatchSpec">MatchSpec</a>]]</code>
+                  <code><span title="list">list</span>[<a class="autorefs autorefs-internal" title="MatchSpec (rattler.match_spec.MatchSpec)" href="../match_spec/#rattler.match_spec.match_spec.MatchSpec">MatchSpec</a>] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5118,7 +5118,7 @@ arbitrary code. It is therefor discouraged to enable executing link scripts.</p>
                 <code>reporter</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="InstallerReporter (rattler.install.installer.InstallerReporter)" href="#rattler.install.installer.InstallerReporter">InstallerReporter</a>]</code>
+                  <code><a class="autorefs autorefs-internal" title="InstallerReporter (rattler.install.installer.InstallerReporter)" href="#rattler.install.installer.InstallerReporter">InstallerReporter</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5136,7 +5136,7 @@ arbitrary code. It is therefor discouraged to enable executing link scripts.</p>
                 <code>alternative_target_prefix</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="str">str</span> | <span title="os.PathLike">PathLike</span>[<span title="str">str</span>]]</code>
+                  <code><span title="str">str</span> | <span title="os.PathLike">PathLike</span>[<span title="str">str</span>] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5156,7 +5156,7 @@ arbitrary code. It is therefor discouraged to enable executing link scripts.</p>
                 <code>config</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="Config (rattler.config.Config)" href="../config/#rattler.config.config.Config">Config</a>]</code>
+                  <code><a class="autorefs autorefs-internal" title="Config (rattler.config.Config)" href="../config/#rattler.config.config.Config">Config</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -5174,7 +5174,7 @@ arbitrary code. It is therefor discouraged to enable executing link scripts.</p>
                 <code>attestation_policy</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="VerificationPolicy (rattler.sigstore.VerificationPolicy)" href="../sigstore/#rattler.sigstore.VerificationPolicy">VerificationPolicy</a>]</code>
+                  <code><a class="autorefs autorefs-internal" title="VerificationPolicy (rattler.sigstore.VerificationPolicy)" href="../sigstore/#rattler.sigstore.VerificationPolicy">VerificationPolicy</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">

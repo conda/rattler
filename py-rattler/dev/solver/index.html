@@ -3994,7 +3994,7 @@ is set and is shared by all packages and channels.</p>
 <div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">solve</span><span class="p">(</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">sources</span><span class="p">,</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">specs</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">gateway</span><span class="o">=</span><span class="n">Gateway</span><span class="p">(),</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">gateway</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">platforms</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">locked_packages</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">pinned_packages</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -4033,7 +4033,7 @@ that should be present in the environment.</p>
                 <code>sources</code>
             </td>
             <td>
-                  <code><span title="typing.Sequence">Sequence</span>[<span title="typing.Union">Union</span>[<a class="autorefs autorefs-internal" title="Channel (rattler.channel.channel.Channel)" href="../channel/#rattler.channel.channel.Channel">Channel</a>, <span title="str">str</span>, <a class="autorefs autorefs-internal" title="RepoDataSource (rattler.repo_data.source.RepoDataSource)" href="../repo_data_source/#rattler.repo_data.source.RepoDataSource">RepoDataSource</a>, <a class="autorefs autorefs-internal" title="SparseRepoData (rattler.repo_data.sparse.SparseRepoData)" href="../sparse_repo_data/#rattler.repo_data.sparse.SparseRepoData">SparseRepoData</a>]]</code>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="Channel (rattler.channel.channel.Channel)" href="../channel/#rattler.channel.channel.Channel">Channel</a> | <span title="str">str</span> | <a class="autorefs autorefs-internal" title="RepoDataSource (rattler.repo_data.source.RepoDataSource)" href="../repo_data_source/#rattler.repo_data.source.RepoDataSource">RepoDataSource</a> | <a class="autorefs autorefs-internal" title="SparseRepoData (rattler.repo_data.sparse.SparseRepoData)" href="../sparse_repo_data/#rattler.repo_data.sparse.SparseRepoData">SparseRepoData</a>]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4050,7 +4050,7 @@ that should be present in the environment.</p>
                 <code>specs</code>
             </td>
             <td>
-                  <code><span title="typing.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="MatchSpec (rattler.match_spec.match_spec.MatchSpec)" href="../match_spec/#rattler.match_spec.match_spec.MatchSpec">MatchSpec</a> | <span title="str">str</span>]</code>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="MatchSpec (rattler.match_spec.match_spec.MatchSpec)" href="../match_spec/#rattler.match_spec.match_spec.MatchSpec">MatchSpec</a> | <span title="str">str</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4066,12 +4066,12 @@ that should be present in the environment.</p>
                 <code>platforms</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="typing.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="Platform (rattler.platform.platform.Platform)" href="../platform/#rattler.platform.platform.Platform">Platform</a> | <a class="autorefs autorefs-internal" title="PlatformLiteral
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="Platform (rattler.platform.platform.Platform)" href="../platform/#rattler.platform.platform.Platform">Platform</a> | <a class="autorefs autorefs-internal" title="PlatformLiteral
 
 
   
       module-attribute
-   (rattler.platform.platform.PlatformLiteral)" href="../platform/#rattler.platform.platform.PlatformLiteral">PlatformLiteral</a>]]</code>
+   (rattler.platform.platform.PlatformLiteral)" href="../platform/#rattler.platform.platform.PlatformLiteral">PlatformLiteral</a>] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4088,7 +4088,7 @@ that should be present in the environment.</p>
                 <code>gateway</code>
             </td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="Gateway (rattler.repo_data.gateway.Gateway)" href="../gateway/#rattler.repo_data.gateway.Gateway">Gateway</a></code>
+                  <code><a class="autorefs autorefs-internal" title="Gateway (rattler.repo_data.gateway.Gateway)" href="../gateway/#rattler.repo_data.gateway.Gateway">Gateway</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4096,7 +4096,7 @@ that should be present in the environment.</p>
               </div>
             </td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="Gateway (rattler.repo_data.gateway.Gateway)" href="../gateway/#rattler.repo_data.gateway.Gateway">Gateway</a>()</code>
+                  <code>None</code>
             </td>
           </tr>
           <tr class="doc-section-item">
@@ -4104,7 +4104,7 @@ that should be present in the environment.</p>
                 <code>locked_packages</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="typing.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4127,7 +4127,7 @@ that should be present in the environment.</p>
                 <code>pinned_packages</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="typing.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4149,7 +4149,7 @@ that should be present in the environment.</p>
                 <code>virtual_packages</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="typing.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="GenericVirtualPackage (rattler.virtual_package.generic.GenericVirtualPackage)" href="../generic_virtual_package/#rattler.virtual_package.generic.GenericVirtualPackage">GenericVirtualPackage</a> | <a class="autorefs autorefs-internal" title="VirtualPackage (rattler.virtual_package.virtual_package.VirtualPackage)" href="../virtual_package/#rattler.virtual_package.virtual_package.VirtualPackage">VirtualPackage</a>]]</code>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="GenericVirtualPackage (rattler.virtual_package.generic.GenericVirtualPackage)" href="../generic_virtual_package/#rattler.virtual_package.generic.GenericVirtualPackage">GenericVirtualPackage</a> | <a class="autorefs autorefs-internal" title="VirtualPackage (rattler.virtual_package.virtual_package.VirtualPackage)" href="../virtual_package/#rattler.virtual_package.virtual_package.VirtualPackage">VirtualPackage</a>] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4184,7 +4184,7 @@ that should be present in the environment.</p>
                 <code>timeout</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="datetime.timedelta">timedelta</span>]</code>
+                  <code><span title="datetime.timedelta">timedelta</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4200,7 +4200,7 @@ that should be present in the environment.</p>
                 <code>exclude_newer</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="datetime.datetime">datetime</span> | <span title="datetime.timedelta">timedelta</span>]</code>
+                  <code><span title="datetime.datetime">datetime</span> | <span title="datetime.timedelta">timedelta</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4271,7 +4271,7 @@ uses only <code>indexed_timestamp</code> and rejects records without it.</p>
                 <code>constraints</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="typing.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="MatchSpec (rattler.match_spec.match_spec.MatchSpec)" href="../match_spec/#rattler.match_spec.match_spec.MatchSpec">MatchSpec</a> | <span title="str">str</span>]]</code>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="MatchSpec (rattler.match_spec.match_spec.MatchSpec)" href="../match_spec/#rattler.match_spec.match_spec.MatchSpec">MatchSpec</a> | <span title="str">str</span>] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4289,12 +4289,12 @@ but they must be satisfied by the solution.</p>
                 <code>channel_relations</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="ChannelRelationsMode
+                  <code><a class="autorefs autorefs-internal" title="ChannelRelationsMode
 
 
   
       module-attribute
-   (rattler.repo_data.gateway.ChannelRelationsMode)" href="../gateway/#rattler.repo_data.gateway.ChannelRelationsMode">ChannelRelationsMode</a>]</code>
+   (rattler.repo_data.gateway.ChannelRelationsMode)" href="../gateway/#rattler.repo_data.gateway.ChannelRelationsMode">ChannelRelationsMode</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4315,7 +4315,7 @@ follows relations recursively and reports problems via Python's
                 <code>channel_relations_max_depth</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="int">int</span>]</code>
+                  <code><span title="int">int</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4359,7 +4359,7 @@ package records before solving.</p>
       <tbody>
           <tr class="doc-section-item">
             <td>
-                  <code><span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]</code>
+                  <code><span title="list">list</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4429,7 +4429,7 @@ repodata.</p>
                 <code>specs</code>
             </td>
             <td>
-                  <code><span title="typing.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="MatchSpec (rattler.match_spec.match_spec.MatchSpec)" href="../match_spec/#rattler.match_spec.match_spec.MatchSpec">MatchSpec</a> | <span title="str">str</span>]</code>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="MatchSpec (rattler.match_spec.match_spec.MatchSpec)" href="../match_spec/#rattler.match_spec.match_spec.MatchSpec">MatchSpec</a> | <span title="str">str</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4445,7 +4445,7 @@ repodata.</p>
                 <code>sparse_repodata</code>
             </td>
             <td>
-                  <code><span title="typing.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="SparseRepoData (rattler.repo_data.sparse.SparseRepoData)" href="../sparse_repo_data/#rattler.repo_data.sparse.SparseRepoData">SparseRepoData</a>]</code>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="SparseRepoData (rattler.repo_data.sparse.SparseRepoData)" href="../sparse_repo_data/#rattler.repo_data.sparse.SparseRepoData">SparseRepoData</a>]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4461,7 +4461,7 @@ repodata.</p>
                 <code>locked_packages</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="typing.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4484,7 +4484,7 @@ repodata.</p>
                 <code>pinned_packages</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="typing.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4506,7 +4506,7 @@ repodata.</p>
                 <code>virtual_packages</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="typing.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="GenericVirtualPackage (rattler.virtual_package.generic.GenericVirtualPackage)" href="../generic_virtual_package/#rattler.virtual_package.generic.GenericVirtualPackage">GenericVirtualPackage</a> | <a class="autorefs autorefs-internal" title="VirtualPackage (rattler.virtual_package.virtual_package.VirtualPackage)" href="../virtual_package/#rattler.virtual_package.virtual_package.VirtualPackage">VirtualPackage</a>]]</code>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="GenericVirtualPackage (rattler.virtual_package.generic.GenericVirtualPackage)" href="../generic_virtual_package/#rattler.virtual_package.generic.GenericVirtualPackage">GenericVirtualPackage</a> | <a class="autorefs autorefs-internal" title="VirtualPackage (rattler.virtual_package.virtual_package.VirtualPackage)" href="../virtual_package/#rattler.virtual_package.virtual_package.VirtualPackage">VirtualPackage</a>] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4541,7 +4541,7 @@ repodata.</p>
                 <code>timeout</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="datetime.timedelta">timedelta</span>]</code>
+                  <code><span title="datetime.timedelta">timedelta</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4557,7 +4557,7 @@ repodata.</p>
                 <code>exclude_newer</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="datetime.datetime">datetime</span> | <span title="datetime.timedelta">timedelta</span>]</code>
+                  <code><span title="datetime.datetime">datetime</span> | <span title="datetime.timedelta">timedelta</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4628,7 +4628,7 @@ uses only <code>indexed_timestamp</code> and rejects records without it.</p>
                 <code>constraints</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="typing.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="MatchSpec (rattler.match_spec.match_spec.MatchSpec)" href="../match_spec/#rattler.match_spec.match_spec.MatchSpec">MatchSpec</a> | <span title="str">str</span>]]</code>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="MatchSpec (rattler.match_spec.match_spec.MatchSpec)" href="../match_spec/#rattler.match_spec.match_spec.MatchSpec">MatchSpec</a> | <span title="str">str</span>] | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4695,7 +4695,7 @@ package records before solving.</p>
       <tbody>
           <tr class="doc-section-item">
             <td>
-                  <code><span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]</code>
+                  <code><span title="list">list</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]</code>
             </td>
             <td>
               <div class="doc-md-description">

@@ -12,7 +12,7 @@ Let's see an example to learn some of the functionality the library has to offer
 import asyncio
 import tempfile
 
-from rattler import solve, install, VirtualPackage
+from rattler import VirtualPackage, install, solve
 
 
 async def main() -> None:
