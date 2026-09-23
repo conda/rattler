@@ -1,13 +1,15 @@
 from __future__ import annotations
+
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional, Literal
+from typing import TYPE_CHECKING, Literal
+
 from rattler.rattler import (
-    PyPathsJson,
+    PyFileMode,
     PyPathsEntry,
+    PyPathsJson,
     PyPathType,
     PyPrefixPlaceholder,
-    PyFileMode,
 )
 
 if TYPE_CHECKING:
@@ -85,7 +87,7 @@ class PathsJson:
         return PathsJson._from_py_paths_json(PyPathsJson.from_str(string))
 
     @classmethod
-    async def from_remote_url(cls, client: Client, url: str) -> Optional[PathsJson]:
+    async def from_remote_url(cls, client: Client, url: str) -> PathsJson | None:
         """
         Fetches `info/paths.json` from a remote package archive URL.
         """
@@ -128,7 +130,7 @@ class PathsJson:
         return PathsJson._from_py_paths_json(PyPathsJson.from_package_directory_with_deprecated_fallback(path))
 
     @property
-    def paths(self) -> List[PathsEntry]:
+    def paths(self) -> list[PathsEntry]:
         """
         All entries included in the package.
 
@@ -149,7 +151,7 @@ class PathsJson:
         return [PathsEntry._from_py_paths_entry(path) for path in self._inner.paths]
 
     @paths.setter
-    def paths(self, paths: List[PathsEntry]) -> None:
+    def paths(self, paths: list[PathsEntry]) -> None:
         self._inner.paths = [entry._inner for entry in paths]
 
     @property
@@ -203,9 +205,9 @@ class PathsEntry:
         relative_path: str,
         no_link: bool,
         path_type: PathType,
-        prefix_placeholder: Optional[PrefixPlaceholder],
-        sha256: Optional[bytes],
-        size_in_bytes: Optional[int],
+        prefix_placeholder: PrefixPlaceholder | None,
+        sha256: bytes | None,
+        size_in_bytes: int | None,
     ) -> None:
         """
         Create a new paths entry.
@@ -342,11 +344,11 @@ class PathsEntry:
         return PathType._from_py_path_type(self._inner.path_type)
 
     @path_type.setter
-    def path_type(self, path_type: "PathType") -> None:
+    def path_type(self, path_type: PathType) -> None:
         self._inner.path_type = path_type._inner
 
     @property
-    def prefix_placeholder(self) -> Optional[PrefixPlaceholder]:
+    def prefix_placeholder(self) -> PrefixPlaceholder | None:
         """
         Optionally the placeholder prefix used in the file. If this value is `None`
         the prefix is not present in the file.
@@ -372,14 +374,14 @@ class PathsEntry:
         return None
 
     @prefix_placeholder.setter
-    def prefix_placeholder(self, placeholder: Optional[PrefixPlaceholder]) -> None:
+    def prefix_placeholder(self, placeholder: PrefixPlaceholder | None) -> None:
         if placeholder is None:
             self._inner.prefix_placeholder = None
         else:
             self._inner.prefix_placeholder = placeholder._inner
 
     @property
-    def sha256(self) -> Optional[bytes]:
+    def sha256(self) -> bytes | None:
         """
         A hex representation of the SHA256 hash of the contents of the file.
         This entry is only present in version 1 of the paths.json file.
@@ -402,11 +404,11 @@ class PathsEntry:
         return self._inner.sha256
 
     @sha256.setter
-    def sha256(self, sha: Optional[bytes]) -> None:
+    def sha256(self, sha: bytes | None) -> None:
         self._inner.sha256 = sha
 
     @property
-    def size_in_bytes(self) -> Optional[int]:
+    def size_in_bytes(self) -> int | None:
         """
         The size of the file in bytes.
         This entry is only present in version 1 of the paths.json file.
@@ -432,7 +434,7 @@ class PathsEntry:
         return None
 
     @size_in_bytes.setter
-    def size_in_bytes(self, size: Optional[int]) -> None:
+    def size_in_bytes(self, size: int | None) -> None:
         self._inner.size_in_bytes = size
 
     @classmethod

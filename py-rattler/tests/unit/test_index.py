@@ -1,11 +1,11 @@
 # type: ignore
-import os
 import json
+import os
 import shutil
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterator
 
 import boto3
 import pytest
@@ -13,7 +13,6 @@ import pytest
 from rattler import Config, Platform
 from rattler.index import index_fs, index_s3
 from rattler.index.index import S3Credentials
-
 
 # ------------------------------------ FILESYSTEM ------------------------------------ #
 
@@ -116,7 +115,7 @@ async def test_index_repodata_revisions_reject_legacy_selection(package_director
 @pytest.mark.asyncio
 @pytest.mark.parametrize("obsolete_field", ["n_packages", "oldest", "newest"])
 async def test_index_repodata_revisions_reject_obsolete_statistics(package_directory, obsolete_field):
-    with pytest.raises(TypeError, match="no longer accepted.*derives package statistics"):
+    with pytest.raises(TypeError, match=r"no longer accepted.*derives package statistics"):
         await index_fs(
             package_directory,
             Platform("noarch"),

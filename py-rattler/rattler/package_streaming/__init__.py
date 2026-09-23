@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Iterable
 from os import PathLike
-from typing import AsyncIterator, Dict, Iterable, List, Literal, Optional, Tuple
+from typing import Literal
 
 from rattler.networking.client import Client
 from rattler.package.about_json import AboutJson
@@ -9,21 +10,21 @@ from rattler.package.index_json import IndexJson
 from rattler.package.paths_json import PathsJson
 from rattler.package.run_exports_json import RunExportsJson
 from rattler.rattler import PyArchiveEntry, PyPackageArchive
+from rattler.rattler import download_and_extract as py_download_and_extract
 from rattler.rattler import download_bytes as py_download_bytes
 from rattler.rattler import download_to_path as py_download_to_path
 from rattler.rattler import download_to_writer as py_download_to_writer
-from rattler.rattler import download_and_extract as py_download_and_extract
 from rattler.rattler import extract as py_extract
 from rattler.rattler import extract_tar_bz2 as py_extract_tar_bz2
 from rattler.rattler import fetch_raw_package_file_from_url as py_fetch_raw_package_file_from_url
 
 
-def extract(path: PathLike[str], dest: PathLike[str]) -> Tuple[bytes, bytes]:
+def extract(path: PathLike[str], dest: PathLike[str]) -> tuple[bytes, bytes]:
     """Extract a file to a destination."""
     return py_extract(path, dest)
 
 
-def extract_tar_bz2(path: PathLike[str], dest: PathLike[str]) -> Tuple[bytes, bytes]:
+def extract_tar_bz2(path: PathLike[str], dest: PathLike[str]) -> tuple[bytes, bytes]:
     """Extract a tar.bz2 file to a destination."""
     return py_extract_tar_bz2(path, dest)
 
@@ -61,8 +62,8 @@ async def download_to_writer(client: Client, url: str, writer: object) -> None:
 
 
 async def download_and_extract(
-    client: Client, url: str, dest: PathLike[str], expected_sha: Optional[bytes] = None
-) -> Tuple[bytes, bytes]:
+    client: Client, url: str, dest: PathLike[str], expected_sha: bytes | None = None
+) -> tuple[bytes, bytes]:
     """Download a file from a URL and extract it to a destination."""
     return await py_download_and_extract(client._client, url, dest, expected_sha)
 
@@ -122,7 +123,7 @@ class ArchiveEntry:
         return self._inner.is_hardlink
 
     @property
-    def link_target(self) -> Optional[str]:
+    def link_target(self) -> str | None:
         """The target of a link entry, or `None` for other entries."""
         return self._inner.link_target
 
@@ -171,7 +172,7 @@ class PackageArchive:
         url: str,
         *,
         sparse: Literal["prefer", "require", "disable"] = "prefer",
-        max_spool_size: Optional[int] = None,
+        max_spool_size: int | None = None,
     ) -> PackageArchive:
         """
         Opens a remote package archive.
@@ -202,7 +203,7 @@ class PackageArchive:
         """How the archive is accessed."""
         return self._inner.access()
 
-    async def read_file(self, path: str) -> Optional[bytes]:
+    async def read_file(self, path: str) -> bytes | None:
         """
         Reads a single file from the package. Returns `None` if the path does
         not exist in the archive.
@@ -222,7 +223,7 @@ class PackageArchive:
         """
         return await self._inner.read_file(path)
 
-    async def read_files(self, paths: Iterable[str]) -> Dict[str, Optional[bytes]]:
+    async def read_files(self, paths: Iterable[str]) -> dict[str, bytes | None]:
         """
         Reads multiple files from the package with the minimum amount of
         work: paths are grouped per section and each touched section is
@@ -259,7 +260,7 @@ class PackageArchive:
         """Reads and parses `info/paths.json`."""
         return PathsJson._from_py_paths_json(await self._inner.paths_json())
 
-    async def run_exports_json(self) -> Optional[RunExportsJson]:
+    async def run_exports_json(self) -> RunExportsJson | None:
         """
         Reads and parses `info/run_exports.json`, or returns `None` when the
         package has none.
@@ -269,7 +270,7 @@ class PackageArchive:
             return None
         return RunExportsJson._from_py_run_exports_json(value)
 
-    async def list_files(self, section: Literal["info", "pkg"] = "pkg") -> List[str]:
+    async def list_files(self, section: Literal["info", "pkg"] = "pkg") -> list[str]:
         """
         Lists the paths of all files (including symbolic links) in one
         section.

@@ -1,16 +1,12 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-import os
-import sys
-from typing import TYPE_CHECKING, Any, Literal, Optional, TypedDict
+from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 if TYPE_CHECKING:
-    if sys.version_info >= (3, 10):
-        from typing import TypeAlias
-    else:
-        from typing_extensions import TypeAlias
+    from typing import TypeAlias
 
 from rattler.config import Config
 from rattler.platform import Platform
@@ -28,13 +24,13 @@ class S3Credentials:
     region: str
 
     # The access key ID for the S3 bucket.
-    access_key_id: Optional[str] = None
+    access_key_id: str | None = None
 
     # The secret access key for the S3 bucket.
-    secret_access_key: Optional[str] = None
+    secret_access_key: str | None = None
 
     # The session token for the S3 bucket.
-    session_token: Optional[str] = None
+    session_token: str | None = None
 
     # Defines how to address the bucket, either using virtual-hosted-style or path-style.
     addressing_style: Literal["path", "virtual-host"] = "virtual-host"
@@ -48,7 +44,7 @@ class RepodataRevisionWithMessage(TypedDict):
     """A selected revision with a publisher-supplied message."""
 
     revision: RepodataRevisionSelection
-    message: Optional[str]
+    message: str | None
 
 
 class RepodataRevisionWithoutMessage(TypedDict):
@@ -79,8 +75,8 @@ def _revision_to_wire(revision: str) -> int:
 
 
 def _repodata_revisions_to_dicts(
-    revisions: Optional[RepodataRevisions],
-) -> Optional[list[dict[str, Any]]]:
+    revisions: RepodataRevisions | None,
+) -> list[dict[str, Any]] | None:
     if revisions is None:
         return None
     if isinstance(revisions, Mapping):
@@ -132,15 +128,15 @@ def _repodata_revisions_to_dicts(
 
 async def index_fs(
     channel_directory: os.PathLike[str],
-    target_platform: Optional[Platform] = None,
-    repodata_patch: Optional[str] = None,
-    write_zst: Optional[bool] = None,
-    write_shards: Optional[bool] = None,
-    repodata_revisions: Optional[RepodataRevisions] = None,
-    package_revision_assignment: Optional[Literal["from-index-json", "latest"]] = None,
+    target_platform: Platform | None = None,
+    repodata_patch: str | None = None,
+    write_zst: bool | None = None,
+    write_shards: bool | None = None,
+    repodata_revisions: RepodataRevisions | None = None,
+    package_revision_assignment: Literal["from-index-json", "latest"] | None = None,
     force: bool = False,
     max_parallel: int | None = None,
-    config: Optional[Config] = None,
+    config: Config | None = None,
 ) -> None:
     """
     Indexes dependencies in the `channel_directory` for one or more subdirectories within said directory.
@@ -195,17 +191,17 @@ async def index_fs(
 
 async def index_s3(
     channel_url: str,
-    credentials: Optional[S3Credentials] = None,
-    target_platform: Optional[Platform] = None,
-    repodata_patch: Optional[str] = None,
-    write_zst: Optional[bool] = None,
-    write_shards: Optional[bool] = None,
-    repodata_revisions: Optional[RepodataRevisions] = None,
-    package_revision_assignment: Optional[Literal["from-index-json", "latest"]] = None,
+    credentials: S3Credentials | None = None,
+    target_platform: Platform | None = None,
+    repodata_patch: str | None = None,
+    write_zst: bool | None = None,
+    write_shards: bool | None = None,
+    repodata_revisions: RepodataRevisions | None = None,
+    package_revision_assignment: Literal["from-index-json", "latest"] | None = None,
     force: bool = False,
     max_parallel: int | None = None,
     precondition_checks: bool = True,
-    config: Optional[Config] = None,
+    config: Config | None = None,
 ) -> None:
     """
     Indexes dependencies in the `channel_url` for one or more subdirectories in the S3 directory.

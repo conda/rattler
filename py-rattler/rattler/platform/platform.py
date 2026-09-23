@@ -1,9 +1,10 @@
 from __future__ import annotations
-from collections.abc import Iterator
-from typing import Any, Dict, Literal, Tuple, Optional
 
-from rattler.rattler import PyPlatform
+from collections.abc import Iterator
+from typing import Any, Literal
+
 from rattler.platform.arch import Arch
+from rattler.rattler import PyPlatform
 
 PlatformLiteral = Literal[
     "noarch",
@@ -44,12 +45,12 @@ PlatformLiteral = Literal[
 
 
 class PlatformSingleton(type):
-    _instances: Dict[str, Platform]
+    _instances: dict[str, Platform]
 
-    def __init__(cls, *args: Tuple[Any], **kwargs: Dict[Any, Any]) -> None:
+    def __init__(cls, *args: tuple[Any], **kwargs: dict[Any, Any]) -> None:
         cls._instances = {}
 
-    def __call__(cls, platform: str, *args: Tuple[Any], **kwargs: Dict[Any, Any]) -> Platform:
+    def __call__(cls, platform: str, *args: tuple[Any], **kwargs: dict[Any, Any]) -> Platform:
         try:
             return cls._instances[platform]
         except KeyError:
@@ -197,7 +198,7 @@ class Platform(metaclass=PlatformSingleton):
         return self._inner.is_unix
 
     @property
-    def arch(self) -> Optional[Arch]:
+    def arch(self) -> Arch | None:
         """
         Return the architecture of the platform.
 
@@ -215,7 +216,7 @@ class Platform(metaclass=PlatformSingleton):
         return Arch._from_py_arch(arch) if arch is not None else None
 
     @property
-    def only_platform(self) -> Optional[str]:
+    def only_platform(self) -> str | None:
         """
         Return the platform without the architecture.
 
