@@ -29,6 +29,10 @@
          <lastmod>2026-09-23</lastmod>
     </url>
     <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/archive_entry/</loc>
+         <lastmod>2026-09-23</lastmod>
+    </url>
+    <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/cache_dir_error/</loc>
          <lastmod>2026-09-23</lastmod>
     </url>
@@ -38,6 +42,10 @@
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/channel_config/</loc>
+         <lastmod>2026-09-23</lastmod>
+    </url>
+    <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/channel_priority/</loc>
          <lastmod>2026-09-23</lastmod>
     </url>
     <url>
@@ -70,6 +78,14 @@
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/environment_creation_error/</loc>
+         <lastmod>2026-09-23</lastmod>
+    </url>
+    <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/explicit_environment_entry/</loc>
+         <lastmod>2026-09-23</lastmod>
+    </url>
+    <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/explicit_environment_spec/</loc>
          <lastmod>2026-09-23</lastmod>
     </url>
     <url>
@@ -133,7 +149,15 @@
          <lastmod>2026-09-23</lastmod>
     </url>
     <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/lock_channel/</loc>
+         <lastmod>2026-09-23</lastmod>
+    </url>
+    <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/lock_file/</loc>
+         <lastmod>2026-09-23</lastmod>
+    </url>
+    <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/lock_platform/</loc>
          <lastmod>2026-09-23</lastmod>
     </url>
     <url>
@@ -149,6 +173,14 @@
          <lastmod>2026-09-23</lastmod>
     </url>
     <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/no_arch_type/</loc>
+         <lastmod>2026-09-23</lastmod>
+    </url>
+    <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/package_archive/</loc>
+         <lastmod>2026-09-23</lastmod>
+    </url>
+    <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/package_hashes/</loc>
          <lastmod>2026-09-23</lastmod>
     </url>
@@ -157,7 +189,15 @@
          <lastmod>2026-09-23</lastmod>
     </url>
     <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/package_name_matcher/</loc>
+         <lastmod>2026-09-23</lastmod>
+    </url>
+    <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/package_record/</loc>
+         <lastmod>2026-09-23</lastmod>
+    </url>
+    <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/package_streaming/</loc>
          <lastmod>2026-09-23</lastmod>
     </url>
     <url>
@@ -205,6 +245,18 @@
          <lastmod>2026-09-23</lastmod>
     </url>
     <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/pty_process/</loc>
+         <lastmod>2026-09-23</lastmod>
+    </url>
+    <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/pty_process_options/</loc>
+         <lastmod>2026-09-23</lastmod>
+    </url>
+    <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/pty_session/</loc>
+         <lastmod>2026-09-23</lastmod>
+    </url>
+    <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/pypi_locked_package/</loc>
          <lastmod>2026-09-23</lastmod>
     </url>
@@ -218,6 +270,10 @@
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/repo_data_record/</loc>
+         <lastmod>2026-09-23</lastmod>
+    </url>
+    <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/repo_data_source/</loc>
          <lastmod>2026-09-23</lastmod>
     </url>
     <url>
@@ -246,6 +302,10 @@
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/version/</loc>
+         <lastmod>2026-09-23</lastmod>
+    </url>
+    <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/version_spec/</loc>
          <lastmod>2026-09-23</lastmod>
     </url>
     <url>
