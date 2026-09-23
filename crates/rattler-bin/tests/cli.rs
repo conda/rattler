@@ -87,8 +87,16 @@ fn test_list_json() {
 
 /// The skill embeds the crate version, which is replaced so the snapshot does
 /// not change on every release.
+///
+/// The command tree depends on the enabled cargo features (`sigstore` adds
+/// `rattler verify-attestation` and the attestation flags), so each
+/// configuration has its own snapshot.
 #[test]
 fn test_skill() {
     let skill = run_rattler(&["skill"]).replace(env!("CARGO_PKG_VERSION"), "[VERSION]");
-    insta::assert_snapshot!(skill);
+    if cfg!(feature = "sigstore") {
+        insta::assert_snapshot!("skill", skill);
+    } else {
+        insta::assert_snapshot!("skill_without_sigstore", skill);
+    }
 }
