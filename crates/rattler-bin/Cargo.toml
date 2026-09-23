@@ -40,7 +40,7 @@ s3 = [
 ]
 gcs = ["rattler_networking/gcs"]
 oauth = ["rattler/oauth"]
-sigstore = ["dep:rattler_redaction", "dep:rattler_sigstore"]
+sigstore = ["rattler/sigstore", "dep:rattler_redaction", "dep:rattler_sigstore"]
 
 [dependencies]
 jiff = { workspace = true }
