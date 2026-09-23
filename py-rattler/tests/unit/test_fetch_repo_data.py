@@ -3,7 +3,8 @@ import os.path
 
 import pytest
 from xprocess import ProcessStarter
-from rattler import Channel, ChannelConfig, fetch_repo_data, SparseRepoData, PackageName
+
+from rattler import Channel, ChannelConfig, PackageName, SparseRepoData, fetch_repo_data
 from rattler.platform import Platform
 from rattler.repo_data.record import RepoDataRecord
 

@@ -1,16 +1,16 @@
 from __future__ import annotations
+
 import os
-from typing import List, Optional, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from rattler.config import Config
 from rattler.match_spec import MatchSpec
 from rattler.networking.client import Client
 from rattler.platform.platform import Platform
 from rattler.prefix.prefix_record import PrefixRecord
+from rattler.rattler import py_install
 from rattler.repo_data.record import RepoDataRecord
 from rattler.sigstore import VerificationPolicy
-
-from rattler.rattler import py_install
 
 
 @runtime_checkable
@@ -125,7 +125,7 @@ class InstallerReporter(Protocol):
         """
         return 0
 
-    def on_download_progress(self, download_idx: int, progress: int, total: Optional[int]) -> None:
+    def on_download_progress(self, download_idx: int, progress: int, total: int | None) -> None:
         """Called periodically with download byte progress.
 
         Parameters
@@ -278,21 +278,21 @@ class InstallerReporter(Protocol):
 
 
 async def install(
-    records: List[RepoDataRecord],
+    records: list[RepoDataRecord],
     target_prefix: str | os.PathLike[str],
-    cache_dir: Optional[os.PathLike[str]] = None,
-    installed_packages: Optional[List[PrefixRecord]] = None,
-    reinstall_packages: Optional[set[str]] = None,
-    ignored_packages: Optional[set[str]] = None,
-    platform: Optional[Platform] = None,
-    execute_link_scripts: Optional[bool] = None,
+    cache_dir: os.PathLike[str] | None = None,
+    installed_packages: list[PrefixRecord] | None = None,
+    reinstall_packages: set[str] | None = None,
+    ignored_packages: set[str] | None = None,
+    platform: Platform | None = None,
+    execute_link_scripts: bool | None = None,
     show_progress: bool = True,
-    client: Optional[Client] = None,
-    requested_specs: Optional[List[MatchSpec]] = None,
-    reporter: Optional[InstallerReporter] = None,
-    alternative_target_prefix: Optional[str | os.PathLike[str]] = None,
-    config: Optional[Config] = None,
-    attestation_policy: Optional[VerificationPolicy] = None,
+    client: Client | None = None,
+    requested_specs: list[MatchSpec] | None = None,
+    reporter: InstallerReporter | None = None,
+    alternative_target_prefix: str | os.PathLike[str] | None = None,
+    config: Config | None = None,
+    attestation_policy: VerificationPolicy | None = None,
 ) -> None:
     """
     Create an environment by downloading and linking the `dependencies` in
