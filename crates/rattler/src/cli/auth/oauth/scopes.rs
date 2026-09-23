@@ -1,7 +1,9 @@
 //! Incremental authorization for commands needing additional OAuth permissions.
 //!
-//! JWT claims here are unverified UX hints, not an authorization boundary. The
-//! resource server must still validate every access token. This module neither
+//! Stored grant metadata (or unverified JWT claims for legacy credentials) is
+//! a UX hint, not an authorization boundary. The resource server must still
+//! validate every access token. Opaque access tokens use stored metadata.
+//! This module neither
 //! reads nor writes credential storage: callers refresh credentials first, then
 //! persist the returned grant only after this operation succeeds.
 //!
@@ -48,7 +50,6 @@ use std::{
 };
 
 use rattler_networking::Authentication;
-use serde_json::Value;
 
 use super::{OAuthConfig, OAuthError, perform_oauth_login};
 
@@ -70,7 +71,9 @@ pub enum EnsureScopesError {
     )]
     AuthorizationRequired,
     /// An unknown existing grant cannot safely be replaced without losing access.
-    #[error("Cannot determine the existing OAuth grant; leaving credentials unchanged")]
+    #[error(
+        "Cannot determine the existing OAuth grant; credentials are unchanged. Use credentials with known granted-scope metadata, or explicitly log out and authorize all desired permissions again"
+    )]
     UnknownGrant,
     /// The caller must not replace another issuer's or client's credentials.
     #[error("Stored OAuth credentials do not belong to the requested issuer and client")]
@@ -110,9 +113,36 @@ pub async fn ensure_oauth_scopes(
 }
 
 async fn ensure_with_login<F, Fut>(
+    config: OAuthConfig,
+    current: Option<&Authentication>,
+    interaction: OAuthInteraction,
+    login: F,
+) -> Result<Authentication, EnsureScopesError>
+where
+    F: FnOnce(OAuthConfig) -> Fut,
+    Fut: Future<Output = Result<Authentication, OAuthError>>,
+{
+    authorize_with_login(config, current, interaction, true, login).await
+}
+
+/// Explicit login always reauthorizes, even if the existing grant is sufficient.
+pub(in crate::cli::auth) async fn reauthorize_with_login<F, Fut>(
+    config: OAuthConfig,
+    current: Option<&Authentication>,
+    login: F,
+) -> Result<Authentication, EnsureScopesError>
+where
+    F: FnOnce(OAuthConfig) -> Fut,
+    Fut: Future<Output = Result<Authentication, OAuthError>>,
+{
+    authorize_with_login(config, current, OAuthInteraction::Allow, false, login).await
+}
+
+async fn authorize_with_login<F, Fut>(
     mut config: OAuthConfig,
     current: Option<&Authentication>,
     interaction: OAuthInteraction,
+    reuse_current: bool,
     login: F,
 ) -> Result<Authentication, EnsureScopesError>
 where
@@ -128,10 +158,10 @@ where
     }
     if let Some(current) = current {
         let grant = grant(current).ok_or(EnsureScopesError::UnknownGrant)?;
-        if grant.issuer != config.issuer_url || grant.client_id != config.client_id {
+        if !same_issuer(&grant.issuer, &config.issuer_url) || grant.client_id != config.client_id {
             return Err(EnsureScopesError::DifferentClient);
         }
-        if grant.is_fresh() && config.scopes.is_subset(&grant.scopes) {
+        if reuse_current && grant.is_fresh() && config.scopes.is_subset(&grant.scopes) {
             return Ok(current.clone());
         }
         config.scopes.extend(grant.scopes);
@@ -145,7 +175,7 @@ where
     let client_id = config.client_id.clone();
     let updated = login(config).await?;
     let grant = grant(&updated).ok_or(EnsureScopesError::IncompleteGrant)?;
-    if grant.issuer != issuer
+    if !same_issuer(&grant.issuer, &issuer)
         || grant.client_id != client_id
         || !grant.is_fresh()
         || !requested.is_subset(&grant.scopes)
@@ -155,11 +185,20 @@ where
     Ok(updated)
 }
 
+// Match URL normalization used by OIDC discovery: a root slash is equivalent,
+// but issuer paths (including their trailing slash) remain distinct.
+fn same_issuer(left: &str, right: &str) -> bool {
+    url::Url::parse(left)
+        .ok()
+        .zip(url::Url::parse(right).ok())
+        .is_some_and(|(left, right)| left == right)
+}
+
 struct Grant {
     issuer: String,
     client_id: String,
     scopes: HashSet<String>,
-    expires_at: i64,
+    expires_at: Option<i64>,
 }
 
 impl Grant {
@@ -168,18 +207,9 @@ impl Grant {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        self.expires_at > 0 && self.expires_at as u64 > now.saturating_add(30)
-    }
-}
-
-fn scope_claim(value: &Value) -> Option<HashSet<String>> {
-    match value {
-        Value::String(scopes) => Some(scopes.split_ascii_whitespace().map(str::to_owned).collect()),
-        Value::Array(scopes) => scopes
-            .iter()
-            .map(|scope| scope.as_str().map(str::to_owned))
-            .collect(),
-        _ => None,
+        // As in normal OAuth refresh, no expiry means no known expiration.
+        self.expires_at
+            .is_none_or(|expiry| expiry > 0 && expiry as u64 > now.saturating_add(30))
     }
 }
 
@@ -193,23 +223,16 @@ fn grant(auth: &Authentication) -> Option<Grant> {
     else {
         return None;
     };
-    let claims = super::super::jwt_claims(access_token)?;
-    // Missing/malformed scope metadata must not be interpreted as an empty
-    // grant: requesting only new scopes could discard unknown old permissions.
-    let mut scopes = None;
-    for name in ["scope", "scp"] {
-        if let Some(value) = claims.get(name) {
-            scopes
-                .get_or_insert_with(HashSet::new)
-                .extend(scope_claim(value)?);
-        }
-    }
-    let token_expiry = claims.get("exp")?.as_i64()?;
+    let token_expiry = super::super::jwt_claims(access_token)
+        .and_then(|claims| claims.get("exp").and_then(serde_json::Value::as_i64));
     Some(Grant {
-        issuer: claims.get("iss")?.as_str()?.to_owned(),
+        issuer: auth.oauth_issuer_url()?,
         client_id: client_id.clone(),
-        scopes: scopes?,
-        expires_at: expires_at.map_or(token_expiry, |expiry| expiry.min(token_expiry)),
+        scopes: auth.oauth_scopes()?.into_iter().collect(),
+        expires_at: match (*expires_at, token_expiry) {
+            (Some(stored), Some(token)) => Some(stored.min(token)),
+            (stored, token) => stored.or(token),
+        },
     })
 }
 

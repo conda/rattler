@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- OAuth credentials retain issuer and granted-scope metadata, including across refresh. Existing credential files remain readable; legacy JWT metadata is recovered before token rotation where possible.
+
+### Breaking
+
+- `Authentication::OAuth` has two new optional Rust fields, `issuer_url` and `scopes`. Downstream struct literals must initialize them (use `None` for legacy/unknown metadata), and exhaustive field patterns must include them or `..`. This is a source API change requiring a breaking release, not a credential-file migration.
+
 ## [0.30.3](https://github.com/conda/rattler/compare/rattler_networking-v0.30.2...rattler_networking-v0.30.3) - 2026-07-24
 
 ### Other

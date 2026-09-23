@@ -520,6 +520,8 @@ mod tests {
                 token_endpoint: format!("http://{addr}/token"),
                 revocation_endpoint: None,
                 client_id: "client-id".to_string(),
+                issuer_url: None,
+                scopes: None,
             },
         )?;
 
@@ -593,6 +595,8 @@ mod tests {
                 token_endpoint: format!("http://{addr}/token"),
                 revocation_endpoint: None,
                 client_id: "client-id".to_string(),
+                issuer_url: None,
+                scopes: None,
             },
         )?;
 

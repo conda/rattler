@@ -1,5 +1,5 @@
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use serde_json::json;
+use serde_json::{Value, json};
 
 use super::*;
 
@@ -18,6 +18,8 @@ fn auth(claims: Value) -> Authentication {
         token_endpoint: "https://prefix.dev/oauth2/token".into(),
         revocation_endpoint: None,
         client_id: "rattler".into(),
+        issuer_url: None,
+        scopes: None,
     }
 }
 
@@ -27,6 +29,110 @@ fn claims(scopes: Value) -> Value {
 
 fn grant_for(config: &OAuthConfig) -> Authentication {
     auth(claims(json!(config.scopes)))
+}
+
+fn opaque_grant(config: &OAuthConfig, expiry: Option<i64>) -> Authentication {
+    Authentication::OAuth {
+        access_token: "opaque-access-token".into(),
+        refresh_token: Some("refresh".into()),
+        expires_at: expiry,
+        token_endpoint: "https://prefix.dev/token".into(),
+        revocation_endpoint: None,
+        client_id: config.client_id.clone(),
+        issuer_url: Some(config.issuer_url.clone()),
+        scopes: Some(config.scopes.iter().cloned().collect()),
+    }
+}
+
+#[tokio::test]
+async fn opaque_grants_can_be_reused_with_or_without_known_expiry() {
+    for expiry in [None, Some(4_000_000_000)] {
+        let current = opaque_grant(&config(), expiry);
+        let result = ensure_with_login(
+            config(),
+            Some(&current),
+            OAuthInteraction::Deny,
+            |_| async { panic!("known opaque grants should not need login") },
+        )
+        .await
+        .unwrap();
+        assert_eq!(result, current);
+    }
+}
+
+#[tokio::test]
+async fn custom_scope_extension_accepts_opaque_replacements() {
+    let mut initial = config();
+    initial.scopes = ["custom:read".into()].into();
+    let current = opaque_grant(&initial, None);
+    let mut desired = config();
+    desired.scopes = ["custom:write".into()].into();
+    let result = ensure_with_login(
+        desired,
+        Some(&current),
+        OAuthInteraction::Allow,
+        |config| async move {
+            assert_eq!(
+                config.scopes,
+                ["custom:read".into(), "custom:write".into()].into()
+            );
+            Ok(opaque_grant(&config, None))
+        },
+    )
+    .await
+    .unwrap();
+    assert!(
+        result
+            .oauth_scopes()
+            .unwrap()
+            .contains(&"custom:read".into())
+    );
+}
+
+#[tokio::test]
+async fn explicit_login_reauthorizes_even_a_sufficient_grant() {
+    let current = opaque_grant(&config(), None);
+    let called = std::cell::Cell::new(false);
+    reauthorize_with_login(config(), Some(&current), |config| {
+        called.set(true);
+        async move { Ok(opaque_grant(&config, None)) }
+    })
+    .await
+    .unwrap();
+    assert!(called.get());
+}
+
+#[tokio::test]
+async fn unknown_legacy_opaque_grants_are_not_silently_overwritten() {
+    let mut current = opaque_grant(&config(), None);
+    if let Authentication::OAuth {
+        scopes, issuer_url, ..
+    } = &mut current
+    {
+        *scopes = None;
+        *issuer_url = None;
+    }
+    let result = reauthorize_with_login(config(), Some(&current), |_| async {
+        panic!("cannot preserve unknown permissions")
+    })
+    .await;
+    assert!(matches!(result, Err(EnsureScopesError::UnknownGrant)));
+}
+
+#[tokio::test]
+async fn root_issuer_url_normalization_accepts_legacy_grants() {
+    let current = grant_for(&config());
+    let mut config = config();
+    config.issuer_url.push('/');
+    ensure_with_login(config, Some(&current), OAuthInteraction::Deny, |_| async {
+        panic!("root-slash normalization must not require reauthorization")
+    })
+    .await
+    .unwrap();
+    assert!(!same_issuer(
+        "https://issuer.example/realm",
+        "https://issuer.example/realm/"
+    ));
 }
 
 #[test]

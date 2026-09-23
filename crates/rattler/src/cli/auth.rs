@@ -1,7 +1,27 @@
 //! This module contains CLI common entrypoint for authentication.
+//!
+//! OAuth scopes are additive. For example:
+//!
+//! ```text
+//! rattler auth login prefix.dev --oauth --oauth-scope custom:read --oauth-scope custom:write
+//! ```
+//!
+//! This requests the host's normal login scopes, all known existing OAuth
+//! permissions, and the custom additions. The provider must allow these scopes
+//! for the configured client. Explicit login always reauthorizes using the
+//! selected flow; it does not skip login when cached permissions suffice.
+//! Cancellation or incomplete consent leaves the previous credentials intact.
+//!
+//! Granted scopes are retained from the token response, supporting opaque and
+//! JWT access tokens. Legacy JWT credentials use claim metadata as a fallback;
+//! a legacy opaque grant without scope metadata cannot be safely extended and
+//! produces an actionable error rather than silently losing permissions.
 
 #[cfg(feature = "oauth")]
 pub mod oauth;
+
+#[cfg(all(test, feature = "oauth"))]
+mod scope_tests;
 
 use base64::{
     Engine as _,
@@ -86,7 +106,7 @@ struct LoginArgs {
     #[clap(long, requires = "oauth", value_parser = ["device-code", "auth-code", "auto"], help_heading = "OAuth/OIDC Authentication")]
     oauth_flow: Option<String>,
 
-    /// Additional OAuth scopes to request (repeatable)
+    /// Add OAuth scopes to the default and existing permissions (repeatable)
     #[cfg(feature = "oauth")]
     #[clap(
         long = "oauth-scope",
@@ -244,6 +264,11 @@ pub enum AuthenticationCLIError {
     #[cfg(feature = "oauth")]
     #[error(transparent)]
     OAuthError(#[from] oauth::OAuthError),
+
+    /// Scope extension could not safely preserve or obtain the requested grant.
+    #[cfg(feature = "oauth")]
+    #[error(transparent)]
+    OAuthScopes(#[from] oauth::EnsureScopesError),
 }
 
 /// Normalize a user-supplied host into its canonical hostname form.
@@ -357,6 +382,63 @@ fn default_oauth_for_login(args: &LoginArgs) -> Option<DefaultOAuthConfig> {
     default_oauth_config_for_host(&args.host)
 }
 
+#[cfg(feature = "oauth")]
+fn login_oauth_scopes(
+    defaults: Option<&DefaultOAuthConfig>,
+    additions: &[String],
+) -> std::collections::HashSet<String> {
+    let mut scopes: std::collections::HashSet<String> = defaults.map_or_else(
+        || {
+            oauth::DEFAULT_OAUTH_SCOPES
+                .iter()
+                .map(|s| (*s).to_owned())
+                .collect()
+        },
+        |defaults| defaults.scopes.iter().cloned().collect(),
+    );
+    scopes.extend(additions.iter().cloned());
+    scopes
+}
+
+/// Use the same authorization implementation as before, but preserve the grant
+/// and original key. Read failures and failed consent must never overwrite it.
+#[cfg(feature = "oauth")]
+async fn login_oauth_and_store<F, Fut>(
+    host: &str,
+    storage: &AuthenticationStorage,
+    config: oauth::OAuthConfig,
+    login: F,
+) -> Result<(), AuthenticationCLIError>
+where
+    F: FnOnce(oauth::OAuthConfig) -> Fut,
+    Fut: std::future::Future<Output = Result<Authentication, oauth::OAuthError>>,
+{
+    let mut key = normalize_login_host(host);
+    let mut current = storage.get(&key)?;
+    // Match the normal credential lookup order, but propagate read failures
+    // rather than interpreting unavailable credentials as a missing grant.
+    let lookup_url = Url::parse(&format!("https://{key}"))?;
+    let mut domain = lookup_url.domain();
+    while current.is_none() {
+        let Some(value) = domain else { break };
+        let wildcard_key = format!("*.{value}");
+        current = storage.get(&wildcard_key)?;
+        if current.is_some() {
+            key = wildcard_key;
+        }
+        domain = value.split_once('.').map(|(_, rest)| rest);
+    }
+    // Explicit OAuth login may replace a different authentication scheme. Only
+    // an existing OAuth grant participates in incremental scope preservation.
+    let current = current
+        .as_ref()
+        .filter(|auth| matches!(auth, Authentication::OAuth { .. }));
+    let auth = oauth::reauthorize_with_login(config, current, login).await?;
+    storage.store(&key, &auth)?;
+    eprintln!("Credentials stored for {key}.");
+    Ok(())
+}
+
 fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
     // parse as url and extract host without scheme or port
     let host = if url.contains("://") {
@@ -451,16 +533,7 @@ async fn login_with_offline(
                 .oauth_redirect_uri
                 .or_else(|| host_default.as_ref().and_then(|c| c.redirect_uri.clone()));
 
-            let scopes: std::collections::HashSet<String> = if !args.oauth_scopes.is_empty() {
-                args.oauth_scopes.into_iter().collect()
-            } else if let Some(default) = host_default {
-                default.scopes.into_iter().collect()
-            } else {
-                oauth::DEFAULT_OAUTH_SCOPES
-                    .iter()
-                    .map(|&s| s.to_string())
-                    .collect()
-            };
+            let scopes = login_oauth_scopes(host_default.as_ref(), &args.oauth_scopes);
 
             let config = oauth::OAuthConfig {
                 issuer_url,
@@ -473,13 +546,8 @@ async fn login_with_offline(
                 callback_page: None,
             };
 
-            let auth = oauth::perform_oauth_login(config).await?;
-            // Normalize the host so that `prefix.dev` and `prefix.dev/` (and
-            // any `https://...` form) write to the same storage key
-            let host = normalize_login_host(&args.host);
-            storage.store(&host, &auth)?;
-            eprintln!("Credentials stored for {host}.");
-            return Ok(());
+            return login_oauth_and_store(&args.host, &storage, config, oauth::perform_oauth_login)
+                .await;
         }
     }
 
@@ -1048,6 +1116,7 @@ fn print_authentication_status(
             token_endpoint,
             revocation_endpoint,
             client_id,
+            ..
         } => {
             let metadata = token_metadata(access_token);
             // OAuth's `expires_at` always refers to the short-lived ACCESS
@@ -1692,6 +1761,8 @@ mod tests {
                     // this test stays hermetic (no HTTP needed).
                     revocation_endpoint: None,
                     client_id: "rattler".into(),
+                    issuer_url: None,
+                    scopes: None,
                 },
             )
             .unwrap();
@@ -1816,6 +1887,8 @@ mod tests {
             token_endpoint: format!("{}/token", server.url()),
             revocation_endpoint: Some(format!("{}/revoke", server.url())),
             client_id: "rattler".into(),
+            issuer_url: None,
+            scopes: None,
         };
         // Write directly to each backend so both end up holding the entry —
         // `storage.store()` stops at the first successful backend.

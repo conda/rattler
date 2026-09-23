@@ -9,7 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Repeatable `auth login --oauth --oauth-scope` options now extend default and existing OAuth permissions instead of replacing defaults. Explicit login still reauthorizes using the selected flow. Both OAuth flows retain granted-scope metadata, supporting opaque access tokens as well as JWTs; cancelled or incomplete grants do not replace stored credentials.
 - Add command-triggered incremental OAuth authorization via `oauth_config_for_host` and `ensure_oauth_scopes`. Consumers such as `pixi audit` can request `basilisk:query` on demand while preserving existing channel permissions, without requiring logout. Normal prefix.dev login scopes are unchanged; consumers must wire the helper into their command and persist credentials only after successful authorization.
+
+### Breaking
+
+- `AuthenticationCLIError` adds an `OAuthScopes` variant for safe grant-extension failures. Downstream exhaustive matches must handle it.
 
 ## [0.48.1](https://github.com/conda/rattler/compare/rattler-v0.48.0...rattler-v0.48.1) - 2026-08-03
 

@@ -58,6 +58,7 @@ type ExtendedCoreProviderMetadata = ProviderMetadata<
 use super::DEFAULT_USER_AGENT;
 
 mod scopes;
+pub(super) use scopes::reauthorize_with_login;
 pub use scopes::{EnsureScopesError, OAuthInteraction, ensure_oauth_scopes};
 
 /// Generic OIDC scopes used when no host-specific defaults apply.
@@ -110,7 +111,8 @@ pub struct OAuthConfig {
     pub client_secret: Option<String>,
     /// Which flow to use.
     pub flow: OAuthFlow,
-    /// Additional OAuth scopes to request.
+    /// Scopes to request. An empty set uses the generic OIDC defaults.
+    /// Incremental authorization additionally preserves the existing grant.
     pub scopes: HashSet<String>,
     /// Fixed redirect URI for the auth-code flow. When `None`, rattler
     /// binds to a random localhost port. Required when the OAuth client
@@ -142,6 +144,24 @@ struct OAuthTokens {
     refresh_token: Option<String>,
     expires_in: Option<Duration>,
     authenticated_as: Option<String>,
+    scopes: Vec<String>,
+}
+
+/// RFC 6749 section 5.1: an omitted scope means the grant equals the request.
+/// Both authorization-code and device-code responses use this rule.
+fn granted_scopes(response: Option<&[Scope]>, requested: &HashSet<String>) -> Vec<String> {
+    let mut scopes: Vec<String> = response.map_or_else(
+        || requested.iter().cloned().collect(),
+        |scopes| {
+            scopes
+                .iter()
+                .map(|scope| scope.as_str().to_owned())
+                .collect()
+        },
+    );
+    scopes.sort();
+    scopes.dedup();
+    scopes
 }
 
 /// Errors that can occur during OAuth authentication.
@@ -312,6 +332,8 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
         token_endpoint: endpoints.token_endpoint,
         revocation_endpoint: endpoints.revocation_endpoint,
         client_id: config.client_id,
+        issuer_url: Some(config.issuer_url),
+        scopes: Some(tokens.scopes),
     })
 }
 
@@ -477,6 +499,7 @@ async fn auth_code_flow(
         refresh_token: token_response.refresh_token().map(|t| t.secret().clone()),
         expires_in: token_response.expires_in(),
         authenticated_as,
+        scopes: granted_scopes(token_response.scopes().map(Vec::as_slice), scopes),
     })
 }
 
@@ -837,6 +860,7 @@ async fn device_code_flow(
         refresh_token: token_response.refresh_token().map(|t| t.secret().clone()),
         expires_in: token_response.expires_in(),
         authenticated_as,
+        scopes: granted_scopes(token_response.scopes().map(Vec::as_slice), scopes),
     })
 }
 
@@ -926,6 +950,77 @@ mod tests {
         CallbackPageTemplate, DEFAULT_POWERED_BY, callback_page_domain_from_issuer,
         default_callback_page, default_callback_page_with_template, html_escape,
     };
+
+    #[tokio::test]
+    async fn device_login_retains_grant_metadata_from_real_token_response() {
+        use mockito::{Matcher, Server};
+        use serde_json::json;
+        let mut server = Server::new_async().await;
+        let issuer = server.url();
+        let discovery = server
+            .mock("GET", "/.well-known/openid-configuration")
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "issuer":issuer, "authorization_endpoint":format!("{issuer}/authorize"),
+                    "token_endpoint":format!("{issuer}/token"), "jwks_uri":format!("{issuer}/jwks"),
+                    "device_authorization_endpoint":format!("{issuer}/device"),
+                    "response_types_supported":["code"], "subject_types_supported":["public"],
+                    "id_token_signing_alg_values_supported":["RS256"]
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+        let jwks = server
+            .mock("GET", "/jwks")
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"keys":[]}"#)
+            .create_async()
+            .await;
+        let device = server.mock("POST", "/device")
+            .match_body(Matcher::Regex("scope=[^&]*custom%3Aread".into()))
+            .with_header("content-type", "application/json")
+            .with_body(json!({"device_code":"test-device", "user_code":"TEST", "verification_uri":format!("{issuer}/verify"), "expires_in":60, "interval":0}).to_string())
+            .create_async().await;
+        let token = server.mock("POST", "/token")
+            .match_body(Matcher::UrlEncoded("grant_type".into(), "urn:ietf:params:oauth:grant-type:device_code".into()))
+            .with_header("content-type", "application/json")
+            .with_body(json!({"access_token":"opaque", "token_type":"Bearer", "expires_in":3600, "scope":"custom:read"}).to_string())
+            .create_async().await;
+        let mut config =
+            crate::cli::auth::oauth_config_for_host("prefix.dev", &["custom:read"]).unwrap();
+        config.issuer_url = issuer.clone();
+        config.flow = super::OAuthFlow::DeviceCode;
+        let auth = super::perform_oauth_login(config).await.unwrap();
+        assert_eq!(auth.oauth_scopes().unwrap(), ["custom:read"]);
+        assert_eq!(auth.oauth_issuer_url(), Some(issuer));
+        discovery.assert_async().await;
+        jwks.assert_async().await;
+        device.assert_async().await;
+        token.assert_async().await;
+    }
+
+    #[test]
+    fn token_response_scopes_override_request_and_omission_preserves_request() {
+        use openidconnect::{OAuth2TokenResponse, core::CoreTokenResponse};
+        let requested = ["openid".to_owned(), "custom:read".to_owned()].into();
+        for (scope, expected) in [
+            (None, vec!["custom:read", "openid"]),
+            (Some("custom:read"), vec!["custom:read"]),
+        ] {
+            let mut response = serde_json::json!({"access_token":"opaque", "token_type":"Bearer"});
+            if let Some(scope) = scope {
+                response["scope"] = serde_json::json!(scope);
+            }
+            let response: CoreTokenResponse = serde_json::from_value(response).unwrap();
+            assert_eq!(
+                super::granted_scopes(response.scopes().map(Vec::as_slice), &requested),
+                expected
+            );
+        }
+        assert!(super::granted_scopes(Some(&[]), &requested).is_empty());
+    }
 
     #[test]
     fn escapes_html_detail() {
