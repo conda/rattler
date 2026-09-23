@@ -135,8 +135,10 @@ pub fn verify_bundles(
     );
     let expected_channel = expected_channel(record);
 
-    let verifier = Verifier::new(trusted_root);
-    let sigstore_policy = SigstoreVerificationPolicy::default();
+    let verifier =
+        Verifier::new(trusted_root).map_err(|err| SigstoreError::TrustedRoot(err.to_string()))?;
+    // Publisher policy is applied separately to the verified identities.
+    let sigstore_policy = SigstoreVerificationPolicy::any_identity();
 
     let mut result = BundleVerification::default();
     for (index, bundle) in bundles.iter().enumerate() {
@@ -175,7 +177,7 @@ fn verify_bundle(
     let statement = statement_of(bundle)?;
     let target_channel = validate_statement(&statement, filename)?;
 
-    let mut warnings = outcome.warnings;
+    let mut warnings = Vec::new();
     if let (Some(target_channel), Some(expected)) = (target_channel.as_deref(), expected_channel) {
         let target = Url::parse(target_channel)
             .expect("validate_statement guarantees that targetChannel is a valid URL");
@@ -195,9 +197,9 @@ fn verify_bundle(
 
     Ok(VerifiedAttestation {
         index: 0,
-        identity: outcome.identity,
-        issuer: outcome.issuer,
-        integrated_time: outcome.integrated_time,
+        identity: outcome.identity().map(str::to_owned),
+        issuer: outcome.issuer().map(str::to_owned),
+        integrated_time: outcome.integrated_time(),
         target_channel,
         warnings,
     })
