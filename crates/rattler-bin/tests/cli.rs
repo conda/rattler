@@ -99,3 +99,65 @@ fn test_skill() {
     let skill = run_rattler(&["skill"]).replace(env!("CARGO_PKG_VERSION"), "[VERSION]");
     insta::assert_snapshot!(skill);
 }
+
+/// Snapshots of `rattler verify-attestation` for a real signed package.
+#[cfg(feature = "sigstore")]
+mod attestation {
+    use super::run_rattler;
+
+    /// A package published to <https://prefix.dev/skill-forge> by a GitHub
+    /// Actions workflow, and the attestation sidecar it was published with. Both
+    /// were downloaded from `https://prefix.dev/skill-forge/noarch/` and are
+    /// kept verbatim so the snapshots describe a real attestation. See
+    /// `test-data/sigstore/README.md`.
+    const PACKAGE: &str = "test-data/sigstore/agent-skill-conda-forge-0.0.21-h4616a5c_0.conda";
+    const SIDECAR: &str = "test-data/sigstore/agent-skill-conda-forge-0.0.21-h4616a5c_0.conda.sigs";
+
+    /// The channel the sidecar's `targetChannel` names, which the verification
+    /// compares the channel of the package against.
+    const CHANNEL: &str = "https://prefix.dev/skill-forge";
+
+    /// Verifies the fixture the way the published package is verified, but
+    /// entirely from local files: `--offline` keeps both the sidecar retrieval
+    /// and the trusted root off the network, so the test does not depend on
+    /// prefix.dev or on the Sigstore TUF repository being reachable.
+    ///
+    /// The signing certificate is checked against the time the signature was
+    /// recorded in the transparency log rather than against the current time, so
+    /// the fixture does not expire together with the certificate.
+    fn run_verify_attestation(extra_args: &[&str]) -> String {
+        let mut args = vec![
+            "--offline",
+            "verify-attestation",
+            "--attestation",
+            SIDECAR,
+            PACKAGE,
+            "--channel",
+            CHANNEL,
+        ];
+        args.extend_from_slice(extra_args);
+        normalize_file_urls(&run_rattler(&args))
+    }
+
+    /// Replaces the absolute `file://` URL a local sidecar is reported under, so
+    /// the snapshots do not depend on where the repository was checked out.
+    fn normalize_file_urls(output: &str) -> String {
+        regex::Regex::new(r"file://\S*/test-data/")
+            .expect("the pattern is valid")
+            .replace_all(output, "file:///[ROOT]/test-data/")
+            .into_owned()
+    }
+
+    #[test]
+    fn test_verify_attestation() {
+        insta::assert_snapshot!(run_verify_attestation(&[]));
+    }
+
+    /// The JSON output carries every claim of the signing certificate and the
+    /// full transparency log metadata, including what the human output folds
+    /// together or leaves out.
+    #[test]
+    fn test_verify_attestation_json() {
+        insta::assert_snapshot!(run_verify_attestation(&["--format", "json"]));
+    }
+}

@@ -1,0 +1,23 @@
+---
+source: crates/rattler-bin/tests/cli.rs
+expression: "run_verify_attestation(&[])"
+---
+✓ Sigstore attestation verified
+
+Package:     agent-skill-conda-forge-0.0.21-h4616a5c_0.conda
+SHA-256:     0024f57c1e6aa280b52c1475a792be2e56a89de71792b3ccbf2962fec92becc4
+Attestation: file:///[ROOT]/test-data/sigstore/agent-skill-conda-forge-0.0.21-h4616a5c_0.conda.sigs
+
+Bundle 1 of 1
+  Identity:          https://github.com/pavelzw/skill-forge/.github/workflows/package.yml@refs/heads/main
+  Issuer:            https://token.actions.githubusercontent.com
+  Repository:        https://github.com/pavelzw/skill-forge (public, id 1151760276)
+  Commit:            8a96d273f7245383c451499fb65375ec408ca042 on refs/heads/main
+  Workflow:          .github/workflows/package.yml (trigger: push)
+  Runner:            github-hosted
+  Build:             https://github.com/pavelzw/skill-forge/actions/runs/36007002754/attempts/1
+  Signed at:         2026-09-24T13:38:44Z
+  Transparency log:  index 2939132933 on rekor.sigstore.dev
+                     https://search.sigstore.dev/?logIndex=2939132933
+  Target channel:    https://prefix.dev/skill-forge
+  Checks:            certificate chain, SCT, log inclusion proof
