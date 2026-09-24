@@ -1,0 +1,3 @@
+# Subdir
+
+::: rattler.platform.subdir

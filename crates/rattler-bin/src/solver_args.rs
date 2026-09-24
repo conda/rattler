@@ -6,7 +6,7 @@ use clap::ValueEnum;
 use miette::IntoDiagnostic;
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
-    ParseMatchSpecOptions, Platform, RepoDataRecord, SolverResult, Version,
+    ParseMatchSpecOptions, RepoDataRecord, SolverResult, Subdir, Version,
 };
 use rattler_solve::{IntoRepoData, SolveError, SolverImpl, SolverTask, libsolv_c, resolvo};
 use rattler_virtual_packages::{VirtualPackageOverrides, VirtualPackages};
@@ -36,7 +36,7 @@ pub struct SolverArgs {
 
     /// The platform to solve for. Defaults to the platform of the current host.
     #[clap(long)]
-    platform: Option<Platform>,
+    platform: Option<Subdir>,
 
     /// Virtual packages to use for solving, e.g. __glibc=2.28.
     ///
@@ -214,7 +214,7 @@ impl SolverArgs {
 
     /// The platform to solve for, either as given on the command line or the
     /// platform of the current host.
-    pub fn platform(&self) -> miette::Result<Platform> {
+    pub fn platform(&self) -> miette::Result<Subdir> {
         self.platform.map_or_else(crate::host_platform, Ok)
     }
 

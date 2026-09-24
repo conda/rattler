@@ -6,7 +6,7 @@ from typing import Protocol, runtime_checkable
 from rattler.config import Config
 from rattler.match_spec import MatchSpec
 from rattler.networking.client import Client
-from rattler.platform.platform import Platform
+from rattler.platform.subdir import Subdir
 from rattler.prefix.prefix_record import PrefixRecord
 from rattler.rattler import py_install
 from rattler.repo_data.record import RepoDataRecord
@@ -284,7 +284,7 @@ async def install(
     installed_packages: list[PrefixRecord] | None = None,
     reinstall_packages: set[str] | None = None,
     ignored_packages: set[str] | None = None,
-    platform: Platform | None = None,
+    platform: Subdir | None = None,
     execute_link_scripts: bool | None = None,
     show_progress: bool = True,
     client: Client | None = None,

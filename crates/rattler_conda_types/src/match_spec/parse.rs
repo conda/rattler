@@ -23,7 +23,7 @@ use super::{
 use crate::match_spec::condition::parse_condition_with_options;
 use crate::{
     Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError, ParseMatchSpecOptions,
-    ParseStrictness, ParseVersionError, Platform, VersionSpec,
+    ParseStrictness, ParseVersionError, Subdir, VersionSpec,
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
     flags::is_valid_matchspec_flag,
     match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError},
@@ -175,7 +175,7 @@ fn starts_bracket_fields(input: &str) -> bool {
     // Any identifier followed by `=` marks a field section; unknown keys are
     // rejected later with a precise error. A key whitelist here would leave
     // quotes untracked for unknown keys, so a `#` inside a quoted value would
-    // be stripped as a comment. Platform selectors (`[linux-64]`) and glob
+    // be stripped as a comment. Subdir selectors (`[linux-64]`) and glob
     // character classes have no `=` and still fall through.
     !key.is_empty() && contents[key_end..].trim_start().starts_with('=')
 }
@@ -1031,7 +1031,7 @@ fn parse_channel_and_subdir(
 
     if let Some((channel, subdir)) = input.rsplit_once('/') {
         // If the subdir is a platform, we assume the channel has a subdir
-        if Platform::from_str(subdir).is_ok() {
+        if Subdir::from_str(subdir).is_ok() {
             return Ok((
                 Some(Channel::from_str(channel, &channel_config)?),
                 Some(subdir.to_string()),

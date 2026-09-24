@@ -4,7 +4,7 @@ from rattler.channel import Channel
 from rattler.lock.channel import LockChannel
 from rattler.lock.package import LockedPackage, PypiLockedPackage
 from rattler.lock.platform import LockPlatform
-from rattler.platform.platform import Platform
+from rattler.platform.subdir import Subdir
 from rattler.rattler import PyEnvironment
 from rattler.repo_data.record import RepoDataRecord
 
@@ -17,7 +17,7 @@ class Environment:
     _env: PyEnvironment
 
     def __init__(
-        self, name: str, requirements: dict[Platform, list[RepoDataRecord]], channels: list[Channel | LockChannel]
+        self, name: str, requirements: dict[Subdir, list[RepoDataRecord]], channels: list[Channel | LockChannel]
     ) -> None:
         """
         Create a new environment.

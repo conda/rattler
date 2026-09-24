@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 from rattler.match_spec.match_spec import MatchSpec
 from rattler.package.no_arch_type import NoArchLiteral, NoArchType
 from rattler.package.package_name import PackageName
-from rattler.platform.platform import Platform
-from rattler.rattler import ParsePlatformError, PyRecord
+from rattler.platform.subdir import Subdir
+from rattler.rattler import ParseSubdirError, PyRecord
 from rattler.version import VersionWithSource
 
 if TYPE_CHECKING:
@@ -186,7 +186,7 @@ class PackageRecord:
         version: str | VersionWithSource,
         build: str,
         build_number: int,
-        subdir: str | Platform,
+        subdir: str | Subdir,
         arch: str | None = None,
         platform: str | None = None,
         noarch: NoArchType | NoArchLiteral | None = None,
@@ -207,12 +207,12 @@ class PackageRecord:
     ) -> None:
         if isinstance(subdir, str):
             try:
-                subdir = Platform(subdir)
-            except ParsePlatformError:
+                subdir = Subdir(subdir)
+            except ParseSubdirError:
                 # if the string is not a valid platform, we just keep it as a string
                 pass
 
-        if isinstance(subdir, Platform):
+        if isinstance(subdir, Subdir):
             if arch is None:
                 subdir_arch = subdir.arch
                 arch = str(subdir_arch) if subdir_arch is not None else arch
