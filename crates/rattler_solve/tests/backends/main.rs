@@ -854,9 +854,10 @@ mod resolvo {
     use std::{collections::HashMap, sync::Arc};
 
     use rattler_conda_types::{
-        MatchSpec, PackageRecord, ParseStrictness, RepoDataRecord, VersionWithSource,
-        package::DistArchiveIdentifier,
+        MatchSpec, PackageRecord, ParseMatchSpecOptions, ParseStrictness, RepoDataRecord,
+        VersionWithSource, package::DistArchiveIdentifier,
     };
+    use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
     use rattler_solve::{SolveStrategy, SolverImpl, SolverTask};
     use url::Url;
 
@@ -1374,6 +1375,48 @@ mod resolvo {
               └─ bar <2, which cannot be installed because there are no viable options:
                  └─ bar 1, which conflicts with the versions reported above.
         "###);
+    }
+
+    #[test]
+    fn test_sparse_repodata_loads_extra_dependencies() {
+        let repo_data =
+            super::read_sparse_repodata(&dummy_channel_with_optional_dependencies_json_path());
+
+        for (spec, expected) in [
+            ("bar <2", "bar 1"),
+            ("foo[extras=[with-bar]]", "bar 1, foo 1"),
+        ] {
+            let spec =
+                MatchSpec::from_str(spec, ParseMatchSpecOptions::lenient().with_extras(true))
+                    .unwrap();
+            let package_names = spec.name.as_exact().cloned().into_iter();
+            let records = SparseRepoData::load_records_recursive(
+                [&repo_data],
+                package_names,
+                None,
+                PackageFormatSelection::default(),
+            )
+            .unwrap();
+            let result = rattler_solve::resolvo::Solver
+                .solve(SolverTask {
+                    specs: vec![spec],
+                    ..SolverTask::from_iter(&records)
+                })
+                .unwrap();
+            let mut packages = result
+                .records
+                .iter()
+                .map(|record| {
+                    format!(
+                        "{} {}",
+                        record.package_record.name.as_normalized(),
+                        record.package_record.version
+                    )
+                })
+                .collect::<Vec<_>>();
+            packages.sort();
+            assert_eq!(packages.join(", "), expected);
+        }
     }
 
     // Candidate ordering tests (resolvo-specific)
