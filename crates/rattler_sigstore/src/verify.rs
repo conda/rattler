@@ -7,10 +7,15 @@
 //!    binding between the in-toto subject digest and the package SHA256),
 //!    performed by `sigstore-verify` against the package record's `sha256`.
 //!    The package archive itself is never needed.
-//! 2. The CEP 27 checks on the in-toto statement: the predicate type must be
-//!    the conda publish predicate, the subject name must equal the package
-//!    filename and, depending on the [`ChannelCheck`], the `targetChannel`
-//!    must match the channel the package was retrieved from.
+//! 2. The [CEP 27](https://conda.org/learn/ceps/cep-0027) checks on the in-toto
+//!    statement: the predicate type must be the conda publish predicate, the
+//!    subject name must equal the package filename and, depending on the
+//!    [`ChannelCheck`], the `targetChannel` must match the channel the package
+//!    was retrieved from.
+//!
+//! [CEP 50](https://conda.org/learn/ceps/cep-0050) governs how the sidecar is
+//! distributed but adds no publish-attestation verification rules, so only the
+//! CEP 27 rules apply here.
 //!
 //! Which signing identities are trusted is decided afterwards by the
 //! [`VerificationPolicy`].

@@ -282,7 +282,10 @@ class VerifiedChecks:
 
 @dataclass(frozen=True)
 class VerifiedAttestation:
-    """A Sigstore bundle that passed signature, CEP 27, and publisher checks."""
+    """A Sigstore bundle that passed signature, [CEP 27], and publisher checks.
+
+    [CEP 27]: https://conda.org/learn/ceps/cep-0027
+    """
 
     index: int
     identity: str | None

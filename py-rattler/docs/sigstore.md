@@ -2,6 +2,8 @@
 
 Py-rattler can verify the Sigstore attestations advertised by conda package records and apply the same policy while installing packages.
 
+Attestations use the format and verification rules of [CEP 27](https://conda.org/learn/ceps/cep-0027) and are distributed as described by [CEP 50](https://conda.org/learn/ceps/cep-0050): a `.sigs` sidecar next to the package, advertised through the `attestations_sha256` field of the repodata. Which signing identities to trust is not covered by either CEP and is up to the policy you pass in.
+
 ```python
 from rattler import Issuer, Publisher, VerificationPolicy
 

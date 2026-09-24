@@ -2,18 +2,23 @@
 //! Discovery, retrieval and verification of Sigstore attestations for conda
 //! packages.
 //!
-//! This crate implements the client side of the conda CEP on distribution of
-//! Sigstore attestations together with the verification rules of CEP 27:
+//! This crate implements the client side of two conda CEPs:
+//! [CEP 50](https://conda.org/learn/ceps/cep-0050), which standardizes how
+//! Sigstore attestations are distributed alongside packages, and
+//! [CEP 27](https://conda.org/learn/ceps/cep-0027), which standardizes the
+//! attestation format and the rules for verifying one. CEP 50 adds no
+//! publish-attestation verification rules of its own.
 //!
 //! - A package record advertises its attestations through the
-//!   `attestations_sha256` field of the repodata.
+//!   `attestations_sha256` field of the repodata (CEP 50).
 //! - The attestations live in a sidecar at `<package_url>.sigs.<sha256>`, a
-//!   JSON array of Sigstore bundles. See [`sidecar`].
+//!   JSON array of Sigstore bundles (CEP 50). See [`sidecar`].
 //! - Each bundle is verified with `sigstore-verify` against the package's
 //!   SHA256 and then checked against the CEP 27 rules for conda publish
 //!   attestations. See [`verify`].
 //! - A [`VerificationPolicy`] decides which signing identities are trusted for
-//!   all packages and whether failures warn or block. See [`policy`].
+//!   all packages and whether failures warn or block. Neither CEP prescribes
+//!   this; CEP 50 leaves trust policy explicitly out of scope. See [`policy`].
 //!
 //! # Example
 //!

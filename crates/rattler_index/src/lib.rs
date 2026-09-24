@@ -1041,7 +1041,8 @@ pub const ATTESTATION_SIDECAR_SUFFIX: &str = ".sigs";
 /// Reads the attestation sidecar (`<package>.sigs`) for every registered
 /// package that has one, records its SHA256 in the package record and verifies
 /// that the identical content-addressed sidecar (`<package>.sigs.<sha256>`)
-/// has already been published.
+/// has already been published: both URLs must serve the same bytes per
+/// [CEP 50](https://conda.org/learn/ceps/cep-0050).
 ///
 /// Packages without a sidecar have `attestations_sha256` cleared so that a
 /// removed sidecar is no longer advertised.

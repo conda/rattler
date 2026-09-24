@@ -1,5 +1,10 @@
 //! Trust policy: which signing identity is accepted and how strictly
 //! verification failures are treated.
+//!
+//! Neither [CEP 27](https://conda.org/learn/ceps/cep-0027) nor
+//! [CEP 50](https://conda.org/learn/ceps/cep-0050) prescribes this — CEP 50
+//! leaves trust policy explicitly out of scope — so everything here is
+//! rattler's own policy layer on top of them.
 
 use std::fmt;
 
@@ -144,8 +149,8 @@ impl Publisher {
 /// How the `targetChannel` recorded in an attestation is compared against the
 /// channel a package was retrieved from.
 ///
-/// CEP 27 says the field SHOULD match, but allows verifiers to permit
-/// mismatches for mirrors.
+/// [CEP 27](https://conda.org/learn/ceps/cep-0027) says the field SHOULD match,
+/// but allows verifiers to permit mismatches for mirrors.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum ChannelCheck {
     /// A mismatching `targetChannel` rejects the attestation.

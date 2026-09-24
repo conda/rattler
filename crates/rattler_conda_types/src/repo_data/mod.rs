@@ -548,10 +548,11 @@ pub struct PackageRecord {
     pub arch: Option<String>,
 
     /// The SHA256 hash of the Sigstore attestation sidecar served alongside the
-    /// package (see the conda CEP on distribution of Sigstore attestations). The
-    /// sidecar is served at `<package_url>.sigs.<attestations_sha256>` and
-    /// contains a JSON array of Sigstore bundles. If this is `None` no
-    /// attestations are advertised for the package.
+    /// package, as specified by
+    /// [CEP 50](https://conda.org/learn/ceps/cep-0050). The sidecar is served
+    /// at `<package_url>.sigs.<attestations_sha256>` and contains a JSON array
+    /// of Sigstore bundles. If this is `None` no attestations are advertised
+    /// for the package.
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
     pub attestations_sha256: Option<Sha256Hash>,
 
