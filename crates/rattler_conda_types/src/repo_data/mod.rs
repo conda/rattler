@@ -99,7 +99,10 @@ pub struct ChannelInfo {
     ///
     /// Serialized as a `vN`-keyed dictionary per the CEP draft
     /// <https://github.com/conda/ceps/pull/146>.
-    #[serde_as(as = "IndexMap<DisplayFromStr, _>")]
+    #[serde_as(
+        serialize_as = "IndexMap<DisplayFromStr, _>",
+        deserialize_as = "crate::utils::serde::LossyRepodataRevisions"
+    )]
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub repodata_revisions: RepodataRevisions,
 
@@ -1487,6 +1490,59 @@ mod test {
         assert_eq!(revisions[&RepodataRevision::Unknown(1)].n_packages, Some(1));
         assert_eq!(revisions[&RepodataRevision::Unknown(2)].n_packages, Some(2));
         assert_eq!(serde_json::to_value(&repodata).unwrap(), raw);
+    }
+
+    #[test]
+    fn test_repodata_revisions_skip_unreadable_entries() {
+        // An unreadable entry in the advisory `repodata_revisions` map must not
+        // take the package records down with it, see #2784.
+        let repodata: RepoData = serde_json::from_value(serde_json::json!({
+            "info": {
+                "subdir": "noarch",
+                "repodata_revisions": {
+                    "v1": { "n_packages": 1 },
+                    "v0-beta": { "n_packages": 2 },
+                    "v2": "not a map"
+                }
+            },
+            "packages": { "numpy-1.0-0.tar.bz2": {
+                "name": "numpy", "version": "1.0", "build": "0", "build_number": 0,
+                "subdir": "noarch", "size": 1, "depends": []
+            }},
+            "packages.conda": {},
+            "repodata_version": 2
+        }))
+        .unwrap();
+
+        assert_eq!(repodata.packages.len(), 1);
+        let revisions = &repodata.info.as_ref().unwrap().repodata_revisions;
+        assert_eq!(revisions.len(), 1);
+        assert_eq!(revisions[&RepodataRevision::Unknown(1)].n_packages, Some(1));
+    }
+
+    #[test]
+    fn test_repodata_revisions_of_the_wrong_shape_are_skipped() {
+        // Same for a value that is not a map at all, see #2784.
+        let repodata: RepoData = serde_json::from_value(serde_json::json!({
+            "info": { "subdir": "noarch", "repodata_revisions": [] },
+            "packages": { "numpy-1.0-0.tar.bz2": {
+                "name": "numpy", "version": "1.0", "build": "0", "build_number": 0,
+                "subdir": "noarch", "size": 1, "depends": []
+            }},
+            "packages.conda": {},
+            "repodata_version": 2
+        }))
+        .unwrap();
+
+        assert_eq!(repodata.packages.len(), 1);
+        assert!(
+            repodata
+                .info
+                .as_ref()
+                .unwrap()
+                .repodata_revisions
+                .is_empty()
+        );
     }
 
     #[test]

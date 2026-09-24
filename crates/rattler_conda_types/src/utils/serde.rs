@@ -5,6 +5,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _, se
 use serde_with::{DeserializeAs, SerializeAs};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::hash::Hash;
+use std::str::FromStr;
 use std::{
     marker::PhantomData,
     path::{Path, PathBuf},
@@ -74,6 +76,55 @@ impl<'de> DeserializeAs<'de, Option<Url>> for LossyUrl {
             }
         };
         Ok(Some(url))
+    }
+}
+
+/// A helper type that parses a map of repodata revisions, skipping entries
+/// whose key or value cannot be understood.
+///
+/// `repodata_revisions` is advisory, so a key written by a newer tool must not
+/// make the whole repodata file, and with it every package record, unreadable.
+pub(crate) struct LossyRepodataRevisions;
+
+impl<'de, K, V> DeserializeAs<'de, IndexMap<K, V>> for LossyRepodataRevisions
+where
+    K: FromStr + Hash + Eq,
+    K::Err: std::fmt::Display,
+    V: Deserialize<'de>,
+{
+    fn deserialize_as<D>(deserializer: D) -> Result<IndexMap<K, V>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = match serde_json::Value::deserialize(deserializer)? {
+            serde_json::Value::Object(map) => map,
+            other => {
+                tracing::warn!("expected a map of repodata revisions, found {other}. Skipping...");
+                return Ok(IndexMap::default());
+            }
+        };
+        let mut result = IndexMap::with_capacity(raw.len());
+
+        for (key, value) in raw {
+            let parsed_key = match K::from_str(&key) {
+                Ok(key) => key,
+                Err(e) => {
+                    tracing::warn!("unable to parse repodata revision '{key}': {e}. Skipping...");
+                    continue;
+                }
+            };
+            match V::deserialize(value) {
+                Ok(value) => {
+                    result.insert(parsed_key, value);
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "unable to parse the metadata of repodata revision '{key}': {e}. Skipping..."
+                    );
+                }
+            }
+        }
+        Ok(result)
     }
 }
 
