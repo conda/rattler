@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["S3Options","S3OptionsMap"]};
+window.SIDEBAR_ITEMS = {"enum":["S3AddressingStyle"],"struct":["S3Options","S3OptionsMap"]};
