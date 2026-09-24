@@ -536,7 +536,7 @@ async fn test_normal_and_force_reindex_preserve_v3_extensions() {
 }
 
 #[tokio::test]
-async fn test_reindex_derives_authoritative_legacy_and_v3_stats_and_message_precedence() {
+async fn test_reindex_derives_authoritative_v3_stats_and_drops_legacy_revision() {
     let temp_dir = tempfile::tempdir().unwrap();
     let subdir_path = temp_dir.path().join("noarch");
     fs::create_dir(&subdir_path).unwrap();
@@ -640,13 +640,9 @@ async fn test_reindex_derives_authoritative_legacy_and_v3_stats_and_message_prec
     assert!(repodata["v3"]["tar.bz2"]["v3-stats-1.0-0"].is_object());
     assert_eq!(
         repodata["info"]["repodata_revisions"],
+        // The legacy layout is not advertised: CEP 48 keys start at `v3`, so the
+        // seeded `v0` entry is dropped rather than refreshed.
         serde_json::json!({
-            "v0": {
-                "message": "previous legacy message",
-                "n_packages": 1,
-                "oldest": 1710000000000i64,
-                "newest": 1710000000000i64
-            },
             "v3": {
                 "message": "configured v3 message",
                 "n_packages": 1,

@@ -24,15 +24,30 @@ use crate::{
     solver_args::SolverArgs,
 };
 
+/// The examples shown by `rattler solve --help` and in `rattler skill`.
+///
+/// The attestation example only applies when the `sigstore` feature is enabled,
+/// because the `--verify-attestations` flag does not exist otherwise.
+#[cfg(feature = "sigstore")]
+const EXAMPLES: &str = r#"Examples:
+  rattler solve python numpy                 # print the solved environment as a table
+  rattler solve python --format json         # print the solved records as JSON
+  rattler solve python --format urls         # print only the urls of the solved packages
+  rattler solve python --verify-attestations require --issuer github --identity 'https://github.com/org/*'"#;
+
+/// The examples shown by `rattler solve --help` and in `rattler skill`.
+#[cfg(not(feature = "sigstore"))]
+const EXAMPLES: &str = r#"Examples:
+  rattler solve python numpy                 # print the solved environment as a table
+  rattler solve python --format json         # print the solved records as JSON
+  rattler solve python --format urls         # print only the urls of the solved packages"#;
+
 /// Solve a conda environment without installing it.
 ///
 /// Resolves the specified package specs for a target platform and prints the
 /// resulting package set.
 #[derive(Debug, clap::Parser)]
-#[clap(after_help = r#"Examples:
-  rattler solve python numpy                 # print the solved environment as a table
-  rattler solve python --format json         # print the solved records as JSON
-  rattler solve python --format urls         # print only the urls of the solved packages"#)]
+#[clap(after_help = EXAMPLES)]
 pub struct Opt {
     /// Package specs to solve.
     #[clap(required = true)]
@@ -40,6 +55,10 @@ pub struct Opt {
 
     #[clap(flatten)]
     solver: SolverArgs,
+
+    #[cfg(feature = "sigstore")]
+    #[clap(flatten)]
+    attestations: crate::attestation_args::AttestationPolicyArgs,
 
     /// Output format (defaults to human-readable output)
     #[clap(long)]
@@ -64,7 +83,7 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
     let download_client = super::client::create_client_with_middleware(offline)?;
 
     let config = load_config()?;
-    let gateway = build_gateway(download_client, &config, offline, true)?;
+    let gateway = build_gateway(download_client.clone(), &config, offline, true)?;
 
     let start_load_repo_data = Instant::now();
     let repo_data = wrap_in_async_progress(
@@ -145,6 +164,11 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
         }
         return Ok(());
     }
+
+    #[cfg(feature = "sigstore")]
+    opt.attestations
+        .verify_records(&solved_packages, &download_client)
+        .await?;
 
     match opt.format {
         Some(QueryOutputFormat::Json) => {

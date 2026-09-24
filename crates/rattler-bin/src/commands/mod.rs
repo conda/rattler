@@ -23,8 +23,11 @@ pub mod progress;
 pub mod run;
 pub mod search;
 pub mod shell_hook;
+pub mod skill;
 pub mod solve;
 pub mod table;
+#[cfg(feature = "sigstore")]
+pub mod verify_attestation;
 pub mod virtual_packages;
 pub mod whoneeds;
 

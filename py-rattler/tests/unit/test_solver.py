@@ -6,16 +6,17 @@ from pathlib import Path
 import pytest
 
 from rattler import (
-    solve,
-    ChannelPriority,
-    RepoDataRecord,
     Channel,
+    ChannelPriority,
     Gateway,
-    SparseRepoData,
     MatchSpec,
-    solve_with_sparse_repodata,
     PackageFormatSelection,
+    RepoDataRecord,
+    SparseRepoData,
+    solve,
+    solve_with_sparse_repodata,
 )
+from rattler.solver import TimestampPolicy
 
 
 @pytest.mark.asyncio
@@ -122,7 +123,7 @@ async def test_solve_channel_priority_disabled(
     assert isinstance(solved_data, list)
     assert isinstance(solved_data[0], RepoDataRecord)
     assert (
-        list(filter(lambda r: r.file_name.startswith("pytorch-cpu-0.4.1-py36_cpu_1"), solved_data))[0].channel
+        next(r for r in solved_data if r.file_name.startswith("pytorch-cpu-0.4.1-py36_cpu_1")).channel
         == pytorch_channel.base_url
     )
     assert len(solved_data) == 32
@@ -506,3 +507,38 @@ async def test_solve_with_sparse_repodata_with_wheels() -> None:
     # solve needs to include these two packages
     assert "starlette" in package_names
     assert "python" in package_names
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sparse", [False, True])
+@pytest.mark.parametrize(
+    "policy,expected", [("allow-missing", "3"), ("require-timestamp", "2"), ("require-indexed-timestamp", "1")]
+)
+async def test_timestamp_policy(tmp_path: Path, sparse: bool, policy: TimestampPolicy, expected: str) -> None:
+    cutoff = datetime.datetime(2026, 3, 23, tzinfo=datetime.timezone.utc)
+    cutoff_ms = int(cutoff.timestamp() * 1000)
+    packages = {}
+    for version, timestamps in [
+        ("1", {"indexed_timestamp": cutoff_ms, "timestamp": cutoff_ms + 1000}),
+        ("2", {"timestamp": cutoff_ms}),
+        ("3", {}),
+        ("4", {"timestamp": cutoff_ms - 86400000, "indexed_timestamp": cutoff_ms + 1}),
+    ]:
+        packages[f"foo-{version}-0.tar.bz2"] = {
+            "name": "foo",
+            "version": version,
+            "build": "0",
+            "build_number": 0,
+            "subdir": "noarch",
+            "depends": [],
+            **timestamps,
+        }
+    path = tmp_path / "noarch" / "repodata.json"
+    path.parent.mkdir()
+    path.write_text(json.dumps({"info": {"subdir": "noarch"}, "packages": packages}))
+    repodata = SparseRepoData(Channel(str(tmp_path)), "noarch", path)
+    if sparse:
+        result = await solve_with_sparse_repodata(["foo"], [repodata], exclude_newer=cutoff, timestamp_policy=policy)
+    else:
+        result = await solve([repodata], ["foo"], platforms=["noarch"], exclude_newer=cutoff, timestamp_policy=policy)
+    assert str(result[0].version) == expected

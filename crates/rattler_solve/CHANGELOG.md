@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [10.0.0](https://github.com/conda/rattler/compare/rattler_solve-v9.0.8...rattler_solve-v10.0.0) - 2026-09-23
+
+### Added
+
+- *(rattler_solve)* Use indexed_timestamp in exclude-newer ([#2798](https://github.com/conda/rattler/pull/2798))
+- add standalone Sigstore attestation verification ([#2794](https://github.com/conda/rattler/pull/2794))
+
 ## [9.0.8](https://github.com/conda/rattler/compare/rattler_solve-v9.0.7...rattler_solve-v9.0.8) - 2026-09-17
 
 ### Other

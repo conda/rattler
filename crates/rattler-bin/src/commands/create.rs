@@ -21,6 +21,11 @@ use crate::{
 /// Resolves and installs the specified packages into a target prefix,
 /// pulling from the configured channels.
 #[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler create python numpy                          # install into ./.prefix from conda-forge
+  rattler create -p ./env -c conda-forge python=3.12   # choose the prefix and the channel
+  rattler create python --dry-run --platform linux-64  # show the transaction without installing
+  rattler create python --constraint "numpy<2"         # constrain a package without requiring it"#)]
 pub struct Opt {
     /// Package specs to install
     #[clap(required = true)]
@@ -32,6 +37,10 @@ pub struct Opt {
     /// Simulate command without installation
     #[clap(long)]
     dry_run: bool,
+
+    #[cfg(feature = "sigstore")]
+    #[clap(flatten)]
+    attestations: crate::attestation_args::AttestationPolicyArgs,
 
     /// Target prefix (environment path) for package installation
     #[clap(
@@ -182,7 +191,10 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     }
 
     let install_start = Instant::now();
-    let result = Installer::new()
+    let installer = Installer::new();
+    #[cfg(feature = "sigstore")]
+    let installer = installer.with_attestation_policy(opt.attestations.policy());
+    let result = installer
         .with_download_client(download_client)
         .with_max_concurrent_requests(config.concurrency.downloads)
         .with_target_platform(install_platform)

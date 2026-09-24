@@ -39,6 +39,33 @@ features = ["pyo3/extension-module"]
 line-length = 120
 target-version = "py310"
 
+[tool.ruff.lint]
+select = [
+  "B",    # flake8-bugbear
+  "C4",   # flake8-comprehensions
+  "E4",   # pycodestyle imports
+  "E7",   # pycodestyle statements
+  "E9",   # pycodestyle runtime errors
+  "F",    # Pyflakes
+  "FURB", # refurb
+  "I",    # isort
+  "PERF", # Perflint
+  "PIE",  # flake8-pie
+  "RUF",  # Ruff-specific rules
+  "SIM",  # flake8-simplify
+  "UP",   # pyupgrade
+]
+ignore = [
+  "SIM105", # contextlib.suppress is not always clearer than try-except-pass
+]
+
+[tool.ruff.lint.per-file-ignores]
+"examples/**" = ["B008"] # Function-call defaults are part of the Typer CLI definitions
+"tests/**" = [
+  "B017",  # Bindings can expose exception types that vary across platforms
+  "RUF012", # Test-local process starter classes use mutable class attributes as configuration
+]
+
 [tool.mypy]
 python_version = "3.10"
 files = ["rattler", "tests", "examples"]

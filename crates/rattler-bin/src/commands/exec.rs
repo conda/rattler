@@ -35,6 +35,10 @@ use crate::{
 /// Run a command and install it in a temporary environment.
 #[derive(Debug, Parser)]
 #[clap(trailing_var_arg = true, arg_required_else_help = true)]
+#[clap(after_help = r#"Examples:
+  rattler exec ruff check .                            # the package is guessed from the command name
+  rattler exec --spec python=3.12 python --version     # pick the package(s) explicitly
+  rattler exec --with rich python -c "import rich"     # guess python and add another package"#)]
 pub struct Opt {
     /// The executable to run, followed by any arguments.
     #[clap(num_args = 1.., value_hint = ValueHint::CommandWithArguments)]

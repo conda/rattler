@@ -18,7 +18,7 @@ use std::sync::{
 
 use jiff::Timestamp;
 use rattler_conda_types::{
-    GenericVirtualPackage, MatchSpec, PackageName, RepoDataRecord, SolverResult, utils::TimestampMs,
+    GenericVirtualPackage, MatchSpec, PackageName, RepoDataRecord, SolverResult,
 };
 use url::Url;
 
@@ -149,6 +149,35 @@ impl CancellationToken {
     }
 }
 
+/// Global timestamp selection and missing metadata policy for [`ExcludeNewer`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum TimestampPolicy {
+    /// Prefer index time, then build time; include records missing both.
+    AllowMissing,
+    /// Prefer index time, then build time; reject records missing both.
+    #[default]
+    RequireTimestamp,
+    /// Use only index time; reject records without an index timestamp.
+    RequireIndexedTimestamp,
+}
+
+/// Why a record is excluded by [`ExcludeNewer`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum TimestampExclusionReason {
+    /// The strict policy requires publication metadata.
+    #[error("the package has no indexed timestamp")]
+    MissingIndexedTimestamp,
+    /// Neither publication nor build time is available.
+    #[error("the package has no timestamp")]
+    MissingTimestamp,
+    /// The selected timestamp is strictly later than the effective cutoff.
+    #[error("the package is uploaded after the cutoff date of {}", cutoff.to_zoned(jiff::tz::TimeZone::system()).strftime("%Y-%m-%d %H:%M:%S"))]
+    NewerThanCutoff {
+        /// The effective package/channel cutoff.
+        cutoff: Timestamp,
+    },
+}
+
 /// Configuration for filtering packages newer than a cutoff.
 ///
 /// This feature helps reduce the risk of installing compromised packages by
@@ -159,6 +188,11 @@ impl CancellationToken {
 /// and report malicious packages before they can be installed.
 ///
 /// This is similar to pnpm's `minimumReleaseAge` feature.
+///
+/// By default, [`TimestampPolicy::RequireTimestamp`] uses the index timestamp,
+/// falls back to build time, and excludes records missing both. Use
+/// [`Self::with_timestamp_policy`] to change this for all packages and channels.
+/// Records exactly at their effective cutoff remain eligible.
 ///
 /// # Example
 ///
@@ -188,8 +222,8 @@ pub struct ExcludeNewer {
     /// [`Self::channel_cutoffs`] for matching package names.
     package_cutoffs: HashMap<PackageName, Timestamp>,
 
-    /// Whether to include packages that don't have a timestamp.
-    include_unknown_timestamp: bool,
+    /// Timestamp policy shared by all packages and channels.
+    timestamp_policy: TimestampPolicy,
 }
 
 impl ExcludeNewer {
@@ -205,7 +239,7 @@ impl ExcludeNewer {
             cutoff,
             channel_cutoffs: HashMap::new(),
             package_cutoffs: HashMap::new(),
-            include_unknown_timestamp: false,
+            timestamp_policy: TimestampPolicy::default(),
         }
     }
 
@@ -221,7 +255,7 @@ impl ExcludeNewer {
             cutoff: Self::cutoff_from_duration(duration, now),
             channel_cutoffs: HashMap::new(),
             package_cutoffs: HashMap::new(),
-            include_unknown_timestamp: false,
+            timestamp_policy: TimestampPolicy::default(),
         }
     }
 
@@ -289,17 +323,15 @@ impl ExcludeNewer {
         self
     }
 
-    /// Sets whether packages without a timestamp should be included.
-    ///
-    /// Call this to override the constructor default.
-    pub fn with_include_unknown_timestamp(mut self, include: bool) -> Self {
-        self.include_unknown_timestamp = include;
+    /// Sets the global timestamp policy. Cutoff overrides do not change it.
+    pub fn with_timestamp_policy(mut self, policy: TimestampPolicy) -> Self {
+        self.timestamp_policy = policy;
         self
     }
 
-    /// Returns whether packages without a timestamp are included.
-    pub fn include_unknown_timestamp(&self) -> bool {
-        self.include_unknown_timestamp
+    /// Returns the global timestamp policy.
+    pub fn timestamp_policy(&self) -> TimestampPolicy {
+        self.timestamp_policy
     }
 
     /// Computes the cutoff time for the given package and channel.
@@ -311,17 +343,31 @@ impl ExcludeNewer {
             .unwrap_or(self.cutoff)
     }
 
-    /// Returns whether a package should be excluded.
-    pub fn is_excluded(
-        &self,
-        package: &PackageName,
-        channel: Option<&str>,
-        timestamp: Option<&TimestampMs>,
-    ) -> bool {
+    /// Returns why a record is excluded, preserving timestamp provenance.
+    pub fn exclusion_reason(&self, record: &RepoDataRecord) -> Option<TimestampExclusionReason> {
+        let package = &record.package_record;
+        let timestamp = match self.timestamp_policy {
+            TimestampPolicy::RequireIndexedTimestamp => match package.indexed_timestamp {
+                Some(timestamp) => Some(timestamp),
+                None => return Some(TimestampExclusionReason::MissingIndexedTimestamp),
+            },
+            _ => package.indexed_timestamp.or(package.timestamp),
+        };
+        let cutoff = self.cutoff_for_package(&package.name, record.channel.as_deref());
         match timestamp {
-            Some(timestamp) => *timestamp > self.cutoff_for_package(package, channel),
-            None => !self.include_unknown_timestamp(),
+            Some(timestamp) if timestamp > cutoff => {
+                Some(TimestampExclusionReason::NewerThanCutoff { cutoff })
+            }
+            None if self.timestamp_policy == TimestampPolicy::RequireTimestamp => {
+                Some(TimestampExclusionReason::MissingTimestamp)
+            }
+            _ => None,
         }
+    }
+
+    /// Returns whether a record should be excluded by the timestamp policy and cutoff.
+    pub fn is_excluded(&self, record: &RepoDataRecord) -> bool {
+        self.exclusion_reason(record).is_some()
     }
 }
 

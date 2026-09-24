@@ -7,6 +7,10 @@ use url::Url;
 
 /// Download an arbitrary file.
 #[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler download https://conda.anaconda.org/conda-forge/noarch/repodata.json
+  rattler download https://example.com/file.tar.gz -o ./file.tar.gz
+  rattler download https://example.com/index.json -o - | jq .    # stream to stdout"#)]
 pub struct Opt {
     /// URL of the file to download
     #[clap(required = true)]

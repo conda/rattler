@@ -1,6 +1,6 @@
 """Tests for custom RepoDataSource implementations."""
 
-from typing import Any, List
+from typing import Any
 
 import pytest
 
@@ -19,11 +19,11 @@ from rattler import (
 class MockRepoDataSource(RepoDataSource):
     """A mock implementation of the RepoDataSource protocol for testing."""
 
-    def __init__(self, records_by_platform: dict[str, dict[str, List[RepoDataRecord]]]):
+    def __init__(self, records_by_platform: dict[str, dict[str, list[RepoDataRecord]]]):
         """Initialize with a mapping of platform -> package_name -> records."""
         self._records = records_by_platform
 
-    async def fetch_package_records(self, platform: Platform, name: PackageName) -> List[RepoDataRecord]:
+    async def fetch_package_records(self, platform: Platform, name: PackageName) -> list[RepoDataRecord]:
         """Fetch records for a specific package name and platform."""
         platform_str = str(platform)
         name_str = name.normalized
@@ -31,7 +31,7 @@ class MockRepoDataSource(RepoDataSource):
             return self._records[platform_str][name_str]
         return []
 
-    def package_names(self, platform: Platform) -> List[str]:
+    def package_names(self, platform: Platform) -> list[str]:
         """Return all available package names for the given platform."""
         platform_str = str(platform)
         if platform_str in self._records:
@@ -61,7 +61,7 @@ def record_snapshot(record: RepoDataRecord) -> str:
     return f"{record.name.normalized}={record.version}={record.build}"
 
 
-def results_snapshot(results: List[List[RepoDataRecord]]) -> List[List[str]]:
+def results_snapshot(results: list[list[RepoDataRecord]]) -> list[list[str]]:
     """Convert query results to snapshot format."""
     return [[record_snapshot(r) for r in source_results] for source_results in results]
 
@@ -76,7 +76,7 @@ def test_protocol_check_missing_method() -> None:
     """Test that objects missing methods are not recognized as RepoDataSource."""
 
     class IncompleteSource:
-        async def fetch_package_records(self, platform: Any, name: Any) -> List[Any]:
+        async def fetch_package_records(self, platform: Any, name: Any) -> list[Any]:
             return []
 
         # Missing package_names method
@@ -254,13 +254,13 @@ async def test_custom_source_backed_by_sparse_repodata() -> None:
         def __init__(self, repodata_by_platform: dict[str, SparseRepoData]):
             self._repodata = repodata_by_platform
 
-        async def fetch_package_records(self, platform: Platform, name: PackageName) -> List[RepoDataRecord]:
+        async def fetch_package_records(self, platform: Platform, name: PackageName) -> list[RepoDataRecord]:
             platform_str = str(platform)
             if platform_str in self._repodata:
                 return self._repodata[platform_str].load_records(name)
             return []
 
-        def package_names(self, platform: Platform) -> List[str]:
+        def package_names(self, platform: Platform) -> list[str]:
             platform_str = str(platform)
             if platform_str in self._repodata:
                 return self._repodata[platform_str].package_names()
