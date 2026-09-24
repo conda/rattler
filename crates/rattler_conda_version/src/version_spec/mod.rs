@@ -578,6 +578,100 @@ mod tests {
     }
 
     #[test]
+    fn issue_994() {
+        // A wildcard immediately followed by a local version segment (e.g.
+        // `3.4.*+aws`) used to be rejected as an unsupported regular
+        // expression, because the version parser only consumes the release
+        // part before the `*` and treats anything with a leftover `*` as a
+        // regex. It should instead behave like a normal `StartsWith` glob,
+        // additionally constrained to the given local version.
+        let spec = VersionSpec::from_str("3.4.*+aws", ParseStrictness::Lenient).unwrap();
+        assert!(spec.matches(&"3.4.0+aws".parse().unwrap()));
+        assert!(spec.matches(&"3.4.3+aws".parse().unwrap()));
+        assert!(!spec.matches(&"3.4.3+other".parse().unwrap()));
+        assert!(!spec.matches(&"3.5.0+aws".parse().unwrap()));
+        assert!(!spec.matches(&"3.4".parse().unwrap()));
+
+        // The display form round trips.
+        assert_eq!(
+            VersionSpec::from_str(&spec.to_string(), ParseStrictness::Lenient).unwrap(),
+            spec
+        );
+
+        // The undotted spelling of the wildcard works the same way.
+        assert_eq!(
+            VersionSpec::from_str("3.4*+aws", ParseStrictness::Lenient).unwrap(),
+            spec
+        );
+
+        // The rendered form keeps the local version with the wildcard last.
+        assert_eq!(spec.to_string(), "3.4+aws.*");
+
+        // A wildcard without a release part, or with a local version that is
+        // not a version, keeps the error it has without this change.
+        for unsupported in ["*+aws", "3.4.*+", "3.4.*+*", "3.4.*++aws", "1.0,3.4.*+*"] {
+            assert!(VersionSpec::from_str(unsupported, ParseStrictness::Lenient).is_err());
+        }
+
+        // Strict mode keeps rejecting a wildcard combined with an explicit
+        // operator, exactly like it does without a local version.
+        assert!(VersionSpec::from_str("3.4.*+aws", ParseStrictness::Strict).is_ok());
+        assert!(VersionSpec::from_str("==3.4.*+aws", ParseStrictness::Strict).is_err());
+        assert_eq!(
+            VersionSpec::from_str("==3.4.*+aws", ParseStrictness::Lenient).unwrap(),
+            VersionSpec::from_str("==3.4+aws", ParseStrictness::Lenient).unwrap()
+        );
+    }
+
+    #[test]
+    fn issue_2679() {
+        // A glob that does not trail the version is a glob pattern which conda maps to
+        // a regular expression. Those are not supported, but the error should say so.
+        for strictness in [ParseStrictness::Lenient, ParseStrictness::Strict] {
+            assert_matches!(
+                VersionSpec::from_str("*3.1", strictness).unwrap_err(),
+                ParseVersionSpecError::InvalidConstraint(
+                    ParseConstraintError::RegexConstraintsNotSupported
+                )
+            );
+            assert_matches!(
+                VersionSpec::from_str(">=*3.1", strictness).unwrap_err(),
+                ParseVersionSpecError::InvalidConstraint(
+                    ParseConstraintError::RegexConstraintsNotSupported
+                )
+            );
+        }
+
+        // A glob that trails the version is still a "starts with" constraint and a
+        // lone glob is still "any".
+        assert_eq!(
+            VersionSpec::from_str("3.1*", ParseStrictness::Lenient).unwrap(),
+            VersionSpec::StrictRange(
+                StrictRangeOperator::StartsWith,
+                StrictVersion::from(Version::from_str("3.1").unwrap())
+            )
+        );
+        assert_eq!(
+            VersionSpec::from_str("*", ParseStrictness::Strict).unwrap(),
+            VersionSpec::Any
+        );
+        assert_eq!(
+            VersionSpec::from_str("*.*", ParseStrictness::Strict).unwrap(),
+            VersionSpec::Any
+        );
+        assert_eq!(
+            VersionSpec::from_str("*,<2", ParseStrictness::Strict).unwrap(),
+            VersionSpec::Group(
+                LogicalOperator::And,
+                vec![
+                    VersionSpec::Any,
+                    VersionSpec::Range(RangeOperator::Less, Version::from_str("2").unwrap())
+                ]
+            )
+        );
+    }
+
+    #[test]
     fn issue_bracket_printing() {
         let v = VersionSpec::from_str("(>=1,<2)|>3", ParseStrictness::Lenient).unwrap();
         assert_eq!(format!("{v}"), ">=1,<2|>3");
