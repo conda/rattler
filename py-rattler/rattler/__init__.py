@@ -74,8 +74,8 @@ del _get_rattler_version
 
 __all__ = [
     "AboutJson",
-    "Channel",
     "CertificateClaims",
+    "Channel",
     "ChannelCheck",
     "ChannelConfig",
     "ChannelInfo",
