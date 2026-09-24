@@ -550,6 +550,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#pinning-the-trust-anchors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pinning the trust anchors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rattler.sigstore" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -618,6 +629,56 @@
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rattler.sigstore.TrustedRoot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TrustedRoot
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TrustedRoot">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rattler.sigstore.TrustedRoot.__repr__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __repr__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.sigstore.TrustedRoot.from_json" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_json
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.sigstore.TrustedRoot.from_path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_path
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -3919,6 +3980,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#pinning-the-trust-anchors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pinning the trust anchors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rattler.sigstore" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3987,6 +4059,56 @@
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rattler.sigstore.TrustedRoot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TrustedRoot
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TrustedRoot">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rattler.sigstore.TrustedRoot.__repr__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __repr__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.sigstore.TrustedRoot.from_json" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_json
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.sigstore.TrustedRoot.from_path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_path
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -4123,6 +4245,14 @@
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">outcome</span> <span class="o">=</span> <span class="k">await</span> <span class="n">verify_attestation</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">policy</span><span class="p">)</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">await</span> <span class="n">install</span><span class="p">(</span><span class="n">records</span><span class="p">,</span> <span class="n">target_prefix</span><span class="p">,</span> <span class="n">attestation_policy</span><span class="o">=</span><span class="n">policy</span><span class="p">)</span>
 </span></code></pre></div>
+<h2 id="pinning-the-trust-anchors">Pinning the trust anchors<a class="headerlink" href="#pinning-the-trust-anchors" title="Permanent link">#</a></h2>
+<p>By default the production Sigstore trusted root is fetched over TUF the first time a bundle is verified, which needs access to <code>tuf-repo-cdn.sigstore.dev</code>. Passing a <code>TrustedRoot</code> verifies against that trust material instead, so the only remaining request is the sidecar download.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrustedRoot</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">trusted_root</span> <span class="o">=</span> <span class="n">TrustedRoot</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span><span class="s2">&quot;trusted_root.json&quot;</span><span class="p">)</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">outcome</span> <span class="o">=</span> <span class="k">await</span> <span class="n">verify_attestation</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">trusted_root</span><span class="o">=</span><span class="n">trusted_root</span><span class="p">)</span>
+</span></code></pre></div>
+<p>A pinned root stays usable as the Sigstore infrastructure rotates its keys, because a bundle's certificate chain is validated against the point in time it was signed at. It does not pick up new certificate authorities, so a bundle issued under one the file does not carry fails to verify until the file is refreshed.</p>
 
 
 <div class="doc doc-object doc-module">
@@ -4338,6 +4468,183 @@
 
 
 
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="rattler.sigstore.TrustedRoot" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">TrustedRoot</span>
+
+
+<a href="#rattler.sigstore.TrustedRoot" class="headerlink" title="Permanent link">#</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>The Sigstore trust anchors every attestation bundle is verified against.</p>
+<p>Verification normally loads the production trusted root over TUF, which
+needs network access. Supplying one of these instead makes verification use
+the given trust material, so it can run against a pinned
+<code>trusted_root.json</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="rattler.sigstore.TrustedRoot.__repr__" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">__repr__</span>
+
+
+<a href="#rattler.sigstore.TrustedRoot.__repr__" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">__repr__</span><span class="p">()</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return a string representation of this trusted root.</p>
+<h5 id="rattler.sigstore.TrustedRoot.__repr__--examples">Examples<a class="headerlink" href="#rattler.sigstore.TrustedRoot.__repr__--examples" title="Permanent link">#</a></h5>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">root</span> <span class="o">=</span> <span class="n">TrustedRoot</span><span class="o">.</span><span class="n">from_json</span><span class="p">(</span><span class="s1">&#39;{&quot;mediaType&quot;: &quot;application/vnd.dev.sigstore.trustedroot+json;version=0.1&quot;}&#39;</span><span class="p">)</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="nb">repr</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="s1">&#39;TrustedRoot()&#39;</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span>
+</span></code></pre></div>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="rattler.sigstore.TrustedRoot.from_json" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">from_json</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
+  </span>
+
+<a href="#rattler.sigstore.TrustedRoot.from_json" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">from_json</span><span class="p">(</span><span class="n">json</span><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Parse a trusted root from the contents of a <code>trusted_root.json</code>.</p>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>json</code> is not a valid Sigstore trusted root.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <h5 id="rattler.sigstore.TrustedRoot.from_json--examples">Examples<a class="headerlink" href="#rattler.sigstore.TrustedRoot.from_json--examples" title="Permanent link">#</a></h5>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">root</span> <span class="o">=</span> <span class="n">TrustedRoot</span><span class="o">.</span><span class="n">from_json</span><span class="p">(</span><span class="s1">&#39;{&quot;mediaType&quot;: &quot;application/vnd.dev.sigstore.trustedroot+json;version=0.1&quot;}&#39;</span><span class="p">)</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">root</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">TrustedRoot</span><span class="p">()</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span>
+</span></code></pre></div>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="rattler.sigstore.TrustedRoot.from_path" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">from_path</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
+  </span>
+
+<a href="#rattler.sigstore.TrustedRoot.from_path" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">from_path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Read a trusted root from a <code>trusted_root.json</code> file.</p>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>path</code> cannot be read or does not hold a valid
+Sigstore trusted root.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
 
 
 
@@ -4636,12 +4943,17 @@
   </span>
 
 <a href="#rattler.sigstore.verify_attestation" class="headerlink" title="Permanent link">#</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">verify_attestation</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">client</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">verify_attestation</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">record</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">client</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">trusted_root</span><span class="o">=</span><span class="kc">None</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
 
         <p>Discover and verify the Sigstore attestations advertised by <code>record</code>.</p>
+<p>Without a <code>trusted_root</code> the production trusted root is loaded over TUF on
+first use, which requires network access. Passing one verifies against that
+trust material instead, leaving the sidecar download as the only request.</p>
 
 
     </div>
