@@ -504,7 +504,7 @@ jobs:
           ref: ${{ inputs.sha }}
       - name: Extract release notes
         id: release_notes
-        uses: ffurrer2/extract-release-notes@273da39a24fb7db106a35526c8162815faffd31d # v3
+        uses: ffurrer2/extract-release-notes@273da39a24fb7db106a35526c8162815faffd31d # v3.1.0
         with:
           changelog_file: py-rattler/CHANGELOG.md
       - name: Verify release notes
@@ -533,8 +533,7 @@ jobs:
       - extract-changelog
     # If you don't set an input tag, it's a dry run (no uploads).
     if: ${{ inputs.tag }}
-    environment:
-      name: release
+    environment: release
     permissions:
       # For pypi trusted publishing
       id-token: write

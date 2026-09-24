@@ -32,6 +32,7 @@ create_exception!(exceptions, ActivationScriptFormatError, PyException);
 create_exception!(exceptions, GatewayError, PyException);
 create_exception!(exceptions, GatewayWarning, PyUserWarning);
 create_exception!(exceptions, InstallerError, PyException);
+create_exception!(exceptions, AttestationError, PyException);
 create_exception!(exceptions, ParseExplicitEnvironmentSpecError, PyException);
 create_exception!(exceptions, ValidatePackageRecordsError, PyException);
 create_exception!(exceptions, AuthenticationStorageError, PyException);

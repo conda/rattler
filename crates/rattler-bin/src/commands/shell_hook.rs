@@ -9,6 +9,9 @@ use rattler_shell::{
 
 /// Print the shell activation hook for a conda prefix to stdout.
 #[derive(Debug, Parser)]
+#[clap(after_help = r#"Examples:
+  rattler shell-hook -p ./env                          # activate with: eval "$(rattler shell-hook -p ./env)"
+  rattler shell-hook -p ./env --shell fish             # generate the hook for another shell"#)]
 pub struct Opt {
     /// Target prefix (environment path) to generate the shell hook for
     #[clap(

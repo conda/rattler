@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Literal
 
 from rattler.channel import ChannelConfig
 from rattler.rattler import PyConfig
@@ -97,7 +97,7 @@ class Config:
         return config
 
     @staticmethod
-    def from_toml_with_unused_keys(toml: str, shared: bool = False) -> Tuple[Config, List[str]]:
+    def from_toml_with_unused_keys(toml: str, shared: bool = False) -> tuple[Config, list[str]]:
         """
         Parse a configuration from a TOML string, returning it together with
         the sorted keys that were not recognized. Unrecognized keys are
@@ -120,7 +120,7 @@ class Config:
         return Config._from_py_config(py_config), unused
 
     @staticmethod
-    def load_from_files(paths: List[Union[str, os.PathLike[str]]]) -> Config:
+    def load_from_files(paths: list[str | os.PathLike[str]]) -> Config:
         """
         Load a configuration by merging the given files, in order: later
         files take precedence over earlier ones. Every file is parsed as a
@@ -136,7 +136,7 @@ class Config:
         return Config._from_py_config(PyConfig.load_from_files([Path(path) for path in paths]))
 
     @staticmethod
-    def load_from_locations(locations: List[Tuple[Union[str, os.PathLike[str]], bool]]) -> Config:
+    def load_from_locations(locations: list[tuple[str | os.PathLike[str], bool]]) -> Config:
         """
         Load a configuration by merging the given `(path, is_shared)`
         locations, in order: later locations take precedence. Locations
@@ -171,7 +171,7 @@ class Config:
         return Config._from_py_config(PyConfig.load_from_default_locations(tool))
 
     @staticmethod
-    def config_search_paths(tool: str) -> List[Tuple[Path, bool]]:
+    def config_search_paths(tool: str) -> list[tuple[Path, bool]]:
         """
         The configuration file locations of `tool` as `(path, is_shared)`
         pairs, from lowest to highest precedence. The paths are candidates
@@ -189,7 +189,7 @@ class Config:
         return [(Path(path), is_shared) for path, is_shared in PyConfig.config_search_paths(tool)]
 
     @property
-    def loaded_from(self) -> List[Path]:
+    def loaded_from(self) -> list[Path]:
         """
         The files this configuration was loaded from, in load order (lowest
         precedence first).
@@ -205,7 +205,7 @@ class Config:
         return [Path(path) for path in self._inner.loaded_from]
 
     @property
-    def default_channels(self) -> Optional[List[str]]:
+    def default_channels(self) -> list[str] | None:
         """
         The channels to use when none are given explicitly.
 
@@ -222,7 +222,7 @@ class Config:
         return self._inner.default_channels
 
     @property
-    def authentication_override_file(self) -> Optional[Path]:
+    def authentication_override_file(self) -> Path | None:
         """
         The file to read authentication credentials from, instead of the
         default storage.
@@ -231,7 +231,7 @@ class Config:
         return Path(path) if path is not None else None
 
     @property
-    def tls_no_verify(self) -> Optional[bool]:
+    def tls_no_verify(self) -> bool | None:
         """
         Whether to skip verification of TLS server certificates.
 
@@ -246,7 +246,7 @@ class Config:
         return self._inner.tls_no_verify
 
     @property
-    def tls_root_certs(self) -> Optional[TlsRootCerts]:
+    def tls_root_certs(self) -> TlsRootCerts | None:
         """
         Which TLS root certificates to use. Whether this has any effect
         depends on the TLS backend the consumer is built with.
@@ -262,7 +262,7 @@ class Config:
         return self._inner.tls_root_certs
 
     @property
-    def mirrors(self) -> Dict[str, List[str]]:
+    def mirrors(self) -> dict[str, list[str]]:
         """
         The configured mirrors, mapping an upstream channel URL to the
         mirrors to use for it.
@@ -282,7 +282,7 @@ class Config:
         return dict(self._inner.mirrors)
 
     @property
-    def build_package_format(self) -> Optional[str]:
+    def build_package_format(self) -> str | None:
         """
         The package format and compression level to build, as
         `'<format>:<level>'` — e.g. `'conda:max'` or `'tarbz2:5'`.
@@ -350,22 +350,22 @@ class Config:
         return self._inner.concurrency_downloads
 
     @property
-    def proxy_https(self) -> Optional[str]:
+    def proxy_https(self) -> str | None:
         """The HTTPS proxy to use."""
         return self._inner.proxy_https
 
     @property
-    def proxy_http(self) -> Optional[str]:
+    def proxy_http(self) -> str | None:
         """The HTTP proxy to use."""
         return self._inner.proxy_http
 
     @property
-    def proxy_non_proxy_hosts(self) -> List[str]:
+    def proxy_non_proxy_hosts(self) -> list[str]:
         """The hosts to reach without going through the proxy."""
         return self._inner.proxy_non_proxy_hosts
 
     @property
-    def run_post_link_scripts(self) -> Optional[RunPostLinkScripts]:
+    def run_post_link_scripts(self) -> RunPostLinkScripts | None:
         """
         Whether to run a package's post-link scripts.
 
@@ -380,22 +380,22 @@ class Config:
         return self._inner.run_post_link_scripts
 
     @property
-    def allow_symbolic_links(self) -> Optional[bool]:
+    def allow_symbolic_links(self) -> bool | None:
         """Whether symbolic links may be used when installing packages."""
         return self._inner.allow_symbolic_links
 
     @property
-    def allow_hard_links(self) -> Optional[bool]:
+    def allow_hard_links(self) -> bool | None:
         """Whether hard links may be used when installing packages."""
         return self._inner.allow_hard_links
 
     @property
-    def allow_ref_links(self) -> Optional[bool]:
+    def allow_ref_links(self) -> bool | None:
         """Whether ref links (copy-on-write) may be used when installing packages."""
         return self._inner.allow_ref_links
 
     @property
-    def repodata_config(self) -> Dict[str, Any]:
+    def repodata_config(self) -> dict[str, Any]:
         """
         The repodata fetching configuration, as a nested dictionary. The
         channel-independent options are at the top level; per-channel
@@ -416,7 +416,7 @@ class Config:
         return dict(self._inner.repodata_config)
 
     @property
-    def s3_options(self) -> Dict[str, Any]:
+    def s3_options(self) -> dict[str, Any]:
         """
         The S3 configuration, mapping a bucket name to its options
         (`endpoint-url`, `region`, `force-path-style`).
@@ -438,7 +438,7 @@ class Config:
         return dict(self._inner.s3_options)
 
     @property
-    def index_config(self) -> Dict[str, Any]:
+    def index_config(self) -> dict[str, Any]:
         """
         The `rattler-index` configuration, as a nested dictionary. The
         default options are at the top level; per-channel overrides are
@@ -449,7 +449,7 @@ class Config:
         """
         return dict(self._inner.index_config)
 
-    def resolve_index_config(self, channel: str) -> Dict[str, Any]:
+    def resolve_index_config(self, channel: str) -> dict[str, Any]:
         """
         The effective `rattler-index` options for `channel`, resolved by
         layering the matching per-channel entries onto the defaults.
@@ -509,7 +509,7 @@ class Config:
         """
         self._inner.validate()
 
-    def keys(self) -> List[str]:
+    def keys(self) -> list[str]:
         """
         The dotted TOML key paths this configuration understands. These are
         the keys accepted by `set` and `unset`.
@@ -591,7 +591,7 @@ class Config:
         """
         return self._inner.to_toml()
 
-    def save(self, path: Union[str, os.PathLike[str]]) -> None:
+    def save(self, path: str | os.PathLike[str]) -> None:
         """
         Write this configuration to `path` as TOML, creating parent
         directories as needed.

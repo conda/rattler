@@ -1,10 +1,11 @@
 from __future__ import annotations
+
 import warnings
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Any, Dict, Literal, Tuple, Optional
+from typing import TYPE_CHECKING, Any, Literal
 
-from rattler.rattler import PySubdir
 from rattler.platform.arch import Arch
+from rattler.rattler import PySubdir
 
 SubdirLiteral = Literal[
     "noarch",
@@ -40,15 +41,17 @@ SubdirLiteral = Literal[
     "wasi-wasm32",
     "zos-z",
 ]
+"""The set of subdir names that can be used to construct a
+[`Subdir`][rattler.platform.subdir.Subdir]."""
 
 
 class SubdirSingleton(type):
-    _instances: Dict[str, Subdir]
+    _instances: dict[str, Subdir]
 
-    def __init__(cls, *args: Tuple[Any], **kwargs: Dict[Any, Any]) -> None:
+    def __init__(cls, *args: tuple[Any], **kwargs: dict[Any, Any]) -> None:
         cls._instances = {}
 
-    def __call__(cls, subdir: str, *args: Tuple[Any], **kwargs: Dict[Any, Any]) -> Subdir:
+    def __call__(cls, subdir: str, *args: tuple[Any], **kwargs: dict[Any, Any]) -> Subdir:
         try:
             return cls._instances[subdir]
         except KeyError:
@@ -196,7 +199,7 @@ class Subdir(metaclass=SubdirSingleton):
         return self._inner.is_unix
 
     @property
-    def arch(self) -> Optional[Arch]:
+    def arch(self) -> Arch | None:
         """
         Return the architecture of the subdir.
 
@@ -214,7 +217,7 @@ class Subdir(metaclass=SubdirSingleton):
         return Arch._from_py_arch(arch) if arch is not None else None
 
     @property
-    def only_platform(self) -> Optional[str]:
+    def only_platform(self) -> str | None:
         """
         Return the platform (os) part of the subdir.
 

@@ -12,6 +12,10 @@ use url::Url;
 
 /// Extract one or more local or remote conda packages.
 #[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler extract ./pkg.conda                          # extract into ./<name>-<version>-<build>
+  rattler extract ./pkg.conda --destination ./out      # extract into a specific directory
+  rattler extract ./a.conda ./b.tar.bz2 -d ./out       # one subdirectory per package"#)]
 pub struct Opt {
     /// Paths or URLs to conda package archives (.tar.bz2 or .conda)
     #[clap(required = true)]

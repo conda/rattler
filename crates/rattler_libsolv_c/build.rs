@@ -11,7 +11,13 @@ fn build_libsolv() -> Result<PathBuf> {
             "Bundled libsolv not found, please do `git submodule update --init`."
         ));
     }
-    let out = cmake::Config::new(p.parent().unwrap())
+    let mut config = cmake::Config::new(p.parent().unwrap());
+    if target.contains("musl") {
+        // Bundled libsolv assumes BSD's qsort_r signature outside glibc, but musl
+        // uses the GNU signature. Use libsolv's bundled sorter instead.
+        config.define("HAVE_QSORT_R", "OFF");
+    }
+    let out = config
         .define("DENABLE_EXAMPLES", "OFF")
         .define("ENABLE_CONDA", "ON")
         .define("ENABLE_COMPLEX_DEPS", "ON")

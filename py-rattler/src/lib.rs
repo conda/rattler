@@ -22,6 +22,7 @@ mod pty;
 mod record;
 mod repo_data;
 mod shell;
+mod sigstore;
 mod solver;
 mod subdir;
 mod utils;
@@ -40,8 +41,8 @@ use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
 use config::PyConfig;
 use error::PyRattlerError;
 use exceptions::{
-    ActivationError, ActivationScriptFormatError, AuthenticationStorageError, CacheDirError,
-    CanonicalMatchSpecError, ConfigError, ConversionError, ConvertSubdirError,
+    ActivationError, ActivationScriptFormatError, AttestationError, AuthenticationStorageError,
+    CacheDirError, CanonicalMatchSpecError, ConfigError, ConversionError, ConvertSubdirError,
     DetectVirtualPackageError, EnvironmentCreationError, FetchRepoDataError, InvalidChannelError,
     InvalidHeaderNameError, InvalidHeaderValueError, InvalidMatchSpecError,
     InvalidPackageNameError, InvalidUrlError, InvalidVersionError, InvalidVersionSpecError,
@@ -84,6 +85,9 @@ use repo_data::{
 };
 use run_exports_json::PyRunExportsJson;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
+use sigstore::{
+    PyVerificationOutcome, PyVerificationPolicy, PyVerifiedAttestation, py_verify_attestation,
+};
 use solver::{py_solve, py_solve_with_sparse_repodata};
 use subdir::{PyArch, PySubdir};
 use version::{PyVersion, PyVersionSpec};
@@ -132,6 +136,10 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyRetryMiddleware>()?;
     m.add_class::<PyAddHeadersMiddleware>()?;
     m.add_class::<PyClientWithMiddleware>()?;
+    m.add_class::<PyVerificationPolicy>()?;
+    m.add_class::<PyVerifiedAttestation>()?;
+    m.add_class::<PyVerificationOutcome>()?;
+    m.add_function(wrap_pyfunction!(py_verify_attestation, &m)?)?;
 
     // Shell activation things
     m.add_class::<PyActivationVariables>()?;
@@ -284,6 +292,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
         "InstallerError",
         py.get_type::<crate::exceptions::InstallerError>(),
     )?;
+    m.add("AttestationError", py.get_type::<AttestationError>())?;
     m.add(
         "ParseExplicitEnvironmentSpecError",
         py.get_type::<ParseExplicitEnvironmentSpecError>(),

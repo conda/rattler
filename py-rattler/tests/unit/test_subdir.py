@@ -1,14 +1,15 @@
 import warnings
 
 import pytest
+
 from rattler import Subdir
 
 
 def test_deprecated_platform_aliases() -> None:
     """The pre-rename names still resolve, but warn and yield the same objects."""
     import rattler
-    import rattler.platform
     import rattler.exceptions
+    import rattler.platform
 
     with pytest.warns(DeprecationWarning, match="`Platform` is deprecated"):
         assert rattler.Platform is Subdir
@@ -35,4 +36,4 @@ def test_unknown_attribute_still_raises() -> None:
     import rattler
 
     with pytest.raises(AttributeError):
-        rattler.NotAThing  # type: ignore[attr-defined]
+        _ = rattler.NotAThing  # type: ignore[attr-defined]

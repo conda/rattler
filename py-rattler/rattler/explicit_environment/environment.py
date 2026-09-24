@@ -1,9 +1,8 @@
 from pathlib import Path
-from typing import List, Optional
 
-from rattler.rattler import PyExplicitEnvironmentSpec as _PyExplicitEnvironmentSpec
-from rattler.rattler import PyExplicitEnvironmentEntry as _PyExplicitEnvironmentEntry
 from rattler.platform import Subdir
+from rattler.rattler import PyExplicitEnvironmentEntry as _PyExplicitEnvironmentEntry
+from rattler.rattler import PyExplicitEnvironmentSpec as _PyExplicitEnvironmentSpec
 
 
 class ExplicitEnvironmentEntry:
@@ -56,7 +55,7 @@ class ExplicitEnvironmentSpec:
         return cls(_PyExplicitEnvironmentSpec.from_str(content))
 
     @property
-    def platform(self) -> Optional[Subdir]:
+    def platform(self) -> Subdir | None:
         """Returns the platform specified in the explicit environment specification"""
         platform = self._inner.platform()
         if platform is not None:
@@ -64,6 +63,6 @@ class ExplicitEnvironmentSpec:
         return None
 
     @property
-    def packages(self) -> List[ExplicitEnvironmentEntry]:
+    def packages(self) -> list[ExplicitEnvironmentEntry]:
         """Returns the environment entries (URLs) specified in the explicit environment specification"""
         return [ExplicitEnvironmentEntry(p) for p in self._inner.packages()]

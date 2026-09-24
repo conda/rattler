@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import datetime
-from typing import Dict, Mapping, Optional, Tuple, TypedDict
+from collections.abc import Mapping
+from typing import TypedDict
 
 
 class RepodataRevisionMetadata(TypedDict, total=False):
@@ -19,14 +20,14 @@ class RepodataRevisionMetadata(TypedDict, total=False):
     newest: datetime.datetime
 
 
-_PyRepodataRevisionMetadata = Tuple[Optional[str], Optional[int], Optional[int], Optional[int]]
+_PyRepodataRevisionMetadata = tuple[str | None, int | None, int | None, int | None]
 
 
 def _repodata_revisions_from_py(
     revisions: Mapping[str, _PyRepodataRevisionMetadata],
-) -> Dict[str, RepodataRevisionMetadata]:
+) -> dict[str, RepodataRevisionMetadata]:
     """Convert FFI revision metadata to Python's timestamp representation."""
-    result: Dict[str, RepodataRevisionMetadata] = {}
+    result: dict[str, RepodataRevisionMetadata] = {}
     for revision, (message, n_packages, oldest, newest) in revisions.items():
         metadata: RepodataRevisionMetadata = {}
         if message is not None:

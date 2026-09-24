@@ -1,0 +1,238 @@
+---
+source: crates/rattler-bin/tests/cli.rs
+expression: skill
+---
+---
+name: rattler
+description: Solve, create, inspect and manipulate conda environments and packages with the `rattler` CLI. Use when the user mentions rattler, conda packages (.conda or .tar.bz2 archives), conda channels or repodata, or wants to solve, install, list or inspect a conda environment without pixi or conda.
+---
+
+# rattler CLI
+
+`rattler` (version [VERSION]) is a small command-line frontend for the rattler
+Rust crates that pixi, rattler-build and prefix.dev are built on. It talks to
+plain conda channels and prefixes, has no project file, and never modifies your
+shell configuration. Reach for it for one-off operations: solve a set of specs,
+create a throwaway prefix, inspect or extract a package, look up reverse
+dependencies, or run a tool in a temporary environment. For project-based
+workflows use pixi instead.
+
+## Conventions
+
+- Run `rattler <command> --help` for the complete and authoritative list of
+  flags. This file is a map, not the manual.
+- Package specs use conda matchspec syntax: `python`, `numpy>=2`,
+  `pytorch=2.*=*cuda*`, `conda-forge::xtensor`.
+- Channels are passed with `-c`/`--channel` and may be repeated. Commands that
+  query channels default to `conda-forge` when no channel is given.
+- The prefix (environment directory) is passed with `-p`/`--prefix` and defaults
+  to `.prefix` in the current directory. `list` and `run` also honour the
+  `CONDA_PREFIX` environment variable, so they work inside an activated
+  environment.
+- Machine-readable output: `--format json` or `--format urls` on `solve`,
+  `search`, `list` and `whoneeds`; `--json` on `info` and `inspect`. Progress
+  bars and logs go to stderr, results go to stdout, so piping stdout is safe.
+- `--offline` (global) disables all network access and only uses cached
+  repodata and packages. `-v`/`--verbose` (global) enables debug logging;
+  `RUST_LOG` gives finer control.
+- Solving for another target: `--platform linux-64` selects the platform,
+  `--virtual-package __glibc=2.28` overrides detected virtual packages.
+  `rattler virtual-packages` prints what is detected on this machine.
+- Reproducible solves: `--exclude-newer 2025-01-01` ignores packages published
+  after a date, `--strategy lowest-direct` picks the oldest allowed versions of
+  the requested packages.
+- Private channels: `rattler auth login <host> --token <token>` stores
+  credentials that every other command then reuses. Check with
+  `rattler auth status`.
+
+## Typical workflows
+
+Solve, install and run:
+
+```bash
+rattler solve python numpy -c conda-forge --format json > solved.json
+rattler create -c conda-forge -p ./env python numpy
+rattler run -p ./env python -c "import numpy; print(numpy.__version__)"
+```
+
+Run a tool once without keeping an environment:
+
+```bash
+rattler exec ruff check .
+```
+
+Private channels and uploads (`auth` and `upload` are shared with pixi and
+rattler-build, so credentials stored here are picked up by those tools too):
+
+```bash
+rattler auth login prefix.dev --token pfx_xxx
+rattler auth login anaconda.org --conda-token xxx
+rattler auth status
+rattler upload prefix -c my-channel ./mypkg-1.0-h123_0.conda
+```
+
+The examples below are the same ones `rattler <command> --help` prints.
+
+## Commands
+
+| Command | Description |
+|---|---|
+| `rattler auth` | Login to prefix.dev or anaconda.org servers to access private channels |
+| `rattler auth login` | Store authentication information for a given host |
+| `rattler auth logout` | Remove authentication information for a given host |
+| `rattler auth token` | Print the stored authentication token for a given host |
+| `rattler auth status` | Show stored authentication entries and non-secret token metadata |
+| `rattler compare-packages` | Compare two conda packages and report the differences |
+| `rattler create` | Create a conda environment from package listing |
+| `rattler download` | Download an arbitrary file |
+| `rattler fetch-file` | Read a file from inside a local or remote conda package |
+| `rattler info` | Show information about this `rattler` build and the host system |
+| `rattler inspect` | Inspect package metadata from a local or remote conda package |
+| `rattler search` | Search for packages in conda channels using glob or regex patterns |
+| `rattler solve` | Solve a conda environment without installing it |
+| `rattler whoneeds` | Show packages that depend on the given package (reverse dependencies) |
+| `rattler shell-hook` | Print the shell activation hook for a conda prefix to stdout |
+| `rattler virtual-packages` | Print detected virtual packages |
+| `rattler install-menu` | Install menu items for an installed package |
+| `rattler remove-menu` | Remove installed menu items for a package |
+| `rattler run` | Run a command in an activated conda environment |
+| `rattler extract` | Extract one or more local or remote conda packages |
+| `rattler link` | Link an extracted package into a prefix |
+| `rattler inject-into-prefix` | Add one or more conda package archives to a prefix without solving |
+| `rattler remove-from-prefix` | Remove one or more installed conda packages from a prefix without solving |
+| `rattler upload` | Upload options |
+| `rattler upload quetz` | Upload to a Quetz server. Authentication is used from the keychain / auth-file |
+| `rattler upload artifactory` | Options for uploading to an Artifactory channel |
+| `rattler upload prefix` | Options for uploading to a prefix.dev server. Authentication is used from the keychain / auth-file |
+| `rattler upload anaconda` | Options for uploading to a Anaconda.org server |
+| `rattler upload cloudsmith` | Options for uploading to a Cloudsmith repository. Authentication is used from the keychain / auth-file |
+| `rattler upload s3` | Options for uploading to S3 |
+| `rattler list` | List the packages installed in a conda prefix |
+| `rattler exec` | Run a command and install it in a temporary environment |
+
+## Global options
+
+- `-v, --verbose`: Log verbose
+- `--offline`: Disable network access and use only locally cached data
+
+## Examples
+
+### `rattler compare-packages`
+
+```bash
+rattler compare-packages ./numpy-2.0.0-py312_0.conda ./numpy-2.1.0-py312_0.conda
+rattler compare-packages ./local.conda https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda
+```
+
+### `rattler create`
+
+```bash
+rattler create python numpy                          # install into ./.prefix from conda-forge
+rattler create -p ./env -c conda-forge python=3.12   # choose the prefix and the channel
+rattler create python --dry-run --platform linux-64  # show the transaction without installing
+rattler create python --constraint "numpy<2"         # constrain a package without requiring it
+```
+
+### `rattler download`
+
+```bash
+rattler download https://conda.anaconda.org/conda-forge/noarch/repodata.json
+rattler download https://example.com/file.tar.gz -o ./file.tar.gz
+rattler download https://example.com/index.json -o - | jq .    # stream to stdout
+```
+
+### `rattler fetch-file`
+
+```bash
+rattler fetch-file ./pkg.conda info/index.json
+rattler fetch-file https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda info/recipe/meta.yaml
+```
+
+### `rattler info`
+
+```bash
+rattler info
+rattler info --json
+```
+
+### `rattler inspect`
+
+```bash
+rattler inspect ./numpy-2.1.0-py312h1234_0.conda     # metadata and the first 10 files
+rattler inspect https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda
+rattler inspect ./pkg.conda --json                    # machine-readable metadata
+rattler inspect ./pkg.conda --limit -1                # list all files
+```
+
+### `rattler search`
+
+```bash
+rattler search 'python*'              # glob pattern
+rattler search '^numpy-.*$'           # regex pattern
+rattler search openssl -c bioconda    # search in specific channel
+rattler search xtensor --format urls  # print only the package urls
+```
+
+### `rattler solve`
+
+```bash
+rattler solve python numpy                 # print the solved environment as a table
+rattler solve python --format json         # print the solved records as JSON
+rattler solve python --format urls         # print only the urls of the solved packages
+```
+
+### `rattler whoneeds`
+
+```bash
+rattler whoneeds numpy                      # packages that depend on numpy
+rattler whoneeds __cuda                     # packages that depend on a virtual package
+rattler whoneeds ./python-3.13.1-h123_0.conda   # packages that can use this exact package
+rattler whoneeds https://conda.anaconda.org/conda-forge/noarch/polars-1.44.1-pyh8da0edf_0.conda
+rattler whoneeds numpy --format urls        # print only the urls of the dependent packages
+```
+
+### `rattler shell-hook`
+
+```bash
+rattler shell-hook -p ./env                          # activate with: eval "$(rattler shell-hook -p ./env)"
+rattler shell-hook -p ./env --shell fish             # generate the hook for another shell
+```
+
+### `rattler extract`
+
+```bash
+rattler extract ./pkg.conda                          # extract into ./<name>-<version>-<build>
+rattler extract ./pkg.conda --destination ./out      # extract into a specific directory
+rattler extract ./a.conda ./b.tar.bz2 -d ./out       # one subdirectory per package
+```
+
+### `rattler inject-into-prefix`
+
+```bash
+rattler inject-into-prefix -p ./env ./mypkg-1.0-h123_0.conda   # add a locally built package without solving
+rattler inject-into-prefix -p ./env https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda
+rattler inject-into-prefix -p ./env ./pkg.conda --skip-compatibility-checks
+```
+
+### `rattler remove-from-prefix`
+
+```bash
+rattler remove-from-prefix -p ./env tzdata
+rattler remove-from-prefix -p ./env numpy --skip-compatibility-checks   # even if other packages depend on it
+```
+
+### `rattler list`
+
+```bash
+rattler list -p /path/to/environment
+rattler list -p /path/to/environment --format json  # print the records as JSON
+rattler list -p /path/to/environment --format urls  # print only the package urls
+```
+
+### `rattler exec`
+
+```bash
+rattler exec ruff check .                            # the package is guessed from the command name
+rattler exec --spec python=3.12 python --version     # pick the package(s) explicitly
+rattler exec --with rich python -c "import rich"     # guess python and add another package
+```

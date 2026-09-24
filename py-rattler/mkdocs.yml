@@ -89,12 +89,17 @@ nav:
           - fetch: fetch_repo_data.md
           - solve: solver.md
           - install: installer.md
+          - Sigstore attestations: sigstore.md
           - index: index_.md
       - channel:
           - ChannelConfig: channel_config.md
           - Channel: channel.md
+          - ChannelPriority: channel_priority.md
       - config:
           - Config: config.md
+      - explicit_environment:
+          - ExplicitEnvironmentSpec: explicit_environment_spec.md
+          - ExplicitEnvironmentEntry: explicit_environment_entry.md
       - lock:
           - LockFile: lock_file.md
           - Environment: environment.md
@@ -104,6 +109,8 @@ nav:
           - CondaLockedSourcePackage: conda_locked_source_package.md
           - PypiLockedPackage: pypi_locked_package.md
           - PackageHashes: package_hashes.md
+          - LockChannel: lock_channel.md
+          - LockPlatform: lock_platform.md
       - metadata:
           - AboutJson: about_json.md
           - RunExportsJson: run_exports_json.md
@@ -113,6 +120,7 @@ nav:
           - PrefixPlaceholder: prefix_placeholder.md
           - FileMode: file_mode.md
           - IndexJson: index_json.md
+          - NoArchType: no_arch_type.md
       - match_spec:
           - MatchSpec: match_spec.md
           - NamelessMatchSpec: nameless_match_spec.md
@@ -120,12 +128,21 @@ nav:
           - Client: client.md
       - package:
           - PackageName: package_name.md
+          - PackageNameMatcher: package_name_matcher.md
+      - package_streaming:
+          - download & extract: package_streaming.md
+          - PackageArchive: package_archive.md
+          - ArchiveEntry: archive_entry.md
       - subdir:
           - Arch: arch.md
           - Subdir: subdir.md
       - prefix:
           - PrefixPaths: prefix_paths.md
           - PrefixRecord: prefix_record.md
+      - pty:
+          - PtySession: pty_session.md
+          - PtyProcess: pty_process.md
+          - PtyProcessOptions: pty_process_options.md
       - repo_data:
           - Gateway: gateway.md
           - PackageRecord: package_record.md
@@ -136,9 +153,11 @@ nav:
           - Repodata: repo_data.md
           - WhoNeeds: who_needs.md
           - SparseRepoData: sparse_repo_data.md
+          - RepoDataSource: repo_data_source.md
       - version:
           - Version: version.md
           - VersionWithSource: version_with_source.md
+          - VersionSpec: version_spec.md
       - virtual_package:
           - VirtualPackage: virtual_package.md
           - GenericVirtualPackage: generic_virtual_package.md
@@ -150,6 +169,7 @@ nav:
           - PathModificationBehavior: path_modification_behavior.md
       - exceptions:
           - ActivationError: activation_error.md
+          - AttestationError: attestation_error.md
           - CacheDirError: cache_dir_error.md
           - DetectVirtualPackageError: detect_virtual_package_error.md
           - EnvironmentCreationError: environment_creation_error.md

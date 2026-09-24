@@ -4,12 +4,12 @@ import asyncio
 from pathlib import Path
 from typing import get_args
 
-from rattler import install as rattler_install
-from rattler import LockFile, Subdir
-from rattler.platform.subdir import SubdirLiteral
-from rattler.networking import Client, MirrorMiddleware, AuthenticationMiddleware
 import typer
 
+from rattler import LockFile, Subdir
+from rattler import install as rattler_install
+from rattler.networking import AuthenticationMiddleware, Client, MirrorMiddleware
+from rattler.platform.subdir import SubdirLiteral
 
 app = typer.Typer()
 

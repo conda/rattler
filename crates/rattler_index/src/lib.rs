@@ -1,5 +1,11 @@
 //! Indexing of packages in a output folder to create up to date repodata.json
 //! files
+//!
+//! Channel indexing assigns `indexed_timestamp` to newly published archives.
+//! Existing publication timestamps, including legacy missing values, are
+//! preserved when reindexing, even with `force` enabled. Archive readers do not
+//! assign publication timestamps. Build timestamps in the future or later than
+//! publication are flagged with warnings.
 #![deny(missing_docs)]
 
 pub mod cache;
@@ -216,11 +222,13 @@ fn indexed_package_record_from_index_json<T: Read>(
         license: index.license,
         license_family: index.license_family,
         timestamp: index.timestamp,
+        indexed_timestamp: None,
         python_site_packages_path: index.python_site_packages_path,
         legacy_bz2_md5: None,
         legacy_bz2_size: None,
         purls: index.purls,
         run_exports: None,
+        attestations_sha256: None,
     };
 
     Ok(IndexedPackageRecord {
@@ -759,12 +767,37 @@ async fn index_subdir_inner(
     } else {
         read_existing_repodata(&op, &format!("{subdir}/{REPODATA}"), &metadata.repodata).await?
     };
+    // Keep publication history separate from reusable archive metadata. A
+    // present entry with no timestamp is a legacy publication, not a new one.
+    // Include raw records (patches may remove packages), but let published
+    // records win, including intentional corrections and missing values.
+    let mut indexed_timestamps: HashMap<_, _> = package_source
+        .packages
+        .iter()
+        .map(|(filename, package)| (filename.clone(), package.record.indexed_timestamp))
+        .collect();
     let existing_repodata = if repodata_patch.is_some() {
         let published =
             read_existing_repodata(&op, &format!("{subdir}/{REPODATA}"), &metadata.repodata)
                 .await?;
+        indexed_timestamps.extend(
+            published
+                .packages
+                .iter()
+                .map(|(filename, package)| (filename.clone(), package.record.indexed_timestamp)),
+        );
         merge_patch_repodata(package_source, published)
     } else {
+        // When patches are disabled, packages previously hidden by a removal
+        // patch may only have publication history in the old raw repodata.
+        let raw_path = format!("{subdir}/{REPODATA_FROM_PACKAGES}");
+        let raw_metadata = RepodataFileMetadata::new(&op, &raw_path, precondition_checks).await?;
+        let raw = read_existing_repodata(&op, &raw_path, &raw_metadata).await?;
+        for (filename, package) in raw.packages {
+            indexed_timestamps
+                .entry(filename)
+                .or_insert(package.record.indexed_timestamp);
+        }
         package_source
     };
 
@@ -782,21 +815,24 @@ async fn index_subdir_inner(
         existing_repodata
     };
 
-    // List all the packages in the subdirectory.
-    let uploaded_packages: HashSet<DistArchiveIdentifier> = op
-        .list_with(&format!("{}/", subdir.as_str()))
-        .await?
-        .iter()
-        .filter_map(|entry| {
-            if entry.metadata().mode().is_file() {
-                let filename = entry.name().to_string();
-                // Check if the file is an archive package file.
-                DistArchiveIdentifier::try_from_filename(&filename)
-            } else {
-                None
+    // List all the packages in the subdirectory. Attestation sidecars
+    // (`<package>.sigs`) are collected alongside so that the corresponding
+    // package records can advertise them.
+    let mut uploaded_packages: HashSet<DistArchiveIdentifier> = HashSet::new();
+    let mut attestation_sidecars: HashSet<DistArchiveIdentifier> = HashSet::new();
+    for entry in op.list_with(&format!("{}/", subdir.as_str())).await? {
+        if !entry.metadata().mode().is_file() {
+            continue;
+        }
+        let filename = entry.name();
+        if let Some(package_filename) = filename.strip_suffix(ATTESTATION_SIDECAR_SUFFIX) {
+            if let Some(identifier) = DistArchiveIdentifier::try_from_filename(package_filename) {
+                attestation_sidecars.insert(identifier);
             }
-        })
-        .collect();
+        } else if let Some(identifier) = DistArchiveIdentifier::try_from_filename(filename) {
+            uploaded_packages.insert(identifier);
+        }
+    }
 
     tracing::debug!(
         "Found {} already uploaded packages in subdir {}.",
@@ -920,6 +956,9 @@ async fn index_subdir_inner(
         registered_packages.insert(filename, record);
     }
 
+    apply_attestation_sidecars(&op, subdir, &attestation_sidecars, &mut registered_packages)
+        .await?;
+
     let mut packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState> =
         IndexMap::default();
     let mut conda_packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState> =
@@ -929,7 +968,25 @@ async fn index_subdir_inner(
         ..V3Packages::default()
     };
     let latest_revision = latest_repodata_revision(&repodata_revisions);
-    for (filename, package) in registered_packages {
+    let indexed_at = jiff::Timestamp::now().into();
+    for (filename, mut package) in registered_packages {
+        // Assign only after extraction/cache lookup, using the history freshly
+        // read on this attempt. A concurrent publisher's timestamp therefore
+        // takes precedence over any work performed before a retry.
+        package.record.indexed_timestamp = indexed_timestamps
+            .get(&filename)
+            .copied()
+            .unwrap_or(Some(indexed_at));
+        if let Some(timestamp) = package.record.timestamp {
+            if timestamp > indexed_at {
+                tracing::warn!(%filename, %subdir, ?timestamp, "Package build timestamp is in the future");
+            }
+            if let Some(indexed_timestamp) = package.record.indexed_timestamp
+                && timestamp > indexed_timestamp
+            {
+                tracing::warn!(%filename, %subdir, ?timestamp, ?indexed_timestamp, "Package build timestamp is later than its indexed timestamp");
+            }
+        }
         let revision =
             package_revision_assignment.assign(package.repodata_revision, latest_revision);
         insert_package_record_by_revision(
@@ -950,8 +1007,6 @@ async fn index_subdir_inner(
             repodata_revisions: repodata_revisions_for_packages(
                 &repodata_revisions,
                 &existing_repodata_revisions,
-                &packages,
-                &conda_packages,
                 &v3,
             ),
             channel_relations: channel_metadata.channel_relations,
@@ -977,6 +1032,70 @@ async fn index_subdir_inner(
         packages_removed: packages_to_delete.len(),
         retries: 0, // Will be set by index_subdir
     })
+}
+
+/// The suffix of an attestation sidecar file that lives next to a package in a
+/// channel: `<package_filename>.sigs`.
+pub const ATTESTATION_SIDECAR_SUFFIX: &str = ".sigs";
+
+/// Reads the attestation sidecar (`<package>.sigs`) for every registered
+/// package that has one, records its SHA256 in the package record and verifies
+/// that the identical content-addressed sidecar (`<package>.sigs.<sha256>`)
+/// has already been published.
+///
+/// Packages without a sidecar have `attestations_sha256` cleared so that a
+/// removed sidecar is no longer advertised.
+async fn apply_attestation_sidecars(
+    op: &Operator,
+    subdir: Subdir,
+    sidecars: &HashSet<DistArchiveIdentifier>,
+    registered_packages: &mut ahash::HashMap<DistArchiveIdentifier, IndexedPackageRecord>,
+) -> Result<(), RepodataError> {
+    for (identifier, indexed) in registered_packages.iter_mut() {
+        if !sidecars.contains(identifier) {
+            indexed.record.attestations_sha256 = None;
+            continue;
+        }
+
+        let package_filename = identifier.to_file_name();
+        let sidecar_path = format!("{subdir}/{package_filename}{ATTESTATION_SIDECAR_SUFFIX}");
+        let bytes = op.read(&sidecar_path).await?.to_bytes();
+
+        // The sidecar must be a JSON array of Sigstore bundles.
+        match serde_json::from_slice::<serde_json::Value>(&bytes) {
+            Ok(serde_json::Value::Array(bundles)) if !bundles.is_empty() => {}
+            Ok(_) => {
+                return Err(RepodataError::Other(anyhow::anyhow!(
+                    "attestation sidecar {sidecar_path} must be a non-empty JSON array of Sigstore bundles"
+                )));
+            }
+            Err(err) => {
+                return Err(RepodataError::Other(anyhow::anyhow!(
+                    "attestation sidecar {sidecar_path} is not valid JSON: {err}"
+                )));
+            }
+        }
+
+        let sha256 = rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(&bytes);
+        let content_addressed_path = format!("{sidecar_path}.{}", hex::encode(sha256));
+        let content_addressed_bytes = op
+            .read(&content_addressed_path)
+            .await
+            .map_err(|err| {
+                RepodataError::Other(anyhow::anyhow!(
+                    "failed to read content-addressed attestation sidecar {content_addressed_path}: {err}"
+                ))
+            })?
+            .to_bytes();
+        if content_addressed_bytes != bytes {
+            return Err(RepodataError::Other(anyhow::anyhow!(
+                "content-addressed attestation sidecar {content_addressed_path} does not match {sidecar_path}"
+            )));
+        }
+
+        indexed.record.attestations_sha256 = Some(sha256);
+    }
+    Ok(())
 }
 
 fn serialize_msgpack_zst<T>(val: &T) -> Result<Vec<u8>, RepodataError>
@@ -1148,11 +1267,12 @@ fn render_record_matchspecs_for_revision(
         } else {
             let parse_options =
                 ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3);
-            let render = |field: &str, spec: &str| -> anyhow::Result<String> {
+            let render = |field: &str, spec: &str, allow_v3: bool| -> anyhow::Result<String> {
                 let parsed = MatchSpec::from_str(spec, parse_options).with_context(|| {
                     format!("failed to parse {revision} repodata MatchSpec in {field}: '{spec}'")
                 })?;
                 if revision.uses_legacy_package_layout()
+                    && !allow_v3
                     && !parsed
                         .required_repodata_revision()
                         .uses_legacy_package_layout()
@@ -1171,12 +1291,12 @@ fn render_record_matchspecs_for_revision(
                 depends: record
                     .depends
                     .iter()
-                    .map(|spec| render("depends", spec))
+                    .map(|spec| render("depends", spec, false))
                     .collect::<Result<_, _>>()?,
                 constrains: record
                     .constrains
                     .iter()
-                    .map(|spec| render("constrains", spec))
+                    .map(|spec| render("constrains", spec, false))
                     .collect::<Result<_, _>>()?,
                 extra_depends: record
                     .extra_depends
@@ -1184,7 +1304,7 @@ fn render_record_matchspecs_for_revision(
                     .map(|(group, specs)| {
                         specs
                             .iter()
-                            .map(|spec| render(&format!("extra_depends.{group}"), spec))
+                            .map(|spec| render(&format!("extra_depends.{group}"), spec, true))
                             .collect::<Result<_, _>>()
                             .map(|rendered| (group.clone(), rendered))
                     })
@@ -1330,18 +1450,19 @@ impl RevisionStats {
 fn repodata_revisions_for_packages(
     configured: &[RepodataRevisionSelection],
     existing: &RepodataRevisions,
-    legacy_packages: &IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
-    legacy_conda_packages: &IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
     v3: &V3Packages,
 ) -> RepodataRevisions {
     // `BTreeMap` keeps the result ordered ascending regardless of input order.
     // Existing package statistics are deliberately discarded: generated
     // statistics always describe the typed records written below.
+    //
+    // The legacy layout is never advertised. CEP 48 requires every
+    // `info.repodata_revisions` key to be `vN` with `N` >= 3, so there is no
+    // revision to describe the `packages` and `packages.conda` maps, and an
+    // existing `v0` entry is dropped rather than carried forward.
     let mut revisions = existing
         .iter()
-        .filter(|(revision, _)| {
-            revision.uses_legacy_package_layout() || **revision == RepodataRevision::V3
-        })
+        .filter(|(revision, _)| **revision == RepodataRevision::V3)
         .map(|(revision, metadata)| {
             (
                 *revision,
@@ -1361,15 +1482,6 @@ fn repodata_revisions_for_packages(
     }
 
     let mut stats = BTreeMap::<RepodataRevision, RevisionStats>::new();
-    for record in legacy_packages
-        .values()
-        .chain(legacy_conda_packages.values())
-    {
-        stats
-            .entry(RepodataRevision::Legacy)
-            .or_default()
-            .add(record);
-    }
     for (_, record) in v3.records() {
         stats.entry(RepodataRevision::V3).or_default().add(record);
     }
@@ -2171,62 +2283,22 @@ mod tests {
     }
 
     #[test]
-    fn legacy_revision_metadata_includes_configured_message_and_package_stats() {
-        let mut legacy_packages = IndexMap::default();
-        let mut legacy_conda_packages = IndexMap::default();
-        let oldest: rattler_conda_types::utils::TimestampMs =
-            serde_json::from_str("1710000000000").unwrap();
-        let newest: rattler_conda_types::utils::TimestampMs =
-            serde_json::from_str("1720000000000").unwrap();
-
-        let mut tar_bz2_record = PackageRecord::new(
-            PackageName::new_unchecked("legacy-tar"),
-            Version::from_str("1.0").unwrap(),
-            "0".to_string(),
-        );
-        tar_bz2_record.timestamp = Some(oldest);
-        legacy_packages.insert(
-            DistArchiveIdentifier::try_from_filename("legacy-tar-1.0-0.tar.bz2").unwrap(),
-            tar_bz2_record,
-        );
-
-        let mut conda_record = PackageRecord::new(
-            PackageName::new_unchecked("legacy-conda"),
-            Version::from_str("1.0").unwrap(),
-            "0".to_string(),
-        );
-        conda_record.timestamp = Some(newest);
-        legacy_conda_packages.insert(
-            DistArchiveIdentifier::try_from_filename("legacy-conda-1.0-0.conda").unwrap(),
-            conda_record,
-        );
-
+    fn legacy_packages_are_not_advertised_as_a_revision() {
+        // CEP 48 has no revision key for the legacy package maps, so indexing a
+        // channel that only holds them must not write `info.repodata_revisions`,
+        // and an existing `v0` entry must not survive a re-index.
         let existing = RepodataRevisions::from([(
             RepodataRevision::Legacy,
             RepodataRevisionMetadata {
-                message: Some("stale message".to_string()),
+                message: Some("stale legacy message".to_string()),
                 n_packages: Some(99),
-                oldest: Some(newest),
-                newest: Some(newest),
+                ..RepodataRevisionMetadata::default()
             },
         )]);
-        let revisions = repodata_revisions_for_packages(
-            &[RepodataRevisionSelection {
-                revision: RepodataRevision::Legacy,
-                message: Some("legacy packages".to_string()),
-            }],
-            &existing,
-            &legacy_packages,
-            &legacy_conda_packages,
-            &V3Packages::default(),
-        );
 
-        assert_eq!(revisions.len(), 1);
-        let metadata = &revisions[&RepodataRevision::Legacy];
-        assert_eq!(metadata.message.as_deref(), Some("legacy packages"));
-        assert_eq!(metadata.n_packages, Some(2));
-        assert_eq!(metadata.oldest, Some(oldest));
-        assert_eq!(metadata.newest, Some(newest));
+        let revisions = repodata_revisions_for_packages(&[], &existing, &V3Packages::default());
+
+        assert!(revisions.is_empty());
     }
 
     #[test]
@@ -2316,10 +2388,7 @@ mod tests {
                 ..RepodataRevisionMetadata::default()
             },
         )]);
-        let empty = IndexMap::default();
-
-        let preserved =
-            repodata_revisions_for_packages(&[], &existing, &empty, &empty, &V3Packages::default());
+        let preserved = repodata_revisions_for_packages(&[], &existing, &V3Packages::default());
         assert_eq!(
             preserved[&RepodataRevision::V3].message.as_deref(),
             Some("existing message")
@@ -2332,8 +2401,6 @@ mod tests {
                 message: Some("caller message".to_string()),
             }],
             &existing,
-            &empty,
-            &empty,
             &V3Packages::default(),
         );
         assert_eq!(

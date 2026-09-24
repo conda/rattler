@@ -1,6 +1,6 @@
 [package]
 name = "rattler-bin"
-version = "0.3.0"
+version = "0.4.0"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust binary for common Conda operations"
@@ -16,10 +16,11 @@ name = "rattler"
 path = "src/main.rs"
 
 [features]
-default = ["rustls", "s3", "gcs", "oauth"]
+default = ["rustls", "s3", "gcs", "oauth", "sigstore"]
 native-tls = [
   "reqwest/native-tls",
   "rattler/native-tls",
+  "rattler_sigstore?/native-tls",
   "rattler_repodata_gateway/native-tls",
   "rattler_networking/native-tls",
   "rattler_cache/native-tls",
@@ -27,6 +28,7 @@ native-tls = [
 rustls = [
   "reqwest/rustls",
   "rattler/rustls",
+  "rattler_sigstore?/rustls",
   "rattler_repodata_gateway/rustls",
   "rattler_networking/rustls",
   "rattler_cache/rustls",
@@ -38,6 +40,7 @@ s3 = [
 ]
 gcs = ["rattler_networking/gcs"]
 oauth = ["rattler/oauth"]
+sigstore = ["rattler/sigstore", "dep:rattler_redaction", "dep:rattler_sigstore"]
 
 [dependencies]
 jiff = { workspace = true }
@@ -48,6 +51,7 @@ console = { workspace = true, features = ["windows-console-colors"] }
 dirs = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
+humantime = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }
 indicatif = { workspace = true }
 miette = { workspace = true }
@@ -72,6 +76,8 @@ rattler_menuinst = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false, features = [
   "reqwest",
 ] }
+rattler_redaction = { workspace = true, optional = true, features = ["reqwest", "reqwest-middleware"] }
+rattler_sigstore = { workspace = true, optional = true, default-features = false }
 rattler_upload = { workspace = true }
 rattler_shell = { workspace = true, default-features = false }
 reqwest = { workspace = true, features = ["stream", "query"] }
@@ -91,3 +97,4 @@ regex = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+shlex = { workspace = true }

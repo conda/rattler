@@ -1,14 +1,15 @@
 from __future__ import annotations
-import os
-from typing import Dict, List, Optional, TYPE_CHECKING
-import datetime
 
-from rattler import VersionWithSource
+import datetime
+import os
+from typing import TYPE_CHECKING
+
 from rattler.match_spec.match_spec import MatchSpec
-from rattler.package.no_arch_type import NoArchType, NoArchLiteral
+from rattler.package.no_arch_type import NoArchLiteral, NoArchType
 from rattler.package.package_name import PackageName
 from rattler.platform.subdir import Subdir
-from rattler.rattler import PyRecord, ParseSubdirError
+from rattler.rattler import ParseSubdirError, PyRecord
+from rattler.version import VersionWithSource
 
 if TYPE_CHECKING:
     import networkx as nx
@@ -51,9 +52,9 @@ class PackageRecord:
     @staticmethod
     def from_index_json(
         path: os.PathLike[str],
-        size: Optional[int] = None,
-        sha256: Optional[str] = None,
-        md5: Optional[str] = None,
+        size: int | None = None,
+        sha256: str | None = None,
+        md5: str | None = None,
     ) -> PackageRecord:
         """
         Builds a PackageRecord from an `index.json`.
@@ -79,7 +80,7 @@ class PackageRecord:
         return PackageRecord._from_py_record(PyRecord.from_index_json(path, size, sha256, md5))
 
     @staticmethod
-    def sort_topologically(records: List[PackageRecord]) -> List[PackageRecord]:
+    def sort_topologically(records: list[PackageRecord]) -> list[PackageRecord]:
         """
         Sorts the records topologically.
         This function is deterministic, meaning that it will return the same result
@@ -110,7 +111,7 @@ class PackageRecord:
         return [PackageRecord._from_py_record(p) for p in PyRecord.sort_topologically(records)]
 
     @staticmethod
-    def to_graph(records: List[PackageRecord]) -> nx.DiGraph:  # type: ignore[type-arg]
+    def to_graph(records: list[PackageRecord]) -> nx.DiGraph:  # type: ignore[type-arg]
         """
         Converts a list of PackageRecords to a DAG (`networkx.DiGraph`).
         The nodes in the graph are the PackageRecords and the edges are the dependencies.
@@ -137,7 +138,7 @@ class PackageRecord:
         return graph
 
     @staticmethod
-    def validate(records: List[PackageRecord]) -> None:
+    def validate(records: list[PackageRecord]) -> None:
         """
         Validate that the given package records are valid w.r.t. 'depends' and 'constrains'.
 
@@ -186,22 +187,23 @@ class PackageRecord:
         build: str,
         build_number: int,
         subdir: str | Subdir,
-        arch: Optional[str] = None,
-        platform: Optional[str] = None,
-        noarch: Optional[NoArchType | NoArchLiteral] = None,
-        depends: Optional[List[str]] = None,
-        constrains: Optional[List[str]] = None,
-        sha256: Optional[bytes] = None,
-        md5: Optional[bytes] = None,
-        size: Optional[int] = None,
-        features: Optional[List[str]] = None,
-        legacy_bz2_md5: Optional[bytes] = None,
-        legacy_bz2_size: Optional[int] = None,
-        license: Optional[str] = None,
-        license_family: Optional[str] = None,
-        python_site_packages_path: Optional[str] = None,
-        extra_depends: Optional[Dict[str, List[str]]] = None,
-        flags: Optional[List[str]] = None,
+        arch: str | None = None,
+        platform: str | None = None,
+        noarch: NoArchType | NoArchLiteral | None = None,
+        depends: list[str] | None = None,
+        constrains: list[str] | None = None,
+        sha256: bytes | None = None,
+        md5: bytes | None = None,
+        size: int | None = None,
+        features: list[str] | None = None,
+        legacy_bz2_md5: bytes | None = None,
+        legacy_bz2_size: int | None = None,
+        license: str | None = None,
+        license_family: str | None = None,
+        python_site_packages_path: str | None = None,
+        extra_depends: dict[str, list[str]] | None = None,
+        flags: list[str] | None = None,
+        attestations_sha256: bytes | None = None,
     ) -> None:
         if isinstance(subdir, str):
             try:
@@ -263,9 +265,11 @@ class PackageRecord:
             self._record.extra_depends = extra_depends
         if flags is not None:
             self._record.flags = flags
+        if attestations_sha256 is not None:
+            self._record.attestations_sha256 = attestations_sha256
 
     @property
-    def arch(self) -> Optional[str]:
+    def arch(self) -> str | None:
         """
         Optionally the architecture the package supports.
 
@@ -290,7 +294,7 @@ class PackageRecord:
         return self._record.arch
 
     @arch.setter
-    def arch(self, value: Optional[str]) -> None:
+    def arch(self, value: str | None) -> None:
         self._record.arch = value
 
     @property
@@ -346,7 +350,7 @@ class PackageRecord:
         self._record.build_number = value
 
     @property
-    def constrains(self) -> List[str]:
+    def constrains(self) -> list[str]:
         """
         Additional constraints on packages.
         Constrains are different from depends in that packages
@@ -373,11 +377,11 @@ class PackageRecord:
         return self._record.constrains
 
     @constrains.setter
-    def constrains(self, value: List[str]) -> None:
+    def constrains(self, value: list[str]) -> None:
         self._record.constrains = value
 
     @property
-    def depends(self) -> List[str]:
+    def depends(self) -> list[str]:
         """
         Specification of packages this package depends on.
 
@@ -399,11 +403,11 @@ class PackageRecord:
         return self._record.depends
 
     @depends.setter
-    def depends(self, value: List[str]) -> None:
+    def depends(self, value: list[str]) -> None:
         self._record.depends = value
 
     @property
-    def extra_depends(self) -> Dict[str, List[str]]:
+    def extra_depends(self) -> dict[str, list[str]]:
         """
         Conditional or optional dependencies. Maps a condition name (e.g. an
         extra/feature name) to a list of dependency specifications that are
@@ -430,11 +434,11 @@ class PackageRecord:
         return self._record.extra_depends
 
     @extra_depends.setter
-    def extra_depends(self, value: Dict[str, List[str]]) -> None:
+    def extra_depends(self, value: dict[str, list[str]]) -> None:
         self._record.extra_depends = value
 
     @property
-    def features(self) -> Optional[str]:
+    def features(self) -> str | None:
         """
         Features are a deprecated way to specify different feature
         sets for the conda solver. This is not supported anymore and
@@ -461,11 +465,11 @@ class PackageRecord:
         return self._record.features
 
     @features.setter
-    def features(self, value: Optional[str]) -> None:
+    def features(self, value: str | None) -> None:
         self._record.features = value
 
     @property
-    def flags(self) -> List[str]:
+    def flags(self) -> list[str]:
         """Plain string flags used to select package variants.
 
         Rattler preserves unrecognized flags so applications can round-trip
@@ -486,11 +490,11 @@ class PackageRecord:
         return self._record.flags
 
     @flags.setter
-    def flags(self, value: List[str]) -> None:
+    def flags(self, value: list[str]) -> None:
         self._record.flags = value
 
     @property
-    def legacy_bz2_md5(self) -> Optional[bytes]:
+    def legacy_bz2_md5(self) -> bytes | None:
         """
         A deprecated md5 hash.
 
@@ -514,11 +518,11 @@ class PackageRecord:
         return self._record.legacy_bz2_md5
 
     @legacy_bz2_md5.setter
-    def legacy_bz2_md5(self, value: Optional[bytes]) -> None:
+    def legacy_bz2_md5(self, value: bytes | None) -> None:
         self._record.legacy_bz2_md5 = value
 
     @property
-    def legacy_bz2_size(self) -> Optional[int]:
+    def legacy_bz2_size(self) -> int | None:
         """
         A deprecated package archive size.
 
@@ -542,11 +546,11 @@ class PackageRecord:
         return self._record.legacy_bz2_size
 
     @legacy_bz2_size.setter
-    def legacy_bz2_size(self, value: Optional[int]) -> None:
+    def legacy_bz2_size(self, value: int | None) -> None:
         self._record.legacy_bz2_size = value
 
     @property
-    def license(self) -> Optional[str]:
+    def license(self) -> str | None:
         """
         The specific license of the package.
 
@@ -571,11 +575,11 @@ class PackageRecord:
         return self._record.license
 
     @license.setter
-    def license(self, value: Optional[str]) -> None:
+    def license(self, value: str | None) -> None:
         self._record.license = value
 
     @property
-    def license_family(self) -> Optional[str]:
+    def license_family(self) -> str | None:
         """
         The license family.
 
@@ -601,11 +605,11 @@ class PackageRecord:
         return self._record.license_family
 
     @license_family.setter
-    def license_family(self, value: Optional[str]) -> None:
+    def license_family(self, value: str | None) -> None:
         self._record.license_family = value
 
     @property
-    def md5(self) -> Optional[bytes]:
+    def md5(self) -> bytes | None:
         """
         Optionally a MD5 hash of the package archive.
 
@@ -628,7 +632,7 @@ class PackageRecord:
         return self._record.md5
 
     @md5.setter
-    def md5(self, value: Optional[bytes]) -> None:
+    def md5(self, value: bytes | None) -> None:
         self._record.md5 = value
 
     @property
@@ -692,7 +696,7 @@ class PackageRecord:
         self._record.noarch = value._noarch
 
     @property
-    def platform(self) -> Optional[str]:
+    def platform(self) -> str | None:
         """
         Optionally the platform the package supports.
 
@@ -717,11 +721,11 @@ class PackageRecord:
         return self._record.platform
 
     @platform.setter
-    def platform(self, value: Optional[str]) -> None:
+    def platform(self, value: str | None) -> None:
         self._record.platform = value
 
     @property
-    def sha256(self) -> Optional[bytes]:
+    def sha256(self) -> bytes | None:
         """
         Optionally a SHA256 hash of the package archive.
 
@@ -744,11 +748,20 @@ class PackageRecord:
         return self._record.sha256
 
     @sha256.setter
-    def sha256(self, value: Optional[bytes]) -> None:
+    def sha256(self, value: bytes | None) -> None:
         self._record.sha256 = value
 
     @property
-    def size(self) -> Optional[int]:
+    def attestations_sha256(self) -> bytes | None:
+        """The SHA256 hash of the package's Sigstore attestation sidecar, if advertised."""
+        return self._record.attestations_sha256
+
+    @attestations_sha256.setter
+    def attestations_sha256(self, value: bytes | None) -> None:
+        self._record.attestations_sha256 = value
+
+    @property
+    def size(self) -> int | None:
         """
         Optionally the size of the package archive in bytes.
 
@@ -773,7 +786,7 @@ class PackageRecord:
         return self._record.size
 
     @size.setter
-    def size(self, value: Optional[int]) -> None:
+    def size(self, value: int | None) -> None:
         self._record.size = value
 
     @property
@@ -803,7 +816,7 @@ class PackageRecord:
         self._record.subdir = value
 
     @property
-    def timestamp(self) -> Optional[datetime.datetime]:
+    def timestamp(self) -> datetime.datetime | None:
         """
         The date this entry was created.
 
@@ -833,14 +846,28 @@ class PackageRecord:
         return self._record.timestamp
 
     @timestamp.setter
-    def timestamp(self, value: Optional[datetime.datetime]) -> None:
+    def timestamp(self, value: datetime.datetime | None) -> None:
         if value is not None:
+            # Convert Python's Unix seconds to the Rust binding's Unix milliseconds.
             self._record.timestamp = int(value.timestamp() * 1000)
         else:
             self._record.timestamp = None
 
     @property
-    def track_features(self) -> List[str]:
+    def indexed_timestamp(self) -> datetime.datetime | None:
+        """Server-assigned time when this artifact first entered the channel index."""
+        value = self._record.indexed_timestamp
+        if value is None:
+            return None
+        return datetime.datetime.fromtimestamp(value / 1000.0, tz=datetime.timezone.utc)
+
+    @indexed_timestamp.setter
+    def indexed_timestamp(self, value: datetime.datetime | None) -> None:
+        # Convert Python's Unix seconds to the Rust binding's Unix milliseconds.
+        self._record.indexed_timestamp = None if value is None else int(value.timestamp() * 1000)
+
+    @property
+    def track_features(self) -> list[str]:
         """
         Track features are nowadays only used to downweight
         packages (ie. give them less priority).
@@ -866,7 +893,7 @@ class PackageRecord:
         return self._record.track_features
 
     @track_features.setter
-    def track_features(self, value: List[str]) -> None:
+    def track_features(self, value: list[str]) -> None:
         self._record.track_features = value
 
     @property
@@ -896,7 +923,7 @@ class PackageRecord:
         self._record.version = (value._version, value._source)
 
     @property
-    def python_site_packages_path(self) -> Optional[str]:
+    def python_site_packages_path(self) -> str | None:
         """
         Optionally a path within the environment of the site-packages directory. This field is only
         present for python interpreter packages.
@@ -917,7 +944,7 @@ class PackageRecord:
         return self._record.python_site_packages_path
 
     @python_site_packages_path.setter
-    def python_site_packages_path(self, value: Optional[str]) -> None:
+    def python_site_packages_path(self, value: str | None) -> None:
         """
         Sets the optional path within the environment of the site-packages directory.
         Examples

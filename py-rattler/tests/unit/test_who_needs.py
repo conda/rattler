@@ -1,4 +1,5 @@
 import pytest
+
 from rattler import (
     Channel,
     Gateway,

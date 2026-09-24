@@ -1,10 +1,9 @@
 from __future__ import annotations
+
 import os
-from typing import List, Optional, Union
 import warnings
 
-from rattler.rattler import PyVirtualPackage, PyOverride, PyVirtualPackageOverrides
-
+from rattler.rattler import PyOverride, PyVirtualPackage, PyVirtualPackageOverrides
 from rattler.virtual_package.generic import GenericVirtualPackage
 
 
@@ -221,27 +220,30 @@ class VirtualPackage:
         return virtual_package
 
     @staticmethod
-    def current() -> List[VirtualPackage]:
+    def current() -> list[VirtualPackage]:
         """
         Returns virtual packages detected for the current system or an error
         if the versions could not be properly detected.
 
         .. deprecated:: 0.7.0 Use `detect` instead.
         """
-        warnings.warn("Use `detect` instead")
+        warnings.warn("Use `detect` instead", stacklevel=2)
         return VirtualPackage.detect()
 
     @staticmethod
     def detect(
-        overrides: VirtualPackageOverrides = VirtualPackageOverrides(),
-        cache_dir: Optional[Union[str, os.PathLike[str]]] = None,
-    ) -> List[VirtualPackage]:
+        overrides: VirtualPackageOverrides | None = None,
+        cache_dir: str | os.PathLike[str] | None = None,
+    ) -> list[VirtualPackage]:
         """
         Returns virtual packages detected for the current system with the given overrides.
 
         If `cache_dir` is given, expensive detection results (currently CUDA) are cached in that
         directory across processes until the next reboot.
         """
+        if overrides is None:
+            overrides = VirtualPackageOverrides()
+
         return [
             VirtualPackage._from_py_virtual_package(vp)
             for vp in PyVirtualPackage.detect(overrides._overrides, cache_dir)

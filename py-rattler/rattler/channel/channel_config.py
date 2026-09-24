@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 import os
+
 from rattler.rattler import PyChannelConfig
 
 

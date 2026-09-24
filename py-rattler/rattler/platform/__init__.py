@@ -3,10 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from rattler.platform import subdir as _subdir
-from rattler.platform.subdir import Subdir, SubdirLiteral
 from rattler.platform.arch import Arch
+from rattler.platform.subdir import Subdir, SubdirLiteral
 
-__all__ = ["Subdir", "SubdirLiteral", "Platform", "PlatformLiteral", "Arch"]
+__all__ = ["Arch", "Platform", "PlatformLiteral", "Subdir", "SubdirLiteral"]
 
 
 _DEPRECATED_ALIASES = {"Platform": "Subdir", "PlatformLiteral": "SubdirLiteral"}

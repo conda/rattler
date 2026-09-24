@@ -84,3 +84,11 @@ fn test_list_json() {
         "json"
     ]));
 }
+
+/// The skill embeds the crate version, which is replaced so the snapshot does
+/// not change on every release.
+#[test]
+fn test_skill() {
+    let skill = run_rattler(&["skill"]).replace(env!("CARGO_PKG_VERSION"), "[VERSION]");
+    insta::assert_snapshot!(skill);
+}

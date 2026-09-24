@@ -7,6 +7,7 @@ try:
     from rattler.rattler import (
         ActivationError,
         ActivationScriptFormatError,
+        AttestationError,
         AuthenticationStorageError,
         CacheDirError,
         CanonicalMatchSpecError,
@@ -92,6 +93,9 @@ except ImportError:
 
     class InstallerError(Exception):  # type: ignore[no-redef]
         """An error that can occur when installing a package"""
+
+    class AttestationError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when verifying a Sigstore attestation"""
 
     class InvalidChannelError(Exception):  # type: ignore[no-redef]
         """Error that can occur when parsing a channel."""
@@ -185,6 +189,7 @@ else:
 __all__ = [
     "ActivationError",
     "ActivationScriptFormatError",
+    "AttestationError",
     "AuthenticationStorageError",
     "CacheDirError",
     "CanonicalMatchSpecError",
@@ -212,8 +217,8 @@ __all__ = [
     "ParseArchError",
     "ParseCondaLockError",
     "ParseExplicitEnvironmentSpecError",
-    "ParseSubdirError",
     "ParsePlatformError",
+    "ParseSubdirError",
     "RequirementError",
     "ShellError",
     "SolverError",

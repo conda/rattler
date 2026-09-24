@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import os
 import warnings
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Iterable, List, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Literal
 
 from rattler.channel.channel import Channel
 from rattler.config import Config
@@ -59,7 +60,7 @@ class _RepoDataSourceAdapter:
     def __init__(self, source: RepoDataSource) -> None:
         self._source = source
 
-    async def fetch_package_records(self, py_platform: Any, py_name: Any) -> List[RepoDataRecord]:
+    async def fetch_package_records(self, py_platform: Any, py_name: Any) -> list[RepoDataRecord]:
         """Convert FFI types and delegate to the wrapped source."""
         # Wrap raw FFI types in Python wrapper classes
         platform = Subdir._from_py_subdir(py_platform)
@@ -68,7 +69,7 @@ class _RepoDataSourceAdapter:
         # Call the user's implementation with proper Python types
         return await self._source.fetch_package_records(platform, name)
 
-    def package_names(self, py_platform: Any) -> List[str]:
+    def package_names(self, py_platform: Any) -> list[str]:
         """Convert FFI types and delegate to the wrapped source."""
         platform = Subdir._from_py_subdir(py_platform)
         return self._source.package_names(platform)
@@ -92,7 +93,7 @@ class SourceConfig:
     sharded_enabled: bool = True
     """Whether sharded repodata is enabled or not."""
 
-    jlap_enabled: Optional[bool] = None
+    jlap_enabled: bool | None = None
     """Deprecated: JLAP support has been removed. This field is ignored."""
 
     cache_action: CacheAction = "cache-or-fetch"
@@ -140,9 +141,9 @@ class ChannelNotice:
     id: str
     message: str
     level: Literal["info", "warning", "critical"]
-    created_at: Optional[str]
-    expires_at: Optional[str]
-    interval: Optional[int]
+    created_at: str | None
+    expires_at: str | None
+    interval: int | None
 
     @classmethod
     def _from_py(cls, notice: PyChannelNotice) -> ChannelNotice:
@@ -157,7 +158,7 @@ class ChannelNotice:
         )
 
 
-class GatewayQueryResult(list[List[RepoDataRecord]]):
+class GatewayQueryResult(list[list[RepoDataRecord]]):
     """Repodata, removed packages, and CEP-6 notices returned by :meth:`Gateway.query`.
 
     This remains a list for compatibility with earlier releases.
@@ -165,14 +166,14 @@ class GatewayQueryResult(list[List[RepoDataRecord]]):
 
     def __init__(
         self,
-        repodata: List[List[RepoDataRecord]],
-        notices: List[ChannelNotice],
-        removed: Optional[List[List[RemovedPackage]]] = None,
+        repodata: list[list[RepoDataRecord]],
+        notices: list[ChannelNotice],
+        removed: list[list[RemovedPackage]] | None = None,
     ) -> None:
         super().__init__(repodata)
         self.repodata = self
         self.notices = notices
-        self.removed: List[List[RemovedPackage]] = removed if removed is not None else [[] for _ in repodata]
+        self.removed: list[list[RemovedPackage]] = removed if removed is not None else [[] for _ in repodata]
         """Packages the sources list as removed, one list per entry in ``repodata``.
 
         Every removed entry of a package name the query fetched is included; the
@@ -187,7 +188,7 @@ class GatewayNamesResult(list[PackageName]):
     This remains a list for compatibility with earlier releases.
     """
 
-    def __init__(self, names: List[PackageName], notices: List[ChannelNotice]) -> None:
+    def __init__(self, names: list[PackageName], notices: list[ChannelNotice]) -> None:
         super().__init__(names)
         self.names = self
         self.notices = notices
@@ -213,11 +214,11 @@ class Gateway:
 
     def __init__(
         self,
-        cache_dir: Optional[os.PathLike[str]] = None,
-        default_config: Optional[SourceConfig] = None,
-        per_channel_config: Optional[dict[str, SourceConfig]] = None,
+        cache_dir: os.PathLike[str] | None = None,
+        default_config: SourceConfig | None = None,
+        per_channel_config: dict[str, SourceConfig] | None = None,
         max_concurrent_requests: int = 100,
-        client: Optional[Client] = None,
+        client: Client | None = None,
         show_progress: bool = False,
     ) -> None:
         """
@@ -256,8 +257,8 @@ class Gateway:
     def from_config(
         cls,
         config: Config,
-        cache_dir: Optional[os.PathLike[str]] = None,
-        client: Optional[Client] = None,
+        cache_dir: os.PathLike[str] | None = None,
+        client: Client | None = None,
         show_progress: bool = False,
     ) -> Gateway:
         """Create a gateway using repodata and networking settings from ``config``.
@@ -292,12 +293,12 @@ class Gateway:
 
     async def query(
         self,
-        sources: Iterable[Union[Channel, str, RepoDataSource]],
+        sources: Iterable[Channel | str | RepoDataSource],
         platforms: Iterable[Subdir | SubdirLiteral],
         specs: Iterable[MatchSpec | PackageName | str],
         recursive: bool = True,
-        channel_relations: Optional[ChannelRelationsMode] = None,
-        channel_relations_max_depth: Optional[int] = None,
+        channel_relations: ChannelRelationsMode | None = None,
+        channel_relations_max_depth: int | None = None,
         channel_notices: bool = False,
     ) -> GatewayQueryResult:
         """Queries the gateway for repodata from channels and custom sources.
@@ -383,10 +384,10 @@ class Gateway:
 
     async def who_needs(
         self,
-        sources: Iterable[Union[Channel, str, RepoDataSource]],
+        sources: Iterable[Channel | str | RepoDataSource],
         platforms: Iterable[Subdir | SubdirLiteral],
-        target: Union[str, PackageName, "PackageRecord", "GenericVirtualPackage"],
-    ) -> List[Dependent]:
+        target: str | PackageName | PackageRecord | GenericVirtualPackage,
+    ) -> list[Dependent]:
         """Returns the reverse dependencies of `target` in the given sources.
 
         Scans every package of the queried sources and platforms entirely
@@ -426,10 +427,10 @@ class Gateway:
 
     async def names(
         self,
-        sources: Iterable[Union[Channel, str, RepoDataSource]],
+        sources: Iterable[Channel | str | RepoDataSource],
         platforms: Iterable[Subdir | SubdirLiteral],
-        channel_relations: Optional[ChannelRelationsMode] = None,
-        channel_relations_max_depth: Optional[int] = None,
+        channel_relations: ChannelRelationsMode | None = None,
+        channel_relations_max_depth: int | None = None,
         channel_notices: bool = False,
     ) -> GatewayNamesResult:
         """Queries all the names of packages in channels or custom sources.
@@ -479,7 +480,7 @@ class Gateway:
     async def channel_notices(
         self,
         channels: Iterable[Channel | str],
-    ) -> List[ChannelNotice]:
+    ) -> list[ChannelNotice]:
         """Fetch CEP-6 notices for the given channels.
 
         Results reuse the same expiration-aware cache as regular queries.
@@ -493,7 +494,7 @@ class Gateway:
         self,
         channel: Channel | str,
         platform: Subdir | SubdirLiteral,
-    ) -> Optional[ChannelRelations]:
+    ) -> ChannelRelations | None:
         """Returns the CEP-42 ``channel_relations`` declared by the given
         ``(channel, platform)`` subdirectory, or ``None`` if none were declared
         or the subdirectory doesn't exist.
@@ -516,7 +517,7 @@ class Gateway:
     def clear_repodata_cache(
         self,
         channel: Channel | str,
-        subdirs: Optional[Iterable[Subdir | SubdirLiteral]] = None,
+        subdirs: Iterable[Subdir | SubdirLiteral] | None = None,
         clear_disk: bool = False,
     ) -> None:
         """
@@ -564,7 +565,7 @@ class Gateway:
         return f"{type(self).__name__}()"
 
 
-def _convert_sources(sources: Iterable[Any]) -> List[Any]:
+def _convert_sources(sources: Iterable[Any]) -> list[Any]:
     """Convert an iterable of sources to a list suitable for the Rust gateway.
 
     Channels are converted to their internal PyChannel representation.

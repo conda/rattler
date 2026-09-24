@@ -24,6 +24,9 @@ use super::package_source::{PackageSource, client_for};
 /// changed/added/removed files in the package payload (based on
 /// `info/paths.json`) and changed/added/removed files in the info section.
 #[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler compare-packages ./numpy-2.0.0-py312_0.conda ./numpy-2.1.0-py312_0.conda
+  rattler compare-packages ./local.conda https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda"#)]
 pub struct Opt {
     /// Path or URL of the first conda package (.tar.bz2 or .conda)
     #[clap(value_name = "LEFT")]

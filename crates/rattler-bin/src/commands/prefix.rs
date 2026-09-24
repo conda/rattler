@@ -18,6 +18,10 @@ const PIXI_ENVIRONMENT_FINGERPRINT_FILE: &str = ".pixi-environment-fingerprint";
 
 /// Add one or more conda package archives to a prefix without solving.
 #[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler inject-into-prefix -p ./env ./mypkg-1.0-h123_0.conda   # add a locally built package without solving
+  rattler inject-into-prefix -p ./env https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda
+  rattler inject-into-prefix -p ./env ./pkg.conda --skip-compatibility-checks"#)]
 pub struct InjectOpt {
     /// Paths or URLs of conda package archives (.conda or .tar.bz2)
     #[clap(required = true)]
@@ -34,6 +38,9 @@ pub struct InjectOpt {
 
 /// Remove one or more installed conda packages from a prefix without solving.
 #[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler remove-from-prefix -p ./env tzdata
+  rattler remove-from-prefix -p ./env numpy --skip-compatibility-checks   # even if other packages depend on it"#)]
 pub struct RemoveFromPrefixOpt {
     /// Exact package names of installed packages to remove
     #[clap(required = true)]
