@@ -15,7 +15,7 @@ use crate::{
 use pyo3::exceptions::PyValueError;
 use pythonize::depythonize;
 use rattler_networking::AuthenticationStorage;
-use rattler_s3::{ResolvedS3Credentials, S3AddressingStyle, S3Credentials};
+use rattler_s3::{ResolvedS3Credentials, S3Credentials};
 use std::path::PathBuf;
 
 fn parse_package_revision_assignment(value: &str) -> PyResult<PackageRevisionAssignment> {
@@ -156,11 +156,7 @@ pub fn py_index_s3<'py>(
                     access_key_id: None,
                     secret_access_key: None,
                     session_token: None,
-                    addressing_style: if options.force_path_style {
-                        S3AddressingStyle::Path
-                    } else {
-                        S3AddressingStyle::VirtualHost
-                    },
+                    addressing_style: options.addressing_style.into(),
                 };
                 let auth_storage = config
                     .as_ref()

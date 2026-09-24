@@ -132,7 +132,7 @@ expression: "(unused, normalized(config))"
                             fragment: None,
                         },
                         region: "auto",
-                        force_path_style: false,
+                        addressing_style: VirtualHost,
                     },
                 },
             ),

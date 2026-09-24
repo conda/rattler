@@ -7,18 +7,7 @@ use aws_sdk_s3::config::{Credentials, ProvideCredentials};
 use rattler_networking::{Authentication, AuthenticationStorage};
 use url::Url;
 
-/// How to address S3 buckets.
-#[derive(Default, Debug, Copy, Clone, Eq, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
-pub enum S3AddressingStyle {
-    /// Address the bucket as a virtual host. E.g. <https://bucket_name.s3.us-east-1.amazonaws.com>.
-    #[default]
-    VirtualHost,
-
-    /// Address the bucket using a path. E.g. <https://s3.us-east-1.amazonaws.com/bucket_name>.
-    Path,
-}
+pub use rattler_networking::s3_middleware::S3AddressingStyle;
 
 /// Rattler based crates always either use S3 credentials specified by the user
 /// through CLI arguments combined with credentials coming from `rattler auth`,

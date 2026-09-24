@@ -13,6 +13,30 @@ use url::Url;
 
 use crate::{Authentication, AuthenticationStorage};
 
+/// How to address an S3 bucket.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum S3AddressingStyle {
+    /// Address the bucket as a virtual host, e.g.
+    /// <https://bucket-name.s3.us-east-1.amazonaws.com>.
+    #[default]
+    VirtualHost,
+
+    /// Address the bucket through the path, e.g.
+    /// <https://s3.us-east-1.amazonaws.com/bucket-name>.
+    Path,
+}
+
+#[cfg(feature = "rattler_config")]
+impl From<rattler_config::config::s3::S3AddressingStyle> for S3AddressingStyle {
+    fn from(value: rattler_config::config::s3::S3AddressingStyle) -> Self {
+        match value {
+            rattler_config::config::s3::S3AddressingStyle::VirtualHost => Self::VirtualHost,
+            rattler_config::config::s3::S3AddressingStyle::Path => Self::Path,
+        }
+    }
+}
+
 /// Configuration for the S3 middleware.
 #[derive(Clone, Debug)]
 pub enum S3Config {
@@ -24,8 +48,8 @@ pub enum S3Config {
         endpoint_url: Url,
         /// The region to use for the S3 client.
         region: String,
-        /// Whether to force path style for the S3 client.
-        force_path_style: bool,
+        /// How to address the bucket.
+        addressing_style: S3AddressingStyle,
     },
 }
 
@@ -44,7 +68,7 @@ where
                 S3Config::Custom {
                     endpoint_url: v.endpoint_url,
                     region: v.region,
-                    force_path_style: v.force_path_style,
+                    addressing_style: v.addressing_style.into(),
                 },
             )
         })
@@ -70,7 +94,7 @@ pub fn compute_s3_config_from_config(
                 S3Config::Custom {
                     endpoint_url: options.endpoint_url.clone(),
                     region: options.region.clone(),
-                    force_path_style: options.force_path_style,
+                    addressing_style: options.addressing_style.into(),
                 },
             )
         })
@@ -133,7 +157,7 @@ impl S3 {
         if let S3Config::Custom {
             endpoint_url,
             region,
-            force_path_style,
+            addressing_style,
         } = self
             .config
             .get(&bucket_name)
@@ -152,7 +176,7 @@ impl S3 {
                 ) => aws_sdk_s3::config::Builder::from(sdk_config)
                     .endpoint_url(endpoint_url)
                     .region(aws_sdk_s3::config::Region::new(region))
-                    .force_path_style(force_path_style)
+                    .force_path_style(addressing_style == S3AddressingStyle::Path)
                     .credentials_provider(aws_sdk_s3::config::Credentials::new(
                         access_key_id,
                         secret_access_key,
@@ -172,7 +196,7 @@ impl S3 {
                     aws_sdk_s3::config::Builder::from(sdk_config)
                         .endpoint_url(endpoint_url)
                         .region(aws_sdk_s3::config::Region::new(region))
-                        .force_path_style(force_path_style)
+                        .force_path_style(addressing_style == S3AddressingStyle::Path)
                 }
             };
             let s3_config = config_builder.build();
@@ -461,7 +485,7 @@ region = eu-central-1
                 S3Config::Custom {
                     endpoint_url: Url::parse("http://localhost:9000").unwrap(),
                     region: "eu-central-1".into(),
-                    force_path_style: true,
+                    addressing_style: S3AddressingStyle::Path,
                 },
             )]),
             store,
@@ -494,7 +518,7 @@ region = eu-central-1
                 S3Config::Custom {
                     endpoint_url: Url::parse("http://localhost:9000").unwrap(),
                     region: "eu-central-1".into(),
-                    force_path_style: true,
+                    addressing_style: S3AddressingStyle::Path,
                 },
             )]),
             AuthenticationStorage::empty(),
@@ -519,7 +543,7 @@ region = eu-central-1
         )
         .await;
 
-        // The custom endpoint and force_path_style should be respected.
+        // The custom endpoint and addressing style should be respected.
         assert_eq!(presigned.scheme(), "http");
         assert_eq!(presigned.host_str().unwrap(), "localhost");
         assert_eq!(

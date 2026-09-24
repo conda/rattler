@@ -1,9 +1,13 @@
 use pyo3::{
-    FromPyObject, Py, PyAny, PyResult, Python, pyclass, pymethods,
+    FromPyObject, Py, PyAny, PyResult, Python,
+    exceptions::PyValueError,
+    pyclass, pymethods,
     types::{PyAnyMethods, PyDict, PyDictMethods, PyTypeMethods},
 };
 use rattler_networking::{
-    GCSMiddleware, MirrorMiddleware, mirror_middleware::Mirror, s3_middleware::S3Config,
+    GCSMiddleware, MirrorMiddleware,
+    mirror_middleware::Mirror,
+    s3_middleware::{S3AddressingStyle, S3Config},
 };
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
@@ -135,27 +139,37 @@ pub struct PyS3Config {
 pub(crate) struct PyS3ConfigCustom {
     pub(crate) endpoint_url: Url,
     pub(crate) region: String,
-    pub(crate) force_path_style: bool,
+    pub(crate) addressing_style: S3AddressingStyle,
 }
 
 #[pymethods]
 impl PyS3Config {
     #[new]
-    #[pyo3(signature = (endpoint_url=None, region=None, force_path_style=None))]
+    #[pyo3(signature = (endpoint_url=None, region=None, addressing_style=None))]
     pub fn __init__(
         endpoint_url: Option<String>,
         region: Option<String>,
-        force_path_style: Option<bool>,
+        addressing_style: Option<String>,
     ) -> PyResult<Self> {
-        match (endpoint_url, region, force_path_style) {
-            (Some(endpoint_url), Some(region), Some(force_path_style)) => Ok(Self {
+        let addressing_style = match addressing_style.as_deref() {
+            None => S3AddressingStyle::default(),
+            Some("virtual-host") => S3AddressingStyle::VirtualHost,
+            Some("path") => S3AddressingStyle::Path,
+            Some(other) => {
+                return Err(PyValueError::new_err(format!(
+                    "invalid addressing_style '{other}', expected 'virtual-host' or 'path'"
+                )));
+            }
+        };
+        match (endpoint_url, region) {
+            (Some(endpoint_url), Some(region)) => Ok(Self {
                 custom: Some(PyS3ConfigCustom {
                     endpoint_url: Url::parse(&endpoint_url).map_err(PyRattlerError::from)?,
                     region,
-                    force_path_style,
+                    addressing_style,
                 }),
             }),
-            (None, None, None) => Ok(Self { custom: None }),
+            (None, None) => Ok(Self { custom: None }),
             _ => unreachable!("Case handled in python"),
         }
     }
@@ -168,7 +182,7 @@ impl From<PyS3Config> for S3Config {
             Some(custom) => S3Config::Custom {
                 endpoint_url: custom.endpoint_url,
                 region: custom.region,
-                force_path_style: custom.force_path_style,
+                addressing_style: custom.addressing_style,
             },
         }
     }
