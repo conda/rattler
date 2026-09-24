@@ -1,13 +1,54 @@
+use std::{path::PathBuf, sync::Arc};
+
 use pyo3::{
     Bound, PyAny, PyResult, Python, exceptions::PyValueError, pyclass, pyfunction, pymethods,
 };
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::RepoDataRecord;
 use rattler_sigstore::{
-    ChannelCheck, Issuer, Publisher, VerificationConfig, VerificationOutcome, VerificationPolicy,
+    ChannelCheck, Issuer, Publisher, TrustedRoot, VerificationConfig, VerificationOutcome,
+    VerificationPolicy,
 };
 
 use crate::{error::PyRattlerError, networking::client::PyClientWithMiddleware, record::PyRecord};
+
+/// A Sigstore trusted root, the trust anchor every bundle is verified against.
+///
+/// Wrapped in an `Arc` because pyo3 clones the class out of Python on every
+/// call and a trusted root carries the full set of certificate authorities.
+#[pyclass(from_py_object)]
+#[derive(Clone)]
+pub struct PyTrustedRoot {
+    pub(crate) inner: Arc<TrustedRoot>,
+}
+
+#[pymethods]
+impl PyTrustedRoot {
+    /// Parses a trusted root from the JSON of a `trusted_root.json` target.
+    #[staticmethod]
+    pub fn from_json(json: &str) -> PyResult<Self> {
+        TrustedRoot::from_json(json)
+            .map(|root| Self {
+                inner: Arc::new(root),
+            })
+            .map_err(|err| PyValueError::new_err(format!("invalid trusted root: {err}")))
+    }
+
+    /// Reads a trusted root from a `trusted_root.json` file.
+    #[staticmethod]
+    pub fn from_path(path: PathBuf) -> PyResult<Self> {
+        TrustedRoot::from_file(&path)
+            .map(|root| Self {
+                inner: Arc::new(root),
+            })
+            .map_err(|err| {
+                PyValueError::new_err(format!(
+                    "could not read trusted root '{}': {err}",
+                    path.display()
+                ))
+            })
+    }
+}
 
 #[pyclass(from_py_object)]
 #[derive(Clone)]
@@ -199,16 +240,32 @@ impl PyVerificationOutcome {
 }
 
 #[pyfunction]
+#[pyo3(signature = (record, policy, client, trusted_root=None))]
 pub fn py_verify_attestation<'py>(
     py: Python<'py>,
     record: Bound<'py, PyAny>,
     policy: PyVerificationPolicy,
     client: PyClientWithMiddleware,
+    trusted_root: Option<PyTrustedRoot>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let record: RepoDataRecord = PyRecord::try_from(record)?.try_into()?;
     future_into_py(py, async move {
-        rattler_sigstore::verify_record(&policy.inner, &record, &client.inner)
-            .await
+        // Without an explicit root the production one is loaded over TUF, which
+        // needs the network; with one, verification is entirely local apart
+        // from fetching the sidecar.
+        let outcome = match trusted_root {
+            Some(trusted_root) => {
+                rattler_sigstore::verify_record_with_trusted_root(
+                    &policy.inner,
+                    &record,
+                    &client.inner,
+                    &trusted_root.inner,
+                )
+                .await
+            }
+            None => rattler_sigstore::verify_record(&policy.inner, &record, &client.inner).await,
+        };
+        outcome
             .map(PyVerificationOutcome::from)
             .map_err(PyRattlerError::from)
             .map_err(Into::into)

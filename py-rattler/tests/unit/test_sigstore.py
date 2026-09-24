@@ -7,12 +7,15 @@ from rattler import (
     Issuer,
     Publisher,
     RepoDataRecord,
+    TrustedRoot,
     VerificationMode,
     VerificationPolicy,
     install,
     verify_attestation,
 )
 from rattler.exceptions import AttestationError, InstallerError
+
+TRUSTED_ROOT_JSON = '{"mediaType": "application/vnd.dev.sigstore.trustedroot+json;version=0.1"}'
 
 
 def package_path() -> Path:
@@ -37,6 +40,35 @@ def test_verification_policy() -> None:
     assert policy.channel_check == ChannelCheck.WARN
     assert policy.max_sidecar_size == 1024
     assert Issuer.gitlab().url == "https://gitlab.com"
+
+
+def test_trusted_root_from_json() -> None:
+    assert repr(TrustedRoot.from_json(TRUSTED_ROOT_JSON)) == "TrustedRoot()"
+
+    with pytest.raises(ValueError, match="invalid trusted root"):
+        TrustedRoot.from_json("not a trusted root")
+
+
+def test_trusted_root_from_path(tmp_path: Path) -> None:
+    path = tmp_path / "trusted_root.json"
+    path.write_text(TRUSTED_ROOT_JSON)
+
+    assert repr(TrustedRoot.from_path(path)) == "TrustedRoot()"
+
+    with pytest.raises(ValueError, match="could not read trusted root"):
+        TrustedRoot.from_path(tmp_path / "missing.json")
+
+
+@pytest.mark.asyncio
+async def test_verify_attestation_accepts_trusted_root() -> None:
+    record = await RepoDataRecord.from_package_archive(package_path())
+    outcome = await verify_attestation(
+        record,
+        VerificationPolicy.warn(),
+        trusted_root=TrustedRoot.from_json(TRUSTED_ROOT_JSON),
+    )
+
+    assert not outcome.is_verified
 
 
 @pytest.mark.asyncio

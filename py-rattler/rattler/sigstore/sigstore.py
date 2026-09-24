@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from enum import Enum
 from urllib.parse import urlsplit
 
 from rattler.networking import Client
-from rattler.rattler import PyVerificationOutcome, PyVerificationPolicy, py_verify_attestation
+from rattler.rattler import (
+    PyTrustedRoot,
+    PyVerificationOutcome,
+    PyVerificationPolicy,
+    py_verify_attestation,
+)
 from rattler.repo_data import RepoDataRecord
 
 DEFAULT_MAX_SIDECAR_SIZE = 4 * 1024 * 1024
@@ -55,6 +61,61 @@ class Publisher:
 
     identity: str | None = None
     issuer: Issuer | None = None
+
+
+class TrustedRoot:
+    """The Sigstore trust anchors every attestation bundle is verified against.
+
+    Verification normally loads the production trusted root over TUF, which
+    needs network access. Supplying one of these instead makes verification use
+    the given trust material, so it can run against a pinned
+    ``trusted_root.json``.
+    """
+
+    def __init__(self, inner: PyTrustedRoot) -> None:
+        self._inner = inner
+
+    @classmethod
+    def from_json(cls, json: str) -> TrustedRoot:
+        """Parse a trusted root from the contents of a ``trusted_root.json``.
+
+        Raises:
+            ValueError: If `json` is not a valid Sigstore trusted root.
+
+        Examples
+        --------
+        ```python
+        >>> root = TrustedRoot.from_json('{"mediaType": "application/vnd.dev.sigstore.trustedroot+json;version=0.1"}')
+        >>> root
+        TrustedRoot()
+        >>>
+        ```
+        """
+        return cls(PyTrustedRoot.from_json(json))
+
+    @classmethod
+    def from_path(cls, path: os.PathLike[str] | str) -> TrustedRoot:
+        """Read a trusted root from a ``trusted_root.json`` file.
+
+        Raises:
+            ValueError: If `path` cannot be read or does not hold a valid
+                Sigstore trusted root.
+        """
+        return cls(PyTrustedRoot.from_path(os.fspath(path)))
+
+    def __repr__(self) -> str:
+        """Return a string representation of this trusted root.
+
+        Examples
+        --------
+        ```python
+        >>> root = TrustedRoot.from_json('{"mediaType": "application/vnd.dev.sigstore.trustedroot+json;version=0.1"}')
+        >>> repr(root)
+        'TrustedRoot()'
+        >>>
+        ```
+        """
+        return "TrustedRoot()"
 
 
 class VerificationPolicy:
@@ -196,9 +257,20 @@ async def verify_attestation(
     record: RepoDataRecord,
     policy: VerificationPolicy,
     client: Client | None = None,
+    trusted_root: TrustedRoot | None = None,
 ) -> VerificationOutcome:
-    """Discover and verify the Sigstore attestations advertised by ``record``."""
+    """Discover and verify the Sigstore attestations advertised by ``record``.
+
+    Without a `trusted_root` the production trusted root is loaded over TUF on
+    first use, which requires network access. Passing one verifies against that
+    trust material instead, leaving the sidecar download as the only request.
+    """
     if client is None:
         client = Client.default_client()
-    outcome = await py_verify_attestation(record, policy._inner, client._client)
+    outcome = await py_verify_attestation(
+        record,
+        policy._inner,
+        client._client,
+        trusted_root._inner if trusted_root is not None else None,
+    )
     return VerificationOutcome._from_ffi(outcome)
