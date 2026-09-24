@@ -183,7 +183,7 @@ const EDIT_MATRIX: &[(&str, &str)] = &[
     ("proxy-config.non-proxy-hosts", r#"["localhost"]"#),
     (
         "s3-options.some-bucket",
-        r#"{"endpoint-url": "https://s3.example.com", "region": "auto", "force-path-style": true}"#,
+        r#"{"endpoint-url": "https://s3.example.com", "region": "auto", "addressing-style": "path"}"#,
     ),
 ];
 

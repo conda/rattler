@@ -4,7 +4,8 @@ use std::{collections::HashMap, sync::Arc};
 
 use rattler_networking::{
     AuthenticationMiddleware, AuthenticationStorage, S3Middleware,
-    authentication_storage::backends::file::FileStorage, s3_middleware::S3Config,
+    authentication_storage::backends::file::FileStorage,
+    s3_middleware::{S3AddressingStyle, S3Config},
 };
 
 use reqwest::Client;
@@ -98,7 +99,7 @@ async fn test_r2_download_repodata(r2_host: String, r2_credentials: Option<(Stri
             S3Config::Custom {
                 endpoint_url: Url::parse(&r2_host).unwrap(),
                 region: "auto".into(),
-                force_path_style: true,
+                addressing_style: S3AddressingStyle::Path,
             },
         )]),
         auth_storage.clone(),

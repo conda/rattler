@@ -419,7 +419,7 @@ class Config:
     def s3_options(self) -> dict[str, Any]:
         """
         The S3 configuration, mapping a bucket name to its options
-        (`endpoint-url`, `region`, `force-path-style`).
+        (`endpoint-url`, `region`, `addressing-style`).
 
         Examples
         --------
@@ -428,7 +428,7 @@ class Config:
         ...     [s3-options.my-bucket]
         ...     endpoint-url = "https://my-s3.example.com"
         ...     region = "eu-central-1"
-        ...     force-path-style = false
+        ...     addressing-style = "path"
         ... ''')
         >>> config.s3_options["my-bucket"]["region"]
         'eu-central-1'
