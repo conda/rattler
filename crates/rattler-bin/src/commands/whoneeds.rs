@@ -11,7 +11,7 @@ use rattler_conda_types::{
 use rattler_repodata_gateway::who_needs::{DependencyKind, Dependent, WhoNeedsTarget};
 use url::Url;
 
-use super::{QueryOutputFormat, print_url_lines};
+use super::{QueryOutputFormat, hyperlink, print_url_lines};
 use crate::commands::gateway::{build_gateway, load_config};
 
 /// Show packages that depend on the given package (reverse dependencies).
@@ -263,9 +263,10 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
             DependencyKind::ExtraDepends(extra) => format!("via extra '{extra}'"),
             DependencyKind::RunExport(_) => "via run export".to_string(),
         };
+        let package_page = hyperlink::package_page(dependent.record.channel.as_deref(), name);
         println!(
             "  {} {} {} ({} {}){}",
-            console::style(name).bold().green(),
+            hyperlink::maybe_link(package_page, console::style(name).bold().green()),
             console::style(&record.version).cyan(),
             record.build,
             kind,

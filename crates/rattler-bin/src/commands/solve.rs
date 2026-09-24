@@ -17,7 +17,7 @@ use crate::{
     commands::{
         QueryOutputFormat,
         gateway::{build_gateway, load_config},
-        print_url_lines,
+        hyperlink, print_url_lines,
         progress::{wrap_in_async_progress, wrap_in_progress},
         table::{Cell, Table},
     },
@@ -246,18 +246,33 @@ fn print_records(
         let explicit = specs
             .iter()
             .any(|spec| spec.matches(&record.package_record));
-        let name_cell = if explicit {
-            let styled = console::style(&name).green().bold().to_string();
-            Cell::styled(styled, name)
+        let styled = if explicit {
+            console::style(&name).green().bold().to_string()
         } else {
-            Cell::plain(name)
+            name.clone()
         };
+        // The name links to the web page of the package, if its channel has
+        // one. The link wraps the styling so both survive.
+        let package_page = hyperlink::package_page(
+            record.channel.as_deref(),
+            record.package_record.name.as_normalized(),
+        );
+        let name_cell = Cell::styled(hyperlink::maybe_link(package_page, styled), name);
+
+        let channel = format_channel(record, channel_config);
+        let channel_cell = Cell::styled(
+            hyperlink::maybe_link(
+                record.channel.as_deref().and_then(hyperlink::channel_page),
+                console::style(&channel).dim(),
+            ),
+            channel,
+        );
 
         let mut row = vec![
             name_cell,
             Cell::plain(record.package_record.version.to_string()),
             dim(record.package_record.build.clone()),
-            dim(format_channel(record, channel_config)),
+            channel_cell,
         ];
         if !constraints.is_empty() {
             row.push(dim(constraints

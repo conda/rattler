@@ -11,7 +11,7 @@ use rattler_repodata_gateway::RepoData;
 
 use crate::commands::gateway::{build_gateway, load_config};
 
-use super::{QueryOutputFormat, print_url_lines};
+use super::{QueryOutputFormat, hyperlink, print_url_lines};
 
 /// Search for packages in conda channels using glob or regex patterns.
 #[derive(Debug, clap::Parser)]
@@ -192,9 +192,15 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
         let total = records.len();
         let shown = records.len().min(limit_versions);
 
+        // The heading links to the web page of the package, using the channel
+        // of its newest record; the channel of each version links to its own.
+        let package_page = hyperlink::package_page(
+            records.first().and_then(|record| record.channel.as_deref()),
+            &name,
+        );
         println!(
             "{} ({} version{})",
-            console::style(&name).bold().green(),
+            hyperlink::maybe_link(package_page, console::style(&name).bold().green()),
             total,
             if total == 1 { "" } else { "s" }
         );
@@ -206,7 +212,10 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
                 console::style(&record.package_record.version).cyan(),
                 record.package_record.build,
                 record.package_record.subdir,
-                console::style(channel).dim()
+                hyperlink::maybe_link(
+                    record.channel.as_deref().and_then(hyperlink::channel_page),
+                    console::style(channel).dim()
+                )
             );
         }
 

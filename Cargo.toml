@@ -178,6 +178,7 @@ sigstore-trust-root = { version = "0.12", default-features = false, features = [
 ] }
 strum = { version = "0.28", features = ["derive"] }
 superslice = "1"
+supports-hyperlinks = "3.2"
 syn = "2"
 sysinfo = "0.39"
 tar = "0.4"
