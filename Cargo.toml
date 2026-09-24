@@ -210,6 +210,7 @@ which = "8"
 windows-sys = { version = "0.61", default-features = false }
 windows-native-keyring-store = "1"
 winver = { version = "1" }
+x509-cert = { version = "0.2", default-features = false }
 xxhash-rust = "0.8"
 zip = { version = "8", default-features = false }
 zstd = { version = "0.13", default-features = false }

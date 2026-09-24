@@ -34,11 +34,13 @@
 //! # }
 //! ```
 
+pub mod certificate;
 pub mod error;
 pub mod policy;
 pub mod sidecar;
 pub mod verify;
 
+pub use certificate::{CertificateClaims, SigningCertificate};
 pub use error::{SigstoreError, SigstoreResult};
 pub use policy::{
     ChannelCheck, Identity, Issuer, Publisher, VerificationConfig, VerificationPolicy,
@@ -47,10 +49,10 @@ pub use sidecar::{
     AttestationSidecar, DEFAULT_MAX_SIDECAR_SIZE, SIDECAR_SUFFIX, fetch_bundles, fetch_sidecar,
     mutable_sidecar_url, parse_bundles, parse_sidecar, sidecar_url, sidecar_url_for_record,
 };
-pub use sigstore_types::Bundle;
+pub use sigstore_types::{Bundle, TimeRange, TransparencyLogEntry};
 pub use sigstore_verify::trust_root::TrustedRoot;
 pub use verify::{
     BundleVerification, CONDA_PUBLISH_PREDICATE_TYPE, CondaPublishPredicate, RejectedAttestation,
-    VerificationOutcome, VerifiedAttestation, production_trusted_root, verify_bundles,
-    verify_record, verify_record_with_trusted_root,
+    VerificationOutcome, VerifiedAttestation, VerifiedChecks, embedded_trusted_root,
+    production_trusted_root, verify_bundles, verify_record, verify_record_with_trusted_root,
 };

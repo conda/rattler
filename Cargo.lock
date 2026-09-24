@@ -5593,6 +5593,7 @@ dependencies = [
  "tower-http 0.7.1",
  "tracing",
  "url",
+ "x509-cert",
 ]
 
 [[package]]

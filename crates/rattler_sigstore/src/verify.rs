@@ -20,14 +20,16 @@ use rattler_conda_types::RepoDataRecord;
 use rattler_redaction::Redact;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::Deserialize;
-use sigstore_types::{Artifact, Bundle, SignatureContent, intoto::Subject};
+use sigstore_types::{Artifact, Bundle, SignatureContent, TransparencyLogEntry, intoto::Subject};
 use sigstore_verify::{
-    VerificationPolicy as SigstoreVerificationPolicy, Verifier, trust_root::TrustedRoot,
+    VerificationPolicy as SigstoreVerificationPolicy, VerificationResult, Verifier,
+    trust_root::{SigstoreInstance, TrustedRoot},
 };
 use tokio::sync::OnceCell;
 use url::Url;
 
 use crate::{
+    certificate::{CertificateClaims, SigningCertificate},
     error::{SigstoreError, SigstoreResult},
     policy::{ChannelCheck, Publisher, VerificationPolicy, normalize_channel_url},
     sidecar::{AttestationSidecar, fetch_sidecar},
@@ -60,6 +62,7 @@ pub struct CondaPublishPredicate {
 
 /// An attestation that passed Sigstore verification and the CEP 27 checks.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct VerifiedAttestation {
     /// The index of the bundle in the sidecar.
     pub index: usize,
@@ -67,13 +70,86 @@ pub struct VerifiedAttestation {
     pub identity: Option<String>,
     /// The OIDC issuer of the signing certificate.
     pub issuer: Option<String>,
-    /// The time at which the signature was integrated into the transparency
-    /// log.
+    /// The authenticated time at which the signature was integrated into the
+    /// transparency log.
+    ///
+    /// Unlike [`TransparencyLogEntry::integrated_time`] of [`Self::log_entry`],
+    /// which is an unverified claim of the bundle, this is only set when log
+    /// inclusion was actually verified.
     pub integrated_time: Option<Timestamp>,
     /// The `targetChannel` recorded in the attestation, if any.
     pub target_channel: Option<String>,
+    /// The verified signing certificate: its validity window and the claims it
+    /// makes about the CI workload that signed the package.
+    ///
+    /// This is `None` for a bundle signed with a bare public key instead of a
+    /// Fulcio certificate, and when the certificate could not be parsed, in
+    /// which case [`Self::warnings`] explains why.
+    pub certificate: Option<SigningCertificate>,
+    /// The transparency log entry that records the signature, which locates it
+    /// in a public log for independent auditing.
+    pub log_entry: Option<TransparencyLogEntry>,
+    /// Which parts of the Sigstore verification were performed.
+    pub checks: VerifiedChecks,
     /// Non-fatal observations made during verification.
     pub warnings: Vec<String>,
+}
+
+impl VerifiedAttestation {
+    /// The CI claims of the signing certificate.
+    pub fn claims(&self) -> Option<&CertificateClaims> {
+        Some(&self.certificate.as_ref()?.claims)
+    }
+
+    /// The index of the transparency log entry, which identifies the signature
+    /// within its log.
+    pub fn log_index(&self) -> Option<u64> {
+        Some(self.log_entry.as_ref()?.log_index.value())
+    }
+
+    /// The origin of the transparency log the signature was recorded in, e.g.
+    /// `rekor.sigstore.dev`.
+    ///
+    /// This is taken from the signed checkpoint, so it is only available for a
+    /// bundle that carries an inclusion proof.
+    pub fn log_origin(&self) -> Option<&str> {
+        let entry = self.log_entry.as_ref()?;
+        let checkpoint = entry.inclusion_proof.as_ref()?.checkpoint.checkpoint()?;
+        Some(checkpoint.origin.as_str())
+    }
+}
+
+/// Which parts of the Sigstore verification of a bundle were performed.
+///
+/// A claim about a signature is only as strong as the checks behind it, so
+/// these flags let a consumer report what was actually established rather than
+/// implying a full verification.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
+#[non_exhaustive]
+pub struct VerifiedChecks {
+    /// The certificate chains to a trusted Fulcio root, has the code signing
+    /// extended key usage and was valid at every verified signing time.
+    pub certificate_chain: bool,
+    /// The certificate's signed certificate timestamp was verified against the
+    /// certificate transparency log keys.
+    pub signed_certificate_timestamp: bool,
+    /// Inclusion in the transparency log was verified.
+    pub transparency_log: bool,
+    /// The bundle carried a full inclusion proof rather than only an inclusion
+    /// promise, so log membership was checked against a signed checkpoint
+    /// instead of being taken on the log's word.
+    pub inclusion_proof: bool,
+}
+
+impl VerifiedChecks {
+    fn new(result: &VerificationResult, bundle: &Bundle) -> Self {
+        Self {
+            certificate_chain: result.certificate_verified(),
+            signed_certificate_timestamp: result.sct_verified(),
+            transparency_log: result.tlog_verified(),
+            inclusion_proof: bundle.has_inclusion_proof(),
+        }
+    }
 }
 
 /// A bundle that did not pass verification.
@@ -110,6 +186,19 @@ pub async fn production_trusted_root() -> SigstoreResult<&'static TrustedRoot> {
                 .map_err(|err| SigstoreError::TrustedRoot(err.to_string()))
         })
         .await
+}
+
+/// Returns the trusted root snapshot that is embedded in the binary.
+///
+/// [`production_trusted_root`] is the root to use whenever the network can be
+/// reached: it is fetched through TUF and therefore reflects key rotations and
+/// revocations. The embedded snapshot is a copy of the public good instance's
+/// root taken when `sigstore-trust-root` was released, so it ages with this
+/// crate's dependencies and is only a sensible choice when TUF is unavailable,
+/// such as for an offline verification.
+pub fn embedded_trusted_root() -> SigstoreResult<TrustedRoot> {
+    TrustedRoot::from_embedded(SigstoreInstance::PublicGood)
+        .map_err(|err| SigstoreError::TrustedRoot(err.to_string()))
 }
 
 /// Verifies every bundle in `bundles` against `record` using `trusted_root`.
@@ -195,12 +284,31 @@ fn verify_bundle(
         }
     }
 
+    // The certificate was already parsed and verified by `sigstore-verify`, so
+    // a failure here only means that the CI claims are unavailable and must not
+    // invalidate an otherwise good signature.
+    let certificate = match bundle.signing_certificate() {
+        Some(der) => match SigningCertificate::from_der(der.as_bytes()) {
+            Ok(certificate) => Some(certificate),
+            Err(err) => {
+                warnings.push(format!(
+                    "the signing certificate claims could not be read: {err}"
+                ));
+                None
+            }
+        },
+        None => None,
+    };
+
     Ok(VerifiedAttestation {
         index: 0,
         identity: outcome.identity().map(str::to_owned),
         issuer: outcome.issuer().map(str::to_owned),
         integrated_time: outcome.integrated_time(),
         target_channel,
+        certificate,
+        log_entry: bundle.verification_material.tlog_entries.first().cloned(),
+        checks: VerifiedChecks::new(&outcome, bundle),
         warnings,
     })
 }

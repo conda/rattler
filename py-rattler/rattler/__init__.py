@@ -52,6 +52,7 @@ from rattler.repo_data import (
     WhlPackageRecord,
 )
 from rattler.sigstore import (
+    CertificateClaims,
     ChannelCheck,
     Issuer,
     Publisher,
@@ -60,6 +61,7 @@ from rattler.sigstore import (
     VerificationOutcome,
     VerificationPolicy,
     VerifiedAttestation,
+    VerifiedChecks,
     verify_attestation,
 )
 from rattler.solver import solve, solve_with_sparse_repodata
@@ -73,6 +75,7 @@ del _get_rattler_version
 __all__ = [
     "AboutJson",
     "Channel",
+    "CertificateClaims",
     "ChannelCheck",
     "ChannelConfig",
     "ChannelInfo",
@@ -136,6 +139,7 @@ __all__ = [
     "VerificationOutcome",
     "VerificationPolicy",
     "VerifiedAttestation",
+    "VerifiedChecks",
     "Version",
     "VersionSpec",
     "VersionWithSource",

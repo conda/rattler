@@ -6,8 +6,8 @@ use pyo3::{
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::RepoDataRecord;
 use rattler_sigstore::{
-    ChannelCheck, Issuer, Publisher, TrustedRoot, VerificationConfig, VerificationOutcome,
-    VerificationPolicy,
+    CertificateClaims, ChannelCheck, Issuer, Publisher, TrustedRoot, VerificationConfig,
+    VerificationOutcome, VerificationPolicy, VerifiedAttestation, VerifiedChecks,
 };
 
 use crate::{error::PyRattlerError, networking::client::PyClientWithMiddleware, record::PyRecord};
@@ -152,6 +152,87 @@ impl PyVerificationPolicy {
     }
 }
 
+/// The claims a Fulcio signing certificate makes about the CI workload that
+/// produced an attestation.
+#[pyclass(from_py_object)]
+#[derive(Clone)]
+pub struct PyCertificateClaims {
+    #[pyo3(get)]
+    build_signer_uri: Option<String>,
+    #[pyo3(get)]
+    build_signer_digest: Option<String>,
+    #[pyo3(get)]
+    runner_environment: Option<String>,
+    #[pyo3(get)]
+    source_repository_uri: Option<String>,
+    #[pyo3(get)]
+    source_repository_digest: Option<String>,
+    #[pyo3(get)]
+    source_repository_ref: Option<String>,
+    #[pyo3(get)]
+    source_repository_identifier: Option<String>,
+    #[pyo3(get)]
+    source_repository_owner_uri: Option<String>,
+    #[pyo3(get)]
+    source_repository_owner_identifier: Option<String>,
+    #[pyo3(get)]
+    build_config_uri: Option<String>,
+    #[pyo3(get)]
+    build_config_digest: Option<String>,
+    #[pyo3(get)]
+    build_trigger: Option<String>,
+    #[pyo3(get)]
+    run_invocation_uri: Option<String>,
+    #[pyo3(get)]
+    source_repository_visibility_at_signing: Option<String>,
+}
+
+impl From<CertificateClaims> for PyCertificateClaims {
+    fn from(value: CertificateClaims) -> Self {
+        Self {
+            build_signer_uri: value.build_signer_uri,
+            build_signer_digest: value.build_signer_digest,
+            runner_environment: value.runner_environment,
+            source_repository_uri: value.source_repository_uri,
+            source_repository_digest: value.source_repository_digest,
+            source_repository_ref: value.source_repository_ref,
+            source_repository_identifier: value.source_repository_identifier,
+            source_repository_owner_uri: value.source_repository_owner_uri,
+            source_repository_owner_identifier: value.source_repository_owner_identifier,
+            build_config_uri: value.build_config_uri,
+            build_config_digest: value.build_config_digest,
+            build_trigger: value.build_trigger,
+            run_invocation_uri: value.run_invocation_uri,
+            source_repository_visibility_at_signing: value.source_repository_visibility_at_signing,
+        }
+    }
+}
+
+/// Which parts of the Sigstore verification of a bundle were performed.
+#[pyclass(from_py_object)]
+#[derive(Clone)]
+pub struct PyVerifiedChecks {
+    #[pyo3(get)]
+    certificate_chain: bool,
+    #[pyo3(get)]
+    signed_certificate_timestamp: bool,
+    #[pyo3(get)]
+    transparency_log: bool,
+    #[pyo3(get)]
+    inclusion_proof: bool,
+}
+
+impl From<VerifiedChecks> for PyVerifiedChecks {
+    fn from(value: VerifiedChecks) -> Self {
+        Self {
+            certificate_chain: value.certificate_chain,
+            signed_certificate_timestamp: value.signed_certificate_timestamp,
+            transparency_log: value.transparency_log,
+            inclusion_proof: value.inclusion_proof,
+        }
+    }
+}
+
 #[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct PyVerifiedAttestation {
@@ -160,7 +241,35 @@ pub struct PyVerifiedAttestation {
     issuer: Option<String>,
     integrated_time: Option<String>,
     target_channel: Option<String>,
+    claims: Option<PyCertificateClaims>,
+    signed_at: Option<String>,
+    log_index: Option<u64>,
+    log_origin: Option<String>,
+    checks: PyVerifiedChecks,
     warnings: Vec<String>,
+}
+
+impl From<VerifiedAttestation> for PyVerifiedAttestation {
+    fn from(value: VerifiedAttestation) -> Self {
+        Self {
+            index: value.index,
+            log_index: value.log_index(),
+            log_origin: value.log_origin().map(str::to_owned),
+            checks: value.checks.into(),
+            identity: value.identity,
+            issuer: value.issuer,
+            integrated_time: value.integrated_time.map(|time| time.to_string()),
+            target_channel: value.target_channel,
+            signed_at: value
+                .certificate
+                .as_ref()
+                .map(|certificate| certificate.issued_at().to_string()),
+            claims: value
+                .certificate
+                .map(|certificate| certificate.claims.into()),
+            warnings: value.warnings,
+        }
+    }
 }
 
 #[pymethods]
@@ -191,6 +300,31 @@ impl PyVerifiedAttestation {
     }
 
     #[getter]
+    pub fn claims(&self) -> Option<PyCertificateClaims> {
+        self.claims.clone()
+    }
+
+    #[getter]
+    pub fn signed_at(&self) -> Option<&str> {
+        self.signed_at.as_deref()
+    }
+
+    #[getter]
+    pub fn log_index(&self) -> Option<u64> {
+        self.log_index
+    }
+
+    #[getter]
+    pub fn log_origin(&self) -> Option<&str> {
+        self.log_origin.as_deref()
+    }
+
+    #[getter]
+    pub fn checks(&self) -> PyVerifiedChecks {
+        self.checks.clone()
+    }
+
+    #[getter]
     pub fn warnings(&self) -> Vec<String> {
         self.warnings.clone()
     }
@@ -206,16 +340,7 @@ pub struct PyVerificationOutcome {
 impl From<VerificationOutcome> for PyVerificationOutcome {
     fn from(value: VerificationOutcome) -> Self {
         Self {
-            attestation: value.attestation.map(|attestation| PyVerifiedAttestation {
-                index: attestation.index,
-                identity: attestation.identity,
-                issuer: attestation.issuer,
-                integrated_time: attestation
-                    .integrated_time
-                    .map(|timestamp| timestamp.to_string()),
-                target_channel: attestation.target_channel,
-                warnings: attestation.warnings,
-            }),
+            attestation: value.attestation.map(PyVerifiedAttestation::from),
             warnings: value.warnings,
         }
     }

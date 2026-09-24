@@ -277,6 +277,30 @@ async fn verify_real_bundle_offline() {
         "{:?}",
         attestation.warnings
     );
+
+    // The signing certificate locates the package in the source it was built
+    // from, and the log entry locates the signature in a public log.
+    let claims = attestation.claims().expect("a CI signing certificate");
+    assert_eq!(
+        claims.source_repository_uri.as_deref(),
+        Some("https://github.com/hunger/octoconda")
+    );
+    assert_eq!(
+        claims.run_invocation_uri.as_deref(),
+        Some("https://github.com/hunger/octoconda/actions/runs/23778256205/attempts/1")
+    );
+    assert_eq!(claims.runner_environment.as_deref(), Some("github-hosted"));
+    assert_eq!(attestation.log_index(), Some(1_202_156_555));
+    assert_eq!(
+        attestation.log_origin(),
+        Some("rekor.sigstore.dev - 1193050959916656506")
+    );
+
+    let checks = attestation.checks;
+    assert!(checks.certificate_chain);
+    assert!(checks.signed_certificate_timestamp);
+    assert!(checks.transparency_log);
+    assert!(checks.inclusion_proof);
 }
 
 #[tokio::test]
