@@ -8,7 +8,10 @@ use rattler_conda_types::package::{AboutJson, IndexJson, PackageFile, PathsJson,
 use serde::Serialize;
 use url::Url;
 
-use super::package_source::{PackageSource, client_for};
+use super::{
+    hyperlink,
+    package_source::{PackageSource, client_for},
+};
 
 /// Inspect package metadata from a local or remote conda package.
 #[derive(Debug, clap::Parser)]
@@ -180,7 +183,10 @@ fn print_about(about: &AboutJson) {
     print_urls("documentation", &about.doc_url);
     print_urls("repository", &about.dev_url);
     if let Some(source_url) = &about.source_url {
-        println!("source: {source_url}");
+        println!(
+            "source: {}",
+            hyperlink::maybe_link(hyperlink::web(source_url), source_url)
+        );
     }
 }
 
@@ -269,15 +275,19 @@ fn print_text(label: &str, text: &str) {
 }
 
 /// Prints a single URL inline and multiple URLs as a list, or nothing when
-/// there are none.
+/// there are none. The URLs stay visible in full; the hyperlink only makes
+/// them clickable.
 fn print_urls(label: &str, urls: &[Url]) {
     match urls {
         [] => {}
-        [url] => println!("{label}: {url}"),
+        [url] => println!(
+            "{label}: {}",
+            hyperlink::maybe_link(hyperlink::web(url), url)
+        ),
         urls => {
             println!("{label}:");
             for url in urls {
-                println!("  - {url}");
+                println!("  - {}", hyperlink::maybe_link(hyperlink::web(url), url));
             }
         }
     }

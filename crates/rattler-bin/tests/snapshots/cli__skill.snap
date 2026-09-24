@@ -32,6 +32,11 @@ workflows use pixi instead.
 - Machine-readable output: `--format json` or `--format urls` on `solve`,
   `search`, `list` and `whoneeds`; `--json` on `info` and `inspect`. Progress
   bars and logs go to stderr, results go to stdout, so piping stdout is safe.
+- The human-readable output turns package names, channels, paths and URLs into
+  OSC 8 terminal hyperlinks, but only on an interactive terminal that supports
+  them: a redirected stdout, `NO_COLOR=1` or `FORCE_HYPERLINK=0` gives plain
+  text, and the machine-readable formats never carry links. The text of a link
+  is the same either way, so nothing is hidden behind one.
 - `--offline` (global) disables all network access and only uses cached
   repodata and packages. `-v`/`--verbose` (global) enables debug logging;
   `RUST_LOG` gives finer control.

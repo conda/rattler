@@ -11,8 +11,14 @@ const CLOBBER_PACKAGE: &str = "test-data/clobber/clobber-1-0.2.0-h4616a5c_0.tar.
 /// be addressed with stable relative paths) and returns its stdout. Styling is
 /// disabled automatically because stdout is not a terminal.
 fn run_rattler(args: &[&str]) -> String {
+    run_rattler_with_env(args, &[])
+}
+
+/// [`run_rattler`] with extra environment variables set for the run.
+fn run_rattler_with_env(args: &[&str], env: &[(&str, &str)]) -> String {
     let output = Command::new(env!("CARGO_BIN_EXE_rattler"))
         .args(args)
+        .envs(env.iter().copied())
         .current_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
         .output()
         .expect("failed to run the rattler binary");
@@ -83,6 +89,53 @@ fn test_list_json() {
         "--format",
         "json"
     ]));
+}
+
+/// The start of an OSC 8 hyperlink.
+const OSC8: &str = "\u{1b}]8;;";
+
+/// Whatever else the output carries, a consumer that cannot render hyperlinks
+/// must not receive any. Since stdout is a pipe here, this is the default for
+/// every command.
+#[test]
+fn test_no_hyperlinks_when_stdout_is_not_a_terminal() {
+    for args in [
+        vec!["list", "-p", FIXTURE_PREFIX],
+        vec!["list", "-p", FIXTURE_PREFIX, "--format", "urls"],
+        vec!["inspect", EMPTY_PACKAGE],
+        vec!["info"],
+    ] {
+        let output = run_rattler(&args);
+        assert!(
+            !output.contains(OSC8),
+            "rattler {args:?} wrote a hyperlink to a piped stdout"
+        );
+    }
+}
+
+/// `FORCE_HYPERLINK` opts a non-terminal stdout in, which is also the only way
+/// to observe the links in a test.
+#[test]
+fn test_hyperlinks_can_be_forced() {
+    let output = run_rattler_with_env(
+        &["list", "-p", FIXTURE_PREFIX, "--full-name", "bzip2"],
+        &[("FORCE_HYPERLINK", "1")],
+    );
+    // The package name links to its page on prefix.dev, which mirrors the
+    // conda-forge channel the fixture records come from, and the name itself is
+    // still there in full.
+    assert!(
+        output.contains(&format!(
+            "{OSC8}https://prefix.dev/channels/conda-forge/packages/bzip2\u{1b}\\bzip2\u{1b}]8;;\u{1b}\\"
+        )),
+        "expected a hyperlinked package name, got:\n{output}"
+    );
+    // Machine-readable output stays plain even then.
+    let urls = run_rattler_with_env(
+        &["list", "-p", FIXTURE_PREFIX, "--format", "urls"],
+        &[("FORCE_HYPERLINK", "1")],
+    );
+    assert!(!urls.contains(OSC8), "got hyperlinks in --format urls");
 }
 
 /// The skill embeds the crate version, which is replaced so the snapshot does

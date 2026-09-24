@@ -5,6 +5,8 @@ use miette::{Context, IntoDiagnostic};
 use tokio::io::AsyncWriteExt;
 use url::Url;
 
+use super::hyperlink;
+
 /// Download an arbitrary file.
 #[derive(Debug, clap::Parser)]
 #[clap(after_help = r#"Examples:
@@ -111,7 +113,18 @@ pub async fn download(opt: Opt, offline: bool) -> miette::Result<()> {
             .into_diagnostic()
             .with_context(|| format!("failed to move the download to {}", output.display()))?;
 
-        eprintln!("Downloaded {} to {}", opt.url, output.display());
+        let output_url = std::path::absolute(&output)
+            .ok()
+            .and_then(|absolute| hyperlink::file(&absolute));
+        eprintln!(
+            "Downloaded {} to {}",
+            hyperlink::maybe_link_on(
+                hyperlink::Stream::Stderr,
+                hyperlink::web(&opt.url),
+                &opt.url
+            ),
+            hyperlink::maybe_link_on(hyperlink::Stream::Stderr, output_url, output.display())
+        );
     }
     Ok(())
 }

@@ -16,8 +16,18 @@ use reqwest_middleware::ClientWithMiddleware;
 use tokio::io::AsyncWriteExt;
 use url::Url;
 
-use super::{client::create_client_with_middleware, package_source::PackageSource};
+use super::{client::create_client_with_middleware, hyperlink, package_source::PackageSource};
 use crate::publisher_args::PublisherArgs;
+
+/// The page a signing identity refers to, if any.
+///
+/// A workflow identity carries the git reference it ran from after an `@`
+/// (`https://github.com/org/repo/.github/workflows/build.yml@refs/heads/main`),
+/// which is not part of the URL that serves the workflow.
+fn identity_url(identity: &str) -> Option<Url> {
+    let (url, _reference) = identity.rsplit_once('@').unwrap_or((identity, ""));
+    hyperlink::web(&Url::parse(url).ok()?)
+}
 
 /// Verify Sigstore attestations for a conda package.
 #[derive(Debug, clap::Parser)]
@@ -130,9 +140,10 @@ pub async fn verify_attestation(opt: Opt, offline: bool) -> miette::Result<()> {
     for attestation in verification.verified {
         println!();
         println!("Bundle: {}", attestation.index);
+        let identity = attestation.identity.as_deref().unwrap_or("<unknown>");
         println!(
             "Identity: {}",
-            attestation.identity.as_deref().unwrap_or("<unknown>")
+            hyperlink::maybe_link(identity_url(identity), identity)
         );
         println!(
             "Issuer: {}",
@@ -144,9 +155,16 @@ pub async fn verify_attestation(opt: Opt, offline: bool) -> miette::Result<()> {
                 .integrated_time
                 .map_or_else(|| "<unknown>".to_string(), |time| time.to_string())
         );
+        let target_channel = attestation.target_channel.as_deref().unwrap_or("<none>");
         println!(
             "Target channel: {}",
-            attestation.target_channel.as_deref().unwrap_or("<none>")
+            hyperlink::maybe_link(
+                Url::parse(target_channel)
+                    .ok()
+                    .as_ref()
+                    .and_then(hyperlink::web),
+                target_channel
+            )
         );
         for warning in attestation.warnings {
             eprintln!("{} {warning}", style("warning:").yellow().bold());

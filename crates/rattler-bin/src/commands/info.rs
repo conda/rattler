@@ -5,6 +5,8 @@ use rattler_conda_types::{GenericVirtualPackage, Platform};
 use rattler_virtual_packages::{VirtualPackageOverrides, VirtualPackages};
 use serde::Serialize;
 
+use super::hyperlink;
+
 /// Show information about this `rattler` build and the host system.
 #[derive(Debug, clap::Parser)]
 #[clap(after_help = r#"Examples:
@@ -123,14 +125,14 @@ pub fn info(opt: Opt) -> miette::Result<()> {
         "Cache dir",
         info.cache_dir.as_ref().map_or_else(
             || console::style("<disabled>".to_string()).dim().to_string(),
-            |path| path.display().to_string(),
+            |path| hyperlink::maybe_link(hyperlink::directory(path), path.display()),
         ),
     );
     print_field(
         "Auth storage",
         info.auth_storage.as_ref().map_or_else(
             || console::style("<unknown>".to_string()).dim().to_string(),
-            |path| path.display().to_string(),
+            |path| hyperlink::maybe_link(hyperlink::file(path), path.display()),
         ),
     );
     print_list("Virtual packages", &info.virtual_packages);
