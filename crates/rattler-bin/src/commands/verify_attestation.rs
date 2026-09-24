@@ -9,7 +9,7 @@ use rattler_conda_types::{RepoDataRecord, package::DistArchiveIdentifier};
 use rattler_package_streaming::fs::repodata_record_from_package_archive;
 use rattler_redaction::Redact;
 use rattler_sigstore::{
-    CONDA_PUBLISH_PREDICATE_TYPE, CertificateClaims, ChannelCheck, DEFAULT_MAX_SIDECAR_SIZE,
+    CONDA_PUBLISH_PREDICATE_TYPE, ChannelCheck, DEFAULT_MAX_SIDECAR_SIZE, FulcioCiClaims,
     RejectedAttestation, SigstoreError, VerifiedAttestation, VerifiedChecks, embedded_trusted_root,
     fetch_bundles, mutable_sidecar_url, production_trusted_root, verify_bundles,
 };
@@ -227,8 +227,56 @@ struct CertificateReport {
     /// When the certificate was issued, which approximates the signing time.
     not_before: String,
     /// When the short-lived certificate expired.
-    not_after: Option<String>,
-    claims: CertificateClaims,
+    not_after: String,
+    claims: ClaimsReport,
+}
+
+/// The CI claims of a signing certificate, as JSON.
+///
+/// This mirrors [`FulcioCiClaims`] rather than serializing it, because the
+/// upstream type is deliberately free of serde and may grow fields: the JSON
+/// this command emits is a contract with its callers, so it is spelled out here
+/// where a change to it is visible in review. Every key is always present, an
+/// absent claim as `null`, so consumers see a stable set of fields.
+#[derive(Debug, Default, Serialize)]
+struct ClaimsReport {
+    build_signer_uri: Option<String>,
+    build_signer_digest: Option<String>,
+    runner_environment: Option<String>,
+    source_repository_uri: Option<String>,
+    source_repository_digest: Option<String>,
+    source_repository_ref: Option<String>,
+    source_repository_identifier: Option<String>,
+    source_repository_owner_uri: Option<String>,
+    source_repository_owner_identifier: Option<String>,
+    build_config_uri: Option<String>,
+    build_config_digest: Option<String>,
+    build_trigger: Option<String>,
+    run_invocation_uri: Option<String>,
+    source_repository_visibility_at_signing: Option<String>,
+}
+
+impl From<&FulcioCiClaims> for ClaimsReport {
+    fn from(claims: &FulcioCiClaims) -> Self {
+        Self {
+            build_signer_uri: claims.build_signer_uri.clone(),
+            build_signer_digest: claims.build_signer_digest.clone(),
+            runner_environment: claims.runner_environment.clone(),
+            source_repository_uri: claims.source_repository_uri.clone(),
+            source_repository_digest: claims.source_repository_digest.clone(),
+            source_repository_ref: claims.source_repository_ref.clone(),
+            source_repository_identifier: claims.source_repository_identifier.clone(),
+            source_repository_owner_uri: claims.source_repository_owner_uri.clone(),
+            source_repository_owner_identifier: claims.source_repository_owner_identifier.clone(),
+            build_config_uri: claims.build_config_uri.clone(),
+            build_config_digest: claims.build_config_digest.clone(),
+            build_trigger: claims.build_trigger.clone(),
+            run_invocation_uri: claims.run_invocation_uri.clone(),
+            source_repository_visibility_at_signing: claims
+                .source_repository_visibility_at_signing
+                .clone(),
+        }
+    }
 }
 
 /// The transparency log entry recording a verified attestation.
@@ -278,9 +326,9 @@ impl BundleReport {
                 .certificate
                 .as_ref()
                 .map(|certificate| CertificateReport {
-                    not_before: certificate.validity.start.to_string(),
-                    not_after: certificate.validity.end.map(|end| end.to_string()),
-                    claims: certificate.claims.clone(),
+                    not_before: certificate.not_before.to_string(),
+                    not_after: certificate.not_after.to_string(),
+                    claims: (&certificate.ci_claims).into(),
                 }),
             transparency_log: TransparencyLogReport::new(attestation),
             checks: attestation.checks,
@@ -459,7 +507,7 @@ fn describe_checks(checks: &VerifiedChecks) -> String {
 
 /// Shortens a build config URI to the path within its repository, since the
 /// repository and ref are already shown on their own lines.
-fn shorten_build_config(build_config_uri: &str, claims: &CertificateClaims) -> String {
+fn shorten_build_config(build_config_uri: &str, claims: &ClaimsReport) -> String {
     let mut workflow = build_config_uri;
     if let Some(repository) = &claims.source_repository_uri
         && let Some(relative) = workflow
@@ -611,9 +659,11 @@ mod tests {
 
     #[test]
     fn build_config_is_shortened_to_the_path_in_the_repository() {
-        let mut claims = CertificateClaims::default();
-        claims.source_repository_uri = Some("https://github.com/org/repo".to_string());
-        claims.source_repository_ref = Some("refs/heads/main".to_string());
+        let claims = ClaimsReport {
+            source_repository_uri: Some("https://github.com/org/repo".to_string()),
+            source_repository_ref: Some("refs/heads/main".to_string()),
+            ..Default::default()
+        };
         assert_eq!(
             shorten_build_config(
                 "https://github.com/org/repo/.github/workflows/publish.yml@refs/heads/main",

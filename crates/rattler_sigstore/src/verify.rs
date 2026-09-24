@@ -23,13 +23,13 @@ use serde::Deserialize;
 use sigstore_types::{Artifact, Bundle, SignatureContent, TransparencyLogEntry, intoto::Subject};
 use sigstore_verify::{
     VerificationPolicy as SigstoreVerificationPolicy, VerificationResult, Verifier,
+    crypto::{CertificateInfo, FulcioCiClaims},
     trust_root::{SigstoreInstance, TrustedRoot},
 };
 use tokio::sync::OnceCell;
 use url::Url;
 
 use crate::{
-    certificate::{CertificateClaims, SigningCertificate},
     error::{SigstoreError, SigstoreResult},
     policy::{ChannelCheck, Publisher, VerificationPolicy, normalize_channel_url},
     sidecar::{AttestationSidecar, fetch_sidecar},
@@ -79,13 +79,18 @@ pub struct VerifiedAttestation {
     pub integrated_time: Option<Timestamp>,
     /// The `targetChannel` recorded in the attestation, if any.
     pub target_channel: Option<String>,
-    /// The verified signing certificate: its validity window and the claims it
-    /// makes about the CI workload that signed the package.
+    /// The signing certificate the signature was verified against: its validity
+    /// window and the claims it makes about the CI workload that signed the
+    /// package.
+    ///
+    /// Fulcio issues short-lived certificates, so
+    /// [`not_before`](CertificateInfo::not_before) is within seconds of the
+    /// moment the package was signed and is the best available answer to "when
+    /// was this signed?".
     ///
     /// This is `None` for a bundle signed with a bare public key instead of a
-    /// Fulcio certificate, and when the certificate could not be parsed, in
-    /// which case [`Self::warnings`] explains why.
-    pub certificate: Option<SigningCertificate>,
+    /// Fulcio certificate.
+    pub certificate: Option<CertificateInfo>,
     /// The transparency log entry that records the signature, which locates it
     /// in a public log for independent auditing.
     pub log_entry: Option<TransparencyLogEntry>,
@@ -97,8 +102,8 @@ pub struct VerifiedAttestation {
 
 impl VerifiedAttestation {
     /// The CI claims of the signing certificate.
-    pub fn claims(&self) -> Option<&CertificateClaims> {
-        Some(&self.certificate.as_ref()?.claims)
+    pub fn claims(&self) -> Option<&FulcioCiClaims> {
+        Some(&self.certificate.as_ref()?.ci_claims)
     }
 
     /// The index of the transparency log entry, which identifies the signature
@@ -115,7 +120,7 @@ impl VerifiedAttestation {
     pub fn log_origin(&self) -> Option<&str> {
         let entry = self.log_entry.as_ref()?;
         let checkpoint = entry.inclusion_proof.as_ref()?.checkpoint.checkpoint()?;
-        Some(checkpoint.origin.as_str())
+        Some(checkpoint.origin())
     }
 }
 
@@ -284,29 +289,13 @@ fn verify_bundle(
         }
     }
 
-    // The certificate was already parsed and verified by `sigstore-verify`, so
-    // a failure here only means that the CI claims are unavailable and must not
-    // invalidate an otherwise good signature.
-    let certificate = match bundle.signing_certificate() {
-        Some(der) => match SigningCertificate::from_der(der.as_bytes()) {
-            Ok(certificate) => Some(certificate),
-            Err(err) => {
-                warnings.push(format!(
-                    "the signing certificate claims could not be read: {err}"
-                ));
-                None
-            }
-        },
-        None => None,
-    };
-
     Ok(VerifiedAttestation {
         index: 0,
         identity: outcome.identity().map(str::to_owned),
         issuer: outcome.issuer().map(str::to_owned),
         integrated_time: outcome.integrated_time(),
         target_channel,
-        certificate,
+        certificate: outcome.certificate().cloned(),
         log_entry: bundle.verification_material.tlog_entries.first().cloned(),
         checks: VerifiedChecks::new(&outcome, bundle),
         warnings,

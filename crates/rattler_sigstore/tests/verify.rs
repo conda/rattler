@@ -290,6 +290,18 @@ async fn verify_real_bundle_offline() {
         Some("https://github.com/hunger/octoconda/actions/runs/23778256205/attempts/1")
     );
     assert_eq!(claims.runner_environment.as_deref(), Some("github-hosted"));
+
+    // Fulcio issues certificates with a ten minute lifetime, which is why
+    // `not_before` is a usable approximation of the signing time.
+    let certificate = attestation
+        .certificate
+        .as_ref()
+        .expect("a Fulcio signing certificate");
+    assert_eq!(
+        certificate.not_after.duration_since(certificate.not_before),
+        jiff::SignedDuration::from_mins(10)
+    );
+
     assert_eq!(attestation.log_index(), Some(1_202_156_555));
     assert_eq!(
         attestation.log_origin(),

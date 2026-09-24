@@ -170,10 +170,16 @@ smallvec = { version = "1", features = [
   "const_generics",
   "union",
 ] }
-sigstore-sign = { version = "0.12", default-features = false }
-sigstore-types = { version = "0.12" }
-sigstore-verify = { version = "0.12", default-features = false, features = ["tuf"] }
-sigstore-trust-root = { version = "0.12", default-features = false, features = [
+# Temporarily taken from a fork, for https://github.com/sigstore/sigstore-rust/pull/250:
+# the Fulcio CI claims `rattler_sigstore` reports are parsed upstream there. Move
+# back to a crates.io release once that is merged and published, which also
+# unblocks publishing `rattler_sigstore` itself.
+sigstore-sign = { git = "https://github.com/pavelzw/sigstore-rust", branch = "fulcio-ci-claims", default-features = false }
+sigstore-types = { git = "https://github.com/pavelzw/sigstore-rust", branch = "fulcio-ci-claims" }
+sigstore-verify = { git = "https://github.com/pavelzw/sigstore-rust", branch = "fulcio-ci-claims", default-features = false, features = [
+  "tuf",
+] }
+sigstore-trust-root = { git = "https://github.com/pavelzw/sigstore-rust", branch = "fulcio-ci-claims", default-features = false, features = [
   "tuf",
 ] }
 strum = { version = "0.28", features = ["derive"] }
@@ -210,7 +216,6 @@ which = "8"
 windows-sys = { version = "0.61", default-features = false }
 windows-native-keyring-store = "1"
 winver = { version = "1" }
-x509-cert = { version = "0.2", default-features = false }
 xxhash-rust = "0.8"
 zip = { version = "8", default-features = false }
 zstd = { version = "0.13", default-features = false }

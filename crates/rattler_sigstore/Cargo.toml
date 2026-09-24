@@ -32,7 +32,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["fs", "io-util", "sync"] }
 tracing = { workspace = true }
 url = { workspace = true }
-x509-cert = { workspace = true }
 
 [dev-dependencies]
 axum = { workspace = true }

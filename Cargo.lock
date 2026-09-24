@@ -5593,7 +5593,6 @@ dependencies = [
  "tower-http 0.7.1",
  "tracing",
  "url",
- "x509-cert",
 ]
 
 [[package]]
@@ -6628,9 +6627,8 @@ dependencies = [
 
 [[package]]
 name = "sigstore-bundle"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b09b8bcaae75fd5ae3fc65a1805881d76adab05fbe049f246b51324fbdab0cd"
+version = "0.13.0"
+source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#deb9d788dc4674fcf128b3b1f85fe4833df8c531"
 dependencies = [
  "jiff",
  "serde_json",
@@ -6640,12 +6638,10 @@ dependencies = [
 
 [[package]]
 name = "sigstore-crypto"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8198a909848c5aa5954c40d8fce4bd46ec74a04abb6cc954b58799d9905d4b84"
+version = "0.13.0"
+source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#deb9d788dc4674fcf128b3b1f85fe4833df8c531"
 dependencies = [
  "aws-lc-rs",
- "base64 0.22.1",
  "const-oid 0.9.6",
  "der",
  "futures-io",
@@ -6658,9 +6654,8 @@ dependencies = [
 
 [[package]]
 name = "sigstore-fulcio"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a56d778bd90566341afc0ad5b8596a8a30b79dcceb2ec41b4c33ebd5ad0e99fd"
+version = "0.13.0"
+source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#deb9d788dc4674fcf128b3b1f85fe4833df8c531"
 dependencies = [
  "reqwest",
  "serde",
@@ -6673,11 +6668,9 @@ dependencies = [
 
 [[package]]
 name = "sigstore-merkle"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "984773bc31490c3559f0ddc4fcef840d2434d5881232ba9b5dd75ab23a699cf6"
+version = "0.13.0"
+source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#deb9d788dc4674fcf128b3b1f85fe4833df8c531"
 dependencies = [
- "base64 0.22.1",
  "sigstore-crypto",
  "sigstore-types",
  "thiserror 2.0.20",
@@ -6685,12 +6678,12 @@ dependencies = [
 
 [[package]]
 name = "sigstore-oidc"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8f735817ae69273f3a4741f2ec6abbd7dd9d5c1a993546e13c5f979ef4a6ced"
+version = "0.13.0"
+source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#deb9d788dc4674fcf128b3b1f85fe4833df8c531"
 dependencies = [
  "ambient-id",
  "base64 0.22.1",
+ "jiff",
  "rand 0.9.5",
  "reqwest",
  "serde",
@@ -6699,13 +6692,13 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "url",
+ "zeroize",
 ]
 
 [[package]]
 name = "sigstore-rekor"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "438490baf0b20a99472018b8d8467e61d41fb46f5e5c46fa325ca99581b6e17b"
+version = "0.13.0"
+source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#deb9d788dc4674fcf128b3b1f85fe4833df8c531"
 dependencies = [
  "base64 0.22.1",
  "jiff",
@@ -6719,9 +6712,8 @@ dependencies = [
 
 [[package]]
 name = "sigstore-sign"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46e0a904cc64672d3dd6be40f263dcd0b93188ad6117cedcd931a7699ec00bc2"
+version = "0.13.0"
+source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#deb9d788dc4674fcf128b3b1f85fe4833df8c531"
 dependencies = [
  "base64 0.22.1",
  "futures-io",
@@ -6739,9 +6731,8 @@ dependencies = [
 
 [[package]]
 name = "sigstore-trust-root"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b02f88b0f591c40973ec5598ecaf51f5d9e5732ba8a3d30fa1fcac3417d8c99f"
+version = "0.13.0"
+source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#deb9d788dc4674fcf128b3b1f85fe4833df8c531"
 dependencies = [
  "base64 0.22.1",
  "directories",
@@ -6759,9 +6750,8 @@ dependencies = [
 
 [[package]]
 name = "sigstore-tsa"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d39ab616a300267f10620d5d3611ae8e70102d039763a39a0c5af7e72cf7370"
+version = "0.13.0"
+source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#deb9d788dc4674fcf128b3b1f85fe4833df8c531"
 dependencies = [
  "aws-lc-rs",
  "base64 0.22.1",
@@ -6783,9 +6773,8 @@ dependencies = [
 
 [[package]]
 name = "sigstore-tuf"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d1236682ec091698853ff47d77cb891f3cf22868e95895c467d86f826f6836b"
+version = "0.13.0"
+source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#deb9d788dc4674fcf128b3b1f85fe4833df8c531"
 dependencies = [
  "glob",
  "hex",
@@ -6804,9 +6793,8 @@ dependencies = [
 
 [[package]]
 name = "sigstore-types"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4e3bab67498d4ada7d4a8c5a4bafae165505498744888546a433274d05db1f0"
+version = "0.13.0"
+source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#deb9d788dc4674fcf128b3b1f85fe4833df8c531"
 dependencies = [
  "base64 0.22.1",
  "hex",
@@ -6819,9 +6807,8 @@ dependencies = [
 
 [[package]]
 name = "sigstore-verify"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0520b1b6bdc99f02add74df9b1b050402a80291450539c9df536c47af8ea964a"
+version = "0.13.0"
+source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#deb9d788dc4674fcf128b3b1f85fe4833df8c531"
 dependencies = [
  "base64 0.22.1",
  "const-oid 0.9.6",

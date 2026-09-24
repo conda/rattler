@@ -6,7 +6,7 @@ use pyo3::{
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::RepoDataRecord;
 use rattler_sigstore::{
-    CertificateClaims, ChannelCheck, Issuer, Publisher, TrustedRoot, VerificationConfig,
+    ChannelCheck, FulcioCiClaims, Issuer, Publisher, TrustedRoot, VerificationConfig,
     VerificationOutcome, VerificationPolicy, VerifiedAttestation, VerifiedChecks,
 };
 
@@ -187,8 +187,8 @@ pub struct PyCertificateClaims {
     source_repository_visibility_at_signing: Option<String>,
 }
 
-impl From<CertificateClaims> for PyCertificateClaims {
-    fn from(value: CertificateClaims) -> Self {
+impl From<FulcioCiClaims> for PyCertificateClaims {
+    fn from(value: FulcioCiClaims) -> Self {
         Self {
             build_signer_uri: value.build_signer_uri,
             build_signer_digest: value.build_signer_digest,
@@ -260,13 +260,15 @@ impl From<VerifiedAttestation> for PyVerifiedAttestation {
             issuer: value.issuer,
             integrated_time: value.integrated_time.map(|time| time.to_string()),
             target_channel: value.target_channel,
+            // Fulcio certificates are short-lived, so the moment the
+            // certificate became valid approximates the signing time.
             signed_at: value
                 .certificate
                 .as_ref()
-                .map(|certificate| certificate.issued_at().to_string()),
+                .map(|certificate| certificate.not_before.to_string()),
             claims: value
                 .certificate
-                .map(|certificate| certificate.claims.into()),
+                .map(|certificate| certificate.ci_claims.into()),
             warnings: value.warnings,
         }
     }

@@ -34,13 +34,11 @@
 //! # }
 //! ```
 
-pub mod certificate;
 pub mod error;
 pub mod policy;
 pub mod sidecar;
 pub mod verify;
 
-pub use certificate::{CertificateClaims, SigningCertificate};
 pub use error::{SigstoreError, SigstoreResult};
 pub use policy::{
     ChannelCheck, Identity, Issuer, Publisher, VerificationConfig, VerificationPolicy,
@@ -49,7 +47,13 @@ pub use sidecar::{
     AttestationSidecar, DEFAULT_MAX_SIDECAR_SIZE, SIDECAR_SUFFIX, fetch_bundles, fetch_sidecar,
     mutable_sidecar_url, parse_bundles, parse_sidecar, sidecar_url, sidecar_url_for_record,
 };
-pub use sigstore_types::{Bundle, TimeRange, TransparencyLogEntry};
+pub use sigstore_types::{Bundle, TransparencyLogEntry};
+/// The signing certificate a verified attestation was produced with, including
+/// the claims Fulcio copied from the workload identity of the signer: the
+/// repository, the commit, the build configuration and the CI run. Both types
+/// come from `sigstore-crypto` and are re-exported here so that a consumer of
+/// this crate does not have to depend on it directly.
+pub use sigstore_verify::crypto::{CertificateInfo, FulcioCiClaims};
 pub use sigstore_verify::trust_root::TrustedRoot;
 pub use verify::{
     BundleVerification, CONDA_PUBLISH_PREDICATE_TYPE, CondaPublishPredicate, RejectedAttestation,
