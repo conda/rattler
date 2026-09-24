@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/conda/rattler/compare/rattler_s3-v0.2.16...rattler_s3-v0.3.0) - 2026-09-24
+
+### Other
+
+- *(s3)* [**breaking**] replace force_path_style with addressing_style ([#2843](https://github.com/conda/rattler/pull/2843))
+
 ## [0.2.16](https://github.com/conda/rattler/compare/rattler_s3-v0.2.15...rattler_s3-v0.2.16) - 2026-09-23
 
 ### Added

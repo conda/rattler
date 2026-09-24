@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.50.1](https://github.com/conda/rattler/compare/rattler-v0.50.0...rattler-v0.50.1) - 2026-09-24
+
+### Fixed
+
+- replace existing files instead of overwriting them when copying ([#2827](https://github.com/conda/rattler/pull/2827))
+
 ## [0.50.0](https://github.com/conda/rattler/compare/rattler-v0.49.0...rattler-v0.50.0) - 2026-09-23
 
 ### Added
