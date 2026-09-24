@@ -71,7 +71,7 @@ class TrustedRoot:
     Verification normally loads the production trusted root over TUF, which
     needs network access. Supplying one of these instead makes verification use
     the given trust material, so it can run against a pinned
-    ``trusted_root.json``.
+    ``trusted_root.json`` or against the snapshot embedded in py-rattler.
     """
 
     def __init__(self, inner: PyTrustedRoot) -> None:
@@ -104,6 +104,30 @@ class TrustedRoot:
                 Sigstore trusted root.
         """
         return cls(PyTrustedRoot.from_path(os.fspath(path)))
+
+    @classmethod
+    def embedded(cls) -> TrustedRoot:
+        """Return the trust anchors of the public good instance that ship with py-rattler.
+
+        This is the root to reach for when `tuf-repo-cdn.sigstore.dev` cannot be
+        reached, not a general way to avoid the network. It is a snapshot taken
+        when py-rattler's Sigstore dependencies were released, so unlike the
+        root loaded over TUF it does not pick up key rotations or revocations
+        and ages with the installed version of py-rattler. Prefer
+        [`TrustedRoot.from_path`][rattler.sigstore.TrustedRoot.from_path] with a
+        `trusted_root.json` you refresh yourself if you need a pinned root that
+        can be updated independently.
+
+        Examples
+        --------
+        ```python
+        >>> root = TrustedRoot.embedded()
+        >>> root
+        TrustedRoot()
+        >>>
+        ```
+        """
+        return cls(PyTrustedRoot.embedded())
 
     def __repr__(self) -> str:
         """Return a string representation of this trusted root.

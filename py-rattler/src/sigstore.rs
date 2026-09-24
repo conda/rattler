@@ -48,6 +48,16 @@ impl PyTrustedRoot {
                 ))
             })
     }
+
+    /// Returns the trusted root snapshot embedded in this extension module.
+    #[staticmethod]
+    pub fn embedded() -> PyResult<Self> {
+        rattler_sigstore::embedded_trusted_root()
+            .map(|root| Self {
+                inner: Arc::new(root),
+            })
+            .map_err(|err| PyValueError::new_err(format!("invalid embedded trusted root: {err}")))
+    }
 }
 
 #[pyclass(from_py_object)]
