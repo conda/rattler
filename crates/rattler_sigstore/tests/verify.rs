@@ -354,7 +354,13 @@ async fn verify_checks_target_channel() {
     )
     .unwrap();
     assert!(strict.verified.is_empty());
-    assert!(strict.rejected[0].reason.contains("targets channel"));
+    // Both channels are rendered as URLs, not as `Url`'s `Debug` output, and in
+    // the normalized form they were compared in.
+    assert_eq!(
+        strict.rejected[0].reason,
+        "the attestation targets channel https://prefix.dev/github-releases \
+         but the package was retrieved from https://mirror.example.com/github-releases"
+    );
 
     let warn = verify_bundles(
         &record,

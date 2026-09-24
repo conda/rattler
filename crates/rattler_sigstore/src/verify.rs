@@ -278,11 +278,15 @@ fn verify_bundle(
 
     let mut warnings = Vec::new();
     if let (Some(target_channel), Some(expected)) = (target_channel.as_deref(), expected_channel) {
-        let target = Url::parse(target_channel)
-            .expect("validate_statement guarantees that targetChannel is a valid URL");
-        if normalize_channel_url(target.clone()) != *expected {
+        // Compare and report the normalized form, so that the two URLs in the
+        // message are the ones that were actually compared.
+        let target = normalize_channel_url(
+            Url::parse(target_channel)
+                .expect("validate_statement guarantees that targetChannel is a valid URL"),
+        );
+        if target != *expected {
             let message = format!(
-                "the attestation targets channel {:?} but the package was retrieved from {}",
+                "the attestation targets channel {} but the package was retrieved from {}",
                 target.redact(),
                 expected.clone().redact()
             );
