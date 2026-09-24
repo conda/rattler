@@ -5531,6 +5531,7 @@ dependencies = [
  "aws-credential-types",
  "aws-sdk-s3",
  "aws-smithy-http-client",
+ "aws-smithy-types",
  "clap",
  "rattler_networking",
  "serde",
