@@ -4442,6 +4442,7 @@ dependencies = [
  "aws-sdk-s3",
  "aws-smithy-http-client",
  "clap",
+ "opendal",
  "rattler_networking",
  "serde",
  "thiserror 2.0.20",
