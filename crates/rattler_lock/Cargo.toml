@@ -18,6 +18,7 @@ indexmap = { workspace = true, features = ["serde"] }
 itertools = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
+rattler_redaction = { workspace = true, default-features = false }
 rattler_solve = { workspace = true, default-features = false, features = ["serde"] }
 file_url = { workspace = true }
 pep508_rs = { workspace = true }
@@ -39,3 +40,4 @@ insta = { workspace = true, features = ["yaml"] }
 serde_json = { workspace = true }
 similar-asserts = { workspace = true }
 rstest = { workspace = true }
+tempfile = { workspace = true }
