@@ -72,7 +72,21 @@ from rattler.sigstore import (
 from rattler.solver import solve, solve_with_sparse_repodata
 from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version
 from rattler.version import Version, VersionSpec, VersionWithSource
-from rattler.virtual_package import GenericVirtualPackage, Override, VirtualPackage, VirtualPackageOverrides
+from rattler.virtual_package import (
+    ConsentRequest,
+    DetectionOutcome,
+    DetectorFailure,
+    DetectorRegistration,
+    DetectorRegistrations,
+    DetectorResult,
+    GenericVirtualPackage,
+    Override,
+    RejectedDetectorRegistration,
+    SkippedRegistration,
+    VirtualPackage,
+    VirtualPackageOverrides,
+    detect_virtual_packages,
+)
 
 __version__ = _get_rattler_version()
 del _get_rattler_version
@@ -92,7 +106,13 @@ __all__ = [
     "CondaLockedPackage",
     "CondaLockedSourcePackage",
     "Config",
+    "ConsentRequest",
     "Dependent",
+    "DetectionOutcome",
+    "DetectorFailure",
+    "DetectorRegistration",
+    "DetectorRegistrations",
+    "DetectorResult",
     "Environment",
     "FileMode",
     "Gateway",
@@ -129,6 +149,7 @@ __all__ = [
     "PrefixRecord",
     "Publisher",
     "PypiLockedPackage",
+    "RejectedDetectorRegistration",
     "RemovedPackage",
     "RepoData",
     "RepoDataRecord",
@@ -136,6 +157,7 @@ __all__ = [
     "RepodataRevisionMetadata",
     "RunExportsJson",
     "RunPostLinkScripts",
+    "SkippedRegistration",
     "SourceConfig",
     "SparseRepoData",
     "Subdir",
@@ -152,6 +174,7 @@ __all__ = [
     "VirtualPackage",
     "VirtualPackageOverrides",
     "WhlPackageRecord",
+    "detect_virtual_packages",
     "fetch_repo_data",
     "index",
     "install",

@@ -123,6 +123,13 @@ impl PyConfig {
         self.inner.loaded_from.clone()
     }
 
+    /// The `virtual-package-detectors` section: the detector timeout and the
+    /// consent decisions keyed by registration origin, then detector name.
+    #[getter]
+    fn virtual_package_detectors<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        to_py(py, &self.inner.virtual_package_detectors)
+    }
+
     #[getter]
     fn default_channels(&self) -> Option<Vec<String>> {
         self.inner
