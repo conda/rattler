@@ -1490,7 +1490,7 @@ mod test {
         now: u64,
     ) -> cache::CacheEnv {
         cache::CacheEnv {
-            boot_id: Some(cache::BootId::Uuid(boot.to_owned())),
+            boot_id: Some(crate::boot::BootId::Uuid(boot.to_owned())),
             driver_fingerprint: driver.map(|version| cache::DriverFingerprint::Module {
                 version: version.to_owned(),
             }),
@@ -1679,28 +1679,6 @@ mod test {
         // The same boot session still reads.
         let same_boot = fake_env("boot-A", Some("driver-1"), None, 1_000);
         assert!(cache::read_with_env(&same_boot, dir.path()).is_some());
-    }
-
-    #[test]
-    fn test_boot_time_tolerance() {
-        // The extracted numeric comparison, testable on every platform.
-        assert!(cache::boot_times_within_tolerance(1_000, 1_000));
-        assert!(cache::boot_times_within_tolerance(1_000, 1_120));
-        assert!(cache::boot_times_within_tolerance(1_120, 1_000));
-        assert!(!cache::boot_times_within_tolerance(1_000, 1_121));
-
-        // Two derived boot times match within tolerance.
-        let a = cache::BootId::BootTime(1000);
-        let b = cache::BootId::BootTime(1050);
-        assert!(a.matches(&b));
-        let c = cache::BootId::BootTime(2000);
-        assert!(!a.matches(&c));
-
-        // Boot counters must match exactly, and a boot counter never matches a boot time.
-        let count = cache::BootId::BootCount(5);
-        assert!(count.matches(&cache::BootId::BootCount(5)));
-        assert!(!count.matches(&cache::BootId::BootCount(6)));
-        assert!(!count.matches(&a));
     }
 
     #[test]
