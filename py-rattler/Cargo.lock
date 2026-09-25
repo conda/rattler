@@ -4444,8 +4444,6 @@ dependencies = [
  "clap",
  "opendal",
  "rattler_networking",
- "reqsign-aws-v4",
- "reqsign-core",
  "serde",
  "thiserror 2.0.20",
  "url",
