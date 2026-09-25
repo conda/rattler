@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from os import PathLike
@@ -84,6 +84,15 @@ class ChannelInfo:
         if relations is None:
             return None
         return ChannelRelations._from_inner(relations)
+
+    @property
+    def virtual_package_detectors(self) -> Any | None:
+        """
+        The raw ``info.virtual_package_detectors`` value: a mapping from detector
+        package name to the virtual package names it reports, as published by the
+        channel and not yet validated. ``None`` when the field is absent.
+        """
+        return self._inner.virtual_package_detectors
 
     @property
     def repodata_revisions(self) -> dict[str, RepodataRevisionMetadata]:

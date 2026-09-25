@@ -3670,6 +3670,7 @@ dependencies = [
  "astral-reqwest-retry",
  "async-trait",
  "futures",
+ "hex",
  "http 1.5.0",
  "jiff",
  "nix",
@@ -3683,6 +3684,7 @@ dependencies = [
  "pyo3-file",
  "pythonize",
  "rattler",
+ "rattler_cache",
  "rattler_conda_types",
  "rattler_config",
  "rattler_digest",
@@ -3696,12 +3698,14 @@ dependencies = [
  "rattler_shell",
  "rattler_sigstore",
  "rattler_solve",
+ "rattler_virtual_package_detectors",
  "rattler_virtual_packages",
  "reqwest",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
  "tokio",
+ "tracing",
  "url",
 ]
 
@@ -4345,6 +4349,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_prefix_guard"
+version = "0.1.2"
+dependencies = [
+ "fs-err",
+ "libc",
+ "serde",
+ "serde_json",
+ "tokio",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "rattler_pty"
 version = "0.2.17"
 dependencies = [
@@ -4506,6 +4522,37 @@ dependencies = [
  "thiserror 2.0.20",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "rattler_virtual_package_detectors"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "fs-err",
+ "futures",
+ "hex",
+ "indexmap 2.14.0",
+ "libc",
+ "rattler",
+ "rattler_cache",
+ "rattler_conda_types",
+ "rattler_config",
+ "rattler_digest",
+ "rattler_networking",
+ "rattler_prefix_guard",
+ "rattler_repodata_gateway",
+ "rattler_shell",
+ "rattler_solve",
+ "rattler_virtual_packages",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "url",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

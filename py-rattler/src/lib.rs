@@ -28,6 +28,7 @@ mod subdir;
 mod utils;
 mod version;
 mod virtual_package;
+mod virtual_package_detectors;
 mod who_needs;
 
 mod exceptions;
@@ -49,7 +50,7 @@ use exceptions::{
     IoError, LinkError, LockFileError, PackageNameMatcherParseError, ParseArchError,
     ParseCondaLockError, ParseExplicitEnvironmentSpecError, ParseSubdirError, RequirementError,
     ShellError, SolverError, TransactionError, ValidatePackageRecordsError, VersionBumpError,
-    VersionExtendError,
+    VersionExtendError, VirtualPackageOverrideError,
 };
 use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
 use generic_virtual_package::PyGenericVirtualPackage;
@@ -94,6 +95,11 @@ use solver::{py_solve, py_solve_with_sparse_repodata};
 use subdir::{PyArch, PySubdir};
 use version::{PyVersion, PyVersionSpec};
 use virtual_package::{PyOverride, PyVirtualPackage, PyVirtualPackageOverrides};
+use virtual_package_detectors::{
+    PyConsentRequest, PyDetectionOutcome, PyDetectorFailure, PyDetectorRegistration,
+    PyDetectorResult, PyRejectedDetectorRegistration, PySkippedRegistration,
+    py_detect_virtual_packages,
+};
 use who_needs::PyDependent;
 
 #[cfg(feature = "pty")]
@@ -181,6 +187,14 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyOverride>()?;
     m.add_class::<PyVirtualPackageOverrides>()?;
     m.add_class::<PyVirtualPackage>()?;
+    m.add_class::<PyDetectorRegistration>()?;
+    m.add_class::<PyRejectedDetectorRegistration>()?;
+    m.add_class::<PyConsentRequest>()?;
+    m.add_class::<PyDetectorResult>()?;
+    m.add_class::<PyDetectorFailure>()?;
+    m.add_class::<PySkippedRegistration>()?;
+    m.add_class::<PyDetectionOutcome>()?;
+    m.add_function(wrap_pyfunction!(py_detect_virtual_packages, &m)?)?;
     m.add_class::<PyPrefixPathsEntry>()?;
     m.add_class::<PyPrefixPathType>()?;
     m.add_class::<PyPrefixPaths>()?;
@@ -232,6 +246,10 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
 
     // Exceptions
     m.add("InvalidVersionError", py.get_type::<InvalidVersionError>())?;
+    m.add(
+        "VirtualPackageOverrideError",
+        py.get_type::<VirtualPackageOverrideError>(),
+    )?;
     m.add(
         "InvalidVersionSpecError",
         py.get_type::<InvalidVersionSpecError>(),

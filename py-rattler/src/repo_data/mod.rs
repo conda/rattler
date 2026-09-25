@@ -161,6 +161,23 @@ impl PyChannelInfo {
     pub fn channel_relations(&self) -> Option<PyChannelRelations> {
         self.inner.channel_relations.clone().map(Into::into)
     }
+
+    /// The raw `info.virtual_package_detectors` value, unvalidated, or `None`
+    /// when the field is absent.
+    #[getter]
+    pub fn virtual_package_detectors<'py>(
+        &self,
+        py: pyo3::Python<'py>,
+    ) -> PyResult<Option<pyo3::Bound<'py, pyo3::PyAny>>> {
+        self.inner
+            .virtual_package_detectors
+            .as_ref()
+            .map(|value| {
+                pythonize::pythonize(py, value)
+                    .map_err(|err| pyo3::exceptions::PyValueError::new_err(err.to_string()))
+            })
+            .transpose()
+    }
 }
 
 /// Python wrapper around [`ChannelRelations`] — see
