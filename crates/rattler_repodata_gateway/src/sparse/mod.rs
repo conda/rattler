@@ -602,6 +602,20 @@ impl SparseRepoData {
             .channel_relations
             .as_ref()
     }
+
+    /// The raw `info.virtual_package_detectors` value, if the field is present.
+    ///
+    /// The value is not validated; use
+    /// [`SubdirDetectorRegistrations::parse`](rattler_conda_types::virtual_package_detector::SubdirDetectorRegistrations::parse)
+    /// for that.
+    pub fn virtual_package_detectors(&self) -> Option<&serde_json::Value> {
+        self.inner
+            .borrow_repo_data()
+            .info
+            .as_ref()?
+            .virtual_package_detectors
+            .as_ref()
+    }
 }
 
 /// A serde compatible struct that only sparsely parses a repodata.json file.
