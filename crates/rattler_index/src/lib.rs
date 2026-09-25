@@ -31,8 +31,6 @@ use indexmap::IndexMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 #[cfg(feature = "s3")]
 use opendal::layers::RetryLayer;
-#[cfg(feature = "s3")]
-use opendal::services::S3Config;
 use opendal::{Configurator, Operator, services::FsConfig};
 use rattler_conda_types::{
     ChannelInfo, ChannelNotice, ChannelNotices, ChannelRelations, MatchSpec, PackageRecord,
@@ -55,7 +53,7 @@ use rattler_package_streaming::{
     seek::{self, stream_conda_content},
 };
 #[cfg(feature = "s3")]
-use rattler_s3::ResolvedS3Credentials;
+use rattler_s3::S3CredentialSource;
 use retry_policies::{Jitter, RetryDecision, RetryPolicy, policies::ExponentialBackoff};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -1785,8 +1783,8 @@ pub async fn index_fs_with_channel_metadata(
 pub struct IndexS3Config {
     /// The channel to index.
     pub channel: Url,
-    /// The resolved credentials to use for S3 access.
-    pub credentials: ResolvedS3Credentials,
+    /// Where the credentials to use for S3 access come from.
+    pub credentials: S3CredentialSource,
     /// The target platform to index.
     pub target_platform: Option<Platform>,
     /// The path to a repodata patch to apply to the index.
@@ -1809,26 +1807,19 @@ pub struct IndexS3Config {
     pub precondition_checks: PreconditionChecks,
 }
 
+/// Create an operator for the channel at the given S3 URL.
+///
+/// The operator asks `credentials` for a new set whenever the ones it holds are
+/// about to expire, so indexing a large channel keeps working past the lifetime
+/// of temporary credentials.
 #[cfg(feature = "s3")]
-fn s3_config(
-    credentials: &ResolvedS3Credentials,
-    channel: &Url,
-) -> Result<S3Config, anyhow::Error> {
-    let mut s3_config = S3Config::default();
-    s3_config.root = Some(channel.path().to_string());
-    s3_config.bucket = channel
+fn s3_operator(credentials: &S3CredentialSource, channel: &Url) -> Result<Operator, anyhow::Error> {
+    let bucket = channel
         .host_str()
-        .ok_or(anyhow::anyhow!("No bucket in S3 URL"))?
-        .to_string();
-    s3_config.region = Some(credentials.region.clone());
-    s3_config.endpoint = Some(credentials.endpoint_url.to_string());
-    s3_config.secret_access_key = Some(credentials.secret_access_key.clone());
-    s3_config.access_key_id = Some(credentials.access_key_id.clone());
-    s3_config.session_token = credentials.session_token.clone();
-    s3_config.enable_virtual_host_style =
-        credentials.addressing_style == rattler_s3::S3AddressingStyle::VirtualHost;
+        .ok_or(anyhow::anyhow!("No bucket in S3 URL"))?;
+    let builder = credentials.opendal_builder(bucket, channel.path());
 
-    Ok(s3_config)
+    Ok(Operator::new(builder)?.layer(RetryLayer::new()).finish())
 }
 
 /// Create a new `repodata.json` for all packages in the channel at the given S3
@@ -1858,10 +1849,7 @@ pub async fn index_s3_with_channel_metadata(
     }: IndexS3Config,
     channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<()> {
-    // Create the S3 configuration for opendal.
-    let s3_config = s3_config(&credentials, &channel)?;
-    let builder = s3_config.into_builder();
-    let op = Operator::new(builder)?.layer(RetryLayer::new()).finish();
+    let op = s3_operator(&credentials, &channel)?;
 
     index_with_channel_metadata(
         target_platform,
@@ -2189,7 +2177,7 @@ pub async fn ensure_channel_initialized_fs_with_channel_metadata(
 #[cfg(feature = "s3")]
 pub async fn ensure_channel_initialized_s3(
     channel: &Url,
-    credentials: &ResolvedS3Credentials,
+    credentials: &S3CredentialSource,
 ) -> anyhow::Result<()> {
     ensure_channel_initialized_s3_with_channel_metadata(
         channel,
@@ -2204,14 +2192,10 @@ pub async fn ensure_channel_initialized_s3(
 #[cfg(feature = "s3")]
 pub async fn ensure_channel_initialized_s3_with_channel_metadata(
     channel: &Url,
-    credentials: &ResolvedS3Credentials,
+    credentials: &S3CredentialSource,
     channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<()> {
-    let s3_config = s3_config(credentials, channel)?;
-
-    let op = Operator::new(s3_config.into_builder())?
-        .layer(RetryLayer::new())
-        .finish();
+    let op = s3_operator(credentials, channel)?;
     ensure_channel_initialized_with_channel_metadata(&op, channel_metadata).await
 }
 
