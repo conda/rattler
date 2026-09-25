@@ -22,6 +22,7 @@ mod run_export;
 pub mod subdir;
 pub mod utils;
 pub mod version_spec;
+pub mod virtual_package_detector;
 
 pub mod compression_level;
 mod environment_yaml;

@@ -265,6 +265,7 @@ mod tests {
                     created_at: Some(jiff::Timestamp::now()),
                     repodata_revisions: RepodataRevisions::default(),
                     channel_relations: None,
+                    virtual_package_detectors: None,
                 },
                 shards,
             };

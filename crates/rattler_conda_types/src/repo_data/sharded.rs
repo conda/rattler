@@ -60,6 +60,16 @@ pub struct ShardedSubdirInfo {
     /// [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
     #[serde(default, skip_serializing_if = "ChannelRelations::is_none_or_empty")]
     pub channel_relations: Option<ChannelRelations>,
+
+    /// The virtual package detectors the channel registers for this subdir,
+    /// with the same schema and semantics as the field in
+    /// [`ChannelInfo`](crate::ChannelInfo).
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::virtual_package_detector::deserialize_present"
+    )]
+    pub virtual_package_detectors: Option<serde_json::Value>,
 }
 
 #[cfg(test)]
@@ -121,6 +131,7 @@ mod tests {
                 created_at: None,
                 repodata_revisions: IndexMap::default(),
                 channel_relations: None,
+                virtual_package_detectors: None,
             },
             shards: ahash::HashMap::default(),
         };
@@ -160,6 +171,7 @@ mod tests {
                 created_at: None,
                 repodata_revisions: IndexMap::default(),
                 channel_relations,
+                virtual_package_detectors: None,
             };
             let json = serde_json::to_string(&info).unwrap();
             assert!(!json.contains("channel_relations"));

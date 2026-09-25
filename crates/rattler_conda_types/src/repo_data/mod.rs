@@ -107,6 +107,17 @@ pub struct ChannelInfo {
     /// [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
     #[serde(default, skip_serializing_if = "ChannelRelations::is_none_or_empty")]
     pub channel_relations: Option<ChannelRelations>,
+
+    /// The virtual package detectors the channel registers for this subdir,
+    /// kept as opaque JSON so an invalid registration never prevents parsing
+    /// the repodata. Validate it with
+    /// [`SubdirDetectorRegistrations::parse`](crate::virtual_package_detector::SubdirDetectorRegistrations::parse).
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::virtual_package_detector::deserialize_present"
+    )]
+    pub virtual_package_detectors: Option<serde_json::Value>,
 }
 
 /// Repodata revisions keyed by revision, mirroring the `vN` dictionary of the
@@ -1367,6 +1378,7 @@ mod test {
                     base: Some("../conda-forge".to_string()),
                     overrides: None,
                 }),
+                virtual_package_detectors: None,
             }),
             packages: IndexMap::default(),
             conda_packages: IndexMap::default(),
@@ -1389,6 +1401,7 @@ mod test {
                     base_url: None,
                     repodata_revisions: IndexMap::default(),
                     channel_relations,
+                    virtual_package_detectors: None,
                 }),
                 packages: IndexMap::default(),
                 conda_packages: IndexMap::default(),
@@ -1398,6 +1411,58 @@ mod test {
             let json = serde_json::to_string(&repodata).unwrap();
             assert!(!json.contains("channel_relations"));
         }
+    }
+
+    #[test]
+    fn test_virtual_package_detectors_round_trip() {
+        let raw = r#"{
+            "info": {
+                "subdir": "linux-64",
+                "virtual_package_detectors": {
+                    "mpi-detect": ["__conda_forge_openmpi", "__conda_forge_mpich"]
+                }
+            },
+            "packages": {},
+            "packages.conda": {}
+        }"#;
+        let repodata: RepoData = serde_json::from_str(raw).unwrap();
+        let detectors = repodata
+            .info
+            .as_ref()
+            .and_then(|info| info.virtual_package_detectors.as_ref())
+            .unwrap();
+        assert_eq!(
+            detectors,
+            &serde_json::json!({
+                "mpi-detect": ["__conda_forge_openmpi", "__conda_forge_mpich"]
+            })
+        );
+
+        // Invalid registrations are kept verbatim so the rest of the repodata
+        // still parses.
+        let raw = r#"{"info": {"subdir": "linux-64", "virtual_package_detectors": null}, "packages": {}}"#;
+        let repodata: RepoData = serde_json::from_str(raw).unwrap();
+        assert_eq!(
+            repodata.info.as_ref().unwrap().virtual_package_detectors,
+            Some(serde_json::Value::Null)
+        );
+
+        let json = serde_json::to_string(&repodata).unwrap();
+        assert!(json.contains("\"virtual_package_detectors\":null"));
+        assert_eq!(serde_json::from_str::<RepoData>(&json).unwrap(), repodata);
+
+        let without = RepoData {
+            info: Some(ChannelInfo {
+                subdir: Some("linux-64".to_string()),
+                base_url: None,
+                repodata_revisions: IndexMap::default(),
+                channel_relations: None,
+                virtual_package_detectors: None,
+            }),
+            ..repodata
+        };
+        let json = serde_json::to_string(&without).unwrap();
+        assert!(!json.contains("virtual_package_detectors"));
     }
 
     #[test]
