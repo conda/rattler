@@ -87,6 +87,9 @@ regex = { workspace = true, optional = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+# Lets the S3 middleware tests implement a credential provider of their own;
+# `aws-sdk-s3` re-exports the trait but not the future its method returns.
+aws-credential-types = { workspace = true }
 insta = { workspace = true, features = ["json"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "time"] }
