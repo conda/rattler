@@ -15,7 +15,7 @@ use crate::{
 use pyo3::exceptions::PyValueError;
 use pythonize::depythonize;
 use rattler_networking::AuthenticationStorage;
-use rattler_s3::{ResolvedS3Credentials, S3Credentials};
+use rattler_s3::{S3CredentialSource, S3Credentials};
 use std::path::PathBuf;
 
 fn parse_package_revision_assignment(value: &str) -> PyResult<PackageRevisionAssignment> {
@@ -176,8 +176,9 @@ pub fn py_index_s3<'py>(
             match credentials {
                 Some((credentials, auth_storage)) => credentials
                     .resolve(&channel_url, &auth_storage)
+                    .map(S3CredentialSource::from)
                     .ok_or_else(|| PyValueError::new_err("could not resolve s3 credentials"))?,
-                None => ResolvedS3Credentials::from_sdk()
+                None => S3CredentialSource::from_sdk()
                     .await
                     .map_err(PyRattlerError::from)?,
             };
