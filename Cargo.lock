@@ -5724,6 +5724,7 @@ name = "rattler_virtual_packages"
 version = "8.0.1"
 dependencies = [
  "archspec",
+ "libc",
  "libloading 0.9.0",
  "nom 8.0.0",
  "once_cell",

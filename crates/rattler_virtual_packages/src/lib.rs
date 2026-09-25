@@ -33,6 +33,7 @@
 //! example.
 
 pub mod amdgpu;
+pub mod boot;
 pub mod cuda;
 pub mod defaults;
 pub mod libc;

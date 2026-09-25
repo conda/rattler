@@ -4513,6 +4513,7 @@ name = "rattler_virtual_packages"
 version = "8.0.1"
 dependencies = [
  "archspec",
+ "libc",
  "libloading",
  "nom",
  "once_cell",

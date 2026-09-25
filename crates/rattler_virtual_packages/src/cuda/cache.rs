@@ -16,6 +16,7 @@
 //! file or use the `CONDA_OVERRIDE_CUDA*` variables to bypass it.
 
 use super::{CudaArchInfo, CudaDetectionMethod, CudaInfo, CudaInfoSources, DetectedCudaInfo};
+use crate::boot::BootId;
 #[cfg(target_os = "windows")]
 use crate::win;
 use rattler_conda_types::Version;
@@ -37,110 +38,6 @@ const ARCH_MISSING_TTL_SECS: u64 = 10 * 60;
 /// Reject entries whose write time is further than this into the future, which means the clock
 /// stepped backwards and the recorded `written_at` can no longer be trusted for the TTL.
 const MAX_CLOCK_SKEW_SECS: u64 = 5 * 60;
-
-/// Identifies a single boot session of the machine.
-///
-/// All variants are compiled on every platform so the comparison logic can be unit-tested
-/// anywhere; `current` only ever produces the variants that exist on the host platform.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(super) enum BootId {
-    /// The kernel's per-boot UUID from `/proc/sys/kernel/random/boot_id` (Linux).
-    Uuid(String),
-    /// The prefetcher boot counter from the registry, incremented once per boot (Windows).
-    BootCount(u32),
-    /// A boot time in unix seconds derived from the uptime (Windows fallback). The derivation
-    /// drifts a little between processes, which `matches` absorbs with a tolerance.
-    BootTime(u64),
-}
-
-impl BootId {
-    /// Returns the identifier of the current boot session, or `None` if it cannot be determined
-    /// (in which case no caching takes place).
-    pub(super) fn current() -> Option<Self> {
-        #[cfg(target_os = "linux")]
-        {
-            // The kernel generates a fresh UUID on every boot.
-            let id = std::fs::read_to_string("/proc/sys/kernel/random/boot_id").ok()?;
-            Some(Self::Uuid(id.trim().to_owned()))
-        }
-        #[cfg(target_os = "windows")]
-        {
-            // Prefer the prefetcher boot counter: it increments exactly once per boot and involves
-            // no clock arithmetic, so it cannot be confused by reboots or clock steps.
-            if let Some(count) = windows_boot_count() {
-                return Some(Self::BootCount(count));
-            }
-            // Fall back to deriving the boot time from the uptime.
-            let uptime_secs =
-                unsafe { windows_sys::Win32::System::SystemInformation::GetTickCount64() } / 1000;
-            let now_secs = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .ok()?
-                .as_secs();
-            Some(Self::BootTime(now_secs.checked_sub(uptime_secs)?))
-        }
-        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
-        {
-            None
-        }
-    }
-
-    /// Returns true if both identifiers refer to the same boot session.
-    pub(super) fn matches(&self, other: &Self) -> bool {
-        match (self, other) {
-            // Two derived boot times can drift a few seconds between processes; treat them as the
-            // same session when they are within tolerance.
-            (Self::BootTime(a), Self::BootTime(b)) => boot_times_within_tolerance(*a, *b),
-            // Everything else (boot UUIDs, boot counters, or mixed kinds) must match exactly; two
-            // different kinds never refer to the same session.
-            _ => self == other,
-        }
-    }
-}
-
-/// Returns true if two `boottime:` second values are close enough to be the same boot session.
-///
-/// Extracted as a plain function (not `cfg(windows)`-gated) so the tolerance logic is compiled and
-/// unit-tested on every platform. A real reboot shifts the derived boot time by at least the
-/// previous uptime, which is far larger than this tolerance.
-pub(super) fn boot_times_within_tolerance(a: u64, b: u64) -> bool {
-    /// The derived boot time drifts a little between processes.
-    const BOOT_TIME_TOLERANCE_SECS: u64 = 120;
-    a.abs_diff(b) <= BOOT_TIME_TOLERANCE_SECS
-}
-
-/// Reads the prefetcher boot counter from the registry, incremented once per boot.
-#[cfg(target_os = "windows")]
-fn windows_boot_count() -> Option<u32> {
-    use windows_sys::Win32::System::Registry::{
-        HKEY_LOCAL_MACHINE, RRF_RT_REG_DWORD, RegGetValueW,
-    };
-
-    fn wide(s: &str) -> Vec<u16> {
-        s.encode_utf16().chain(std::iter::once(0)).collect()
-    }
-
-    let subkey = wide(
-        "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management\\PrefetchParameters",
-    );
-    let value = wide("BootId");
-    let mut data: u32 = 0;
-    let mut data_size: u32 = std::mem::size_of::<u32>() as u32;
-    let status = unsafe {
-        RegGetValueW(
-            HKEY_LOCAL_MACHINE,
-            subkey.as_ptr(),
-            value.as_ptr(),
-            RRF_RT_REG_DWORD,
-            std::ptr::null_mut(),
-            std::ptr::addr_of_mut!(data).cast::<std::ffi::c_void>(),
-            &mut data_size,
-        )
-    };
-    // ERROR_SUCCESS
-    if status == 0 { Some(data) } else { None }
-}
 
 /// Identifies the installed NVIDIA driver.
 ///
