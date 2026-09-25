@@ -264,6 +264,8 @@ class CertificateClaims:
     build_trigger: str | None
     run_invocation_uri: str | None
     source_repository_visibility_at_signing: str | None
+    deployment_environment: str | None
+    token_subject: str | None
 
     @classmethod
     def _from_ffi(cls, claims: PyCertificateClaims) -> CertificateClaims:
@@ -282,6 +284,8 @@ class CertificateClaims:
             build_trigger=claims.build_trigger,
             run_invocation_uri=claims.run_invocation_uri,
             source_repository_visibility_at_signing=claims.source_repository_visibility_at_signing,
+            deployment_environment=claims.deployment_environment,
+            token_subject=claims.token_subject,
         )
 
 

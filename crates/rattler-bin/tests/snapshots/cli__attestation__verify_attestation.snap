@@ -11,10 +11,12 @@ Attestation: file:///[ROOT]/test-data/sigstore/agent-skill-conda-forge-0.0.21-h4
 Bundle 1 of 1
   Identity:          https://github.com/pavelzw/skill-forge/.github/workflows/package.yml@refs/heads/main
   Issuer:            https://token.actions.githubusercontent.com
+  Token subject:     repo:pavelzw/skill-forge:environment:upload
   Repository:        https://github.com/pavelzw/skill-forge (public, id 1151760276)
   Commit:            8a96d273f7245383c451499fb65375ec408ca042 on refs/heads/main
   Workflow:          .github/workflows/package.yml (trigger: push)
   Runner:            github-hosted
+  Environment:       upload
   Build:             https://github.com/pavelzw/skill-forge/actions/runs/36007002754/attempts/1
   Signed at:         2026-09-24T13:38:44Z
   Transparency log:  index 2939132933 on rekor.sigstore.dev

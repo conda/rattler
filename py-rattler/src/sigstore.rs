@@ -195,6 +195,10 @@ pub struct PyCertificateClaims {
     run_invocation_uri: Option<String>,
     #[pyo3(get)]
     source_repository_visibility_at_signing: Option<String>,
+    #[pyo3(get)]
+    deployment_environment: Option<String>,
+    #[pyo3(get)]
+    token_subject: Option<String>,
 }
 
 impl From<FulcioCiClaims> for PyCertificateClaims {
@@ -214,6 +218,8 @@ impl From<FulcioCiClaims> for PyCertificateClaims {
             build_trigger: value.build_trigger,
             run_invocation_uri: value.run_invocation_uri,
             source_repository_visibility_at_signing: value.source_repository_visibility_at_signing,
+            deployment_environment: value.deployment_environment,
+            token_subject: value.token_subject,
         }
     }
 }

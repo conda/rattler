@@ -31,7 +31,9 @@ expression: "run_verify_attestation(&[\"--format\", \"json\"])"
           "build_config_digest": "8a96d273f7245383c451499fb65375ec408ca042",
           "build_trigger": "push",
           "run_invocation_uri": "https://github.com/pavelzw/skill-forge/actions/runs/36007002754/attempts/1",
-          "source_repository_visibility_at_signing": "public"
+          "source_repository_visibility_at_signing": "public",
+          "deployment_environment": "upload",
+          "token_subject": "repo:pavelzw/skill-forge:environment:upload"
         }
       },
       "transparency_log": {

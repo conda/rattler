@@ -254,6 +254,8 @@ struct ClaimsReport {
     build_trigger: Option<String>,
     run_invocation_uri: Option<String>,
     source_repository_visibility_at_signing: Option<String>,
+    deployment_environment: Option<String>,
+    token_subject: Option<String>,
 }
 
 impl From<&FulcioCiClaims> for ClaimsReport {
@@ -275,6 +277,8 @@ impl From<&FulcioCiClaims> for ClaimsReport {
             source_repository_visibility_at_signing: claims
                 .source_repository_visibility_at_signing
                 .clone(),
+            deployment_environment: claims.deployment_environment.clone(),
+            token_subject: claims.token_subject.clone(),
         }
     }
 }
@@ -410,6 +414,12 @@ fn print_bundle(bundle: &BundleReport) {
 
     if let Some(certificate) = &bundle.certificate {
         let claims = &certificate.claims;
+        // The identity above is what the provider derived for the certificate;
+        // this is what the token it was requested with actually claimed, which
+        // is the value a provider's own documentation describes.
+        if let Some(subject) = &claims.token_subject {
+            indented("Token subject", subject);
+        }
         if let Some(repository) = &claims.source_repository_uri {
             // The identifiers do not change when a repository is renamed, so
             // they are what a trust policy should be pinned to.
@@ -451,6 +461,12 @@ fn print_bundle(bundle: &BundleReport) {
         }
         if let Some(runner) = &claims.runner_environment {
             indented("Runner", runner);
+        }
+        // The deployment environment a job ran in is what deployment protection
+        // rules hang off, so it says more about how guarded the build was than
+        // the ref does. It is absent for a job that declared no environment.
+        if let Some(environment) = &claims.deployment_environment {
+            indented("Environment", environment);
         }
         if let Some(run) = &claims.run_invocation_uri {
             indented("Build", run);
