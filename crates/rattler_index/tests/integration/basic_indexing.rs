@@ -1246,6 +1246,9 @@ async fn test_index_writes_channel_metadata() {
             base: Some("../conda-forge".to_string()),
             overrides: Some("../fallback".to_string()),
         }),
+        virtual_package_detectors: Some(serde_json::json!({
+            "mpi-detect": ["__conda_forge_openmpi", "__conda_forge_mpich"]
+        })),
         notices: Some(vec![ChannelNotice {
             id: "security-1".to_string(),
             message: "Please update demo".to_string(),
@@ -1293,6 +1296,10 @@ async fn test_index_writes_channel_metadata() {
         repodata_json["info"]["repodata_revisions"]["v3"]["n_packages"],
         0
     );
+    assert_eq!(
+        repodata_json["info"]["virtual_package_detectors"]["mpi-detect"],
+        serde_json::json!(["__conda_forge_openmpi", "__conda_forge_mpich"])
+    );
 
     let shard_index_bytes = fs::read(subdir_path.join("repodata_shards.msgpack.zst")).unwrap();
     let shard_index_bytes = zstd::decode_all(shard_index_bytes.as_slice()).unwrap();
@@ -1317,6 +1324,12 @@ async fn test_index_writes_channel_metadata() {
             .overrides
             .as_deref(),
         Some("../fallback")
+    );
+    assert_eq!(
+        shard_index.info.virtual_package_detectors,
+        Some(serde_json::json!({
+            "mpi-detect": ["__conda_forge_openmpi", "__conda_forge_mpich"]
+        }))
     );
     assert_eq!(
         shard_index.info.repodata_revisions[&RepodataRevision::V3].n_packages,
