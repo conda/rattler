@@ -118,6 +118,15 @@ impl SubdirState {
             SubdirState::NotFound => None,
         }
     }
+
+    /// The raw `info.virtual_package_detectors` value of this subdir's
+    /// repodata, or `None` if absent or the subdir was not found.
+    pub fn virtual_package_detectors(&self) -> Option<&serde_json::Value> {
+        match self {
+            SubdirState::Found(subdir) => subdir.virtual_package_detectors(),
+            SubdirState::NotFound => None,
+        }
+    }
 }
 
 /// Fetches and caches repodata records by package name for a specific
@@ -203,6 +212,12 @@ impl SubdirData {
     pub fn channel_relations(&self) -> Option<&ChannelRelations> {
         self.client.channel_relations()
     }
+
+    /// The raw `info.virtual_package_detectors` value of this subdir's
+    /// repodata, if any.
+    pub fn virtual_package_detectors(&self) -> Option<&serde_json::Value> {
+        self.client.virtual_package_detectors()
+    }
 }
 
 /// A client that can be used to fetch repodata for a specific subdirectory.
@@ -230,6 +245,12 @@ pub trait SubdirClient: Send + Sync {
     ///
     /// [CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
     fn channel_relations(&self) -> Option<&ChannelRelations> {
+        None
+    }
+
+    /// The raw `info.virtual_package_detectors` value of the subdir's
+    /// repodata, if any. Sources without repodata metadata keep the default.
+    fn virtual_package_detectors(&self) -> Option<&serde_json::Value> {
         None
     }
 }

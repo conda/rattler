@@ -321,6 +321,13 @@ impl SubdirClient for ShardedSubdir {
     fn channel_relations(&self) -> Option<&ChannelRelations> {
         self.sharded_repodata.info.channel_relations.as_ref()
     }
+
+    fn virtual_package_detectors(&self) -> Option<&serde_json::Value> {
+        self.sharded_repodata
+            .info
+            .virtual_package_detectors
+            .as_ref()
+    }
 }
 
 /// Atomically writes the shard bytes to the cache.

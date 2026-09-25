@@ -3,6 +3,7 @@ mod boxed;
 mod builder;
 mod channel_config;
 mod channel_expander;
+mod channel_expansion;
 mod channel_notices;
 mod channel_relations;
 #[cfg(not(target_arch = "wasm32"))]
@@ -19,6 +20,7 @@ mod sharded_subdir;
 mod source;
 mod subdir;
 mod subdir_builder;
+mod virtual_package_detectors_query;
 mod warning;
 mod who_needs_query;
 
@@ -48,6 +50,11 @@ pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
 pub use source::{MultiSource, MultiSourceError, RepoDataSource, Source};
 use subdir::SubdirState;
 use tracing::{Level, instrument};
+pub use virtual_package_detectors_query::{
+    AcceptedDetectorRegistration, RegistrationConflict, RegistrationConflictKind,
+    RejectedDetectorRegistration, VirtualPackageDetectorWarning, VirtualPackageDetectorsOutput,
+    VirtualPackageDetectorsQuery,
+};
 pub use warning::GatewayWarning;
 pub use who_needs_query::WhoNeedsQuery;
 
@@ -193,6 +200,35 @@ impl Gateway {
             self.inner.clone(),
             channels.into_iter().map(Into::into).collect(),
             platforms.into_iter().collect(),
+        )
+    }
+
+    /// The package cache this gateway shares with the installers it feeds.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn package_cache(&self) -> &PackageCache {
+        &self.inner.package_cache
+    }
+
+    /// Collects the virtual package detectors that `channels` and the
+    /// channels they relate to register for `subdir`.
+    ///
+    /// Registrations of `subdir` and `noarch` are combined per channel and
+    /// then accepted or rejected in CEP 42 channel order, so every accepted
+    /// virtual package name has exactly one detector. See
+    /// [`VirtualPackageDetectorsQuery`] for the options and the output.
+    pub fn virtual_package_detectors<AsChannel, ChannelIter>(
+        &self,
+        channels: ChannelIter,
+        subdir: Subdir,
+    ) -> VirtualPackageDetectorsQuery
+    where
+        AsChannel: Into<Channel>,
+        ChannelIter: IntoIterator<Item = AsChannel>,
+    {
+        VirtualPackageDetectorsQuery::new(
+            self.inner.clone(),
+            channels.into_iter().map(Into::into).collect(),
+            subdir,
         )
     }
 
