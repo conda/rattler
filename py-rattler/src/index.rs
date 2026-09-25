@@ -172,16 +172,15 @@ pub fn py_index_s3<'py>(
     let target_platform = target_platform.map(Platform::from);
     future_into_py(py, async move {
         // Resolve the credentials
-        let credentials =
-            match credentials {
-                Some((credentials, auth_storage)) => credentials
-                    .resolve(&channel_url, &auth_storage)
-                    .map(S3CredentialSource::from)
-                    .ok_or_else(|| PyValueError::new_err("could not resolve s3 credentials"))?,
-                None => S3CredentialSource::from_sdk()
-                    .await
-                    .map_err(PyRattlerError::from)?,
-            };
+        let credentials = match credentials {
+            Some((credentials, auth_storage)) => credentials
+                .resolve(&channel_url, &auth_storage)
+                .map(S3CredentialSource::from)
+                .ok_or_else(|| PyValueError::new_err("could not resolve s3 credentials"))?,
+            None => S3CredentialSource::from_sdk()
+                .await
+                .map_err(PyRattlerError::from)?,
+        };
 
         index_s3_with_channel_metadata(
             IndexS3Config {
