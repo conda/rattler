@@ -529,7 +529,9 @@ mod test {
 
     use crate::{
         DownloadReporter, GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
-        UnsupportedRepodataRevision, fetch::CacheAction, gateway::Gateway,
+        UnsupportedRepodataRevision,
+        fetch::{CacheAction, Variant},
+        gateway::{ChannelConfig as GatewayChannelConfig, Gateway},
         utils::simple_channel_server::SimpleChannelServer,
     };
     use rattler_conda_types::RepodataRevision;
@@ -594,6 +596,58 @@ mod test {
 
         let total_records: usize = records.iter().map(RepoData::len).sum();
         assert_eq!(total_records, 45060);
+    }
+
+    #[tokio::test]
+    async fn configured_repodata_variants_use_ordered_fallback() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let noarch = tempdir.path().join("noarch");
+        fs_err::create_dir_all(&noarch).unwrap();
+        let repodata = r#"{
+            "info": {"subdir": "noarch"},
+            "packages": {
+                "demo-1.0-0.tar.bz2": {
+                    "build": "0", "build_number": 0, "depends": [],
+                    "name": "demo", "noarch": "generic", "subdir": "noarch",
+                    "version": "1.0"
+                }
+            },
+            "packages.conda": {}
+        }"#;
+        fs_err::write(noarch.join("current_repodata.json"), repodata).unwrap();
+
+        let source_config = SourceConfig {
+            sharded_enabled: false,
+            repodata_variants: Some(
+                [Variant::Current, Variant::AfterPatches]
+                    .into_iter()
+                    .collect(),
+            ),
+            ..SourceConfig::default()
+        };
+        let gateway_config = GatewayChannelConfig {
+            default: source_config,
+            ..GatewayChannelConfig::default()
+        };
+        let query = |gateway: &Gateway| {
+            gateway.query(
+                vec![Channel::try_from_directory(tempdir.path()).unwrap()],
+                vec![Platform::NoArch],
+                vec![PackageName::from_str("demo").unwrap()],
+            )
+        };
+
+        let gateway = Gateway::builder()
+            .with_channel_config(gateway_config.clone())
+            .finish();
+        assert_eq!(query(&gateway).await.unwrap()[0].len(), 1);
+
+        fs_err::remove_file(noarch.join("current_repodata.json")).unwrap();
+        fs_err::write(noarch.join("repodata.json"), repodata).unwrap();
+        let gateway = Gateway::builder()
+            .with_channel_config(gateway_config)
+            .finish();
+        assert_eq!(query(&gateway).await.unwrap()[0].len(), 1);
     }
 
     #[tokio::test]
