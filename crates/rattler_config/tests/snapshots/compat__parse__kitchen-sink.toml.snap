@@ -219,6 +219,7 @@ expression: "(unused, normalized(config))"
                     base_url: None,
                     notices: None,
                     channel_relations: None,
+                    virtual_package_detectors: None,
                 },
                 per_channel: {
                     "s3://my-bucket/staging": IndexChannelConfig {
@@ -231,6 +232,7 @@ expression: "(unused, normalized(config))"
                         ),
                         notices: None,
                         channel_relations: None,
+                        virtual_package_detectors: None,
                     },
                 },
             },
@@ -246,6 +248,23 @@ expression: "(unused, normalized(config))"
             allow_ref_links: Some(
                 true,
             ),
+            virtual_package_detectors: VirtualPackageDetectorsConfig {
+                timeout_seconds: Some(
+                    60,
+                ),
+                consent: {
+                    https://conda.anaconda.org/conda-forge/: {
+                        PackageName {
+                            normalized: None,
+                            source: "cuda-detect",
+                        }: Deny,
+                        PackageName {
+                            normalized: None,
+                            source: "mpi-detect",
+                        }: Allow,
+                    },
+                },
+            },
         },
         extensions: NoExtension,
         loaded_from: [],
