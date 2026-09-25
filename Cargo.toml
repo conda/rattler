@@ -170,16 +170,16 @@ smallvec = { version = "1", features = [
   "const_generics",
   "union",
 ] }
-# Temporarily taken from a fork, for https://github.com/sigstore/sigstore-rust/pull/250:
-# the Fulcio CI claims `rattler_sigstore` reports are parsed upstream there. Move
-# back to a crates.io release once that is merged and published, which also
-# unblocks publishing `rattler_sigstore` itself.
-sigstore-sign = { git = "https://github.com/pavelzw/sigstore-rust", branch = "fulcio-ci-claims", default-features = false }
-sigstore-types = { git = "https://github.com/pavelzw/sigstore-rust", branch = "fulcio-ci-claims" }
-sigstore-verify = { git = "https://github.com/pavelzw/sigstore-rust", branch = "fulcio-ci-claims", default-features = false, features = [
+# Temporarily taken from git: the Fulcio CI claims `rattler_sigstore` reports are
+# parsed by https://github.com/sigstore/sigstore-rust/pull/250, which is merged
+# but not released yet. Move back to a crates.io release once it is published,
+# which also unblocks publishing `rattler_sigstore` itself.
+sigstore-sign = { git = "https://github.com/sigstore/sigstore-rust", branch = "main", default-features = false }
+sigstore-types = { git = "https://github.com/sigstore/sigstore-rust", branch = "main" }
+sigstore-verify = { git = "https://github.com/sigstore/sigstore-rust", branch = "main", default-features = false, features = [
   "tuf",
 ] }
-sigstore-trust-root = { git = "https://github.com/pavelzw/sigstore-rust", branch = "fulcio-ci-claims", default-features = false, features = [
+sigstore-trust-root = { git = "https://github.com/sigstore/sigstore-rust", branch = "main", default-features = false, features = [
   "tuf",
 ] }
 strum = { version = "0.28", features = ["derive"] }

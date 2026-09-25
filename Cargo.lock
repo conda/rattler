@@ -6628,7 +6628,7 @@ dependencies = [
 [[package]]
 name = "sigstore-bundle"
 version = "0.13.0"
-source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#0889ee335fef5ac609a4570f7776c133c476937a"
+source = "git+https://github.com/sigstore/sigstore-rust?branch=main#b6ca0c100400a6f51d65abdd0f6e3589a438d70f"
 dependencies = [
  "jiff",
  "serde_json",
@@ -6639,7 +6639,7 @@ dependencies = [
 [[package]]
 name = "sigstore-crypto"
 version = "0.13.0"
-source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#0889ee335fef5ac609a4570f7776c133c476937a"
+source = "git+https://github.com/sigstore/sigstore-rust?branch=main#b6ca0c100400a6f51d65abdd0f6e3589a438d70f"
 dependencies = [
  "aws-lc-rs",
  "const-oid 0.9.6",
@@ -6655,7 +6655,7 @@ dependencies = [
 [[package]]
 name = "sigstore-fulcio"
 version = "0.13.0"
-source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#0889ee335fef5ac609a4570f7776c133c476937a"
+source = "git+https://github.com/sigstore/sigstore-rust?branch=main#b6ca0c100400a6f51d65abdd0f6e3589a438d70f"
 dependencies = [
  "reqwest",
  "serde",
@@ -6669,7 +6669,7 @@ dependencies = [
 [[package]]
 name = "sigstore-merkle"
 version = "0.13.0"
-source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#0889ee335fef5ac609a4570f7776c133c476937a"
+source = "git+https://github.com/sigstore/sigstore-rust?branch=main#b6ca0c100400a6f51d65abdd0f6e3589a438d70f"
 dependencies = [
  "sigstore-crypto",
  "sigstore-types",
@@ -6679,7 +6679,7 @@ dependencies = [
 [[package]]
 name = "sigstore-oidc"
 version = "0.13.0"
-source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#0889ee335fef5ac609a4570f7776c133c476937a"
+source = "git+https://github.com/sigstore/sigstore-rust?branch=main#b6ca0c100400a6f51d65abdd0f6e3589a438d70f"
 dependencies = [
  "ambient-id",
  "base64 0.22.1",
@@ -6698,7 +6698,7 @@ dependencies = [
 [[package]]
 name = "sigstore-rekor"
 version = "0.13.0"
-source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#0889ee335fef5ac609a4570f7776c133c476937a"
+source = "git+https://github.com/sigstore/sigstore-rust?branch=main#b6ca0c100400a6f51d65abdd0f6e3589a438d70f"
 dependencies = [
  "base64 0.22.1",
  "jiff",
@@ -6713,7 +6713,7 @@ dependencies = [
 [[package]]
 name = "sigstore-sign"
 version = "0.13.0"
-source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#0889ee335fef5ac609a4570f7776c133c476937a"
+source = "git+https://github.com/sigstore/sigstore-rust?branch=main#b6ca0c100400a6f51d65abdd0f6e3589a438d70f"
 dependencies = [
  "base64 0.22.1",
  "futures-io",
@@ -6732,7 +6732,7 @@ dependencies = [
 [[package]]
 name = "sigstore-trust-root"
 version = "0.13.0"
-source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#0889ee335fef5ac609a4570f7776c133c476937a"
+source = "git+https://github.com/sigstore/sigstore-rust?branch=main#b6ca0c100400a6f51d65abdd0f6e3589a438d70f"
 dependencies = [
  "base64 0.22.1",
  "directories",
@@ -6751,7 +6751,7 @@ dependencies = [
 [[package]]
 name = "sigstore-tsa"
 version = "0.13.0"
-source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#0889ee335fef5ac609a4570f7776c133c476937a"
+source = "git+https://github.com/sigstore/sigstore-rust?branch=main#b6ca0c100400a6f51d65abdd0f6e3589a438d70f"
 dependencies = [
  "aws-lc-rs",
  "base64 0.22.1",
@@ -6774,7 +6774,7 @@ dependencies = [
 [[package]]
 name = "sigstore-tuf"
 version = "0.13.0"
-source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#0889ee335fef5ac609a4570f7776c133c476937a"
+source = "git+https://github.com/sigstore/sigstore-rust?branch=main#b6ca0c100400a6f51d65abdd0f6e3589a438d70f"
 dependencies = [
  "glob",
  "hex",
@@ -6794,7 +6794,7 @@ dependencies = [
 [[package]]
 name = "sigstore-types"
 version = "0.13.0"
-source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#0889ee335fef5ac609a4570f7776c133c476937a"
+source = "git+https://github.com/sigstore/sigstore-rust?branch=main#b6ca0c100400a6f51d65abdd0f6e3589a438d70f"
 dependencies = [
  "base64 0.22.1",
  "hex",
@@ -6808,7 +6808,7 @@ dependencies = [
 [[package]]
 name = "sigstore-verify"
 version = "0.13.0"
-source = "git+https://github.com/pavelzw/sigstore-rust?branch=fulcio-ci-claims#0889ee335fef5ac609a4570f7776c133c476937a"
+source = "git+https://github.com/sigstore/sigstore-rust?branch=main#b6ca0c100400a6f51d65abdd0f6e3589a438d70f"
 dependencies = [
  "base64 0.22.1",
  "const-oid 0.9.6",
