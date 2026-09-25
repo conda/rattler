@@ -277,6 +277,42 @@ async fn verify_real_bundle_offline() {
         "{:?}",
         attestation.warnings
     );
+
+    // The signing certificate locates the package in the source it was built
+    // from, and the log entry locates the signature in a public log.
+    let claims = attestation.claims().expect("a CI signing certificate");
+    assert_eq!(
+        claims.source_repository_uri.as_deref(),
+        Some("https://github.com/hunger/octoconda")
+    );
+    assert_eq!(
+        claims.run_invocation_uri.as_deref(),
+        Some("https://github.com/hunger/octoconda/actions/runs/23778256205/attempts/1")
+    );
+    assert_eq!(claims.runner_environment.as_deref(), Some("github-hosted"));
+
+    // Fulcio issues certificates with a ten minute lifetime, which is why
+    // `not_before` is a usable approximation of the signing time.
+    let certificate = attestation
+        .certificate
+        .as_ref()
+        .expect("a Fulcio signing certificate");
+    assert_eq!(
+        certificate.not_after.duration_since(certificate.not_before),
+        jiff::SignedDuration::from_mins(10)
+    );
+
+    assert_eq!(attestation.log_index(), Some(1_202_156_555));
+    assert_eq!(
+        attestation.log_origin(),
+        Some("rekor.sigstore.dev - 1193050959916656506")
+    );
+
+    let checks = attestation.checks;
+    assert!(checks.certificate_chain);
+    assert!(checks.signed_certificate_timestamp);
+    assert!(checks.transparency_log);
+    assert!(checks.inclusion_proof);
 }
 
 #[tokio::test]
@@ -318,7 +354,13 @@ async fn verify_checks_target_channel() {
     )
     .unwrap();
     assert!(strict.verified.is_empty());
-    assert!(strict.rejected[0].reason.contains("targets channel"));
+    // Both channels are rendered as URLs, not as `Url`'s `Debug` output, and in
+    // the normalized form they were compared in.
+    assert_eq!(
+        strict.rejected[0].reason,
+        "the attestation targets channel https://prefix.dev/github-releases \
+         but the package was retrieved from https://mirror.example.com/github-releases"
+    );
 
     let warn = verify_bundles(
         &record,

@@ -7,9 +7,11 @@ from urllib.parse import urlsplit
 
 from rattler.networking import Client
 from rattler.rattler import (
+    PyCertificateClaims,
     PyTrustedRoot,
     PyVerificationOutcome,
     PyVerificationPolicy,
+    PyVerifiedChecks,
     py_verify_attestation,
 )
 from rattler.repo_data import RepoDataRecord
@@ -69,7 +71,7 @@ class TrustedRoot:
     Verification normally loads the production trusted root over TUF, which
     needs network access. Supplying one of these instead makes verification use
     the given trust material, so it can run against a pinned
-    ``trusted_root.json``.
+    ``trusted_root.json`` or against the snapshot embedded in py-rattler.
     """
 
     def __init__(self, inner: PyTrustedRoot) -> None:
@@ -102,6 +104,30 @@ class TrustedRoot:
                 Sigstore trusted root.
         """
         return cls(PyTrustedRoot.from_path(os.fspath(path)))
+
+    @classmethod
+    def embedded(cls) -> TrustedRoot:
+        """Return the trust anchors of the public good instance that ship with py-rattler.
+
+        This is the root to reach for when `tuf-repo-cdn.sigstore.dev` cannot be
+        reached, not a general way to avoid the network. It is a snapshot taken
+        when py-rattler's Sigstore dependencies were released, so unlike the
+        root loaded over TUF it does not pick up key rotations or revocations
+        and ages with the installed version of py-rattler. Prefer
+        [`TrustedRoot.from_path`][rattler.sigstore.TrustedRoot.from_path] with a
+        `trusted_root.json` you refresh yourself if you need a pinned root that
+        can be updated independently.
+
+        Examples
+        --------
+        ```python
+        >>> root = TrustedRoot.embedded()
+        >>> root
+        TrustedRoot()
+        >>>
+        ```
+        """
+        return cls(PyTrustedRoot.embedded())
 
     def __repr__(self) -> str:
         """Return a string representation of this trusted root.
@@ -215,14 +241,94 @@ class VerificationPolicy:
 
 
 @dataclass(frozen=True)
+class CertificateClaims:
+    """The claims a Fulcio signing certificate makes about the CI workload that signed a package.
+
+    Every claim is optional: Sigstore only records them for a certificate issued
+    to a CI workload, and which of them are set depends on the identity
+    provider. The names are provider-neutral, so GitHub Actions, GitLab CI and
+    Buildkite all populate the same claims.
+    """
+
+    build_signer_uri: str | None
+    build_signer_digest: str | None
+    runner_environment: str | None
+    source_repository_uri: str | None
+    source_repository_digest: str | None
+    source_repository_ref: str | None
+    source_repository_identifier: str | None
+    source_repository_owner_uri: str | None
+    source_repository_owner_identifier: str | None
+    build_config_uri: str | None
+    build_config_digest: str | None
+    build_trigger: str | None
+    run_invocation_uri: str | None
+    source_repository_visibility_at_signing: str | None
+    deployment_environment: str | None
+    token_subject: str | None
+
+    @classmethod
+    def _from_ffi(cls, claims: PyCertificateClaims) -> CertificateClaims:
+        return cls(
+            build_signer_uri=claims.build_signer_uri,
+            build_signer_digest=claims.build_signer_digest,
+            runner_environment=claims.runner_environment,
+            source_repository_uri=claims.source_repository_uri,
+            source_repository_digest=claims.source_repository_digest,
+            source_repository_ref=claims.source_repository_ref,
+            source_repository_identifier=claims.source_repository_identifier,
+            source_repository_owner_uri=claims.source_repository_owner_uri,
+            source_repository_owner_identifier=claims.source_repository_owner_identifier,
+            build_config_uri=claims.build_config_uri,
+            build_config_digest=claims.build_config_digest,
+            build_trigger=claims.build_trigger,
+            run_invocation_uri=claims.run_invocation_uri,
+            source_repository_visibility_at_signing=claims.source_repository_visibility_at_signing,
+            deployment_environment=claims.deployment_environment,
+            token_subject=claims.token_subject,
+        )
+
+
+@dataclass(frozen=True)
+class VerifiedChecks:
+    """Which parts of the Sigstore verification of a bundle were performed."""
+
+    certificate_chain: bool
+    signed_certificate_timestamp: bool
+    transparency_log: bool
+    inclusion_proof: bool
+
+    @classmethod
+    def _from_ffi(cls, checks: PyVerifiedChecks) -> VerifiedChecks:
+        return cls(
+            certificate_chain=checks.certificate_chain,
+            signed_certificate_timestamp=checks.signed_certificate_timestamp,
+            transparency_log=checks.transparency_log,
+            inclusion_proof=checks.inclusion_proof,
+        )
+
+
+@dataclass(frozen=True)
 class VerifiedAttestation:
-    """A Sigstore bundle that passed signature, CEP 27, and publisher checks."""
+    """A Sigstore bundle that passed signature, [CEP 27], and publisher checks.
+
+    [CEP 27]: https://conda.org/learn/ceps/cep-0027
+    """
 
     index: int
     identity: str | None
     issuer: str | None
     integrated_time: str | None
     target_channel: str | None
+    claims: CertificateClaims | None
+    """The claims of the signing certificate, if it was issued to a CI workload."""
+    signed_at: str | None
+    """When the signing certificate was issued, which approximates the signing time."""
+    log_index: int | None
+    """The index that identifies the signature within its transparency log."""
+    log_origin: str | None
+    """The name the transparency log gives itself in its signed checkpoint."""
+    checks: VerifiedChecks
     warnings: list[str]
 
 
@@ -242,12 +348,18 @@ class VerificationOutcome:
         attestation = outcome.attestation
         verified = None
         if attestation is not None:
+            claims = attestation.claims
             verified = VerifiedAttestation(
                 index=attestation.index,
                 identity=attestation.identity,
                 issuer=attestation.issuer,
                 integrated_time=attestation.integrated_time,
                 target_channel=attestation.target_channel,
+                claims=None if claims is None else CertificateClaims._from_ffi(claims),
+                signed_at=attestation.signed_at,
+                log_index=attestation.log_index,
+                log_origin=attestation.log_origin,
+                checks=VerifiedChecks._from_ffi(attestation.checks),
                 warnings=attestation.warnings,
             )
         return cls(attestation=verified, warnings=outcome.warnings)

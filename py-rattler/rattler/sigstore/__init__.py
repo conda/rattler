@@ -1,4 +1,5 @@
 from rattler.sigstore.sigstore import (
+    CertificateClaims,
     ChannelCheck,
     Issuer,
     Publisher,
@@ -7,10 +8,12 @@ from rattler.sigstore.sigstore import (
     VerificationOutcome,
     VerificationPolicy,
     VerifiedAttestation,
+    VerifiedChecks,
     verify_attestation,
 )
 
 __all__ = [
+    "CertificateClaims",
     "ChannelCheck",
     "Issuer",
     "Publisher",
@@ -19,5 +22,6 @@ __all__ = [
     "VerificationOutcome",
     "VerificationPolicy",
     "VerifiedAttestation",
+    "VerifiedChecks",
     "verify_attestation",
 ]

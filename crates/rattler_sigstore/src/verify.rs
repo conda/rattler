@@ -7,10 +7,15 @@
 //!    binding between the in-toto subject digest and the package SHA256),
 //!    performed by `sigstore-verify` against the package record's `sha256`.
 //!    The package archive itself is never needed.
-//! 2. The CEP 27 checks on the in-toto statement: the predicate type must be
-//!    the conda publish predicate, the subject name must equal the package
-//!    filename and, depending on the [`ChannelCheck`], the `targetChannel`
-//!    must match the channel the package was retrieved from.
+//! 2. The [CEP 27](https://conda.org/learn/ceps/cep-0027) checks on the in-toto
+//!    statement: the predicate type must be the conda publish predicate, the
+//!    subject name must equal the package filename and, depending on the
+//!    [`ChannelCheck`], the `targetChannel` must match the channel the package
+//!    was retrieved from.
+//!
+//! [CEP 50](https://conda.org/learn/ceps/cep-0050) governs how the sidecar is
+//! distributed but adds no publish-attestation verification rules, so only the
+//! CEP 27 rules apply here.
 //!
 //! Which signing identities are trusted is decided afterwards by the
 //! [`VerificationPolicy`].
@@ -20,9 +25,11 @@ use rattler_conda_types::RepoDataRecord;
 use rattler_redaction::Redact;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::Deserialize;
-use sigstore_types::{Artifact, Bundle, SignatureContent, intoto::Subject};
+use sigstore_types::{Artifact, Bundle, SignatureContent, TransparencyLogEntry, intoto::Subject};
 use sigstore_verify::{
-    VerificationPolicy as SigstoreVerificationPolicy, Verifier, trust_root::TrustedRoot,
+    VerificationPolicy as SigstoreVerificationPolicy, VerificationResult, Verifier,
+    crypto::{CertificateInfo, FulcioCiClaims},
+    trust_root::{SigstoreInstance, TrustedRoot},
 };
 use tokio::sync::OnceCell;
 use url::Url;
@@ -60,6 +67,7 @@ pub struct CondaPublishPredicate {
 
 /// An attestation that passed Sigstore verification and the CEP 27 checks.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct VerifiedAttestation {
     /// The index of the bundle in the sidecar.
     pub index: usize,
@@ -67,13 +75,91 @@ pub struct VerifiedAttestation {
     pub identity: Option<String>,
     /// The OIDC issuer of the signing certificate.
     pub issuer: Option<String>,
-    /// The time at which the signature was integrated into the transparency
-    /// log.
+    /// The authenticated time at which the signature was integrated into the
+    /// transparency log.
+    ///
+    /// Unlike [`TransparencyLogEntry::integrated_time`] of [`Self::log_entry`],
+    /// which is an unverified claim of the bundle, this is only set when log
+    /// inclusion was actually verified.
     pub integrated_time: Option<Timestamp>,
     /// The `targetChannel` recorded in the attestation, if any.
     pub target_channel: Option<String>,
+    /// The signing certificate the signature was verified against: its validity
+    /// window and the claims it makes about the CI workload that signed the
+    /// package.
+    ///
+    /// Fulcio issues short-lived certificates, so
+    /// [`not_before`](CertificateInfo::not_before) is within seconds of the
+    /// moment the package was signed and is the best available answer to "when
+    /// was this signed?".
+    ///
+    /// This is `None` for a bundle signed with a bare public key instead of a
+    /// Fulcio certificate.
+    pub certificate: Option<CertificateInfo>,
+    /// The transparency log entry that records the signature, which locates it
+    /// in a public log for independent auditing.
+    pub log_entry: Option<TransparencyLogEntry>,
+    /// Which parts of the Sigstore verification were performed.
+    pub checks: VerifiedChecks,
     /// Non-fatal observations made during verification.
     pub warnings: Vec<String>,
+}
+
+impl VerifiedAttestation {
+    /// The CI claims of the signing certificate.
+    pub fn claims(&self) -> Option<&FulcioCiClaims> {
+        Some(&self.certificate.as_ref()?.ci_claims)
+    }
+
+    /// The index of the transparency log entry, which identifies the signature
+    /// within its log.
+    pub fn log_index(&self) -> Option<u64> {
+        Some(self.log_entry.as_ref()?.log_index.value())
+    }
+
+    /// The origin of the transparency log the signature was recorded in, e.g.
+    /// `rekor.sigstore.dev`.
+    ///
+    /// This is taken from the signed checkpoint, so it is only available for a
+    /// bundle that carries an inclusion proof.
+    pub fn log_origin(&self) -> Option<&str> {
+        let entry = self.log_entry.as_ref()?;
+        let checkpoint = entry.inclusion_proof.as_ref()?.checkpoint.checkpoint()?;
+        Some(checkpoint.origin())
+    }
+}
+
+/// Which parts of the Sigstore verification of a bundle were performed.
+///
+/// A claim about a signature is only as strong as the checks behind it, so
+/// these flags let a consumer report what was actually established rather than
+/// implying a full verification.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
+#[non_exhaustive]
+pub struct VerifiedChecks {
+    /// The certificate chains to a trusted Fulcio root, has the code signing
+    /// extended key usage and was valid at every verified signing time.
+    pub certificate_chain: bool,
+    /// The certificate's signed certificate timestamp was verified against the
+    /// certificate transparency log keys.
+    pub signed_certificate_timestamp: bool,
+    /// Inclusion in the transparency log was verified.
+    pub transparency_log: bool,
+    /// The bundle carried a full inclusion proof rather than only an inclusion
+    /// promise, so log membership was checked against a signed checkpoint
+    /// instead of being taken on the log's word.
+    pub inclusion_proof: bool,
+}
+
+impl VerifiedChecks {
+    fn new(result: &VerificationResult, bundle: &Bundle) -> Self {
+        Self {
+            certificate_chain: result.certificate_verified(),
+            signed_certificate_timestamp: result.sct_verified(),
+            transparency_log: result.tlog_verified(),
+            inclusion_proof: bundle.has_inclusion_proof(),
+        }
+    }
 }
 
 /// A bundle that did not pass verification.
@@ -110,6 +196,19 @@ pub async fn production_trusted_root() -> SigstoreResult<&'static TrustedRoot> {
                 .map_err(|err| SigstoreError::TrustedRoot(err.to_string()))
         })
         .await
+}
+
+/// Returns the trusted root snapshot that is embedded in the binary.
+///
+/// [`production_trusted_root`] is the root to use whenever the network can be
+/// reached: it is fetched through TUF and therefore reflects key rotations and
+/// revocations. The embedded snapshot is a copy of the public good instance's
+/// root taken when `sigstore-trust-root` was released, so it ages with this
+/// crate's dependencies and is only a sensible choice when TUF is unavailable,
+/// such as for an offline verification.
+pub fn embedded_trusted_root() -> SigstoreResult<TrustedRoot> {
+    TrustedRoot::from_embedded(SigstoreInstance::PublicGood)
+        .map_err(|err| SigstoreError::TrustedRoot(err.to_string()))
 }
 
 /// Verifies every bundle in `bundles` against `record` using `trusted_root`.
@@ -179,11 +278,15 @@ fn verify_bundle(
 
     let mut warnings = Vec::new();
     if let (Some(target_channel), Some(expected)) = (target_channel.as_deref(), expected_channel) {
-        let target = Url::parse(target_channel)
-            .expect("validate_statement guarantees that targetChannel is a valid URL");
-        if normalize_channel_url(target.clone()) != *expected {
+        // Compare and report the normalized form, so that the two URLs in the
+        // message are the ones that were actually compared.
+        let target = normalize_channel_url(
+            Url::parse(target_channel)
+                .expect("validate_statement guarantees that targetChannel is a valid URL"),
+        );
+        if target != *expected {
             let message = format!(
-                "the attestation targets channel {:?} but the package was retrieved from {}",
+                "the attestation targets channel {} but the package was retrieved from {}",
                 target.redact(),
                 expected.clone().redact()
             );
@@ -201,6 +304,9 @@ fn verify_bundle(
         issuer: outcome.issuer().map(str::to_owned),
         integrated_time: outcome.integrated_time(),
         target_channel,
+        certificate: outcome.certificate().cloned(),
+        log_entry: bundle.verification_material.tlog_entries.first().cloned(),
+        checks: VerifiedChecks::new(&outcome, bundle),
         warnings,
     })
 }

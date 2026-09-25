@@ -96,6 +96,10 @@ pub enum SigstoreError {
         message: String,
     },
 
+    /// The signing certificate of a bundle could not be parsed.
+    #[error("{0}")]
+    InvalidCertificate(String),
+
     /// The Sigstore trusted root could not be loaded.
     #[error("failed to load the Sigstore trusted root: {0}")]
     TrustedRoot(String),

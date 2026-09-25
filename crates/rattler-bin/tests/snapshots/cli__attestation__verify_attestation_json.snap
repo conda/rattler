@@ -1,0 +1,62 @@
+---
+source: crates/rattler-bin/tests/cli.rs
+expression: "run_verify_attestation(&[\"--format\", \"json\"])"
+---
+{
+  "verified": true,
+  "package": "agent-skill-conda-forge-0.0.21-h4616a5c_0.conda",
+  "sha256": "0024f57c1e6aa280b52c1475a792be2e56a89de71792b3ccbf2962fec92becc4",
+  "attestation_url": "file:///[ROOT]/test-data/sigstore/agent-skill-conda-forge-0.0.21-h4616a5c_0.conda.sigs",
+  "bundles": [
+    {
+      "index": 0,
+      "identity": "https://github.com/pavelzw/skill-forge/.github/workflows/package.yml@refs/heads/main",
+      "issuer": "https://token.actions.githubusercontent.com",
+      "predicate_type": "https://schemas.conda.org/attestations-publish-1.schema.json",
+      "target_channel": "https://prefix.dev/skill-forge",
+      "certificate": {
+        "not_before": "2026-09-24T13:38:44Z",
+        "not_after": "2026-09-24T13:48:44Z",
+        "claims": {
+          "build_signer_uri": "https://github.com/pavelzw/skill-forge/.github/workflows/package.yml@refs/heads/main",
+          "build_signer_digest": "8a96d273f7245383c451499fb65375ec408ca042",
+          "runner_environment": "github-hosted",
+          "source_repository_uri": "https://github.com/pavelzw/skill-forge",
+          "source_repository_digest": "8a96d273f7245383c451499fb65375ec408ca042",
+          "source_repository_ref": "refs/heads/main",
+          "source_repository_identifier": "1151760276",
+          "source_repository_owner_uri": "https://github.com/pavelzw",
+          "source_repository_owner_identifier": "29506042",
+          "build_config_uri": "https://github.com/pavelzw/skill-forge/.github/workflows/package.yml@refs/heads/main",
+          "build_config_digest": "8a96d273f7245383c451499fb65375ec408ca042",
+          "build_trigger": "push",
+          "run_invocation_uri": "https://github.com/pavelzw/skill-forge/actions/runs/36007002754/attempts/1",
+          "source_repository_visibility_at_signing": "public",
+          "deployment_environment": "upload",
+          "token_subject": "repo:pavelzw/skill-forge:environment:upload"
+        }
+      },
+      "transparency_log": {
+        "log_index": 2939132933,
+        "log_id": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+        "kind": "dsse",
+        "kind_version": "0.0.1",
+        "integrated_time": "2026-09-24T13:38:45Z",
+        "inclusion_proof": {
+          "origin": "rekor.sigstore.dev - 1193050959916656506",
+          "tree_size": 2817228674,
+          "root_hash": "70fc429ba43c0c2720f71df832e3f02a79866a5fb1df3943323779a88d770658"
+        },
+        "url": "https://search.sigstore.dev/?logIndex=2939132933"
+      },
+      "checks": {
+        "certificate_chain": true,
+        "signed_certificate_timestamp": true,
+        "transparency_log": true,
+        "inclusion_proof": true
+      },
+      "warnings": []
+    }
+  ],
+  "rejected": []
+}
