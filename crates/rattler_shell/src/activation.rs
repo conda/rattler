@@ -1195,6 +1195,7 @@ mod tests {
                 }),
             ),
             ("zsh", ShellEnum::Zsh(shell::Zsh)),
+            ("sh", ShellEnum::Sh(shell::Sh)),
             ("fish", ShellEnum::Fish(shell::Fish)),
             ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),
             ("cmd", ShellEnum::CmdExe(shell::CmdExe)),
@@ -1252,6 +1253,7 @@ mod tests {
         let shell_types = vec![
             ("bash", ShellEnum::Bash(shell::Bash::default())),
             ("zsh", ShellEnum::Zsh(shell::Zsh)),
+            ("sh", ShellEnum::Sh(shell::Sh)),
             ("fish", ShellEnum::Fish(shell::Fish)),
             ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),
             ("cmd", ShellEnum::CmdExe(shell::CmdExe)),
@@ -1317,6 +1319,7 @@ mod tests {
         let shell_types = vec![
             ("bash", ShellEnum::Bash(shell::Bash::default())),
             ("zsh", ShellEnum::Zsh(shell::Zsh)),
+            ("sh", ShellEnum::Sh(shell::Sh)),
             ("fish", ShellEnum::Fish(shell::Fish)),
             ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),
             ("cmd", ShellEnum::CmdExe(shell::CmdExe)),
@@ -1440,6 +1443,7 @@ mod tests {
         let shell_types = vec![
             ("bash", ShellEnum::Bash(shell::Bash::default())),
             ("zsh", ShellEnum::Zsh(shell::Zsh)),
+            ("sh", ShellEnum::Sh(shell::Sh)),
             ("fish", ShellEnum::Fish(shell::Fish)),
             ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),
             ("cmd", ShellEnum::CmdExe(shell::CmdExe)),
