@@ -26,6 +26,44 @@ When `--config` is omitted, `rattler-index` falls back to its built-in defaults
 (`write-zst = true`, `write-shards = true`, no advertised repodata revisions,
 `from-index-json` revision assignment, no channel metadata).
 
+## Indexing large channels
+
+Indexing a channel means downloading every package that is not yet in
+`repodata.json`, hashing it and reading its `info/index.json`. For a channel of
+conda-forge's size this is a long job, so `rattler-index` is built to be
+interrupted and resumed:
+
+- **Broken packages do not abort the run.** A package that cannot be read or
+  parsed is left out of the repodata, reported at the end, and makes the
+  process exit with status 1. Everything else in the subdir is still indexed.
+- **`--cache-dir <DIR>`** persists the parsed metadata of every package (one
+  JSON-lines file per subdir). A package is only downloaded again when its
+  `ETag`, modification time or size changed, and packages that failed to parse
+  are not retried until the file changes. This is what makes a run resumable:
+  after a crash or an interrupt, the next run continues from the cache. The
+  same directory can also be set through `RATTLER_INDEX_CACHE_DIR`. Do not
+  share one cache directory between indexers that run at the same time.
+- **Ctrl-C finishes cleanly.** The first `SIGINT` stops starting new packages,
+  lets the ones in flight finish, saves them to the cache and exits with status
+  130 without touching the existing repodata. A second `SIGINT` aborts
+  immediately. With **`--publish-partial`** the interrupted subdir's repodata
+  is written with the packages indexed so far, so clients see progress and the
+  next run adds the rest.
+- **`--max-parallel <N>`** and **`--max-in-flight-bytes <SIZE>`** bound the
+  memory used for packages in flight: at most `N` packages and roughly `SIZE`
+  package bytes (default `2GiB`) are held at once. A single package larger than
+  `SIZE` is still processed, on its own.
+
+```shell
+rattler-index --cache-dir ~/.cache/rattler-index/my-channel \
+  --max-parallel 16 --max-in-flight-bytes 4GiB \
+  s3 s3://my-bucket/my-channel
+```
+
+Subdirs are indexed one after another in alphabetical order. To spread a large
+channel over several machines, run one process per subdir with
+`--target-platform`.
+
 ## Per-channel index configuration
 
 Index options live in `[index-config]` and follow the same shape as

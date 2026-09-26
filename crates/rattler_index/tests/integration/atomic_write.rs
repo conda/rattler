@@ -1,5 +1,5 @@
 use rattler_conda_types::{Channel, ChannelConfig, Platform};
-use rattler_index::{IndexFsConfig, PackageRevisionAssignment, index_fs};
+use rattler_index::{IndexFsConfig, IndexProcessingOptions, PackageRevisionAssignment, index_fs};
 use rattler_repodata_gateway::sparse::SparseRepoData;
 
 /// Indexing must succeed while `repodata.json` is memory-mapped (as the gateway
@@ -21,6 +21,7 @@ async fn test_index_fs_over_memory_mapped_repodata() {
         force: true,
         max_parallel: 8,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     };
 
     // Generate the initial repodata.

@@ -5,8 +5,8 @@ use rattler_conda_types::{
     compression_level::CompressionLevel,
 };
 use rattler_index::{
-    IndexFsConfig, PackageRevisionAssignment, RepodataRevision, RepodataRevisionSelection,
-    index_fs, package_record_from_archive,
+    IndexFsConfig, IndexProcessingOptions, PackageRevisionAssignment, RepodataRevision,
+    RepodataRevisionSelection, index_fs, package_record_from_archive,
 };
 use rattler_package_streaming::write::{write_conda_package, write_tar_bz2_package};
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
@@ -98,6 +98,7 @@ async fn index(root: &Path, force: bool, patch: Option<&str>, v3: bool) -> Value
         force,
         max_parallel: 2,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     })
     .await
     .unwrap();

@@ -3,8 +3,9 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::Platform;
 use rattler_config::config::concurrency::default_max_concurrent_solves;
 use rattler_index::{
-    ChannelMetadata, IndexFsConfig, IndexS3Config, PackageRevisionAssignment,
-    RepodataRevisionSelection, index_fs_with_channel_metadata, index_s3_with_channel_metadata,
+    ChannelMetadata, IndexFsConfig, IndexProcessingOptions, IndexS3Config, IndexStats,
+    PackageRevisionAssignment, RepodataRevisionSelection, index_fs_with_channel_metadata,
+    index_s3_with_channel_metadata,
 };
 use url::Url;
 
@@ -17,6 +18,25 @@ use pythonize::depythonize;
 use rattler_networking::AuthenticationStorage;
 use rattler_s3::{ResolvedS3Credentials, S3Credentials};
 use std::path::PathBuf;
+
+/// Turns per-package failures into an error. The repodata for the packages
+/// that could be indexed has been written at this point; the error lists the
+/// packages that were left out.
+fn check_index_stats(stats: IndexStats) -> Result<(), PyRattlerError> {
+    if !stats.has_failures() {
+        return Ok(());
+    }
+    let mut failures = stats
+        .failed_packages()
+        .map(|(subdir, failed)| format!("{subdir}/{}: {}", failed.filename, failed.error))
+        .collect::<Vec<_>>();
+    failures.sort();
+    Err(PyRattlerError::from(anyhow::anyhow!(
+        "{} packages could not be indexed and were left out of the repodata:\n{}",
+        failures.len(),
+        failures.join("\n")
+    )))
+}
 
 fn parse_package_revision_assignment(value: &str) -> PyResult<PackageRevisionAssignment> {
     match value {
@@ -85,11 +105,14 @@ pub fn py_index_fs<'py>(
                 force,
                 max_parallel,
                 multi_progress: None,
+                processing: IndexProcessingOptions::default(),
             },
             channel_metadata,
         )
         .await
-        .map_err(|e| PyRattlerError::from(e).into())
+        .map_err(PyRattlerError::from)
+        .and_then(check_index_stats)
+        .map_err(Into::into)
     })
 }
 
@@ -200,10 +223,13 @@ pub fn py_index_s3<'py>(
                 } else {
                     rattler_index::PreconditionChecks::Disabled
                 },
+                processing: IndexProcessingOptions::default(),
             },
             channel_metadata,
         )
         .await
-        .map_err(|e| PyRattlerError::from(e).into())
+        .map_err(PyRattlerError::from)
+        .and_then(check_index_stats)
+        .map_err(Into::into)
     })
 }

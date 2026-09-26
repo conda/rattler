@@ -57,9 +57,10 @@ use rattler_package_streaming::{
 #[cfg(feature = "s3")]
 use rattler_s3::ResolvedS3Credentials;
 use retry_policies::{Jitter, RetryDecision, RetryPolicy, policies::ExponentialBackoff};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
+use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 #[cfg(feature = "s3")]
 use url::Url;
@@ -130,6 +131,18 @@ pub(crate) struct IndexedPackageRecord {
     wheel_url: Option<UrlOrPath>,
 }
 
+/// A package that could not be indexed.
+///
+/// The package is left out of the generated repodata; every other package in
+/// the subdir is still indexed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FailedPackage {
+    /// The filename of the package within its subdir.
+    pub filename: String,
+    /// Why the package could not be indexed.
+    pub error: String,
+}
+
 /// Statistics for a single subdir indexing operation
 #[derive(Debug, Clone, Default)]
 pub struct SubdirIndexStats {
@@ -139,6 +152,19 @@ pub struct SubdirIndexStats {
     pub packages_removed: usize,
     /// Number of retries due to concurrent modifications
     pub retries: usize,
+    /// Packages that could not be read or parsed and were left out of the
+    /// generated repodata.
+    pub failed_packages: Vec<FailedPackage>,
+    /// Number of packages that were not attempted because indexing was
+    /// cancelled.
+    pub packages_skipped: usize,
+    /// Whether indexing of this subdir was cut short by cancellation.
+    pub cancelled: bool,
+    /// Whether the repodata files of this subdir were (re)written.
+    ///
+    /// This is `false` only when indexing was cancelled without publishing a
+    /// partial result.
+    pub repodata_written: bool,
 }
 
 /// Statistics for the entire indexing operation
@@ -146,6 +172,27 @@ pub struct SubdirIndexStats {
 pub struct IndexStats {
     /// Statistics per subdir
     pub subdirs: HashMap<Platform, SubdirIndexStats>,
+    /// Whether indexing was cancelled before all subdirs were processed.
+    pub cancelled: bool,
+}
+
+impl IndexStats {
+    /// All packages that could not be indexed, with their subdir.
+    pub fn failed_packages(&self) -> impl Iterator<Item = (Platform, &FailedPackage)> {
+        self.subdirs.iter().flat_map(|(subdir, stats)| {
+            stats
+                .failed_packages
+                .iter()
+                .map(move |failed| (*subdir, failed))
+        })
+    }
+
+    /// Whether any package could not be indexed.
+    pub fn has_failures(&self) -> bool {
+        self.subdirs
+            .values()
+            .any(|stats| !stats.failed_packages.is_empty())
+    }
 }
 
 const REPODATA_FROM_PACKAGES: &str = "repodata_from_packages.json";
@@ -176,67 +223,116 @@ pub fn write_retry_policy() -> impl RetryPolicy {
         .build_with_total_retry_duration(std::time::Duration::from_secs(600)) // Retry for up to 10 minutes total
 }
 
+/// The raw metadata extracted from a package archive.
+///
+/// This is what the indexer stores in its cache: the unmodified
+/// `info/index.json` and `info/run_exports.json` contents plus the archive
+/// digests. A [`PackageRecord`] is derived from it with
+/// [`ParsedPackage::to_package_record`], so cached packages go through exactly
+/// the same derivation as freshly parsed ones.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ParsedPackage {
+    /// The raw contents of `info/index.json`.
+    pub index_json: String,
+    /// The parsed `info/run_exports.json`, if the archive contains one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_exports: Option<RunExportsJson>,
+    /// Hex encoded SHA256 digest of the archive.
+    pub sha256: String,
+    /// Hex encoded MD5 digest of the archive.
+    pub md5: String,
+    /// Size of the archive in bytes.
+    pub size: u64,
+}
+
+impl ParsedPackage {
+    fn new(
+        package_as_bytes: &[u8],
+        index_json: String,
+        run_exports: Option<RunExportsJson>,
+    ) -> Self {
+        let sha256 =
+            rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(package_as_bytes);
+        let md5 = rattler_digest::compute_bytes_digest::<rattler_digest::Md5>(package_as_bytes);
+        Self {
+            index_json,
+            run_exports,
+            sha256: hex::encode(sha256),
+            md5: hex::encode(md5),
+            size: package_as_bytes.len() as u64,
+        }
+    }
+
+    /// Derive the package record from the raw package metadata.
+    pub fn to_package_record(&self) -> std::io::Result<PackageRecord> {
+        self.to_indexed_record().map(|indexed| indexed.record)
+    }
+
+    pub(crate) fn to_indexed_record(&self) -> std::io::Result<IndexedPackageRecord> {
+        let validated = IndexJson::from_str(&self.index_json)?
+            .into_validated()
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
+        let repodata_revision = validated.required_repodata_revision();
+        let (index, matchspecs) = validated.into_parts();
+
+        let invalid_digest = |name: &str| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("invalid {name} digest in parsed package metadata"),
+            )
+        };
+        let sha256 = rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(&self.sha256)
+            .ok_or_else(|| invalid_digest("sha256"))?;
+        let md5 = rattler_digest::parse_digest_from_hex::<rattler_digest::Md5>(&self.md5)
+            .ok_or_else(|| invalid_digest("md5"))?;
+
+        let package_record = PackageRecord {
+            name: index.name,
+            version: index.version,
+            build: index.build,
+            build_number: index.build_number,
+            subdir: index.subdir.unwrap_or_else(|| "unknown".to_string()),
+            md5: Some(md5),
+            sha256: Some(sha256),
+            size: Some(self.size),
+            arch: index.arch,
+            platform: index.platform,
+            depends: index.depends,
+            extra_depends: index.extra_depends,
+            constrains: index.constrains,
+            track_features: index.track_features,
+            features: index.features,
+            flags: index.flags,
+            noarch: index.noarch,
+            license: index.license,
+            license_family: index.license_family,
+            timestamp: index.timestamp,
+            indexed_timestamp: None,
+            python_site_packages_path: index.python_site_packages_path,
+            legacy_bz2_md5: None,
+            legacy_bz2_size: None,
+            purls: index.purls,
+            run_exports: self.run_exports.clone(),
+            attestations_sha256: None,
+        };
+
+        Ok(IndexedPackageRecord {
+            record: package_record,
+            repodata_revision,
+            matchspecs: Some(matchspecs),
+            wheel_url: None,
+        })
+    }
+}
+
 /// Extract the package record from an `index.json` file.
 pub fn package_record_from_index_json<T: Read>(
     package_as_bytes: impl AsRef<[u8]>,
     index_json_reader: &mut T,
 ) -> std::io::Result<PackageRecord> {
-    indexed_package_record_from_index_json(package_as_bytes, index_json_reader)
-        .map(|indexed| indexed.record)
-}
-
-/// Extract an indexed package record from an `index.json` file.
-fn indexed_package_record_from_index_json<T: Read>(
-    package_as_bytes: impl AsRef<[u8]>,
-    index_json_reader: &mut T,
-) -> std::io::Result<IndexedPackageRecord> {
-    let validated = IndexJson::from_reader(index_json_reader)?
-        .into_validated()
-        .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
-    let repodata_revision = validated.required_repodata_revision();
-    let (index, matchspecs) = validated.into_parts();
-
-    let sha256_result =
-        rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(&package_as_bytes);
-    let md5_result = rattler_digest::compute_bytes_digest::<rattler_digest::Md5>(&package_as_bytes);
-    let size = package_as_bytes.as_ref().len();
-
-    let package_record = PackageRecord {
-        name: index.name,
-        version: index.version,
-        build: index.build,
-        build_number: index.build_number,
-        subdir: index.subdir.unwrap_or_else(|| "unknown".to_string()),
-        md5: Some(md5_result),
-        sha256: Some(sha256_result),
-        size: Some(size as u64),
-        arch: index.arch,
-        platform: index.platform,
-        depends: index.depends,
-        extra_depends: index.extra_depends,
-        constrains: index.constrains,
-        track_features: index.track_features,
-        features: index.features,
-        flags: index.flags,
-        noarch: index.noarch,
-        license: index.license,
-        license_family: index.license_family,
-        timestamp: index.timestamp,
-        indexed_timestamp: None,
-        python_site_packages_path: index.python_site_packages_path,
-        legacy_bz2_md5: None,
-        legacy_bz2_size: None,
-        purls: index.purls,
-        run_exports: None,
-        attestations_sha256: None,
-    };
-
-    Ok(IndexedPackageRecord {
-        record: package_record,
-        repodata_revision,
-        matchspecs: Some(matchspecs),
-        wheel_url: None,
-    })
+    let mut index_json = String::new();
+    index_json_reader.read_to_string(&mut index_json)?;
+    ParsedPackage::new(package_as_bytes.as_ref(), index_json, None).to_package_record()
 }
 
 fn repodata_patch_from_conda_package_stream<'a>(
@@ -291,17 +387,7 @@ pub fn package_record_from_tar_bz2(file: &Path) -> std::io::Result<PackageRecord
 /// This function will look for the `info/index.json` file in the conda package
 /// and extract the package record from it.
 pub fn package_record_from_tar_bz2_reader(reader: impl BufRead) -> std::io::Result<PackageRecord> {
-    let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
-    let reader = Cursor::new(&bytes);
-    let mut archive = read::stream_tar_bz2(reader);
-    for entry in archive.entries()?.flatten() {
-        let mut entry = entry;
-        let path = entry.path()?;
-        if path.as_os_str().eq("info/index.json") {
-            return package_record_from_index_json(&bytes, &mut entry);
-        }
-    }
-    Err(std::io::Error::other("No index.json found"))
+    parse_tar_bz2_reader(reader)?.to_package_record()
 }
 
 /// Extract the package record from a `.conda` package file.
@@ -328,70 +414,70 @@ pub fn package_record_from_archive(file: &Path) -> std::io::Result<PackageRecord
     }
 }
 
-fn read_indexed_json_from_archive(
-    bytes: &Vec<u8>,
+/// Extract the package record from a `.conda` package file content.
+/// This function will look for the `info/index.json` file in the conda package
+/// and extract the package record from it.
+pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result<PackageRecord> {
+    parse_conda_reader(reader)?.to_package_record()
+}
+
+/// Reads the whole reader into memory.
+///
+/// The archive readers need `Seek` (for `.conda`) and the digests need every
+/// byte, so the package has to be buffered.
+fn read_all(mut reader: impl BufRead) -> std::io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    reader.read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
+/// Reads `info/index.json` (and `info/run_exports.json`) from the `info`
+/// archive of a `.conda` package.
+fn parse_info_archive(
+    bytes: &[u8],
     archive: &mut tar::Archive<impl Read>,
-) -> std::io::Result<IndexedPackageRecord> {
+) -> std::io::Result<ParsedPackage> {
     let mut index_json = None;
     let mut run_exports_json = None;
     for entry in archive.entries()?.flatten() {
         let mut entry = entry;
         let path = entry.path()?;
         if path.as_os_str().eq("info/index.json") {
-            index_json = Some(indexed_package_record_from_index_json(bytes, &mut entry)?);
+            let mut contents = String::new();
+            entry.read_to_string(&mut contents)?;
+            index_json = Some(contents);
         } else if path.as_os_str().eq("info/run_exports.json") {
             run_exports_json = Some(RunExportsJson::from_reader(&mut entry)?);
         }
+        if index_json.is_some() && run_exports_json.is_some() {
+            break;
+        }
     }
 
-    if let Some(mut index_json) = index_json {
-        index_json.record.run_exports = run_exports_json;
-        return Ok(index_json);
-    }
-
-    Err(std::io::Error::other("No index.json found"))
+    let index_json = index_json.ok_or_else(|| std::io::Error::other("No index.json found"))?;
+    Ok(ParsedPackage::new(bytes, index_json, run_exports_json))
 }
 
-fn read_index_json_from_archive(
-    bytes: &Vec<u8>,
-    archive: &mut tar::Archive<impl Read>,
-) -> std::io::Result<PackageRecord> {
-    read_indexed_json_from_archive(bytes, archive).map(|indexed| indexed.record)
-}
-
-/// Extract the package record from a `.conda` package file content.
-/// This function will look for the `info/index.json` file in the conda package
-/// and extract the package record from it.
-pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result<PackageRecord> {
-    let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
-    let reader = Cursor::new(&bytes);
-    let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
-    read_index_json_from_archive(&bytes, &mut archive)
-}
-
-fn indexed_package_record_from_tar_bz2_reader(
-    reader: impl BufRead,
-) -> std::io::Result<IndexedPackageRecord> {
-    let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
-    let reader = Cursor::new(&bytes);
-    let mut archive = read::stream_tar_bz2(reader);
+fn parse_tar_bz2_reader(reader: impl BufRead) -> std::io::Result<ParsedPackage> {
+    let bytes = read_all(reader)?;
+    let mut archive = read::stream_tar_bz2(Cursor::new(&bytes));
     for entry in archive.entries()?.flatten() {
         let mut entry = entry;
         let path = entry.path()?;
         if path.as_os_str().eq("info/index.json") {
-            return indexed_package_record_from_index_json(&bytes, &mut entry);
+            let mut index_json = String::new();
+            entry.read_to_string(&mut index_json)?;
+            return Ok(ParsedPackage::new(&bytes, index_json, None));
         }
     }
     Err(std::io::Error::other("No index.json found"))
 }
 
-fn indexed_package_record_from_conda_reader(
-    reader: impl BufRead,
-) -> std::io::Result<IndexedPackageRecord> {
-    let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
-    let reader = Cursor::new(&bytes);
-    let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
-    read_indexed_json_from_archive(&bytes, &mut archive)
+fn parse_conda_reader(reader: impl BufRead) -> std::io::Result<ParsedPackage> {
+    let bytes = read_all(reader)?;
+    let mut archive = seek::stream_conda_info(Cursor::new(&bytes))
+        .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
+    parse_info_archive(&bytes, &mut archive)
 }
 
 /// Parse a package file buffer based on its filename extension.
@@ -400,26 +486,56 @@ fn indexed_package_record_from_conda_reader(
 ///
 /// * `buffer` - The file contents to parse
 /// * `filename` - The filename (used to determine archive type)
-///
-/// # Returns
-///
-/// Returns the parsed `PackageRecord`.
-fn parse_package_buffer(
-    buffer: opendal::Buffer,
-    filename: &str,
-) -> std::io::Result<IndexedPackageRecord> {
+fn parse_package_buffer(buffer: opendal::Buffer, filename: &str) -> std::io::Result<ParsedPackage> {
     let reader = buffer.reader();
-    let archive_type = DistArchiveType::try_from(filename).unwrap();
+    let archive_type = DistArchiveType::try_from(filename).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("unsupported package archive: {filename}"),
+        )
+    })?;
     match archive_type {
-        DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
-            indexed_package_record_from_tar_bz2_reader(reader)
-        }
-        DistArchiveType::Conda(CondaArchiveType::Conda) => {
-            indexed_package_record_from_conda_reader(reader)
-        }
+        DistArchiveType::Conda(CondaArchiveType::TarBz2) => parse_tar_bz2_reader(reader),
+        DistArchiveType::Conda(CondaArchiveType::Conda) => parse_conda_reader(reader),
         DistArchiveType::Wheel(WheelArchiveType::Whl) => Err(std::io::Error::other(
             "Package type \".whl\" not yet supported.",
         )),
+    }
+}
+
+/// Limits the number of package bytes held in memory at once.
+///
+/// Permits are handed out in units of [`ByteBudget::UNIT`] bytes. A package
+/// larger than the whole budget is clamped to the budget so it can still be
+/// processed, on its own.
+#[derive(Debug)]
+pub(crate) struct ByteBudget {
+    semaphore: Semaphore,
+    max_units: u32,
+}
+
+impl ByteBudget {
+    /// Granularity of a permit.
+    const UNIT: u64 = 64 * 1024;
+
+    pub(crate) fn new(max_bytes: u64) -> Self {
+        let max_units = max_bytes
+            .div_ceil(Self::UNIT)
+            .clamp(1, u64::from(u32::MAX >> 3)) as u32;
+        Self {
+            semaphore: Semaphore::new(max_units as usize),
+            max_units,
+        }
+    }
+
+    pub(crate) async fn acquire(&self, bytes: u64) -> tokio::sync::SemaphorePermit<'_> {
+        let units = bytes
+            .div_ceil(Self::UNIT)
+            .clamp(1, u64::from(self.max_units)) as u32;
+        self.semaphore
+            .acquire_many(units)
+            .await
+            .expect("byte budget semaphore was unexpectedly closed")
     }
 }
 
@@ -428,8 +544,8 @@ fn parse_package_buffer(
 /// This function encapsulates the logic for reading a package file, including:
 /// - Checking the cache for a previously computed record
 /// - Reading the file with retry logic on cache miss
-/// - Parsing the package content
-/// - Storing the result in the cache
+/// - Parsing the package content on a blocking thread
+/// - Storing the result (or the parse failure) in the cache
 ///
 /// # Arguments
 ///
@@ -437,6 +553,7 @@ fn parse_package_buffer(
 /// * `cache` - The package record cache (scoped to a single subdir)
 /// * `subdir` - The subdirectory (e.g., "noarch", "linux-64")
 /// * `filename` - The package filename (e.g., "package-1.0.0.tar.bz2")
+/// * `byte_budget` - Optional limit on the package bytes in memory at once
 ///
 /// # Returns
 ///
@@ -446,57 +563,93 @@ async fn read_and_parse_package(
     cache: &cache::PackageRecordCache,
     subdir: Platform,
     filename: &str,
+    byte_budget: Option<&ByteBudget>,
 ) -> std::io::Result<IndexedPackageRecord> {
     let file_path = format!("{subdir}/{filename}");
 
     // Try cache or get current metadata
-    // Cache uses filename as key since it's scoped to a single subdir
-    match cache.get_or_stat(op, &file_path).await {
-        Ok(cache::CacheResult::Hit(record)) => {
-            // Cache hit - reuse the record
-            Ok(*record)
+    let current_metadata = match cache.get_or_stat(op, &file_path).await {
+        Ok(cache::CacheResult::Hit(package)) => return package.to_indexed_record(),
+        Ok(cache::CacheResult::Broken(error)) => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("{error} (cached failure, the file has not changed since)"),
+            ));
         }
-        Ok(cache::CacheResult::Miss {
-            etag,
-            last_modified,
-        }) => {
-            // Cache miss - read file with retry logic
-            let (buffer, final_metadata) = cache::read_package_with_retry(
-                op,
-                &file_path,
-                RepodataFileMetadata {
-                    etag,
-                    last_modified,
-                    file_existed: true, // File exists since we got its metadata from stat
-                    precondition_checks: PreconditionChecks::Enabled, // Always enabled for cache reads
-                },
-            )
-            .await
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
-
-            // Parse package
-            let record = parse_package_buffer(buffer, filename)?;
-
-            // Store in cache using filename as key
-            cache
-                .insert(
-                    &file_path,
-                    record.clone(),
-                    final_metadata.etag,
-                    final_metadata.last_modified,
-                )
-                .await;
-
-            Ok(record)
-        }
+        Ok(cache::CacheResult::Miss(metadata)) => Some(metadata),
         Err(e) => {
             tracing::warn!("Cache stat failed for {file_path}: {e}, proceeding without cache");
-            // Fall back to direct read without cache
-            let buffer = op
-                .read(&file_path)
-                .await
-                .map_err(|e| std::io::Error::other(e.to_string()))?;
-            parse_package_buffer(buffer, filename)
+            None
+        }
+    };
+
+    // Reserve memory for the package before downloading it. The permit is held
+    // until the parse finished and the buffer is dropped.
+    let _permit = match byte_budget {
+        Some(budget) => Some(
+            budget
+                .acquire(current_metadata.as_ref().and_then(|m| m.size).unwrap_or(0))
+                .await,
+        ),
+        None => None,
+    };
+
+    let (buffer, final_metadata) = if let Some(metadata) = &current_metadata {
+        let (buffer, final_metadata) = cache::read_package_with_retry(
+            op,
+            &file_path,
+            RepodataFileMetadata {
+                etag: metadata.etag.clone(),
+                last_modified: metadata.last_modified,
+                file_existed: true, // File exists since we got its metadata from stat
+                precondition_checks: PreconditionChecks::Enabled, // Always enabled for cache reads
+            },
+        )
+        .await
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
+        let final_metadata = cache::CachedFileMetadata {
+            etag: final_metadata.etag,
+            last_modified: final_metadata.last_modified,
+            size: Some(buffer.len() as u64),
+        };
+        (buffer, Some(final_metadata))
+    } else {
+        // Fall back to direct read without cache
+        let buffer = op
+            .read(&file_path)
+            .await
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
+        (buffer, None)
+    };
+
+    // Decompressing and hashing is CPU bound; keep it off the async workers.
+    // A panic inside the parser is reported as a failure of this package only.
+    let owned_filename = filename.to_owned();
+    let parsed = tokio::task::spawn_blocking(move || parse_package_buffer(buffer, &owned_filename))
+        .await
+        .unwrap_or_else(|join_error| {
+            Err(std::io::Error::other(format!(
+                "parsing the package panicked: {join_error}"
+            )))
+        });
+
+    match parsed {
+        Ok(parsed) => {
+            let parsed = Arc::new(parsed);
+            if let Some(final_metadata) = final_metadata {
+                cache
+                    .insert(&file_path, parsed.clone(), final_metadata)
+                    .await;
+            }
+            parsed.to_indexed_record()
+        }
+        Err(err) => {
+            if let Some(final_metadata) = final_metadata {
+                cache
+                    .insert_broken(&file_path, err.to_string(), final_metadata)
+                    .await;
+            }
+            Err(err)
         }
     }
 }
@@ -629,8 +782,9 @@ impl RepodataMetadataCollection {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn index_subdir(
+/// Everything needed to index one subdir.
+#[derive(Clone)]
+struct SubdirIndexParams {
     subdir: Platform,
     op: Operator,
     force: bool,
@@ -641,35 +795,25 @@ async fn index_subdir(
     channel_metadata: ChannelMetadata,
     repodata_patch: Option<PatchInstructions>,
     progress: Option<MultiProgress>,
-    semaphore: Arc<Semaphore>,
+    max_parallel: usize,
+    byte_budget: Option<Arc<ByteBudget>>,
     cache: cache::PackageRecordCache,
     precondition_checks: PreconditionChecks,
-) -> Result<SubdirIndexStats, RepodataError> {
+    cancellation_token: CancellationToken,
+    publish_partial: bool,
+}
+
+async fn index_subdir(params: SubdirIndexParams) -> Result<SubdirIndexStats, RepodataError> {
     // Use write_retry_policy for handling lock contention during repodata writes
     // This will retry for 10 minutes with longer backoff durations (10s, 30s, 60s, etc.)
     let retry_policy = write_retry_policy();
     let mut current_try = 0;
+    let subdir = params.subdir;
 
     loop {
         let request_start_time = SystemTime::now();
 
-        match index_subdir_inner(
-            subdir,
-            op.clone(),
-            force,
-            write_zst,
-            write_shards,
-            repodata_revisions.clone(),
-            package_revision_assignment,
-            channel_metadata.clone(),
-            repodata_patch.clone(),
-            progress.clone(),
-            semaphore.clone(),
-            cache.clone(),
-            precondition_checks,
-        )
-        .await
-        {
+        match index_subdir_inner(params.clone()).await {
             Ok(mut stats) => {
                 stats.retries = current_try;
                 return Ok(stats);
@@ -692,7 +836,8 @@ async fn index_subdir(
                     _ => false,
                 };
 
-                if is_retryable_condition_error {
+                // Never retry once cancellation was requested.
+                if is_retryable_condition_error && !params.cancellation_token.is_cancelled() {
                     // Race condition detected - should we retry?
                     match retry_policy.should_retry(request_start_time, current_try as u32) {
                         RetryDecision::Retry { execute_after } => {
@@ -708,7 +853,13 @@ async fn index_subdir(
                                 e,
                                 duration
                             );
-                            tokio::time::sleep(duration).await;
+                            tokio::select! {
+                                () = tokio::time::sleep(duration) => {}
+                                () = params.cancellation_token.cancelled() => {
+                                    tracing::info!("Cancelled while waiting to retry {subdir}");
+                                    return Err(e);
+                                }
+                            }
                             current_try += 1;
                             continue;
                         }
@@ -727,22 +878,26 @@ async fn index_subdir(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn index_subdir_inner(
-    subdir: Platform,
-    op: Operator,
-    force: bool,
-    write_zst: bool,
-    write_shards: bool,
-    repodata_revisions: Vec<RepodataRevisionSelection>,
-    package_revision_assignment: PackageRevisionAssignment,
-    channel_metadata: ChannelMetadata,
-    repodata_patch: Option<PatchInstructions>,
-    progress: Option<MultiProgress>,
-    semaphore: Arc<Semaphore>,
-    cache: cache::PackageRecordCache,
-    precondition_checks: PreconditionChecks,
-) -> Result<SubdirIndexStats, RepodataError> {
+async fn index_subdir_inner(params: SubdirIndexParams) -> Result<SubdirIndexStats, RepodataError> {
+    let SubdirIndexParams {
+        subdir,
+        op,
+        force,
+        write_zst,
+        write_shards,
+        repodata_revisions,
+        package_revision_assignment,
+        channel_metadata,
+        repodata_patch,
+        progress,
+        max_parallel,
+        byte_budget,
+        cache,
+        precondition_checks,
+        cancellation_token,
+        publish_partial,
+    } = params;
+
     // Step 1: Collect ETags/metadata for all critical files upfront
     let metadata = RepodataMetadataCollection::new(
         &op,
@@ -860,10 +1015,13 @@ async fn index_subdir_inner(
         registered_packages.remove(filename);
     }
 
-    let packages_to_add = uploaded_packages
+    // Deterministic order so that interrupted runs make visible progress
+    // through the same list.
+    let mut packages_to_add = uploaded_packages
         .difference(&registered_packages.keys().cloned().collect::<HashSet<_>>())
         .cloned()
         .collect::<Vec<_>>();
+    packages_to_add.sort_by_cached_key(DistArchiveIdentifier::to_file_name);
 
     tracing::info!(
         "Adding {} packages to subdir {}.",
@@ -884,73 +1042,118 @@ async fn index_subdir_inner(
     .progress_chars("##-");
     pb.set_style(sty);
 
-    let mut tasks = FuturesUnordered::new();
-    for filename in packages_to_add.iter() {
-        let task = {
-            let op = op.clone();
-            let filename = filename.clone();
-            let pb = pb.clone();
-            let semaphore = semaphore.clone();
-            let cache = cache.clone();
-            async move {
-                let _permit = semaphore
-                    .acquire()
-                    .await
-                    .expect("Semaphore was unexpectedly closed");
+    // Packages are processed through a lazy stream: at most `max_parallel`
+    // packages are in flight and no work is created for packages that have not
+    // been reached yet. Once cancellation is requested no new package is
+    // started; the ones in flight run to completion so their result lands in
+    // the cache.
+    let total_to_add = packages_to_add.len();
+    let mut results = Vec::new();
+    let mut failed_packages = Vec::new();
+    let mut attempted = 0usize;
+    {
+        let op = &op;
+        let cache = &cache;
+        let pb = &pb;
+        let byte_budget = byte_budget.as_deref();
+        let cancellation_token = &cancellation_token;
+        let mut stream = futures::stream::iter(packages_to_add)
+            .take_while(|_| futures::future::ready(!cancellation_token.is_cancelled()))
+            .map(|filename| async move {
                 pb.set_message(format!(
                     "Indexing {} {}",
                     subdir.as_str(),
-                    console::style(&filename).dim()
+                    console::style(filename.to_file_name()).dim()
                 ));
-
-                let record =
-                    read_and_parse_package(&op, &cache, subdir, &filename.to_file_name()).await?;
-
+                let result = read_and_parse_package(
+                    op,
+                    cache,
+                    subdir,
+                    &filename.to_file_name(),
+                    byte_budget,
+                )
+                .await;
                 pb.inc(1);
-                Ok::<(DistArchiveIdentifier, IndexedPackageRecord), std::io::Error>((
-                    filename, record,
-                ))
-            }
-        };
-        tasks.push(tokio::spawn(task));
-    }
-    let mut results = Vec::new();
-    while let Some(join_result) = tasks.next().await {
-        match join_result {
-            Ok(Ok(result)) => results.push(result),
-            Ok(Err(e)) => {
-                tasks.clear();
-                tracing::error!("Failed to process package: {}", e);
-                pb.abandon_with_message(format!(
-                    "{} {}",
-                    console::style("Failed to index").red(),
-                    console::style(subdir.as_str()).dim()
-                ));
-                return Err(RepodataError::Other(anyhow::anyhow!(e)));
-            }
-            Err(join_err) => {
-                tasks.clear();
-                tracing::error!("Task panicked: {}", join_err);
-                pb.abandon_with_message(format!(
-                    "{} {}",
-                    console::style("Failed to index").red(),
-                    console::style(subdir.as_str()).dim()
-                ));
-                return Err(join_err.into());
+                (filename, result)
+            })
+            .buffer_unordered(max_parallel.max(1));
+
+        while let Some((filename, result)) = stream.next().await {
+            attempted += 1;
+            match result {
+                Ok(record) => results.push((filename, record)),
+                Err(error) => {
+                    let filename = filename.to_file_name();
+                    tracing::error!("Failed to index {subdir}/{filename}: {error}");
+                    failed_packages.push(FailedPackage {
+                        filename,
+                        error: error.to_string(),
+                    });
+                }
             }
         }
     }
-    pb.finish_with_message(format!(
-        "{} {}",
-        console::style("Finished").green(),
-        subdir.as_str()
-    ));
+    let cancelled = cancellation_token.is_cancelled() && attempted < total_to_add;
+    let packages_skipped = total_to_add - attempted;
+    failed_packages.sort_by(|a, b| a.filename.cmp(&b.filename));
+
+    if cancelled {
+        pb.abandon_with_message(format!(
+            "{} {} ({} packages not indexed)",
+            console::style("Interrupted").yellow(),
+            subdir.as_str(),
+            packages_skipped
+        ));
+    } else if failed_packages.is_empty() {
+        pb.finish_with_message(format!(
+            "{} {}",
+            console::style("Finished").green(),
+            subdir.as_str()
+        ));
+    } else {
+        pb.finish_with_message(format!(
+            "{} {} ({} packages failed)",
+            console::style("Finished").yellow(),
+            subdir.as_str(),
+            failed_packages.len()
+        ));
+    }
 
     tracing::info!(
-        "Successfully added {} packages to subdir {}.",
+        "Successfully added {} packages to subdir {} ({} failed, {} skipped).",
         results.len(),
-        subdir
+        subdir,
+        failed_packages.len(),
+        packages_skipped
     );
+
+    // Persist what was learned about this subdir, dropping entries for files
+    // that no longer exist in the channel.
+    let known_paths = uploaded_packages
+        .iter()
+        .map(|identifier| format!("{subdir}/{}", identifier.to_file_name()))
+        .collect::<HashSet<_>>();
+    if let Err(err) = cache.compact(&known_paths).await {
+        tracing::warn!("Failed to compact the package cache for {subdir}: {err}");
+    }
+
+    let stats = SubdirIndexStats {
+        packages_added: results.len(),
+        packages_removed: packages_to_delete.len(),
+        retries: 0, // Will be set by index_subdir
+        failed_packages,
+        packages_skipped,
+        cancelled,
+        repodata_written: false,
+    };
+
+    if cancelled && !publish_partial {
+        tracing::info!(
+            "Indexing of {subdir} was cancelled; not writing repodata. \
+             Re-run to continue from the cache."
+        );
+        return Ok(stats);
+    }
 
     for (filename, record) in results {
         registered_packages.insert(filename, record);
@@ -1028,9 +1231,8 @@ async fn index_subdir_inner(
     .await?;
 
     Ok(SubdirIndexStats {
-        packages_added: packages_to_add.len(),
-        packages_removed: packages_to_delete.len(),
-        retries: 0, // Will be set by index_subdir
+        repodata_written: true,
+        ..stats
     })
 }
 
@@ -1705,6 +1907,41 @@ pub async fn write_repodata(
     Ok(())
 }
 
+/// Options that control how packages are processed, shared by all backends.
+///
+/// These are the knobs that matter for large channels: where parsed package
+/// metadata is persisted, how much memory may be used for packages in flight,
+/// and how to react to cancellation.
+#[derive(Debug, Clone, Default)]
+pub struct IndexProcessingOptions {
+    /// Directory in which parsed package metadata is cached across runs, one
+    /// file per subdir. When set, a package is only downloaded and parsed
+    /// again if its `ETag`, modification time or size changed, and packages
+    /// that could not be parsed are not retried until the file changes.
+    ///
+    /// This is what makes an interrupted run resumable: everything parsed so
+    /// far is on disk and the next run continues from there.
+    ///
+    /// The directory must not be shared by processes that index at the same
+    /// time; give each concurrent indexer its own directory.
+    ///
+    /// `None` keeps parsed metadata in memory only.
+    pub cache_dir: Option<PathBuf>,
+    /// Upper bound on the package bytes held in memory at once.
+    ///
+    /// `None` only limits the number of packages in flight (`max_parallel`).
+    pub max_in_flight_bytes: Option<u64>,
+    /// Token to request cooperative cancellation. Once cancelled, no new
+    /// package is started; packages in flight finish and are cached. Subdirs
+    /// that were not reached are skipped.
+    pub cancellation_token: Option<CancellationToken>,
+    /// Whether to write repodata for the packages collected so far when
+    /// indexing of a subdir is cancelled. If `false` (the default) the
+    /// repodata of a cancelled subdir is left untouched and only the cache is
+    /// updated.
+    pub publish_partial: bool,
+}
+
 /// Configuration for `index_fs`
 pub struct IndexFsConfig {
     /// The channel to index.
@@ -1727,16 +1964,21 @@ pub struct IndexFsConfig {
     pub max_parallel: usize,
     /// The multi-progress bar to use for the index.
     pub multi_progress: Option<MultiProgress>,
+    /// Caching, memory and cancellation options.
+    pub processing: IndexProcessingOptions,
 }
 
 /// Create a new `repodata.json` for all packages in the channel at the given
 /// directory.
-pub async fn index_fs(config: IndexFsConfig) -> anyhow::Result<()> {
+pub async fn index_fs(config: IndexFsConfig) -> anyhow::Result<IndexStats> {
     index_fs_with_channel_metadata(config, ChannelMetadata::default()).await
 }
 
 /// Create a new `repodata.json` for all packages in the channel at the given
 /// directory and write channel metadata into the generated repodata.
+///
+/// Packages that cannot be read or parsed are left out of the repodata and
+/// reported in the returned [`IndexStats`]; check [`IndexStats::has_failures`].
 pub async fn index_fs_with_channel_metadata(
     IndexFsConfig {
         channel,
@@ -1749,9 +1991,10 @@ pub async fn index_fs_with_channel_metadata(
         force,
         max_parallel,
         multi_progress,
+        processing,
     }: IndexFsConfig,
     channel_metadata: ChannelMetadata,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<IndexStats> {
     let mut config = FsConfig::default();
     let root = channel.canonicalize()?;
     config.root = Some(root.to_string_lossy().to_string());
@@ -1762,22 +2005,24 @@ pub async fn index_fs_with_channel_metadata(
     config.atomic_write_dir = Some(root.join(".tmp").to_string_lossy().to_string());
     let builder = config.into_builder();
     let op = Operator::new(builder)?.finish();
-    index_with_channel_metadata(
-        target_platform,
+    index_with_options(
         op,
-        repodata_patch,
-        write_zst,
-        write_shards,
-        repodata_revisions,
-        package_revision_assignment,
-        force,
-        max_parallel,
-        multi_progress,
-        PreconditionChecks::Disabled,
-        channel_metadata,
+        IndexOptions {
+            target_platform,
+            repodata_patch,
+            write_zst,
+            write_shards,
+            repodata_revisions,
+            package_revision_assignment,
+            force,
+            max_parallel,
+            multi_progress,
+            precondition_checks: PreconditionChecks::Disabled,
+            channel_metadata,
+            processing,
+        },
     )
     .await
-    .map(|_| ())
 }
 
 /// Configuration for `index_s3`
@@ -1807,6 +2052,8 @@ pub struct IndexS3Config {
     pub multi_progress: Option<MultiProgress>,
     /// Configuration for precondition checks during file operations.
     pub precondition_checks: PreconditionChecks,
+    /// Caching, memory and cancellation options.
+    pub processing: IndexProcessingOptions,
 }
 
 #[cfg(feature = "s3")]
@@ -1834,12 +2081,15 @@ fn s3_config(
 /// Create a new `repodata.json` for all packages in the channel at the given S3
 /// URL.
 #[cfg(feature = "s3")]
-pub async fn index_s3(config: IndexS3Config) -> anyhow::Result<()> {
+pub async fn index_s3(config: IndexS3Config) -> anyhow::Result<IndexStats> {
     index_s3_with_channel_metadata(config, ChannelMetadata::default()).await
 }
 
 /// Create a new `repodata.json` for all packages in the channel at the given S3
 /// URL and write channel metadata into the generated repodata.
+///
+/// Packages that cannot be read or parsed are left out of the repodata and
+/// reported in the returned [`IndexStats`]; check [`IndexStats::has_failures`].
 #[cfg(feature = "s3")]
 pub async fn index_s3_with_channel_metadata(
     IndexS3Config {
@@ -1855,30 +2105,33 @@ pub async fn index_s3_with_channel_metadata(
         max_parallel,
         multi_progress,
         precondition_checks,
+        processing,
     }: IndexS3Config,
     channel_metadata: ChannelMetadata,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<IndexStats> {
     // Create the S3 configuration for opendal.
     let s3_config = s3_config(&credentials, &channel)?;
     let builder = s3_config.into_builder();
     let op = Operator::new(builder)?.layer(RetryLayer::new()).finish();
 
-    index_with_channel_metadata(
-        target_platform,
+    index_with_options(
         op,
-        repodata_patch,
-        write_zst,
-        write_shards,
-        repodata_revisions,
-        package_revision_assignment,
-        force,
-        max_parallel,
-        multi_progress,
-        precondition_checks,
-        channel_metadata,
+        IndexOptions {
+            target_platform,
+            repodata_patch,
+            write_zst,
+            write_shards,
+            repodata_revisions,
+            package_revision_assignment,
+            force,
+            max_parallel,
+            multi_progress,
+            precondition_checks,
+            channel_metadata,
+            processing,
+        },
     )
     .await
-    .map(|_| ())
 }
 
 /// Create a new `repodata.json` for all packages in the given operator's root.
@@ -1897,6 +2150,8 @@ pub async fn index_s3_with_channel_metadata(
 ///
 /// Returns `IndexStats` containing statistics about the indexing operation,
 /// including the number of packages added/removed and retry counts per subdir.
+///
+/// See [`index_with_options`] for caching, memory and cancellation controls.
 #[allow(clippy::too_many_arguments)]
 pub async fn index(
     target_platform: Option<Platform>,
@@ -1930,6 +2185,8 @@ pub async fn index(
 
 /// Create a new `repodata.json` for all packages in the given operator's root
 /// and write channel metadata into the generated repodata.
+///
+/// See [`index_with_options`] for caching, memory and cancellation controls.
 #[allow(clippy::too_many_arguments)]
 pub async fn index_with_channel_metadata(
     target_platform: Option<Platform>,
@@ -1945,7 +2202,87 @@ pub async fn index_with_channel_metadata(
     precondition_checks: PreconditionChecks,
     channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<IndexStats> {
+    index_with_options(
+        op,
+        IndexOptions {
+            target_platform,
+            repodata_patch,
+            write_zst,
+            write_shards,
+            repodata_revisions,
+            package_revision_assignment,
+            force,
+            max_parallel,
+            multi_progress,
+            precondition_checks,
+            channel_metadata,
+            processing: IndexProcessingOptions::default(),
+        },
+    )
+    .await
+}
+
+/// All options of [`index_with_options`].
+#[derive(Debug, Clone, Default)]
+pub struct IndexOptions {
+    /// The target platform to index. `None` indexes every subdir found.
+    pub target_platform: Option<Platform>,
+    /// The filename of a repodata patch package in `noarch` to apply.
+    pub repodata_patch: Option<String>,
+    /// Whether to write the repodata as a zstd-compressed file.
+    pub write_zst: bool,
+    /// Whether to write the repodata shards.
+    pub write_shards: bool,
+    /// Repodata revisions to advertise in generated repodata.
+    pub repodata_revisions: Vec<RepodataRevisionSelection>,
+    /// How packages are assigned to repodata revisions.
+    pub package_revision_assignment: PackageRevisionAssignment,
+    /// Whether to ignore the records of the existing repodata.
+    pub force: bool,
+    /// The maximum number of packages processed in parallel.
+    pub max_parallel: usize,
+    /// The multi-progress bar to use for the index.
+    pub multi_progress: Option<MultiProgress>,
+    /// Configuration for precondition checks during file operations.
+    pub precondition_checks: PreconditionChecks,
+    /// Metadata written into the generated repodata.
+    pub channel_metadata: ChannelMetadata,
+    /// Caching, memory and cancellation options.
+    pub processing: IndexProcessingOptions,
+}
+
+/// Create a new `repodata.json` for all packages in the given operator's root.
+///
+/// This is the most general entry point; [`index`], [`index_with_channel_metadata`],
+/// [`index_fs`] and [`index_s3`] all delegate to it.
+///
+/// Packages that cannot be read or parsed do not abort indexing. They are left
+/// out of the generated repodata and listed in
+/// [`SubdirIndexStats::failed_packages`]. Subdir-level failures (listing the
+/// subdir, reading or writing repodata) are still returned as errors.
+///
+/// When the [`IndexProcessingOptions::cancellation_token`] is cancelled, no new
+/// package is started, packages in flight finish, and
+/// [`IndexStats::cancelled`] is set. Combined with a
+/// [`IndexProcessingOptions::cache_dir`], the next run continues where this
+/// one stopped.
+pub async fn index_with_options(op: Operator, options: IndexOptions) -> anyhow::Result<IndexStats> {
+    let IndexOptions {
+        target_platform,
+        repodata_patch,
+        write_zst,
+        write_shards,
+        repodata_revisions,
+        package_revision_assignment,
+        force,
+        max_parallel,
+        multi_progress,
+        precondition_checks,
+        channel_metadata,
+        processing,
+    } = options;
     validate_configured_repodata_revisions(&repodata_revisions)?;
+    let cancellation_token = processing.cancellation_token.unwrap_or_default();
 
     let notices_metadata = if channel_metadata.notices.is_some() {
         Some(RepodataFileMetadata::new(&op, CHANNEL_NOTICES, precondition_checks).await?)
@@ -2011,43 +2348,62 @@ pub async fn index_with_channel_metadata(
         None
     };
 
-    let semaphore = Semaphore::new(max_parallel);
-    let semaphore = Arc::new(semaphore);
+    let byte_budget = processing
+        .max_in_flight_bytes
+        .map(|bytes| Arc::new(ByteBudget::new(bytes)));
 
-    let mut tasks: Vec<(Platform, _)> = Vec::new();
-    for subdir in subdirs.iter() {
-        // Create a separate cache for each subdir.
-        // The cache persists across retry attempts for this specific subdir.
-        let cache = cache::PackageRecordCache::new();
-
-        let task = index_subdir(
-            *subdir,
-            op.clone(),
-            force,
-            write_zst,
-            write_shards,
-            repodata_revisions.clone(),
-            package_revision_assignment,
-            channel_metadata.clone(),
-            repodata_patch
-                .as_ref()
-                .and_then(|p| p.subdirs.get(&subdir.to_string()).cloned()),
-            multi_progress.clone(),
-            semaphore.clone(),
-            cache,
-            precondition_checks,
-        )
-        .instrument(tracing::info_span!("index_subdir", subdir = %subdir));
-        tasks.push((*subdir, task));
-    }
+    // Deterministic subdir order so an interrupted run resumes predictably.
+    let mut subdirs = subdirs.into_iter().collect::<Vec<_>>();
+    subdirs.sort_by_key(|subdir| subdir.as_str());
 
     let mut stats = IndexStats {
         subdirs: HashMap::new(),
+        cancelled: false,
     };
 
-    for (subdir, task) in tasks {
+    for subdir in subdirs {
+        if cancellation_token.is_cancelled() {
+            tracing::info!("Indexing cancelled; skipping subdir {subdir}");
+            stats.cancelled = true;
+            continue;
+        }
+
+        // Create a separate cache for each subdir.
+        // The cache persists across retry attempts for this specific subdir
+        // and, with a cache directory, across runs.
+        let cache = match &processing.cache_dir {
+            Some(cache_dir) => cache::PackageRecordCache::with_store(
+                cache_dir.join(format!("{}.jsonl", subdir.as_str())),
+            )
+            .with_context(|| format!("failed to open the package cache for {subdir}"))?,
+            None => cache::PackageRecordCache::new(),
+        };
+
+        let task = index_subdir(SubdirIndexParams {
+            subdir,
+            op: op.clone(),
+            force,
+            write_zst,
+            write_shards,
+            repodata_revisions: repodata_revisions.clone(),
+            package_revision_assignment,
+            channel_metadata: channel_metadata.clone(),
+            repodata_patch: repodata_patch
+                .as_ref()
+                .and_then(|p| p.subdirs.get(&subdir.to_string()).cloned()),
+            progress: multi_progress.clone(),
+            max_parallel,
+            byte_budget: byte_budget.clone(),
+            cache,
+            precondition_checks,
+            cancellation_token: cancellation_token.clone(),
+            publish_partial: processing.publish_partial,
+        })
+        .instrument(tracing::info_span!("index_subdir", subdir = %subdir));
+
         match task.await {
             Ok(subdir_stats) => {
+                stats.cancelled |= subdir_stats.cancelled;
                 stats.subdirs.insert(subdir, subdir_stats);
             }
             Err(e) => {
@@ -2058,8 +2414,11 @@ pub async fn index_with_channel_metadata(
     }
 
     // Publish notices only after all repodata updates succeeded, so a failed
-    // indexing operation cannot partially update channel-level messaging.
-    if let (Some(notices), Some(metadata)) = (&channel_metadata.notices, notices_metadata.as_ref())
+    // or interrupted indexing operation cannot partially update channel-level
+    // messaging.
+    if !stats.cancelled
+        && let (Some(notices), Some(metadata)) =
+            (&channel_metadata.notices, notices_metadata.as_ref())
     {
         write_channel_notices_with_metadata(&op, notices, metadata).await?;
     }
@@ -2497,16 +2856,16 @@ mod tests {
     #[test]
     fn latest_assignment_canonicalizes_validated_legacy_index_json() {
         let filename = DistArchiveIdentifier::try_from_filename("demo-1.0-0.tar.bz2").unwrap();
-        let mut index_json = Cursor::new(
-            br#"{
+        let index_json = r#"{
                 "build": "0",
                 "build_number": 0,
                 "depends": ["python >=3.10"],
                 "name": "demo",
                 "version": "1.0"
-            }"#,
-        );
-        let indexed = indexed_package_record_from_index_json(b"package", &mut index_json).unwrap();
+            }"#;
+        let indexed = ParsedPackage::new(b"package", index_json.to_owned(), None)
+            .to_indexed_record()
+            .unwrap();
         assert_eq!(indexed.repodata_revision, RepodataRevision::Legacy);
 
         let mut v3 = V3Packages::default();

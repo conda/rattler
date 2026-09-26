@@ -9,8 +9,8 @@ use rattler_conda_types::{
     compression_level::CompressionLevel,
 };
 use rattler_index::{
-    ChannelMetadata, IndexFsConfig, PackageRevisionAssignment, RepodataRevision,
-    RepodataRevisionSelection, index_fs, index_fs_with_channel_metadata,
+    ChannelMetadata, IndexFsConfig, IndexProcessingOptions, PackageRevisionAssignment,
+    RepodataRevision, RepodataRevisionSelection, index_fs, index_fs_with_channel_metadata,
 };
 use rattler_package_streaming::write::{write_conda_package, write_tar_bz2_package};
 use serde::Deserialize;
@@ -90,6 +90,7 @@ async fn test_index() {
         force: true,
         max_parallel: 32,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     })
     .await;
     if let Err(e) = &res {
@@ -160,6 +161,7 @@ async fn test_index_empty_directory_creates_noarch_repodata() {
         force: true,
         max_parallel: 100,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     })
     .await;
 
@@ -193,6 +195,7 @@ async fn test_empty_channel_rejects_unsupported_configured_revision() {
         force: false,
         max_parallel: 1,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     })
     .await
     .unwrap_err();
@@ -215,6 +218,7 @@ fn noarch_index_config(channel: &Path) -> IndexFsConfig {
         force: false,
         max_parallel: 1,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     }
 }
 
@@ -393,6 +397,7 @@ async fn test_reindex_removes_deleted_conda_package() {
         force: false,
         max_parallel: 1,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     })
     .await
     .unwrap();
@@ -421,6 +426,7 @@ async fn test_reindex_removes_deleted_conda_package() {
         force: false,
         max_parallel: 1,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     })
     .await
     .unwrap();
@@ -458,6 +464,7 @@ async fn test_normal_and_force_reindex_preserve_v3_extensions() {
         force: false,
         max_parallel: 1,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     })
     .await
     .unwrap();
@@ -491,6 +498,7 @@ async fn test_normal_and_force_reindex_preserve_v3_extensions() {
         force: false,
         max_parallel: 1,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     })
     .await
     .unwrap();
@@ -513,6 +521,7 @@ async fn test_normal_and_force_reindex_preserve_v3_extensions() {
         force: true,
         max_parallel: 1,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     })
     .await
     .unwrap();
@@ -628,6 +637,7 @@ async fn test_reindex_derives_authoritative_v3_stats_and_drops_legacy_revision()
         force: true,
         max_parallel: 1,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     })
     .await
     .unwrap();
@@ -676,6 +686,7 @@ async fn test_force_reindex_with_patch_preserves_and_merge_patches_v3_extensions
         force: true,
         max_parallel: 1,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     })
     .await
     .unwrap();
@@ -765,6 +776,7 @@ async fn test_force_reindex_with_patch_preserves_and_merge_patches_v3_extensions
         force: true,
         max_parallel: 1,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     })
     .await
     .unwrap();
@@ -815,6 +827,7 @@ async fn test_reindex_rejects_unsupported_producer_map_without_rewriting() {
         force: true,
         max_parallel: 1,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     })
     .await
     .unwrap_err();
@@ -852,6 +865,7 @@ async fn test_reindex_rejects_v1_producer_map_without_rewriting() {
         force: false,
         max_parallel: 1,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     })
     .await
     .unwrap_err();
@@ -896,6 +910,7 @@ async fn test_reindex_preserves_existing_revision_messages_until_overridden() {
             force,
             max_parallel: 1,
             multi_progress: None,
+            processing: IndexProcessingOptions::default(),
         })
         .await
         .unwrap();
@@ -924,6 +939,7 @@ async fn test_reindex_preserves_existing_revision_messages_until_overridden() {
         force: false,
         max_parallel: 1,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     })
     .await
     .unwrap();
@@ -959,6 +975,7 @@ async fn test_index_latest_repodata_revision() {
         force: true,
         max_parallel: 1,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     })
     .await
     .unwrap();
@@ -1072,6 +1089,7 @@ async fn test_index_repodata_revision_from_index_json() {
         force: true,
         max_parallel: 1,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     })
     .await
     .unwrap();
@@ -1133,6 +1151,7 @@ async fn test_index_writes_channel_metadata() {
             force: true,
             max_parallel: 1,
             multi_progress: None,
+            processing: IndexProcessingOptions::default(),
         },
         channel_metadata,
     )
@@ -1244,6 +1263,7 @@ async fn test_sharded_repodata_is_deterministic() {
         force,
         max_parallel: 1,
         multi_progress: None,
+        processing: IndexProcessingOptions::default(),
     };
 
     // Build the index, then reindex the unchanged channel several times.
