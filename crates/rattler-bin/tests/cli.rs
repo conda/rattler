@@ -214,6 +214,34 @@ fn test_whoprovides_json() {
 }
 
 #[test]
+fn test_whoprovides_fails_without_index() {
+    // A subdir whose repodata has no `lookup_url` is an error, not a warning.
+    let index = write_lookup_index();
+    std::fs::write(
+        index.path().join("noarch/repodata.json"),
+        r#"{"info": {"subdir": "noarch"}, "packages": {}, "packages.conda": {}}"#,
+    )
+    .unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_rattler"))
+        .args([
+            "whoprovides",
+            "--channels",
+            index.path().to_str().unwrap(),
+            "--platform",
+            "linux-64",
+            "include/zlib.h",
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no lookup index for noarch"),
+        "unexpected stderr: {stderr}"
+    );
+}
+
+#[test]
 fn test_whoprovides_human_readable() {
     let index = write_lookup_index();
     let output = run_rattler(&[

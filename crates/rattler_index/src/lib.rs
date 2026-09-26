@@ -350,13 +350,6 @@ pub fn package_record_from_archive(file: &Path) -> std::io::Result<PackageRecord
     }
 }
 
-fn read_indexed_json_from_archive(
-    bytes: &Vec<u8>,
-    archive: &mut tar::Archive<impl Read>,
-) -> std::io::Result<IndexedPackageRecord> {
-    read_package_files_from_archive(bytes, archive, false).map(|(indexed, _)| indexed)
-}
-
 /// Reads `info/index.json` and `info/run_exports.json` from the archive and,
 /// with `extract_paths`, the paths of the files in the package: from
 /// `info/paths.json`, or from `info/files` for packages that predate it.
@@ -435,7 +428,7 @@ fn read_index_json_from_archive(
     bytes: &Vec<u8>,
     archive: &mut tar::Archive<impl Read>,
 ) -> std::io::Result<PackageRecord> {
-    read_indexed_json_from_archive(bytes, archive).map(|indexed| indexed.record)
+    read_package_files_from_archive(bytes, archive, false).map(|(indexed, _)| indexed.record)
 }
 
 /// Extract the package record from a `.conda` package file content.

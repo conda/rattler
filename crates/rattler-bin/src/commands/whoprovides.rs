@@ -1,15 +1,13 @@
 //! `rattler whoprovides`: which packages contain a file, answered with the
 //! lookup index a channel publishes next to its repodata (`info.lookup_url`).
 
-use std::{collections::BTreeMap, env, str::FromStr, time::Instant};
+use std::{collections::BTreeMap, env, time::Instant};
 
 use futures_util::future::try_join_all;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
-use rattler_conda_types::{
-    Channel, ChannelConfig, Platform, Version, package::CondaArchiveIdentifier,
-};
+use rattler_conda_types::{Channel, ChannelConfig, Platform, package::CondaArchiveIdentifier};
 use rattler_lookup::{Kind, Location, Matches, Query, SubdirIndex, discovery};
 
 use super::{QueryOutputFormat, print_url_lines};
@@ -64,29 +62,15 @@ pub struct Opt {
     format: Option<QueryOutputFormat>,
 }
 
-/// One artifact containing a matching path.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// One artifact containing a matching path, ordered by package name,
+/// version, build string and subdir.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Found {
     identifier: CondaArchiveIdentifier,
-    /// A parsed version, for ordering.
-    version: Option<Version>,
     subdir: String,
-    filename: String,
     url: String,
     /// The path in the artifact that matched.
     path: String,
-}
-
-impl Found {
-    /// Sort key: by name, then newest version first, then build string.
-    fn sort_key(&self) -> (String, std::cmp::Reverse<Option<Version>>, String, String) {
-        (
-            self.identifier.identifier.name.clone(),
-            std::cmp::Reverse(self.version.clone()),
-            self.identifier.identifier.build_string.clone(),
-            self.url.clone(),
-        )
-    }
 }
 
 /// The manifest locations of the subdirs to search.
@@ -121,7 +105,7 @@ async fn locate_indexes(
                     )
                 })? {
                 Some(location) => locations.push(location),
-                None => eprintln!(
+                None => miette::bail!(
                     "{} has no lookup index for {subdir}",
                     channel.canonical_name()
                 ),
@@ -151,13 +135,6 @@ pub async fn whoprovides(opt: Opt, offline: bool) -> miette::Result<()> {
     pb.set_message("Locating lookup indexes...");
 
     let locations = locate_indexes(&opt, &subdirs, &client).await?;
-    if locations.is_empty() {
-        pb.finish_and_clear();
-        return Err(miette::miette!(
-            "none of the channels publishes a lookup index for {}",
-            subdirs.iter().join(", ")
-        ));
-    }
 
     pb.set_message("Opening lookup indexes...");
     let mut indexes = try_join_all(
@@ -195,24 +172,23 @@ pub async fn whoprovides(opt: Opt, offline: bool) -> miette::Result<()> {
             let channel = index.channel().trim_end_matches('/');
             for (path, filenames) in matches.paths {
                 for filename in filenames {
-                    let Some(identifier) = CondaArchiveIdentifier::try_from_filename(&filename)
-                    else {
-                        tracing::warn!("skipping unrecognized artifact filename {filename}");
-                        continue;
-                    };
-                    let version = Version::from_str(&identifier.identifier.version).ok();
+                    let identifier = CondaArchiveIdentifier::try_from_filename(&filename)
+                        .ok_or_else(|| {
+                            miette::miette!(
+                                "the lookup index of {} in {channel} contains an unrecognized artifact filename: {filename}",
+                                index.subdir()
+                            )
+                        })?;
                     found.push(Found {
-                        version,
                         identifier,
                         subdir: index.subdir().to_string(),
                         url: format!("{channel}/{}/{filename}", index.subdir()),
-                        filename,
                         path: path.clone(),
                     });
                 }
             }
         }
-        found.sort_by_cached_key(Found::sort_key);
+        found.sort();
         all_found.push((query.clone(), found));
     }
     pb.finish_and_clear();
@@ -238,7 +214,7 @@ pub async fn whoprovides(opt: Opt, offline: bool) -> miette::Result<()> {
                         "version": found.identifier.identifier.version,
                         "build": found.identifier.identifier.build_string,
                         "subdir": found.subdir,
-                        "filename": found.filename,
+                        "filename": found.identifier.to_file_name(),
                         "url": found.url,
                     })
                 })
@@ -276,7 +252,7 @@ pub async fn whoprovides(opt: Opt, offline: bool) -> miette::Result<()> {
             continue;
         }
 
-        // One line per package name, with its newest artifact.
+        // One line per package name, with its first artifact.
         let mut grouped: BTreeMap<&str, (&Found, usize)> = BTreeMap::new();
         for artifact in found {
             let name = artifact.identifier.identifier.name.as_str();

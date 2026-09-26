@@ -27,7 +27,7 @@ When `--config` is omitted, `rattler-index` falls back to its built-in defaults
 advertised repodata revisions, `from-index-json` revision assignment, no
 channel metadata).
 
-## Lookup index
+## Lookup index (CEP XXXX)
 
 With `--write-lookup` (or `write-lookup = true` in the config), `rattler-index`
 also maintains the *lookup index* of every subdir in `<subdir>/lookup/`: a set
