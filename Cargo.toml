@@ -28,6 +28,8 @@ ambient-id = { version = "0.0.11", default-features = false }
 anyhow = "1"
 apple-native-keyring-store = { version = "1", default-features = false }
 archspec = "0.2"
+arrow-array = "60"
+arrow-schema = "60"
 assert_matches = "1"
 async-compression = { version = "0.4", features = [
   "gzip",
@@ -125,6 +127,13 @@ open = "5"
 openidconnect = { version = "4", default-features = false }
 oauth2-reqwest = { version = "0.1.0-alpha.3", default-features = false }
 parking_lot = "0.12"
+parquet = { version = "60", default-features = false, features = [
+  "arrow",
+  "async",
+  "snap",
+  "flate2-rust_backend",
+  "zstd",
+] }
 pathdiff = "0.2"
 pep440_rs = { version = "0.7" }
 pep508_rs = { version = "0.9", features = ["non-pep508-extensions"] }
@@ -227,6 +236,7 @@ rattler_digest = { path = "crates/rattler_digest", version = "=1.4.0", default-f
 rattler_git = { path = "crates/rattler_git", version = "=0.3.6", default-features = false }
 rattler_index = { path = "crates/rattler_index", version = "=0.31.7", default-features = false }
 rattler_libsolv_c = { path = "crates/rattler_libsolv_c", version = "=1.5.0", default-features = false }
+rattler_lookup = { path = "crates/rattler_lookup", version = "=0.1.0", default-features = false }
 rattler_lock = { path = "crates/rattler_lock", version = "=0.33.1", default-features = false }
 rattler_macros = { path = "crates/rattler_macros", version = "=1.2.0", default-features = false }
 rattler_menuinst = { path = "crates/rattler_menuinst", version = "=0.3.1", default-features = false }

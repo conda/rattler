@@ -13,18 +13,21 @@ readme.workspace = true
 default-run = "rattler-index"
 
 [features]
-default = ["rustls", "s3"]
+default = ["rustls", "s3", "lookup"]
+lookup = ["dep:rattler_lookup", "dep:tempfile"]
 native-tls = [
   "reqwest/native-tls",
   "rattler_package_streaming/native-tls",
   "rattler_networking/native-tls",
   "rattler_s3?/native-tls",
+  "rattler_lookup?/native-tls",
 ]
 rustls = [
   "reqwest/rustls",
   "rattler_package_streaming/rustls",
   "rattler_networking/rustls",
   "rattler_s3?/rustls",
+  "rattler_lookup?/rustls",
   "opendal/reqwest-rustls-tls",
 ]
 s3 = ["opendal/services-s3", "dep:rattler_s3"]
@@ -58,6 +61,7 @@ rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }
 hex = { workspace = true }
+rattler_lookup = { workspace = true, optional = true }
 rattler_s3 = { workspace = true, optional = true, features = ["clap"] }
 reqwest = { workspace = true, default-features = false, features = [
   "http2",
@@ -69,6 +73,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 tar = { workspace = true }
+tempfile = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
@@ -77,8 +82,10 @@ zstd = { workspace = true }
 retry-policies = { workspace = true }
 
 [dev-dependencies]
+rattler_lookup = { workspace = true }
 rattler_repodata_gateway = { path = "../rattler_repodata_gateway", default-features = false, features = [
   "sparse",
 ] }
+reqwest-middleware = { workspace = true }
 tempfile = { workspace = true }
 tools = { path = "../tools", default-features = false }

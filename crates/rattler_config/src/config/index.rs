@@ -11,6 +11,7 @@
 //! [index-config]
 //! write-zst = true
 //! write-shards = true
+//! write-lookup = false
 //!
 //! [index-config."s3://my-bucket"]
 //! base-url = "../packages/"
@@ -85,6 +86,11 @@ pub struct IndexChannelConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub write_shards: Option<bool>,
 
+    /// Whether to write the lookup index (`<subdir>/lookup/`, which
+    /// artifacts contain a file) and point to it with `info.lookup_url`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub write_lookup: Option<bool>,
+
     /// Additional repodata revisions to advertise in generated repodata.
     /// The legacy layout is implicit; currently only v3 can be selected.
     #[serde(
@@ -119,6 +125,7 @@ impl IndexChannelConfig {
     pub fn is_empty(&self) -> bool {
         self.write_zst.is_none()
             && self.write_shards.is_none()
+            && self.write_lookup.is_none()
             && self.repodata_revisions.is_none()
             && self.package_revision_assignment.is_none()
             && self.base_url.is_none()
@@ -131,6 +138,7 @@ impl IndexChannelConfig {
         Self {
             write_zst: other.write_zst.or(self.write_zst),
             write_shards: other.write_shards.or(self.write_shards),
+            write_lookup: other.write_lookup.or(self.write_lookup),
             repodata_revisions: other
                 .repodata_revisions
                 .or_else(|| self.repodata_revisions.clone()),
@@ -296,6 +304,7 @@ mod tests {
             r#"
 write-zst = true
 write-shards = false
+write-lookup = true
 repodata-revisions = ["v3"]
 package-revision-assignment = "latest"
 base-url = "../packages/"
@@ -306,6 +315,7 @@ base = "../conda-forge"
         );
         assert_eq!(cfg.default.write_zst, Some(true));
         assert_eq!(cfg.default.write_shards, Some(false));
+        assert_eq!(cfg.default.write_lookup, Some(true));
         assert_eq!(cfg.default.repodata_revisions.as_ref().unwrap().len(), 1);
         assert_eq!(
             cfg.default.repodata_revisions.as_ref().unwrap()[0].revision,

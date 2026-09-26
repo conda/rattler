@@ -82,6 +82,7 @@ async fn index(root: &Path, force: bool, patch: Option<&str>, v3: bool) -> Value
         repodata_patch: patch.map(str::to_owned),
         write_zst: true,
         write_shards: true,
+        write_lookup: false,
         repodata_revisions: if v3 {
             vec![RepodataRevisionSelection {
                 revision: RepodataRevision::V3,
@@ -334,6 +335,7 @@ async fn forced_retry_preserves_concurrent_publication_with_cached_metadata() {
         Some(Platform::NoArch),
         op.clone(),
         None,
+        false,
         false,
         false,
         vec![],

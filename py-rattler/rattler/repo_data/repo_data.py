@@ -86,6 +86,16 @@ class ChannelInfo:
         return ChannelRelations._from_inner(relations)
 
     @property
+    def lookup_url(self) -> str | None:
+        """
+        The URL of the ``manifest.json`` of the subdir's lookup index (which
+        packages contain a file), absolute or relative to the repodata file.
+
+        ``None`` when the channel publishes no lookup index.
+        """
+        return self._inner.lookup_url
+
+    @property
     def repodata_revisions(self) -> dict[str, RepodataRevisionMetadata]:
         """Revisions advertised in ``info.repodata_revisions``, keyed by ``vN``.
 

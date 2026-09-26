@@ -71,6 +71,8 @@ enum Command {
     Search(commands::search::Opt),
     Solve(commands::solve::Opt),
     Whoneeds(commands::whoneeds::Opt),
+    #[cfg(feature = "lookup")]
+    Whoprovides(commands::whoprovides::Opt),
     ShellHook(commands::shell_hook::Opt),
     VirtualPackages(commands::virtual_packages::Opt),
     #[cfg(feature = "sigstore")]
@@ -148,6 +150,8 @@ async fn async_main() -> miette::Result<()> {
         Command::Search(opts) => commands::search::search(opts, offline).await,
         Command::Solve(opts) => commands::solve::solve(opts, offline).await,
         Command::Whoneeds(opts) => commands::whoneeds::whoneeds(opts, offline).await,
+        #[cfg(feature = "lookup")]
+        Command::Whoprovides(opts) => commands::whoprovides::whoprovides(opts, offline).await,
         Command::List(opts) => commands::list::list(opts).await,
         Command::ShellHook(opts) => commands::shell_hook::shell_hook(opts).await,
         Command::VirtualPackages(opts) => commands::virtual_packages::virtual_packages(opts),

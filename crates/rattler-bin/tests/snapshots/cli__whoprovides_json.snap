@@ -1,0 +1,26 @@
+---
+source: crates/rattler-bin/tests/cli.rs
+expression: "run_rattler(&[\"whoprovides\", \"--lookup-url\", index.path().to_str().unwrap(),\n\"--platform\", \"linux-64\", \"--format\", \"json\", \"**/zlib.h\", \"does/not/exist\",])"
+---
+[
+  {
+    "query": "**/zlib.h",
+    "path": "include/zlib.h",
+    "name": "mariadb-connector-c",
+    "version": "3.4.1",
+    "build": "h1234_0",
+    "subdir": "linux-64",
+    "filename": "mariadb-connector-c-3.4.1-h1234_0.tar.bz2",
+    "url": "https://conda.anaconda.org/conda-forge/linux-64/mariadb-connector-c-3.4.1-h1234_0.tar.bz2"
+  },
+  {
+    "query": "**/zlib.h",
+    "path": "include/zlib.h",
+    "name": "zlib",
+    "version": "1.3.1",
+    "build": "hb9d3cd8_2",
+    "subdir": "linux-64",
+    "filename": "zlib-1.3.1-hb9d3cd8_2.conda",
+    "url": "https://conda.anaconda.org/conda-forge/linux-64/zlib-1.3.1-hb9d3cd8_2.conda"
+  }
+]

@@ -16,11 +16,12 @@ name = "rattler"
 path = "src/main.rs"
 
 [features]
-default = ["rustls", "s3", "gcs", "oauth", "sigstore"]
+default = ["rustls", "s3", "gcs", "oauth", "sigstore", "lookup"]
 native-tls = [
   "reqwest/native-tls",
   "rattler/native-tls",
   "rattler_sigstore?/native-tls",
+  "rattler_lookup?/native-tls",
   "rattler_repodata_gateway/native-tls",
   "rattler_networking/native-tls",
   "rattler_cache/native-tls",
@@ -29,6 +30,7 @@ rustls = [
   "reqwest/rustls",
   "rattler/rustls",
   "rattler_sigstore?/rustls",
+  "rattler_lookup?/rustls",
   "rattler_repodata_gateway/rustls",
   "rattler_networking/rustls",
   "rattler_cache/rustls",
@@ -41,6 +43,7 @@ s3 = [
 gcs = ["rattler_networking/gcs"]
 oauth = ["rattler/oauth"]
 sigstore = ["rattler/sigstore", "dep:rattler_redaction", "dep:rattler_sigstore"]
+lookup = ["dep:rattler_lookup"]
 
 [dependencies]
 jiff = { workspace = true }
@@ -59,6 +62,7 @@ rattler = { workspace = true, features = ["indicatif", "cli-tools", "auth-intera
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_config = { workspace = true, default-features = false }
 rattler_index = { workspace = true, default-features = false }
+rattler_lookup = { workspace = true, optional = true, default-features = false }
 rattler_networking = { workspace = true, default-features = false, features = [
   "system-integration",
   "netrc-rs",
@@ -97,4 +101,5 @@ regex = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+rattler_lookup = { workspace = true, default-features = false }
 shlex = { workspace = true }

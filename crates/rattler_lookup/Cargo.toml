@@ -1,0 +1,44 @@
+[package]
+name = "rattler_lookup"
+version = "0.1.0"
+edition.workspace = true
+authors = []
+description = "Read and write the lookup index of a conda channel: which packages contain a file"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+
+[features]
+default = ["rustls"]
+native-tls = ["reqwest/native-tls"]
+rustls = ["reqwest/rustls"]
+
+[dependencies]
+arrow-array = { workspace = true }
+arrow-schema = { workspace = true }
+async_http_range_reader = { workspace = true }
+bytes = { workspace = true }
+futures = { workspace = true }
+hex = { workspace = true }
+http = { workspace = true }
+jiff = { workspace = true }
+parquet = { workspace = true }
+reqwest = { workspace = true, default-features = false }
+reqwest-middleware = { workspace = true }
+rmp-serde = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["fs", "io-util", "sync"] }
+url = { workspace = true }
+zstd = { workspace = true }
+
+[dev-dependencies]
+axum = { workspace = true }
+insta = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tower-http = { workspace = true, features = ["fs"] }
