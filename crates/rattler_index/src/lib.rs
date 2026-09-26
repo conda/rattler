@@ -11,6 +11,8 @@
 pub mod cache;
 /// Defines errors used in this crate.
 pub mod error;
+#[cfg(feature = "lookup")]
+mod lookup;
 mod utils;
 
 use crate::error::RepodataError;
@@ -128,6 +130,11 @@ pub(crate) struct IndexedPackageRecord {
     /// this cache and are parsed only if they are emitted as v3.
     matchspecs: Option<ValidatedMatchSpecs>,
     wheel_url: Option<UrlOrPath>,
+    /// The file paths the archive contains, read from `info/paths.json` (or
+    /// `info/files` for archives that predate it). Only collected while a paths
+    /// index is written, since holding them costs about as much memory as the
+    /// rest of the record.
+    file_paths: Option<Arc<Vec<String>>>,
 }
 
 /// Statistics for a single subdir indexing operation
@@ -236,6 +243,7 @@ fn indexed_package_record_from_index_json<T: Read>(
         repodata_revision,
         matchspecs: Some(matchspecs),
         wheel_url: None,
+        file_paths: None,
     })
 }
 
@@ -331,9 +339,12 @@ pub fn package_record_from_archive(file: &Path) -> std::io::Result<PackageRecord
 fn read_indexed_json_from_archive(
     bytes: &Vec<u8>,
     archive: &mut tar::Archive<impl Read>,
+    file_paths: FilePaths,
 ) -> std::io::Result<IndexedPackageRecord> {
     let mut index_json = None;
     let mut run_exports_json = None;
+    let mut paths = None;
+    let mut files = None;
     for entry in archive.entries()?.flatten() {
         let mut entry = entry;
         let path = entry.path()?;
@@ -341,22 +352,86 @@ fn read_indexed_json_from_archive(
             index_json = Some(indexed_package_record_from_index_json(bytes, &mut entry)?);
         } else if path.as_os_str().eq("info/run_exports.json") {
             run_exports_json = Some(RunExportsJson::from_reader(&mut entry)?);
+        } else if file_paths == FilePaths::Read {
+            if path.as_os_str().eq("info/paths.json") {
+                paths = Some(read_paths_json(&mut entry)?);
+            } else if path.as_os_str().eq("info/files") {
+                files = Some(read_files(&mut entry)?);
+            }
         }
     }
 
     if let Some(mut index_json) = index_json {
         index_json.record.run_exports = run_exports_json;
+        // `info/files` is only a fallback: archives that have `info/paths.json`
+        // list the same paths there.
+        index_json.file_paths = paths.or(files).map(Arc::new);
         return Ok(index_json);
     }
 
     Err(std::io::Error::other("No index.json found"))
 }
 
+/// Whether the paths contained in an archive are read along with its metadata.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FilePaths {
+    /// Read `info/paths.json`, for the lookup index.
+    Read,
+    /// Leave [`IndexedPackageRecord::file_paths`] empty.
+    Skip,
+}
+
+/// The paths listed in an `info/paths.json`.
+///
+/// Only `_path` is read: the digests and sizes of the entries are of no use
+/// here and parsing them costs both time and memory.
+fn read_paths_json(reader: &mut impl Read) -> std::io::Result<Vec<String>> {
+    #[derive(serde::Deserialize)]
+    struct PathsJson {
+        paths: Vec<PathsEntry>,
+    }
+    #[derive(serde::Deserialize)]
+    struct PathsEntry {
+        #[serde(rename = "_path")]
+        path: String,
+    }
+
+    let paths: PathsJson = serde_json::from_reader(reader)?;
+    Ok(paths
+        .paths
+        .into_iter()
+        .map(|entry| normalize_package_path(&entry.path))
+        .collect())
+}
+
+/// The paths listed in an `info/files`, one per line.
+fn read_files(reader: &mut impl Read) -> std::io::Result<Vec<String>> {
+    let mut content = String::new();
+    BufReader::new(reader).read_to_string(&mut content)?;
+    Ok(content
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(normalize_package_path)
+        .collect())
+}
+
+/// The path of a file in an archive as the lookup index stores it: with `/` as
+/// the separator and without a leading `./`.
+fn normalize_package_path(path: &str) -> String {
+    let path = path.trim_start_matches("./");
+    if path.contains('\\') {
+        path.replace('\\', "/")
+    } else {
+        path.to_string()
+    }
+}
+
 fn read_index_json_from_archive(
     bytes: &Vec<u8>,
     archive: &mut tar::Archive<impl Read>,
 ) -> std::io::Result<PackageRecord> {
-    read_indexed_json_from_archive(bytes, archive).map(|indexed| indexed.record)
+    read_indexed_json_from_archive(bytes, archive, FilePaths::Skip).map(|indexed| indexed.record)
 }
 
 /// Extract the package record from a `.conda` package file content.
@@ -371,10 +446,16 @@ pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result
 
 fn indexed_package_record_from_tar_bz2_reader(
     reader: impl BufRead,
+    file_paths: FilePaths,
 ) -> std::io::Result<IndexedPackageRecord> {
     let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
     let reader = Cursor::new(&bytes);
     let mut archive = read::stream_tar_bz2(reader);
+    if file_paths == FilePaths::Read {
+        // The paths may be listed after `index.json`, so the whole archive is
+        // decompressed instead of stopping at the first entry of interest.
+        return read_indexed_json_from_archive(&bytes, &mut archive, file_paths);
+    }
     for entry in archive.entries()?.flatten() {
         let mut entry = entry;
         let path = entry.path()?;
@@ -387,11 +468,12 @@ fn indexed_package_record_from_tar_bz2_reader(
 
 fn indexed_package_record_from_conda_reader(
     reader: impl BufRead,
+    file_paths: FilePaths,
 ) -> std::io::Result<IndexedPackageRecord> {
     let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
     let reader = Cursor::new(&bytes);
     let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
-    read_indexed_json_from_archive(&bytes, &mut archive)
+    read_indexed_json_from_archive(&bytes, &mut archive, file_paths)
 }
 
 /// Parse a package file buffer based on its filename extension.
@@ -407,15 +489,16 @@ fn indexed_package_record_from_conda_reader(
 fn parse_package_buffer(
     buffer: opendal::Buffer,
     filename: &str,
+    file_paths: FilePaths,
 ) -> std::io::Result<IndexedPackageRecord> {
     let reader = buffer.reader();
     let archive_type = DistArchiveType::try_from(filename).unwrap();
     match archive_type {
         DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
-            indexed_package_record_from_tar_bz2_reader(reader)
+            indexed_package_record_from_tar_bz2_reader(reader, file_paths)
         }
         DistArchiveType::Conda(CondaArchiveType::Conda) => {
-            indexed_package_record_from_conda_reader(reader)
+            indexed_package_record_from_conda_reader(reader, file_paths)
         }
         DistArchiveType::Wheel(WheelArchiveType::Whl) => Err(std::io::Error::other(
             "Package type \".whl\" not yet supported.",
@@ -446,6 +529,7 @@ async fn read_and_parse_package(
     cache: &cache::PackageRecordCache,
     subdir: Platform,
     filename: &str,
+    file_paths: FilePaths,
 ) -> std::io::Result<IndexedPackageRecord> {
     let file_path = format!("{subdir}/{filename}");
 
@@ -475,7 +559,7 @@ async fn read_and_parse_package(
             .map_err(|e| std::io::Error::other(e.to_string()))?;
 
             // Parse package
-            let record = parse_package_buffer(buffer, filename)?;
+            let record = parse_package_buffer(buffer, filename, file_paths)?;
 
             // Store in cache using filename as key
             cache
@@ -496,7 +580,7 @@ async fn read_and_parse_package(
                 .read(&file_path)
                 .await
                 .map_err(|e| std::io::Error::other(e.to_string()))?;
-            parse_package_buffer(buffer, filename)
+            parse_package_buffer(buffer, filename, file_paths)
         }
     }
 }
@@ -629,6 +713,32 @@ impl RepodataMetadataCollection {
     }
 }
 
+/// How the index of the file paths contained in the packages of a channel is
+/// written, see the `lookup` feature.
+///
+/// The index is published as `<subdir>/lookup/manifest.json` and the
+/// Parquet layers next to it, and the repodata points at it with its
+/// `info.lookup_url` field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LookupOptions {
+    /// The number of layers above which all layers are merged into one.
+    pub compact_threshold: usize,
+    /// Merge all layers into one regardless of how many there are.
+    pub compact: bool,
+}
+
+impl Default for LookupOptions {
+    fn default() -> Self {
+        Self {
+            compact_threshold: DEFAULT_LOOKUP_COMPACT_THRESHOLD,
+            compact: false,
+        }
+    }
+}
+
+/// The default number of layers of a lookup index above which it is compacted.
+pub const DEFAULT_LOOKUP_COMPACT_THRESHOLD: usize = 8;
+
 #[allow(clippy::too_many_arguments)]
 async fn index_subdir(
     subdir: Platform,
@@ -644,6 +754,7 @@ async fn index_subdir(
     semaphore: Arc<Semaphore>,
     cache: cache::PackageRecordCache,
     precondition_checks: PreconditionChecks,
+    lookup: Option<LookupOptions>,
 ) -> Result<SubdirIndexStats, RepodataError> {
     // Use write_retry_policy for handling lock contention during repodata writes
     // This will retry for 10 minutes with longer backoff durations (10s, 30s, 60s, etc.)
@@ -667,6 +778,7 @@ async fn index_subdir(
             semaphore.clone(),
             cache.clone(),
             precondition_checks,
+            lookup,
         )
         .await
         {
@@ -742,7 +854,22 @@ async fn index_subdir_inner(
     semaphore: Arc<Semaphore>,
     cache: cache::PackageRecordCache,
     precondition_checks: PreconditionChecks,
+    lookup: Option<LookupOptions>,
 ) -> Result<SubdirIndexStats, RepodataError> {
+    #[cfg(not(feature = "lookup"))]
+    if lookup.is_some() {
+        return Err(RepodataError::Other(anyhow::anyhow!(
+            "writing a lookup index requires the `lookup` feature of rattler_index"
+        )));
+    }
+
+    // The paths of the packages are only read while they are indexed.
+    let file_paths = if lookup.is_some() {
+        FilePaths::Read
+    } else {
+        FilePaths::Skip
+    };
+
     // Step 1: Collect ETags/metadata for all critical files upfront
     let metadata = RepodataMetadataCollection::new(
         &op,
@@ -903,8 +1030,14 @@ async fn index_subdir_inner(
                     console::style(&filename).dim()
                 ));
 
-                let record =
-                    read_and_parse_package(&op, &cache, subdir, &filename.to_file_name()).await?;
+                let record = read_and_parse_package(
+                    &op,
+                    &cache,
+                    subdir,
+                    &filename.to_file_name(),
+                    file_paths,
+                )
+                .await?;
 
                 pb.inc(1);
                 Ok::<(DistArchiveIdentifier, IndexedPackageRecord), std::io::Error>((
@@ -959,6 +1092,27 @@ async fn index_subdir_inner(
     apply_attestation_sidecars(&op, subdir, &attestation_sidecars, &mut registered_packages)
         .await?;
 
+    // The lookup index is written before the repodata that points at it, so that
+    // the manifest exists by the time a client learns about it.
+    #[cfg(feature = "lookup")]
+    let lookup_url = if let Some(options) = &lookup {
+        lookup::write_index(
+            &op,
+            subdir,
+            &registered_packages,
+            options,
+            precondition_checks,
+            &semaphore,
+            &cache,
+        )
+        .await?
+        .then(|| lookup::LOOKUP_URL.to_string())
+    } else {
+        None
+    };
+    #[cfg(not(feature = "lookup"))]
+    let lookup_url: Option<String> = None;
+
     let mut packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState> =
         IndexMap::default();
     let mut conda_packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState> =
@@ -1010,7 +1164,7 @@ async fn index_subdir_inner(
                 &v3,
             ),
             channel_relations: channel_metadata.channel_relations,
-            lookup_url: None,
+            lookup_url,
         }),
         packages,
         conda_packages,
@@ -1218,6 +1372,7 @@ fn package_records_from_repodata(repodata: RepoData) -> ExistingRepodata {
                         repodata_revision: RepodataRevision::Legacy,
                         matchspecs: None,
                         wheel_url: None,
+                        file_paths: None,
                     },
                 )
             }),
@@ -1232,6 +1387,7 @@ fn package_records_from_repodata(repodata: RepoData) -> ExistingRepodata {
                 repodata_revision: RepodataRevision::V3,
                 matchspecs: None,
                 wheel_url,
+                file_paths: None,
             },
         )
     }));
@@ -1588,6 +1744,12 @@ pub async fn write_repodata(
             .info
             .as_ref()
             .and_then(|info| info.channel_relations.clone());
+        // The shards index lives next to `repodata.json`, so the same relative
+        // url points at the manifest of the lookup index.
+        let sharded_lookup_url = repodata
+            .info
+            .as_ref()
+            .and_then(|info| info.lookup_url.clone());
         for (k, package_record) in repodata.conda_packages {
             let package_name = package_record.name.as_normalized();
             let shard = shards_by_package_names
@@ -1650,7 +1812,7 @@ pub async fn write_repodata(
                 created_at: Some(jiff::Timestamp::now()),
                 repodata_revisions: sharded_repodata_revisions,
                 channel_relations: sharded_channel_relations,
-                lookup_url: None,
+                lookup_url: sharded_lookup_url,
             },
             shards: shards
                 .iter()
@@ -1729,6 +1891,9 @@ pub struct IndexFsConfig {
     pub max_parallel: usize,
     /// The multi-progress bar to use for the index.
     pub multi_progress: Option<MultiProgress>,
+    /// Whether and how to write the index of the file paths contained in the
+    /// packages, see [`LookupOptions`].
+    pub lookup: Option<LookupOptions>,
 }
 
 /// Create a new `repodata.json` for all packages in the channel at the given
@@ -1751,6 +1916,7 @@ pub async fn index_fs_with_channel_metadata(
         force,
         max_parallel,
         multi_progress,
+        lookup,
     }: IndexFsConfig,
     channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<()> {
@@ -1777,6 +1943,7 @@ pub async fn index_fs_with_channel_metadata(
         multi_progress,
         PreconditionChecks::Disabled,
         channel_metadata,
+        lookup,
     )
     .await
     .map(|_| ())
@@ -1809,6 +1976,9 @@ pub struct IndexS3Config {
     pub multi_progress: Option<MultiProgress>,
     /// Configuration for precondition checks during file operations.
     pub precondition_checks: PreconditionChecks,
+    /// Whether and how to write the index of the file paths contained in the
+    /// packages, see [`LookupOptions`].
+    pub lookup: Option<LookupOptions>,
 }
 
 #[cfg(feature = "s3")]
@@ -1857,6 +2027,7 @@ pub async fn index_s3_with_channel_metadata(
         max_parallel,
         multi_progress,
         precondition_checks,
+        lookup,
     }: IndexS3Config,
     channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<()> {
@@ -1878,6 +2049,7 @@ pub async fn index_s3_with_channel_metadata(
         multi_progress,
         precondition_checks,
         channel_metadata,
+        lookup,
     )
     .await
     .map(|_| ())
@@ -1912,6 +2084,7 @@ pub async fn index(
     max_parallel: usize,
     multi_progress: Option<MultiProgress>,
     precondition_checks: PreconditionChecks,
+    lookup: Option<LookupOptions>,
 ) -> anyhow::Result<IndexStats> {
     index_with_channel_metadata(
         target_platform,
@@ -1926,6 +2099,7 @@ pub async fn index(
         multi_progress,
         precondition_checks,
         ChannelMetadata::default(),
+        lookup,
     )
     .await
 }
@@ -1946,6 +2120,7 @@ pub async fn index_with_channel_metadata(
     multi_progress: Option<MultiProgress>,
     precondition_checks: PreconditionChecks,
     channel_metadata: ChannelMetadata,
+    lookup: Option<LookupOptions>,
 ) -> anyhow::Result<IndexStats> {
     validate_configured_repodata_revisions(&repodata_revisions)?;
 
@@ -2038,6 +2213,7 @@ pub async fn index_with_channel_metadata(
             semaphore.clone(),
             cache,
             precondition_checks,
+            lookup,
         )
         .instrument(tracing::info_span!("index_subdir", subdir = %subdir));
         tasks.push((*subdir, task));
@@ -2427,6 +2603,7 @@ mod tests {
             repodata_revision: RepodataRevision::from(4),
             matchspecs: None,
             wheel_url: None,
+            file_paths: None,
         };
         let error = insert_package_record_by_revision(
             &mut IndexMap::default(),
@@ -2453,6 +2630,7 @@ mod tests {
             repodata_revision: RepodataRevision::V3,
             matchspecs: None,
             wheel_url: None,
+            file_paths: None,
         };
         let mut packages = IndexMap::default();
         insert_package_record_by_revision(
@@ -2585,6 +2763,7 @@ mod tests {
                 repodata_revision: RepodataRevision::V3,
                 matchspecs: None,
                 wheel_url: None,
+                file_paths: None,
             },
             RepodataRevision::V3,
         )
@@ -2608,6 +2787,7 @@ mod tests {
             repodata_revision: revision,
             matchspecs: None,
             wheel_url: None,
+            file_paths: None,
         };
 
         let mut packages = IndexMap::default();
