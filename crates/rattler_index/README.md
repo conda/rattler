@@ -24,7 +24,7 @@ configures S3 credentials, concurrency, and per-channel index options under the
 
 When `--config` is omitted, `rattler-index` falls back to its built-in defaults
 (`write-zst = true`, `write-shards = true`, no advertised repodata revisions,
-`from-index-json` revision assignment, no channel metadata).
+`from-index-json` revision assignment, no channel metadata, no lookup index).
 
 ## Per-channel index configuration
 
@@ -81,6 +81,8 @@ Matching rules:
 | `base-url` | string | Writes `info.base_url` in generated `repodata.json` and sharded repodata metadata. May be relative or absolute. |
 | `channel-relations.base` | string | A single channel reference with higher priority than this channel, written to `info.channel_relations.base`. |
 | `channel-relations.overrides` | string | A single channel reference with lower priority than this channel, written to `info.channel_relations.overrides`. |
+| `write-lookup` | boolean | Writes the index of the file paths contained in the packages, see [below](#lookup-index). Defaults to `false`. |
+| `lookup-compact-threshold` | integer | The number of layers of the lookup index above which they are all merged into one. Defaults to `8`. |
 
 `channel-relations.base` and `channel-relations.overrides` follow
 [CEP-42 channel relationship metadata](https://github.com/conda/ceps/blob/main/cep-0042.md)
@@ -134,3 +136,36 @@ example:
 
 The same channel metadata is also written into the sharded repodata index when
 `write-shards` is enabled.
+
+## Lookup index
+
+With `write-lookup = true` (or `--write-lookup`), each subdir also gets
+an index of the file paths contained in its packages, so that clients can answer
+"which artifacts contain this path?" with a few HTTP range requests:
+
+```text
+<subdir>/lookup/manifest.json
+<subdir>/lookup/packages-<sha256>.parquet
+<subdir>/lookup/paths-<sha256>.parquet
+<subdir>/lookup/reversed-paths-<sha256>.parquet
+```
+
+The `paths` table answers a path and a pattern with a literal start, the
+`reversed-paths` table — the same paths with their components reversed — turns
+`**/libz.so.1` into a prefix scan.
+
+`repodata.json` and the sharded repodata index point at the manifest through
+`info.lookup_url`; `rattler whoprovides` reads it from there. Writing the
+index requires the `lookup` cargo feature of this crate — without it,
+enabling the option is an error.
+
+Every run adds one layer covering the packages that no layer covers yet, and
+merges all layers into one once there are more than
+`lookup-compact-threshold` of them (`--compact-lookup` forces that
+merge). Superseded layer files are left in place, since clients may still be
+reading a manifest they fetched earlier; deleting them after a week is up to the
+channel operator.
+
+Indexing a package reads its `info/paths.json` and holds those paths in memory
+until the layer is written, so enabling the option on an existing channel — which
+reads every package once — needs memory proportional to the size of the channel.

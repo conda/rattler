@@ -113,6 +113,7 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
                 1,
                 None,
                 PreconditionChecks::Enabled,
+                None,
             )
             .await
         }
@@ -134,6 +135,7 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
                 1,
                 None,
                 PreconditionChecks::Enabled,
+                None,
             )
             .await
         }

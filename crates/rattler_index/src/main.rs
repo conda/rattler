@@ -8,7 +8,8 @@ use rattler_config::config::{
     concurrency::default_max_concurrent_solves, index::IndexChannelConfig,
 };
 use rattler_index::{
-    ChannelMetadata, IndexFsConfig, PackageRevisionAssignment, index_fs_with_channel_metadata,
+    ChannelMetadata, DEFAULT_LOOKUP_COMPACT_THRESHOLD, IndexFsConfig, LookupOptions,
+    PackageRevisionAssignment, index_fs_with_channel_metadata,
 };
 #[cfg(feature = "s3")]
 use rattler_index::{IndexS3Config, PreconditionChecks, index_s3_with_channel_metadata};
@@ -69,6 +70,21 @@ struct Cli {
     #[cfg(feature = "s3")]
     #[arg(long, default_value = "false", global = true)]
     disable_precondition_checks: bool,
+
+    /// Write the index of the file paths contained in the packages of the
+    /// channel, `<subdir>/lookup/`, so that clients can look up which
+    /// artifact contains a file.
+    ///
+    /// Every run indexes the packages that are not indexed yet, which means
+    /// that enabling this on an existing channel reads all of its packages once
+    /// and holds their paths in memory.
+    #[arg(long, global = true)]
+    write_lookup: bool,
+
+    /// Merge all layers of the lookup index into one, regardless of how many
+    /// there are. Implies `--write-lookup`.
+    #[arg(long, global = true)]
+    compact_lookup: bool,
 
     /// The path to the config file to use to configure rattler-index.
     /// Uses the same configuration format as pixi, see `https://pixi.sh/latest/reference/pixi_configuration`.
@@ -144,6 +160,7 @@ async fn main() -> anyhow::Result<()> {
             let resolved = resolve_index_channel_config(&config, &target);
             let (write_zst, write_shards, repodata_revisions, package_revision_assignment) =
                 effective_index_options(&resolved);
+            let lookup = lookup_options(cli.write_lookup, cli.compact_lookup, &resolved)?;
             let channel_metadata = ChannelMetadata::from_index_config(&resolved);
 
             index_fs_with_channel_metadata(
@@ -158,6 +175,7 @@ async fn main() -> anyhow::Result<()> {
                     force: cli.force,
                     max_parallel,
                     multi_progress: Some(multi_progress),
+                    lookup,
                 },
                 channel_metadata,
             )
@@ -172,6 +190,7 @@ async fn main() -> anyhow::Result<()> {
             let resolved = resolve_index_channel_config(&config, &target);
             let (write_zst, write_shards, repodata_revisions, package_revision_assignment) =
                 effective_index_options(&resolved);
+            let lookup = lookup_options(cli.write_lookup, cli.compact_lookup, &resolved)?;
             let channel_metadata = ChannelMetadata::from_index_config(&resolved);
 
             let bucket = channel.host().context("Invalid S3 url")?.to_string();
@@ -208,6 +227,7 @@ async fn main() -> anyhow::Result<()> {
                     max_parallel,
                     multi_progress: Some(multi_progress),
                     precondition_checks,
+                    lookup,
                 },
                 channel_metadata,
             )
@@ -223,6 +243,30 @@ fn resolve_index_channel_config(config: &Option<Config>, target: &str) -> IndexC
         .as_ref()
         .map(|c| c.index_config.resolve(target))
         .unwrap_or_default()
+}
+
+/// Whether and how to write the lookup index, from the command line and the
+/// configuration of the channel.
+fn lookup_options(
+    write_lookup: bool,
+    compact: bool,
+    cfg: &IndexChannelConfig,
+) -> anyhow::Result<Option<LookupOptions>> {
+    let write = write_lookup || compact || cfg.write_lookup.unwrap_or(false);
+    if !write {
+        return Ok(None);
+    }
+    if !cfg!(feature = "lookup") {
+        anyhow::bail!(
+            "this rattler-index was built without the `lookup` feature and cannot write a lookup index"
+        );
+    }
+    Ok(Some(LookupOptions {
+        compact_threshold: cfg
+            .lookup_compact_threshold
+            .unwrap_or(DEFAULT_LOOKUP_COMPACT_THRESHOLD),
+        compact,
+    }))
 }
 
 fn effective_index_options(

@@ -5340,6 +5340,7 @@ version = "0.31.7"
 dependencies = [
  "ahash",
  "anyhow",
+ "astral-reqwest-middleware",
  "bytes",
  "clap",
  "clap-verbosity-flag",
@@ -5354,6 +5355,7 @@ dependencies = [
  "rattler_conda_types",
  "rattler_config",
  "rattler_digest",
+ "rattler_lookup",
  "rattler_networking",
  "rattler_package_streaming",
  "rattler_repodata_gateway",

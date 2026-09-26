@@ -32,7 +32,7 @@ build = "cargo build"
 check = "cargo check"
 # libsolv compilation cannot find pixi's clang for some reason
 # so we skip that test for now
-test = "cargo nextest run --workspace --no-default-features --features=indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,edit,rattler_config,cli-tools,rattler_conda_types/semver -E 'not test(libsolv_bindings_up_to_date)' --no-fail-fast"
+test = "cargo nextest run --workspace --no-default-features --features=indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,edit,rattler_config,cli-tools,rattler_conda_types/semver,rattler_index/lookup -E 'not test(libsolv_bindings_up_to_date)' --no-fail-fast"
 rattler = "cargo run --bin rattler --release --"
 doc = "RUSTDOCFLAGS='-Dwarnings -Wunreachable-pub' cargo doc --no-deps --all --all-features"
 
@@ -88,7 +88,7 @@ typos = "typos --force-exclude"
 ruff-format = "ruff format --force-exclude"
 ruff-lint = "ruff check --fix --exit-non-zero-on-fix --force-exclude"
 cargo-fmt = "cargo fmt --all"
-cargo-clippy = "cargo clippy --all-targets --workspace -- -D warnings -Dclippy::dbg_macro"
+cargo-clippy = "cargo clippy --all-targets --workspace --features rattler_index/lookup -- -D warnings -Dclippy::dbg_macro"
 
 [environments]
 lint = { features = ["lint"], solve-group = "default" }

@@ -85,6 +85,7 @@ pub fn py_index_fs<'py>(
                 force,
                 max_parallel,
                 multi_progress: None,
+                lookup: None,
             },
             channel_metadata,
         )
@@ -200,6 +201,7 @@ pub fn py_index_s3<'py>(
                 } else {
                     rattler_index::PreconditionChecks::Disabled
                 },
+                lookup: None,
             },
             channel_metadata,
         )
