@@ -76,6 +76,7 @@ rattler_menuinst = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false, features = [
   "reqwest",
 ] }
+rattler_lookup = { workspace = true, default-features = false }
 rattler_redaction = { workspace = true, optional = true, features = ["reqwest", "reqwest-middleware"] }
 rattler_sigstore = { workspace = true, optional = true, default-features = false }
 rattler_upload = { workspace = true }
