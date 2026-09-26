@@ -28,6 +28,8 @@ ambient-id = { version = "0.0.11", default-features = false }
 anyhow = "1"
 apple-native-keyring-store = { version = "1", default-features = false }
 archspec = "0.2"
+arrow-array = { version = "60", default-features = false }
+arrow-schema = { version = "60", default-features = false }
 assert_matches = "1"
 async-compression = { version = "0.4", features = [
   "gzip",
@@ -125,6 +127,11 @@ open = "5"
 openidconnect = { version = "4", default-features = false }
 oauth2-reqwest = { version = "0.1.0-alpha.3", default-features = false }
 parking_lot = "0.12"
+parquet = { version = "60", default-features = false, features = [
+  "arrow",
+  "async",
+  "zstd",
+] }
 pathdiff = "0.2"
 pep440_rs = { version = "0.7" }
 pep508_rs = { version = "0.9", features = ["non-pep508-extensions"] }
@@ -232,6 +239,7 @@ rattler_macros = { path = "crates/rattler_macros", version = "=1.2.0", default-f
 rattler_menuinst = { path = "crates/rattler_menuinst", version = "=0.3.1", default-features = false }
 rattler_networking = { path = "crates/rattler_networking", version = "=0.30.10", default-features = false }
 rattler_package_streaming = { path = "crates/rattler_package_streaming", version = "=0.27.7", default-features = false }
+rattler_lookup = { path = "crates/rattler_lookup", version = "=0.1.0", default-features = false }
 rattler_prefix_guard = { path = "crates/rattler_prefix_guard", version = "=0.1.2", default-features = false }
 rattler_pty = { path = "crates/rattler_pty", version = "=0.2.17", default-features = false }
 rattler_redaction = { path = "crates/rattler_redaction", version = "=0.2.6", default-features = false }
