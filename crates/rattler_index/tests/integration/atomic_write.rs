@@ -16,6 +16,7 @@ async fn test_index_fs_over_memory_mapped_repodata() {
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
+        write_lookup: false,
         repodata_revisions: Vec::new(),
         package_revision_assignment: PackageRevisionAssignment::default(),
         force: true,

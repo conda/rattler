@@ -30,8 +30,13 @@ workflows use pixi instead.
   `CONDA_PREFIX` environment variable, so they work inside an activated
   environment.
 - Machine-readable output: `--format json` or `--format urls` on `solve`,
-  `search`, `list` and `whoneeds`; `--json` on `info` and `inspect`. Progress
-  bars and logs go to stderr, results go to stdout, so piping stdout is safe.
+  `search`, `list`, `whoneeds` and `whoprovides`; `--json` on `info` and
+  `inspect`. Progress bars and logs go to stderr, results go to stdout, so
+  piping stdout is safe.
+- `rattler whoprovides include/zlib.h` (or a pattern such as `'**/zlib.h'`,
+  `'**/libssl.so*'`, `'site-packages/polars/*'`) lists the packages that ship
+  a file, using the lookup index of the channel (`info.lookup_url` in its
+  repodata; `--lookup-url` points to an index hosted elsewhere).
 - `--offline` (global) disables all network access and only uses cached
   repodata and packages. `-v`/`--verbose` (global) enables debug logging;
   `RUST_LOG` gives finer control.
@@ -91,6 +96,7 @@ The examples below are the same ones `rattler <command> --help` prints.
 | `rattler search` | Search for packages in conda channels using glob or regex patterns |
 | `rattler solve` | Solve a conda environment without installing it |
 | `rattler whoneeds` | Show packages that depend on the given package (reverse dependencies) |
+| `rattler whoprovides` | Show packages that contain a file (or files matching a pattern) |
 | `rattler shell-hook` | Print the shell activation hook for a conda prefix to stdout |
 | `rattler virtual-packages` | Print detected virtual packages |
 | `rattler verify-attestation` | Verify Sigstore attestations for a conda package |
@@ -191,6 +197,25 @@ rattler whoneeds __cuda                     # packages that depend on a virtual 
 rattler whoneeds ./python-3.13.1-h123_0.conda   # packages that can use this exact package
 rattler whoneeds https://conda.anaconda.org/conda-forge/noarch/polars-1.44.1-pyh8da0edf_0.conda
 rattler whoneeds numpy --format urls        # print only the urls of the dependent packages
+```
+
+### `rattler whoprovides`
+
+```bash
+rattler whoprovides include/zlib.h              # packages that ship this file
+rattler whoprovides '**/zlib.h'                 # ... wherever it is in the package
+rattler whoprovides '**/libssl.so*' -p linux-64 # file names with a literal start
+rattler whoprovides 'site-packages/polars/*'    # files directly below a directory
+rattler whoprovides bin/git --format urls       # print only the urls of the packages
+rattler whoprovides bin/git --lookup-url https://example.org/index   # an index hosted elsewhere
+
+Patterns use `*` and `?` within a path component and `**` for any number of
+components. A pattern needs a literal start (`site-packages/polars/*`), or
+its last component does if it starts with `**/` (`**/libssl.so*`); `**/*.h`
+cannot be answered. Paths are looked up as they are stored in the packages,
+e.g. `lib/python3.12/site-packages/numpy/__init__.py` for a Python package
+and `site-packages/numpy/__init__.py` for a noarch one; `**/numpy/__init__.py`
+finds both.
 ```
 
 ### `rattler shell-hook`

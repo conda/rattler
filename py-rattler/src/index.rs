@@ -63,6 +63,7 @@ pub fn py_index_fs<'py>(
     };
     let write_zst = write_zst.or(resolved.write_zst).unwrap_or(true);
     let write_shards = write_shards.or(resolved.write_shards).unwrap_or(true);
+    let write_lookup = resolved.write_lookup.unwrap_or(false);
     let max_parallel = max_parallel
         .or_else(|| {
             config
@@ -80,6 +81,7 @@ pub fn py_index_fs<'py>(
                 repodata_patch,
                 write_zst,
                 write_shards,
+                write_lookup,
                 repodata_revisions,
                 package_revision_assignment,
                 force,
@@ -126,6 +128,7 @@ pub fn py_index_s3<'py>(
     };
     let write_zst = write_zst.or(resolved.write_zst).unwrap_or(true);
     let write_shards = write_shards.or(resolved.write_shards).unwrap_or(true);
+    let write_lookup = resolved.write_lookup.unwrap_or(false);
     let max_parallel = max_parallel
         .or_else(|| {
             config
@@ -190,6 +193,7 @@ pub fn py_index_s3<'py>(
                 repodata_patch,
                 write_zst,
                 write_shards,
+                write_lookup,
                 repodata_revisions,
                 package_revision_assignment,
                 force,

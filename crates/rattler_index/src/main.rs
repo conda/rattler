@@ -70,6 +70,14 @@ struct Cli {
     #[arg(long, default_value = "false", global = true)]
     disable_precondition_checks: bool,
 
+    /// Also write the lookup index of every subdir (`<subdir>/lookup/`,
+    /// which artifacts contain a file, see `rattler whoprovides`) and point
+    /// to it with `info.lookup_url`. Can also be set with `write-lookup` in
+    /// the `index-config` section of the config file.
+    #[cfg(feature = "lookup")]
+    #[arg(long, default_value = "false", global = true)]
+    write_lookup: bool,
+
     /// The path to the config file to use to configure rattler-index.
     /// Uses the same configuration format as pixi, see `https://pixi.sh/latest/reference/pixi_configuration`.
     /// Per-channel index options are read from the `index-config` section.
@@ -134,6 +142,14 @@ async fn main() -> anyhow::Result<()> {
         PreconditionChecks::Enabled
     };
 
+    // `--write-lookup` wins over the config; without the `lookup` feature
+    // only the config can enable it (and indexing then fails with a clear
+    // error).
+    #[cfg(feature = "lookup")]
+    let force_write_lookup = cli.write_lookup;
+    #[cfg(not(feature = "lookup"))]
+    let force_write_lookup = false;
+
     match cli.command {
         Commands::FileSystem { channel } => {
             let target = channel
@@ -144,6 +160,7 @@ async fn main() -> anyhow::Result<()> {
             let resolved = resolve_index_channel_config(&config, &target);
             let (write_zst, write_shards, repodata_revisions, package_revision_assignment) =
                 effective_index_options(&resolved);
+            let write_lookup = force_write_lookup || resolved.write_lookup.unwrap_or(false);
             let channel_metadata = ChannelMetadata::from_index_config(&resolved);
 
             index_fs_with_channel_metadata(
@@ -153,6 +170,7 @@ async fn main() -> anyhow::Result<()> {
                     repodata_patch: cli.repodata_patch,
                     write_zst,
                     write_shards,
+                    write_lookup,
                     repodata_revisions,
                     package_revision_assignment,
                     force: cli.force,
@@ -172,6 +190,7 @@ async fn main() -> anyhow::Result<()> {
             let resolved = resolve_index_channel_config(&config, &target);
             let (write_zst, write_shards, repodata_revisions, package_revision_assignment) =
                 effective_index_options(&resolved);
+            let write_lookup = force_write_lookup || resolved.write_lookup.unwrap_or(false);
             let channel_metadata = ChannelMetadata::from_index_config(&resolved);
 
             let bucket = channel.host().context("Invalid S3 url")?.to_string();
@@ -202,6 +221,7 @@ async fn main() -> anyhow::Result<()> {
                     repodata_patch: cli.repodata_patch,
                     write_zst,
                     write_shards,
+                    write_lookup,
                     repodata_revisions,
                     package_revision_assignment,
                     force: cli.force,

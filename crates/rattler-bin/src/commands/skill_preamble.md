@@ -26,8 +26,13 @@ workflows use pixi instead.
   `CONDA_PREFIX` environment variable, so they work inside an activated
   environment.
 - Machine-readable output: `--format json` or `--format urls` on `solve`,
-  `search`, `list` and `whoneeds`; `--json` on `info` and `inspect`. Progress
-  bars and logs go to stderr, results go to stdout, so piping stdout is safe.
+  `search`, `list`, `whoneeds` and `whoprovides`; `--json` on `info` and
+  `inspect`. Progress bars and logs go to stderr, results go to stdout, so
+  piping stdout is safe.
+- `rattler whoprovides include/zlib.h` (or a pattern such as `'**/zlib.h'`,
+  `'**/libssl.so*'`, `'site-packages/polars/*'`) lists the packages that ship
+  a file, using the lookup index of the channel (`info.lookup_url` in its
+  sharded repodata); `-c` selects the channel, a URL or a local directory.
 - `--offline` (global) disables all network access and only uses cached
   repodata and packages. `-v`/`--verbose` (global) enables debug logging;
   `RUST_LOG` gives finer control.

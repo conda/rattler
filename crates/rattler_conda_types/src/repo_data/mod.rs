@@ -107,6 +107,12 @@ pub struct ChannelInfo {
     /// [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
     #[serde(default, skip_serializing_if = "ChannelRelations::is_none_or_empty")]
     pub channel_relations: Option<ChannelRelations>,
+
+    /// The URL of the `manifest.json` of the subdir's lookup index (which
+    /// packages contain a file), absolute or relative to this repodata file.
+    /// Absent if the channel publishes no lookup index.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lookup_url: Option<String>,
 }
 
 /// Repodata revisions keyed by revision, mirroring the `vN` dictionary of the
@@ -1350,6 +1356,16 @@ mod test {
         assert_eq!(relations.base.as_deref(), Some("../conda-forge"));
         assert_eq!(relations.overrides.as_deref(), Some("../fallback-channel"));
 
+        // `lookup_url` (CEP for the lookup index) round-trips and is omitted
+        // when unset.
+        let raw = r#"{"info":{"subdir":"linux-64","lookup_url":"./lookup/manifest.json"},"packages":{},"packages.conda":{},"repodata_version":2}"#;
+        let repodata: RepoData = serde_json::from_str(raw).unwrap();
+        let info = repodata.info.as_ref().unwrap();
+        assert_eq!(info.lookup_url.as_deref(), Some("./lookup/manifest.json"));
+        let json = serde_json::to_string(&repodata).unwrap();
+        assert!(json.contains(r#""lookup_url":"./lookup/manifest.json""#));
+        assert!(!json.contains("channel_relations"));
+
         // Round trip with a single field set and the other omitted.
         let partial = RepoData {
             version: Some(2),
@@ -1361,6 +1377,7 @@ mod test {
                     base: Some("../conda-forge".to_string()),
                     overrides: None,
                 }),
+                lookup_url: None,
             }),
             packages: IndexMap::default(),
             conda_packages: IndexMap::default(),
@@ -1383,6 +1400,7 @@ mod test {
                     base_url: None,
                     repodata_revisions: IndexMap::default(),
                     channel_relations,
+                    lookup_url: None,
                 }),
                 packages: IndexMap::default(),
                 conda_packages: IndexMap::default(),

@@ -702,6 +702,7 @@ mod tests {
                 created_at: None,
                 repodata_revisions: RepodataRevisions::default(),
                 channel_relations: None,
+                lookup_url: None,
             },
             shards: [("missing-shard".into(), [0u8; 32].into())]
                 .into_iter()

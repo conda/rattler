@@ -99,3 +99,171 @@ fn test_skill() {
     let skill = run_rattler(&["skill"]).replace(env!("CARGO_PKG_VERSION"), "[VERSION]");
     insta::assert_snapshot!(skill);
 }
+
+/// Writes a small lookup index (one base layer plus a delta layer) for
+/// `linux-64` and `noarch` into a temporary directory, as `rattler-index
+/// --write-lookup` would, and returns the directory.
+fn write_lookup_index() -> tempfile::TempDir {
+    use rattler_lookup::{Kind, Manifest, WriteOptions, write_layer};
+
+    let root = tempfile::tempdir().unwrap();
+    let channel = "https://conda.anaconda.org/conda-forge/";
+    let subdirs = [
+        (
+            "linux-64",
+            vec![
+                (
+                    "zlib-1.3.1-hb9d3cd8_2.conda".to_string(),
+                    vec![
+                        "include/zlib.h".to_string(),
+                        "lib/libz.so.1.3.1".to_string(),
+                        "lib/libz.so".to_string(),
+                    ],
+                ),
+                (
+                    "zlib-1.2.13-h4ab18f5_6.conda".to_string(),
+                    vec![
+                        "include/zlib.h".to_string(),
+                        "lib/libz.so.1.2.13".to_string(),
+                    ],
+                ),
+                (
+                    "mariadb-connector-c-3.4.1-h1234_0.tar.bz2".to_string(),
+                    vec![
+                        "include/zlib.h".to_string(),
+                        "lib/libmariadb.so.3".to_string(),
+                    ],
+                ),
+            ],
+        ),
+        (
+            "noarch",
+            vec![(
+                "polars-1.44.2-pyh3138b34_0.conda".to_string(),
+                vec![
+                    "site-packages/polars/__init__.py".to_string(),
+                    "site-packages/polars/io/__init__.py".to_string(),
+                ],
+            )],
+        ),
+    ];
+    for (subdir, artifacts) in subdirs {
+        let dir = root.path().join(subdir).join("lookup");
+        let mut manifest = Manifest::empty(channel, subdir, &Kind::ALL);
+        let (base, delta) = artifacts.split_at(artifacts.len() - 1);
+        for artifacts in [base, delta] {
+            let layer = write_layer(
+                &dir,
+                channel,
+                subdir,
+                &Kind::ALL,
+                artifacts.to_vec(),
+                &WriteOptions::default(),
+            )
+            .unwrap();
+            manifest.layers.push(layer.layer);
+        }
+        manifest.removed = vec!["zlib-1.2.13-h4ab18f5_6.conda".to_string()];
+        std::fs::write(dir.join("manifest.json"), manifest.to_json().unwrap()).unwrap();
+        write_shards(root.path(), subdir, Some("lookup/manifest.json"));
+    }
+    root
+}
+
+/// Writes the sharded repodata index of `subdir`, which points to the lookup
+/// index with `lookup_url`, as a channel does.
+fn write_shards(root: &std::path::Path, subdir: &str, lookup_url: Option<&str>) {
+    let mut info =
+        serde_json::json!({ "subdir": subdir, "base_url": "", "shards_base_url": "./shards/" });
+    if let Some(url) = lookup_url {
+        info["lookup_url"] = url.into();
+    }
+    let msgpack =
+        rmp_serde::to_vec_named(&serde_json::json!({ "info": info, "shards": {} })).unwrap();
+    std::fs::write(
+        root.join(subdir).join("repodata_shards.msgpack.zst"),
+        zstd::stream::encode_all(&msgpack[..], 0).unwrap(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn test_whoprovides_urls() {
+    let index = write_lookup_index();
+    insta::assert_snapshot!(run_rattler(&[
+        "whoprovides",
+        "--channels",
+        index.path().to_str().unwrap(),
+        "--platform",
+        "linux-64",
+        "--format",
+        "urls",
+        "include/zlib.h",
+        "**/__init__.py",
+        "lib/libz.so*",
+    ]));
+}
+
+#[test]
+fn test_whoprovides_json() {
+    let index = write_lookup_index();
+    insta::assert_snapshot!(run_rattler(&[
+        "whoprovides",
+        "--channels",
+        index.path().to_str().unwrap(),
+        "--platform",
+        "linux-64",
+        "--format",
+        "json",
+        "**/zlib.h",
+        "does/not/exist",
+    ]));
+}
+
+#[test]
+fn test_whoprovides_fails_without_index() {
+    // A subdir whose sharded repodata has no `lookup_url` is an error.
+    let index = write_lookup_index();
+    write_shards(index.path(), "noarch", None);
+    let output = Command::new(env!("CARGO_BIN_EXE_rattler"))
+        .args([
+            "whoprovides",
+            "--channels",
+            index.path().to_str().unwrap(),
+            "--platform",
+            "linux-64",
+            "include/zlib.h",
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no lookup index for noarch"),
+        "unexpected stderr: {stderr}"
+    );
+}
+
+#[test]
+fn test_whoprovides_human_readable() {
+    let index = write_lookup_index();
+    let output = run_rattler(&[
+        "whoprovides",
+        "--channels",
+        index.path().to_str().unwrap(),
+        "--platform",
+        "linux-64",
+        "include/zlib.h",
+        "**/__init__.py",
+        "does/not/exist",
+    ]);
+    // Timings make the output unsuitable for a snapshot.
+    assert!(output.contains("Found 2 packages (2 records) that provide 'include/zlib.h'"));
+    assert!(output.contains("  zlib 1.3.1 hb9d3cd8_2 (linux-64)\n"));
+    assert!(output.contains("  mariadb-connector-c 3.4.1 h1234_0 (linux-64)\n"));
+    assert!(output.contains("Found 1 package (1 record) that provides '**/__init__.py'"));
+    assert!(output.contains(
+        "  polars 1.44.2 pyh3138b34_0 (noarch) site-packages/polars/__init__.py and 1 more record\n"
+    ));
+    assert!(output.contains("No packages found that provide 'does/not/exist'"));
+}
