@@ -165,6 +165,17 @@ fn write_lookup_index() -> tempfile::TempDir {
         }
         manifest.removed = vec!["zlib-1.2.13-h4ab18f5_6.conda".to_string()];
         std::fs::write(dir.join("manifest.json"), manifest.to_json().unwrap()).unwrap();
+        // The channel's repodata points to the manifest, as a channel does.
+        std::fs::write(
+            root.path().join(subdir).join("repodata.json"),
+            serde_json::json!({
+                "info": { "subdir": subdir, "lookup_url": "lookup/manifest.json" },
+                "packages": {},
+                "packages.conda": {},
+            })
+            .to_string(),
+        )
+        .unwrap();
     }
     root
 }
@@ -174,7 +185,7 @@ fn test_whoprovides_urls() {
     let index = write_lookup_index();
     insta::assert_snapshot!(run_rattler(&[
         "whoprovides",
-        "--lookup-url",
+        "--channels",
         index.path().to_str().unwrap(),
         "--platform",
         "linux-64",
@@ -191,7 +202,7 @@ fn test_whoprovides_json() {
     let index = write_lookup_index();
     insta::assert_snapshot!(run_rattler(&[
         "whoprovides",
-        "--lookup-url",
+        "--channels",
         index.path().to_str().unwrap(),
         "--platform",
         "linux-64",
@@ -207,7 +218,7 @@ fn test_whoprovides_human_readable() {
     let index = write_lookup_index();
     let output = run_rattler(&[
         "whoprovides",
-        "--lookup-url",
+        "--channels",
         index.path().to_str().unwrap(),
         "--platform",
         "linux-64",

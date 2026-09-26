@@ -1,6 +1,6 @@
 ---
 source: crates/rattler-bin/tests/cli.rs
-expression: "run_rattler(&[\"whoprovides\", \"--lookup-url\", index.path().to_str().unwrap(),\n\"--platform\", \"linux-64\", \"--format\", \"json\", \"**/zlib.h\", \"does/not/exist\",])"
+expression: "run_rattler(&[\"whoprovides\", \"--channels\", index.path().to_str().unwrap(),\n\"--platform\", \"linux-64\", \"--format\", \"json\", \"**/zlib.h\", \"does/not/exist\",])"
 ---
 [
   {

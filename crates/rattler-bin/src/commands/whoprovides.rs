@@ -10,10 +10,7 @@ use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::{
     Channel, ChannelConfig, Platform, Version, package::CondaArchiveIdentifier,
 };
-use rattler_lookup::{
-    Kind, Location, LookupError, Matches, Query, SubdirIndex, discovery,
-    manifest::{MANIFEST_FILE, manifest_location},
-};
+use rattler_lookup::{Kind, Location, Matches, Query, SubdirIndex, discovery};
 
 use super::{QueryOutputFormat, print_url_lines};
 
@@ -25,7 +22,7 @@ use super::{QueryOutputFormat, print_url_lines};
   rattler whoprovides '**/libssl.so*' -p linux-64 # file names with a literal start
   rattler whoprovides 'site-packages/polars/*'    # files directly below a directory
   rattler whoprovides bin/git --format urls       # print only the urls of the packages
-  rattler whoprovides bin/git --lookup-url https://example.org/index   # an index hosted elsewhere
+  rattler whoprovides bin/git -c https://example.org/channel   # another channel (URL or directory)
 
 Patterns use `*` and `?` within a path component and `**` for any number of
 components. A pattern needs a literal start (`site-packages/polars/*`), or
@@ -49,12 +46,6 @@ pub struct Opt {
     /// `noarch` is always searched, too.
     #[clap(short, long)]
     platform: Option<Platform>,
-
-    /// Where the lookup index is, instead of following `lookup_url` from the
-    /// repodata of the channels: a URL or directory containing
-    /// `<subdir>/lookup/manifest.json`, or a single `manifest.json`.
-    #[clap(long, conflicts_with = "channels", value_name = "URL")]
-    lookup_url: Option<String>,
 
     /// Maximum number of packages to display
     #[clap(long, default_value = "100")]
@@ -105,18 +96,6 @@ async fn locate_indexes(
     client: &reqwest_middleware::ClientWithMiddleware,
 ) -> miette::Result<Vec<Location>> {
     let mut locations = Vec::new();
-    if let Some(lookup_url) = &opt.lookup_url {
-        let base = Location::parse(lookup_url);
-        if lookup_url.ends_with(MANIFEST_FILE) {
-            locations.push(base);
-        } else {
-            for subdir in subdirs {
-                locations.push(manifest_location(&base, subdir.as_str()));
-            }
-        }
-        return Ok(locations);
-    }
-
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
     let channels = opt
@@ -181,32 +160,14 @@ pub async fn whoprovides(opt: Opt, offline: bool) -> miette::Result<()> {
     }
 
     pb.set_message("Opening lookup indexes...");
-    let explicit_location = opt.lookup_url.is_some();
-    let mut indexes = try_join_all(locations.into_iter().map(|location| {
-        let client = &client;
-        let kinds = &kinds;
-        async move {
-            match SubdirIndex::open(location.clone(), kinds, client).await {
-                Ok(index) => Ok(Some(index)),
-                // A base given with --lookup-url may not have every subdir.
-                Err(LookupError::NotFound(_)) if explicit_location => {
-                    eprintln!("there is no lookup index at {location}");
-                    Ok(None)
-                }
-                Err(err) => Err(err),
-            }
-        }
-    }))
+    let mut indexes = try_join_all(
+        locations
+            .into_iter()
+            .map(|location| SubdirIndex::open(location, &kinds, &client)),
+    )
     .await
     .into_diagnostic()
-    .context("failed to open the lookup index")?
-    .into_iter()
-    .flatten()
-    .collect::<Vec<_>>();
-    if indexes.is_empty() {
-        pb.finish_and_clear();
-        return Err(miette::miette!("no lookup index found"));
-    }
+    .context("failed to open the lookup index")?;
     let opened = start.elapsed();
 
     let mut all_found: Vec<(Query, Vec<Found>)> = Vec::new();
