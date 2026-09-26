@@ -8,8 +8,8 @@
 //! [`Manifest`] (`manifest.json`, the only file that changes) and *layers*.
 //! Every layer has a *packages file* listing the artifacts it indexes and one
 //! *lookup table* per [`Kind`]: a sorted, unique key column and a list of row
-//! numbers in the packages file. The repodata points to the manifest with
-//! `info.lookup_url` (see [`discovery`]).
+//! numbers in the packages file. The sharded repodata index points to the
+//! manifest with `info.lookup_url` (see [`discovery`]).
 //!
 //! * Reading: [`SubdirIndex`] opens a manifest and answers a [`Query`] (a
 //!   path such as `include/zlib.h`, or a pattern such as `**/zlib.h` or

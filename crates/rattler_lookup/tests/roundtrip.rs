@@ -392,53 +392,35 @@ async fn http_roundtrip() {
     }
 }
 
-fn write_repodata(root: &Path, subdir: &str, lookup_url: Option<&str>) {
-    let dir = root.join(subdir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let mut info = serde_json::json!({ "subdir": subdir });
+fn write_shards(root: &Path, subdir: &str, lookup_url: Option<&str>) {
+    let mut info = serde_json::json!({
+        "subdir": subdir,
+        "base_url": "",
+        "shards_base_url": "./shards/",
+    });
     if let Some(url) = lookup_url {
         info["lookup_url"] = url.into();
     }
-    let repodata = serde_json::json!({ "info": info, "packages": {}, "repodata_version": 2 });
-    std::fs::write(
-        dir.join("repodata.json"),
-        serde_json::to_vec(&repodata).unwrap(),
-    )
-    .unwrap();
-}
-
-fn write_shards(root: &Path, subdir: &str, lookup_url: &str) {
-    let shards = serde_json::json!({
-        "info": {
-            "subdir": subdir,
-            "base_url": "",
-            "shards_base_url": "./shards/",
-            "lookup_url": lookup_url,
-        },
-        "shards": {},
-    });
+    let shards = serde_json::json!({ "info": info, "shards": {} });
     let msgpack = rmp_serde::to_vec_named(&shards).unwrap();
     let encoded = zstd::stream::encode_all(&msgpack[..], 0).unwrap();
-    std::fs::write(
-        root.join(subdir).join("repodata_shards.msgpack.zst"),
-        encoded,
-    )
-    .unwrap();
+    let dir = root.join(subdir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("repodata_shards.msgpack.zst"), encoded).unwrap();
 }
 
 #[tokio::test]
 async fn discovers_manifests_through_lookup_url() {
     let root = tempfile::tempdir().unwrap();
     write_index(root.path());
-    write_repodata(root.path(), "noarch", Some("./lookup/manifest.json"));
-    write_repodata(root.path(), "linux-64", None);
-    write_repodata(
+    write_shards(root.path(), "noarch", Some("./lookup/manifest.json"));
+    write_shards(root.path(), "linux-64", None);
+    write_shards(
         root.path(),
         "osx-64",
         Some("https://example.org/idx/osx-64/lookup/manifest.json"),
     );
-    std::fs::create_dir_all(root.path().join("win-64")).unwrap();
-    write_shards(root.path(), "win-64", "./lookup/manifest.json");
+    // osx-arm64 has no sharded repodata at all.
 
     let base = serve(root.path().to_path_buf(), true).await;
     for channel in [Location::from(root.path()), Location::from(base)] {
@@ -471,12 +453,6 @@ async fn discovers_manifests_through_lookup_url() {
             Some(Location::parse(
                 "https://example.org/idx/osx-64/lookup/manifest.json"
             ))
-        );
-        assert_eq!(
-            discovery::discover_manifest(&channel, "win-64", &client())
-                .await
-                .unwrap(),
-            Some(manifest_location(&channel, "win-64"))
         );
     }
 }

@@ -102,4 +102,6 @@ regex = { workspace = true }
 [dev-dependencies]
 insta = { workspace = true }
 rattler_lookup = { workspace = true, default-features = false }
+rmp-serde = { workspace = true }
+zstd = { workspace = true }
 shlex = { workspace = true }

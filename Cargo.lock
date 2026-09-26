@@ -5150,6 +5150,7 @@ dependencies = [
  "rattler_virtual_packages",
  "regex",
  "reqwest",
+ "rmp-serde",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -5159,6 +5160,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+ "zstd 0.13.3",
 ]
 
 [[package]]

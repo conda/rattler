@@ -1,5 +1,6 @@
 //! `rattler whoprovides`: which packages contain a file, answered with the
-//! lookup index a channel publishes next to its repodata (`info.lookup_url`).
+//! lookup index a channel publishes next to its repodata (`info.lookup_url`
+//! of its sharded repodata index).
 
 use std::{collections::BTreeMap, env, time::Instant};
 
@@ -92,26 +93,31 @@ async fn locate_indexes(
         "Channels: {}",
         channels.iter().map(Channel::canonical_name).join(", ")
     );
-    for channel in &channels {
+    // All channel/subdir pairs are probed concurrently.
+    let probes = channels.iter().flat_map(|channel| {
         let base = Location::from(url::Url::from(channel.base_url.clone()));
-        for subdir in subdirs {
-            match discovery::discover_manifest(&base, subdir.as_str(), client)
-                .await
-                .into_diagnostic()
-                .with_context(|| {
-                    format!(
-                        "failed to look for the lookup index of {subdir} in {}",
+        subdirs.iter().map(move |subdir| {
+            let base = base.clone();
+            async move {
+                match discovery::discover_manifest(&base, subdir.as_str(), client)
+                    .await
+                    .into_diagnostic()
+                    .with_context(|| {
+                        format!(
+                            "failed to look for the lookup index of {subdir} in {}",
+                            channel.canonical_name()
+                        )
+                    })? {
+                    Some(location) => Ok(location),
+                    None => Err(miette::miette!(
+                        "{} has no lookup index for {subdir}",
                         channel.canonical_name()
-                    )
-                })? {
-                Some(location) => locations.push(location),
-                None => miette::bail!(
-                    "{} has no lookup index for {subdir}",
-                    channel.canonical_name()
-                ),
+                    )),
+                }
             }
-        }
-    }
+        })
+    });
+    locations.extend(try_join_all(probes).await?);
     Ok(locations)
 }
 
@@ -128,14 +134,21 @@ pub async fn whoprovides(opt: Opt, offline: bool) -> miette::Result<()> {
     let platform = opt.platform.map_or_else(crate::host_platform, Ok)?;
     let subdirs: Vec<Platform> = [platform, Platform::NoArch].into_iter().dedup().collect();
 
-    let start = Instant::now();
     let pb = ProgressBar::new_spinner();
     pb.enable_steady_tick(std::time::Duration::from_millis(100));
     pb.set_style(ProgressStyle::with_template("{spinner:.green} {msg}").unwrap());
     pb.set_message("Locating lookup indexes...");
 
+    let discovery = Instant::now();
     let locations = locate_indexes(&opt, &subdirs, &client).await?;
+    tracing::debug!(
+        "located {} lookup index(es) through the sharded repodata in {:?}",
+        locations.len(),
+        discovery.elapsed()
+    );
 
+    // The reported time is that of the lookup itself, without discovery.
+    let start = Instant::now();
     pb.set_message("Opening lookup indexes...");
     let mut indexes = try_join_all(
         locations

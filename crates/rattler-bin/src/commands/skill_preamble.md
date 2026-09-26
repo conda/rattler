@@ -32,7 +32,7 @@ workflows use pixi instead.
 - `rattler whoprovides include/zlib.h` (or a pattern such as `'**/zlib.h'`,
   `'**/libssl.so*'`, `'site-packages/polars/*'`) lists the packages that ship
   a file, using the lookup index of the channel (`info.lookup_url` in its
-  repodata); `-c` selects the channel, a URL or a local directory.
+  sharded repodata); `-c` selects the channel, a URL or a local directory.
 - `--offline` (global) disables all network access and only uses cached
   repodata and packages. `-v`/`--verbose` (global) enables debug logging;
   `RUST_LOG` gives finer control.

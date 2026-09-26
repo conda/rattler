@@ -165,19 +165,26 @@ fn write_lookup_index() -> tempfile::TempDir {
         }
         manifest.removed = vec!["zlib-1.2.13-h4ab18f5_6.conda".to_string()];
         std::fs::write(dir.join("manifest.json"), manifest.to_json().unwrap()).unwrap();
-        // The channel's repodata points to the manifest, as a channel does.
-        std::fs::write(
-            root.path().join(subdir).join("repodata.json"),
-            serde_json::json!({
-                "info": { "subdir": subdir, "lookup_url": "lookup/manifest.json" },
-                "packages": {},
-                "packages.conda": {},
-            })
-            .to_string(),
-        )
-        .unwrap();
+        write_shards(root.path(), subdir, Some("lookup/manifest.json"));
     }
     root
+}
+
+/// Writes the sharded repodata index of `subdir`, which points to the lookup
+/// index with `lookup_url`, as a channel does.
+fn write_shards(root: &std::path::Path, subdir: &str, lookup_url: Option<&str>) {
+    let mut info =
+        serde_json::json!({ "subdir": subdir, "base_url": "", "shards_base_url": "./shards/" });
+    if let Some(url) = lookup_url {
+        info["lookup_url"] = url.into();
+    }
+    let msgpack =
+        rmp_serde::to_vec_named(&serde_json::json!({ "info": info, "shards": {} })).unwrap();
+    std::fs::write(
+        root.join(subdir).join("repodata_shards.msgpack.zst"),
+        zstd::stream::encode_all(&msgpack[..], 0).unwrap(),
+    )
+    .unwrap();
 }
 
 #[test]
@@ -215,13 +222,9 @@ fn test_whoprovides_json() {
 
 #[test]
 fn test_whoprovides_fails_without_index() {
-    // A subdir whose repodata has no `lookup_url` is an error, not a warning.
+    // A subdir whose sharded repodata has no `lookup_url` is an error.
     let index = write_lookup_index();
-    std::fs::write(
-        index.path().join("noarch/repodata.json"),
-        r#"{"info": {"subdir": "noarch"}, "packages": {}, "packages.conda": {}}"#,
-    )
-    .unwrap();
+    write_shards(index.path(), "noarch", None);
     let output = Command::new(env!("CARGO_BIN_EXE_rattler"))
         .args([
             "whoprovides",
