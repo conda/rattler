@@ -1,0 +1,135 @@
+---
+source: crates/rattler_conda_types/tests/matchspec_display_edge_cases.rs
+expression: cases.0
+---
+case      : foo
+legacy    : foo
+  reparse : same spec
+canonical : foo
+  reparse : same spec, stable
+
+case      : foo >=1
+legacy    : foo >=1
+  reparse : same spec
+canonical : foo[version=">=1"]
+  reparse : same spec, stable
+
+case      : foo >=1,<2 py39h123_0
+legacy    : foo >=1,<2 py39h123_0
+  reparse : same spec
+canonical : foo[version=">=1,<2",build="py39h123_0"]
+  reparse : same spec, stable
+
+case      : foo[version=">=1,<2",build="py39h123_0"]
+legacy    : foo >=1,<2 py39h123_0
+  reparse : same spec
+canonical : foo[version=">=1,<2",build="py39h123_0"]
+  reparse : same spec, stable
+
+case      : foo 1.2.*
+legacy    : foo 1.2.*
+  reparse : same spec
+canonical : foo[version="1.2.*"]
+  reparse : same spec, stable
+
+case      : foo * py39h123_0
+legacy    : foo * py39h123_0
+  reparse : same spec
+canonical : foo[version="*",build="py39h123_0"]
+  reparse : same spec, stable
+
+case      : foo[build="py39h123_0",build_number=">=2"]
+legacy    : foo[build_number=">=2", build="py39h123_0"]
+  reparse : same spec
+canonical : foo[build="py39h123_0",build_number=">=2"]
+  reparse : same spec, stable
+
+case      : foo[version="(>=1,<2)|>3"]
+legacy    : foo >=1,<2|>3
+  reparse : same spec
+canonical : foo[version=">=1,<2|>3"]
+  reparse : same spec, stable
+
+case      : conda-forge::foo >=1
+legacy    : conda-forge::foo >=1
+  reparse : same spec
+canonical : foo[version=">=1",channel="conda-forge"]
+  reparse : same spec, stable
+
+case      : conda-forge/linux-64::foo
+legacy    : conda-forge/linux-64::foo
+  reparse : same spec
+canonical : foo[channel="conda-forge",subdir="linux-64"]
+  reparse : same spec, stable
+
+case      : foo[subdir="linux-64"]
+legacy    : foo[subdir="linux-64"]
+  reparse : same spec
+canonical : foo[subdir="linux-64"]
+  reparse : same spec, stable
+
+case      : foo[fn="pkg.conda"]
+legacy    : foo[fn="pkg.conda"]
+  reparse : same spec
+canonical : foo[fn="pkg.conda"]
+  reparse : same spec, stable
+
+case      : foo[namespace="python",version=">=1"]
+legacy    : foo >=1[namespace="python"]
+  reparse : same spec
+canonical : foo[version=">=1",namespace="python"]
+  reparse : same spec, stable
+
+case      : *[sha256="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"]
+legacy    : *[sha256="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"]
+  reparse : same spec
+canonical : *[sha256="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"]
+  reparse : same spec, stable
+
+case      : foo[md5="0123456789abcdef0123456789abcdef",license="BSD-3-Clause",license_family="BSD"]
+legacy    : foo[md5="0123456789abcdef0123456789abcdef", license="BSD-3-Clause", license_family="BSD"]
+  reparse : same spec
+canonical : foo[md5="0123456789abcdef0123456789abcdef",license="BSD-3-Clause",license_family="BSD"]
+  reparse : same spec, stable
+
+case      : build = a,b
+legacy    : foo[build="a,b"]
+  reparse : same spec
+canonical : foo[build="a,b"]
+  reparse : same spec, stable
+
+case      : build = a|b
+legacy    : foo[build="a|b"]
+  reparse : same spec
+canonical : foo[build="a|b"]
+  reparse : same spec, stable
+
+case      : build = a b
+legacy    : foo[build="a b"]
+  reparse : same spec
+canonical : foo[build="a b"]
+  reparse : same spec, stable
+
+case      : build = a#b
+legacy    : foo[build="a#b"]
+  reparse : same spec
+canonical : foo[build="a#b"]
+  reparse : same spec, stable
+
+case      : build = a[0]
+legacy    : foo[build="a[0]"]
+  reparse : same spec
+canonical : foo[build="a[0]"]
+  reparse : same spec, stable
+
+case      : build = a;b
+legacy    : foo[build="a;b"]
+  reparse : same spec
+canonical : foo[build="a;b"]
+  reparse : same spec, stable
+
+case      : build = a:b
+legacy    : foo[build="a:b"]
+  reparse : same spec
+canonical : foo[build="a:b"]
+  reparse : same spec, stable

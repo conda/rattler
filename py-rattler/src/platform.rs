@@ -1,9 +1,11 @@
 use std::str::FromStr;
 
-use pyo3::{pyclass, pymethods};
+use pyo3::{PyResult, exceptions::PyRuntimeError, pyclass, pymethods};
 use rattler_conda_types::{Arch, Platform};
 
 use crate::error::PyRattlerError;
+
+const UNKNOWN_HOST_PLATFORM: &str = "the current host is not a known conda platform";
 
 ///////////////////////////
 /// Arch                ///
@@ -39,8 +41,10 @@ impl PyArch {
     }
 
     #[staticmethod]
-    pub fn current() -> Self {
-        Arch::current().into()
+    pub fn current() -> PyResult<Self> {
+        Arch::current()
+            .map(Into::into)
+            .ok_or_else(|| PyRuntimeError::new_err(UNKNOWN_HOST_PLATFORM))
     }
 
     pub fn as_str(&self) -> &str {
@@ -89,8 +93,10 @@ impl PyPlatform {
     }
 
     #[staticmethod]
-    pub fn current() -> Self {
-        Platform::current().into()
+    pub fn current() -> PyResult<Self> {
+        Platform::current()
+            .map(Into::into)
+            .ok_or_else(|| PyRuntimeError::new_err(UNKNOWN_HOST_PLATFORM))
     }
 
     #[staticmethod]

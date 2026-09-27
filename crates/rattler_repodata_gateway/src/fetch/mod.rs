@@ -27,6 +27,12 @@ pub enum RepoDataNotFoundError {
     /// There was a file system error
     #[error(transparent)]
     FileSystemError(#[from] std::io::Error),
+
+    /// The JavaScript fetch implementation reported that the resource does
+    /// not exist.
+    #[cfg(target_arch = "wasm32")]
+    #[error(transparent)]
+    JsFetchError(#[from] crate::utils::js_fetch::JsFetchError),
 }
 
 #[allow(missing_docs)]
@@ -59,11 +65,15 @@ pub enum FetchRepoDataError {
     #[error("failed to write cache state")]
     FailedToWriteCacheState(#[source] std::io::Error),
 
-    #[error("there is no cache available")]
-    NoCacheAvailable,
+    #[error("no usable repodata cache for {0}")]
+    NoCacheAvailable(Url),
 
     #[error("the operation was cancelled")]
     Cancelled,
+
+    #[cfg(target_arch = "wasm32")]
+    #[error(transparent)]
+    JsFetchError(crate::utils::js_fetch::JsFetchError),
 }
 
 impl From<reqwest_middleware::Error> for FetchRepoDataError {

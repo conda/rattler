@@ -202,7 +202,7 @@ expression: "(unused, normalized(config))"
                             fragment: None,
                         },
                         region: "eu-central-1",
-                        force_path_style: true,
+                        addressing_style: Path,
                     },
                 },
             ),
@@ -217,6 +217,7 @@ expression: "(unused, normalized(config))"
                     repodata_revisions: None,
                     package_revision_assignment: None,
                     base_url: None,
+                    notices: None,
                     channel_relations: None,
                 },
                 per_channel: {
@@ -228,6 +229,7 @@ expression: "(unused, normalized(config))"
                         base_url: Some(
                             "../packages/",
                         ),
+                        notices: None,
                         channel_relations: None,
                     },
                 },

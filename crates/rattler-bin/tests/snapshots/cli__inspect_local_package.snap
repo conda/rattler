@@ -1,0 +1,14 @@
+---
+source: crates/rattler-bin/tests/cli.rs
+expression: "run_rattler(&[\"inspect\", EMPTY_PACKAGE])"
+---
+name: empty
+version: 0.1.0
+build: h4616a5c_0
+build number: 0
+subdir: noarch
+noarch: generic
+timestamp: 2025-08-11T20:16:43.111Z
+size: 1.50 KiB
+
+paths: (0 total)

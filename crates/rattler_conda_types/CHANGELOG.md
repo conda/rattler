@@ -7,6 +7,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.54.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.53.0...rattler_conda_types-v0.54.0) - 2026-09-23
+
+### Added
+
+- add standalone Sigstore attestation verification ([#2794](https://github.com/conda/rattler/pull/2794))
+- Add attestations to PackageRecord and rattler-index/upload ([#2773](https://github.com/conda/rattler/pull/2773))
+
+## [0.53.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.52.1...rattler_conda_types-v0.53.0) - 2026-09-17
+
+### Added
+
+- *(rattler_conda_types)* Add indexed_timestamp ([#2790](https://github.com/conda/rattler/pull/2790))
+
+### Fixed
+
+- keep v3-only extra dependencies in legacy repodata ([#2809](https://github.com/conda/rattler/pull/2809))
+- *(rattler_conda_types)* load prefix records in a deterministic order ([#2782](https://github.com/conda/rattler/pull/2782))
+
+### Other
+
+- [**breaking**] Remove timestamp_for_indexing function ([#2799](https://github.com/conda/rattler/pull/2799))
+- [**breaking**] remove Platform::Unknown, make Platform::current() return Option ([#2786](https://github.com/conda/rattler/pull/2786))
+
+## [0.52.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.52.0...rattler_conda_types-v0.52.1) - 2026-08-27
+
+### Other
+
+- updated the following local packages: rattler_redaction
+
+## [0.52.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.51.0...rattler_conda_types-v0.52.0) - 2026-08-26
+
+### Added
+
+- expose proptest strategies for conda types ([#2695](https://github.com/conda/rattler/pull/2695))
+
+### Fixed
+
+- keep legacy-compatible extra_depends in legacy repodata ([#2721](https://github.com/conda/rattler/pull/2721))
+- canonicalize MatchSpecs in v3 repodata ([#2718](https://github.com/conda/rattler/pull/2718))
+
+### Other
+
+- rename CEP 146 to CEP 48 ([#2717](https://github.com/conda/rattler/pull/2717))
+- extract conda version handling into its own crate ([#2714](https://github.com/conda/rattler/pull/2714))
+
+## [0.51.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.50.0...rattler_conda_types-v0.51.0) - 2026-08-21
+
+### Added
+
+- add the CEP 48 repodata wire model ([#2669](https://github.com/conda/rattler/pull/2669))
+
+### Fixed
+
+- recover merged CEP 48 PRs (#2674, #2673, #2670)
+
+## [0.50.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.49.1...rattler_conda_types-v0.50.0) - 2026-08-15
+
+### Added
+
+- adding emscripten-wasm64 platform ([#2680](https://github.com/conda/rattler/pull/2680))
+
+## [0.49.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.49.0...rattler_conda_types-v0.49.1) - 2026-08-11
+
+### Added
+
+- *(rattler_conda_types)* convert to and from `semver::Version` ([#2641](https://github.com/conda/rattler/pull/2641))
+- add CEP-6 channel notice support ([#2639](https://github.com/conda/rattler/pull/2639))
+
+## [0.49.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.48.1...rattler_conda_types-v0.49.0) - 2026-07-24
+
+### Added
+
+- add iOS and Android subdirs and __ios/__android virtual packages ([#2613](https://github.com/conda/rattler/pull/2613))
+
+### Fixed
+
+- render build only match specs with a version placeholder ([#2610](https://github.com/conda/rattler/pull/2610))
+- keep trailing underscores in matchspec versions ([#2606](https://github.com/conda/rattler/pull/2606))
+
+## [0.48.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.48.0...rattler_conda_types-v0.48.1) - 2026-07-14
+
+### Other
+
+- update dependencies ([#2589](https://github.com/conda/rattler/pull/2589))
+
 ## [0.48.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.47.2...rattler_conda_types-v0.48.0) - 2026-07-09
 
 ### Added

@@ -1,10 +1,6 @@
-use std::{
-    collections::HashSet,
-    future::{Future, IntoFuture},
-    sync::Arc,
-};
+use std::{collections::HashSet, future::IntoFuture, sync::Arc};
 
-use futures::{FutureExt, StreamExt, select_biased, stream::FuturesUnordered};
+use futures::{StreamExt, select_biased, stream::FuturesUnordered};
 use rattler_conda_types::{
     Channel, ChannelUrl, MatchSpec, Matches, PackageName, PackageNameMatcher, Platform,
     RepoDataRecord,
@@ -12,13 +8,17 @@ use rattler_conda_types::{
 use url::Url;
 
 use super::{
-    BarrierCell, GatewayError, GatewayInner, GatewayWarning, RepoData,
+    BarrierCell, ChannelNoticeResult, GatewayError, GatewayInner, GatewayWarning, RepoData,
+    boxed::{BoxFuture, box_future},
     channel_expander::{ChannelExpander, ChannelRelationsMode, ChannelRelationsWarning},
     channel_relations::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
+    local_subdir::LocalSubdirClient,
     source::{CustomSourceClient, Source},
-    subdir::{PackageRecords, Subdir, SubdirData},
+    subdir::{PackageRecords, Subdir, SubdirData, extract_unique_deps_split},
 };
 use crate::Reporter;
+
+type RecordPatch = dyn Fn(&RepoDataRecord) -> Option<RepoDataRecord> + Send + Sync;
 
 /// Result of a successful [`RepoDataQuery::execute`].
 ///
@@ -31,6 +31,9 @@ pub struct RepoDataQueryOutput {
     /// next to the channel that introduced them; caller-supplied
     /// sources keep their positions.
     pub repodata: Vec<RepoData>,
+    /// CEP-6 notices published by the queried channels. Also streamed to
+    /// [`Reporter::on_channel_notice`].
+    pub notices: Vec<ChannelNoticeResult>,
     /// Non-fatal warnings encountered during the query. Also streamed
     /// to [`Reporter::on_gateway_warning`] as they are recorded.
     pub warnings: Vec<GatewayWarning>,
@@ -71,6 +74,9 @@ impl<'a> IntoIterator for &'a RepoDataQueryOutput {
 pub struct NamesQueryOutput {
     /// Distinct package names contributed by all queried subdirs.
     pub names: Vec<PackageName>,
+    /// CEP-6 notices published by the queried channels. Also streamed to
+    /// [`Reporter::on_channel_notice`].
+    pub notices: Vec<ChannelNoticeResult>,
     /// Non-fatal warnings encountered during the query. Also streamed
     /// to [`Reporter::on_gateway_warning`] as they are recorded.
     pub warnings: Vec<GatewayWarning>,
@@ -130,8 +136,14 @@ pub struct RepoDataQuery {
     /// Whether to recursively fetch dependencies
     recursive: bool,
 
+    /// A query-local patch applied to repodata records.
+    record_patch: Option<Arc<RecordPatch>>,
+
     /// The reporter to use by the query.
     reporter: Option<Arc<dyn Reporter>>,
+
+    /// Whether to fetch CEP-6 notices for this query.
+    channel_notices: bool,
 
     /// CEP-42 channel relations handling mode.
     channel_relations_mode: ChannelRelationsMode,
@@ -227,7 +239,9 @@ impl RepoDataQuery {
             specs,
 
             recursive: false,
+            record_patch: None,
             reporter: None,
+            channel_notices: false,
             channel_relations_mode: ChannelRelationsMode::default(),
             channel_relations_max_depth: DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
         }
@@ -254,6 +268,15 @@ impl RepoDataQuery {
         }
     }
 
+    /// Enable or disable fetching CEP-6 channel notices. Disabled by default.
+    #[must_use]
+    pub fn channel_notices(self, enabled: bool) -> Self {
+        Self {
+            channel_notices: enabled,
+            ..self
+        }
+    }
+
     /// Sets whether the query should be recursive. If recursive is set to true
     /// the query will also recursively fetch the dependencies of the packages
     /// that match the root specs.
@@ -263,6 +286,25 @@ impl RepoDataQuery {
     #[must_use]
     pub fn recursive(self, recursive: bool) -> Self {
         Self { recursive, ..self }
+    }
+
+    /// Applies a query-local patch to repodata records.
+    ///
+    /// The patch runs after records are retrieved, including from the gateway
+    /// cache, and before recursive dependency discovery. Returning `Some`
+    /// replaces the record for this query, while returning `None` reuses the
+    /// original record. Replacement records are never written to the gateway
+    /// cache. Patches must preserve record identity fields such as the package
+    /// name, identifier, and URL.
+    #[must_use]
+    pub fn with_record_patch(
+        self,
+        patch: impl Fn(&RepoDataRecord) -> Option<RepoDataRecord> + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            record_patch: Some(Arc::new(patch)),
+            ..self
+        }
     }
 
     /// Sets the reporter to use for this query.
@@ -295,6 +337,7 @@ struct QueryExecutor {
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     gateway: Arc<GatewayInner>,
     recursive: bool,
+    record_patch: Option<Arc<RecordPatch>>,
     reporter: Option<Arc<dyn Reporter>>,
 
     // Specs categorized at construction
@@ -332,6 +375,63 @@ struct QueryExecutor {
 
     /// CEP-42 expansion state.
     expander: ChannelExpander,
+
+    /// CEP-6 notice collection state.
+    notices: NoticeCollector,
+}
+
+/// Collects CEP-6 notices while a query runs. Fetches are queued as channels
+/// enter the query — user-supplied and CEP-42-discovered alike — and their
+/// futures are driven concurrently with the query's subdir and record
+/// fetches. Notice failures are non-fatal by construction:
+/// [`GatewayInner::get_channel_notices`] never errors.
+struct NoticeCollector {
+    /// Whether notice fetching is enabled for the query.
+    enabled: bool,
+    /// Channels for which a fetch was already queued; guards against
+    /// queuing one fetch per platform.
+    seen: HashSet<ChannelUrl>,
+    /// In-flight notice fetches.
+    pending: FuturesUnordered<BoxFuture<Vec<ChannelNoticeResult>>>,
+    /// Notices collected so far.
+    collected: Vec<ChannelNoticeResult>,
+}
+
+impl NoticeCollector {
+    fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            seen: HashSet::new(),
+            pending: FuturesUnordered::new(),
+            collected: Vec::new(),
+        }
+    }
+
+    /// Queue a notice fetch for `channel` unless notices are disabled or a
+    /// fetch for the channel was already queued.
+    fn queue(
+        &mut self,
+        gateway: &Arc<GatewayInner>,
+        url: &ChannelUrl,
+        channel: Arc<Channel>,
+        reporter: Option<Arc<dyn Reporter>>,
+    ) {
+        if !self.enabled || !self.seen.insert(url.clone()) {
+            return;
+        }
+        let gateway = gateway.clone();
+        self.pending.push(box_future(async move {
+            gateway
+                .get_channel_notices(std::iter::once(channel.as_ref()), reporter.as_deref())
+                .await
+        }));
+    }
+
+    /// Record a completed batch, streaming it to the reporter.
+    fn collect(&mut self, reporter: Option<&dyn Reporter>, batch: Vec<ChannelNoticeResult>) {
+        GatewayInner::report_channel_notices(reporter, &batch);
+        self.collected.extend(batch);
+    }
 }
 
 impl QueryExecutor {
@@ -344,7 +444,9 @@ impl QueryExecutor {
             platforms,
             specs,
             recursive,
+            record_patch,
             reporter,
+            channel_notices,
             channel_relations_mode,
             channel_relations_max_depth,
         } = query;
@@ -419,6 +521,7 @@ impl QueryExecutor {
         let total_handles = sources_with_idx.len() * platforms.len();
         let mut subdir_handles = Vec::with_capacity(total_handles);
         let pending_subdirs = FuturesUnordered::new();
+        let mut notices = NoticeCollector::new(channel_notices);
 
         for (caller_idx, source) in sources_with_idx {
             for &platform in &platforms {
@@ -428,6 +531,7 @@ impl QueryExecutor {
                 let (kind, pending) = match source_clone {
                     Source::Channel(channel) => {
                         let (url, channel) = expander.register_user_channel(channel);
+                        notices.queue(&gateway, &url, channel.clone(), reporter.clone());
                         let kind = SubdirKind::Channel {
                             url: url.clone(),
                             platform,
@@ -457,6 +561,40 @@ impl QueryExecutor {
                         });
                         (SubdirKind::Custom, fut)
                     }
+                    Source::SparseRepoData(sparse_list) => {
+                        // Each entry represents a different subdir, so find the one
+                        // matching the requested platform; if none matches, treat it
+                        // as having no records, same as a channel that doesn't
+                        // publish a given subdir.
+                        let matching = sparse_list
+                            .iter()
+                            .find(|sparse| platform.as_str() == sparse.subdir())
+                            .cloned();
+                        let url = matching
+                            .as_ref()
+                            .or_else(|| sparse_list.first())
+                            .map(|sparse| sparse.channel.base_url.clone());
+                        let kind = match url {
+                            Some(url) => SubdirKind::Channel { url, platform },
+                            None => SubdirKind::Custom,
+                        };
+                        let subdir = match matching {
+                            Some(sparse) => Arc::new(Subdir::Found(SubdirData::from_client(
+                                LocalSubdirClient::new(sparse),
+                            ))),
+                            None => Arc::new(Subdir::NotFound),
+                        };
+                        let b = barrier.clone();
+                        let fut = box_future(async move {
+                            b.set(subdir.clone()).expect("subdir was set twice");
+                            Ok(PendingSubdirOk {
+                                subdir,
+                                kind_url_and_platform: None,
+                                warning: None,
+                            })
+                        });
+                        (kind, fut)
+                    }
                 };
 
                 subdir_handles.push(SubdirHandle {
@@ -472,6 +610,7 @@ impl QueryExecutor {
         Ok(Self {
             gateway,
             recursive,
+            record_patch,
             reporter,
             direct_url_specs,
             direct_url_result,
@@ -486,6 +625,7 @@ impl QueryExecutor {
             pending_subdirs,
             pending_records: FuturesUnordered::new(),
             expander,
+            notices,
         })
     }
 
@@ -531,6 +671,7 @@ impl QueryExecutor {
                     },
                     PackageRecords {
                         records,
+                        removed: Vec::new(),
                         unique_base_deps,
                         unique_extra_deps,
                     },
@@ -629,6 +770,28 @@ impl QueryExecutor {
                 }
             }
         }
+    }
+
+    /// Apply the query-local record patch and rebuild derived dependency data.
+    fn patch_package_records(&self, mut pkg: PackageRecords) -> PackageRecords {
+        let Some(patch) = &self.record_patch else {
+            return pkg;
+        };
+
+        let mut changed = false;
+        for record in &mut pkg.records {
+            if let Some(patched) = patch(record.as_ref()) {
+                *record = Arc::new(patched);
+                changed = true;
+            }
+        }
+
+        if changed {
+            (pkg.unique_base_deps, pkg.unique_extra_deps) =
+                extract_unique_deps_split(pkg.records.iter().map(AsRef::as_ref));
+        }
+
+        pkg
     }
 
     /// Walk the deps of newly-active extras against records that have
@@ -736,11 +899,13 @@ impl QueryExecutor {
         }
     }
 
-    /// Add matching records to the slot indicated by `target`.
+    /// Add matching records to the slot indicated by `target`. Removed
+    /// packages are added unfiltered: they describe the fetched name, not a
+    /// spec match.
     fn accumulate_records(
         &mut self,
         target: AccumulateTarget,
-        records: Vec<Arc<RepoDataRecord>>,
+        pkg: PackageRecords,
         request: &PendingRequest,
     ) {
         let result = match target {
@@ -750,6 +915,11 @@ impl QueryExecutor {
                 .expect("direct-url fetch spawned without a direct-url bucket"),
             AccumulateTarget::Subdir(idx) => &mut self.subdir_handles[idx].data,
         };
+
+        let PackageRecords {
+            records, removed, ..
+        } = pkg;
+        result.removed.extend(removed);
 
         match &request.specs {
             SourceSpecs::Transitive => {
@@ -836,6 +1006,7 @@ impl QueryExecutor {
                 // Handle any records that were fetched
                 records = self.pending_records.select_next_some() => {
                     let (target, request, pkg) = records?;
+                    let pkg = self.patch_package_records(pkg);
 
                     if self.recursive {
                         let entry =
@@ -850,7 +1021,12 @@ impl QueryExecutor {
                         self.queue_dependencies(&pkg, &request);
                     }
 
-                    self.accumulate_records(target, pkg.records, &request);
+                    self.accumulate_records(target, pkg, &request);
+                }
+
+                // Handle any CEP-6 notices that were fetched
+                batch = self.notices.pending.select_next_some() => {
+                    self.notices.collect(self.reporter.as_deref(), batch);
                 }
 
                 // All futures have been handled, all subdirectories have been loaded and all
@@ -890,6 +1066,8 @@ impl QueryExecutor {
         channel: Arc<Channel>,
         platform: Platform,
     ) {
+        self.notices
+            .queue(&self.gateway, &url, channel.clone(), self.reporter.clone());
         let barrier = Arc::new(BarrierCell::new());
 
         let policy = if self.expander.strict() {
@@ -1008,6 +1186,7 @@ impl QueryExecutor {
         repodata.extend(handles.into_iter().map(|h| h.data));
         Ok(RepoDataQueryOutput {
             repodata,
+            notices: self.notices.collected,
             warnings: self
                 .expander
                 .take_warnings()
@@ -1071,7 +1250,7 @@ async fn fetch_subdir_with_policy(
     policy: FetchErrorPolicy,
 ) -> Result<(Arc<Subdir>, Option<ChannelRelationsWarning>), GatewayError> {
     match gateway
-        .get_or_create_subdir(channel, platform, reporter)
+        .get_or_create_subdir(channel, platform, reporter, true)
         .await
     {
         Ok(subdir) => Ok((subdir, None)),
@@ -1149,22 +1328,6 @@ fn spawn_one_package_fetch(
     }));
 }
 
-#[cfg(target_arch = "wasm32")]
-type BoxFuture<T> = futures::future::LocalBoxFuture<'static, T>;
-
-#[cfg(target_arch = "wasm32")]
-fn box_future<T, F: Future<Output = T> + 'static>(future: F) -> BoxFuture<T> {
-    future.boxed_local()
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-type BoxFuture<T> = futures::future::BoxFuture<'static, T>;
-
-#[cfg(not(target_arch = "wasm32"))]
-fn box_future<T, F: Future<Output = T> + Send + 'static>(future: F) -> BoxFuture<T> {
-    future.boxed()
-}
-
 /// Result type for pending record fetches.
 type PendingSubdirResult = Result<PendingSubdirOk, GatewayError>;
 type PendingRecordsResult =
@@ -1197,6 +1360,9 @@ pub struct NamesQuery {
     /// The reporter to use by the query.
     reporter: Option<Arc<dyn Reporter>>,
 
+    /// Whether to fetch CEP-6 notices for this query.
+    channel_notices: bool,
+
     /// CEP-42 channel relations handling mode.
     channel_relations_mode: ChannelRelationsMode,
 
@@ -1218,8 +1384,18 @@ impl NamesQuery {
             platforms,
 
             reporter: None,
+            channel_notices: false,
             channel_relations_mode: ChannelRelationsMode::default(),
             channel_relations_max_depth: DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
+        }
+    }
+
+    /// Enable or disable fetching CEP-6 channel notices. Disabled by default.
+    #[must_use]
+    pub fn channel_notices(self, enabled: bool) -> Self {
+        Self {
+            channel_notices: enabled,
+            ..self
         }
     }
 
@@ -1264,10 +1440,17 @@ impl NamesQuery {
             self.platforms.clone(),
             self.reporter.clone(),
         );
+        let mut notices = NoticeCollector::new(self.channel_notices);
 
         let mut pending: FuturesUnordered<BoxFuture<NamesFetchResult>> = FuturesUnordered::new();
         for channel in self.channels {
             let (url, channel_arc) = expander.register_user_channel(channel);
+            notices.queue(
+                &self.gateway,
+                &url,
+                channel_arc.clone(),
+                self.reporter.clone(),
+            );
             for &platform in &self.platforms {
                 pending.push(spawn_names_fetch(
                     self.gateway.clone(),
@@ -1288,23 +1471,36 @@ impl NamesQuery {
             FetchErrorPolicy::SwallowAsWarning
         };
 
-        while let Some(result) = pending.next().await {
-            let (url, platform, subdir, warning) = result?;
-            if let Some(w) = warning {
-                expander.push_warning(w);
-            }
-            if let Some(subdir_names) = subdir.package_names() {
-                names.extend(subdir_names);
-            }
-            for (new_url, new_channel, new_plat) in expander.observe(&url, platform, &subdir)? {
-                pending.push(spawn_names_fetch(
-                    self.gateway.clone(),
-                    new_channel,
-                    new_plat,
-                    new_url,
-                    self.reporter.clone(),
-                    policy,
-                ));
+        loop {
+            select_biased! {
+                result = pending.select_next_some() => {
+                    let (url, platform, subdir, warning) = result?;
+                    if let Some(w) = warning {
+                        expander.push_warning(w);
+                    }
+                    if let Some(subdir_names) = subdir.package_names() {
+                        names.extend(subdir_names);
+                    }
+                    for (new_url, new_channel, new_plat) in expander.observe(&url, platform, &subdir)? {
+                        notices.queue(&self.gateway, &new_url, new_channel.clone(), self.reporter.clone());
+                        pending.push(spawn_names_fetch(
+                            self.gateway.clone(),
+                            new_channel,
+                            new_plat,
+                            new_url,
+                            self.reporter.clone(),
+                            policy,
+                        ));
+                    }
+                }
+
+                batch = notices.pending.select_next_some() => {
+                    notices.collect(self.reporter.as_deref(), batch);
+                }
+
+                complete => {
+                    break;
+                }
             }
         }
 
@@ -1320,6 +1516,7 @@ impl NamesQuery {
             .collect::<Result<Vec<PackageName>, _>>()?;
         Ok(NamesQueryOutput {
             names,
+            notices: notices.collected,
             warnings: expander
                 .take_warnings()
                 .into_iter()

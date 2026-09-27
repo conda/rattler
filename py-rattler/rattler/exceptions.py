@@ -2,8 +2,11 @@ try:
     from rattler.rattler import (
         ActivationError,
         ActivationScriptFormatError,
+        AttestationError,
         AuthenticationStorageError,
         CacheDirError,
+        CanonicalMatchSpecError,
+        ConfigError,
         ConversionError,
         ConvertSubdirError,
         DetectVirtualPackageError,
@@ -52,6 +55,12 @@ except ImportError:
     class CacheDirError(Exception):  # type: ignore[no-redef]
         """Error that can occur when querying the cache directory"""
 
+    class CanonicalMatchSpecError(Exception):  # type: ignore[no-redef]
+        """Error that can occur when a MatchSpec cannot be represented canonically"""
+
+    class ConfigError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when loading a configuration file"""
+
     class ConversionError(Exception):  # type: ignore[no-redef]
         """An error that can occur during conversion"""
 
@@ -79,6 +88,9 @@ except ImportError:
 
     class InstallerError(Exception):  # type: ignore[no-redef]
         """An error that can occur when installing a package"""
+
+    class AttestationError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when verifying a Sigstore attestation"""
 
     class InvalidChannelError(Exception):  # type: ignore[no-redef]
         """Error that can occur when parsing a channel."""
@@ -150,8 +162,11 @@ except ImportError:
 __all__ = [
     "ActivationError",
     "ActivationScriptFormatError",
+    "AttestationError",
     "AuthenticationStorageError",
     "CacheDirError",
+    "CanonicalMatchSpecError",
+    "ConfigError",
     "ConversionError",
     "ConvertSubdirError",
     "DetectVirtualPackageError",

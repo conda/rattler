@@ -1,13 +1,19 @@
+use std::sync::LazyLock;
+
 use clap::Parser;
 use indicatif::{MultiProgress, ProgressDrawTarget};
 use miette::IntoDiagnostic;
-use once_cell::sync::Lazy;
 use tracing_subscriber::{EnvFilter, filter::LevelFilter, util::SubscriberInitExt};
 
 use crate::{commands::exec, writer::IndicatifWriter};
 
+#[cfg(feature = "sigstore")]
+mod attestation_args;
 mod commands;
 mod exclude_newer;
+#[cfg(feature = "sigstore")]
+mod publisher_args;
+mod solver_args;
 mod writer;
 
 /// Returns a global instance of [`indicatif::MultiProgress`].
@@ -17,12 +23,21 @@ mod writer;
 /// configured in such a way to it will not interfere if you use the
 /// [`indicatif::MultiProgress`] returning by this function.
 pub fn global_multi_progress() -> MultiProgress {
-    static GLOBAL_MP: Lazy<MultiProgress> = Lazy::new(|| {
+    static GLOBAL_MP: LazyLock<MultiProgress> = LazyLock::new(|| {
         let mp = MultiProgress::new();
         mp.set_draw_target(ProgressDrawTarget::stderr_with_hz(20));
         mp
     });
     GLOBAL_MP.clone()
+}
+
+/// Returns the conda platform of the host, or an error when the host has none.
+pub fn host_platform() -> miette::Result<rattler_conda_types::Platform> {
+    rattler_conda_types::Platform::current().ok_or_else(|| {
+        miette::miette!(
+            "the current host is not a known conda platform, specify the platform explicitly"
+        )
+    })
 }
 
 /// Command line options available through the `rattler` cli.
@@ -46,15 +61,20 @@ struct Opt {
 #[derive(Debug, clap::Subcommand)]
 enum Command {
     Auth(Box<commands::auth::Opt>),
+    ComparePackages(commands::compare_packages::Opt),
     Completion(commands::completion::Opt),
     Create(commands::create::Opt),
     Download(commands::download::Opt),
     FetchFile(commands::fetch_file::Opt),
+    Info(commands::info::Opt),
     Inspect(commands::inspect::Opt),
     Search(commands::search::Opt),
     Solve(commands::solve::Opt),
+    Whoneeds(commands::whoneeds::Opt),
     ShellHook(commands::shell_hook::Opt),
     VirtualPackages(commands::virtual_packages::Opt),
+    #[cfg(feature = "sigstore")]
+    VerifyAttestation(commands::verify_attestation::Opt),
     InstallMenu(commands::menu::InstallOpt),
     RemoveMenu(commands::menu::RemoveOpt),
     Run(commands::run::Opt),
@@ -65,6 +85,7 @@ enum Command {
     Upload(Box<rattler_upload::upload::opt::UploadOpts>),
     List(commands::list::Opt),
     Exec(commands::exec::Opt),
+    Skill(commands::skill::Opt),
 }
 
 /// Entry point of the `rattler` cli.
@@ -115,22 +136,31 @@ async fn async_main() -> miette::Result<()> {
     // Dispatch the selected comment
     match opt.command {
         Command::Auth(opts) => commands::auth::auth(*opts, offline).await,
+        Command::ComparePackages(opts) => {
+            commands::compare_packages::compare_packages(opts, offline).await
+        }
         Command::Completion(opts) => commands::completion::completion(opts),
         Command::Create(opts) => commands::create::create(opts, offline).await,
         Command::Download(opts) => commands::download::download(opts, offline).await,
         Command::FetchFile(opts) => commands::fetch_file::fetch_file(opts, offline).await,
+        Command::Info(opts) => commands::info::info(opts),
         Command::Inspect(opts) => commands::inspect::inspect(opts, offline).await,
         Command::Search(opts) => commands::search::search(opts, offline).await,
         Command::Solve(opts) => commands::solve::solve(opts, offline).await,
+        Command::Whoneeds(opts) => commands::whoneeds::whoneeds(opts, offline).await,
         Command::List(opts) => commands::list::list(opts).await,
         Command::ShellHook(opts) => commands::shell_hook::shell_hook(opts).await,
         Command::VirtualPackages(opts) => commands::virtual_packages::virtual_packages(opts),
+        #[cfg(feature = "sigstore")]
+        Command::VerifyAttestation(opts) => {
+            commands::verify_attestation::verify_attestation(opts, offline).await
+        }
         Command::InstallMenu(opts) => commands::menu::install_menu(opts).await,
         Command::RemoveMenu(opts) => commands::menu::remove_menu(opts).await,
         Command::Run(opts) => commands::run::run(opts).await,
         Command::Extract(opts) => commands::extract::extract(opts, offline).await,
         Command::Link(opts) => commands::link::link(opts).await,
-        Command::InjectIntoPrefix(opts) => commands::prefix::inject(opts).await,
+        Command::InjectIntoPrefix(opts) => commands::prefix::inject(opts, offline).await,
         Command::RemoveFromPrefix(opts) => commands::prefix::remove_from_prefix(opts).await,
         Command::Upload(opts) => {
             if offline {
@@ -141,5 +171,21 @@ async fn async_main() -> miette::Result<()> {
             rattler_upload::upload_from_args(*opts).await
         }
         Command::Exec(opts) => exec::exec(opts, offline).await,
+        Command::Skill(opts) => commands::skill::skill(opts),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::CommandFactory;
+
+    use super::Opt;
+
+    /// Runs clap's internal validation of the whole command tree (duplicate
+    /// flags, broken group references, invalid defaults, ...), which otherwise
+    /// only panics the first time the offending subcommand is actually used.
+    #[test]
+    fn test_cli_is_valid() {
+        Opt::command().debug_assert();
     }
 }

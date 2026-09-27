@@ -1,0 +1,26 @@
+---
+source: crates/rattler-bin/tests/cli.rs
+expression: "run_rattler(&[\"inspect\", \"--json\", EMPTY_PACKAGE])"
+---
+{
+  "size": 1538,
+  "index": {
+    "build": "h4616a5c_0",
+    "build_number": 0,
+    "depends": [],
+    "name": "empty",
+    "noarch": "generic",
+    "subdir": "noarch",
+    "timestamp": 1754943403111,
+    "version": "0.1.0"
+  },
+  "about": {
+    "channels": [
+      "https://conda.anaconda.org/conda-forge/"
+    ]
+  },
+  "paths": {
+    "paths": [],
+    "paths_version": 1
+  }
+}

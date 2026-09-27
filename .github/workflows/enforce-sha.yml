@@ -5,6 +5,10 @@ on:
 
 name: Security
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ensure-pinned-actions:
     runs-on: ubuntu-latest

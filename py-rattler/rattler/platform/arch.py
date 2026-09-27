@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from rattler.rattler import PyArch
-
 from typing import Literal
+
+from rattler.rattler import PyArch
 
 ArchLiteral = Literal[
     "x86",
@@ -10,6 +10,7 @@ ArchLiteral = Literal[
     "aarch64",
     "armv6l",
     "armv7l",
+    "armv7a",
     "loongarch64",
     "ppc64le",
     "ppc64",

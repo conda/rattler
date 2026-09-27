@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from rattler.platform.platform import Platform
     from rattler.package.package_name import PackageName
+    from rattler.platform.platform import Platform
     from rattler.repo_data.record import RepoDataRecord
 
 
@@ -54,7 +54,7 @@ class RepoDataSource(Protocol):
     ```
     """
 
-    async def fetch_package_records(self, platform: Platform, name: PackageName) -> List[RepoDataRecord]:
+    async def fetch_package_records(self, platform: Platform, name: PackageName) -> list[RepoDataRecord]:
         """Fetch records for a specific package name and platform.
 
         This method is called by the gateway when it needs repodata records
@@ -70,7 +70,7 @@ class RepoDataSource(Protocol):
         """
         ...
 
-    def package_names(self, platform: Platform) -> List[str]:
+    def package_names(self, platform: Platform) -> list[str]:
         """Return all available package names for the given platform.
 
         This is used by the gateway to know which packages are available

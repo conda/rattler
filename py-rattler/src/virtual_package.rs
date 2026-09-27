@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use pyo3::{PyResult, pyclass, pymethods};
 use rattler_virtual_packages::{Override, VirtualPackage, VirtualPackageOverrides};
 
@@ -102,6 +104,22 @@ impl PyVirtualPackageOverrides {
         self.inner.osx = value.map(Into::into);
     }
     #[getter]
+    pub fn get_ios(&self) -> Option<PyOverride> {
+        self.inner.ios.clone().map(Into::into)
+    }
+    #[setter]
+    pub fn set_ios(&mut self, value: Option<PyOverride>) {
+        self.inner.ios = value.map(Into::into);
+    }
+    #[getter]
+    pub fn get_android(&self) -> Option<PyOverride> {
+        self.inner.android.clone().map(Into::into)
+    }
+    #[setter]
+    pub fn set_android(&mut self, value: Option<PyOverride>) {
+        self.inner.android = value.map(Into::into);
+    }
+    #[getter]
     pub fn get_cuda(&self) -> Option<PyOverride> {
         self.inner.cuda.clone().map(Into::into)
     }
@@ -116,6 +134,22 @@ impl PyVirtualPackageOverrides {
     #[setter]
     pub fn set_cuda_arch(&mut self, value: Option<PyOverride>) {
         self.inner.cuda_arch = value.map(Into::into);
+    }
+    #[getter]
+    pub fn get_amdgpu(&self) -> Option<PyOverride> {
+        self.inner.amdgpu.clone().map(Into::into)
+    }
+    #[setter]
+    pub fn set_amdgpu(&mut self, value: Option<PyOverride>) {
+        self.inner.amdgpu = value.map(Into::into);
+    }
+    #[getter]
+    pub fn get_amdgpu_arch(&self) -> Option<PyOverride> {
+        self.inner.amdgpu_arch.clone().map(Into::into)
+    }
+    #[setter]
+    pub fn set_amdgpu_arch(&mut self, value: Option<PyOverride>) {
+        self.inner.amdgpu_arch = value.map(Into::into);
     }
     #[getter]
     pub fn get_libc(&self) -> Option<PyOverride> {
@@ -161,14 +195,23 @@ impl PyVirtualPackage {
     // we just warn directly from python.
     #[staticmethod]
     pub fn current() -> PyResult<Vec<Self>> {
-        Self::detect(&PyVirtualPackageOverrides::none())
+        Self::detect(&PyVirtualPackageOverrides::none(), None)
     }
 
+    /// Returns virtual packages detected for the current system with the given overrides. If
+    /// `cache_dir` is given, expensive detection results (currently CUDA) are cached there across
+    /// processes until the next reboot.
     #[staticmethod]
-    pub fn detect(overrides: &PyVirtualPackageOverrides) -> PyResult<Vec<Self>> {
-        Ok(VirtualPackage::detect(&overrides.clone().into())
-            .map(|vp| vp.iter().map(|v| v.clone().into()).collect::<Vec<_>>())
-            .map_err(PyRattlerError::from)?)
+    #[pyo3(signature = (overrides, cache_dir=None))]
+    pub fn detect(
+        overrides: &PyVirtualPackageOverrides,
+        cache_dir: Option<PathBuf>,
+    ) -> PyResult<Vec<Self>> {
+        Ok(
+            VirtualPackage::detect(&overrides.clone().into(), cache_dir.as_deref())
+                .map(|vp| vp.iter().map(|v| v.clone().into()).collect::<Vec<_>>())
+                .map_err(PyRattlerError::from)?,
+        )
     }
 
     pub fn as_generic(&self) -> PyGenericVirtualPackage {

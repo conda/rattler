@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import List, Optional
 
 from rattler.platform.platform import Platform
 from rattler.rattler import PyLockPlatform
@@ -18,8 +17,8 @@ class LockPlatform:
     def __init__(
         self,
         name: str,
-        subdir: Optional[Platform] = None,
-        virtual_packages: Optional[List[str]] = None,
+        subdir: Platform | None = None,
+        virtual_packages: list[str] | None = None,
     ) -> None:
         """
         Create a new lock platform.
@@ -82,7 +81,7 @@ class LockPlatform:
         return Platform._from_py_platform(self._inner.subdir)
 
     @property
-    def virtual_packages(self) -> List[str]:
+    def virtual_packages(self) -> list[str]:
         """
         The list of virtual packages for this platform.
 

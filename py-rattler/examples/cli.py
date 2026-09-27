@@ -4,11 +4,10 @@ import argparse
 import asyncio
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 from rattler.channel import Channel, ChannelConfig
 from rattler.install import install
-from rattler.lock import LockFile, LockChannel, LockPlatform
+from rattler.lock import LockChannel, LockFile, LockPlatform
 from rattler.match_spec import MatchSpec
 from rattler.platform import Platform, PlatformLiteral
 from rattler.solver import solve
@@ -16,10 +15,10 @@ from rattler.solver import solve
 
 async def create_environment(
     prefix: Path,
-    dependencies: List[str],
-    channel_strs: List[str],
-    platform_str: Optional[PlatformLiteral],
-    lockfile: Optional[Path],
+    dependencies: list[str],
+    channel_strs: list[str],
+    platform_str: PlatformLiteral | None,
+    lockfile: Path | None,
 ) -> None:
     if prefix.exists():
         raise ValueError(f"Prefix path {prefix} already exists. Please specify a new path.")

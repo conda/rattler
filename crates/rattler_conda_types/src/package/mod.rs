@@ -24,7 +24,7 @@ pub use {
     files::Files,
     has_prefix::HasPrefix,
     has_prefix::HasPrefixEntry,
-    index::IndexJson,
+    index::{IndexJson, RenderedMatchSpecs, ValidatedIndexJson, ValidatedMatchSpecs},
     link::{LinkJson, NoArchLinks, PythonEntryPoints},
     no_link::NoLink,
     no_softlink::NoSoftlink,

@@ -19,6 +19,10 @@ pub enum InstallerError {
     #[error("failed to determine the currently installed packages")]
     FailedToDetectInstalledPackages(#[source] std::io::Error),
 
+    /// No target platform was specified and the host has no conda platform.
+    #[error("no target platform was specified and the current host is not a known conda platform")]
+    UnknownHostPlatform,
+
     /// Failed to construct a transaction
     #[error("failed to construct a transaction")]
     FailedToConstructTransaction(#[from] TransactionError),
@@ -74,6 +78,12 @@ pub enum InstallerError {
     /// Failed to acquire the global cache lock
     #[error("failed to acquire global cache lock")]
     FailedToAcquireCacheLock(#[source] PackageCacheError),
+
+    /// The attestations of a package did not satisfy the configured
+    /// [`rattler_sigstore::VerificationPolicy`].
+    #[cfg(feature = "sigstore")]
+    #[error("attestation verification failed for {0}")]
+    AttestationRejected(String, #[source] Box<rattler_sigstore::SigstoreError>),
 }
 
 impl From<Cancelled> for InstallerError {

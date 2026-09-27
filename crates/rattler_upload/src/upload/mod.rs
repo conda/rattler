@@ -1,5 +1,6 @@
 //! The upload module provides the package upload functionality.
 
+use self::opt::ArtifactoryAuthentication;
 use crate::{
     AnacondaData, ArtifactoryData, CloudsmithData, QuetzData, tool_configuration::APP_USER_AGENT,
 };
@@ -37,7 +38,7 @@ mod prefix;
 #[cfg(feature = "s3")]
 mod s3;
 #[cfg(feature = "s3")]
-pub use s3::upload_package_to_s3;
+pub use s3::{upload_package_to_s3, upload_package_to_s3_with_attestation};
 
 pub use anaconda::AnacondaError;
 pub use cloudsmith::CloudsmithError;
@@ -124,9 +125,14 @@ pub async fn upload_package_to_quetz(
 
         let hash = sha256_sum(package_file).into_diagnostic()?;
 
+        let force = if quetz_data.force.is_enabled() {
+            "true"
+        } else {
+            "false"
+        };
         let prepared_request = client
             .request(Method::POST, upload_url)
-            .query(&[("force", "false"), ("sha256", &hash)])
+            .query(&[("force", force), ("sha256", &hash)])
             .header("X-API-Key", token.clone());
 
         send_request_with_retry(prepared_request, package_file).await?;
@@ -143,34 +149,32 @@ pub async fn upload_package_to_artifactory(
     package_files: &Vec<PathBuf>,
     artifactory_data: ArtifactoryData,
 ) -> miette::Result<()> {
-    let token = match artifactory_data.token {
-        Some(t) => t,
-        _ => match storage.get_by_url(Url::from(artifactory_data.url.clone())) {
-            Ok((_, Some(Authentication::BearerToken(token)))) => token,
+    let authentication = match artifactory_data.authentication {
+        Some(ArtifactoryAuthentication::Token(token)) => Authentication::BearerToken(token),
+        Some(ArtifactoryAuthentication::Basic { username, password }) => {
+            Authentication::BasicHTTP { username, password }
+        }
+        None => match storage.get_by_url(Url::from(artifactory_data.url.clone())) {
             Ok((
                 _,
-                Some(Authentication::BasicHTTP {
-                    username: _,
-                    password,
-                }),
-            )) => {
-                warn!(
-                    "A bearer token is required for authentication with artifactory. Using the password from the keychain / auth file to authenticate. Consider switching to a bearer token instead for Artifactory."
-                );
-                password
-            }
+                Some(
+                    authentication @ (Authentication::BearerToken(_)
+                    | Authentication::BasicHTTP { .. }),
+                ),
+            )) => authentication,
             Ok((_, Some(_))) => {
-                return Err(miette::miette!("A bearer token is required for authentication with artifactory.
-                            Authentication information found in the keychain / auth file, but it was not a bearer token"));
+                return Err(miette::miette!(
+                    "Authentication information found in the keychain / auth file, but it was neither a bearer token nor HTTP basic auth credentials"
+                ));
             }
             Ok((_, None)) => {
                 return Err(miette::miette!(
-                    "No bearer token was given and none was found in the keychain / auth file"
+                    "No bearer token or HTTP basic auth credentials were given or found in the keychain / auth file"
                 ));
             }
             Err(e) => {
                 return Err(miette::miette!(
-                    "Failed to get authentication information form keychain: {e}"
+                    "Failed to get authentication information from keychain: {e}"
                 ));
             }
         },
@@ -201,9 +205,14 @@ pub async fn upload_package_to_artifactory(
             ))
             .into_diagnostic()?;
 
-        let prepared_request = client
-            .request(Method::PUT, upload_url)
-            .bearer_auth(token.clone());
+        let prepared_request = client.request(Method::PUT, upload_url);
+        let prepared_request = match &authentication {
+            Authentication::BearerToken(token) => prepared_request.bearer_auth(token),
+            Authentication::BasicHTTP { username, password } => {
+                prepared_request.basic_auth(username, Some(password))
+            }
+            _ => unreachable!("Artifactory authentication was validated above"),
+        };
 
         send_request_with_retry(prepared_request, package_file).await?;
     }
@@ -472,8 +481,13 @@ async fn send_request(
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
+
     use axum::{Router, http::StatusCode};
-    use rattler_networking::AuthenticationStorage;
+    use rattler_networking::{
+        Authentication, AuthenticationStorage,
+        authentication_storage::backends::memory::MemoryStorage,
+    };
 
     use crate::upload::opt::{ArtifactoryData, QuetzData};
     use crate::upload::test_utils::{start_test_server, test_package_path};
@@ -495,6 +509,13 @@ mod test {
         StatusCode::OK
     }
 
+    async fn ok_with_basic(headers: axum::http::HeaderMap, _body: axum::body::Bytes) -> StatusCode {
+        let auth = headers.get("authorization").unwrap().to_str().unwrap();
+        // Base64 encoding of `test-user:test-password`, as required by HTTP basic auth.
+        assert_eq!(auth, "Basic dGVzdC11c2VyOnRlc3QtcGFzc3dvcmQ=");
+        StatusCode::OK
+    }
+
     async fn unauthorized(_body: axum::body::Bytes) -> StatusCode {
         StatusCode::UNAUTHORIZED
     }
@@ -512,6 +533,31 @@ mod test {
             url,
             "test-channel".to_string(),
             Some("test-api-key".to_string()),
+            false.into(),
+        );
+        let result =
+            super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+    }
+
+    #[tokio::test]
+    async fn test_quetz_upload_force() {
+        async fn ok_with_force_true(
+            axum::extract::RawQuery(query): axum::extract::RawQuery,
+            _body: axum::body::Bytes,
+        ) -> StatusCode {
+            let query = query.unwrap_or_default();
+            assert!(query.contains("force=true"), "query: {query}");
+            StatusCode::OK
+        }
+        let router = Router::new().fallback(ok_with_force_true);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let quetz_data = QuetzData::new(
+            url,
+            "test-channel".to_string(),
+            Some("test-api-key".to_string()),
+            true.into(),
         );
         let result =
             super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
@@ -523,8 +569,12 @@ mod test {
         let router = Router::new().fallback(unauthorized);
         let url = start_test_server(router).await;
         let storage = AuthenticationStorage::empty();
-        let quetz_data =
-            QuetzData::new(url, "test-channel".to_string(), Some("bad-key".to_string()));
+        let quetz_data = QuetzData::new(
+            url,
+            "test-channel".to_string(),
+            Some("bad-key".to_string()),
+            false.into(),
+        );
         let result =
             super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
         assert!(result.is_err());
@@ -539,6 +589,7 @@ mod test {
             url,
             "test-channel".to_string(),
             Some("test-key".to_string()),
+            false.into(),
         );
         let result =
             super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
@@ -546,15 +597,53 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_artifactory_upload_success() {
+    async fn test_artifactory_bearer_upload_success() {
         let router = Router::new().fallback(ok_with_bearer);
         let url = start_test_server(router).await;
         let storage = AuthenticationStorage::empty();
-        let artifactory_data = ArtifactoryData::new(
-            url,
-            "test-channel".to_string(),
-            Some("test-token".to_string()),
-        );
+        let artifactory_data = ArtifactoryData::new(url, "test-channel".to_string())
+            .with_bearer_auth("test-token".to_string());
+        let result = super::upload_package_to_artifactory(
+            &storage,
+            &vec![test_package_path()],
+            artifactory_data,
+        )
+        .await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+    }
+
+    #[tokio::test]
+    async fn test_artifactory_basic_upload_success() {
+        let router = Router::new().fallback(ok_with_basic);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let artifactory_data = ArtifactoryData::new(url, "test-channel".to_string())
+            .with_basic_auth("test-user".to_string(), "test-password".to_string());
+        let result = super::upload_package_to_artifactory(
+            &storage,
+            &vec![test_package_path()],
+            artifactory_data,
+        )
+        .await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+    }
+
+    #[tokio::test]
+    async fn test_artifactory_basic_upload_from_auth_storage() {
+        let router = Router::new().fallback(ok_with_basic);
+        let url = start_test_server(router).await;
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::new(MemoryStorage::new()));
+        storage
+            .store(
+                url.host_str().unwrap(),
+                &Authentication::BasicHTTP {
+                    username: "test-user".to_string(),
+                    password: "test-password".to_string(),
+                },
+            )
+            .unwrap();
+        let artifactory_data = ArtifactoryData::new(url, "test-channel".to_string());
         let result = super::upload_package_to_artifactory(
             &storage,
             &vec![test_package_path()],
@@ -569,11 +658,8 @@ mod test {
         let router = Router::new().fallback(unauthorized);
         let url = start_test_server(router).await;
         let storage = AuthenticationStorage::empty();
-        let artifactory_data = ArtifactoryData::new(
-            url,
-            "test-channel".to_string(),
-            Some("bad-token".to_string()),
-        );
+        let artifactory_data = ArtifactoryData::new(url, "test-channel".to_string())
+            .with_bearer_auth("bad-token".to_string());
         let result = super::upload_package_to_artifactory(
             &storage,
             &vec![test_package_path()],

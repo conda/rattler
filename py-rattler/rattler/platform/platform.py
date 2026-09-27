@@ -1,13 +1,13 @@
 from __future__ import annotations
-from collections.abc import Iterator
-from typing import Any, Dict, Literal, Tuple, Optional
 
-from rattler.rattler import PyPlatform
+from collections.abc import Iterator
+from typing import Any, Literal
+
 from rattler.platform.arch import Arch
+from rattler.rattler import PyPlatform
 
 PlatformLiteral = Literal[
     "noarch",
-    "unknown",
     "linux-32",
     "linux-64",
     "linux-aarch64",
@@ -25,22 +25,32 @@ PlatformLiteral = Literal[
     "freebsd-arm64",
     "osx-64",
     "osx-arm64",
+    "ios-arm64",
+    "iossimulator-arm64",
+    "iossimulator-64",
+    "android-aarch64",
+    "android-armv7a",
+    "android-64",
+    "android-32",
     "win-32",
     "win-64",
     "win-arm64",
     "emscripten-wasm32",
+    "emscripten-wasm64",
     "wasi-wasm32",
     "zos-z",
 ]
+"""The set of platform names that can be used to construct a
+[`Platform`][rattler.platform.platform.Platform]."""
 
 
 class PlatformSingleton(type):
-    _instances: Dict[str, Platform]
+    _instances: dict[str, Platform]
 
-    def __init__(cls, *args: Tuple[Any], **kwargs: Dict[Any, Any]) -> None:
+    def __init__(cls, *args: tuple[Any], **kwargs: dict[Any, Any]) -> None:
         cls._instances = {}
 
-    def __call__(cls, platform: str, *args: Tuple[Any], **kwargs: Dict[Any, Any]) -> Platform:
+    def __call__(cls, platform: str, *args: tuple[Any], **kwargs: dict[Any, Any]) -> Platform:
         try:
             return cls._instances[platform]
         except KeyError:
@@ -97,7 +107,9 @@ class Platform(metaclass=PlatformSingleton):
     @classmethod
     def current(cls) -> Platform:
         """
-        Returns the current platform.
+        Returns the platform of the current host.
+
+        Raises `RuntimeError` when the host is not a known conda platform.
         """
         return cls._from_py_platform(PyPlatform.current())
 
@@ -112,7 +124,7 @@ class Platform(metaclass=PlatformSingleton):
         >>> next(Platform.all())
         Platform(noarch)
         >>> len(list(Platform.all()))
-        25
+        32
         >>>
         """
         return (cls._from_py_platform(p) for p in PyPlatform.all())
@@ -186,7 +198,7 @@ class Platform(metaclass=PlatformSingleton):
         return self._inner.is_unix
 
     @property
-    def arch(self) -> Optional[Arch]:
+    def arch(self) -> Arch | None:
         """
         Return the architecture of the platform.
 
@@ -204,7 +216,7 @@ class Platform(metaclass=PlatformSingleton):
         return Arch._from_py_arch(arch) if arch is not None else None
 
     @property
-    def only_platform(self) -> Optional[str]:
+    def only_platform(self) -> str | None:
         """
         Return the platform without the architecture.
 

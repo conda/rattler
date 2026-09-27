@@ -1,8 +1,19 @@
+import datetime
 import json
 import random
-import datetime
+from pathlib import Path
 
-from rattler import NoArchType, PackageRecord, PackageName, VersionWithSource
+from rattler import Channel, NoArchType, PackageName, PackageRecord, RepoData, VersionWithSource
+
+
+def test_indexed_timestamp() -> None:
+    record = PackageRecord(name="x", version="1", build="0", build_number=0, subdir="linux-64")
+    assert record.indexed_timestamp is None
+    epoch = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+    record.indexed_timestamp = epoch
+    assert record.indexed_timestamp == epoch
+    record.indexed_timestamp = None
+    assert record.indexed_timestamp is None
 
 
 def test_platform_arch() -> None:
@@ -80,6 +91,7 @@ def test_package_record_setters_and_serialization() -> None:
     record.noarch = NoArchType("python")
     record.platform = "linux"
     record.sha256 = b"5678" * 8
+    record.attestations_sha256 = b"abcd" * 8
     record.size = 2048
     record.subdir = "noarch"
     record.name = PackageName("new-test-pkg")
@@ -111,7 +123,57 @@ def test_package_record_setters_and_serialization() -> None:
     assert record.python_site_packages_path == "lib/python3.9/site-packages"
     assert record.md5 == b"1234" * 4
     assert record.sha256 == b"5678" * 8
+    assert record.attestations_sha256 == b"abcd" * 8
+    assert json_data["attestations_sha256"] == (b"abcd" * 8).hex()
     assert record.legacy_bz2_md5 == b"1234" * 4
+
+
+def test_attestations_sha256_constructor_and_setter() -> None:
+    digest = bytes.fromhex("0123456789abcdef" * 4)
+    record = PackageRecord(
+        name="x",
+        version="1",
+        build="0",
+        build_number=0,
+        subdir="noarch",
+        attestations_sha256=digest,
+    )
+
+    assert record.attestations_sha256 == digest
+    record.attestations_sha256 = None
+    assert record.attestations_sha256 is None
+
+
+def test_flags_roundtrip_preserves_unknown_strings(tmp_path: Path) -> None:
+    flags = ["optional", "future-flag"]
+    constructed = PackageRecord("demo", "1.0", "0", 0, "noarch", flags=flags)
+    assert constructed.flags == flags
+
+    repodata_path = tmp_path / "repodata.json"
+    repodata_path.write_text(
+        json.dumps(
+            {
+                "packages": {
+                    "demo-1.0-0.tar.bz2": {
+                        "name": "demo",
+                        "version": "1.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "flags": flags,
+                        "subdir": "noarch",
+                    }
+                }
+            }
+        )
+    )
+
+    record = RepoData.from_path(repodata_path).into_repo_data(Channel(str(tmp_path)))[0]
+    assert record.flags == flags
+    assert json.loads(record.to_json())["flags"] == flags
+
+    record.flags = ["another-future-flag"]
+    assert record.flags == ["another-future-flag"]
 
 
 def test_extra_depends_default_empty() -> None:
@@ -165,6 +227,23 @@ def test_extra_depends_not_in_json_when_empty() -> None:
     record = PackageRecord(name="pkg", version="1.0", build="py_0", build_number=0, subdir="noarch")
     json_data = json.loads(record.to_json())
     assert "extra_depends" not in json_data
+
+
+def test_package_record_to_graph() -> None:
+    dependency = PackageRecord(name="dependency", version="1", build="0", build_number=0, subdir="noarch")
+    package = PackageRecord(
+        name="package",
+        version="1",
+        build="0",
+        build_number=0,
+        subdir="noarch",
+        depends=["dependency >=1"],
+    )
+
+    graph = PackageRecord.to_graph([package, dependency])
+
+    assert set(graph.nodes) == {package, dependency}
+    assert set(graph.edges) == {(package, dependency)}
 
 
 def test_package_record_topological_sort_robust() -> None:

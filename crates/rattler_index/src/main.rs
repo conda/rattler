@@ -230,7 +230,7 @@ fn effective_index_options(
 ) -> (
     bool,
     bool,
-    Vec<rattler_index::RepodataRevisionInfo>,
+    Vec<rattler_index::RepodataRevisionSelection>,
     PackageRevisionAssignment,
 ) {
     let write_zst = cfg.write_zst.unwrap_or(true);

@@ -1,4 +1,8 @@
-use std::{collections::HashSet, io::BufWriter, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    io::BufWriter,
+    path::Path,
+};
 
 use clap::Parser;
 use itertools::Itertools;
@@ -35,7 +39,7 @@ async fn main() {
     // Determine the subdirs to query.
     let mut subdirs: HashSet<Platform> = HashSet::from_iter(args.subdir);
     if subdirs.is_empty() {
-        subdirs.insert(Platform::current());
+        subdirs.extend(Platform::current());
     }
     subdirs.insert(Platform::NoArch);
     let platforms = subdirs.iter().copied().collect_vec();
@@ -93,6 +97,7 @@ async fn main() {
         None,
         SolveStrategy::default(),
         Vec::new(),
+        &HashMap::default(),
     )
     .unwrap();
 

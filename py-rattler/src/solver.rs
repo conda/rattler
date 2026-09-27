@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    sync::{Arc, LazyLock},
+};
 
 use jiff::Timestamp;
 use pyo3::{
@@ -6,10 +9,11 @@ use pyo3::{
     pybacked::PyBackedStr, pyfunction,
 };
 use pyo3_async_runtimes::tokio::future_into_py;
-use rattler_conda_types::RepoDataRecord;
+use rattler_conda_types::{PackageRecord, ParseStrictness, RepoDataRecord, VersionSpec};
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{
-    ExcludeNewer, RepoDataIter, SolveStrategy, SolverImpl, SolverTask, resolvo::Solver,
+    ExcludeNewer, RepoDataIter, SolveStrategy, SolverImpl, SolverTask, TimestampPolicy,
+    resolvo::Solver,
 };
 use tokio::task::JoinError;
 
@@ -45,8 +49,15 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Wrap<SolveStrategy> {
 fn parse_exclude_newer(
     exclude_newer_timestamp_ms: Option<i64>,
     exclude_newer_duration_seconds: Option<u64>,
+    timestamp_policy: &str,
 ) -> PyResult<Option<ExcludeNewer>> {
-    match (
+    let policy = match timestamp_policy {
+        "allow-missing" => TimestampPolicy::AllowMissing,
+        "require-timestamp" => TimestampPolicy::RequireTimestamp,
+        "require-indexed-timestamp" => TimestampPolicy::RequireIndexedTimestamp,
+        _ => return Err(PyValueError::new_err("invalid timestamp policy")),
+    };
+    let config = match (
         exclude_newer_timestamp_ms.and_then(|ts| Timestamp::from_millisecond(ts).ok()),
         exclude_newer_duration_seconds,
     ) {
@@ -58,12 +69,38 @@ fn parse_exclude_newer(
             std::time::Duration::from_secs(seconds),
         ))),
         (None, None) => Ok(None),
+    }?;
+    Ok(config.map(|config: ExcludeNewer| config.with_timestamp_policy(policy)))
+}
+
+fn is_python_2_or_3(record: &PackageRecord) -> bool {
+    static PYTHON_VERSION: LazyLock<VersionSpec> = LazyLock::new(|| {
+        VersionSpec::from_str("2.*|3.*", ParseStrictness::Strict)
+            .expect("the Python version spec is valid")
+    });
+
+    record.name.as_normalized() == "python" && PYTHON_VERSION.matches(&record.version)
+}
+
+fn add_pip_to_python(record: &mut PackageRecord) {
+    if is_python_2_or_3(record) {
+        record.depends.push("pip".to_owned());
     }
+}
+
+fn patch_python_with_pip(record: &RepoDataRecord) -> Option<RepoDataRecord> {
+    if !is_python_2_or_3(&record.package_record) {
+        return None;
+    }
+
+    let mut patched = record.clone();
+    add_pip_to_python(&mut patched.package_record);
+    Some(patched)
 }
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-#[pyo3(signature = (sources, platforms, specs, constraints, gateway, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, channel_relations=None, channel_relations_max_depth=None)
+#[pyo3(signature = (sources, platforms, specs, constraints, gateway, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, channel_relations=None, channel_relations_max_depth=None, add_pip_as_python_dependency=false, timestamp_policy="require-timestamp")
 )]
 pub fn py_solve<'a>(
     py: Python<'a>,
@@ -82,6 +119,8 @@ pub fn py_solve<'a>(
     strategy: Option<Wrap<SolveStrategy>>,
     channel_relations: Option<Wrap<rattler_repodata_gateway::ChannelRelationsMode>>,
     channel_relations_max_depth: Option<usize>,
+    add_pip_as_python_dependency: bool,
+    timestamp_policy: &str,
 ) -> PyResult<Bound<'a, PyAny>> {
     // Convert Python sources to Rust Source enum
     let rust_sources: Vec<rattler_repodata_gateway::Source> = sources
@@ -89,6 +128,11 @@ pub fn py_solve<'a>(
         .map(py_object_to_source)
         .collect::<PyResult<_>>()?;
 
+    let exclude_newer = parse_exclude_newer(
+        exclude_newer_timestamp_ms,
+        exclude_newer_duration_seconds,
+        timestamp_policy,
+    )?;
     future_into_py(py, async move {
         let mut query = gateway
             .inner
@@ -104,12 +148,12 @@ pub fn py_solve<'a>(
         if let Some(depth) = channel_relations_max_depth {
             query = query.channel_relations_max_depth(depth);
         }
+        if add_pip_as_python_dependency {
+            query = query.with_record_patch(patch_python_with_pip);
+        }
         let output = query.execute().await.map_err(PyRattlerError::from)?;
         emit_gateway_warnings(output.warnings)?;
         let available_packages = output.repodata;
-
-        let exclude_newer =
-            parse_exclude_newer(exclude_newer_timestamp_ms, exclude_newer_duration_seconds)?;
 
         let solve_result = tokio::task::spawn_blocking(move || {
             // Keep the Arcs alive as locals; SolverTask only borrows.
@@ -136,6 +180,7 @@ pub fn py_solve<'a>(
                 exclude_newer,
                 strategy: strategy.map_or_else(Default::default, |v| v.0),
                 dependency_overrides: Vec::new(),
+                excluded_candidates: HashMap::default(),
                 cancellation_token: None,
             };
 
@@ -166,7 +211,7 @@ pub fn py_solve<'a>(
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-#[pyo3(signature = (specs, sparse_repodata, constraints, locked_packages, pinned_packages, virtual_packages, channel_priority, package_format_selection, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None)
+#[pyo3(signature = (specs, sparse_repodata, constraints, locked_packages, pinned_packages, virtual_packages, channel_priority, package_format_selection, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, add_pip_as_python_dependency=false, timestamp_policy="require-timestamp")
 )]
 pub fn py_solve_with_sparse_repodata<'py>(
     py: Python<'py>,
@@ -182,6 +227,8 @@ pub fn py_solve_with_sparse_repodata<'py>(
     exclude_newer_timestamp_ms: Option<i64>,
     exclude_newer_duration_seconds: Option<u64>,
     strategy: Option<Wrap<SolveStrategy>>,
+    add_pip_as_python_dependency: bool,
+    timestamp_policy: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
     // Acquire read locks on the SparseRepoData instances. This allows us to safely access the
     // object in another thread.
@@ -190,16 +237,18 @@ pub fn py_solve_with_sparse_repodata<'py>(
         .map(|s| s.borrow().inner.read_arc())
         .collect::<Vec<_>>();
 
+    let exclude_newer = parse_exclude_newer(
+        exclude_newer_timestamp_ms,
+        exclude_newer_duration_seconds,
+        timestamp_policy,
+    )?;
     future_into_py(py, async move {
-        let exclude_newer =
-            parse_exclude_newer(exclude_newer_timestamp_ms, exclude_newer_duration_seconds)?;
-
         let solve_result = tokio::task::spawn_blocking(move || {
             // Ensure that all the SparseRepoData instances are still valid, e.g. not closed.
             let repo_data_refs = repo_data_locks
                 .iter()
                 .map(|s| {
-                    s.as_ref()
+                    s.as_deref()
                         .ok_or_else(|| PyValueError::new_err("I/O operation on closed file."))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
@@ -211,7 +260,7 @@ pub fn py_solve_with_sparse_repodata<'py>(
             let available_packages = SparseRepoData::load_records_recursive(
                 repo_data_refs,
                 package_names,
-                None,
+                add_pip_as_python_dependency.then_some(add_pip_to_python),
                 package_format_selection.into(),
             )?;
 
@@ -242,6 +291,7 @@ pub fn py_solve_with_sparse_repodata<'py>(
                 exclude_newer,
                 strategy: strategy.map_or_else(Default::default, |v| v.0),
                 dependency_overrides: Vec::new(),
+                excluded_candidates: HashMap::default(),
                 cancellation_token: None,
             };
 

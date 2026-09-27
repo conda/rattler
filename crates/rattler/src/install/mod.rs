@@ -86,6 +86,10 @@ pub enum InstallError {
     #[error("the operation was cancelled")]
     Cancelled,
 
+    /// No target platform was specified and the host has no conda platform.
+    #[error("no target platform was specified and the current host is not a known conda platform")]
+    UnknownHostPlatform,
+
     /// The paths.json file could not be read.
     #[error("failed to read 'paths.json'")]
     FailedToReadPathsJson(#[source] std::io::Error),
@@ -358,7 +362,10 @@ pub async fn link_package(
         .unwrap_or_else(|| can_create_reflinks_sync(target_dir, package_dir, allow_hard_links));
 
     // Determine the platform to use
-    let platform = options.platform.unwrap_or(Platform::current());
+    let platform = options
+        .platform
+        .or_else(Platform::current)
+        .ok_or(InstallError::UnknownHostPlatform)?;
 
     // compute all path renames
     let final_paths = compute_paths(&index_json, &paths_json, options.python_info.as_ref());
@@ -709,7 +716,10 @@ pub fn link_package_sync(
         .unwrap_or_else(|| can_create_reflinks_sync(target_dir, package_dir, allow_hard_links));
 
     // Determine the platform to use
-    let platform = options.platform.unwrap_or(Platform::current());
+    let platform = options
+        .platform
+        .or_else(Platform::current)
+        .ok_or(InstallError::UnknownHostPlatform)?;
 
     // compute all path renames
     let final_paths = compute_paths(&index_json, &paths_json, options.python_info.as_ref());
@@ -1343,7 +1353,7 @@ mod test {
     #[tokio::test]
     pub async fn test_explicit_lock() {
         // Load a prepared explicit environment file for the current platform.
-        let current_platform = Platform::current();
+        let current_platform = Platform::current().expect("host platform");
         let explicit_env_path =
             get_test_data_dir().join(format!("python/explicit-env-{current_platform}.txt"));
         let env = ExplicitEnvironmentSpec::from_path(&explicit_env_path).unwrap();
@@ -1369,7 +1379,7 @@ mod test {
         let lock_path = get_test_data_dir().join("conda-lock/v4/python-lock.yml");
         let lock = LockFile::from_path(&lock_path).unwrap();
 
-        let current_platform = Platform::current();
+        let current_platform = Platform::current().expect("host platform");
         let lock_env = lock
             .default_environment()
             .expect("no default environment in lock file");
@@ -1449,7 +1459,7 @@ mod test {
             .await;
 
         // Run the python command and validate the version it outputs
-        let python_path = if Platform::current().is_windows() {
+        let python_path = if Platform::current().expect("host platform").is_windows() {
             "python.exe"
         } else {
             "bin/python"

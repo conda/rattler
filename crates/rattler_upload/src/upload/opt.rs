@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use clap::Parser;
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use rattler_networking::AuthenticationStorage;
-use tracing::warn;
 use url::Url;
 
 /// Newtype wrapper for the force overwrite flag.
@@ -144,6 +143,10 @@ pub struct QuetzOpts {
     /// keychain / auth-file
     #[arg(short, long, env = "QUETZ_API_KEY")]
     pub api_key: Option<String>,
+
+    /// Force overwrite existing packages
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Debug)]
@@ -152,28 +155,32 @@ pub struct QuetzData {
     pub url: UrlWithTrailingSlash,
     pub channels: String,
     pub api_key: Option<String>,
+    pub force: ForceOverwrite,
 }
 
 impl From<QuetzOpts> for QuetzData {
     fn from(value: QuetzOpts) -> Self {
-        Self::new(value.url, value.channels, value.api_key)
+        Self::new(value.url, value.channels, value.api_key, value.force.into())
     }
 }
 
 impl QuetzData {
     /// Create a new instance of `QuetzData`
-    pub fn new(url: Url, channels: String, api_key: Option<String>) -> Self {
+    pub fn new(url: Url, channels: String, api_key: Option<String>, force: ForceOverwrite) -> Self {
         Self {
             url: url.into(),
             channels,
             api_key,
+            force,
         }
     }
 }
 
+/// Options for uploading to an Artifactory channel.
+///
+/// Authentication can be supplied directly with a bearer token or with an Artifactory username
+/// and password. If no credentials are supplied, they are read from the keychain / auth-file.
 #[derive(Clone, Debug, PartialEq, Parser)]
-/// Options for uploading to a Artifactory channel.
-/// Authentication is used from the keychain / auth-file.
 pub struct ArtifactoryOpts {
     /// The URL to your Artifactory server
     #[arg(short, long, env = "ARTIFACTORY_SERVER_URL")]
@@ -183,17 +190,26 @@ pub struct ArtifactoryOpts {
     #[arg(short, long = "channel", env = "ARTIFACTORY_CHANNEL")]
     pub channels: String,
 
-    /// Your Artifactory username
-    #[arg(long, env = "ARTIFACTORY_USERNAME", hide = true)]
+    /// Your Artifactory username for HTTP basic authentication.
+    #[arg(long, env = "ARTIFACTORY_USERNAME", requires = "password")]
     pub username: Option<String>,
 
-    /// Your Artifactory password
-    #[arg(long, env = "ARTIFACTORY_PASSWORD", hide = true)]
+    /// Your Artifactory password for HTTP basic authentication.
+    #[arg(long, env = "ARTIFACTORY_PASSWORD", requires = "username")]
     pub password: Option<String>,
 
-    /// Your Artifactory token
-    #[arg(short, long, env = "ARTIFACTORY_TOKEN")]
+    /// Your Artifactory token for bearer authentication.
+    #[arg(short, long, env = "ARTIFACTORY_TOKEN", conflicts_with_all = ["username", "password"])]
     pub token: Option<String>,
+}
+
+/// Authentication provided directly for an Artifactory upload.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ArtifactoryAuthentication {
+    /// Authenticate with a bearer token.
+    Token(String),
+    /// Authenticate with HTTP basic authentication.
+    Basic { username: String, password: String },
 }
 
 #[derive(Debug)]
@@ -201,45 +217,50 @@ pub struct ArtifactoryOpts {
 pub struct ArtifactoryData {
     pub url: UrlWithTrailingSlash,
     pub channels: String,
-    pub token: Option<String>,
+    pub authentication: Option<ArtifactoryAuthentication>,
 }
 
 impl TryFrom<ArtifactoryOpts> for ArtifactoryData {
     type Error = miette::Error;
 
     fn try_from(value: ArtifactoryOpts) -> Result<Self, Self::Error> {
-        let token = match (value.username, value.password, value.token) {
-            (_, _, Some(token)) => Some(token),
-            (Some(_), Some(password), _) => {
-                warn!(
-                    "Using username and password for Artifactory authentication is deprecated, using password as token. Please use an API token instead."
-                );
-                Some(password)
-            }
-            (Some(_), None, _) => {
-                return Err(miette::miette!(
-                    "Artifactory username provided without a password"
-                ));
-            }
-            (None, Some(_), _) => {
-                return Err(miette::miette!(
-                    "Artifactory password provided without a username"
-                ));
-            }
-            _ => None,
-        };
-        Ok(Self::new(value.url, value.channels, token))
+        let data = Self::new(value.url, value.channels);
+
+        if let Some(username) = value.username {
+            let password = value
+                .password
+                .expect("clap guarantees that password is present if username is present");
+            return Ok(data.with_basic_auth(username, password));
+        }
+
+        if let Some(token) = value.token {
+            return Ok(data.with_bearer_auth(token));
+        }
+
+        Ok(data)
     }
 }
 
 impl ArtifactoryData {
-    /// Create a new instance of `ArtifactoryData`
-    pub fn new(url: Url, channels: String, token: Option<String>) -> Self {
+    /// Create a new and unauthenticated instance of `ArtifactoryData`
+    pub fn new(url: Url, channels: String) -> Self {
         Self {
             url: url.into(),
             channels,
-            token,
+            authentication: None,
         }
+    }
+
+    /// Use HTTP bearer authentication with the given token.
+    pub fn with_bearer_auth(mut self, token: String) -> Self {
+        self.authentication = Some(ArtifactoryAuthentication::Token(token));
+        self
+    }
+
+    /// Use HTTP basic authentication with the given username and password.
+    pub fn with_basic_auth(mut self, username: String, password: String) -> Self {
+        self.authentication = Some(ArtifactoryAuthentication::Basic { username, password });
+        self
     }
 }
 
@@ -395,6 +416,14 @@ pub struct S3Opts {
 
     #[clap(flatten)]
     pub credentials: rattler_s3::clap::S3CredentialsOpts,
+
+    /// Publish an attestation sidecar alongside the package.
+    ///
+    /// The file must contain the complete sidecar as a non-empty JSON array of
+    /// Sigstore bundles. Attestations can only be uploaded with a single
+    /// package.
+    #[arg(long)]
+    pub attestation: Option<PathBuf>,
 
     /// Replace files if it already exists.
     #[arg(long)]

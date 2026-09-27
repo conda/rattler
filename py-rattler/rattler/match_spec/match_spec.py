@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from rattler.channel.channel import Channel
 from rattler.package.package_name_matcher import PackageNameMatcher
@@ -28,15 +28,15 @@ class MatchSpec:
     provided in the positional argument. Conda has historically had several string
     representations for equivalent MatchSpecs.
 
-    A series of rules are now followed for creating the canonical string
-    representation of a MatchSpec instance. The canonical string representation can
-    generically be represented by:
+    The following historic syntax describes forms accepted by the parser and the
+    legacy positional representation. It is not the canonical formatter output,
+    which is provided by the Rust API.
 
     `(channel(/subdir):(namespace):)name(version(build))[key1=value1,key2=value2]`
 
     where `()` indicate optional fields.
 
-    The rules for constructing a canonical string representation are:
+    Historical MatchSpec syntax includes:
 
     1. `name` (i.e. "package name") is required. Its position is always outside the
     key-value brackets. It can also be a glob pattern or a regex if `exact_names_only`
@@ -52,15 +52,13 @@ class MatchSpec:
     ignored.
     5. If `channel` is included and is an exact value, a `::` separator is used between
     `channel` and `name`.  `channel` can either be a canonical channel name or a
-    channel url. In the canonical string representation, the canonical channel name
-    will always be used.
+    channel URL. The legacy display representation uses the channel name.
     6. If `channel` is an exact value and `subdir` is an exact value, `subdir` is
     appended to `channel` with a `/` separator.  Otherwise, `subdir` is included in
     the key-value brackets.
     7. Key-value brackets can be delimited by comma, space, or comma+space. Value can
     optionally be wrapped in single or double quotes, but must be wrapped if `value`
-    contains a comma, space, or equal sign.  The canonical format uses comma delimiters
-    and single quotes.
+    contains a comma, space, or equal sign.
     8. When constructing a `MatchSpec` instance from a string, any key-value pair given
     inside the key-value brackets overrides any matching parameter given outside the
     brackets.
@@ -137,35 +135,35 @@ class MatchSpec:
         return PackageNameMatcher._from_py_package_name_matcher(self._match_spec.name)
 
     @property
-    def version(self) -> Optional[str]:
+    def version(self) -> str | None:
         """
         The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
         """
         return self._match_spec.version
 
     @property
-    def build(self) -> Optional[str]:
+    def build(self) -> str | None:
         """
         The build string of the package (e.g. `py37_0`, `py37h6de7cb9_0`, `py*`)
         """
         return self._match_spec.build
 
     @property
-    def build_number(self) -> Optional[str]:
+    def build_number(self) -> str | None:
         """
         The build number of the package.
         """
         return self._match_spec.build_number
 
     @property
-    def file_name(self) -> Optional[str]:
+    def file_name(self) -> str | None:
         """
         Match the specific filename of the package.
         """
         return self._match_spec.file_name
 
     @property
-    def channel(self) -> Optional[Channel]:
+    def channel(self) -> Channel | None:
         """
         The channel of the package.
         """
@@ -173,42 +171,63 @@ class MatchSpec:
         return channel and Channel._from_py_channel(channel)
 
     @property
-    def subdir(self) -> Optional[str]:
+    def subdir(self) -> str | None:
         """
         The subdir of the channel.
         """
         return self._match_spec.subdir
 
     @property
-    def namespace(self) -> Optional[str]:
+    def namespace(self) -> str | None:
         """
         The namespace of the package.
         """
         return self._match_spec.namespace
 
     @property
-    def extras(self) -> Optional[list[str]]:
+    def extras(self) -> list[str] | None:
         """
         The extras (optional dependencies) of the package.
         """
         return self._match_spec.extras
 
     @property
-    def condition(self) -> Optional[str]:
+    def condition(self) -> str | None:
         """
         The condition under which this match spec applies.
         """
         return self._match_spec.condition
 
+    def to_canonical_string(self) -> str:
+        """
+        Returns the stable, canonical string representation of this match
+        spec: the package name first and every other populated field in a
+        single bracket section, with the same spec always rendering to the
+        same string.
+
+        Raises `CanonicalMatchSpecError` when a value cannot be represented
+        in canonical MatchSpec syntax.
+
+        Examples
+        --------
+        ```python
+        >>> spec = MatchSpec('conda-forge::foo >=1.0', strict=True)
+        >>> spec.to_canonical_string()
+        'foo[version=">=1.0",channel="conda-forge"]'
+        >>>
+        ```
+        """
+        return self._match_spec.to_canonical_string()
+
     @property
-    def md5(self) -> Optional[bytes]:
+    def md5(self) -> bytes | None:
         """
         The md5 hash of the package.
         """
         return self._match_spec.md5
 
     @property
-    def sha256(self) -> Optional[bytes]:
+    def sha256(self) -> bytes | None:
         """
         The sha256 hash of the package.
         """

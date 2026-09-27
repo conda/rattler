@@ -5,7 +5,6 @@
  */
 export const platformNames = [
     "noarch",
-    "unknown",
     "linux-32",
     "linux-64",
     "linux-aarch64",
@@ -27,6 +26,7 @@ export const platformNames = [
     "win-64",
     "win-arm64",
     "emscripten-wasm32",
+    "emscripten-wasm64",
     "wasi-wasm32",
     "zos-z",
 ] as const;
@@ -70,6 +70,7 @@ export const archNames = [
     "riscv32",
     "riscv64",
     "wasm32",
+    "wasm64",
     "z",
 ] as const;
 
@@ -100,8 +101,6 @@ export function isArch(maybeArch: unknown): maybeArch is Platform {
 export function platformArch(platform: Platform): Arch | null {
     switch (platform) {
         case "noarch":
-            return null;
-        case "unknown":
             return null;
         case "linux-32":
             return "x86";
@@ -145,6 +144,8 @@ export function platformArch(platform: Platform): Arch | null {
             return "arm64";
         case "emscripten-wasm32":
             return "wasm32";
+        case "emscripten-wasm64":
+            return "wasm64";
         case "wasi-wasm32":
             return "wasm32";
         case "zos-z":

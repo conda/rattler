@@ -1,20 +1,29 @@
 from __future__ import annotations
+
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, List, Literal, Optional, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from rattler.networking.client import Client
-from rattler.rattler import py_fetch_repo_data, PyFetchRepoDataOptions
+from rattler.rattler import PyFetchRepoDataOptions, py_fetch_repo_data
 from rattler.repo_data.sparse import SparseRepoData
 
 if TYPE_CHECKING:
     import os
+
     from rattler.channel import Channel
     from rattler.platform import Platform
 
 
 CacheAction = Literal["cache-or-fetch", "use-cache-only", "force-cache-only", "no-cache"]
+"""How the repodata cache should be used. `cache-or-fetch` validates the cache and
+re-fetches when it is stale, `use-cache-only` never hits the network and errors if
+nothing is cached, `force-cache-only` uses whatever is cached even if it is stale,
+and `no-cache` always re-fetches."""
+
 Variant = Literal["after-patches", "from-packages", "current"]
+"""Which repodata variant to fetch from the channel."""
 
 
 @dataclass
@@ -42,7 +51,7 @@ class FetchRepoDataOptions:
     bz2_enabled: bool = True
     """Whether the BZ2 compression is enabled or not."""
 
-    jlap_enabled: Optional[bool] = None
+    jlap_enabled: bool | None = None
     """Deprecated: JLAP support has been removed. This field is ignored."""
 
     def __post_init__(self) -> None:
@@ -75,13 +84,13 @@ class FetchRepoDataOptions:
 
 async def fetch_repo_data(
     *,
-    channels: List[Channel],
-    platforms: List[Platform],
-    cache_path: Union[str, os.PathLike[str]],
-    callback: Optional[Callable[[int, int], None]],
-    client: Optional[Client] = None,
-    fetch_options: Optional[FetchRepoDataOptions] = None,
-) -> List[SparseRepoData]:
+    channels: list[Channel],
+    platforms: list[Platform],
+    cache_path: str | os.PathLike[str],
+    callback: Callable[[int, int], None] | None,
+    client: Client | None = None,
+    fetch_options: FetchRepoDataOptions | None = None,
+) -> list[SparseRepoData]:
     """
     Returns a list of RepoData for given channels and platform.
 

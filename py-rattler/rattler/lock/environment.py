@@ -1,15 +1,12 @@
 from __future__ import annotations
-from typing import Dict, List, Optional, Union
 
 from rattler.channel import Channel
 from rattler.lock.channel import LockChannel
 from rattler.lock.package import LockedPackage, PypiLockedPackage
+from rattler.lock.platform import LockPlatform
 from rattler.platform.platform import Platform
-
 from rattler.rattler import PyEnvironment
 from rattler.repo_data.record import RepoDataRecord
-
-from rattler.lock.platform import LockPlatform
 
 
 class Environment:
@@ -20,7 +17,7 @@ class Environment:
     _env: PyEnvironment
 
     def __init__(
-        self, name: str, requirements: Dict[Platform, List[RepoDataRecord]], channels: List[Union[Channel, LockChannel]]
+        self, name: str, requirements: dict[Platform, list[RepoDataRecord]], channels: list[Channel | LockChannel]
     ) -> None:
         """
         Create a new environment.
@@ -42,7 +39,7 @@ class Environment:
             channels=py_channels,
         )
 
-    def platforms(self) -> List[LockPlatform]:
+    def platforms(self) -> list[LockPlatform]:
         """
         Returns all the platforms for which we have a locked-down environment.
 
@@ -59,7 +56,7 @@ class Environment:
         """
         return [LockPlatform._from_py_lock_platform(p) for p in self._env.platforms()]
 
-    def channels(self) -> List[LockChannel]:
+    def channels(self) -> list[LockChannel]:
         """
         Returns the channels that are used by this environment.
         Note that the order of the channels is significant.
@@ -78,7 +75,7 @@ class Environment:
         """
         return [LockChannel._from_py_lock_channel(c) for c in self._env.channels()]
 
-    def packages(self, platform: LockPlatform) -> Optional[List[LockedPackage]]:
+    def packages(self, platform: LockPlatform) -> list[LockedPackage] | None:
         """
         Returns all the packages for a specific platform in this environment.
 
@@ -98,7 +95,7 @@ class Environment:
             return [LockedPackage._from_py_locked_package(p) for p in packages]
         return None
 
-    def packages_by_platform(self) -> Dict[LockPlatform, List[LockedPackage]]:
+    def packages_by_platform(self) -> dict[LockPlatform, list[LockedPackage]]:
         """
         Returns a list of all packages and platforms defined for this environment.
 
@@ -121,7 +118,7 @@ class Environment:
 
     def pypi_packages(
         self,
-    ) -> Dict[str, List[PypiLockedPackage]]:
+    ) -> dict[str, list[PypiLockedPackage]]:
         """
         Returns all pypi packages for all platforms.
 
@@ -144,7 +141,7 @@ class Environment:
             for (platform_name, pypi_tup) in self._env.pypi_packages().items()
         }
 
-    def conda_repodata_records(self) -> Dict[str, List[RepoDataRecord]]:
+    def conda_repodata_records(self) -> dict[str, list[RepoDataRecord]]:
         """
         Returns all conda packages for all platforms.
 
@@ -166,7 +163,7 @@ class Environment:
             for (platform_name, records) in self._env.conda_repodata_records().items()
         }
 
-    def conda_repodata_records_for_platform(self, platform: LockPlatform) -> Optional[List[RepoDataRecord]]:
+    def conda_repodata_records_for_platform(self, platform: LockPlatform) -> list[RepoDataRecord] | None:
         """
         Takes all the conda packages, converts them to [`RepoDataRecord`] and returns them or
         returns an error if the conversion failed. Returns `None` if the specified platform is not
@@ -191,7 +188,7 @@ class Environment:
             return [RepoDataRecord._from_py_record(r) for r in records]
         return None
 
-    def pypi_packages_for_platform(self, platform: LockPlatform) -> Optional[List[PypiLockedPackage]]:
+    def pypi_packages_for_platform(self, platform: LockPlatform) -> list[PypiLockedPackage] | None:
         """
         Returns all the pypi packages and their associated environment data for the specified
         platform. Returns `None` if the platform is not defined for this environment.

@@ -1,16 +1,19 @@
 from __future__ import annotations
+
 import os
-from pathlib import Path
-from typing import List, Optional, Type, Literal, Iterable
-from types import TracebackType
-
-from rattler.match_spec.match_spec import MatchSpec
-from rattler.channel.channel import Channel
-from rattler.package.package_name import PackageName
+from collections.abc import Iterable
 from enum import Enum
+from pathlib import Path
+from types import TracebackType
+from typing import Literal
 
-from rattler.rattler import PySparseRepoData, PyPackageFormatSelection
+from rattler.channel.channel import Channel
+from rattler.match_spec.match_spec import MatchSpec
+from rattler.package.package_name import PackageName
+from rattler.rattler import PyPackageFormatSelection, PySparseRepoData
 from rattler.repo_data.record import RepoDataRecord
+from rattler.repo_data.removed_package import RemovedPackage
+from rattler.repo_data.revisions import RepodataRevisionMetadata, _repodata_revisions_from_py
 
 
 class PackageFormatSelection(Enum):
@@ -111,7 +114,7 @@ class SparseRepoData:
 
     def package_names(
         self, package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Returns a list over all package names in this repodata file.
         This works by iterating over all elements in the `packages` and
@@ -148,7 +151,7 @@ class SparseRepoData:
         self,
         package_name: str | PackageName,
         package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA,
-    ) -> List[RepoDataRecord]:
+    ) -> list[RepoDataRecord]:
         """
         Returns all the records for the specified package name.
 
@@ -177,7 +180,7 @@ class SparseRepoData:
 
     def load_all_records(
         self, package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA
-    ) -> List[RepoDataRecord]:
+    ) -> list[RepoDataRecord]:
         """
         Returns all the records for the specified package name.
 
@@ -206,7 +209,7 @@ class SparseRepoData:
         self,
         specs: Iterable[MatchSpec],
         package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA,
-    ) -> List[RepoDataRecord]:
+    ) -> list[RepoDataRecord]:
         """
         Returns all the records that match any of the specified MatchSpecs.
 
@@ -229,6 +232,34 @@ class SparseRepoData:
             )
         ]
 
+    def load_removed(self, package_name: str | PackageName | None = None) -> list[RemovedPackage]:
+        """
+        Returns the packages listed under the ``removed`` key of the repodata,
+        for the specified package name or for the whole file when no name is
+        given. Removed packages are never returned by the ``load_*`` record
+        methods.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import Channel, ChannelConfig
+        >>> channel = Channel("dummy", ChannelConfig())
+        >>> path = "../test-data/channels/dummy/linux-64/repodata.json"
+        >>> sparse_data = SparseRepoData(channel, "linux-64", path)
+        >>> sparse_data.load_removed()
+        []
+        >>> sparse_data.load_removed("python")
+        []
+        >>>
+        ```
+        """
+        if package_name is not None and not isinstance(package_name, PackageName):
+            package_name = PackageName(package_name)
+        return [
+            RemovedPackage._from_py(removed)
+            for removed in self._sparse.load_removed(package_name._name if package_name is not None else None)
+        ]
+
     @property
     def subdir(self) -> str:
         """
@@ -248,12 +279,21 @@ class SparseRepoData:
         """
         return self._sparse.subdir
 
+    @property
+    def repodata_revisions(self) -> dict[str, RepodataRevisionMetadata]:
+        """Revisions advertised by this repodata, keyed by ``vN``.
+
+        Each value includes the optional publisher-supplied ``message`` and
+        indexer-derived package statistics when available.
+        """
+        return _repodata_revisions_from_py(self._sparse.repodata_revisions)
+
     @staticmethod
     def load_records_recursive(
-        repo_data: List[SparseRepoData],
-        package_names: List[PackageName],
+        repo_data: list[SparseRepoData],
+        package_names: list[PackageName],
         package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA,
-    ) -> List[List[RepoDataRecord]]:
+    ) -> list[list[RepoDataRecord]]:
         """
         Given a set of [`SparseRepoData`]s load all the records
         for the packages with the specified names and all the packages
@@ -332,9 +372,9 @@ class SparseRepoData:
 
     def __exit__(
         self,
-        exctype: Optional[Type[BaseException]],
-        excinst: Optional[BaseException],
-        exctb: Optional[TracebackType],
+        exctype: type[BaseException] | None,
+        excinst: BaseException | None,
+        exctb: TracebackType | None,
     ) -> Literal[False]:
         """
         Closes the `SparseRepoData` instance when exiting the `with` statement.

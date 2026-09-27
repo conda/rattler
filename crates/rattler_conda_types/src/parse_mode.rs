@@ -1,4 +1,5 @@
 use crate::RepodataRevision;
+use rattler_conda_version::ParseStrictness;
 
 /// Defines how strict a parser should behave.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -16,16 +17,6 @@ impl From<ParseStrictness> for ParseStrictnessWithNameMatcher {
             parse_strictness: value,
         }
     }
-}
-
-/// Defines how strict a version parser should behave.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum ParseStrictness {
-    /// Allows guessing the users intent.
-    Lenient,
-
-    /// Very strictly follow parsing rules.
-    Strict,
 }
 
 /// Options for parsing match specifications.
@@ -126,7 +117,7 @@ impl ParseMatchSpecOptions {
     /// whether they want strict or lenient parsing independently from the
     /// repodata revision syntax surface.
     pub fn with_repodata_revision(mut self, revision: RepodataRevision) -> Self {
-        let allow_v3_syntax = !matches!(revision, RepodataRevision::Legacy);
+        let allow_v3_syntax = !revision.uses_legacy_package_layout();
         self.allow_extras = allow_v3_syntax;
         self.allow_conditionals = allow_v3_syntax;
         self.allow_flags = allow_v3_syntax;

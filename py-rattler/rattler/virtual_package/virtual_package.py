@@ -1,9 +1,9 @@
 from __future__ import annotations
-from typing import List
+
+import os
 import warnings
 
-from rattler.rattler import PyVirtualPackage, PyOverride, PyVirtualPackageOverrides
-
+from rattler.rattler import PyOverride, PyVirtualPackage, PyVirtualPackageOverrides
 from rattler.virtual_package.generic import GenericVirtualPackage
 
 
@@ -82,6 +82,8 @@ class VirtualPackageOverrides:
     def __init__(
         self,
         osx: Override | None = None,
+        ios: Override | None = None,
+        android: Override | None = None,
         libc: Override | None = None,
         cuda: Override | None = None,
         archspec: Override | None = None,
@@ -91,6 +93,8 @@ class VirtualPackageOverrides:
         """
         self._overrides = PyVirtualPackageOverrides.none()
         self.osx = osx
+        self.ios = ios
+        self.android = android
         self.libc = libc
         self.cuda = cuda
         self.archspec = archspec
@@ -116,6 +120,36 @@ class VirtualPackageOverrides:
         Sets the OSX override.
         """
         self._overrides.osx = override._override if override else None
+
+    @property
+    def ios(self) -> Override | None:
+        """
+        Returns the iOS override.
+        """
+        override = self._overrides.ios
+        return Override._from_py_override(override) if override else None
+
+    @ios.setter
+    def ios(self, override: Override | None) -> None:
+        """
+        Sets the iOS override.
+        """
+        self._overrides.ios = override._override if override else None
+
+    @property
+    def android(self) -> Override | None:
+        """
+        Returns the Android override.
+        """
+        override = self._overrides.android
+        return Override._from_py_override(override) if override else None
+
+    @android.setter
+    def android(self, override: Override | None) -> None:
+        """
+        Sets the Android override.
+        """
+        self._overrides.android = override._override if override else None
 
     @property
     def libc(self) -> Override | None:
@@ -186,22 +220,34 @@ class VirtualPackage:
         return virtual_package
 
     @staticmethod
-    def current() -> List[VirtualPackage]:
+    def current() -> list[VirtualPackage]:
         """
         Returns virtual packages detected for the current system or an error
         if the versions could not be properly detected.
 
         .. deprecated:: 0.7.0 Use `detect` instead.
         """
-        warnings.warn("Use `detect` instead")
+        warnings.warn("Use `detect` instead", stacklevel=2)
         return VirtualPackage.detect()
 
     @staticmethod
-    def detect(overrides: VirtualPackageOverrides = VirtualPackageOverrides()) -> List[VirtualPackage]:
+    def detect(
+        overrides: VirtualPackageOverrides | None = None,
+        cache_dir: str | os.PathLike[str] | None = None,
+    ) -> list[VirtualPackage]:
         """
         Returns virtual packages detected for the current system with the given overrides.
+
+        If `cache_dir` is given, expensive detection results (currently CUDA) are cached in that
+        directory across processes until the next reboot.
         """
-        return [VirtualPackage._from_py_virtual_package(vp) for vp in PyVirtualPackage.detect(overrides._overrides)]
+        if overrides is None:
+            overrides = VirtualPackageOverrides()
+
+        return [
+            VirtualPackage._from_py_virtual_package(vp)
+            for vp in PyVirtualPackage.detect(overrides._overrides, cache_dir)
+        ]
 
     def into_generic(self) -> GenericVirtualPackage:
         """

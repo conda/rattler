@@ -1,6 +1,8 @@
 //! Provides data types that are used to describe the location of a source
 //! package.
 
+use std::hash::{Hash, Hasher};
+
 use rattler_digest::{Md5Hash, Sha256Hash};
 use typed_path::Utf8TypedPathBuf;
 use url::Url;
@@ -35,7 +37,7 @@ pub struct UrlSourceLocation {
 }
 
 /// A specification of source from a git repository.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GitSourceLocation {
     /// The git url of the package which can contain git+ prefixes.
     pub git: Url,
@@ -45,6 +47,28 @@ pub struct GitSourceLocation {
 
     /// The git subdirectory of the package
     pub subdirectory: Option<String>,
+
+    /// Whether git LFS files should be fetched
+    pub lfs: Option<bool>,
+}
+
+impl Hash for GitSourceLocation {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let GitSourceLocation {
+            git,
+            rev,
+            subdirectory,
+            lfs,
+        } = self;
+        git.hash(state);
+        rev.hash(state);
+        subdirectory.hash(state);
+        // An absent `lfs` field is skipped entirely so that source identifier
+        // hashes of lock files written before the field existed stay stable.
+        if let Some(lfs) = lfs {
+            lfs.hash(state);
+        }
+    }
 }
 
 /// A reference to a specific commit in a git repository.

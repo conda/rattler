@@ -1,0 +1,21 @@
+---
+source: crates/rattler-bin/tests/cli.rs
+expression: "run_rattler(&[\"compare-packages\", EMPTY_PACKAGE, EMPTY_PACKAGE])"
+---
+comparing
+  left:  test-data/packages/empty-0.1.0-h4616a5c_0.conda
+  right: test-data/packages/empty-0.1.0-h4616a5c_0.conda
+
+metadata
+  no changes
+
+dependencies
+  no changes
+
+package files (paths.json)
+  0 changed, 0 added, 0 removed, 0 unchanged
+
+info files
+  0 changed, 0 added, 0 removed, 8 unchanged
+
+no differences found

@@ -3,16 +3,14 @@
 import tempfile
 from pathlib import Path
 
-
 from rattler import (
+    LockChannel,
     LockFile,
     LockPlatform,
-    LockChannel,
-    Platform,
     PackageRecord,
+    Platform,
     RepoDataRecord,
 )
-
 
 # Path to test data relative to the repo root
 TEST_DATA_DIR = Path(__file__).parent.parent.parent.parent / "test-data"
@@ -211,7 +209,7 @@ class TestLockFileRoundTrip:
 
         assert len(original_platforms) == len(parsed_platforms)
 
-        for orig, pars in zip(original_platforms, parsed_platforms):
+        for orig, pars in zip(original_platforms, parsed_platforms, strict=True):
             assert orig.name == pars.name
             assert orig.subdir == pars.subdir
             assert orig.virtual_packages == pars.virtual_packages

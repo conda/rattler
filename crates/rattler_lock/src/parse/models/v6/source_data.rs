@@ -171,6 +171,7 @@ impl<'a> TryFrom<SourceLocationData<'a>> for SourceLocation {
                 git,
                 rev,
                 subdirectory: subdirectory.map(Cow::into_owned),
+                lfs: None,
             }))
         } else {
             unreachable!("we already checked that exactly one of url, path or git is set")

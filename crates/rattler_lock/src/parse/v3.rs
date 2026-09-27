@@ -223,6 +223,7 @@ pub fn parse_v3_or_lower(
                                     |id| id.to_file_name(),
                                 ),
                                 package_record: PackageRecord {
+                                    attestations_sha256: None,
                                     arch: value.arch.or(derived_arch),
                                     build,
                                     build_number,
@@ -243,6 +244,7 @@ pub fn parse_v3_or_lower(
                                     size: value.size,
                                     subdir: subdir.to_string(),
                                     timestamp: value.timestamp.map(Into::into),
+                                    indexed_timestamp: None,
                                     track_features: value.track_features,
                                     version: value.version,
                                     purls: value.purls.is_empty().not().then_some(value.purls),

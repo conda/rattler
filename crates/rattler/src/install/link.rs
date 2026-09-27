@@ -185,12 +185,26 @@ pub fn link_file(
         // Detect file type from the content
         let file_type = FileType::detect(source.as_ref());
 
-        // Open the destination file
-        let destination = BufWriter::with_capacity(
-            50 * 1024,
-            fs::File::create(&destination_path)
-                .map_err(LinkFileError::FailedToOpenDestinationFile)?,
-        );
+        // Open the destination file. An existing file is replaced rather than truncated: in a
+        // shared prefix it may belong to another user, and then setting its permissions below
+        // would fail after the content has already been written (see
+        // `remove_existing_destination`). `create_new` detects this in the same syscall, so a
+        // fresh install does not pay for it.
+        let create_destination = || {
+            fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&destination_path)
+        };
+        let destination = match create_destination() {
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                remove_existing_destination(&destination_path)?;
+                create_destination()
+            }
+            result => result,
+        }
+        .map_err(LinkFileError::FailedToOpenDestinationFile)?;
+        let destination = BufWriter::with_capacity(50 * 1024, destination);
         let mut destination_writer = HashingWriter::<_, rattler_digest::Sha256>::new(destination);
 
         // Convert back-slashes (\) on windows with forward-slashes (/) to avoid problems with
@@ -238,11 +252,14 @@ pub fn link_file(
         let metadata = fs::symlink_metadata(&source_path)
             .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
         // (re)sign the binary if the file is executable or is a Mach-O binary (e.g., dylib)
-        // This is required for all macOS platforms because prefix replacement modifies the binary
-        // content, which invalidates existing signatures. We need to preserve entitlements.
+        // This is required for all macOS and iOS platforms because prefix replacement modifies
+        // the binary content, which invalidates existing signatures. We need to preserve
+        // entitlements. On arm64 an invalid signature does not just emit a warning, the binary
+        // is killed on load, so iOS (device and simulator) binaries need this just as much as
+        // macOS ones.
         if (has_executable_permissions(&metadata.permissions())
             || file_type == Some(FileType::MachO))
-            && target_platform.is_osx()
+            && (target_platform.is_osx() || target_platform.is_ios())
             && *file_mode == FileMode::Binary
         {
             // Did the binary actually change?
@@ -568,32 +585,45 @@ fn symlink_to_destination(
     }
 }
 
-/// Copy the specified file from the source (or cached) directory. If the file already exists it is
-/// removed and the operation is retried.
+/// Copy the specified file from the source (or cached) directory. If an existing file cannot be
+/// overwritten it is removed and the copy is retried.
 fn copy_to_destination(
     source_path: &Path,
     destination_path: &Path,
 ) -> Result<LinkMethod, LinkFileError> {
-    loop {
-        match fs::copy(source_path, destination_path) {
-            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                // If the file already exists, remove it and try again.
-                fs::remove_file(destination_path).map_err(|err| {
-                    LinkFileError::IoError(String::from("removing clobbered file"), err)
-                })?;
-            }
-            Ok(_) => {
-                // Copy file modification times, fs::copy transfers file permissions automatically
-                let metadata = fs::symlink_metadata(source_path)
-                    .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
-                let file_time = filetime::FileTime::from_last_modification_time(&metadata);
-                filetime::set_file_times(destination_path, file_time, file_time)
-                    .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
-
-                return Ok(LinkMethod::Copy);
-            }
-            Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Copy, e)),
+    // `fs::copy` overwrites an existing file in place and then sets its permissions, which
+    // requires owning (or being able to write) that file. If that is denied, replace the file
+    // instead (see `remove_existing_destination`).
+    match fs::copy(source_path, destination_path) {
+        Err(e) if e.kind() == ErrorKind::PermissionDenied => {
+            remove_existing_destination(destination_path)?;
+            fs::copy(source_path, destination_path)
         }
+        result => result,
+    }
+    .map_err(|e| LinkFileError::FailedToLink(LinkMethod::Copy, e))?;
+
+    // Copy file modification times, fs::copy transfers file permissions automatically
+    let metadata =
+        fs::symlink_metadata(source_path).map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+    let file_time = filetime::FileTime::from_last_modification_time(&metadata);
+    filetime::set_file_times(destination_path, file_time, file_time)
+        .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
+
+    Ok(LinkMethod::Copy)
+}
+
+/// Removes a file or symlink that exists at `destination_path`, so that it is replaced
+/// rather than overwritten in place. Replacing only requires write access to the directory, while
+/// overwriting a file and setting its permissions and timestamps requires owning it. This matters
+/// in shared prefixes, where the file may belong to another user of the same group.
+fn remove_existing_destination(destination_path: &Path) -> Result<(), LinkFileError> {
+    match fs::remove_file(destination_path) {
+        Err(e) if e.kind() != ErrorKind::NotFound => Err(LinkFileError::IoError(
+            String::from("removing clobbered file"),
+            e,
+        )),
+        _ => Ok(()),
     }
 }
 
@@ -676,9 +706,11 @@ fn is_valid_shebang_length(shebang: &str, platform: &Platform) -> bool {
     const MAX_SHEBANG_LENGTH_LINUX: usize = 127;
     const MAX_SHEBANG_LENGTH_MACOS: usize = 512;
 
-    if platform.is_linux() {
+    // Android uses the Linux kernel and therefore inherits its shebang limit;
+    // iOS shares the XNU kernel with macOS.
+    if platform.is_linux() || platform.is_android() {
         shebang.len() <= MAX_SHEBANG_LENGTH_LINUX
-    } else if platform.is_osx() {
+    } else if platform.is_osx() || platform.is_ios() {
         shebang.len() <= MAX_SHEBANG_LENGTH_MACOS
     } else {
         true
@@ -1421,6 +1453,87 @@ mod test {
             ExternalSymlinkPolicy::Deny,
         );
         assert!(result.is_ok());
+    }
+
+    /// An existing destination file that cannot be overwritten in place (here:
+    /// read-only; in shared prefixes: owned by another user) must be replaced,
+    /// as long as the directory is writable.
+    #[cfg(unix)]
+    #[test]
+    fn test_copy_replaces_read_only_destination() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let source = tmp.path().join("source");
+        let dest = tmp.path().join("dest");
+        fs::write(&source, b"new").unwrap();
+        fs::write(&dest, b"old").unwrap();
+        fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o444)).unwrap();
+
+        let method = super::copy_to_destination(&source, &dest)
+            .expect("replacing a read-only file in a writable directory should succeed");
+
+        assert_eq!(method, super::LinkMethod::Copy);
+        assert_eq!(fs::read(&dest).unwrap(), b"new");
+    }
+
+    /// Same as above for files whose prefix placeholder is patched on install.
+    #[cfg(unix)]
+    #[test]
+    fn test_patched_file_replaces_read_only_destination() {
+        use super::AppleCodeSignBehavior;
+        use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
+        use rattler_conda_types::prefix::Prefix;
+        use std::os::unix::fs::PermissionsExt;
+        use std::path::PathBuf;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let package_dir = temp_dir.path().join("package");
+        fs::create_dir_all(&package_dir).unwrap();
+        fs::write(
+            package_dir.join("config.py"),
+            "prefix = '/old/placeholder/path'\n",
+        )
+        .unwrap();
+
+        let target_dir = Prefix::create(temp_dir.path().join("target")).unwrap();
+        let destination = target_dir.path().join("config.py");
+        fs::write(&destination, "old content\n").unwrap();
+        fs::set_permissions(&destination, std::fs::Permissions::from_mode(0o444)).unwrap();
+
+        let entry = PathsEntry {
+            relative_path: PathBuf::from("config.py"),
+            no_link: false,
+            path_type: PathType::HardLink,
+            prefix_placeholder: Some(PrefixPlaceholder {
+                file_mode: FileMode::Text,
+                placeholder: "/old/placeholder/path".to_string(),
+            }),
+            sha256: None,
+            size_in_bytes: None,
+        };
+
+        let result = super::link_file(
+            &entry,
+            PathBuf::from("config.py"),
+            &package_dir,
+            &target_dir,
+            target_dir.path().to_str().unwrap(),
+            true,
+            true,
+            true,
+            Platform::Linux64,
+            AppleCodeSignBehavior::DoNothing,
+            filetime::FileTime::now(),
+            ExternalSymlinkPolicy::Deny,
+        )
+        .expect("replacing a read-only file in a writable directory should succeed")
+        .unwrap();
+
+        assert_eq!(result.method, super::LinkMethod::Patched(FileMode::Text));
+        let content = fs::read_to_string(&destination).unwrap();
+        assert!(content.contains(target_dir.path().to_str().unwrap()));
     }
 
     #[cfg_attr(

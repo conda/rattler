@@ -1,6 +1,6 @@
 //! Tests that the sorting of candidates remains the same.
 
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 use futures::FutureExt;
 use itertools::Itertools;
@@ -56,6 +56,7 @@ fn create_sorting_snapshot(package_name: &str, strategy: SolveStrategy) -> Strin
         None,
         strategy,
         Vec::new(), // dependency_overrides
+        &HashMap::default(),
     )
     .expect("failed to create dependency provider");
 

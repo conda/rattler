@@ -3,7 +3,21 @@ from pathlib import Path
 
 import pytest
 
-from rattler import solve, install, Gateway, Channel
+from rattler import Channel, Config, Gateway, install, solve
+
+
+@pytest.mark.asyncio
+async def test_install_accepts_config(tmp_path: Path) -> None:
+    config = Config.from_toml("""
+        allow-symbolic-links = false
+        allow-hard-links = false
+        allow-ref-links = false
+
+        [concurrency]
+        downloads = 1
+    """)
+
+    await install([], tmp_path / "env", config=config, show_progress=False)
 
 
 @pytest.mark.asyncio
