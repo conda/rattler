@@ -188,7 +188,7 @@ async fn test_disk_cache_is_reused_and_invalidated() {
             .unwrap_or_else(|| panic!("no cache line for {path}"))
     };
     let valid_line = by_path(&format!("noarch/{valid}"));
-    assert!(valid_line["package"]["index_json"].is_string());
+    assert_eq!(valid_line["package"]["index_json"]["name"], "valid");
     assert!(valid_line["package"]["sha256"].is_string());
     assert!(valid_line["error"].is_null());
     let broken_line = by_path("noarch/broken-1.0-0.conda");
@@ -303,31 +303,30 @@ async fn channel_cancelled_on_first_read(token: CancellationToken) -> (Operator,
     (op, filenames)
 }
 
-fn cancellable_options(token: CancellationToken, publish_partial: bool) -> IndexOptions {
+fn cancellable_options(token: CancellationToken) -> IndexOptions {
     IndexOptions {
         target_platform: Some(Platform::NoArch),
         max_parallel: 1,
         precondition_checks: PreconditionChecks::Enabled,
         processing: IndexProcessingOptions {
             cancellation_token: Some(token),
-            publish_partial,
             ..IndexProcessingOptions::default()
         },
         ..IndexOptions::default()
     }
 }
 
-/// Validates cooperative cancellation without partial publishing.
+/// Validates cooperative cancellation.
 ///
 /// With one package in flight at a time, cancelling during the first read
 /// lets that package finish, starts no other, and leaves the repodata
-/// untouched.
+/// untouched. A later uncancelled run indexes all packages.
 #[tokio::test]
 async fn test_cancellation_finishes_in_flight_package_and_skips_the_rest() {
     let token = CancellationToken::new();
-    let (op, _) = channel_cancelled_on_first_read(token.clone()).await;
+    let (op, filenames) = channel_cancelled_on_first_read(token.clone()).await;
 
-    let stats = index_with_options(op.clone(), cancellable_options(token.clone(), false))
+    let stats = index_with_options(op.clone(), cancellable_options(token.clone()))
         .await
         .unwrap();
 
@@ -340,39 +339,13 @@ async fn test_cancellation_finishes_in_flight_package_and_skips_the_rest() {
     assert!(noarch.failed_packages.is_empty());
     assert!(!noarch.repodata_written);
     assert!(!op.exists("noarch/repodata.json").await.unwrap());
-}
 
-/// Validates cooperative cancellation with partial publishing: the repodata is
-/// written with the packages indexed so far, and a later uncancelled run adds
-/// the remaining ones.
-#[tokio::test]
-async fn test_cancellation_can_publish_partial_repodata_and_resume() {
-    let token = CancellationToken::new();
-    let (op, filenames) = channel_cancelled_on_first_read(token.clone()).await;
-
-    let stats = index_with_options(op.clone(), cancellable_options(token, true))
+    // Resuming indexes everything.
+    let stats = index_with_options(op.clone(), cancellable_options(CancellationToken::new()))
         .await
         .unwrap();
-    let noarch = &stats.subdirs[&Platform::NoArch];
-    assert!(stats.cancelled);
-    assert_eq!(noarch.packages_added, 1);
-    assert_eq!(noarch.packages_skipped, 2);
-    assert!(noarch.repodata_written);
-
-    let repodata: RepoData =
-        serde_json::from_slice(&op.read("noarch/repodata.json").await.unwrap().to_bytes()).unwrap();
-    // Packages are processed in filename order, so the first one landed.
-    assert_eq!(package_names(&repodata), [filenames[0].clone()]);
-
-    // Resuming picks up the two remaining packages.
-    let stats = index_with_options(
-        op.clone(),
-        cancellable_options(CancellationToken::new(), false),
-    )
-    .await
-    .unwrap();
     assert!(!stats.cancelled);
-    assert_eq!(stats.subdirs[&Platform::NoArch].packages_added, 2);
+    assert_eq!(stats.subdirs[&Platform::NoArch].packages_added, 3);
     let repodata: RepoData =
         serde_json::from_slice(&op.read("noarch/repodata.json").await.unwrap().to_bytes()).unwrap();
     assert_eq!(package_names(&repodata), filenames);

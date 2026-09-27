@@ -45,10 +45,8 @@ interrupted and resumed:
   share one cache directory between indexers that run at the same time.
 - **Ctrl-C finishes cleanly.** The first `SIGINT` stops starting new packages,
   lets the ones in flight finish, saves them to the cache and exits with status
-  130 without touching the existing repodata. A second `SIGINT` aborts
-  immediately. With **`--publish-partial`** the interrupted subdir's repodata
-  is written with the packages indexed so far, so clients see progress and the
-  next run adds the rest.
+  130. The repodata of the interrupted subdir is left untouched; the next run
+  continues from the cache. A second `SIGINT` aborts immediately.
 - **`--max-parallel <N>`** and **`--max-in-flight-bytes <SIZE>`** bound the
   memory used for packages in flight: at most `N` packages and roughly `SIZE`
   package bytes (default `2GiB`) are held at once. A single package larger than

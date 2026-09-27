@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
+use bytesize::ByteSize;
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
 use rattler_conda_types::Platform;
@@ -23,37 +24,6 @@ use url::Url;
 
 /// Exit code used when the process was interrupted with `SIGINT`.
 const EXIT_INTERRUPTED: i32 = 130;
-
-/// Parses a byte size with an optional `K`, `M`, `G` or `T` suffix (powers of
-/// 1024, an optional `i` and `B` are accepted, e.g. `2GiB`, `512M`, `1048576`).
-fn parse_byte_size(value: &str) -> Result<u64, String> {
-    let value = value.trim();
-    let digits_end = value
-        .find(|c: char| !c.is_ascii_digit() && c != '.')
-        .unwrap_or(value.len());
-    let (number, suffix) = value.split_at(digits_end);
-    let number: f64 = number
-        .parse()
-        .map_err(|err| format!("`{value}` is not a valid size: {err}"))?;
-    let suffix = suffix
-        .trim()
-        .trim_end_matches(['b', 'B'])
-        .trim_end_matches(['i', 'I'])
-        .to_ascii_uppercase();
-    let multiplier: f64 = match suffix.as_str() {
-        "" => 1.0,
-        "K" => 1024.0,
-        "M" => 1024.0 * 1024.0,
-        "G" => 1024.0 * 1024.0 * 1024.0,
-        "T" => 1024.0 * 1024.0 * 1024.0 * 1024.0,
-        _ => return Err(format!("`{value}` has an unknown size suffix")),
-    };
-    let bytes = number * multiplier;
-    if !(bytes >= 1.0 && bytes.is_finite()) {
-        return Err(format!("`{value}` must be at least one byte"));
-    }
-    Ok(bytes as u64)
-}
 
 #[cfg(feature = "s3")]
 fn parse_s3_url(value: &str) -> Result<Url, String> {
@@ -89,22 +59,16 @@ struct Cli {
     max_parallel: Option<usize>,
 
     /// The maximum number of package bytes to hold in memory simultaneously.
-    /// Accepts a suffix like `512M` or `4GiB`. Together with `--max-parallel`
+    /// Accepts a suffix like `512MiB` or `4GB`. Together with `--max-parallel`
     /// this bounds the memory used for packages in flight.
-    #[arg(long, global = true, default_value = "2GiB", value_parser = parse_byte_size)]
-    max_in_flight_bytes: u64,
+    #[arg(long, global = true, default_value = "2GiB")]
+    max_in_flight_bytes: ByteSize,
 
     /// Directory in which parsed package metadata is cached between runs.
     /// A package is only downloaded and parsed again when it changed, and an
     /// interrupted run resumes from what was already cached.
     #[arg(long, global = true, env = "RATTLER_INDEX_CACHE_DIR")]
     cache_dir: Option<PathBuf>,
-
-    /// When interrupted with Ctrl-C, still write repodata for the packages
-    /// indexed so far instead of leaving the existing repodata untouched.
-    /// The next run adds the remaining packages.
-    #[arg(long, global = true, default_value = "false")]
-    publish_partial: bool,
 
     /// A specific platform to index.
     /// Defaults to all platforms available in the channel.
@@ -192,9 +156,8 @@ async fn main() -> anyhow::Result<()> {
     spawn_ctrl_c_handler(cancellation_token.clone());
     let processing = IndexProcessingOptions {
         cache_dir: cli.cache_dir,
-        max_in_flight_bytes: Some(cli.max_in_flight_bytes),
+        max_in_flight_bytes: Some(cli.max_in_flight_bytes.as_u64()),
         cancellation_token: Some(cancellation_token.clone()),
-        publish_partial: cli.publish_partial,
     };
 
     let stats = match cli.command {
@@ -334,10 +297,7 @@ fn report(stats: &IndexStats) {
             "Interrupted after indexing {added} packages ({skipped} not attempted). Re-run the same command to continue."
         );
         if !not_written.is_empty() {
-            println!(
-                "Repodata was not updated for: {} (use --publish-partial to publish partial results).",
-                not_written.join(", ")
-            );
+            println!("Repodata was not updated for: {}.", not_written.join(", "));
         }
     } else {
         println!(

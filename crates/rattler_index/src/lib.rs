@@ -162,8 +162,7 @@ pub struct SubdirIndexStats {
     pub cancelled: bool,
     /// Whether the repodata files of this subdir were (re)written.
     ///
-    /// This is `false` only when indexing was cancelled without publishing a
-    /// partial result.
+    /// This is `false` only when indexing of this subdir was cancelled.
     pub repodata_written: bool,
 }
 
@@ -225,15 +224,14 @@ pub fn write_retry_policy() -> impl RetryPolicy {
 
 /// The raw metadata extracted from a package archive.
 ///
-/// This is what the indexer stores in its cache: the unmodified
-/// `info/index.json` and `info/run_exports.json` contents plus the archive
-/// digests. A [`PackageRecord`] is derived from it with
+/// This is what the indexer stores in its cache: the `info/index.json` and
+/// `info/run_exports.json` contents plus the archive digests. A [`PackageRecord`] is derived from it with
 /// [`ParsedPackage::to_package_record`], so cached packages go through exactly
 /// the same derivation as freshly parsed ones.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ParsedPackage {
-    /// The raw contents of `info/index.json`.
-    pub index_json: String,
+    /// The contents of `info/index.json`.
+    pub index_json: IndexJson,
     /// The parsed `info/run_exports.json`, if the archive contains one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_exports: Option<RunExportsJson>,
@@ -248,7 +246,7 @@ pub struct ParsedPackage {
 impl ParsedPackage {
     fn new(
         package_as_bytes: &[u8],
-        index_json: String,
+        index_json: IndexJson,
         run_exports: Option<RunExportsJson>,
     ) -> Self {
         let sha256 =
@@ -269,7 +267,9 @@ impl ParsedPackage {
     }
 
     pub(crate) fn to_indexed_record(&self) -> std::io::Result<IndexedPackageRecord> {
-        let validated = IndexJson::from_str(&self.index_json)?
+        let validated = self
+            .index_json
+            .clone()
             .into_validated()
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
         let repodata_revision = validated.required_repodata_revision();
@@ -330,8 +330,7 @@ pub fn package_record_from_index_json<T: Read>(
     package_as_bytes: impl AsRef<[u8]>,
     index_json_reader: &mut T,
 ) -> std::io::Result<PackageRecord> {
-    let mut index_json = String::new();
-    index_json_reader.read_to_string(&mut index_json)?;
+    let index_json = IndexJson::from_reader(index_json_reader)?;
     ParsedPackage::new(package_as_bytes.as_ref(), index_json, None).to_package_record()
 }
 
@@ -443,9 +442,7 @@ fn parse_info_archive(
         let mut entry = entry;
         let path = entry.path()?;
         if path.as_os_str().eq("info/index.json") {
-            let mut contents = String::new();
-            entry.read_to_string(&mut contents)?;
-            index_json = Some(contents);
+            index_json = Some(IndexJson::from_reader(&mut entry)?);
         } else if path.as_os_str().eq("info/run_exports.json") {
             run_exports_json = Some(RunExportsJson::from_reader(&mut entry)?);
         }
@@ -465,8 +462,7 @@ fn parse_tar_bz2_reader(reader: impl BufRead) -> std::io::Result<ParsedPackage> 
         let mut entry = entry;
         let path = entry.path()?;
         if path.as_os_str().eq("info/index.json") {
-            let mut index_json = String::new();
-            entry.read_to_string(&mut index_json)?;
+            let index_json = IndexJson::from_reader(&mut entry)?;
             return Ok(ParsedPackage::new(&bytes, index_json, None));
         }
     }
@@ -800,7 +796,6 @@ struct SubdirIndexParams {
     cache: cache::PackageRecordCache,
     precondition_checks: PreconditionChecks,
     cancellation_token: CancellationToken,
-    publish_partial: bool,
 }
 
 async fn index_subdir(params: SubdirIndexParams) -> Result<SubdirIndexStats, RepodataError> {
@@ -895,7 +890,6 @@ async fn index_subdir_inner(params: SubdirIndexParams) -> Result<SubdirIndexStat
         cache,
         precondition_checks,
         cancellation_token,
-        publish_partial,
     } = params;
 
     // Step 1: Collect ETags/metadata for all critical files upfront
@@ -1147,7 +1141,7 @@ async fn index_subdir_inner(params: SubdirIndexParams) -> Result<SubdirIndexStat
         repodata_written: false,
     };
 
-    if cancelled && !publish_partial {
+    if cancelled {
         tracing::info!(
             "Indexing of {subdir} was cancelled; not writing repodata. \
              Re-run to continue from the cache."
@@ -1932,14 +1926,10 @@ pub struct IndexProcessingOptions {
     /// `None` only limits the number of packages in flight (`max_parallel`).
     pub max_in_flight_bytes: Option<u64>,
     /// Token to request cooperative cancellation. Once cancelled, no new
-    /// package is started; packages in flight finish and are cached. Subdirs
-    /// that were not reached are skipped.
+    /// package is started; packages in flight finish and are cached, but the
+    /// repodata of the interrupted subdir is left untouched. Subdirs that
+    /// were not reached are skipped.
     pub cancellation_token: Option<CancellationToken>,
-    /// Whether to write repodata for the packages collected so far when
-    /// indexing of a subdir is cancelled. If `false` (the default) the
-    /// repodata of a cancelled subdir is left untouched and only the cache is
-    /// updated.
-    pub publish_partial: bool,
 }
 
 /// Configuration for `index_fs`
@@ -2397,7 +2387,6 @@ pub async fn index_with_options(op: Operator, options: IndexOptions) -> anyhow::
             cache,
             precondition_checks,
             cancellation_token: cancellation_token.clone(),
-            publish_partial: processing.publish_partial,
         })
         .instrument(tracing::info_span!("index_subdir", subdir = %subdir));
 
@@ -2863,9 +2852,10 @@ mod tests {
                 "name": "demo",
                 "version": "1.0"
             }"#;
-        let indexed = ParsedPackage::new(b"package", index_json.to_owned(), None)
-            .to_indexed_record()
-            .unwrap();
+        let indexed =
+            ParsedPackage::new(b"package", IndexJson::from_str(index_json).unwrap(), None)
+                .to_indexed_record()
+                .unwrap();
         assert_eq!(indexed.repodata_revision, RepodataRevision::Legacy);
 
         let mut v3 = V3Packages::default();
