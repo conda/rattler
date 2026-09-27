@@ -10,3 +10,8 @@ wasm-pack.log
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+
+# docs (generated)
+docs/reference/
+site/
+.cache/

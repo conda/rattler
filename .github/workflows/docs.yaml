@@ -9,6 +9,12 @@ on:
       - "py-rattler/mkdocs.yml"
       - "py-rattler/pixi.toml"
       - "py-rattler/rattler/**"
+      - "js-rattler/docs/**"
+      - "js-rattler/mkdocs.yml"
+      - "js-rattler/typedoc.json"
+      - "js-rattler/pixi.toml"
+      - "js-rattler/src/**"
+      - "js-rattler/crate/**"
       - "crates/**"
       - "Cargo.toml"
       - ".github/workflows/docs.yaml"
@@ -20,11 +26,17 @@ on:
       - "py-rattler/mkdocs.yml"
       - "py-rattler/pixi.toml"
       - "py-rattler/rattler/**"
+      - "js-rattler/docs/**"
+      - "js-rattler/mkdocs.yml"
+      - "js-rattler/typedoc.json"
+      - "js-rattler/pixi.toml"
+      - "js-rattler/src/**"
+      - "js-rattler/crate/**"
       - ".github/workflows/docs.yaml"
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to deploy py-rattler docs (e.g. py-rattler-v0.23.0), or leave empty for dev"
+        description: "Tag to deploy docs (e.g. py-rattler-v0.23.0 or js-rattler-v0.3.5), or leave empty for dev"
         required: false
         default: ""
 
@@ -54,6 +66,14 @@ jobs:
 
       - name: Build Py-rattler Documentation
         run: pixi run --manifest-path py-rattler/pixi.toml build-docs
+
+      - uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
+        with:
+          manifest-path: js-rattler/pixi.toml
+          environments: docs
+
+      - name: Build JS-rattler Documentation
+        run: pixi run --manifest-path js-rattler/pixi.toml build-docs
 
   # ── Rust docs: deploy cargo doc to gh-pages on every push to main ──
   rust-docs:
@@ -135,7 +155,7 @@ jobs:
     if: >-
       github.repository == 'conda/rattler' &&
       github.event_name == 'workflow_dispatch' &&
-      github.event.inputs.tag != ''
+      startsWith(github.event.inputs.tag, 'py-rattler-v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -181,3 +201,87 @@ jobs:
           git config user.name "github-actions[bot]"
           git add .
           git diff --staged --quiet || (git commit -m "docs: update py-rattler redirect" && git push)
+
+  # ── js-rattler docs (dev): deploy to "dev" alias on every push to main ──
+  js-rattler-docs-dev:
+    if: >-
+      github.repository == 'conda/rattler' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'workflow_dispatch' && github.event.inputs.tag == ''))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: gh-pages-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
+        with:
+          manifest-path: js-rattler/pixi.toml
+          environments: docs
+
+      - name: Configure Git user
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+      - name: Deploy with mike
+        run: pixi run --manifest-path js-rattler/pixi.toml deploy-dev
+
+  # ── js-rattler docs (release): deploy to "latest" alias via manual trigger ──
+  js-rattler-docs-release:
+    if: >-
+      github.repository == 'conda/rattler' &&
+      github.event_name == 'workflow_dispatch' &&
+      startsWith(github.event.inputs.tag, 'js-rattler-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: gh-pages-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Checkout tag
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: git checkout "tags/$INPUT_TAG"
+
+      - uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
+        with:
+          manifest-path: js-rattler/pixi.toml
+          environments: docs
+
+      - name: Configure Git user
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+      - name: Set version
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: echo "RELEASE_VERSION=${INPUT_TAG#js-rattler-}" >> $GITHUB_ENV
+
+      - name: Deploy with mike
+        run: pixi run --manifest-path js-rattler/pixi.toml deploy-latest
+
+      - name: Add js-rattler redirect to latest
+        run: |
+          git clone --branch gh-pages https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git gh-pages-repo
+          echo '<meta http-equiv="refresh" content="0; url=latest/">' > gh-pages-repo/js-rattler/index.html
+          cd gh-pages-repo
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add .
+          git diff --staged --quiet || (git commit -m "docs: update js-rattler redirect" && git push)
