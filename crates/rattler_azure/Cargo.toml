@@ -24,5 +24,4 @@ url = { workspace = true }
 [dev-dependencies]
 indexmap = { workspace = true, features = ["serde"] }
 insta = { workspace = true, features = ["yaml"] }
-tokio = { workspace = true, features = ["macros", "rt"] }
 toml = { workspace = true }
