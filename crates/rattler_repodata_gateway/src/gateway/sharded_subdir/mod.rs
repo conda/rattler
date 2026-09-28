@@ -194,6 +194,7 @@ mod tests {
     use crate::fetch::CacheAction;
     use crate::gateway::error::GatewayError;
     use crate::gateway::subdir::SubdirClient;
+    use crate::sparse::PackageFormatSelection;
     use axum::{
         Router,
         body::Body,
@@ -358,7 +359,9 @@ mod tests {
         .unwrap();
 
         let package_name = "test-package".parse().unwrap();
-        let result = subdir.fetch_package_records(&package_name, None).await;
+        let result = subdir
+            .fetch_package_records(&package_name, PackageFormatSelection::default(), None)
+            .await;
 
         let err = result.expect_err("should fail with empty response");
         let err_string = err.to_string();
@@ -469,7 +472,9 @@ mod tests {
         .unwrap();
 
         let package_name = "test-package".parse().unwrap();
-        let result = subdir.fetch_package_records(&package_name, None).await;
+        let result = subdir
+            .fetch_package_records(&package_name, PackageFormatSelection::default(), None)
+            .await;
 
         let err = result.expect_err("should fail with truncated response");
         let err_string = err.to_string();
@@ -578,7 +583,11 @@ mod tests {
                 cache_only_subdir_with_cold_shard(cache_dir.path(), &server, action, false).await;
 
             let err = subdir
-                .fetch_package_records(&"test-package".parse().unwrap(), None)
+                .fetch_package_records(
+                    &"test-package".parse().unwrap(),
+                    PackageFormatSelection::default(),
+                    None,
+                )
                 .await
                 .expect_err("a cold shard fails a cache-only query");
 
@@ -608,7 +617,11 @@ mod tests {
                 cache_only_subdir_with_cold_shard(cache_dir.path(), &server, action, true).await;
 
             let records = subdir
-                .fetch_package_records(&"test-package".parse().unwrap(), None)
+                .fetch_package_records(
+                    &"test-package".parse().unwrap(),
+                    PackageFormatSelection::default(),
+                    None,
+                )
                 .await
                 .expect("a cold shard is not an error when opted in");
 

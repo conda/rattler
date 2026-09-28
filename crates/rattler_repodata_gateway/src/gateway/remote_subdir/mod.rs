@@ -1,5 +1,5 @@
 use crate::gateway::subdir::{PackageRecords, SubdirClient};
-use crate::{GatewayError, Reporter};
+use crate::{GatewayError, Reporter, sparse::PackageFormatSelection};
 use rattler_conda_types::{ChannelRelations, PackageName, RepodataRevisions};
 
 cfg_if::cfg_if! {
@@ -18,9 +18,16 @@ impl SubdirClient for RemoteSubdirClient {
     async fn fetch_package_records(
         &self,
         name: &PackageName,
+        package_format_selection: PackageFormatSelection,
         reporter: Option<&dyn Reporter>,
     ) -> Result<PackageRecords, GatewayError> {
-        self.sparse.fetch_package_records(name, reporter).await
+        self.sparse
+            .fetch_package_records(name, package_format_selection, reporter)
+            .await
+    }
+
+    fn applies_package_format_selection(&self) -> bool {
+        self.sparse.applies_package_format_selection()
     }
 
     fn package_names(&self) -> Vec<String> {

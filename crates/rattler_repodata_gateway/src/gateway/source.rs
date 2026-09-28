@@ -8,7 +8,10 @@ use super::{
     GatewayError,
     subdir::{PackageRecords, SubdirClient, extract_unique_deps_split},
 };
-use crate::{Reporter, sparse::SparseRepoData};
+use crate::{
+    Reporter,
+    sparse::{PackageFormatSelection, SparseRepoData},
+};
 
 /// A source of repodata records for a specific subdirectory.
 ///
@@ -100,6 +103,7 @@ impl SubdirClient for CustomSourceClient {
     async fn fetch_package_records(
         &self,
         name: &PackageName,
+        _package_format_selection: PackageFormatSelection,
         _reporter: Option<&dyn Reporter>,
     ) -> Result<PackageRecords, GatewayError> {
         let records = self

@@ -205,7 +205,11 @@ pub struct SubdirData {
     client: Arc<dyn SubdirClient>,
 
     /// Previously fetched or currently pending records (with precomputed deps).
-    records: CoalescedMap<PackageName, PackageRecords>,
+    ///
+    /// The key includes the package format selection only when the client
+    /// applies it itself (see [`SubdirClient::applies_package_format_selection`]),
+    /// otherwise it is `None` and the cached entry holds every format.
+    records: CoalescedMap<(PackageName, Option<PackageFormatSelection>), PackageRecords>,
 }
 
 impl SubdirData {
@@ -227,11 +231,18 @@ impl SubdirData {
 
         let mut records = self
             .records
-            .get_or_try_init(name.clone(), || async move {
-                client
-                    .fetch_package_records(&name_clone, reporter.as_deref())
-                    .await
-            })
+            .get_or_try_init(
+                self.cache_key(name, package_format_selection),
+                || async move {
+                    client
+                        .fetch_package_records(
+                            &name_clone,
+                            package_format_selection,
+                            reporter.as_deref(),
+                        )
+                        .await
+                },
+            )
             .await
             .map_err(|e| match e {
                 CoalescedGetError::Init(gateway_err) => gateway_err,
@@ -244,9 +255,26 @@ impl SubdirData {
         // `records` is the entry cloned out of the shared, cross-query
         // cache, so filtering it here is safe: it never mutates what other
         // queries (potentially with a different selection) will see.
-        records.records =
-            filter_records_by_package_format(records.records, package_format_selection);
+        if !self.client.applies_package_format_selection() {
+            records.records =
+                filter_records_by_package_format(records.records, package_format_selection);
+        }
         Ok(records)
+    }
+
+    /// The key under which records for `name` are cached. Clients that
+    /// apply the package format selection themselves are cached per
+    /// selection, all others once per name.
+    fn cache_key(
+        &self,
+        name: &PackageName,
+        package_format_selection: PackageFormatSelection,
+    ) -> (PackageName, Option<PackageFormatSelection>) {
+        let selection = self
+            .client
+            .applies_package_format_selection()
+            .then_some(package_format_selection);
+        (name.clone(), selection)
     }
 
     /// Fetches the records for `name` without inserting them into the
@@ -260,18 +288,25 @@ impl SubdirData {
         reporter: Option<&dyn Reporter>,
         package_format_selection: PackageFormatSelection,
     ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
-        let records = if let Some(cached) = self.records.get(name) {
+        let records = if let Some(cached) = self
+            .records
+            .get(&self.cache_key(name, package_format_selection))
+        {
             cached.records
         } else {
             self.client
-                .fetch_package_records(name, reporter)
+                .fetch_package_records(name, package_format_selection, reporter)
                 .await?
                 .records
         };
-        Ok(filter_records_by_package_format(
-            records,
-            package_format_selection,
-        ))
+        if self.client.applies_package_format_selection() {
+            Ok(records)
+        } else {
+            Ok(filter_records_by_package_format(
+                records,
+                package_format_selection,
+            ))
+        }
     }
 
     /// The number of package names currently held in the per-name record
@@ -301,13 +336,28 @@ impl SubdirData {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 pub trait SubdirClient: Send + Sync {
-    /// Fetches all repodata records for the package with the given name in a
+    /// Fetches the repodata records for the package with the given name in a
     /// channel subdirectory.
+    ///
+    /// Clients for which [`Self::applies_package_format_selection`] returns
+    /// `true` must only return the records matching
+    /// `package_format_selection`. All other clients may ignore it and return
+    /// records in every format; the selection is then applied by the caller.
     async fn fetch_package_records(
         &self,
         name: &PackageName,
+        package_format_selection: PackageFormatSelection,
         reporter: Option<&dyn Reporter>,
     ) -> Result<PackageRecords, GatewayError>;
+
+    /// Whether [`Self::fetch_package_records`] applies the package format
+    /// selection itself. Clients that can cheaply load only the selected
+    /// formats (e.g. sparse repodata) should return `true`; clients that
+    /// always have to load every record anyway (e.g. shards) should keep the
+    /// default so that one cached fetch serves every selection.
+    fn applies_package_format_selection(&self) -> bool {
+        false
+    }
 
     /// Returns the names of all packages in the subdirectory.
     fn package_names(&self) -> Vec<String>;

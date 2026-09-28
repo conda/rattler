@@ -19,6 +19,7 @@ use crate::{
         subdir::{PackageRecords, SubdirClient},
     },
     reporter::ResponseReporterExt,
+    sparse::PackageFormatSelection,
 };
 use fs_err::tokio as tokio_fs;
 use futures::future::OptionFuture;
@@ -194,6 +195,7 @@ impl SubdirClient for ShardedSubdir {
     async fn fetch_package_records(
         &self,
         name: &PackageName,
+        _package_format_selection: PackageFormatSelection,
         reporter: Option<&dyn Reporter>,
     ) -> Result<PackageRecords, GatewayError> {
         // Find the shard that contains the package

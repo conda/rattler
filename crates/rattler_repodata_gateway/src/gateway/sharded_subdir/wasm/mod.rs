@@ -22,6 +22,7 @@ use crate::{
         subdir::{PackageRecords, SubdirClient},
     },
     reporter::ResponseReporterExt,
+    sparse::PackageFormatSelection,
     utils::js_fetch::JsFetcher,
 };
 
@@ -119,6 +120,7 @@ impl SubdirClient for ShardedSubdir {
     async fn fetch_package_records(
         &self,
         name: &PackageName,
+        _package_format_selection: PackageFormatSelection,
         reporter: Option<&dyn Reporter>,
     ) -> Result<PackageRecords, GatewayError> {
         // Find the shard that contains the package

@@ -78,6 +78,7 @@ impl SubdirClient for LocalSubdirClient {
     async fn fetch_package_records(
         &self,
         name: &PackageName,
+        package_format_selection: PackageFormatSelection,
         _reporter: Option<&dyn Reporter>,
     ) -> Result<PackageRecords, GatewayError> {
         let sparse_repodata = self.sparse.clone();
@@ -91,7 +92,7 @@ impl SubdirClient for LocalSubdirClient {
                 )
             };
             let records = sparse_repodata
-                .load_all_records_by_name(&name)
+                .load_records(&name, package_format_selection)
                 .map_err(io_error)?;
             let removed = sparse_repodata
                 .load_removed(Some(&name))
@@ -109,6 +110,10 @@ impl SubdirClient for LocalSubdirClient {
         return load_records();
         #[cfg(not(target_arch = "wasm32"))]
         simple_spawn_blocking::tokio::run_blocking_task(load_records).await
+    }
+
+    fn applies_package_format_selection(&self) -> bool {
+        true
     }
 
     fn package_names(&self) -> Vec<String> {
