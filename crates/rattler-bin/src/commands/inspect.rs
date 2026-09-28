@@ -1,26 +1,52 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use indicatif::HumanBytes;
 use miette::{Context, IntoDiagnostic};
-use rattler_conda_types::NoArchKind;
-use rattler_conda_types::package::{AboutJson, IndexJson, PackageFile, PathsJson, RunExportsJson};
+use rattler_conda_types::package::{
+    AboutJson, CondaArchiveType, IndexJson, PackageFile, PathsJson, RunExportsJson,
+};
+use rattler_conda_types::{
+    Channel, ChannelConfig, MatchSpec, NoArchKind, ParseMatchSpecOptions, RepoDataRecord, Subdir,
+};
+use rattler_repodata_gateway::RepoData;
 use serde::Serialize;
 use url::Url;
 
+use super::gateway::{build_gateway, load_config};
 use super::package_source::{PackageSource, client_for};
 
-/// Inspect package metadata from a local or remote conda package.
+/// Inspect package metadata from a local or remote conda package, or a matchspec.
 #[derive(Debug, clap::Parser)]
 #[clap(after_help = r#"Examples:
   rattler inspect ./numpy-2.1.0-py312h1234_0.conda     # metadata and the first 10 files
   rattler inspect https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda
   rattler inspect ./pkg.conda --json                    # machine-readable metadata
-  rattler inspect ./pkg.conda --limit -1                # list all files"#)]
+  rattler inspect ./pkg.conda --limit -1                # list all files
+  rattler inspect numpy                                 # newest numpy on conda-forge
+  rattler inspect 'python 3.12.*' -c conda-forge -p linux-64"#)]
 pub struct Opt {
-    /// Path or URL of the conda package to inspect (.conda or .tar.bz2 archive)
+    /// Path or URL of the conda package to inspect (.conda or .tar.bz2
+    /// archive), or a matchspec.
+    ///
+    /// Anything that is not a URL, an existing file or a path ending in
+    /// `.conda` or `.tar.bz2` is treated as a matchspec: the channels are
+    /// searched and the newest matching package is inspected.
     #[clap(required = true)]
     package: String,
+
+    /// Channels to search in when inspecting a matchspec
+    #[clap(short, long, default_value = "conda-forge")]
+    channels: Vec<String>,
+
+    /// Subdir to search in when inspecting a matchspec. Defaults to the
+    /// platform of the current host (noarch is always searched as well).
+    #[clap(short, long)]
+    platform: Option<Subdir>,
+
+    /// Enable sharded repodata when inspecting a matchspec
+    #[clap(long, default_value = "true", action = clap::ArgAction::Set)]
+    sharded: bool,
 
     /// Number of files to print (a negative value prints all files)
     #[clap(long, default_value_t = 10, allow_hyphen_values = true)]
@@ -45,7 +71,13 @@ struct Metadata {
 }
 
 pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
-    let source = PackageSource::parse(&opt.package);
+    let source = if is_package_location(&opt.package) {
+        PackageSource::parse(&opt.package)
+    } else {
+        let record = find_newest_record(&opt, offline).await?;
+        eprintln!("Inspecting {}", record.url);
+        PackageSource::Url(record.url)
+    };
     let client = client_for([&source], offline)?;
     let archive = source.open(client.as_ref()).await?;
 
@@ -87,6 +119,82 @@ pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
         print_human(&metadata, opt.limit);
     }
     Ok(())
+}
+
+/// Whether `package` refers to a package archive (a URL or a local file)
+/// rather than a matchspec.
+///
+/// URLs must have a host: `conda-forge::numpy` parses as a URL with the
+/// scheme `conda-forge` but is a matchspec with a channel.
+fn is_package_location(package: &str) -> bool {
+    matches!(PackageSource::parse(package), PackageSource::Url(url) if url.has_host())
+        || CondaArchiveType::try_from(Path::new(package)).is_some()
+        || Path::new(package).is_file()
+}
+
+/// Searches the channels for records matching the matchspec in `opt.package`
+/// and returns the newest one.
+async fn find_newest_record(opt: &Opt, offline: bool) -> miette::Result<RepoDataRecord> {
+    let matchspec = MatchSpec::from_str(
+        &opt.package,
+        ParseMatchSpecOptions::strict()
+            .with_exact_names_only(false)
+            .with_extras(true)
+            .with_flags(true),
+    )
+    .into_diagnostic()
+    .with_context(|| {
+        format!(
+            "'{}' is not an existing file, a URL or a valid matchspec",
+            opt.package
+        )
+    })?;
+
+    let channel_config =
+        ChannelConfig::default_with_root_dir(std::env::current_dir().into_diagnostic()?);
+    let channels = opt
+        .channels
+        .iter()
+        .map(|channel| Channel::from_str(channel, &channel_config))
+        .collect::<Result<Vec<_>, _>>()
+        .into_diagnostic()?;
+    let platform = opt.platform.map_or_else(crate::host_platform, Ok)?;
+
+    let client = super::client::create_client_with_middleware(offline)?;
+    let gateway = build_gateway(client, &load_config()?, offline, opt.sharded)?;
+    let repo_data = gateway
+        .query(channels, [platform, Subdir::NoArch], [matchspec])
+        .recursive(false)
+        .await
+        .into_diagnostic()
+        .context("failed to query repodata")?;
+
+    newest_record(repo_data.iter().flat_map(RepoData::iter))
+        .cloned()
+        .ok_or_else(|| {
+            miette::miette!(
+                "no packages found matching '{}' on {platform} or noarch",
+                opt.package
+            )
+        })
+}
+
+/// Returns the highest ranked record: packages without tracked features rank
+/// above those with, then the highest version, build number and timestamp
+/// win. Unlike the `Ord` implementation of records this ignores the package
+/// name, so that a glob matchspec picks the newest package across all names.
+fn newest_record<'a>(
+    records: impl IntoIterator<Item = &'a RepoDataRecord>,
+) -> Option<&'a RepoDataRecord> {
+    records.into_iter().max_by(|a, b| {
+        let (a, b) = (&a.package_record, &b.package_record);
+        a.track_features
+            .is_empty()
+            .cmp(&b.track_features.is_empty())
+            .then_with(|| a.version.cmp(&b.version))
+            .then_with(|| a.build_number.cmp(&b.build_number))
+            .then_with(|| a.timestamp.cmp(&b.timestamp))
+    })
 }
 
 /// Takes a file out of a batched `read_files` result and parses it, or `None`
@@ -279,6 +387,31 @@ fn print_urls(label: &str, urls: &[Url]) {
             for url in urls {
                 println!("  - {url}");
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_package_location() {
+        for package in [
+            "https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda",
+            "./numpy-2.1.0-py312h1234_0.conda",
+            "missing-1.0-0.tar.bz2",
+        ] {
+            assert!(
+                is_package_location(package),
+                "{package} should be a package"
+            );
+        }
+        for matchspec in ["numpy", "python 3.12.*", "conda-forge::numpy >=2", "py*"] {
+            assert!(
+                !is_package_location(matchspec),
+                "{matchspec} should be a matchspec"
+            );
         }
     }
 }
