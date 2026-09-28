@@ -10,6 +10,7 @@
 [![Pixi Badge][pixi-badge]][pixi-url]
 [![docs main][docs-main-badge]][docs-main]
 [![python docs main][py-docs-main-badge]][py-docs-main]
+[![js docs main][js-docs-main-badge]][js-docs-main]
 
 [license-badge]: https://img.shields.io/badge/license-BSD--3--Clause-blue?style=flat-square
 [build-badge]: https://img.shields.io/github/actions/workflow/status/conda/rattler/rust-compile.yml?style=flat-square&branch=main
@@ -20,6 +21,8 @@
 [docs-main]: https://conda.github.io/rattler
 [py-docs-main-badge]: https://img.shields.io/badge/python_docs-main-yellow.svg?style=flat-square
 [py-docs-main]: https://conda.github.io/rattler/py-rattler
+[js-docs-main-badge]: https://img.shields.io/badge/js_docs-main-yellow.svg?style=flat-square
+[js-docs-main]: https://conda.github.io/rattler/js-rattler
 [pixi-badge]:https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/prefix-dev/pixi/main/assets/badge/v0.json&style=flat-square
 [pixi-url]: https://pixi.sh
 

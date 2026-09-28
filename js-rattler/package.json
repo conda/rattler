@@ -11,7 +11,7 @@
     "bugs": {
         "url": "https://github.com/conda/rattler/issues"
     },
-    "homepage": "https://github.com/conda/rattler/tree/main/js-rattler#readme",
+    "homepage": "https://conda.github.io/rattler/js-rattler/",
     "types": "./dist/index.d.ts",
     "files": [
         "dist/**/*"
@@ -52,6 +52,8 @@
         "ts-jest": "29.4.12",
         "ts-node": "10.9.2",
         "tslib": "2.8.1",
+        "typedoc": "0.28.20",
+        "typedoc-plugin-markdown": "4.13.1",
         "typescript": "5.9.3",
         "wasm-pack": "0.15.0"
     }

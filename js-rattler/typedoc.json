@@ -1,0 +1,13 @@
+{
+    "$schema": "https://typedoc.org/schema.json",
+    "entryPoints": ["src/index.ts"],
+    "tsconfig": "tsconfig.rollup.json",
+    "plugin": ["typedoc-plugin-markdown"],
+    "out": "docs/reference",
+    "excludeInternal": true,
+    "excludePrivate": true,
+    "readme": "none",
+    "entryFileName": "index.md",
+    "gitRevision": "main",
+    "sourceLinkTemplate": "https://github.com/conda/rattler/blob/{gitRevision}/{path}#L{line}"
+}

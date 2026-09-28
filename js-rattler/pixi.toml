@@ -29,3 +29,24 @@ rust-std-wasm32-unknown-unknown = ">=1.94.0,<2"
 wasm-pack = ">=0.14.0,<0.15"
 zstd = ">=1.5.7,<2"
 clang = ">=22.1.0,<23"
+
+[feature.docs.dependencies]
+python = "3.12.*"
+"ruamel.yaml" = "*"
+mdx_truly_sane_lists = "*"
+
+[feature.docs.pypi-dependencies]
+zensical = "*"
+mike = { git = "https://github.com/squidfunk/mike.git" }
+
+[feature.docs.tasks]
+_typedoc = { cmd = "npx typedoc", depends-on = ["build-debug"] }
+_gen-nav = { cmd = "python docs/scripts/generate_nav.py", depends-on = ["_typedoc"] }
+docs = { cmd = "zensical serve", depends-on = ["_gen-nav"], description = "Serve the docs locally" }
+build-docs = { cmd = "zensical build --strict", depends-on = ["_gen-nav"] }
+deploy-latest = { cmd = "mike deploy --push --update-aliases $RELEASE_VERSION latest", depends-on = ["_gen-nav"] }
+deploy-dev = { cmd = "mike deploy --push dev devel", depends-on = ["_gen-nav"] }
+
+[environments]
+default = ["default"]
+docs = ["default", "docs"]

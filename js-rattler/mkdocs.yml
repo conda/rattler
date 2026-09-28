@@ -1,0 +1,150 @@
+site_name: "js-rattler"
+repo_url: "https://github.com/conda/rattler/"
+edit_uri: edit/main/js-rattler/docs
+site_url: https://conda.github.io/rattler/js-rattler/
+
+theme:
+  name: material
+  variant: classic
+  custom_dir: docs/overrides
+  logo: assets/rattler-logo.svg
+  favicon: assets/rattler-logo.svg
+
+  palette:
+    # Palette toggle for automatic mode
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: prefix-light
+      accent: prefix-light
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: prefix
+      accent: prefix
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  icon:
+    edit: material/pencil
+    view: material/eye
+
+  features:
+    - content.tabs.link
+    - content.code.copy
+    - content.action.edit
+    - content.code.annotate
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - def_list
+  - footnotes
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      toc_depth: 3
+      permalink: "#"
+  - mdx_truly_sane_lists
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quick-start.md
+  - Reference: # rewritten in place by docs/scripts/generate_nav.py before every build/serve
+      - Overview: reference/index.md
+      - Classes:
+          - Gateway: reference/classes/Gateway.md
+          - PackageRecord: reference/classes/PackageRecord.md
+          - SolvedPackage: reference/classes/SolvedPackage.md
+          - Version: reference/classes/Version.md
+          - VersionSpec: reference/classes/VersionSpec.md
+          - VersionWithSource: reference/classes/VersionWithSource.md
+      - Type Aliases:
+          - Arch: reference/type-aliases/Arch.md
+          - ContainsOnlyPackageNameChars: reference/type-aliases/ContainsOnlyPackageNameChars.md
+          - GatewayChannelConfig: reference/type-aliases/GatewayChannelConfig.md
+          - GatewayOptions: reference/type-aliases/GatewayOptions.md
+          - GatewaySourceConfig: reference/type-aliases/GatewaySourceConfig.md
+          - NoArchType: reference/type-aliases/NoArchType.md
+          - NonEmptyString: reference/type-aliases/NonEmptyString.md
+          - NormalizedPackageName: reference/type-aliases/NormalizedPackageName.md
+          - NormalizedPackageNameOrLiteral: reference/type-aliases/NormalizedPackageNameOrLiteral.md
+          - PackageName: reference/type-aliases/PackageName.md
+          - PackageNameChar: reference/type-aliases/PackageNameChar.md
+          - PackageNameLiteral: reference/type-aliases/PackageNameLiteral.md
+          - PackageNameOrLiteral: reference/type-aliases/PackageNameOrLiteral.md
+          - PackageRecordJson: reference/type-aliases/PackageRecordJson.md
+          - ParseStrictness: reference/type-aliases/ParseStrictness.md
+          - Platform: reference/type-aliases/Platform.md
+      - Variables:
+          - archNames: reference/variables/archNames.md
+          - platformNames: reference/variables/platformNames.md
+      - Functions:
+          - isArch: reference/functions/isArch.md
+          - isNormalizedPackageName: reference/functions/isNormalizedPackageName.md
+          - isPackageName: reference/functions/isPackageName.md
+          - isPlatform: reference/functions/isPlatform.md
+          - normalizePackageName: reference/functions/normalizePackageName.md
+          - parsePackageName: reference/functions/parsePackageName.md
+          - platformArch: reference/functions/platformArch.md
+          - simpleSolve: reference/functions/simpleSolve.md
+extra:
+  version:
+    provider: mike
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/prefix-dev
+    - icon: fontawesome/brands/mastodon
+      link: https://hachyderm.io/@prefix
+    - icon: fontawesome/brands/bluesky
+      link: https://bsky.app/profile/prefix.dev
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/company/prefix-dev
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/prefix_dev
+
+plugins:
+  - mike:
+      deploy_prefix: js-rattler
+  - search
+# NOTE: no `social:` plugin — Zensical's classic theme doesn't support it yet
+# (social-card generation, e.g. py-rattler's docs/layouts/custom.yml, is a
+# follow-up once Zensical ships support).
+# NOTE: no `mkdocstrings:` — there is no Python API to document here; the
+# `docs/reference/` tree is plain markdown generated by TypeDoc.
+
+watch:
+  - src
+  - crate

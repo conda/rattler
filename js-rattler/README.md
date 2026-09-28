@@ -17,6 +17,8 @@ Rattler is written in Rust and tries to provide a clean API to its functionaliti
 
 This package provides bindings to the native Rust library compiled to WASM.
 
+Full API reference and guides: <https://conda.github.io/rattler/js-rattler>
+
 ## Development
 
 This project uses [pixi](https://pixi.sh) to manage the development environment and tasks.
