@@ -294,7 +294,7 @@ class Gateway:
 
     async def query(
         self,
-        sources: Iterable[Channel | str | RepoDataSource],
+        sources: Iterable[Channel | str | RepoDataSource | SparseRepoData],
         platforms: Iterable[Subdir | SubdirLiteral],
         specs: Iterable[MatchSpec | PackageName | str],
         recursive: bool = True,
@@ -323,8 +323,8 @@ class Gateway:
         is needed for custom sources, it must be implemented within the source itself.
 
         Arguments:
-            sources: The sources to query. Can be channels (by name, URL, or Channel object)
-                     or custom RepoDataSource implementations.
+            sources: The sources to query. Can be channels (by name, URL, or Channel object),
+                     custom RepoDataSource implementations or SparseRepoData objects.
             platforms: The platforms to query.
             specs: The specs to query.
             recursive: Whether recursively fetch dependencies or not.
@@ -388,7 +388,7 @@ class Gateway:
 
     async def who_needs(
         self,
-        sources: Iterable[Channel | str | RepoDataSource],
+        sources: Iterable[Channel | str | RepoDataSource | SparseRepoData],
         platforms: Iterable[Subdir | SubdirLiteral],
         target: str | PackageName | PackageRecord | GenericVirtualPackage,
     ) -> list[Dependent]:
@@ -411,8 +411,8 @@ class Gateway:
         every package name in the channel.
 
         Arguments:
-            sources: The sources to query. Can be channels (by name, URL, or Channel object)
-                     or custom RepoDataSource implementations.
+            sources: The sources to query. Can be channels (by name, URL, or Channel object),
+                     custom RepoDataSource implementations or SparseRepoData objects.
             platforms: The platforms to query.
             target: The package to find reverse dependencies for.
 
@@ -431,7 +431,7 @@ class Gateway:
 
     async def names(
         self,
-        sources: Iterable[Channel | str | RepoDataSource],
+        sources: Iterable[Channel | str | RepoDataSource | SparseRepoData],
         platforms: Iterable[Subdir | SubdirLiteral],
         channel_relations: ChannelRelationsMode | None = None,
         channel_relations_max_depth: int | None = None,
@@ -441,8 +441,8 @@ class Gateway:
         """Queries all the names of packages in channels or custom sources.
 
         Arguments:
-            sources: The sources to query. Can be channels (by name, URL, or Channel object)
-                     or custom RepoDataSource implementations.
+            sources: The sources to query. Can be channels (by name, URL, or Channel object),
+                     custom RepoDataSource implementations or SparseRepoData objects.
             platforms: The platforms to query.
             channel_relations: How to treat CEP-42 ``channel_relations`` metadata. ``None``
                                uses the gateway default (``"warn"``).
