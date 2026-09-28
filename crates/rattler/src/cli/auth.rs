@@ -194,12 +194,6 @@ pub enum AuthenticationCLIError {
     )]
     S3BadMethod,
 
-    // TODO: rework this
-    /// Wrapper for errors that are generated from the underlying storage system
-    /// (keyring or file system)
-    #[error("Failed to interact with the authentication storage system")]
-    AnyhowError(#[from] anyhow::Error),
-
     /// Wrapper for errors that are generated from the underlying storage system
     /// (keyring or file system)
     #[error("Failed to interact with the authentication storage system")]

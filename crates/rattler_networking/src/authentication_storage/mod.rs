@@ -9,21 +9,49 @@ pub mod storage;
 #[derive(thiserror::Error, Debug)]
 pub enum AuthenticationStorageError {
     /// An error occurred when accessing the file storage
-    #[error("FileStorageError")]
+    #[error(transparent)]
     FileStorageError(#[from] crate::authentication_storage::backends::file::FileStorageError),
     /// An error occurred when accessing the keyring storage
     #[cfg(feature = "keyring")]
-    #[error("KeyringStorageError")]
+    #[error(transparent)]
     KeyringStorageError(
         #[from] crate::authentication_storage::backends::keyring::KeyringAuthenticationStorageError,
     ),
     /// An error occurred when accessing the netrc storage
     #[cfg(feature = "netrc-rs")]
-    #[error("NetRcStorageError")]
+    #[error(transparent)]
     NetRcStorageError(#[from] crate::authentication_storage::backends::netrc::NetRcStorageError),
     /// An error occurred when accessing the memory storage
-    #[error("MemoryStorageError")]
+    #[error(transparent)]
     MemoryStorageError(#[from] crate::authentication_storage::backends::memory::MemoryStorageError),
+
+    /// Every configured backend refused to store the credentials. The
+    /// individual failures are logged as they happen; this is the summary the
+    /// caller sees.
+    #[error("none of the configured backends could store the credentials for '{host}': {backends}")]
+    StoreFailed {
+        /// The host the credentials were to be stored under.
+        host: String,
+        /// The names of the backends that were tried, in the order they were
+        /// consulted.
+        backends: String,
+    },
+
+    /// Every configured backend that holds the host refused to delete it.
+    #[error("none of the configured backends could delete the credentials for '{host}'")]
+    DeleteFailed {
+        /// The host whose credentials were to be deleted.
+        host: String,
+    },
+
+    /// A `(host, source)` pair was addressed, but no configured backend goes by
+    /// that name.
+    #[error("no configured backend is named '{backend}'")]
+    UnknownBackend {
+        /// The name that was looked for, as returned by
+        /// [`StorageBackend::name`].
+        backend: String,
+    },
 }
 
 /// A trait that defines the interface for authentication storage backends
