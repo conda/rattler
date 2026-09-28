@@ -143,7 +143,46 @@ impl Serialize for LockFile {
     where
         S: Serializer,
     {
-        let inner = self.inner.as_ref();
+        self.validate_urls_for_export()
+            .map_err(serde::ser::Error::custom)?;
+        self.allow_unsafe_urls().serialize(serializer)
+    }
+}
+
+impl LockFile {
+    /// Explicitly opt out of URL validation for this serialization only.
+    ///
+    /// # Warning
+    ///
+    /// The returned view serializes URLs verbatim, including credentials and
+    /// query strings. Use it only when deliberately exporting such data, for
+    /// example during a controlled migration of a legacy lockfile. Do not
+    /// publish its output without removing credentials and query strings first.
+    ///
+    /// This does not modify the lockfile or disable validation on subsequent
+    /// calls to [`Self::render_to_string`], [`Self::to_path`], or ordinary Serde
+    /// serialization. No opt-out flag is stored in the lockfile.
+    ///
+    /// ```
+    /// # use rattler_lock::LockFile;
+    /// # fn migrate(lock: &LockFile) -> Result<String, serde_yaml::Error> {
+    /// let contents = serde_yaml::to_string(&lock.allow_unsafe_urls())?;
+    /// # Ok(contents)
+    /// # }
+    /// ```
+    pub fn allow_unsafe_urls(&self) -> impl Serialize + '_ {
+        AllowUnsafeUrls(self)
+    }
+}
+
+struct AllowUnsafeUrls<'a>(&'a LockFile);
+
+impl Serialize for AllowUnsafeUrls<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let inner = self.0.inner.as_ref();
 
         // Determine the package indexes that are used in the lock-file,
         // including those referenced transitively via source-package

@@ -70,6 +70,8 @@ pub fn redact_signatures_in_text<'a>(text: &'a str, redaction: &str) -> Cow<'a, 
 /// signature. Other query parameters and the fragment are left untouched, so
 /// the URL stays recognizable for debugging.
 ///
+/// Percent-encoded spellings of the `t` token marker are recognized as well.
+///
 /// Use [`strip_url_for_serialization`] instead when the URL is written into
 /// durable output.
 ///
@@ -103,7 +105,7 @@ pub fn redact_url_for_display(url: &Url, redaction: &str) -> Option<Url> {
     // have had a signature masked above; returning `None` here would throw
     // that masking away, since callers fall back to the unredacted URL.
     let token_prefixed = url.path_segments().is_some_and(|mut segments| {
-        matches!((segments.next(), segments.next()), (Some("t"), Some(_)))
+        matches!((segments.next(), segments.next()), (Some(marker), Some(_)) if is_conda_token_marker(marker))
     });
 
     if token_prefixed {
@@ -144,9 +146,14 @@ pub fn redact_known_secrets_from_url(url: &Url, redaction: &str) -> Option<Url> 
 /// fragment that is not a conda artifact digest (`md5:<hex>` or
 /// `sha256:<hex>`), which is a content address rather than a secret.
 ///
-/// Secrets are removed rather than masked so that what remains is a URL that
-/// still resolves: the same channel, reached without the credentials. Query
-/// strings go wholesale instead of by key, because arbitrary services use
+/// Percent-encoded spellings of the `t` token marker are recognized as well.
+///
+/// Secrets are removed rather than masked, leaving a syntactically valid URL
+/// without placeholder credentials. This does not guarantee that it still
+/// resolves to the same resource: a query may select a resource or authorize
+/// access. Callers that cannot change resource URLs should compare the result
+/// with the original and reject changed URLs instead of exporting them.
+/// Query strings go wholesale instead of by key, because arbitrary services use
 /// arbitrary parameter names for credentials and no allowlist can promise
 /// otherwise. Stripping an already stripped URL leaves it unchanged.
 ///
@@ -175,7 +182,7 @@ pub fn strip_url_for_serialization(url: &Url) -> Url {
         match (segments.next(), segments.next()) {
             // The remaining segments include the empty one a trailing slash
             // produces, so rejoining them preserves it.
-            (Some("t"), Some(token)) if !token.is_empty() => {
+            (Some(marker), Some(token)) if is_conda_token_marker(marker) && !token.is_empty() => {
                 Some(format!("/{}", segments.collect::<Vec<_>>().join("/")))
             }
             _ => None,
@@ -194,6 +201,22 @@ pub fn strip_url_for_serialization(url: &Url) -> Url {
     }
 
     url
+}
+
+// URL path segments retain percent escapes. Recognize an encoded `t`, including
+// repeated encoding of the percent sign, without decoding or normalizing public
+// path contents. Work is bounded by the length of the segment.
+fn is_conda_token_marker(segment: &str) -> bool {
+    if segment == "t" {
+        return true;
+    }
+    let Some(mut encoded) = segment.strip_prefix('%') else {
+        return false;
+    };
+    while let Some(rest) = encoded.strip_prefix("25") {
+        encoded = rest;
+    }
+    encoded == "74"
 }
 
 /// A trait to redact known secrets from a type.
@@ -331,6 +354,30 @@ mod test {
             redacted.to_string(),
             format!("https://user:{DEFAULT_REDACTION_STR}@prefix.dev/conda-forge/")
         );
+    }
+
+    #[test]
+    fn encoded_token_markers_are_stripped_and_redacted() {
+        for marker in ["t", "%74", "%2574", "%252574"] {
+            let url = Url::parse(&format!(
+                "https://example.com/{marker}/EXAMPLE_SECRET/channel"
+            ))
+            .unwrap();
+            assert_eq!(
+                strip_url_for_serialization(&url).as_str(),
+                "https://example.com/channel"
+            );
+            assert!(
+                !redact_url_for_display(&url, DEFAULT_REDACTION_STR)
+                    .unwrap()
+                    .as_str()
+                    .contains("EXAMPLE_SECRET")
+            );
+        }
+        for marker in ["T", "token", "%75", "%74public"] {
+            let url = Url::parse(&format!("https://example.com/{marker}/public/channel")).unwrap();
+            assert_eq!(strip_url_for_serialization(&url), url);
+        }
     }
 
     #[test]
