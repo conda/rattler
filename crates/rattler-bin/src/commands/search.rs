@@ -28,8 +28,7 @@ pub struct Opt {
     #[clap(required = true)]
     matchspec: String,
 
-    /// Channels to search in. Defaults to the `default-channels` from the
-    /// rattler configuration, or conda-forge.
+    /// Channels to search in
     #[clap(short, long)]
     channels: Option<Vec<String>>,
 

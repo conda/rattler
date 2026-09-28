@@ -36,13 +36,11 @@ pub struct Opt {
     #[clap(required = true)]
     package: String,
 
-    /// Channels to search in when inspecting a matchspec. Defaults to the
-    /// `default-channels` from the rattler configuration, or conda-forge.
+    /// Channels to search in when inspecting a matchspec.
     #[clap(short, long)]
     channels: Option<Vec<String>>,
 
-    /// Subdir to search in when inspecting a matchspec. Defaults to the
-    /// platform of the current host (noarch is always searched as well).
+    /// Subdir to search in when inspecting a matchspec.
     #[clap(short, long)]
     platform: Option<Subdir>,
 
@@ -138,12 +136,10 @@ fn is_package_location(package: &str) -> bool {
 /// Searches the channels for records matching the matchspec in `opt.package`
 /// and returns the newest one.
 async fn find_newest_record(opt: &Opt, offline: bool) -> miette::Result<RepoDataRecord> {
-    let matchspec = MatchSpec::from_str(
-        &opt.package,
-        ParseMatchSpecOptions::strict()
-            .with_extras(true)
-            .with_flags(true),
-    )
+    // Extras and flags are rejected: they select optional dependencies or
+    // variants when solving, which doesn't make much sense for a search-style
+    // query that picks a single package.
+    let matchspec = MatchSpec::from_str(&opt.package, ParseMatchSpecOptions::strict())
     .into_diagnostic()
     .with_context(|| {
         format!(

@@ -55,8 +55,7 @@ pub struct Opt {
     #[clap(long, short = 'w', conflicts_with = "specs")]
     pub with: Vec<String>,
 
-    /// Channels to search for packages. Defaults to the `default-channels`
-    /// from the rattler configuration, or conda-forge.
+    /// Channels to search for packages.
     #[clap(short, long = "channel")]
     pub channels: Option<Vec<String>>,
 

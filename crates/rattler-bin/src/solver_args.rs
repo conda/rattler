@@ -21,8 +21,7 @@ use crate::exclude_newer::{ExcludeNewer, NamedCutoff};
 /// every solving command accepts the same set of flags.
 #[derive(Debug, clap::Args)]
 pub struct SolverArgs {
-    /// Channel to search for packages. Defaults to the `default-channels`
-    /// from the rattler configuration, or conda-forge.
+    /// Channel to search for packages.
     ///
     /// Example: -c conda-forge -c main
     #[clap(short, long = "channel")]
