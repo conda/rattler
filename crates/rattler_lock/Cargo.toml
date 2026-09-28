@@ -11,13 +11,22 @@ repository.workspace = true
 license.workspace = true
 readme.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+
+[features]
+default = []
+# Enables conversion between pixi lock files and CEP-37 (`conda-lock.yml`)
+# lock files through the `conda_lock` module.
+conda-lock = ["dep:rattler_conda_lock"]
+
 [dependencies]
 ahash = { workspace = true }
 jiff = { workspace = true }
 hex = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }
 itertools = { workspace = true }
-rattler_conda_lock = { workspace = true }
+rattler_conda_lock = { workspace = true, optional = true }
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
 rattler_solve = { workspace = true, default-features = false, features = ["serde"] }
@@ -47,3 +56,11 @@ rattler_conda_lock = { workspace = true, features = ["miette"] }
 serde_json = { workspace = true }
 similar-asserts = { workspace = true }
 rstest = { workspace = true }
+
+[[test]]
+name = "conda_lock_conversion"
+required-features = ["conda-lock"]
+
+[[test]]
+name = "conda_lock_errors"
+required-features = ["conda-lock"]
