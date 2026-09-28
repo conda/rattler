@@ -5,7 +5,7 @@ import pytest
 from xprocess import ProcessStarter
 
 from rattler import Channel, ChannelConfig, PackageName, SparseRepoData, fetch_repo_data
-from rattler.platform import Platform
+from rattler.platform import Subdir
 from rattler.repo_data.record import RepoDataRecord
 
 
@@ -49,7 +49,7 @@ async def test_fetch_repo_data(
     port, repo = serve_repo_data
     cache_dir = tmp_path / "test_repo_data_download"
     chan = Channel(repo, ChannelConfig(f"http://localhost:{port}/"))
-    plat = Platform("noarch")
+    plat = Subdir("noarch")
 
     result = await fetch_repo_data(
         channels=[chan],
