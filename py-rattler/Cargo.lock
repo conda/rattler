@@ -4207,6 +4207,7 @@ version = "0.33.1"
 dependencies = [
  "ahash",
  "file_url",
+ "hex",
  "indexmap 2.14.0",
  "itertools 0.15.0",
  "jiff",
