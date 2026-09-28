@@ -97,6 +97,9 @@ axum = { workspace = true, features = ["json", "form"] }
 reqwest-retry = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
+rmp-serde = { workspace = true }
+serde_bytes = { workspace = true }
+zstd = { workspace = true }
 temp-env = { workspace = true }
 rstest = { workspace = true }
 tracing-test = { workspace = true }
