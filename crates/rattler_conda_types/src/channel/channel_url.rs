@@ -3,7 +3,7 @@ use std::fmt::{Debug, Display, Formatter};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{Platform, utils::url_with_trailing_slash::UrlWithTrailingSlash};
+use crate::{Subdir, utils::url_with_trailing_slash::UrlWithTrailingSlash};
 
 /// Represents a channel base url. This is a wrapper around an url that is
 /// normalized:
@@ -27,7 +27,7 @@ impl ChannelUrl {
     }
 
     /// Append the platform to the base url.
-    pub fn platform_url(&self, platform: Platform) -> Url {
+    pub fn platform_url(&self, platform: Subdir) -> Url {
         self.0
             .join(&format!("{}/", platform.as_str())) // trailing slash is important here as this signifies a directory
             .expect("platform is a valid url fragment")

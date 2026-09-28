@@ -143,6 +143,10 @@ pub struct QuetzOpts {
     /// keychain / auth-file
     #[arg(short, long, env = "QUETZ_API_KEY")]
     pub api_key: Option<String>,
+
+    /// Force overwrite existing packages
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Debug)]
@@ -151,21 +155,23 @@ pub struct QuetzData {
     pub url: UrlWithTrailingSlash,
     pub channels: String,
     pub api_key: Option<String>,
+    pub force: ForceOverwrite,
 }
 
 impl From<QuetzOpts> for QuetzData {
     fn from(value: QuetzOpts) -> Self {
-        Self::new(value.url, value.channels, value.api_key)
+        Self::new(value.url, value.channels, value.api_key, value.force.into())
     }
 }
 
 impl QuetzData {
     /// Create a new instance of `QuetzData`
-    pub fn new(url: Url, channels: String, api_key: Option<String>) -> Self {
+    pub fn new(url: Url, channels: String, api_key: Option<String>, force: ForceOverwrite) -> Self {
         Self {
             url: url.into(),
             channels,
             api_key,
+            force,
         }
     }
 }

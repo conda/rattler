@@ -4,8 +4,8 @@ use futures_util::StreamExt;
 use miette::{Context, IntoDiagnostic};
 use rattler::{default_cache_dir, install::Installer, package_cache::PackageCache};
 use rattler_conda_types::{
-    MatchSpec, Matches, PackageName, PackageRecord, ParseStrictness, Platform, PrefixRecord,
-    RepoDataRecord, package::DistArchiveIdentifier,
+    MatchSpec, Matches, PackageName, PackageRecord, ParseStrictness, PrefixRecord, RepoDataRecord,
+    Subdir, package::DistArchiveIdentifier,
 };
 use rattler_package_streaming::fs::repodata_record_from_package_archive;
 use reqwest_middleware::ClientWithMiddleware;
@@ -18,6 +18,10 @@ const PIXI_ENVIRONMENT_FINGERPRINT_FILE: &str = ".pixi-environment-fingerprint";
 
 /// Add one or more conda package archives to a prefix without solving.
 #[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler inject-into-prefix -p ./env ./mypkg-1.0-h123_0.conda   # add a locally built package without solving
+  rattler inject-into-prefix -p ./env https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda
+  rattler inject-into-prefix -p ./env ./pkg.conda --skip-compatibility-checks"#)]
 pub struct InjectOpt {
     /// Paths or URLs of conda package archives (.conda or .tar.bz2)
     #[clap(required = true)]
@@ -34,6 +38,9 @@ pub struct InjectOpt {
 
 /// Remove one or more installed conda packages from a prefix without solving.
 #[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler remove-from-prefix -p ./env tzdata
+  rattler remove-from-prefix -p ./env numpy --skip-compatibility-checks   # even if other packages depend on it"#)]
 pub struct RemoveFromPrefixOpt {
     /// Exact package names of installed packages to remove
     #[clap(required = true)]
@@ -294,10 +301,10 @@ fn validate_package_compatibility(package_record: &PackageRecord) -> miette::Res
 
 fn validate_package_compatibility_for_platform(
     package_record: &PackageRecord,
-    platform: Platform,
+    platform: Subdir,
 ) -> miette::Result<()> {
     let package_subdir = &package_record.subdir;
-    if package_subdir != &Platform::NoArch.to_string() && package_subdir != &platform.to_string() {
+    if package_subdir != &Subdir::NoArch.to_string() && package_subdir != &platform.to_string() {
         return Err(miette::miette!(
             "package {} is for platform {}, but the current platform is {}",
             package_record,
@@ -313,7 +320,7 @@ fn validate_package_compatibility_for_platform(
 
 fn validate_virtual_package_dependencies(
     package_record: &PackageRecord,
-    platform: Platform,
+    platform: Subdir,
 ) -> miette::Result<()> {
     let virtual_packages = rattler_virtual_packages::VirtualPackages::detect_for_platform(
         platform,
@@ -623,14 +630,14 @@ mod tests {
             Version::from_str("0.0.1").unwrap(),
             "h123456".to_string(),
         );
-        record.subdir = Platform::NoArch.to_string();
+        record.subdir = Subdir::NoArch.to_string();
         record.depends = vec!["__win".to_string()];
 
         let err =
-            validate_package_compatibility_for_platform(&record, Platform::OsxArm64).unwrap_err();
+            validate_package_compatibility_for_platform(&record, Subdir::OsxArm64).unwrap_err();
         assert!(err.to_string().contains("virtual dependency '__win'"));
 
-        validate_package_compatibility_for_platform(&record, Platform::Win64).unwrap();
+        validate_package_compatibility_for_platform(&record, Subdir::Win64).unwrap();
     }
 
     #[test]

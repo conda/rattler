@@ -135,7 +135,7 @@ def test_nested_sections_are_dicts():
         [s3-options.my-bucket]
         endpoint-url = "https://my-s3.example.com/"
         region = "eu-central-1"
-        force-path-style = true
+        addressing-style = "path"
     """)
 
     assert config.repodata_config["disable-zstd"] is True
@@ -143,7 +143,7 @@ def test_nested_sections_are_dicts():
     assert config.s3_options["my-bucket"] == {
         "endpoint-url": "https://my-s3.example.com/",
         "region": "eu-central-1",
-        "force-path-style": True,
+        "addressing-style": "path",
     }
 
 

@@ -7,11 +7,11 @@ array_field = []
 [s3-options.dev-bucket]
 endpoint-url = "https://minio.dev.example.com/"
 region = "us-west-2"
-force-path-style = true
+addressing-style = "path"
 
 [s3-options.production-bucket]
 endpoint-url = "https://s3.us-east-1.amazonaws.com/"
 region = "us-west-1"
-force-path-style = false
+addressing-style = "virtual-host"
 
 [nested]

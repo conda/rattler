@@ -35,28 +35,6 @@ mod conda_sorting;
 
 type MatchSpecParseCache = HashMap<String, (Vec<VersionSetId>, Option<ConditionId>)>;
 
-fn exclude_newer_reason(
-    config: &ExcludeNewer,
-    package: &PackageName,
-    channel: Option<&str>,
-    timestamp: Option<&rattler_conda_types::utils::TimestampMs>,
-) -> Option<String> {
-    let cutoff = config.cutoff_for_package(package, channel);
-    match timestamp {
-        Some(timestamp) if *timestamp > cutoff => {
-            // Display in user's local timezone for better readability
-            let display_time = cutoff
-                .to_zoned(jiff::tz::TimeZone::system())
-                .strftime("%Y-%m-%d %H:%M:%S");
-            Some(format!(
-                "the package is uploaded after the cutoff date of {display_time}"
-            ))
-        }
-        None if !config.include_unknown_timestamp() => Some("the package has no timestamp".into()),
-        _ => None,
-    }
-}
-
 /// A dependency override rule.
 #[derive(Clone)]
 pub struct DependencyOverride {
@@ -449,13 +427,9 @@ impl<'a> CondaDependencyProvider<'a> {
                 // record over its other-format twin would throw away the only
                 // candidate the solver may still pick.
                 let excluded = excluded_candidates.contains_key(&record.url)
-                    || exclude_newer.as_ref().is_some_and(|config| {
-                        config.is_excluded(
-                            &record.package_record.name,
-                            record.channel.as_deref(),
-                            record.package_record.timestamp.as_ref(),
-                        )
-                    });
+                    || exclude_newer
+                        .as_ref()
+                        .is_some_and(|config| config.is_excluded(record));
 
                 let identifier = &record.identifier.identifier;
                 let archive_type = record.identifier.archive_type;
@@ -526,21 +500,9 @@ impl<'a> CondaDependencyProvider<'a> {
                 exclude_if_requested(candidates, solvable_id, &record.url);
 
                 if let Some(config) = &exclude_newer
-                    && config.is_excluded(
-                        &record.package_record.name,
-                        record.channel.as_deref(),
-                        record.package_record.timestamp.as_ref(),
-                    )
+                    && let Some(reason) = config.exclusion_reason(record)
                 {
-                    let reason = pool.intern_string(
-                        exclude_newer_reason(
-                            config,
-                            &record.package_record.name,
-                            record.channel.as_deref(),
-                            record.package_record.timestamp.as_ref(),
-                        )
-                        .expect("excluded records must have an exclusion reason"),
-                    );
+                    let reason = pool.intern_string(reason.to_string());
                     candidates.excluded.push((solvable_id, reason));
                 }
 

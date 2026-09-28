@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 # Try to import PTY classes - they may not be available on Windows or without pty feature
 try:
     from rattler.rattler import PyPtySession
@@ -192,7 +190,7 @@ class PtySession:
         """
         return self._inner.exit()
 
-    def interact(self, wait_until: Optional[str] = None) -> Optional[int]:
+    def interact(self, wait_until: str | None = None) -> int | None:
         """
         Start an interactive session, optionally waiting for a pattern first.
 

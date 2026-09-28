@@ -1,12 +1,13 @@
 from __future__ import annotations
+
 from abc import ABC
-from typing import Optional, List
 
-from rattler import PackageRecord, Version, RepoDataRecord
-
-from rattler.rattler import PyLockedPackage
 from rattler.lock.hash import PackageHashes
 from rattler.match_spec import MatchSpec
+from rattler.rattler import PyLockedPackage
+from rattler.repo_data.package_record import PackageRecord
+from rattler.repo_data.record import RepoDataRecord
+from rattler.version import Version
 
 
 class LockedPackage(ABC):
@@ -59,7 +60,7 @@ class LockedPackage(ABC):
         return self._package.location
 
     @property
-    def hashes(self) -> Optional[PackageHashes]:
+    def hashes(self) -> PackageHashes | None:
         """
         Hashes of the file pointed to by `url`.
 
@@ -111,7 +112,7 @@ class CondaLockedPackage(LockedPackage, ABC):
     """
 
     @property
-    def package_record(self) -> Optional[PackageRecord]:
+    def package_record(self) -> PackageRecord | None:
         """
         Returns the metadata of the package as recorded in the lock-file.
 
@@ -124,7 +125,7 @@ class CondaLockedPackage(LockedPackage, ABC):
         return PackageRecord._from_py_record(py_record)
 
     @property
-    def version(self) -> Optional[Version]:
+    def version(self) -> Version | None:
         """
         Returns the version of the package as recorded in the lock-file.
 
@@ -184,7 +185,7 @@ class PypiLockedPackage(LockedPackage):
         return self._package.pypi_version
 
     @property
-    def requires_dist(self) -> List[str]:
+    def requires_dist(self) -> list[str]:
         """
         A list of dependencies on other packages.
 
@@ -204,7 +205,7 @@ class PypiLockedPackage(LockedPackage):
         return self._package.pypi_requires_dist
 
     @property
-    def requires_python(self) -> Optional[str]:
+    def requires_python(self) -> str | None:
         """
         The python version that this package requires.
 

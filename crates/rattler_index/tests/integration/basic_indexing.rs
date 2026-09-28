@@ -5,7 +5,7 @@ use std::{
 };
 
 use rattler_conda_types::{
-    ChannelNotice, ChannelNoticeLevel, ChannelRelations, Platform, Shard, ShardedRepodata,
+    ChannelNotice, ChannelNoticeLevel, ChannelRelations, Shard, ShardedRepodata, Subdir,
     compression_level::CompressionLevel,
 };
 use rattler_index::{
@@ -81,7 +81,7 @@ async fn test_index() {
 
     let res = index_fs(IndexFsConfig {
         channel: temp_dir.path().into(),
-        target_platform: Some(Platform::Win64),
+        target_platform: Some(Subdir::Win64),
         repodata_patch: None,
         write_zst: true,
         write_shards: true,
@@ -100,9 +100,14 @@ async fn test_index() {
     let repodata_path = temp_dir.path().join(subdir_path).join("repodata.json");
     let repodata_json: Value = serde_json::from_reader(File::open(repodata_path).unwrap()).unwrap();
 
-    let expected_repodata_entry: Value =
+    let mut expected_repodata_entry: Value =
         serde_json::from_reader(File::open(test_data_dir().join(index_json_path)).unwrap())
             .unwrap();
+
+    let indexed_timestamp =
+        &repodata_json["packages.conda"]["conda-22.11.1-py38haa244fe_1.conda"]["indexed_timestamp"];
+    assert!(indexed_timestamp.as_i64().unwrap() > 1_700_000_000_000);
+    expected_repodata_entry["indexed_timestamp"] = indexed_timestamp.clone();
 
     assert_eq!(
         repodata_json
@@ -176,7 +181,7 @@ async fn test_empty_channel_rejects_unsupported_configured_revision() {
 
     let err = index_fs(IndexFsConfig {
         channel: temp_dir.path().into(),
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
@@ -201,7 +206,7 @@ async fn test_empty_channel_rejects_unsupported_configured_revision() {
 fn noarch_index_config(channel: &Path) -> IndexFsConfig {
     IndexFsConfig {
         channel: channel.into(),
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
@@ -379,7 +384,7 @@ async fn test_reindex_removes_deleted_conda_package() {
 
     index_fs(IndexFsConfig {
         channel: temp_dir.path().into(),
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
@@ -407,7 +412,7 @@ async fn test_reindex_removes_deleted_conda_package() {
 
     index_fs(IndexFsConfig {
         channel: temp_dir.path().into(),
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
@@ -444,7 +449,7 @@ async fn test_normal_and_force_reindex_preserve_v3_extensions() {
 
     index_fs(IndexFsConfig {
         channel: temp_dir.path().into(),
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         repodata_patch: None,
         write_zst: false,
         write_shards: true,
@@ -477,7 +482,7 @@ async fn test_normal_and_force_reindex_preserve_v3_extensions() {
 
     index_fs(IndexFsConfig {
         channel: temp_dir.path().into(),
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
@@ -499,7 +504,7 @@ async fn test_normal_and_force_reindex_preserve_v3_extensions() {
 
     index_fs(IndexFsConfig {
         channel: temp_dir.path().into(),
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         repodata_patch: None,
         write_zst: true,
         write_shards: true,
@@ -531,7 +536,7 @@ async fn test_normal_and_force_reindex_preserve_v3_extensions() {
 }
 
 #[tokio::test]
-async fn test_reindex_derives_authoritative_legacy_and_v3_stats_and_message_precedence() {
+async fn test_reindex_derives_authoritative_v3_stats_and_drops_legacy_revision() {
     let temp_dir = tempfile::tempdir().unwrap();
     let subdir_path = temp_dir.path().join("noarch");
     fs::create_dir(&subdir_path).unwrap();
@@ -611,7 +616,7 @@ async fn test_reindex_derives_authoritative_legacy_and_v3_stats_and_message_prec
 
     index_fs(IndexFsConfig {
         channel: temp_dir.path().into(),
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
@@ -635,13 +640,9 @@ async fn test_reindex_derives_authoritative_legacy_and_v3_stats_and_message_prec
     assert!(repodata["v3"]["tar.bz2"]["v3-stats-1.0-0"].is_object());
     assert_eq!(
         repodata["info"]["repodata_revisions"],
+        // The legacy layout is not advertised: CEP 48 keys start at `v3`, so the
+        // seeded `v0` entry is dropped rather than refreshed.
         serde_json::json!({
-            "v0": {
-                "message": "previous legacy message",
-                "n_packages": 1,
-                "oldest": 1710000000000i64,
-                "newest": 1710000000000i64
-            },
             "v3": {
                 "message": "configured v3 message",
                 "n_packages": 1,
@@ -666,7 +667,7 @@ async fn test_force_reindex_with_patch_preserves_and_merge_patches_v3_extensions
 
     index_fs(IndexFsConfig {
         channel: temp_dir.path().into(),
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
@@ -755,7 +756,7 @@ async fn test_force_reindex_with_patch_preserves_and_merge_patches_v3_extensions
 
     index_fs(IndexFsConfig {
         channel: temp_dir.path().into(),
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         repodata_patch: Some(patch_name.to_string()),
         write_zst: false,
         write_shards: false,
@@ -805,7 +806,7 @@ async fn test_reindex_rejects_unsupported_producer_map_without_rewriting() {
 
     let err = index_fs(IndexFsConfig {
         channel: temp_dir.path().into(),
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
@@ -842,7 +843,7 @@ async fn test_reindex_rejects_v1_producer_map_without_rewriting() {
 
     let err = index_fs(IndexFsConfig {
         channel: temp_dir.path().into(),
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
@@ -886,7 +887,7 @@ async fn test_reindex_preserves_existing_revision_messages_until_overridden() {
     for force in [false, true] {
         index_fs(IndexFsConfig {
             channel: temp_dir.path().into(),
-            target_platform: Some(Platform::NoArch),
+            target_platform: Some(Subdir::NoArch),
             repodata_patch: None,
             write_zst: false,
             write_shards: false,
@@ -911,7 +912,7 @@ async fn test_reindex_preserves_existing_revision_messages_until_overridden() {
 
     index_fs(IndexFsConfig {
         channel: temp_dir.path().into(),
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
@@ -946,7 +947,7 @@ async fn test_index_latest_repodata_revision() {
 
     index_fs(IndexFsConfig {
         channel: temp_dir.path().into(),
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         repodata_patch: None,
         write_zst: true,
         write_shards: true,
@@ -1059,7 +1060,7 @@ async fn test_index_repodata_revision_from_index_json() {
 
     index_fs(IndexFsConfig {
         channel: temp_dir.path().into(),
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
@@ -1120,7 +1121,7 @@ async fn test_index_writes_channel_metadata() {
     index_fs_with_channel_metadata(
         IndexFsConfig {
             channel: temp_dir.path().into(),
-            target_platform: Some(Platform::NoArch),
+            target_platform: Some(Subdir::NoArch),
             repodata_patch: None,
             write_zst: true,
             write_shards: true,
@@ -1234,7 +1235,7 @@ async fn test_sharded_repodata_is_deterministic() {
 
     let config = |force| IndexFsConfig {
         channel: temp_dir.path().into(),
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         repodata_patch: None,
         write_zst: false,
         write_shards: true,

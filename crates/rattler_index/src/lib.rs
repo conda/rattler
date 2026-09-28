@@ -1,5 +1,11 @@
 //! Indexing of packages in a output folder to create up to date repodata.json
 //! files
+//!
+//! Channel indexing assigns `indexed_timestamp` to newly published archives.
+//! Existing publication timestamps, including legacy missing values, are
+//! preserved when reindexing, even with `force` enabled. Archive readers do not
+//! assign publication timestamps. Build timestamps in the future or later than
+//! publication are flagged with warnings.
 #![deny(missing_docs)]
 
 pub mod cache;
@@ -30,8 +36,8 @@ use opendal::services::S3Config;
 use opendal::{Configurator, Operator, services::FsConfig};
 use rattler_conda_types::{
     ChannelInfo, ChannelNotice, ChannelNotices, ChannelRelations, MatchSpec, PackageRecord,
-    ParseMatchSpecOptions, PatchInstructions, Platform, RepoData, Shard, ShardedRepodata,
-    ShardedSubdirInfo, UrlOrPath, V3Extensions, V3Packages, WhlPackageRecord,
+    ParseMatchSpecOptions, PatchInstructions, RepoData, Shard, ShardedRepodata, ShardedSubdirInfo,
+    Subdir, UrlOrPath, V3Extensions, V3Packages, WhlPackageRecord,
     package::{
         CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
         RunExportsJson, ValidatedMatchSpecs, WheelArchiveType,
@@ -139,7 +145,7 @@ pub struct SubdirIndexStats {
 #[derive(Debug, Clone, Default)]
 pub struct IndexStats {
     /// Statistics per subdir
-    pub subdirs: HashMap<Platform, SubdirIndexStats>,
+    pub subdirs: HashMap<Subdir, SubdirIndexStats>,
 }
 
 const REPODATA_FROM_PACKAGES: &str = "repodata_from_packages.json";
@@ -257,7 +263,7 @@ fn repodata_patch_from_conda_package_stream<'a>(
                     .as_os_str()
                     .to_str()
                     .context("Could not convert OsStr to str")?;
-                let _ = Platform::from_str(subdir_str)?;
+                let _ = Subdir::from_str(subdir_str)?;
                 subdir_str.to_string()
             } else {
                 return Err(anyhow::anyhow!(
@@ -438,7 +444,7 @@ fn parse_package_buffer(
 async fn read_and_parse_package(
     op: &Operator,
     cache: &cache::PackageRecordCache,
-    subdir: Platform,
+    subdir: Subdir,
     filename: &str,
 ) -> std::io::Result<IndexedPackageRecord> {
     let file_path = format!("{subdir}/{filename}");
@@ -563,7 +569,7 @@ impl RepodataMetadataCollection {
     /// Collect metadata for all critical repodata files in a subdir.
     pub async fn new(
         op: &Operator,
-        subdir: Platform,
+        subdir: Subdir,
         has_patch: bool,
         write_zst: bool,
         write_shards: bool,
@@ -625,7 +631,7 @@ impl RepodataMetadataCollection {
 
 #[allow(clippy::too_many_arguments)]
 async fn index_subdir(
-    subdir: Platform,
+    subdir: Subdir,
     op: Operator,
     force: bool,
     write_zst: bool,
@@ -723,7 +729,7 @@ async fn index_subdir(
 
 #[allow(clippy::too_many_arguments)]
 async fn index_subdir_inner(
-    subdir: Platform,
+    subdir: Subdir,
     op: Operator,
     force: bool,
     write_zst: bool,
@@ -761,12 +767,37 @@ async fn index_subdir_inner(
     } else {
         read_existing_repodata(&op, &format!("{subdir}/{REPODATA}"), &metadata.repodata).await?
     };
+    // Keep publication history separate from reusable archive metadata. A
+    // present entry with no timestamp is a legacy publication, not a new one.
+    // Include raw records (patches may remove packages), but let published
+    // records win, including intentional corrections and missing values.
+    let mut indexed_timestamps: HashMap<_, _> = package_source
+        .packages
+        .iter()
+        .map(|(filename, package)| (filename.clone(), package.record.indexed_timestamp))
+        .collect();
     let existing_repodata = if repodata_patch.is_some() {
         let published =
             read_existing_repodata(&op, &format!("{subdir}/{REPODATA}"), &metadata.repodata)
                 .await?;
+        indexed_timestamps.extend(
+            published
+                .packages
+                .iter()
+                .map(|(filename, package)| (filename.clone(), package.record.indexed_timestamp)),
+        );
         merge_patch_repodata(package_source, published)
     } else {
+        // When patches are disabled, packages previously hidden by a removal
+        // patch may only have publication history in the old raw repodata.
+        let raw_path = format!("{subdir}/{REPODATA_FROM_PACKAGES}");
+        let raw_metadata = RepodataFileMetadata::new(&op, &raw_path, precondition_checks).await?;
+        let raw = read_existing_repodata(&op, &raw_path, &raw_metadata).await?;
+        for (filename, package) in raw.packages {
+            indexed_timestamps
+                .entry(filename)
+                .or_insert(package.record.indexed_timestamp);
+        }
         package_source
     };
 
@@ -937,7 +968,25 @@ async fn index_subdir_inner(
         ..V3Packages::default()
     };
     let latest_revision = latest_repodata_revision(&repodata_revisions);
-    for (filename, package) in registered_packages {
+    let indexed_at = jiff::Timestamp::now().into();
+    for (filename, mut package) in registered_packages {
+        // Assign only after extraction/cache lookup, using the history freshly
+        // read on this attempt. A concurrent publisher's timestamp therefore
+        // takes precedence over any work performed before a retry.
+        package.record.indexed_timestamp = indexed_timestamps
+            .get(&filename)
+            .copied()
+            .unwrap_or(Some(indexed_at));
+        if let Some(timestamp) = package.record.timestamp {
+            if timestamp > indexed_at {
+                tracing::warn!(%filename, %subdir, ?timestamp, "Package build timestamp is in the future");
+            }
+            if let Some(indexed_timestamp) = package.record.indexed_timestamp
+                && timestamp > indexed_timestamp
+            {
+                tracing::warn!(%filename, %subdir, ?timestamp, ?indexed_timestamp, "Package build timestamp is later than its indexed timestamp");
+            }
+        }
         let revision =
             package_revision_assignment.assign(package.repodata_revision, latest_revision);
         insert_package_record_by_revision(
@@ -958,8 +1007,6 @@ async fn index_subdir_inner(
             repodata_revisions: repodata_revisions_for_packages(
                 &repodata_revisions,
                 &existing_repodata_revisions,
-                &packages,
-                &conda_packages,
                 &v3,
             ),
             channel_relations: channel_metadata.channel_relations,
@@ -1000,7 +1047,7 @@ pub const ATTESTATION_SIDECAR_SUFFIX: &str = ".sigs";
 /// removed sidecar is no longer advertised.
 async fn apply_attestation_sidecars(
     op: &Operator,
-    subdir: Platform,
+    subdir: Subdir,
     sidecars: &HashSet<DistArchiveIdentifier>,
     registered_packages: &mut ahash::HashMap<DistArchiveIdentifier, IndexedPackageRecord>,
 ) -> Result<(), RepodataError> {
@@ -1403,18 +1450,19 @@ impl RevisionStats {
 fn repodata_revisions_for_packages(
     configured: &[RepodataRevisionSelection],
     existing: &RepodataRevisions,
-    legacy_packages: &IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
-    legacy_conda_packages: &IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
     v3: &V3Packages,
 ) -> RepodataRevisions {
     // `BTreeMap` keeps the result ordered ascending regardless of input order.
     // Existing package statistics are deliberately discarded: generated
     // statistics always describe the typed records written below.
+    //
+    // The legacy layout is never advertised. CEP 48 requires every
+    // `info.repodata_revisions` key to be `vN` with `N` >= 3, so there is no
+    // revision to describe the `packages` and `packages.conda` maps, and an
+    // existing `v0` entry is dropped rather than carried forward.
     let mut revisions = existing
         .iter()
-        .filter(|(revision, _)| {
-            revision.uses_legacy_package_layout() || **revision == RepodataRevision::V3
-        })
+        .filter(|(revision, _)| **revision == RepodataRevision::V3)
         .map(|(revision, metadata)| {
             (
                 *revision,
@@ -1434,15 +1482,6 @@ fn repodata_revisions_for_packages(
     }
 
     let mut stats = BTreeMap::<RepodataRevision, RevisionStats>::new();
-    for record in legacy_packages
-        .values()
-        .chain(legacy_conda_packages.values())
-    {
-        stats
-            .entry(RepodataRevision::Legacy)
-            .or_default()
-            .add(record);
-    }
     for (_, record) in v3.records() {
         stats.entry(RepodataRevision::V3).or_default().add(record);
     }
@@ -1471,7 +1510,7 @@ fn repodata_revisions_for_packages(
 pub async fn write_repodata(
     repodata: RepoData,
     repodata_patch: Option<PatchInstructions>,
-    subdir: Platform,
+    subdir: Subdir,
     op: Operator,
     metadata: &RepodataMetadataCollection,
 ) -> Result<(), RepodataError> {
@@ -1671,7 +1710,7 @@ pub struct IndexFsConfig {
     /// The channel to index.
     pub channel: PathBuf,
     /// The target platform to index.
-    pub target_platform: Option<Platform>,
+    pub target_platform: Option<Subdir>,
     /// The path to a repodata patch to apply to the index.
     pub repodata_patch: Option<String>,
     /// Whether to write the repodata as a zstd-compressed file.
@@ -1719,7 +1758,7 @@ pub async fn index_fs_with_channel_metadata(
     // Write through a temp dir on the same volume and rename over the target,
     // so a memory-mapped repodata.json isn't truncated in place (fails with
     // ERROR_USER_MAPPED_FILE on Windows). `.tmp` is skipped during subdir
-    // enumeration since it doesn't parse as a `Platform`.
+    // enumeration since it doesn't parse as a `Subdir`.
     config.atomic_write_dir = Some(root.join(".tmp").to_string_lossy().to_string());
     let builder = config.into_builder();
     let op = Operator::new(builder)?.finish();
@@ -1749,7 +1788,7 @@ pub struct IndexS3Config {
     /// The resolved credentials to use for S3 access.
     pub credentials: ResolvedS3Credentials,
     /// The target platform to index.
-    pub target_platform: Option<Platform>,
+    pub target_platform: Option<Subdir>,
     /// The path to a repodata patch to apply to the index.
     pub repodata_patch: Option<String>,
     /// Whether to write the repodata as a zstd-compressed file.
@@ -1860,7 +1899,7 @@ pub async fn index_s3_with_channel_metadata(
 /// including the number of packages added/removed and retry counts per subdir.
 #[allow(clippy::too_many_arguments)]
 pub async fn index(
-    target_platform: Option<Platform>,
+    target_platform: Option<Subdir>,
     op: Operator,
     repodata_patch: Option<String>,
     write_zst: bool,
@@ -1893,7 +1932,7 @@ pub async fn index(
 /// and write channel metadata into the generated repodata.
 #[allow(clippy::too_many_arguments)]
 pub async fn index_with_channel_metadata(
-    target_platform: Option<Platform>,
+    target_platform: Option<Subdir>,
     op: Operator,
     repodata_patch: Option<String>,
     write_zst: bool,
@@ -1935,19 +1974,16 @@ pub async fn index_with_channel_metadata(
                     None
                 }
             })
-            .filter_map(|s| Platform::from_str(&s).ok())
+            .filter_map(|s| Subdir::from_str(&s).ok())
             .collect::<HashSet<_>>()
     };
 
-    if !op
-        .exists(&format!("{}/", Platform::NoArch.as_str()))
-        .await?
-    {
+    if !op.exists(&format!("{}/", Subdir::NoArch.as_str())).await? {
         // If `noarch` subdir does not exist, we create it.
         tracing::debug!("Did not find noarch subdir, creating.");
-        op.create_dir(&format!("{}/", Platform::NoArch.as_str()))
+        op.create_dir(&format!("{}/", Subdir::NoArch.as_str()))
             .await?;
-        subdirs.insert(Platform::NoArch);
+        subdirs.insert(Subdir::NoArch);
     }
 
     let repodata_patch = if let Some(path) = repodata_patch {
@@ -1975,7 +2011,7 @@ pub async fn index_with_channel_metadata(
     let semaphore = Semaphore::new(max_parallel);
     let semaphore = Arc::new(semaphore);
 
-    let mut tasks: Vec<(Platform, _)> = Vec::new();
+    let mut tasks: Vec<(Subdir, _)> = Vec::new();
     for subdir in subdirs.iter() {
         // Create a separate cache for each subdir.
         // The cache persists across retry attempts for this specific subdir.
@@ -2073,7 +2109,7 @@ pub async fn ensure_channel_initialized_with_channel_metadata(
     op: &Operator,
     channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<()> {
-    let noarch_repodata_path = format!("{}/{REPODATA}", Platform::NoArch.as_str());
+    let noarch_repodata_path = format!("{}/{REPODATA}", Subdir::NoArch.as_str());
 
     if op.exists(&noarch_repodata_path).await? {
         tracing::debug!("Channel already initialized");
@@ -2082,14 +2118,14 @@ pub async fn ensure_channel_initialized_with_channel_metadata(
 
     tracing::info!("Initializing channel with empty noarch/repodata.json");
 
-    let noarch_path = format!("{}/", Platform::NoArch.as_str());
+    let noarch_path = format!("{}/", Subdir::NoArch.as_str());
     if !op.exists(&noarch_path).await? {
         op.create_dir(&noarch_path).await?;
     }
 
     let empty_repodata = RepoData {
         info: Some(ChannelInfo {
-            subdir: Some(Platform::NoArch.to_string()),
+            subdir: Some(Subdir::NoArch.to_string()),
             base_url: channel_metadata.base_url,
             repodata_revisions: RepodataRevisions::new(),
             channel_relations: channel_metadata.channel_relations,
@@ -2247,62 +2283,22 @@ mod tests {
     }
 
     #[test]
-    fn legacy_revision_metadata_includes_configured_message_and_package_stats() {
-        let mut legacy_packages = IndexMap::default();
-        let mut legacy_conda_packages = IndexMap::default();
-        let oldest: rattler_conda_types::utils::TimestampMs =
-            serde_json::from_str("1710000000000").unwrap();
-        let newest: rattler_conda_types::utils::TimestampMs =
-            serde_json::from_str("1720000000000").unwrap();
-
-        let mut tar_bz2_record = PackageRecord::new(
-            PackageName::new_unchecked("legacy-tar"),
-            Version::from_str("1.0").unwrap(),
-            "0".to_string(),
-        );
-        tar_bz2_record.timestamp = Some(oldest);
-        legacy_packages.insert(
-            DistArchiveIdentifier::try_from_filename("legacy-tar-1.0-0.tar.bz2").unwrap(),
-            tar_bz2_record,
-        );
-
-        let mut conda_record = PackageRecord::new(
-            PackageName::new_unchecked("legacy-conda"),
-            Version::from_str("1.0").unwrap(),
-            "0".to_string(),
-        );
-        conda_record.timestamp = Some(newest);
-        legacy_conda_packages.insert(
-            DistArchiveIdentifier::try_from_filename("legacy-conda-1.0-0.conda").unwrap(),
-            conda_record,
-        );
-
+    fn legacy_packages_are_not_advertised_as_a_revision() {
+        // CEP 48 has no revision key for the legacy package maps, so indexing a
+        // channel that only holds them must not write `info.repodata_revisions`,
+        // and an existing `v0` entry must not survive a re-index.
         let existing = RepodataRevisions::from([(
             RepodataRevision::Legacy,
             RepodataRevisionMetadata {
-                message: Some("stale message".to_string()),
+                message: Some("stale legacy message".to_string()),
                 n_packages: Some(99),
-                oldest: Some(newest),
-                newest: Some(newest),
+                ..RepodataRevisionMetadata::default()
             },
         )]);
-        let revisions = repodata_revisions_for_packages(
-            &[RepodataRevisionSelection {
-                revision: RepodataRevision::Legacy,
-                message: Some("legacy packages".to_string()),
-            }],
-            &existing,
-            &legacy_packages,
-            &legacy_conda_packages,
-            &V3Packages::default(),
-        );
 
-        assert_eq!(revisions.len(), 1);
-        let metadata = &revisions[&RepodataRevision::Legacy];
-        assert_eq!(metadata.message.as_deref(), Some("legacy packages"));
-        assert_eq!(metadata.n_packages, Some(2));
-        assert_eq!(metadata.oldest, Some(oldest));
-        assert_eq!(metadata.newest, Some(newest));
+        let revisions = repodata_revisions_for_packages(&[], &existing, &V3Packages::default());
+
+        assert!(revisions.is_empty());
     }
 
     #[test]
@@ -2392,10 +2388,7 @@ mod tests {
                 ..RepodataRevisionMetadata::default()
             },
         )]);
-        let empty = IndexMap::default();
-
-        let preserved =
-            repodata_revisions_for_packages(&[], &existing, &empty, &empty, &V3Packages::default());
+        let preserved = repodata_revisions_for_packages(&[], &existing, &V3Packages::default());
         assert_eq!(
             preserved[&RepodataRevision::V3].message.as_deref(),
             Some("existing message")
@@ -2408,8 +2401,6 @@ mod tests {
                 message: Some("caller message".to_string()),
             }],
             &existing,
-            &empty,
-            &empty,
             &V3Packages::default(),
         );
         assert_eq!(
