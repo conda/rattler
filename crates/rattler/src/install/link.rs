@@ -1523,7 +1523,7 @@ mod test {
             true,
             true,
             true,
-            Platform::Linux64,
+            Subdir::Linux64,
             AppleCodeSignBehavior::DoNothing,
             filetime::FileTime::now(),
             ExternalSymlinkPolicy::Deny,
