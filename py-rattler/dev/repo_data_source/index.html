@@ -2009,7 +2009,7 @@
   <span class="md-ellipsis">
     
   
-    platform
+    subdir
   
 
     
@@ -2025,7 +2025,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    platform
+    subdir
   
 
           </label>
@@ -2066,14 +2066,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../platform/" class="md-nav__link">
+      <a href="../subdir/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Platform
+    Subdir
   
 
     
@@ -3684,14 +3684,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../parse_platform_error/" class="md-nav__link">
+      <a href="../parse_subdir_error/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    ParsePlatformError
+    ParseSubdirError
   
 
     
@@ -3937,16 +3937,16 @@ your custom source, you must implement it yourself within your source implementa
 marshalled between Python and Rust for each request. For performance-critical
 applications with large amounts of repodata, consider using channels when possible.</p>
 <h4 id="rattler.repo_data.source.RepoDataSource--example">Example<a class="headerlink" href="#rattler.repo_data.source.RepoDataSource--example" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">Platform</span><span class="p">,</span> <span class="n">PackageName</span><span class="p">,</span> <span class="n">RepoDataRecord</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">Subdir</span><span class="p">,</span> <span class="n">PackageName</span><span class="p">,</span> <span class="n">RepoDataRecord</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">MyCustomSource</span><span class="p">:</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">fetch_package_records</span><span class="p">(</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        <span class="bp">self</span><span class="p">,</span> <span class="n">platform</span><span class="p">:</span> <span class="n">Platform</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="n">PackageName</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        <span class="bp">self</span><span class="p">,</span> <span class="n">platform</span><span class="p">:</span> <span class="n">Subdir</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="n">PackageName</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">RepoDataRecord</span><span class="p">]:</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="c1"># Fetch records from your custom source</span>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>        <span class="k">return</span> <span class="p">[</span><span class="o">...</span><span class="p">]</span>
 </span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">package_names</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">platform</span><span class="p">:</span> <span class="n">Platform</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">package_names</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">platform</span><span class="p">:</span> <span class="n">Subdir</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 </span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>        <span class="c1"># Return all available package names for the platform</span>
 </span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;numpy&quot;</span><span class="p">,</span> <span class="s2">&quot;pandas&quot;</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
 </span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>
@@ -4019,7 +4019,7 @@ subdirectory the gateway is querying for.</p>
                 <code>platform</code>
             </td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="Platform (rattler.platform.platform.Platform)" href="../platform/#rattler.platform.platform.Platform">Platform</a></code>
+                  <code><a class="autorefs autorefs-internal" title="Subdir (rattler.platform.subdir.Subdir)" href="../subdir/#rattler.platform.subdir.Subdir">Subdir</a></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4111,7 +4111,7 @@ in this source for a given platform/subdirectory.</p>
                 <code>platform</code>
             </td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="Platform (rattler.platform.platform.Platform)" href="../platform/#rattler.platform.platform.Platform">Platform</a></code>
+                  <code><a class="autorefs autorefs-internal" title="Subdir (rattler.platform.subdir.Subdir)" href="../subdir/#rattler.platform.subdir.Subdir">Subdir</a></code>
             </td>
             <td>
               <div class="doc-md-description">

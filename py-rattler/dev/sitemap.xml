@@ -209,7 +209,7 @@
          <lastmod>2026-09-28</lastmod>
     </url>
     <url>
-         <loc>https://conda.github.io/rattler/py-rattler/dev/parse_platform_error/</loc>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/parse_subdir_error/</loc>
          <lastmod>2026-09-28</lastmod>
     </url>
     <url>
@@ -230,10 +230,6 @@
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/paths_json/</loc>
-         <lastmod>2026-09-28</lastmod>
-    </url>
-    <url>
-         <loc>https://conda.github.io/rattler/py-rattler/dev/platform/</loc>
          <lastmod>2026-09-28</lastmod>
     </url>
     <url>
@@ -302,6 +298,10 @@
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/sparse_repo_data/</loc>
+         <lastmod>2026-09-28</lastmod>
+    </url>
+    <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/subdir/</loc>
          <lastmod>2026-09-28</lastmod>
     </url>
     <url>

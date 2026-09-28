@@ -2009,7 +2009,7 @@
   <span class="md-ellipsis">
     
   
-    platform
+    subdir
   
 
     
@@ -2025,7 +2025,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    platform
+    subdir
   
 
           </label>
@@ -2066,14 +2066,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../platform/" class="md-nav__link">
+      <a href="../subdir/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Platform
+    Subdir
   
 
     
@@ -3662,14 +3662,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../parse_platform_error/" class="md-nav__link">
+      <a href="../parse_subdir_error/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    ParsePlatformError
+    ParseSubdirError
   
 
     
@@ -3911,12 +3911,12 @@ and the script to run to activate the environment.</p>
                 <code>platform</code>
             </td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="Platform (rattler.platform.platform.Platform)" href="../platform/#rattler.platform.platform.Platform">Platform</a> | <a class="autorefs autorefs-internal" title="PlatformLiteral
+                  <code><a class="autorefs autorefs-internal" title="Subdir (rattler.platform.subdir.Subdir)" href="../subdir/#rattler.platform.subdir.Subdir">Subdir</a> | <a class="autorefs autorefs-internal" title="SubdirLiteral
 
 
   
       module-attribute
-   (rattler.platform.platform.PlatformLiteral)" href="../platform/#rattler.platform.platform.PlatformLiteral">PlatformLiteral</a> | None</code>
+   (rattler.platform.subdir.SubdirLiteral)" href="../subdir/#rattler.platform.subdir.SubdirLiteral">SubdirLiteral</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -3965,7 +3965,7 @@ and the script to run to activate the environment.</p>
     </table>
         <h3 id="rattler.shell.shell.activate--examples">Examples<a class="headerlink" href="#rattler.shell.shell.activate--examples" title="Permanent link">#</a></h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler.shell</span><span class="w"> </span><span class="kn">import</span> <span class="n">Shell</span><span class="p">,</span> <span class="n">activate</span><span class="p">,</span> <span class="n">ActivationVariables</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler.platform</span><span class="w"> </span><span class="kn">import</span> <span class="n">Platform</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler.platform</span><span class="w"> </span><span class="kn">import</span> <span class="n">Subdir</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">p</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;/path/to/conda/prefix&quot;</span><span class="p">)</span>

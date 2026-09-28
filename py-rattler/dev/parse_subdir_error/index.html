@@ -8,13 +8,13 @@
       
       
       
-        <link rel="canonical" href="https://conda.github.io/rattler/py-rattler/dev/platform/">
+        <link rel="canonical" href="https://conda.github.io/rattler/py-rattler/dev/parse_subdir_error/">
       
       
-        <link rel="prev" href="../arch/">
+        <link rel="prev" href="../parse_arch_error/">
       
       
-        <link rel="next" href="../prefix_paths/">
+        <link rel="next" href="../solver_error/">
       
       
         
@@ -25,7 +25,7 @@
     
     
       
-        <title>Platform - py-rattler</title>
+        <title>ParseSubdirError - py-rattler</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#platform" class="md-skip">
+        <a href="#parsesubdirerror" class="md-skip">
           Skip to content
         </a>
       
@@ -119,7 +119,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Platform
+              ParseSubdirError
             
           </span>
         </div>
@@ -1986,8 +1986,6 @@
                 
   
   
-    
-  
   
   
     
@@ -1997,11 +1995,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_11" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_11" >
         
           
           <label class="md-nav__link" for="__nav_2_11" id="__nav_2_11_label" tabindex="0">
@@ -2011,7 +2009,7 @@
   <span class="md-ellipsis">
     
   
-    platform
+    subdir
   
 
     
@@ -2022,12 +2020,12 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_11_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_11_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_2_11">
             <span class="md-nav__icon md-icon"></span>
             
   
-    platform
+    subdir
   
 
           </label>
@@ -2065,44 +2063,17 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Platform
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../subdir/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Platform
+    Subdir
   
 
     
@@ -2111,175 +2082,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#rattler.platform.platform" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        platform
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rattler.platform.platform.PlatformLiteral" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        PlatformLiteral
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Platform
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Platform">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.arch" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        arch
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.is_linux" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        is_linux
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.is_osx" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        is_osx
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.is_unix" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        is_unix
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.is_windows" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        is_windows
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.only_platform" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        only_platform
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.__repr__" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        __repr__
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.__str__" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        __str__
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.all" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        all
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.current" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        current
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -3339,6 +3141,8 @@
                 
   
   
+    
+  
   
   
     
@@ -3348,11 +3152,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_18" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_18" checked>
         
           
           <label class="md-nav__link" for="__nav_2_18" id="__nav_2_18_label" tabindex="0">
@@ -3373,7 +3177,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_18_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_18_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2_18">
             <span class="md-nav__icon md-icon"></span>
             
@@ -3780,17 +3584,44 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../parse_platform_error/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ParseSubdirError
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
   <span class="md-ellipsis">
     
   
-    ParsePlatformError
+    ParseSubdirError
   
 
     
@@ -3799,6 +3630,37 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#rattler.exceptions.ParseSubdirError" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ParseSubdirError
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -3902,151 +3764,13 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#rattler.platform.platform" class="md-nav__link">
+  <a href="#rattler.exceptions.ParseSubdirError" class="md-nav__link">
     <span class="md-ellipsis">
       
-        platform
+        ParseSubdirError
       
     </span>
   </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rattler.platform.platform.PlatformLiteral" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        PlatformLiteral
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Platform
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Platform">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.arch" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        arch
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.is_linux" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        is_linux
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.is_osx" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        is_osx
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.is_unix" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        is_unix
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.is_windows" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        is_windows
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.only_platform" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        only_platform
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.__repr__" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        __repr__
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.__str__" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        __str__
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.all" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        all
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rattler.platform.platform.Platform.current" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        current
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -4067,7 +3791,7 @@
 
 
   
-    <a href="https://github.com/conda/rattler/edit/main/py-rattler/docs/platform.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/conda/rattler/edit/main/py-rattler/docs/parse_subdir_error.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75z"/></svg>
     </a>
@@ -4075,105 +3799,22 @@
   
 
 
-<h1 id="platform">Platform<a class="headerlink" href="#platform" title="Permanent link">#</a></h1>
-
-
-<div class="doc doc-object doc-module">
-
-
-
-<a id="rattler.platform.platform"></a>
-    <div class="doc doc-contents first">
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h2 id="rattler.platform.platform.PlatformLiteral" class="doc doc-heading">
-            <span class="doc doc-object-name doc-attribute-name">PlatformLiteral</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
-  </span>
-
-<a href="#rattler.platform.platform.PlatformLiteral" class="headerlink" title="Permanent link">#</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">PlatformLiteral</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="s2">&quot;noarch&quot;</span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="s2">&quot;linux-32&quot;</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="s2">&quot;linux-64&quot;</span><span class="p">,</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="s2">&quot;linux-aarch64&quot;</span><span class="p">,</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="s2">&quot;linux-armv6l&quot;</span><span class="p">,</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="s2">&quot;linux-armv7l&quot;</span><span class="p">,</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="s2">&quot;linux-loongarch64&quot;</span><span class="p">,</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="s2">&quot;linux-ppc64le&quot;</span><span class="p">,</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="s2">&quot;linux-ppc64&quot;</span><span class="p">,</span>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="s2">&quot;linux-ppc&quot;</span><span class="p">,</span>
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="s2">&quot;linux-s390x&quot;</span><span class="p">,</span>
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="s2">&quot;linux-riscv32&quot;</span><span class="p">,</span>
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="s2">&quot;linux-riscv64&quot;</span><span class="p">,</span>
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="s2">&quot;freebsd-32&quot;</span><span class="p">,</span>
-</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="s2">&quot;freebsd-64&quot;</span><span class="p">,</span>
-</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    <span class="s2">&quot;freebsd-arm64&quot;</span><span class="p">,</span>
-</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>    <span class="s2">&quot;osx-64&quot;</span><span class="p">,</span>
-</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>    <span class="s2">&quot;osx-arm64&quot;</span><span class="p">,</span>
-</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    <span class="s2">&quot;ios-arm64&quot;</span><span class="p">,</span>
-</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>    <span class="s2">&quot;iossimulator-arm64&quot;</span><span class="p">,</span>
-</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>    <span class="s2">&quot;iossimulator-64&quot;</span><span class="p">,</span>
-</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>    <span class="s2">&quot;android-aarch64&quot;</span><span class="p">,</span>
-</span><span id="__span-0-24"><a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>    <span class="s2">&quot;android-armv7a&quot;</span><span class="p">,</span>
-</span><span id="__span-0-25"><a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>    <span class="s2">&quot;android-64&quot;</span><span class="p">,</span>
-</span><span id="__span-0-26"><a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>    <span class="s2">&quot;android-32&quot;</span><span class="p">,</span>
-</span><span id="__span-0-27"><a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>    <span class="s2">&quot;win-32&quot;</span><span class="p">,</span>
-</span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>    <span class="s2">&quot;win-64&quot;</span><span class="p">,</span>
-</span><span id="__span-0-29"><a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>    <span class="s2">&quot;win-arm64&quot;</span><span class="p">,</span>
-</span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>    <span class="s2">&quot;emscripten-wasm32&quot;</span><span class="p">,</span>
-</span><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>    <span class="s2">&quot;emscripten-wasm64&quot;</span><span class="p">,</span>
-</span><span id="__span-0-32"><a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>    <span class="s2">&quot;wasi-wasm32&quot;</span><span class="p">,</span>
-</span><span id="__span-0-33"><a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a>    <span class="s2">&quot;zos-z&quot;</span><span class="p">,</span>
-</span><span id="__span-0-34"><a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a><span class="p">]</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>The set of platform names that can be used to construct a
-<a class="autorefs autorefs-internal" title="Platform" href="#rattler.platform.platform.Platform"><code>Platform</code></a>.</p>
-
-    </div>
-
-</div>
-
+<h1 id="parsesubdirerror">ParseSubdirError<a class="headerlink" href="#parsesubdirerror" title="Permanent link">#</a></h1>
 
 
 <div class="doc doc-object doc-class">
 
 
 
-<h2 id="rattler.platform.platform.Platform" class="doc doc-heading">
-            <span class="doc doc-object-name doc-class-name">Platform</span>
+<a id="rattler.exceptions.ParseSubdirError"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="Exception">Exception</span></code></p>
 
 
-<a href="#rattler.platform.platform.Platform" class="headerlink" title="Permanent link">#</a></h2>
 
+        <p>An error that can occur when parsing a platform from a string.</p>
 
-    <div class="doc doc-contents ">
 
 
 
@@ -4181,331 +3822,6 @@
 
 
 
-
-
-
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h3 id="rattler.platform.platform.Platform.arch" class="doc doc-heading">
-            <span class="doc doc-object-name doc-attribute-name">arch</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-property"><code>property</code></small>
-  </span>
-
-<a href="#rattler.platform.platform.Platform.arch" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">arch</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Return the architecture of the platform.</p>
-<h5 id="rattler.platform.platform.Platform.arch--examples">Examples<a class="headerlink" href="#rattler.platform.platform.Platform.arch--examples" title="Permanent link">#</a></h5>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;linux-64&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">arch</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">Arch</span><span class="p">(</span><span class="n">x86_64</span><span class="p">)</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;linux-aarch64&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">arch</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">Arch</span><span class="p">(</span><span class="n">aarch64</span><span class="p">)</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span>
-</span></code></pre></div>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h3 id="rattler.platform.platform.Platform.is_linux" class="doc doc-heading">
-            <span class="doc doc-object-name doc-attribute-name">is_linux</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-property"><code>property</code></small>
-  </span>
-
-<a href="#rattler.platform.platform.Platform.is_linux" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">is_linux</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Return True if the platform is linux.</p>
-<h5 id="rattler.platform.platform.Platform.is_linux--examples">Examples<a class="headerlink" href="#rattler.platform.platform.Platform.is_linux--examples" title="Permanent link">#</a></h5>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;linux-64&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">is_linux</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kc">True</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;osx-64&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">is_linux</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="kc">False</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span>
-</span></code></pre></div>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h3 id="rattler.platform.platform.Platform.is_osx" class="doc doc-heading">
-            <span class="doc doc-object-name doc-attribute-name">is_osx</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-property"><code>property</code></small>
-  </span>
-
-<a href="#rattler.platform.platform.Platform.is_osx" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">is_osx</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Return True if the platform is osx.</p>
-<h5 id="rattler.platform.platform.Platform.is_osx--examples">Examples<a class="headerlink" href="#rattler.platform.platform.Platform.is_osx--examples" title="Permanent link">#</a></h5>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;osx-64&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">is_osx</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kc">True</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;linux-64&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">is_osx</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="kc">False</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span>
-</span></code></pre></div>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h3 id="rattler.platform.platform.Platform.is_unix" class="doc doc-heading">
-            <span class="doc doc-object-name doc-attribute-name">is_unix</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-property"><code>property</code></small>
-  </span>
-
-<a href="#rattler.platform.platform.Platform.is_unix" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">is_unix</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Return True if the platform is unix.</p>
-<h5 id="rattler.platform.platform.Platform.is_unix--examples">Examples<a class="headerlink" href="#rattler.platform.platform.Platform.is_unix--examples" title="Permanent link">#</a></h5>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;linux-64&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">is_unix</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kc">True</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;win-64&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">is_unix</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="kc">False</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span>
-</span></code></pre></div>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h3 id="rattler.platform.platform.Platform.is_windows" class="doc doc-heading">
-            <span class="doc doc-object-name doc-attribute-name">is_windows</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-property"><code>property</code></small>
-  </span>
-
-<a href="#rattler.platform.platform.Platform.is_windows" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">is_windows</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Return True if the platform is win.</p>
-<h5 id="rattler.platform.platform.Platform.is_windows--examples">Examples<a class="headerlink" href="#rattler.platform.platform.Platform.is_windows--examples" title="Permanent link">#</a></h5>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;win-64&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">is_windows</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kc">True</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;linux-64&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">is_windows</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="kc">False</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span>
-</span></code></pre></div>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h3 id="rattler.platform.platform.Platform.only_platform" class="doc doc-heading">
-            <span class="doc doc-object-name doc-attribute-name">only_platform</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-property"><code>property</code></small>
-  </span>
-
-<a href="#rattler.platform.platform.Platform.only_platform" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">only_platform</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Return the platform without the architecture.</p>
-<h5 id="rattler.platform.platform.Platform.only_platform--examples">Examples<a class="headerlink" href="#rattler.platform.platform.Platform.only_platform--examples" title="Permanent link">#</a></h5>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;linux-64&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">only_platform</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="s1">&#39;linux&#39;</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span>
-</span></code></pre></div>
-
-    </div>
-
-</div>
-
-
-
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="rattler.platform.platform.Platform.__repr__" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">__repr__</span>
-
-
-<a href="#rattler.platform.platform.Platform.__repr__" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">__repr__</span><span class="p">()</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Returns a representation of the platform.</p>
-<h5 id="rattler.platform.platform.Platform.__repr__--examples">Examples<a class="headerlink" href="#rattler.platform.platform.Platform.__repr__--examples" title="Permanent link">#</a></h5>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;linux-64&quot;</span><span class="p">)</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">Platform</span><span class="p">(</span><span class="n">linux</span><span class="o">-</span><span class="mi">64</span><span class="p">)</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span>
-</span></code></pre></div>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="rattler.platform.platform.Platform.__str__" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">__str__</span>
-
-
-<a href="#rattler.platform.platform.Platform.__str__" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">__str__</span><span class="p">()</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Returns a string representation of the platform.</p>
-<h5 id="rattler.platform.platform.Platform.__str__--examples">Examples<a class="headerlink" href="#rattler.platform.platform.Platform.__str__--examples" title="Permanent link">#</a></h5>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="nb">str</span><span class="p">(</span><span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;linux-64&quot;</span><span class="p">))</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="s1">&#39;linux-64&#39;</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span>
-</span></code></pre></div>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="rattler.platform.platform.Platform.all" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">all</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
-  </span>
-
-<a href="#rattler.platform.platform.Platform.all" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">all</span><span class="p">()</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Returns all supported platforms.</p>
-<h5 id="rattler.platform.platform.Platform.all--examples">Examples<a class="headerlink" href="#rattler.platform.platform.Platform.all--examples" title="Permanent link">#</a></h5>
-<p>```python</p>
-<blockquote>
-<blockquote>
-<blockquote>
-<p>next(Platform.all())
-Platform(noarch)
-len(list(Platform.all()))
-32
-</p>
-</blockquote>
-</blockquote>
-</blockquote>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="rattler.platform.platform.Platform.current" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">current</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
-  </span>
-
-<a href="#rattler.platform.platform.Platform.current" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">current</span><span class="p">()</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Returns the platform of the current host.</p>
-<p>Raises <code>RuntimeError</code> when the host is not a known conda platform.</p>
-
-
-    </div>
-
-</div>
-
-
-
-  </div>
-
-    </div>
-
-</div>
-
-
-
-
-  </div>
 
     </div>
 
@@ -4578,9 +3894,9 @@ len(list(Platform.all()))
           
             
             <a
-              href="../arch/"
+              href="../parse_arch_error/"
               class="md-footer__link md-footer__link--prev"
-              aria-label="Previous: Arch"
+              aria-label="Previous: ParseArchError"
             >
               <div class="md-footer__button md-icon">
                 
@@ -4591,7 +3907,7 @@ len(list(Platform.all()))
                   Previous
                 </span>
                 <div class="md-ellipsis">
-                  Arch
+                  ParseArchError
                 </div>
               </div>
             </a>
@@ -4601,16 +3917,16 @@ len(list(Platform.all()))
           
             
             <a
-              href="../prefix_paths/"
+              href="../solver_error/"
               class="md-footer__link md-footer__link--next"
-              aria-label="Next: PrefixPaths"
+              aria-label="Next: SolverError"
             >
               <div class="md-footer__title">
                 <span class="md-footer__direction">
                   Next
                 </span>
                 <div class="md-ellipsis">
-                  PrefixPaths
+                  SolverError
                 </div>
               </div>
               <div class="md-footer__button md-icon">
