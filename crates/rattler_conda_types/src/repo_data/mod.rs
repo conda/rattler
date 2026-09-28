@@ -26,8 +26,9 @@ use url::Url;
 
 use crate::{
     Arch, Channel, Flag, MatchSpec, Matches, NoArchType, PackageName, PackageUrl,
-    ParseMatchSpecError, ParseStrictness, RepoDataRecord, Subdir, VersionWithSource,
+    ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord, Subdir, VersionWithSource,
     build_spec::BuildNumber,
+    match_spec::condition::MatchSpecCondition,
     package::{
         ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, IndexJson, RunExportsJson,
         WheelArchiveType,
@@ -978,9 +979,20 @@ impl PackageRecord {
     /// valid environment, i.e., all dependencies of each package are
     /// satisfied by the other packages in the list. If there is a
     /// dependency that is not satisfied, this function will return an error.
+    ///
+    /// A dependency that requests an extra is only satisfied by a record that
+    /// declares that extra. The dependencies *of* the extra are not checked
+    /// though: a package record does not store which of its extras are enabled
+    /// in the environment.
     pub fn validate<T: AsRef<PackageRecord>>(
         records: Vec<T>,
     ) -> Result<(), Box<ValidatePackageRecordsError>> {
+        // Records can come from v3 repodata, so extras, conditionals and flags
+        // have to be accepted while parsing. Otherwise a perfectly valid
+        // environment fails to validate with a parse error.
+        let parse_options =
+            ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3);
+
         for package in records.iter() {
             let package = package.as_ref();
             // First we check if all dependencies are in the environment.
@@ -989,8 +1001,15 @@ impl PackageRecord {
                 if dep.starts_with("__") {
                     continue;
                 }
-                let dep_spec = MatchSpec::from_str(dep, ParseStrictness::Lenient)
+                let dep_spec = MatchSpec::from_str(dep, parse_options)
                     .map_err(ValidatePackageRecordsError::ParseMatchSpec)?;
+                // A conditional dependency is only required if its condition
+                // holds for this environment.
+                if let Some(condition) = dep_spec.condition.as_ref()
+                    && !condition_is_met(condition, &records)
+                {
+                    continue;
+                }
                 if !records.iter().any(|p| dep_spec.matches(p.as_ref())) {
                     return Err(Box::new(
                         ValidatePackageRecordsError::DependencyNotInEnvironment {
@@ -1003,8 +1022,13 @@ impl PackageRecord {
 
             // Then we check if all constraints are satisfied.
             for constraint in package.constrains.iter() {
-                let constraint_spec = MatchSpec::from_str(constraint, ParseStrictness::Lenient)
+                let constraint_spec = MatchSpec::from_str(constraint, parse_options)
                     .map_err(ValidatePackageRecordsError::ParseMatchSpec)?;
+                if let Some(condition) = constraint_spec.condition.as_ref()
+                    && !condition_is_met(condition, &records)
+                {
+                    continue;
+                }
                 let matching_package = records
                     .iter()
                     .find(|record| constraint_spec.name.matches(&record.as_ref().name));
@@ -1020,6 +1044,27 @@ impl PackageRecord {
             }
         }
         Ok(())
+    }
+}
+
+/// Returns whether `condition` holds for the environment formed by `records`.
+///
+/// A condition is met if the environment contains a record matching it, which
+/// mirrors how the solver decides whether a conditional dependency applies.
+fn condition_is_met<T: AsRef<PackageRecord>>(
+    condition: &MatchSpecCondition,
+    records: &[T],
+) -> bool {
+    match condition {
+        MatchSpecCondition::MatchSpec(spec) => {
+            records.iter().any(|record| spec.matches(record.as_ref()))
+        }
+        MatchSpecCondition::And(left, right) => {
+            condition_is_met(left, records) && condition_is_met(right, records)
+        }
+        MatchSpecCondition::Or(left, right) => {
+            condition_is_met(left, records) || condition_is_met(right, records)
+        }
     }
 }
 
@@ -1869,6 +1914,75 @@ mod test {
         assert!(result.err().unwrap().to_string().contains(
             "package 'foo=3.0.2=py36h1af98f8_3' has constraint 'bors <2.0', which is not satisfied by 'bors=2.1=bla_1' in the environment"
         ));
+    }
+
+    /// Records from v3 repodata can carry extras and conditionals in their
+    /// `depends`, which must be understood instead of failing to parse.
+    #[test]
+    fn test_validate_v3_dependencies() {
+        use crate::{PackageName, Version};
+        use std::collections::BTreeMap;
+        use std::str::FromStr;
+
+        fn record(name: &str, version: &str) -> PackageRecord {
+            PackageRecord::new(
+                PackageName::new_unchecked(name),
+                Version::from_str(version).unwrap(),
+                String::from("bla_0"),
+            )
+        }
+
+        let mut foo = record("foo", "1.0");
+        foo.depends = vec![String::from("bar[extras=[json]]")];
+
+        let mut bar_with_extra = record("bar", "1.0");
+        bar_with_extra.extra_depends =
+            BTreeMap::from_iter([(String::from("json"), vec![String::from("simdjson")])]);
+        let simdjson = record("simdjson", "3.0");
+
+        // `bar` declares the extra, so the dependency on it is satisfied.
+        assert!(PackageRecord::validate(vec![&foo, &bar_with_extra, &simdjson]).is_ok());
+
+        // The deps of the extra itself are not validated because a record does
+        // not store which of its extras are enabled, so a missing `simdjson`
+        // goes unnoticed.
+        assert!(PackageRecord::validate(vec![&foo, &bar_with_extra]).is_ok());
+
+        // A `bar` that does not declare the extra does not satisfy the
+        // dependency, even though its name and version match.
+        let bar_without_extra = record("bar", "1.0");
+        let result = PackageRecord::validate(vec![&foo, &bar_without_extra]);
+        assert!(result.is_err());
+        assert!(
+            result
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("has dependency 'bar[extras=[json]]', which is not in the environment")
+        );
+
+        // A conditional dependency is only required when its condition holds
+        // for the environment.
+        let mut conditional = record("conditional", "1.0");
+        conditional.depends = vec![String::from("numpy[when=\"python >=3.9\"]")];
+        assert!(PackageRecord::validate(vec![&conditional]).is_ok());
+
+        let old_python = record("python", "3.8");
+        assert!(PackageRecord::validate(vec![&conditional, &old_python]).is_ok());
+
+        let python = record("python", "3.12");
+        let result = PackageRecord::validate(vec![&conditional, &python]);
+        assert!(result.is_err());
+        assert!(
+            result
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("which is not in the environment")
+        );
+
+        let numpy = record("numpy", "2.0");
+        assert!(PackageRecord::validate(vec![&conditional, &python, &numpy]).is_ok());
     }
 
     #[test]

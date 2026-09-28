@@ -1006,7 +1006,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                         match record {
                             SolverPackageRecord::Record(rec) => {
                                 // Base package matches if spec matches and no features are required
-                                (spec.matches(*rec) && record_provides_extras(spec, rec)) != inverse
+                                spec.matches(*rec) != inverse
                             }
                             SolverPackageRecord::VirtualPackage(GenericVirtualPackage {
                                 version,
@@ -1243,20 +1243,6 @@ fn version_sets_for_match_spec(
     version_set_ids.push(version_set_id);
 
     version_set_ids
-}
-
-/// Returns whether `record` declares every extra that `spec` asks for.
-///
-/// `extra_depends` is the authoritative list of extras a record provides, so a
-/// record that does not declare a requested extra cannot satisfy the spec.
-/// Without this check the solver is free to select a version that does not know
-/// the extra at all, which silently drops the extra's dependencies (e.g. when
-/// the extra of the newest version conflicts with the rest of the solution).
-fn record_provides_extras(spec: &NamelessMatchSpec, record: &RepoDataRecord) -> bool {
-    spec.extras
-        .iter()
-        .flatten()
-        .all(|extra| record.package_record.extra_depends.contains_key(extra))
 }
 
 /// Adds a particular "extra" to the set of solvables
