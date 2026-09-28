@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ErrorKind","Manager","ValueKind"],"struct":["Channel","Document","Error","GitMetadata","Hashes","Label","Labels","LockFile","Metadata","NodePath","Package","PackageIdentity","PackageSource","Report","TimeMetadata"]};

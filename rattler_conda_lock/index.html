@@ -1,0 +1,76 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Read and write CEP-37 `conda-lock.yml` files."><title>rattler_conda_lock - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-b7b9f40b.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="rattler_conda_lock" data-themes="" data-resource-suffix="" data-rustdoc-version="1.95.0 (59807616e 2026-04-14)" data-channel="1.95.0" data-search-js="search-63369b7b.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-170eb4bf.js" ><script src="../static.files/storage-41dd4d93.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-5013f961.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"><meta name="robots" content="noindex">
+
+</head><body class="rustdoc mod crate"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate rattler_conda_lock</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../rattler_conda_lock/index.html">rattler_<wbr>conda_<wbr>lock</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#compatibility" title="Compatibility">Compatibility</a></li><li><a href="#comments-and-formatting" title="Comments and formatting">Comments and formatting</a></li><li><a href="#errors" title="Errors">Errors</a></li></ul><h3><a href="#structs">Crate Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1>Crate <span>rattler_<wbr>conda_<wbr>lock</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/rattler_conda_lock/lib.rs.html#1-98">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Read and write <a href="https://github.com/conda/ceps/blob/main/cep-0037.md">CEP-37</a>
+<code>conda-lock.yml</code> files.</p>
+<p><a href="struct.LockFile.html" title="struct rattler_conda_lock::LockFile"><code>LockFile</code></a> is the editable format model. <a href="struct.Document.html" title="struct rattler_conda_lock::Document"><code>Document</code></a> additionally retains
+the original YAML and source locations for validation and conversion errors.
+Reading accepts documented historical conda-lock representations; writing
+emits deterministic version-1 YAML without preserving comments or formatting.</p>
+<p>This crate does not solve environments, download artifacts, expand environment
+variables, or read source files listed in lockfile metadata. Pixi conversions
+are provided by <code>rattler_lock::conda_lock</code>.</p>
+<p>Enable the <code>miette</code> feature to render <a href="struct.Error.html" title="struct rattler_conda_lock::Error"><code>Error</code></a> labels as source snippets.</p>
+<h2 id="compatibility"><a class="doc-anchor" href="#compatibility">§</a>Compatibility</h2>
+<p>Besides the CEP-37 schema, reading accepts the spellings conda-lock itself
+writes: an omitted <code>version</code>, channels as plain strings, explicit <code>null</code> for
+absent optional fields, <code>*</code> and bare version literals as Python constraints,
+and a revision instead of an artifact digest for packages with a <code>source</code>.
+Unlike conda-lock, SHA256-only conda packages are accepted, as CEP-37 allows.</p>
+<h2 id="comments-and-formatting"><a class="doc-anchor" href="#comments-and-formatting">§</a>Comments and formatting</h2>
+<p>Writing is canonical: packages and target platforms are sorted, maps use
+lexical key order, and comments are not preserved.</p>
+<h2 id="errors"><a class="doc-anchor" href="#errors">§</a>Errors</h2>
+<p>Every failure is an <a href="enum.ErrorKind.html" title="enum rattler_conda_lock::ErrorKind"><code>ErrorKind</code></a> plus the locations it applies to: the model
+path always, and the byte span in the original YAML whenever the diagnostic
+comes from a <a href="struct.Document.html" title="struct rattler_conda_lock::Document"><code>Document</code></a>. Match on the kind; the rendered message is
+documentation, not API.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>rattler_conda_lock::{Document, ErrorKind};
+
+<span class="kw">let </span>source = <span class="string">"\
+metadata:
+  content_hash:
+    linux-64: not-a-digest
+  channels: []
+  platforms: [linux-64]
+  sources: []
+package: []
+"</span>;
+<span class="kw">let </span>error = Document::parse(source).unwrap_err();
+
+<span class="macro">assert!</span>(<span class="macro">matches!</span>(error.kind(), ErrorKind::InvalidDigest { length: <span class="number">64 </span>}));
+<span class="macro">assert_eq!</span>(error.path().as_str(), <span class="string">"metadata.content_hash.linux-64"</span>);
+
+<span class="comment">// The span points into the text that was read, so a caller can render the
+// offending line itself, or let miette do it.
+</span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>source[error.span().unwrap()], <span class="string">"not-a-digest"</span>);
+<span class="macro">assert_eq!</span>(
+    error.to_string(),
+    <span class="string">"metadata.content_hash.linux-64: expected exactly 64 hexadecimal digits"
+</span>);</code></pre></div>
+<p>Diagnostics about two places carry both, which is what makes duplicate
+entries reviewable instead of merely rejected:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>rattler_conda_lock::{Document, ErrorKind};
+
+<span class="kw">let </span>source = <span class="string">"\
+metadata:
+  content_hash:
+    linux-64: 8b7df143d91c716ecfa5fc1730022f6b421b05cedee8fd52b1fc65a96030ad52
+  channels: []
+  platforms: [linux-64, linux-64]
+  sources: []
+package: []
+"</span>;
+<span class="kw">let </span>error = Document::parse(source).unwrap_err();
+
+<span class="macro">assert!</span>(<span class="macro">matches!</span>(error.kind(), ErrorKind::DuplicatePlatform));
+<span class="kw">let </span>[duplicate, first] = error.labels() <span class="kw">else </span>{ <span class="macro">panic!</span>(<span class="string">"expected two labels"</span>) };
+<span class="macro">assert_eq!</span>(first.message(), <span class="prelude-val">Some</span>(<span class="string">"first declared here"</span>));
+<span class="macro">assert!</span>(duplicate.span().unwrap().start &gt; first.span().unwrap().start);</code></pre></div></div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Channel.html" title="struct rattler_conda_lock::Channel">Channel</a></dt><dd>A channel URL or conventional channel name, without environment expansion.</dd><dt><a class="struct" href="struct.Document.html" title="struct rattler_conda_lock::Document">Document</a></dt><dd>An immutable lock file together with its original YAML source locations.</dd><dt><a class="struct" href="struct.Error.html" title="struct rattler_conda_lock::Error">Error</a></dt><dd>A validation or parse failure: an <a href="enum.ErrorKind.html" title="enum rattler_conda_lock::ErrorKind"><code>ErrorKind</code></a> plus the locations it
+applies to.</dd><dt><a class="struct" href="struct.GitMetadata.html" title="struct rattler_conda_lock::GitMetadata">GitMetadata</a></dt><dd>Optional git repository and author provenance.</dd><dt><a class="struct" href="struct.Hashes.html" title="struct rattler_conda_lock::Hashes">Hashes</a></dt><dd>Optional hexadecimal checksums. Empty and SHA256-only hashes are valid.</dd><dt><a class="struct" href="struct.Label.html" title="struct rattler_conda_lock::Label">Label</a></dt><dd>A primary or related location in a diagnostic.</dd><dt><a class="struct" href="struct.Labels.html" title="struct rattler_conda_lock::Labels">Labels</a></dt><dd>The locations a diagnostic applies to: a primary model path, any related
+paths, and the source text they resolve against once a document has been
+consulted.</dd><dt><a class="struct" href="struct.LockFile.html" title="struct rattler_conda_lock::LockFile">Lock<wbr>File</a></dt><dd>A CEP-37 v1 lockfile. The schema version is implicit.</dd><dt><a class="struct" href="struct.Metadata.html" title="struct rattler_conda_lock::Metadata">Metadata</a></dt><dd>Lockfile provenance. Optional empty maps remain distinct from absent maps.</dd><dt><a class="struct" href="struct.NodePath.html" title="struct rattler_conda_lock::NodePath">Node<wbr>Path</a></dt><dd>A path to a node in the lock-file model, such as <code>package[3].hash.sha256</code>.</dd><dt><a class="struct" href="struct.Package.html" title="struct rattler_conda_lock::Package">Package</a></dt><dd>One artifact selected for a target platform and install category.</dd><dt><a class="struct" href="struct.PackageIdentity.html" title="struct rattler_conda_lock::PackageIdentity">Package<wbr>Identity</a></dt><dd>The install identity of a <a href="struct.Package.html" title="struct rattler_conda_lock::Package"><code>Package</code></a>, as returned by <a href="struct.Package.html#method.identity" title="method rattler_conda_lock::Package::identity"><code>Package::identity</code></a>.</dd><dt><a class="struct" href="struct.PackageSource.html" title="struct rattler_conda_lock::PackageSource">Package<wbr>Source</a></dt><dd>URL provenance; its serialized <code>type</code> is always <code>url</code>.</dd><dt><a class="struct" href="struct.Report.html" title="struct rattler_conda_lock::Report">Report</a></dt><dd>A message plus <a href="struct.Labels.html" title="struct rattler_conda_lock::Labels"><code>Labels</code></a>, for callers whose own error kind does not
+implement <code>miette::Diagnostic</code> — for example <code>rattler_lock</code>, which has no
+<code>miette</code> dependency of its own and asks <a href="struct.Labels.html#method.report" title="method rattler_conda_lock::Labels::report"><code>Labels::report</code></a> or
+<a href="struct.Error.html#method.report" title="method rattler_conda_lock::Error::report"><code>Error::report</code></a> for one instead.</dd><dt><a class="struct" href="struct.TimeMetadata.html" title="struct rattler_conda_lock::TimeMetadata">Time<wbr>Metadata</a></dt><dd>UTC creation time with whole-second precision.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.ErrorKind.html" title="enum rattler_conda_lock::ErrorKind">Error<wbr>Kind</a></dt><dd>What went wrong, independent of where it went wrong.</dd><dt><a class="enum" href="enum.Manager.html" title="enum rattler_conda_lock::Manager">Manager</a></dt><dd>The installer responsible for an artifact.</dd><dt><a class="enum" href="enum.ValueKind.html" title="enum rattler_conda_lock::ValueKind">Value<wbr>Kind</a></dt><dd>The YAML shape a node was required to have.</dd></dl></section></div></main></body></html>

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ChecksumAlgorithm","CondaLockErrorKind"],"struct":["CondaLockError","ExportOptions","ImportOptions"]};
