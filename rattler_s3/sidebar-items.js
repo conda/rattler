@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["FromSDKError","S3AddressingStyle"],"mod":["clap"],"struct":["ResolvedS3Credentials","S3Credentials"]};
+window.SIDEBAR_ITEMS = {"enum":["FromSDKError","ResolveError","S3AddressingStyle"],"mod":["clap"],"struct":["ResolvedS3Credentials","S3CredentialSource","S3Credentials"]};
