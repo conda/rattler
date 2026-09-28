@@ -91,6 +91,7 @@ The examples below are the same ones `rattler <command> --help` prints.
 | `rattler search` | Search for packages in conda channels using glob or regex patterns |
 | `rattler solve` | Solve a conda environment without installing it |
 | `rattler whoneeds` | Show packages that depend on the given package (reverse dependencies) |
+| `rattler whoprovides` | Show the artifacts of a channel that contain the given file path |
 | `rattler shell-hook` | Print the shell activation hook for a conda prefix to stdout |
 | `rattler virtual-packages` | Print detected virtual packages |
 | `rattler verify-attestation` | Verify Sigstore attestations for a conda package |
@@ -191,6 +192,16 @@ rattler whoneeds __cuda                     # packages that depend on a virtual 
 rattler whoneeds ./python-3.13.1-h123_0.conda   # packages that can use this exact package
 rattler whoneeds https://conda.anaconda.org/conda-forge/noarch/polars-1.44.1-pyh8da0edf_0.conda
 rattler whoneeds numpy --format urls        # print only the urls of the dependent packages
+```
+
+### `rattler whoprovides`
+
+```bash
+rattler whoprovides bin/python                  # artifacts that contain bin/python
+rattler whoprovides lib/libssl.so.3 -p linux-64 # only for one platform
+rattler whoprovides 'site-packages/polars/**'   # every path below a directory
+rattler whoprovides '**/libz.so.1' --names      # the packages, wherever the file is
+rattler whoprovides bin/python --index ./my-index   # an index that is not advertised
 ```
 
 ### `rattler shell-hook`

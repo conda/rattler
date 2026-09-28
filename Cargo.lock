@@ -5134,6 +5134,7 @@ dependencies = [
  "rattler_conda_types",
  "rattler_config",
  "rattler_index",
+ "rattler_lookup",
  "rattler_menuinst",
  "rattler_networking",
  "rattler_package_streaming",
