@@ -31,13 +31,11 @@ use indexmap::IndexMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 #[cfg(feature = "s3")]
 use opendal::layers::RetryLayer;
-#[cfg(feature = "s3")]
-use opendal::services::S3Config;
 use opendal::{Configurator, Operator, services::FsConfig};
 use rattler_conda_types::{
     ChannelInfo, ChannelNotice, ChannelNotices, ChannelRelations, MatchSpec, PackageRecord,
-    ParseMatchSpecOptions, PatchInstructions, Platform, RepoData, Shard, ShardedRepodata,
-    ShardedSubdirInfo, UrlOrPath, V3Extensions, V3Packages, WhlPackageRecord,
+    ParseMatchSpecOptions, PatchInstructions, RepoData, Shard, ShardedRepodata, ShardedSubdirInfo,
+    Subdir, UrlOrPath, V3Extensions, V3Packages, WhlPackageRecord,
     package::{
         CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
         RunExportsJson, ValidatedMatchSpecs, WheelArchiveType,
@@ -55,7 +53,7 @@ use rattler_package_streaming::{
     seek::{self, stream_conda_content},
 };
 #[cfg(feature = "s3")]
-use rattler_s3::ResolvedS3Credentials;
+use rattler_s3::S3CredentialSource;
 use retry_policies::{Jitter, RetryDecision, RetryPolicy, policies::ExponentialBackoff};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -170,14 +168,14 @@ pub struct SubdirIndexStats {
 #[derive(Debug, Clone, Default)]
 pub struct IndexStats {
     /// Statistics per subdir
-    pub subdirs: HashMap<Platform, SubdirIndexStats>,
+    pub subdirs: HashMap<Subdir, SubdirIndexStats>,
     /// Whether indexing was cancelled before all subdirs were processed.
     pub cancelled: bool,
 }
 
 impl IndexStats {
     /// All packages that could not be indexed, with their subdir.
-    pub fn failed_packages(&self) -> impl Iterator<Item = (Platform, &FailedPackage)> {
+    pub fn failed_packages(&self) -> impl Iterator<Item = (Subdir, &FailedPackage)> {
         self.subdirs.iter().flat_map(|(subdir, stats)| {
             stats
                 .failed_packages
@@ -358,7 +356,7 @@ fn repodata_patch_from_conda_package_stream<'a>(
                     .as_os_str()
                     .to_str()
                     .context("Could not convert OsStr to str")?;
-                let _ = Platform::from_str(subdir_str)?;
+                let _ = Subdir::from_str(subdir_str)?;
                 subdir_str.to_string()
             } else {
                 return Err(anyhow::anyhow!(
@@ -557,7 +555,7 @@ impl ByteBudget {
 async fn read_and_parse_package(
     op: &Operator,
     cache: &cache::PackageRecordCache,
-    subdir: Platform,
+    subdir: Subdir,
     filename: &str,
     byte_budget: Option<&ByteBudget>,
 ) -> std::io::Result<IndexedPackageRecord> {
@@ -718,7 +716,7 @@ impl RepodataMetadataCollection {
     /// Collect metadata for all critical repodata files in a subdir.
     pub async fn new(
         op: &Operator,
-        subdir: Platform,
+        subdir: Subdir,
         has_patch: bool,
         write_zst: bool,
         write_shards: bool,
@@ -781,7 +779,7 @@ impl RepodataMetadataCollection {
 /// Everything needed to index one subdir.
 #[derive(Clone)]
 struct SubdirIndexParams {
-    subdir: Platform,
+    subdir: Subdir,
     op: Operator,
     force: bool,
     write_zst: bool,
@@ -1243,7 +1241,7 @@ pub const ATTESTATION_SIDECAR_SUFFIX: &str = ".sigs";
 /// removed sidecar is no longer advertised.
 async fn apply_attestation_sidecars(
     op: &Operator,
-    subdir: Platform,
+    subdir: Subdir,
     sidecars: &HashSet<DistArchiveIdentifier>,
     registered_packages: &mut ahash::HashMap<DistArchiveIdentifier, IndexedPackageRecord>,
 ) -> Result<(), RepodataError> {
@@ -1706,7 +1704,7 @@ fn repodata_revisions_for_packages(
 pub async fn write_repodata(
     repodata: RepoData,
     repodata_patch: Option<PatchInstructions>,
-    subdir: Platform,
+    subdir: Subdir,
     op: Operator,
     metadata: &RepodataMetadataCollection,
 ) -> Result<(), RepodataError> {
@@ -1937,7 +1935,7 @@ pub struct IndexFsConfig {
     /// The channel to index.
     pub channel: PathBuf,
     /// The target platform to index.
-    pub target_platform: Option<Platform>,
+    pub target_platform: Option<Subdir>,
     /// The path to a repodata patch to apply to the index.
     pub repodata_patch: Option<String>,
     /// Whether to write the repodata as a zstd-compressed file.
@@ -1991,7 +1989,7 @@ pub async fn index_fs_with_channel_metadata(
     // Write through a temp dir on the same volume and rename over the target,
     // so a memory-mapped repodata.json isn't truncated in place (fails with
     // ERROR_USER_MAPPED_FILE on Windows). `.tmp` is skipped during subdir
-    // enumeration since it doesn't parse as a `Platform`.
+    // enumeration since it doesn't parse as a `Subdir`.
     config.atomic_write_dir = Some(root.join(".tmp").to_string_lossy().to_string());
     let builder = config.into_builder();
     let op = Operator::new(builder)?.finish();
@@ -2020,10 +2018,10 @@ pub async fn index_fs_with_channel_metadata(
 pub struct IndexS3Config {
     /// The channel to index.
     pub channel: Url,
-    /// The resolved credentials to use for S3 access.
-    pub credentials: ResolvedS3Credentials,
+    /// Where the credentials to use for S3 access come from.
+    pub credentials: S3CredentialSource,
     /// The target platform to index.
-    pub target_platform: Option<Platform>,
+    pub target_platform: Option<Subdir>,
     /// The path to a repodata patch to apply to the index.
     pub repodata_patch: Option<String>,
     /// Whether to write the repodata as a zstd-compressed file.
@@ -2046,26 +2044,19 @@ pub struct IndexS3Config {
     pub processing: IndexProcessingOptions,
 }
 
+/// Create an operator for the channel at the given S3 URL.
+///
+/// The operator asks `credentials` for a new set whenever the ones it holds are
+/// about to expire, so indexing a large channel keeps working past the lifetime
+/// of temporary credentials.
 #[cfg(feature = "s3")]
-fn s3_config(
-    credentials: &ResolvedS3Credentials,
-    channel: &Url,
-) -> Result<S3Config, anyhow::Error> {
-    let mut s3_config = S3Config::default();
-    s3_config.root = Some(channel.path().to_string());
-    s3_config.bucket = channel
+fn s3_operator(credentials: &S3CredentialSource, channel: &Url) -> Result<Operator, anyhow::Error> {
+    let bucket = channel
         .host_str()
-        .ok_or(anyhow::anyhow!("No bucket in S3 URL"))?
-        .to_string();
-    s3_config.region = Some(credentials.region.clone());
-    s3_config.endpoint = Some(credentials.endpoint_url.to_string());
-    s3_config.secret_access_key = Some(credentials.secret_access_key.clone());
-    s3_config.access_key_id = Some(credentials.access_key_id.clone());
-    s3_config.session_token = credentials.session_token.clone();
-    s3_config.enable_virtual_host_style =
-        credentials.addressing_style == rattler_s3::S3AddressingStyle::VirtualHost;
+        .ok_or(anyhow::anyhow!("No bucket in S3 URL"))?;
+    let builder = credentials.opendal_builder(bucket, channel.path());
 
-    Ok(s3_config)
+    Ok(Operator::new(builder)?.layer(RetryLayer::new()).finish())
 }
 
 /// Create a new `repodata.json` for all packages in the channel at the given S3
@@ -2099,10 +2090,7 @@ pub async fn index_s3_with_channel_metadata(
     }: IndexS3Config,
     channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<IndexStats> {
-    // Create the S3 configuration for opendal.
-    let s3_config = s3_config(&credentials, &channel)?;
-    let builder = s3_config.into_builder();
-    let op = Operator::new(builder)?.layer(RetryLayer::new()).finish();
+    let op = s3_operator(&credentials, &channel)?;
 
     index_with_options(
         op,
@@ -2144,7 +2132,7 @@ pub async fn index_s3_with_channel_metadata(
 /// See [`index_with_options`] for caching, memory and cancellation controls.
 #[allow(clippy::too_many_arguments)]
 pub async fn index(
-    target_platform: Option<Platform>,
+    target_platform: Option<Subdir>,
     op: Operator,
     repodata_patch: Option<String>,
     write_zst: bool,
@@ -2179,7 +2167,7 @@ pub async fn index(
 /// See [`index_with_options`] for caching, memory and cancellation controls.
 #[allow(clippy::too_many_arguments)]
 pub async fn index_with_channel_metadata(
-    target_platform: Option<Platform>,
+    target_platform: Option<Subdir>,
     op: Operator,
     repodata_patch: Option<String>,
     write_zst: bool,
@@ -2216,7 +2204,7 @@ pub async fn index_with_channel_metadata(
 #[derive(Debug, Clone, Default)]
 pub struct IndexOptions {
     /// The target platform to index. `None` indexes every subdir found.
-    pub target_platform: Option<Platform>,
+    pub target_platform: Option<Subdir>,
     /// The filename of a repodata patch package in `noarch` to apply.
     pub repodata_patch: Option<String>,
     /// Whether to write the repodata as a zstd-compressed file.
@@ -2301,19 +2289,16 @@ pub async fn index_with_options(op: Operator, options: IndexOptions) -> anyhow::
                     None
                 }
             })
-            .filter_map(|s| Platform::from_str(&s).ok())
+            .filter_map(|s| Subdir::from_str(&s).ok())
             .collect::<HashSet<_>>()
     };
 
-    if !op
-        .exists(&format!("{}/", Platform::NoArch.as_str()))
-        .await?
-    {
+    if !op.exists(&format!("{}/", Subdir::NoArch.as_str())).await? {
         // If `noarch` subdir does not exist, we create it.
         tracing::debug!("Did not find noarch subdir, creating.");
-        op.create_dir(&format!("{}/", Platform::NoArch.as_str()))
+        op.create_dir(&format!("{}/", Subdir::NoArch.as_str()))
             .await?;
-        subdirs.insert(Platform::NoArch);
+        subdirs.insert(Subdir::NoArch);
     }
 
     let repodata_patch = if let Some(path) = repodata_patch {
@@ -2460,7 +2445,7 @@ pub async fn ensure_channel_initialized_with_channel_metadata(
     op: &Operator,
     channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<()> {
-    let noarch_repodata_path = format!("{}/{REPODATA}", Platform::NoArch.as_str());
+    let noarch_repodata_path = format!("{}/{REPODATA}", Subdir::NoArch.as_str());
 
     if op.exists(&noarch_repodata_path).await? {
         tracing::debug!("Channel already initialized");
@@ -2469,14 +2454,14 @@ pub async fn ensure_channel_initialized_with_channel_metadata(
 
     tracing::info!("Initializing channel with empty noarch/repodata.json");
 
-    let noarch_path = format!("{}/", Platform::NoArch.as_str());
+    let noarch_path = format!("{}/", Subdir::NoArch.as_str());
     if !op.exists(&noarch_path).await? {
         op.create_dir(&noarch_path).await?;
     }
 
     let empty_repodata = RepoData {
         info: Some(ChannelInfo {
-            subdir: Some(Platform::NoArch.to_string()),
+            subdir: Some(Subdir::NoArch.to_string()),
             base_url: channel_metadata.base_url,
             repodata_revisions: RepodataRevisions::new(),
             channel_relations: channel_metadata.channel_relations,
@@ -2537,7 +2522,7 @@ pub async fn ensure_channel_initialized_fs_with_channel_metadata(
 #[cfg(feature = "s3")]
 pub async fn ensure_channel_initialized_s3(
     channel: &Url,
-    credentials: &ResolvedS3Credentials,
+    credentials: &S3CredentialSource,
 ) -> anyhow::Result<()> {
     ensure_channel_initialized_s3_with_channel_metadata(
         channel,
@@ -2552,14 +2537,10 @@ pub async fn ensure_channel_initialized_s3(
 #[cfg(feature = "s3")]
 pub async fn ensure_channel_initialized_s3_with_channel_metadata(
     channel: &Url,
-    credentials: &ResolvedS3Credentials,
+    credentials: &S3CredentialSource,
     channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<()> {
-    let s3_config = s3_config(credentials, channel)?;
-
-    let op = Operator::new(s3_config.into_builder())?
-        .layer(RetryLayer::new())
-        .finish();
+    let op = s3_operator(credentials, channel)?;
     ensure_channel_initialized_with_channel_metadata(&op, channel_metadata).await
 }
 

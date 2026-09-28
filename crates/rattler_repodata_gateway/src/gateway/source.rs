@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use rattler_conda_types::{Channel, PackageName, Platform, RepoDataRecord};
+use rattler_conda_types::{Channel, PackageName, RepoDataRecord, Subdir};
 
 use super::{
     GatewayError,
@@ -25,7 +25,7 @@ pub trait RepoDataSource: Send + Sync {
     /// subdirectory the gateway is querying for.
     async fn fetch_package_records(
         &self,
-        platform: Platform,
+        platform: Subdir,
         name: &PackageName,
     ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError>;
 
@@ -33,7 +33,7 @@ pub trait RepoDataSource: Send + Sync {
     ///
     /// This is used by the gateway to know which packages are available
     /// in this source for a given platform/subdirectory.
-    fn package_names(&self, platform: Platform) -> Vec<String>;
+    fn package_names(&self, platform: Subdir) -> Vec<String>;
 }
 
 /// A source of repodata, either a channel or a custom source.
@@ -84,12 +84,12 @@ impl From<Vec<Arc<SparseRepoData>>> for Source {
 /// the same way as channel subdirectories.
 pub(super) struct CustomSourceClient {
     source: Arc<dyn RepoDataSource>,
-    platform: Platform,
+    platform: Subdir,
 }
 
 impl CustomSourceClient {
     /// Create a new adapter for the given source and platform.
-    pub fn new(source: Arc<dyn RepoDataSource>, platform: Platform) -> Self {
+    pub fn new(source: Arc<dyn RepoDataSource>, platform: Subdir) -> Self {
         Self { source, platform }
     }
 }

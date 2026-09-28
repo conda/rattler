@@ -22,11 +22,10 @@ serde_with = { workspace = true }
 sha2 = { workspace = true }
 tokio = { workspace = true, features = ["io-util"], optional = true }
 url = { workspace = true }
-generic-array = { workspace = true, optional = true }
 
 [features]
 tokio = ["dep:tokio"]
-serde = ["dep:serde", "dep:serde-untagged", "generic-array/serde"]
+serde = ["dep:serde", "dep:serde-untagged"]
 
 [package.metadata.docs.rs]
 all-features = true

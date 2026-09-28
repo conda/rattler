@@ -4,7 +4,7 @@ use anyhow::Context;
 use bytesize::ByteSize;
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 use rattler_config::config::{
     concurrency::default_max_concurrent_solves, index::IndexChannelConfig,
 };
@@ -17,7 +17,7 @@ use rattler_index::{IndexS3Config, PreconditionChecks, index_s3_with_channel_met
 #[cfg(feature = "s3")]
 use rattler_networking::AuthenticationStorage;
 #[cfg(feature = "s3")]
-use rattler_s3::S3Credentials;
+use rattler_s3::{S3CredentialSource, S3Credentials};
 use tokio_util::sync::CancellationToken;
 #[cfg(feature = "s3")]
 use url::Url;
@@ -73,7 +73,7 @@ struct Cli {
     /// A specific platform to index.
     /// Defaults to all platforms available in the channel.
     #[arg(long, global = true)]
-    target_platform: Option<Platform>,
+    target_platform: Option<Subdir>,
 
     /// The name of the conda package (expected to be in the `noarch` subdir)
     /// that should be used for repodata patching. For more information, see `https://prefix.dev/blog/repodata_patching`.
@@ -216,9 +216,9 @@ async fn main() -> anyhow::Result<()> {
             let credentials = match Option::<S3Credentials>::from(credentials) {
                 Some(credentials) => {
                     let auth_storage = AuthenticationStorage::from_env_and_defaults()?;
-                    credentials.resolve(&channel, &auth_storage).ok_or_else(|| anyhow::anyhow!("Could not find S3 credentials in the authentication storage, and no credentials were provided via the command line."))?
+                    credentials.resolve(&channel, &auth_storage).map(S3CredentialSource::from).ok_or_else(|| anyhow::anyhow!("Could not find S3 credentials in the authentication storage, and no credentials were provided via the command line."))?
                 }
-                None => rattler_s3::ResolvedS3Credentials::from_sdk().await?,
+                None => S3CredentialSource::from_sdk().await?,
             };
 
             index_s3_with_channel_metadata(

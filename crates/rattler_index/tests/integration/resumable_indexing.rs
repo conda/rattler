@@ -14,7 +14,7 @@ use std::{
 };
 
 use opendal::Operator;
-use rattler_conda_types::{Platform, RepoData, compression_level::CompressionLevel};
+use rattler_conda_types::{RepoData, Subdir, compression_level::CompressionLevel};
 use rattler_index::{
     IndexFsConfig, IndexOptions, IndexProcessingOptions, PackageRevisionAssignment,
     PreconditionChecks, index_fs, index_with_options,
@@ -62,7 +62,7 @@ fn write_package(subdir_path: &Path, name: &str) -> String {
 fn fs_config(channel: &Path, processing: IndexProcessingOptions) -> IndexFsConfig {
     IndexFsConfig {
         channel: channel.to_path_buf(),
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
@@ -118,7 +118,7 @@ async fn test_broken_packages_are_skipped_and_reported() {
 
     assert!(stats.has_failures());
     assert!(!stats.cancelled);
-    let noarch = &stats.subdirs[&Platform::NoArch];
+    let noarch = &stats.subdirs[&Subdir::NoArch];
     assert_eq!(noarch.packages_added, 1);
     assert_eq!(noarch.packages_skipped, 0);
     assert!(noarch.repodata_written);
@@ -175,8 +175,8 @@ async fn test_disk_cache_is_reused_and_invalidated() {
     let stats = index_fs(fs_config(channel.path(), processing()))
         .await
         .unwrap();
-    assert_eq!(stats.subdirs[&Platform::NoArch].packages_added, 1);
-    assert_eq!(stats.subdirs[&Platform::NoArch].failed_packages.len(), 1);
+    assert_eq!(stats.subdirs[&Subdir::NoArch].packages_added, 1);
+    assert_eq!(stats.subdirs[&Subdir::NoArch].failed_packages.len(), 1);
 
     let cache_file = cache_dir.path().join("noarch.jsonl");
     let lines = cache_lines(&cache_file);
@@ -221,7 +221,7 @@ async fn test_disk_cache_is_reused_and_invalidated() {
     let stats = index_fs(fs_config(channel.path(), processing()))
         .await
         .unwrap();
-    let noarch = &stats.subdirs[&Platform::NoArch];
+    let noarch = &stats.subdirs[&Subdir::NoArch];
     assert_eq!(noarch.packages_added, 1);
     assert_eq!(noarch.failed_packages.len(), 1);
     assert!(
@@ -242,8 +242,8 @@ async fn test_disk_cache_is_reused_and_invalidated() {
     let stats = index_fs(fs_config(channel.path(), IndexProcessingOptions::default()))
         .await
         .unwrap();
-    assert_eq!(stats.subdirs[&Platform::NoArch].packages_added, 0);
-    assert_eq!(stats.subdirs[&Platform::NoArch].failed_packages.len(), 2);
+    assert_eq!(stats.subdirs[&Subdir::NoArch].packages_added, 0);
+    assert_eq!(stats.subdirs[&Subdir::NoArch].failed_packages.len(), 2);
 
     // Changing the size invalidates the cache entry and the package is parsed
     // again, which now fails. Removing the broken package drops its entry.
@@ -253,7 +253,7 @@ async fn test_disk_cache_is_reused_and_invalidated() {
     let stats = index_fs(fs_config(channel.path(), processing()))
         .await
         .unwrap();
-    let noarch = &stats.subdirs[&Platform::NoArch];
+    let noarch = &stats.subdirs[&Subdir::NoArch];
     assert_eq!(noarch.packages_added, 0);
     assert_eq!(noarch.failed_packages.len(), 1);
     assert_eq!(noarch.failed_packages[0].filename, valid);
@@ -305,7 +305,7 @@ async fn channel_cancelled_on_first_read(token: CancellationToken) -> (Operator,
 
 fn cancellable_options(token: CancellationToken) -> IndexOptions {
     IndexOptions {
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         max_parallel: 1,
         precondition_checks: PreconditionChecks::Enabled,
         processing: IndexProcessingOptions {
@@ -332,7 +332,7 @@ async fn test_cancellation_finishes_in_flight_package_and_skips_the_rest() {
 
     assert!(token.is_cancelled());
     assert!(stats.cancelled);
-    let noarch = &stats.subdirs[&Platform::NoArch];
+    let noarch = &stats.subdirs[&Subdir::NoArch];
     assert!(noarch.cancelled);
     assert_eq!(noarch.packages_added, 1);
     assert_eq!(noarch.packages_skipped, 2);
@@ -345,7 +345,7 @@ async fn test_cancellation_finishes_in_flight_package_and_skips_the_rest() {
         .await
         .unwrap();
     assert!(!stats.cancelled);
-    assert_eq!(stats.subdirs[&Platform::NoArch].packages_added, 3);
+    assert_eq!(stats.subdirs[&Subdir::NoArch].packages_added, 3);
     let repodata: RepoData =
         serde_json::from_slice(&op.read("noarch/repodata.json").await.unwrap().to_bytes()).unwrap();
     assert_eq!(package_names(&repodata), filenames);
@@ -380,6 +380,6 @@ async fn test_byte_budget_smaller_than_a_package_does_not_deadlock() {
     .unwrap();
 
     assert!(!stats.has_failures());
-    assert_eq!(stats.subdirs[&Platform::NoArch].packages_added, 3);
+    assert_eq!(stats.subdirs[&Subdir::NoArch].packages_added, 3);
     assert_eq!(package_names(&read_repodata(channel.path())), filenames);
 }
