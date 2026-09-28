@@ -897,7 +897,7 @@ mod resolvo {
         let err = rattler_solve::resolvo::Solver.solve(task).unwrap_err();
         insta::assert_snapshot!(err, @"
         foo * cannot be installed because there are no viable options:
-        └─ foo 1.0 | 2.0 | ... | 8.0 would require
+        └─ foo 1.0 | 2.0 | ... | 8.0 (build h123456_0) would require
            └─ bar ==1.0, for which no candidates were found.
         ");
     }
@@ -1344,11 +1344,11 @@ mod resolvo {
         ├─ conflicting-extras[extra2] can be installed with any of the following options:
         │  └─ conflicting-extras[extra2]
         └─ conflicting-extras [extras=[extra1, extra2]] cannot be installed because there are no viable options:
-           └─ conflicting-extras 1 would require
+           └─ conflicting-extras 1 (build xxx) would require
               ├─ bar >=2, which can be installed with any of the following options:
-              │  └─ bar 2
+              │  └─ bar 2 (build xxx)
               └─ bar <2, which cannot be installed because there are no viable options:
-                 └─ bar 1, which conflicts with the versions reported above.
+                 └─ bar 1 (build xxx), which conflicts with bar >=2
         ");
     }
 
@@ -1369,11 +1369,11 @@ mod resolvo {
         ├─ conflicting-extras[extra1] can be installed with any of the following options:
         │  └─ conflicting-extras[extra1]
         ├─ bar >=2 can be installed with any of the following options:
-        │  └─ bar 2
+        │  └─ bar 2 (build xxx)
         └─ conflicting-extras [extras=[extra1]] cannot be installed because there are no viable options:
-           └─ conflicting-extras 1 would require
+           └─ conflicting-extras 1 (build xxx) would require
               └─ bar <2, which cannot be installed because there are no viable options:
-                 └─ bar 1, which conflicts with the versions reported above.
+                 └─ bar 1 (build xxx), which conflicts with bar >=2
         ");
     }
 
@@ -1772,8 +1772,8 @@ fn channel_priority_strict() {
 #[should_panic(
     expected = "called `Result::unwrap()` on an `Err` value: Unsolvable([\"The following packages \
     are incompatible\\n└─ pytorch-cpu ==0.4.1 py36_cpu_1 cannot be installed because there are no \
-    viable options:\\n   └─ pytorch-cpu 0.4.1 is excluded because due to strict channel priority \
-    not using this option from: 'https://conda.anaconda.org/pytorch/'\\n\"])"
+    viable options:\\n   └─ pytorch-cpu 0.4.1 (build py36_cpu_1) is excluded because due to strict \
+    channel priority not using this option from: 'https://conda.anaconda.org/pytorch/'\\n\"])"
 )]
 fn channel_priority_strict_panic() {
     let repodata = vec![

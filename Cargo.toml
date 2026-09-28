@@ -254,3 +254,11 @@ rattler_virtual_packages = { path = "crates/rattler_virtual_packages", version =
 
 # This is also a rattler crate, but we only pin it to minor version
 simple_spawn_blocking = { path = "crates/simple_spawn_blocking", version = "1.1", default-features = false }
+
+# Temporary: unsat reports from resolvo 0.12.1 do not collapse candidate lists,
+# which makes a conflict involving a package with many versions run to hundreds
+# of lines, and their conflict messages do not say which versions are at odds.
+# Drop this once the fix is released upstream.
+# https://github.com/prefix-dev/resolvo
+[patch.crates-io]
+resolvo = { git = "https://github.com/pavelzw/resolvo", rev = "76df3974056f4755e016b8ec6074af1240b0902a" }

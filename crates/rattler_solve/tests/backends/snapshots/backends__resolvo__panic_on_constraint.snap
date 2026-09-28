@@ -4,7 +4,7 @@ expression: result.unwrap_err()
 ---
 The following packages are incompatible
 └─ xbar * can be installed with any of the following options:
-   └─ xbar 1 would require
+   └─ xbar 1 (build xxx) would require
       └─ xfoo >=2, which can be installed with any of the following options:
-         └─ xfoo 2
+         └─ xfoo 2 (build xxx)
 └─ the constraint xfoo ==1 cannot be fulfilled
