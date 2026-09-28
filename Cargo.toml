@@ -80,9 +80,6 @@ fs-err = { version = "3" }
 fslock = "0.2"
 futures = "0.3"
 futures-util = "0.3"
-# lots of other crates are still stuck on older version which breaks `deserialize`
-# pinning to 0.14.7 because 0.14.8 introduces deprecation notices.
-generic-array = "=0.14.9"
 getrandom = { version = "0.4", default-features = false }
 glob = "0.3"
 google-cloud-auth = { version = "1", default-features = false, features = [
