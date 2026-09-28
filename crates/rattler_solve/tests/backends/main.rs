@@ -630,6 +630,21 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
+        fn test_extras_select_version_providing_extra() {
+            crate::extras_tests::solve_extras_select_version_providing_extra::<$T>();
+        }
+
+        #[test]
+        fn test_extras_unsatisfiable_extra_is_not_dropped() {
+            crate::extras_tests::solve_extras_unsatisfiable_extra_is_not_dropped::<$T>();
+        }
+
+        #[test]
+        fn test_extras_unknown_extra_is_an_error() {
+            crate::extras_tests::solve_extras_unknown_extra_is_an_error::<$T>();
+        }
+
+        #[test]
         fn test_solver_case_favored() {
             crate::solver_case_tests::solve_favored::<$T>();
         }
