@@ -42,23 +42,41 @@ pub struct MirrorMiddleware {
 }
 
 impl MirrorMiddleware {
-    /// Create a new `MirrorMiddleware` from a map of mirrors
+    /// Create a new `MirrorMiddleware` from a map of mirrors.
+    ///
+    /// URLs are normalized to directory prefixes ending in `/`; bare channel
+    /// paths without the slash are not mirrored. Equivalent source URLs combine
+    /// their mirror lists in source-URL order.
     pub fn from_map(mirror_map: HashMap<Url, Vec<Mirror>>) -> Self {
-        let mirror_map: HashMap<Url, Vec<MirrorState>> = mirror_map
+        fn with_trailing_slash(url: &Url) -> Url {
+            if url.path().ends_with('/') {
+                url.clone()
+            } else {
+                let mut url = url.clone();
+                url.set_path(&format!("{}/", url.path()));
+                url
+            }
+        }
+
+        let mut normalized_map: HashMap<Url, Vec<MirrorState>> =
+            HashMap::with_capacity(mirror_map.len());
+        for (url, mirrors) in mirror_map
             .into_iter()
-            .map(|(url, mirrors)| {
-                let mirrors = mirrors
-                    .into_iter()
-                    .map(|mirror| MirrorState {
+            .sorted_by(|(a, _), (b, _)| a.as_str().cmp(b.as_str()))
+        {
+            normalized_map
+                .entry(with_trailing_slash(&url))
+                .or_default()
+                .extend(mirrors.into_iter().map(|mut mirror| {
+                    mirror.url = with_trailing_slash(&mirror.url);
+                    MirrorState {
                         failures: AtomicUsize::new(0),
                         mirror,
-                    })
-                    .collect();
-                (url, mirrors)
-            })
-            .collect();
+                    }
+                }));
+        }
 
-        let sorted_keys = mirror_map
+        let sorted_keys = normalized_map
             .keys()
             .cloned()
             .sorted_by(|a, b| b.path().len().cmp(&a.path().len()))
@@ -66,7 +84,7 @@ impl MirrorMiddleware {
             .collect::<Vec<(String, Url)>>();
 
         Self {
-            mirror_map,
+            mirror_map: normalized_map,
             sorted_keys,
         }
     }
@@ -84,29 +102,17 @@ impl MirrorMiddleware {
     /// `&ConfigBase<T>` of any extension coerces into it.
     #[cfg(feature = "rattler_config")]
     pub fn from_config(config: &rattler_config::config::CommonConfig) -> Self {
-        /// Mirror urls are used as prefixes; without a trailing slash the
-        /// last component would be truncated when joining relative paths.
-        fn with_trailing_slash(url: &Url) -> Url {
-            if url.path().ends_with('/') {
-                url.clone()
-            } else {
-                let mut url = url.clone();
-                url.set_path(&format!("{}/", url.path()));
-                url
-            }
-        }
-
         Self::from_map(
             config
                 .mirrors
                 .iter()
                 .map(|(url, mirrors)| {
                     (
-                        with_trailing_slash(url),
+                        url.clone(),
                         mirrors
                             .iter()
                             .map(|mirror| Mirror {
-                                url: with_trailing_slash(mirror),
+                                url: mirror.clone(),
                                 no_zstd: false,
                                 no_bz2: false,
                                 max_failures: None,
@@ -149,11 +155,6 @@ impl Middleware for MirrorMiddleware {
 
         for (key, url) in self.keys() {
             if let Some(url_rest) = url_str.strip_prefix(key) {
-                // Require a path-segment boundary so `conda-forge` doesn't match `conda-forge2`.
-                if !key.ends_with('/') && !url_rest.is_empty() && !url_rest.starts_with('/') {
-                    continue;
-                }
-
                 let url_rest = url_rest.trim_start_matches('/');
                 // replace the key with the mirror
                 let mirrors = self.mirror_map.get(url).unwrap();
@@ -429,39 +430,97 @@ mod test {
             axum::serve(upstream_listener, upstream_router.into_make_service()).into_future(),
         );
 
-        let mut mirror_map = std::collections::HashMap::new();
-        // `from_map` permits keys without a trailing slash.
-        mirror_map.insert(
-            format!(
-                "http://{}:{}/conda-forge",
-                upstream_addr.ip(),
-                upstream_addr.port()
-            )
-            .parse()
-            .unwrap(),
-            vec![mirror_setting(mirror_url)],
-        );
+        for suffix in ["", "/"] {
+            let mirror_map = std::collections::HashMap::from([(
+                format!("http://{upstream_addr}/conda-forge{suffix}")
+                    .parse()
+                    .unwrap(),
+                vec![mirror_setting(mirror_url.clone())],
+            )]);
+            let middleware = MirrorMiddleware::from_map(mirror_map);
+            let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+                .with(middleware)
+                .build();
 
-        let middleware = MirrorMiddleware::from_map(mirror_map);
-        let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
-            .with(middleware)
-            .build();
+            for (path, expected) in [
+                (
+                    "conda-forge2/count",
+                    "HIT real upstream at path: /conda-forge2/count",
+                ),
+                (
+                    "conda-forge/count",
+                    "HIT conda-forge mirror at path: /count",
+                ),
+                ("conda-forge/", "HIT conda-forge mirror at path: /"),
+                // A bare channel URL is not inside the normalized directory prefix.
+                ("conda-forge", "HIT real upstream at path: /conda-forge"),
+            ] {
+                let res = client
+                    .get(format!("http://{upstream_addr}/{path}"))
+                    .send()
+                    .await
+                    .unwrap();
+                assert!(res.status().is_success(), "status: {}", res.status());
+                assert_eq!(
+                    res.text().await.unwrap(),
+                    expected,
+                    "key suffix {suffix:?}, path {path}"
+                );
+            }
+        }
+    }
 
-        // conda-forge2 must reach upstream unchanged.
-        let res = client
-            .get(format!(
-                "http://{}:{}/conda-forge2/count",
-                upstream_addr.ip(),
-                upstream_addr.port()
-            ))
-            .send()
-            .await
-            .unwrap();
-        assert!(res.status().is_success(), "status: {}", res.status());
-        let body = res.text().await.unwrap();
+    #[test]
+    fn from_map_appends_trailing_slashes() {
+        for source_suffix in ["", "/"] {
+            for mirror_suffix in ["", "/"] {
+                let middleware = MirrorMiddleware::from_map(std::collections::HashMap::from([(
+                    format!("https://upstream.example.com/channel{source_suffix}")
+                        .parse()
+                        .unwrap(),
+                    vec![mirror_setting(
+                        format!("https://mirror.example.com/channel{mirror_suffix}")
+                            .parse()
+                            .unwrap(),
+                    )],
+                )]));
+                let source: Url = "https://upstream.example.com/channel/".parse().unwrap();
+                assert_eq!(middleware.keys(), [(source.to_string(), source.clone())]);
+                assert_eq!(
+                    middleware.mirror_map[&source][0].mirror.url.as_str(),
+                    "https://mirror.example.com/channel/"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn from_map_preserves_mirrors_for_equivalent_prefixes() {
+        let middleware = MirrorMiddleware::from_map(std::collections::HashMap::from([
+            (
+                "https://upstream.example.com/channel".parse().unwrap(),
+                vec![mirror_setting(
+                    "https://first.example.com/channel".parse().unwrap(),
+                )],
+            ),
+            (
+                "https://upstream.example.com/channel/".parse().unwrap(),
+                vec![mirror_setting(
+                    "https://second.example.com/channel/".parse().unwrap(),
+                )],
+            ),
+        ]));
+        let source: Url = "https://upstream.example.com/channel/".parse().unwrap();
+        assert_eq!(middleware.keys(), [(source.to_string(), source.clone())]);
+        let mirrors = &middleware.mirror_map[&source];
+        assert_eq!(mirrors.len(), 2);
         assert_eq!(
-            body, "HIT real upstream at path: /conda-forge2/count",
-            "request for the unrelated 'conda-forge2' channel was routed to the 'conda-forge' mirror instead of the real upstream: {body}"
+            mirrors[0].mirror.url.as_str(),
+            "https://first.example.com/channel/"
+        );
+        assert_eq!(
+            mirrors[1].mirror.url.as_str(),
+            "https://second.example.com/channel/"
         );
     }
 
@@ -483,6 +542,11 @@ mod test {
                 "https://conda.anaconda.org/conda-forge/".to_string(),
                 Url::parse("https://conda.anaconda.org/conda-forge/").unwrap()
             )]
+        );
+        let source: Url = "https://conda.anaconda.org/conda-forge/".parse().unwrap();
+        assert_eq!(
+            middleware.mirror_map[&source][0].mirror.url.as_str(),
+            "https://mirror.example.com/conda-forge/"
         );
     }
 }
