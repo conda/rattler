@@ -28,6 +28,8 @@ rustls = [
   "opendal/reqwest-rustls-tls",
 ]
 s3 = ["opendal/services-s3", "dep:rattler_s3"]
+# Write the index of the file paths contained in the packages of a channel.
+lookup = ["dep:rattler_lookup"]
 
 [[bin]]
 name = "rattler-index"
@@ -57,6 +59,7 @@ rattler_networking = { workspace = true, default-features = false, features = [
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }
+rattler_lookup = { workspace = true, optional = true }
 hex = { workspace = true }
 rattler_s3 = { workspace = true, optional = true, features = ["clap"] }
 reqwest = { workspace = true, default-features = false, features = [
@@ -65,7 +68,7 @@ reqwest = { workspace = true, default-features = false, features = [
   "charset",
 ] }
 rmp-serde = { workspace = true }
-serde = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 tar = { workspace = true }
@@ -80,5 +83,7 @@ retry-policies = { workspace = true }
 rattler_repodata_gateway = { path = "../rattler_repodata_gateway", default-features = false, features = [
   "sparse",
 ] }
+rattler_lookup = { workspace = true }
+reqwest-middleware = { workspace = true }
 tempfile = { workspace = true }
 tools = { path = "../tools", default-features = false }

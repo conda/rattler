@@ -21,6 +21,7 @@ async fn test_index_fs_over_memory_mapped_repodata() {
         force: true,
         max_parallel: 8,
         multi_progress: None,
+        lookup: None,
     };
 
     // Generate the initial repodata.

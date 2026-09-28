@@ -11,6 +11,7 @@
 //! [index-config]
 //! write-zst = true
 //! write-shards = true
+//! write-lookup = true
 //!
 //! [index-config."s3://my-bucket"]
 //! base-url = "../packages/"
@@ -85,6 +86,16 @@ pub struct IndexChannelConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub write_shards: Option<bool>,
 
+    /// Whether to write the index of the file paths contained in the packages,
+    /// `<subdir>/lookup/`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub write_lookup: Option<bool>,
+
+    /// The number of layers of the lookup index above which all of them are
+    /// merged into one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lookup_compact_threshold: Option<usize>,
+
     /// Additional repodata revisions to advertise in generated repodata.
     /// The legacy layout is implicit; currently only v3 can be selected.
     #[serde(
@@ -119,6 +130,8 @@ impl IndexChannelConfig {
     pub fn is_empty(&self) -> bool {
         self.write_zst.is_none()
             && self.write_shards.is_none()
+            && self.write_lookup.is_none()
+            && self.lookup_compact_threshold.is_none()
             && self.repodata_revisions.is_none()
             && self.package_revision_assignment.is_none()
             && self.base_url.is_none()
@@ -131,6 +144,10 @@ impl IndexChannelConfig {
         Self {
             write_zst: other.write_zst.or(self.write_zst),
             write_shards: other.write_shards.or(self.write_shards),
+            write_lookup: other.write_lookup.or(self.write_lookup),
+            lookup_compact_threshold: other
+                .lookup_compact_threshold
+                .or(self.lookup_compact_threshold),
             repodata_revisions: other
                 .repodata_revisions
                 .or_else(|| self.repodata_revisions.clone()),

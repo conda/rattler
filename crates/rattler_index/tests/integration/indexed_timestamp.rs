@@ -98,6 +98,7 @@ async fn index(root: &Path, force: bool, patch: Option<&str>, v3: bool) -> Value
         force,
         max_parallel: 2,
         multi_progress: None,
+        lookup: None,
     })
     .await
     .unwrap();
@@ -342,6 +343,7 @@ async fn forced_retry_preserves_concurrent_publication_with_cached_metadata() {
         1,
         None,
         rattler_index::PreconditionChecks::Enabled,
+        None,
     )
     .await
     .unwrap();
