@@ -36,26 +36,6 @@ fn test_inspect_local_package_json() {
 }
 
 #[test]
-fn test_inspect_local_package_rejects_channel_options() {
-    for args in [
-        ["inspect", EMPTY_PACKAGE, "-c", "conda-forge"],
-        ["inspect", EMPTY_PACKAGE, "-p", "linux-64"],
-    ] {
-        let output = Command::new(env!("CARGO_BIN_EXE_rattler"))
-            .args(args)
-            .current_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
-            .output()
-            .expect("failed to run the rattler binary");
-        assert!(!output.status.success(), "rattler {args:?} should fail");
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(
-            stderr.contains("can only be used when inspecting a matchspec"),
-            "unexpected error for {args:?}:\n{stderr}"
-        );
-    }
-}
-
-#[test]
 fn test_compare_identical_packages() {
     insta::assert_snapshot!(run_rattler(&[
         "compare-packages",

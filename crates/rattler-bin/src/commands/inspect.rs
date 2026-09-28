@@ -6,14 +6,12 @@ use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::package::{
     AboutJson, CondaArchiveType, IndexJson, PackageFile, PathsJson, RunExportsJson,
 };
-use rattler_conda_types::{
-    Channel, ChannelConfig, MatchSpec, NoArchKind, ParseMatchSpecOptions, RepoDataRecord, Subdir,
-};
+use rattler_conda_types::{MatchSpec, NoArchKind, ParseMatchSpecOptions, RepoDataRecord, Subdir};
 use rattler_repodata_gateway::RepoData;
 use serde::Serialize;
 use url::Url;
 
-use super::gateway::{build_gateway, load_config};
+use super::gateway::{build_gateway, load_config, resolve_channels};
 use super::package_source::{PackageSource, client_for};
 
 /// Inspect package metadata from a local or remote conda package, or a matchspec.
@@ -31,11 +29,13 @@ pub struct Opt {
     ///
     /// Anything that is not a URL, an existing file or a path ending in
     /// `.conda` or `.tar.bz2` is treated as a matchspec: the channels are
-    /// searched and the newest matching package is inspected.
+    /// searched and the newest matching package is inspected. The matchspec
+    /// must name exactly one package, globs and regexes are not supported.
     #[clap(required = true)]
     package: String,
 
-    /// Channels to search in when inspecting a matchspec [default: conda-forge]
+    /// Channels to search in when inspecting a matchspec. Defaults to the
+    /// `default-channels` from the rattler configuration, or conda-forge.
     #[clap(short, long)]
     channels: Option<Vec<String>>,
 
@@ -139,32 +139,23 @@ async fn find_newest_record(opt: &Opt, offline: bool) -> miette::Result<RepoData
     let matchspec = MatchSpec::from_str(
         &opt.package,
         ParseMatchSpecOptions::strict()
-            .with_exact_names_only(false)
             .with_extras(true)
             .with_flags(true),
     )
     .into_diagnostic()
     .with_context(|| {
         format!(
-            "'{}' is not an existing file, a URL or a valid matchspec",
+            "'{}' is not an existing file, a URL or a valid matchspec with an exact package name",
             opt.package
         )
     })?;
 
-    let channel_config =
-        ChannelConfig::default_with_root_dir(std::env::current_dir().into_diagnostic()?);
-    let channels = opt
-        .channels
-        .as_deref()
-        .unwrap_or(&["conda-forge".to_string()])
-        .iter()
-        .map(|channel| Channel::from_str(channel, &channel_config))
-        .collect::<Result<Vec<_>, _>>()
-        .into_diagnostic()?;
+    let config = load_config()?;
+    let channels = resolve_channels(opt.channels.as_deref(), &config)?;
     let platform = opt.platform.map_or_else(crate::host_platform, Ok)?;
 
     let client = super::client::create_client_with_middleware(offline)?;
-    let gateway = build_gateway(client, &load_config()?, offline, true)?;
+    let gateway = build_gateway(client, &config, offline, true)?;
     let repo_data = gateway
         .query(channels, [platform, Subdir::NoArch], [matchspec])
         .recursive(false)
@@ -172,7 +163,10 @@ async fn find_newest_record(opt: &Opt, offline: bool) -> miette::Result<RepoData
         .into_diagnostic()
         .context("failed to query repodata")?;
 
-    newest_record(repo_data.iter().flat_map(RepoData::iter))
+    repo_data
+        .iter()
+        .flat_map(RepoData::iter)
+        .max()
         .cloned()
         .ok_or_else(|| {
             miette::miette!(
@@ -180,24 +174,6 @@ async fn find_newest_record(opt: &Opt, offline: bool) -> miette::Result<RepoData
                 opt.package
             )
         })
-}
-
-/// Returns the highest ranked record: packages without tracked features rank
-/// above those with, then the highest version, build number and timestamp
-/// win. Unlike the `Ord` implementation of records this ignores the package
-/// name, so that a glob matchspec picks the newest package across all names.
-fn newest_record<'a>(
-    records: impl IntoIterator<Item = &'a RepoDataRecord>,
-) -> Option<&'a RepoDataRecord> {
-    records.into_iter().max_by(|a, b| {
-        let (a, b) = (&a.package_record, &b.package_record);
-        a.track_features
-            .is_empty()
-            .cmp(&b.track_features.is_empty())
-            .then_with(|| a.version.cmp(&b.version))
-            .then_with(|| a.build_number.cmp(&b.build_number))
-            .then_with(|| a.timestamp.cmp(&b.timestamp))
-    })
 }
 
 /// Takes a file out of a batched `read_files` result and parses it, or `None`
@@ -410,7 +386,7 @@ mod tests {
                 "{package} should be a package"
             );
         }
-        for matchspec in ["numpy", "python 3.12.*", "conda-forge::numpy >=2", "py*"] {
+        for matchspec in ["numpy", "python 3.12.*", "conda-forge::numpy >=2"] {
             assert!(
                 !is_package_location(matchspec),
                 "{matchspec} should be a matchspec"
