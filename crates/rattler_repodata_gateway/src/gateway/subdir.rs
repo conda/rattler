@@ -83,7 +83,7 @@ pub(crate) fn extract_unique_deps_split<'a>(
     (Arc::from(base), Arc::new(per_extra))
 }
 
-pub enum Subdir {
+pub enum SubdirState {
     /// The subdirectory is missing from the channel, it is considered empty.
     NotFound,
 
@@ -91,20 +91,20 @@ pub enum Subdir {
     Found(SubdirData),
 }
 
-impl Subdir {
+impl SubdirState {
     /// Returns the names of all packages in the subdirectory.
     pub fn package_names(&self) -> Option<Vec<String>> {
         match self {
-            Subdir::Found(subdir) => Some(subdir.package_names()),
-            Subdir::NotFound => None,
+            SubdirState::Found(subdir) => Some(subdir.package_names()),
+            SubdirState::NotFound => None,
         }
     }
 
     /// Returns repodata revisions advertised by this subdirectory.
     pub fn repodata_revisions(&self) -> &RepodataRevisions {
         match self {
-            Subdir::Found(subdir) => subdir.repodata_revisions(),
-            Subdir::NotFound => empty_repodata_revisions(),
+            SubdirState::Found(subdir) => subdir.repodata_revisions(),
+            SubdirState::NotFound => empty_repodata_revisions(),
         }
     }
 
@@ -114,8 +114,8 @@ impl Subdir {
     /// [CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
     pub fn channel_relations(&self) -> Option<&ChannelRelations> {
         match self {
-            Subdir::Found(subdir) => subdir.channel_relations(),
-            Subdir::NotFound => None,
+            SubdirState::Found(subdir) => subdir.channel_relations(),
+            SubdirState::NotFound => None,
         }
     }
 }

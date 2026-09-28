@@ -1,3 +1,0 @@
-# Platform
-
-::: rattler.platform.platform
