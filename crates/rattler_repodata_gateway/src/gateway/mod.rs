@@ -2249,7 +2249,7 @@ mod test {
         let records = gateway
             .query(
                 vec![super::Source::SparseRepoData(vec![source])],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![PackageName::from_str("bors").unwrap()].into_iter(),
             )
             .recursive(false)
@@ -2282,7 +2282,7 @@ mod test {
         let records = gateway
             .query(
                 vec![channel],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![PackageName::from_str("bors").unwrap()].into_iter(),
             )
             .recursive(false)
@@ -2309,11 +2309,11 @@ mod test {
         // Create a mock source with some records
         let mut mock_source = MockRepoDataSource::new();
         mock_source.add_record(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record("testpkg", "1.0.0", "linux-64"),
         );
         mock_source.add_record(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record("testpkg", "2.0.0", "linux-64"),
         );
 
@@ -2323,7 +2323,7 @@ mod test {
         let records = gateway
             .query(
                 vec![super::Source::Custom(source.clone())],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
             )
             .recursive(false)
