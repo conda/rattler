@@ -1,7 +1,7 @@
 import asyncio
 import tempfile
 
-from rattler import solve, install, VirtualPackage
+from rattler import VirtualPackage, install, solve
 
 
 async def main() -> None:

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.16](https://github.com/conda/rattler/compare/rattler_s3-v0.2.15...rattler_s3-v0.2.16) - 2026-09-23
+
+### Added
+
+- add standalone Sigstore attestation verification ([#2794](https://github.com/conda/rattler/pull/2794))
+
+## [0.2.15](https://github.com/conda/rattler/compare/rattler_s3-v0.2.14...rattler_s3-v0.2.15) - 2026-09-17
+
+### Other
+
+- updated the following local packages: rattler_networking
+
 ## [0.2.14](https://github.com/conda/rattler/compare/rattler_s3-v0.2.13...rattler_s3-v0.2.14) - 2026-08-27
 
 ### Other

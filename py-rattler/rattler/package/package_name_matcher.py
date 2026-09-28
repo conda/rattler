@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Union
-
 from rattler.package.package_name import PackageName
 from rattler.rattler import PyPackageNameMatcher
 
@@ -61,7 +59,7 @@ class PackageNameMatcher:
         """
         return self._package_name_matcher.normalized
 
-    def as_package_name(self) -> Union[PackageName, None]:
+    def as_package_name(self) -> PackageName | None:
         """
         Converts a PackageNameMatcher to a PackageName if it is an exact matcher.
 

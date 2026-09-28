@@ -185,6 +185,13 @@ describe("PackageRecord", () => {
         record.timestamp = new Date(1605110689659);
         expect(record.timestamp).toEqual(new Date(1605110689659));
     });
+    it("indexed timestamp preserves the epoch and can be cleared", () => {
+        expect(record.indexedTimestamp).toBeUndefined();
+        record.indexedTimestamp = new Date(0);
+        expect(record.indexedTimestamp).toEqual(new Date(0));
+        record.indexedTimestamp = undefined;
+        expect(record.indexedTimestamp).toBeUndefined();
+    });
     it("legacy_bz2_md5 can be modified", () => {
         record.legacyBz2Md5 = "d65ab674acf3b7294ebacaec05fc5b55";
         expect(record.legacyBz2Md5).toEqual("d65ab674acf3b7294ebacaec05fc5b55");

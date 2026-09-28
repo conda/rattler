@@ -1,19 +1,18 @@
 # type: ignore
-import os
 import json
+import os
 import shutil
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterator
 
 import boto3
 import pytest
 
-from rattler import Platform
+from rattler import Config, Subdir
 from rattler.index import index_fs, index_s3
 from rattler.index.index import S3Credentials
-
 
 # ------------------------------------ FILESYSTEM ------------------------------------ #
 
@@ -44,8 +43,29 @@ async def test_index(package_directory):
 
 
 @pytest.mark.asyncio
+async def test_index_uses_config_with_explicit_overrides(package_directory):
+    config = Config.from_toml("""
+        [index-config]
+        write-zst = false
+        write-shards = false
+        package-revision-assignment = "latest"
+        repodata-revisions = ["v3"]
+    """)
+
+    await index_fs(package_directory, config=config, write_zst=True)
+
+    for subdir in ("noarch", "win-64"):
+        assert (package_directory / subdir / "repodata.json.zst").is_file()
+        assert not (package_directory / subdir / "repodata_shards.msgpack.zst").exists()
+
+    with open(package_directory / "noarch/repodata.json") as f:
+        repodata = json.load(f)
+    assert "pytweening-1.0.4-pyhd8ed1ab_0" in repodata["v3"]["tar.bz2"]
+
+
+@pytest.mark.asyncio
 async def test_index_specific_subdir_non_noarch(package_directory):
-    await index_fs(package_directory, Platform("win-64"))
+    await index_fs(package_directory, Subdir("win-64"))
 
     assert "repodata.json" in os.listdir(package_directory / "win-64")
     with open(package_directory / "win-64/repodata.json") as f:
@@ -54,7 +74,7 @@ async def test_index_specific_subdir_non_noarch(package_directory):
 
 @pytest.mark.asyncio
 async def test_index_specific_subdir_noarch(package_directory):
-    await index_fs(package_directory, Platform("noarch"))
+    await index_fs(package_directory, Subdir("noarch"))
 
     win_files = os.listdir(package_directory / "win-64")
     assert "repodata.json" not in win_files
@@ -68,7 +88,7 @@ async def test_index_specific_subdir_noarch(package_directory):
 async def test_index_repodata_revisions(package_directory):
     await index_fs(
         package_directory,
-        Platform("noarch"),
+        Subdir("noarch"),
         repodata_revisions=[{"revision": "v3", "message": "v3 packages"}],
         package_revision_assignment="latest",
         force=True,
@@ -87,7 +107,7 @@ async def test_index_repodata_revisions_reject_legacy_selection(package_director
     with pytest.raises(ValueError, match="expected 'v3'"):
         await index_fs(
             package_directory,
-            Platform("noarch"),
+            Subdir("noarch"),
             repodata_revisions=["legacy"],
         )
 
@@ -95,10 +115,10 @@ async def test_index_repodata_revisions_reject_legacy_selection(package_director
 @pytest.mark.asyncio
 @pytest.mark.parametrize("obsolete_field", ["n_packages", "oldest", "newest"])
 async def test_index_repodata_revisions_reject_obsolete_statistics(package_directory, obsolete_field):
-    with pytest.raises(TypeError, match="no longer accepted.*derives package statistics"):
+    with pytest.raises(TypeError, match=r"no longer accepted.*derives package statistics"):
         await index_fs(
             package_directory,
-            Platform("noarch"),
+            Subdir("noarch"),
             repodata_revisions=[{"revision": "v3", obsolete_field: 1}],
         )
 
@@ -108,7 +128,7 @@ async def test_index_repodata_revisions_reject_legacy_mapping(package_directory)
     with pytest.raises(TypeError, match="no longer accepts a vN-keyed metadata mapping"):
         await index_fs(
             package_directory,
-            Platform("noarch"),
+            Subdir("noarch"),
             repodata_revisions={"v3": {"n_packages": 1}},  # type: ignore[arg-type]
         )
 
