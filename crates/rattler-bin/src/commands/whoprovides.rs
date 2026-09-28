@@ -1,6 +1,5 @@
 //! `rattler whoprovides`: which packages contain a file, answered with the
-//! lookup index a channel publishes next to its repodata (`info.lookup_url`
-//! of its sharded repodata index).
+//! lookup index a channel publishes next to its repodata (`info.lookup_url`).
 
 use std::{collections::BTreeMap, env, time::Instant};
 
@@ -142,7 +141,7 @@ pub async fn whoprovides(opt: Opt, offline: bool) -> miette::Result<()> {
     let discovery = Instant::now();
     let locations = locate_indexes(&opt, &subdirs, &client).await?;
     tracing::debug!(
-        "located {} lookup index(es) through the sharded repodata in {:?}",
+        "located {} lookup index(es) through the repodata in {:?}",
         locations.len(),
         discovery.elapsed()
     );
