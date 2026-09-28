@@ -674,6 +674,11 @@ impl<T: Shell + Clone> Activator<T> {
             .unwrap_or(("", stdout.as_ref()));
         let (_, after_env) = rest.rsplit_once(ENV_START_SEPARATOR).unwrap_or(("", ""));
 
+        #[cfg(target_os = "macos")]
+        if !before_env.contains('\0') && !after_env.contains('\0') {
+            tracing::debug!("env -0 is unavailable; parsing newline-separated environment records");
+        }
+
         // Parse both environments and find the difference
         let before_env = self.shell_type.parse_env(before_env);
         let after_env = self.shell_type.parse_env(after_env);
@@ -1035,6 +1040,50 @@ mod tests {
         insta::assert_snapshot!(script);
     }
 
+    #[cfg(unix)]
+    #[derive(Clone)]
+    struct NewlineEnvBash(shell::Bash);
+
+    #[cfg(unix)]
+    impl Shell for NewlineEnvBash {
+        fn set_env_var(
+            &self,
+            f: &mut impl std::fmt::Write,
+            env_var: &str,
+            value: &str,
+        ) -> Result<(), ShellError> {
+            self.0.set_env_var(f, env_var, value)
+        }
+
+        fn unset_env_var(
+            &self,
+            f: &mut impl std::fmt::Write,
+            env_var: &str,
+        ) -> Result<(), ShellError> {
+            self.0.unset_env_var(f, env_var)
+        }
+
+        fn run_script(&self, f: &mut impl std::fmt::Write, path: &Path) -> Result<(), ShellError> {
+            self.0.run_script(f, path)
+        }
+
+        fn extension(&self) -> &str {
+            self.0.extension()
+        }
+
+        fn executable(&self) -> &str {
+            self.0.executable()
+        }
+
+        fn create_run_script_command(&self, path: &Path) -> std::process::Command {
+            self.0.create_run_script_command(path)
+        }
+
+        fn print_env(&self, f: &mut impl std::fmt::Write) -> std::fmt::Result {
+            writeln!(f, "/usr/bin/env")
+        }
+    }
+
     fn test_run_activation(shell: ShellEnum, with_unicode: bool) {
         let environment_dir = tempfile::TempDir::new().unwrap();
 
@@ -1153,6 +1202,52 @@ mod tests {
             activation_env.get("ENV_WITH_NEWLINE").map(String::as_str),
             Some("hello\nworld")
         );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_run_activation_with_newline_separated_env_dump() {
+        let environment_dir = tempfile::TempDir::new().unwrap();
+        let mut activator = Activator::from_path(
+            environment_dir.path(),
+            NewlineEnvBash(shell::Bash::default()),
+            Subdir::current().expect("host platform"),
+        )
+        .unwrap();
+        activator.post_activation_env_vars = IndexMap::from_iter([
+            (String::from("UNCHANGED"), String::from("same=value")),
+            (
+                String::from("VALUE_WITH_EQUALS"),
+                String::from("left=middle=right"),
+            ),
+            (String::from("EMPTY_VALUE"), String::new()),
+        ]);
+
+        let activation_env = activator
+            .run_activation(
+                ActivationVariables {
+                    current_env: HashMap::from([(
+                        String::from("UNCHANGED"),
+                        String::from("same=value"),
+                    )]),
+                    ..ActivationVariables::default()
+                },
+                Some(HashMap::from([
+                    (OsStr::new("PATH"), OsStr::new("/usr/bin:/bin")),
+                    (OsStr::new("UNCHANGED"), OsStr::new("same=value")),
+                ])),
+            )
+            .unwrap();
+
+        assert_eq!(
+            activation_env.get("VALUE_WITH_EQUALS").map(String::as_str),
+            Some("left=middle=right")
+        );
+        assert_eq!(
+            activation_env.get("EMPTY_VALUE").map(String::as_str),
+            Some("")
+        );
+        assert!(!activation_env.contains_key("UNCHANGED"));
     }
 
     #[test]
