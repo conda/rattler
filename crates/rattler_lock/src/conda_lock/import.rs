@@ -5,7 +5,7 @@ use std::{
 
 use pep508_rs::Requirement;
 use rattler_conda_lock::{Document, LockFile as CepLockFile, Manager, NodePath, Package};
-use rattler_conda_types::{PackageName, PackageRecord, Platform, VersionWithSource};
+use rattler_conda_types::{PackageName, PackageRecord, Subdir, VersionWithSource};
 use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 
 use super::dependencies::{conda_spec, python_spec};
@@ -123,7 +123,7 @@ fn import(lock_file: &CepLockFile, options: &ImportOptions) -> Result<LockFile, 
         .iter()
         .enumerate()
         .map(|(index, name)| {
-            let subdir = Platform::from_str(name).map_err(|error| {
+            let subdir = Subdir::from_str(name).map_err(|error| {
                 CondaLockError::new(
                     platforms_path.index(index),
                     CondaLockErrorKind::UnsupportedPlatform(error),

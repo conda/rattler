@@ -133,7 +133,7 @@ pub enum CondaLockErrorKind {
 
     /// A target platform is not a platform pixi knows.
     #[error("unsupported target platform")]
-    UnsupportedPlatform(#[source] rattler_conda_types::ParsePlatformError),
+    UnsupportedPlatform(#[source] rattler_conda_types::ParseSubdirError),
 
     /// The pixi lock-file builder rejected the imported data.
     #[error("cannot build a pixi lock file from this CEP-37 lock file")]
