@@ -134,7 +134,14 @@ fn mask_sas_signature(query: &str) -> String {
     query
         .split('&')
         .map(|parameter| match parameter.split_once('=') {
-            Some((name, _)) if name.eq_ignore_ascii_case("sig") => format!("{name}=REDACTED"),
+            // Servers decode parameter names, so `%73ig` is also the signature.
+            Some((name, _))
+                if percent_encoding::percent_decode_str(name)
+                    .decode_utf8_lossy()
+                    .eq_ignore_ascii_case("sig") =>
+            {
+                format!("{name}=REDACTED")
+            }
             _ => parameter.to_string(),
         })
         .collect::<Vec<_>>()
@@ -437,6 +444,15 @@ mod debug_redaction_tests {
             assert!(!shown.contains("SECRETSIG"), "signature leaked: {shown}");
             assert!(shown.contains("sv=2024-11-04"), "over-redacted: {shown}");
             assert!(shown.contains("se=z"), "over-redacted: {shown}");
+        }
+
+        for spelled in ["SIG", "%73ig", "%53%49%47"] {
+            let encoded = channel(&format!(
+                "az://acct.blob.core.windows.net/general/p?{spelled}=SECRETSIG&sv=1"
+            ));
+            for shown in masked_spellings(&encoded) {
+                assert!(!shown.contains("SECRETSIG"), "signature leaked: {shown}");
+            }
         }
 
         let fragmented = channel("az://acct.blob.core.windows.net/general/p?sv=1#sig=SECRETFRAG");
