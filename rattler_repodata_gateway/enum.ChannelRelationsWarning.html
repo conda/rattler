@@ -25,7 +25,7 @@
     },
     DiscoveryFetchFailed {
         url: <a class="struct" href="../rattler_conda_types/channel/channel_url/struct.ChannelUrl.html" title="struct rattler_conda_types::channel::channel_url::ChannelUrl">ChannelUrl</a>,
-        platform: <a class="enum" href="../rattler_conda_types/platform/enum.Platform.html" title="enum rattler_conda_types::platform::Platform">Platform</a>,
+        platform: <a class="enum" href="../rattler_conda_types/subdir/enum.Subdir.html" title="enum rattler_conda_types::subdir::Subdir">Subdir</a>,
         error: <a class="struct" href="https://doc.rust-lang.org/1.95.0/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>,
     },
     UserOrderConflict {
@@ -64,7 +64,7 @@ not followed. Reported at finalize, when depths are final.</p>
 </div></div></div><section id="variant.DiscoveryFetchFailed" class="variant"><a href="#variant.DiscoveryFetchFailed" class="anchor">§</a><h3 class="code-header">DiscoveryFetchFailed</h3></section><div class="docblock"><p>A discovered channel failed to fetch; in <code>Warn</code> mode its subdir
 is treated as empty.</p>
 </div><div class="sub-variant" id="variant.DiscoveryFetchFailed.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.DiscoveryFetchFailed.field.url" class="section-header"><a href="#variant.DiscoveryFetchFailed.field.url" class="anchor field">§</a><code>url: <a class="struct" href="../rattler_conda_types/channel/channel_url/struct.ChannelUrl.html" title="struct rattler_conda_types::channel::channel_url::ChannelUrl">ChannelUrl</a></code></span><div class="docblock"><p>Channel that failed to fetch.</p>
-</div></div><div class="sub-variant-field"><span id="variant.DiscoveryFetchFailed.field.platform" class="section-header"><a href="#variant.DiscoveryFetchFailed.field.platform" class="anchor field">§</a><code>platform: <a class="enum" href="../rattler_conda_types/platform/enum.Platform.html" title="enum rattler_conda_types::platform::Platform">Platform</a></code></span><div class="docblock"><p>Platform whose subdir failed to fetch.</p>
+</div></div><div class="sub-variant-field"><span id="variant.DiscoveryFetchFailed.field.platform" class="section-header"><a href="#variant.DiscoveryFetchFailed.field.platform" class="anchor field">§</a><code>platform: <a class="enum" href="../rattler_conda_types/subdir/enum.Subdir.html" title="enum rattler_conda_types::subdir::Subdir">Subdir</a></code></span><div class="docblock"><p>Subdir whose subdir failed to fetch.</p>
 </div></div><div class="sub-variant-field"><span id="variant.DiscoveryFetchFailed.field.error" class="section-header"><a href="#variant.DiscoveryFetchFailed.field.error" class="anchor field">§</a><code>error: <a class="struct" href="https://doc.rust-lang.org/1.95.0/alloc/string/struct.String.html" title="struct alloc::string::String">String</a></code></span><div class="docblock"><p>Display-formatted <a href="enum.GatewayError.html" title="enum rattler_repodata_gateway::GatewayError"><code>GatewayError</code></a>.</p>
 </div></div></div><section id="variant.UserOrderConflict" class="variant"><a href="#variant.UserOrderConflict" class="anchor">§</a><h3 class="code-header">UserOrderConflict</h3></section><div class="docblock"><p>The relation contradicts the explicit channel order and was
 ignored. Never fatal: the user’s order wins.</p>

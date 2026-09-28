@@ -2,7 +2,7 @@
 
 </head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">rattler_shell/run/</div>mod.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Helpers to run commands in an activated environment.
 <a href=#2 id=2 data-nosnippet>2</a>
-<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>rattler_conda_types::Platform;
+<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>rattler_conda_types::Subdir;
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>std::process::{Command, ExitStatus, Output};
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>std::{collections::HashMap, path::Path};
 <a href=#6 id=6 data-nosnippet>6</a>
@@ -41,7 +41,7 @@
 <a href=#39 id=39 data-nosnippet>39</a>    env_vars: <span class="kw-2">&amp;</span>HashMap&lt;String, String&gt;,
 <a href=#40 id=40 data-nosnippet>40</a>    cwd: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Path&gt;,
 <a href=#41 id=41 data-nosnippet>41</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ExitStatus, RunError&gt; {
-<a href=#42 id=42 data-nosnippet>42</a>    <span class="kw">let </span>platform = Platform::current().ok_or(RunError::UnknownHostPlatform)<span class="question-mark">?</span>;
+<a href=#42 id=42 data-nosnippet>42</a>    <span class="kw">let </span>platform = Subdir::current().ok_or(RunError::UnknownHostPlatform)<span class="question-mark">?</span>;
 <a href=#43 id=43 data-nosnippet>43</a>    <span class="kw">let </span>activator = Activator::from_path(prefix, shell, platform)<span class="question-mark">?</span>;
 <a href=#44 id=44 data-nosnippet>44</a>
 <a href=#45 id=45 data-nosnippet>45</a>    <span class="kw">let </span>current_path = std::env::var(<span class="string">"PATH"</span>)
@@ -82,7 +82,7 @@
 <a href=#80 id=80 data-nosnippet>80</a>    shell: ShellEnum,
 <a href=#81 id=81 data-nosnippet>81</a>    env_vars: <span class="kw-2">&amp;</span>HashMap&lt;String, String&gt;,
 <a href=#82 id=82 data-nosnippet>82</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Output, RunError&gt; {
-<a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">let </span>platform = Platform::current().ok_or(RunError::UnknownHostPlatform)<span class="question-mark">?</span>;
+<a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">let </span>platform = Subdir::current().ok_or(RunError::UnknownHostPlatform)<span class="question-mark">?</span>;
 <a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">let </span><span class="kw-2">mut </span>shell_script = shell::ShellScript::new(shell.clone(), platform);
 <a href=#85 id=85 data-nosnippet>85</a>
 <a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">for </span>(k, v) <span class="kw">in </span>env_vars.iter() {

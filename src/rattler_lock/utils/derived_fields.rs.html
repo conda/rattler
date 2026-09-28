@@ -110,7 +110,7 @@
 <a href=#108 id=108 data-nosnippet>108</a>    </span><span class="kw">let _ </span>= CondaArchiveIdentifier::try_from_filename(archive_str)<span class="question-mark">?</span>;
 <a href=#109 id=109 data-nosnippet>109</a>
 <a href=#110 id=110 data-nosnippet>110</a>    <span class="comment">// Parse the subdir as a platform, if it fails we can't derive the subdir.
-<a href=#111 id=111 data-nosnippet>111</a>    </span>rattler_conda_types::Platform::from_str(subdir_str)
+<a href=#111 id=111 data-nosnippet>111</a>    </span>rattler_conda_types::Subdir::from_str(subdir_str)
 <a href=#112 id=112 data-nosnippet>112</a>        .is_ok()
 <a href=#113 id=113 data-nosnippet>113</a>        .then_some(subdir_str)
 <a href=#114 id=114 data-nosnippet>114</a>}
@@ -137,7 +137,7 @@
 <a href=#135 id=135 data-nosnippet>135</a>}
 <a href=#136 id=136 data-nosnippet>136</a>
 <a href=#137 id=137 data-nosnippet>137</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>derive_arch_and_platform(subdir: <span class="kw-2">&amp;</span>str) -&gt; (<span class="prelude-ty">Option</span>&lt;String&gt;, <span class="prelude-ty">Option</span>&lt;String&gt;) {
-<a href=#138 id=138 data-nosnippet>138</a>    <span class="kw">let </span>platform = rattler_conda_types::Platform::from_str(subdir).ok();
+<a href=#138 id=138 data-nosnippet>138</a>    <span class="kw">let </span>platform = rattler_conda_types::Subdir::from_str(subdir).ok();
 <a href=#139 id=139 data-nosnippet>139</a>    platform.map_or((<span class="prelude-val">None</span>, <span class="prelude-val">None</span>), |p| {
 <a href=#140 id=140 data-nosnippet>140</a>        (
 <a href=#141 id=141 data-nosnippet>141</a>            p.arch().map(|arch| arch.to_string()),

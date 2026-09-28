@@ -3,7 +3,7 @@
 </head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">rattler/install/</div>entry_point.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span><span class="kw">crate</span>::install::PythonInfo;
 <a href=#2 id=2 data-nosnippet>2</a><span class="kw">use </span>digest::Output;
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>rattler_conda_types::{
-<a href=#4 id=4 data-nosnippet>4</a>    Platform,
+<a href=#4 id=4 data-nosnippet>4</a>    Subdir,
 <a href=#5 id=5 data-nosnippet>5</a>    package::EntryPoint,
 <a href=#6 id=6 data-nosnippet>6</a>    prefix_record::{PathType, PathsEntry},
 <a href=#7 id=7 data-nosnippet>7</a>};
@@ -88,11 +88,11 @@
 <a href=#86 id=86 data-nosnippet>86</a>/// `scripts/update-launchers.py` for how to refresh them.
 <a href=#87 id=87 data-nosnippet>87</a>///
 <a href=#88 id=88 data-nosnippet>88</a>/// [`conda/conda-launchers`]: https://github.com/conda/conda-launchers/releases
-<a href=#89 id=89 data-nosnippet>89</a></span><span class="kw">pub fn </span>get_windows_launcher(platform: <span class="kw-2">&amp;</span>Platform) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[u8] {
+<a href=#89 id=89 data-nosnippet>89</a></span><span class="kw">pub fn </span>get_windows_launcher(platform: <span class="kw-2">&amp;</span>Subdir) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[u8] {
 <a href=#90 id=90 data-nosnippet>90</a>    <span class="kw">match </span>platform {
-<a href=#91 id=91 data-nosnippet>91</a>        Platform::Win32 =&gt; <span class="macro">include_bytes!</span>(<span class="string">"../../resources/cli-32.exe"</span>),
-<a href=#92 id=92 data-nosnippet>92</a>        Platform::Win64 =&gt; <span class="macro">include_bytes!</span>(<span class="string">"../../resources/cli-64.exe"</span>),
-<a href=#93 id=93 data-nosnippet>93</a>        Platform::WinArm64 =&gt; <span class="macro">include_bytes!</span>(<span class="string">"../../resources/cli-arm64.exe"</span>),
+<a href=#91 id=91 data-nosnippet>91</a>        Subdir::Win32 =&gt; <span class="macro">include_bytes!</span>(<span class="string">"../../resources/cli-32.exe"</span>),
+<a href=#92 id=92 data-nosnippet>92</a>        Subdir::Win64 =&gt; <span class="macro">include_bytes!</span>(<span class="string">"../../resources/cli-64.exe"</span>),
+<a href=#93 id=93 data-nosnippet>93</a>        Subdir::WinArm64 =&gt; <span class="macro">include_bytes!</span>(<span class="string">"../../resources/cli-arm64.exe"</span>),
 <a href=#94 id=94 data-nosnippet>94</a>        <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">"unsupported platform for a Windows entry point launcher: {platform}"</span>),
 <a href=#95 id=95 data-nosnippet>95</a>    }
 <a href=#96 id=96 data-nosnippet>96</a>}
@@ -117,7 +117,7 @@
 <a href=#115 id=115 data-nosnippet>115</a>    target_prefix: <span class="kw-2">&amp;</span>str,
 <a href=#116 id=116 data-nosnippet>116</a>    entry_point: <span class="kw-2">&amp;</span>EntryPoint,
 <a href=#117 id=117 data-nosnippet>117</a>    python_info: <span class="kw-2">&amp;</span>PythonInfo,
-<a href=#118 id=118 data-nosnippet>118</a>    target_platform: <span class="kw-2">&amp;</span>Platform,
+<a href=#118 id=118 data-nosnippet>118</a>    target_platform: <span class="kw-2">&amp;</span>Subdir,
 <a href=#119 id=119 data-nosnippet>119</a>) -&gt; <span class="prelude-ty">Result</span>&lt;[PathsEntry; <span class="number">2</span>], std::io::Error&gt; {
 <a href=#120 id=120 data-nosnippet>120</a>    <span class="kw">let </span>relative_path_script_py = ensure_entry_point_relative_path(
 <a href=#121 id=121 data-nosnippet>121</a>        <span class="kw-2">&amp;</span>python_info
@@ -308,7 +308,7 @@
 <a href=#306 id=306 data-nosnippet>306</a>    <span class="kw">use </span><span class="kw">super</span>::ensure_entry_point_relative_path;
 <a href=#307 id=307 data-nosnippet>307</a>    <span class="kw">use </span><span class="kw">crate</span>::install::PythonInfo;
 <a href=#308 id=308 data-nosnippet>308</a>    <span class="kw">use </span>rattler_conda_types::package::EntryPoint;
-<a href=#309 id=309 data-nosnippet>309</a>    <span class="kw">use </span>rattler_conda_types::{Platform, Version};
+<a href=#309 id=309 data-nosnippet>309</a>    <span class="kw">use </span>rattler_conda_types::{Subdir, Version};
 <a href=#310 id=310 data-nosnippet>310</a>    <span class="kw">use </span>std::path::{Path, PathBuf};
 <a href=#311 id=311 data-nosnippet>311</a>    <span class="kw">use </span>std::str::FromStr;
 <a href=#312 id=312 data-nosnippet>312</a>
@@ -355,27 +355,19 @@
 <a href=#353 id=353 data-nosnippet>353</a>            <span class="string">"/prefix"</span>,
 <a href=#354 id=354 data-nosnippet>354</a>            <span class="bool-val">false</span>,
 <a href=#355 id=355 data-nosnippet>355</a>            <span class="kw-2">&amp;</span>EntryPoint::from_str(<span class="string">"jupyter-lab = jupyterlab.labapp:main"</span>).unwrap(),
-<a href=#356 id=356 data-nosnippet>356</a>            <span class="kw-2">&amp;</span>PythonInfo::from_version(
-<a href=#357 id=357 data-nosnippet>357</a>                <span class="kw-2">&amp;</span>Version::from_str(<span class="string">"3.11.0"</span>).unwrap(),
-<a href=#358 id=358 data-nosnippet>358</a>                <span class="prelude-val">None</span>,
-<a href=#359 id=359 data-nosnippet>359</a>                Platform::Linux64,
-<a href=#360 id=360 data-nosnippet>360</a>            )
-<a href=#361 id=361 data-nosnippet>361</a>            .unwrap(),
-<a href=#362 id=362 data-nosnippet>362</a>        );
-<a href=#363 id=363 data-nosnippet>363</a>        <span class="macro">insta::assert_snapshot!</span>(script);
-<a href=#364 id=364 data-nosnippet>364</a>
-<a href=#365 id=365 data-nosnippet>365</a>        <span class="kw">let </span>script = <span class="kw">super</span>::python_entry_point_template(
-<a href=#366 id=366 data-nosnippet>366</a>            <span class="string">"/prefix"</span>,
-<a href=#367 id=367 data-nosnippet>367</a>            <span class="bool-val">true</span>,
-<a href=#368 id=368 data-nosnippet>368</a>            <span class="kw-2">&amp;</span>EntryPoint::from_str(<span class="string">"jupyter-lab = jupyterlab.labapp:main"</span>).unwrap(),
-<a href=#369 id=369 data-nosnippet>369</a>            <span class="kw-2">&amp;</span>PythonInfo::from_version(
-<a href=#370 id=370 data-nosnippet>370</a>                <span class="kw-2">&amp;</span>Version::from_str(<span class="string">"3.11.0"</span>).unwrap(),
-<a href=#371 id=371 data-nosnippet>371</a>                <span class="prelude-val">None</span>,
-<a href=#372 id=372 data-nosnippet>372</a>                Platform::Linux64,
-<a href=#373 id=373 data-nosnippet>373</a>            )
-<a href=#374 id=374 data-nosnippet>374</a>            .unwrap(),
-<a href=#375 id=375 data-nosnippet>375</a>        );
-<a href=#376 id=376 data-nosnippet>376</a>        <span class="macro">insta::assert_snapshot!</span>(<span class="string">"windows"</span>, script);
-<a href=#377 id=377 data-nosnippet>377</a>    }
-<a href=#378 id=378 data-nosnippet>378</a>}
+<a href=#356 id=356 data-nosnippet>356</a>            <span class="kw-2">&amp;</span>PythonInfo::from_version(<span class="kw-2">&amp;</span>Version::from_str(<span class="string">"3.11.0"</span>).unwrap(), <span class="prelude-val">None</span>, Subdir::Linux64)
+<a href=#357 id=357 data-nosnippet>357</a>                .unwrap(),
+<a href=#358 id=358 data-nosnippet>358</a>        );
+<a href=#359 id=359 data-nosnippet>359</a>        <span class="macro">insta::assert_snapshot!</span>(script);
+<a href=#360 id=360 data-nosnippet>360</a>
+<a href=#361 id=361 data-nosnippet>361</a>        <span class="kw">let </span>script = <span class="kw">super</span>::python_entry_point_template(
+<a href=#362 id=362 data-nosnippet>362</a>            <span class="string">"/prefix"</span>,
+<a href=#363 id=363 data-nosnippet>363</a>            <span class="bool-val">true</span>,
+<a href=#364 id=364 data-nosnippet>364</a>            <span class="kw-2">&amp;</span>EntryPoint::from_str(<span class="string">"jupyter-lab = jupyterlab.labapp:main"</span>).unwrap(),
+<a href=#365 id=365 data-nosnippet>365</a>            <span class="kw-2">&amp;</span>PythonInfo::from_version(<span class="kw-2">&amp;</span>Version::from_str(<span class="string">"3.11.0"</span>).unwrap(), <span class="prelude-val">None</span>, Subdir::Linux64)
+<a href=#366 id=366 data-nosnippet>366</a>                .unwrap(),
+<a href=#367 id=367 data-nosnippet>367</a>        );
+<a href=#368 id=368 data-nosnippet>368</a>        <span class="macro">insta::assert_snapshot!</span>(<span class="string">"windows"</span>, script);
+<a href=#369 id=369 data-nosnippet>369</a>    }
+<a href=#370 id=370 data-nosnippet>370</a>}
 </code></pre></div></section></main></body></html>

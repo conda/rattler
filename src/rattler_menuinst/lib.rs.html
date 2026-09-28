@@ -3,7 +3,7 @@
 </head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">rattler_menuinst/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::path::{Path, PathBuf};
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>rattler_conda_types::{
-<a href=#4 id=4 data-nosnippet>4</a>    Platform, PrefixRecord,
+<a href=#4 id=4 data-nosnippet>4</a>    PrefixRecord, Subdir,
 <a href=#5 id=5 data-nosnippet>5</a>    menuinst::{MenuMode, Tracker},
 <a href=#6 id=6 data-nosnippet>6</a>};
 <a href=#7 id=7 data-nosnippet>7</a>
@@ -85,7 +85,7 @@
 <a href=#83 id=83 data-nosnippet>83</a></span><span class="kw">pub fn </span>install_menuitems_for_record(
 <a href=#84 id=84 data-nosnippet>84</a>    target_prefix: <span class="kw-2">&amp;</span>Path,
 <a href=#85 id=85 data-nosnippet>85</a>    prefix_record: <span class="kw-2">&amp;</span>PrefixRecord,
-<a href=#86 id=86 data-nosnippet>86</a>    platform: Platform,
+<a href=#86 id=86 data-nosnippet>86</a>    platform: Subdir,
 <a href=#87 id=87 data-nosnippet>87</a>    menu_mode: MenuMode,
 <a href=#88 id=88 data-nosnippet>88</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), MenuInstError&gt; {
 <a href=#89 id=89 data-nosnippet>89</a>    <span class="comment">// Look for Menu/*.json files in the package paths
@@ -125,7 +125,7 @@
 <a href=#123 id=123 data-nosnippet>123</a>    file: <span class="kw-2">&amp;</span>Path,
 <a href=#124 id=124 data-nosnippet>124</a>    prefix: <span class="kw-2">&amp;</span>Path,
 <a href=#125 id=125 data-nosnippet>125</a>    base_prefix: <span class="kw-2">&amp;</span>Path,
-<a href=#126 id=126 data-nosnippet>126</a>    platform: Platform,
+<a href=#126 id=126 data-nosnippet>126</a>    platform: Subdir,
 <a href=#127 id=127 data-nosnippet>127</a>    menu_mode: MenuMode,
 <a href=#128 id=128 data-nosnippet>128</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Tracker&gt;, MenuInstError&gt; {
 <a href=#129 id=129 data-nosnippet>129</a>    <span class="kw">let </span>text = std::fs::read_to_string(file)<span class="question-mark">?</span>;

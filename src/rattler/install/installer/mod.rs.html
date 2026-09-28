@@ -24,8 +24,8 @@
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>itertools::Itertools;
 <a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>rattler_cache::package_cache::{CacheMetadata, CacheReporter};
 <a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>rattler_conda_types::{
-<a href=#25 id=25 data-nosnippet>25</a>    MatchSpec, PackageName, PackageNameMatcher, PackageRecord, Platform, PrefixRecord,
-<a href=#26 id=26 data-nosnippet>26</a>    RepoDataRecord, prefix_record::Link, utils::ensure_safe_path_component,
+<a href=#25 id=25 data-nosnippet>25</a>    MatchSpec, PackageName, PackageNameMatcher, PackageRecord, PrefixRecord, RepoDataRecord,
+<a href=#26 id=26 data-nosnippet>26</a>    Subdir, prefix_record::Link, utils::ensure_safe_path_component,
 <a href=#27 id=27 data-nosnippet>27</a>};
 <a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span>rattler_networking::{LazyClient, retry_policies::default_retry_policy};
 <a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span>rayon::prelude::<span class="kw-2">*</span>;
@@ -84,7 +84,7 @@
 <a href=#82 id=82 data-nosnippet>82</a>    io_semaphore: <span class="prelude-ty">Option</span>&lt;Arc&lt;Semaphore&gt;&gt;,
 <a href=#83 id=83 data-nosnippet>83</a>    concurrent_requests_semaphore: <span class="prelude-ty">Option</span>&lt;Arc&lt;Semaphore&gt;&gt;,
 <a href=#84 id=84 data-nosnippet>84</a>    reporter: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>Reporter&gt;&gt;,
-<a href=#85 id=85 data-nosnippet>85</a>    target_platform: <span class="prelude-ty">Option</span>&lt;Platform&gt;,
+<a href=#85 id=85 data-nosnippet>85</a>    target_platform: <span class="prelude-ty">Option</span>&lt;Subdir&gt;,
 <a href=#86 id=86 data-nosnippet>86</a>    apple_code_sign_behavior: AppleCodeSignBehavior,
 <a href=#87 id=87 data-nosnippet>87</a>    alternative_target_prefix: <span class="prelude-ty">Option</span>&lt;PathBuf&gt;,
 <a href=#88 id=88 data-nosnippet>88</a>    reinstall_packages: <span class="prelude-ty">Option</span>&lt;HashSet&lt;PackageName&gt;&gt;,
@@ -369,7 +369,7 @@
 <a href=#367 id=367 data-nosnippet>367</a>    <span class="doccomment">/// Sets the target platform of the installation. If not specifically set
 <a href=#368 id=368 data-nosnippet>368</a>    /// this will default to the current platform.
 <a href=#369 id=369 data-nosnippet>369</a>    </span><span class="attr">#[must_use]
-<a href=#370 id=370 data-nosnippet>370</a>    </span><span class="kw">pub fn </span>with_target_platform(<span class="self">self</span>, target_platform: Platform) -&gt; <span class="self">Self </span>{
+<a href=#370 id=370 data-nosnippet>370</a>    </span><span class="kw">pub fn </span>with_target_platform(<span class="self">self</span>, target_platform: Subdir) -&gt; <span class="self">Self </span>{
 <a href=#371 id=371 data-nosnippet>371</a>        <span class="self">Self </span>{
 <a href=#372 id=372 data-nosnippet>372</a>            target_platform: <span class="prelude-val">Some</span>(target_platform),
 <a href=#373 id=373 data-nosnippet>373</a>            ..<span class="self">self
@@ -381,7 +381,7 @@
 <a href=#379 id=379 data-nosnippet>379</a>    ///
 <a href=#380 id=380 data-nosnippet>380</a>    /// This function is similar to [`Self::with_target_platform`], but modifies
 <a href=#381 id=381 data-nosnippet>381</a>    /// an existing instance.
-<a href=#382 id=382 data-nosnippet>382</a>    </span><span class="kw">pub fn </span>set_target_platform(<span class="kw-2">&amp;mut </span><span class="self">self</span>, target_platform: Platform) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+<a href=#382 id=382 data-nosnippet>382</a>    </span><span class="kw">pub fn </span>set_target_platform(<span class="kw-2">&amp;mut </span><span class="self">self</span>, target_platform: Subdir) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
 <a href=#383 id=383 data-nosnippet>383</a>        <span class="self">self</span>.target_platform = <span class="prelude-val">Some</span>(target_platform);
 <a href=#384 id=384 data-nosnippet>384</a>        <span class="self">self
 <a href=#385 id=385 data-nosnippet>385</a>    </span>}
@@ -572,7 +572,7 @@
 <a href=#570 id=570 data-nosnippet>570</a>        <span class="comment">// Construct a transaction from the current and desired situation.
 <a href=#571 id=571 data-nosnippet>571</a>        </span><span class="kw">let </span>target_platform = <span class="self">self
 <a href=#572 id=572 data-nosnippet>572</a>            </span>.target_platform
-<a href=#573 id=573 data-nosnippet>573</a>            .or_else(Platform::current)
+<a href=#573 id=573 data-nosnippet>573</a>            .or_else(Subdir::current)
 <a href=#574 id=574 data-nosnippet>574</a>            .ok_or(InstallerError::UnknownHostPlatform)<span class="question-mark">?</span>;
 <a href=#575 id=575 data-nosnippet>575</a>        <span class="kw">let </span>desired_records: Vec&lt;<span class="kw">_</span>&gt; = records.into_iter().collect();
 <a href=#576 id=576 data-nosnippet>576</a>        <span class="kw">let </span><span class="kw-2">mut </span>transaction = Transaction::from_current_and_desired(
@@ -615,7 +615,7 @@
 <a href=#613 id=613 data-nosnippet>613</a>
 <a href=#614 id=614 data-nosnippet>614</a>        <span class="comment">// Validate that if the target platform is NoArch, all packages to be installed
 <a href=#615 id=615 data-nosnippet>615</a>        // must also be noarch (subdir == "noarch")
-<a href=#616 id=616 data-nosnippet>616</a>        </span><span class="kw">if </span>target_platform == Platform::NoArch {
+<a href=#616 id=616 data-nosnippet>616</a>        </span><span class="kw">if </span>target_platform == Subdir::NoArch {
 <a href=#617 id=617 data-nosnippet>617</a>            <span class="kw">let </span>non_noarch_packages: Vec&lt;String&gt; = transaction
 <a href=#618 id=618 data-nosnippet>618</a>                .installed_packages()
 <a href=#619 id=619 data-nosnippet>619</a>                .filter(|record| record.package_record.subdir != <span class="string">"noarch"</span>)
@@ -1959,7 +1959,7 @@
 <a href=#1957 id=1957 data-nosnippet>1957</a>
 <a href=#1958 id=1958 data-nosnippet>1958</a>    <span class="attr">#[tokio::test]
 <a href=#1959 id=1959 data-nosnippet>1959</a>    </span><span class="kw">async fn </span>test_noarch_platform_rejects_platform_specific_packages() {
-<a href=#1960 id=1960 data-nosnippet>1960</a>        <span class="kw">use </span>rattler_conda_types::Platform;
+<a href=#1960 id=1960 data-nosnippet>1960</a>        <span class="kw">use </span>rattler_conda_types::Subdir;
 <a href=#1961 id=1961 data-nosnippet>1961</a>
 <a href=#1962 id=1962 data-nosnippet>1962</a>        <span class="kw">let </span>(_temp_dir, target_prefix) = create_test_environment();
 <a href=#1963 id=1963 data-nosnippet>1963</a>
@@ -1967,8 +1967,8 @@
 <a href=#1965 id=1965 data-nosnippet>1965</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>platform_specific_package = create_dummy_repo_record();
 <a href=#1966 id=1966 data-nosnippet>1966</a>        platform_specific_package.package_record.subdir = <span class="string">"osx-arm64"</span>.to_string();
 <a href=#1967 id=1967 data-nosnippet>1967</a>
-<a href=#1968 id=1968 data-nosnippet>1968</a>        <span class="comment">// Try to install this platform-specific package with Platform::NoArch
-<a href=#1969 id=1969 data-nosnippet>1969</a>        </span><span class="kw">let </span>installer = Installer::new().with_target_platform(Platform::NoArch);
+<a href=#1968 id=1968 data-nosnippet>1968</a>        <span class="comment">// Try to install this platform-specific package with Subdir::NoArch
+<a href=#1969 id=1969 data-nosnippet>1969</a>        </span><span class="kw">let </span>installer = Installer::new().with_target_platform(Subdir::NoArch);
 <a href=#1970 id=1970 data-nosnippet>1970</a>        <span class="kw">let </span>result = installer
 <a href=#1971 id=1971 data-nosnippet>1971</a>            .install(<span class="kw-2">&amp;</span>target_prefix, <span class="macro">vec!</span>[platform_specific_package.clone()])
 <a href=#1972 id=1972 data-nosnippet>1972</a>            .<span class="kw">await</span>;
@@ -1998,7 +1998,7 @@
 <a href=#1996 id=1996 data-nosnippet>1996</a>
 <a href=#1997 id=1997 data-nosnippet>1997</a>    <span class="attr">#[tokio::test]
 <a href=#1998 id=1998 data-nosnippet>1998</a>    </span><span class="kw">async fn </span>test_noarch_platform_accepts_noarch_packages() {
-<a href=#1999 id=1999 data-nosnippet>1999</a>        <span class="kw">use </span>rattler_conda_types::{NoArchType, Platform};
+<a href=#1999 id=1999 data-nosnippet>1999</a>        <span class="kw">use </span>rattler_conda_types::{NoArchType, Subdir};
 <a href=#2000 id=2000 data-nosnippet>2000</a>
 <a href=#2001 id=2001 data-nosnippet>2001</a>        <span class="kw">let </span>(_temp_dir, target_prefix) = create_test_environment();
 <a href=#2002 id=2002 data-nosnippet>2002</a>
@@ -2007,8 +2007,8 @@
 <a href=#2005 id=2005 data-nosnippet>2005</a>        noarch_package.package_record.subdir = <span class="string">"noarch"</span>.to_string();
 <a href=#2006 id=2006 data-nosnippet>2006</a>        noarch_package.package_record.noarch = NoArchType::generic();
 <a href=#2007 id=2007 data-nosnippet>2007</a>
-<a href=#2008 id=2008 data-nosnippet>2008</a>        <span class="comment">// Try to install this noarch package with Platform::NoArch
-<a href=#2009 id=2009 data-nosnippet>2009</a>        </span><span class="kw">let </span>installer = Installer::new().with_target_platform(Platform::NoArch);
+<a href=#2008 id=2008 data-nosnippet>2008</a>        <span class="comment">// Try to install this noarch package with Subdir::NoArch
+<a href=#2009 id=2009 data-nosnippet>2009</a>        </span><span class="kw">let </span>installer = Installer::new().with_target_platform(Subdir::NoArch);
 <a href=#2010 id=2010 data-nosnippet>2010</a>        <span class="kw">let </span>result = installer
 <a href=#2011 id=2011 data-nosnippet>2011</a>            .install(<span class="kw-2">&amp;</span>target_prefix, <span class="macro">vec!</span>[noarch_package.clone()])
 <a href=#2012 id=2012 data-nosnippet>2012</a>            .<span class="kw">await</span>;

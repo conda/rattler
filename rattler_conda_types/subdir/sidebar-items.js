@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Arch","ParseSubdirError","Subdir"],"fn":["is_valid_subdir_name"],"struct":["ArchIter","ParseArchError","SubdirIter"]};

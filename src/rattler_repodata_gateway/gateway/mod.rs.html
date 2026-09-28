@@ -42,13 +42,13 @@
 <a href=#40 id=40 data-nosnippet>40</a><span class="kw">pub use </span>query::{NamesQuery, NamesQueryOutput, RepoDataQuery, RepoDataQueryOutput};
 <a href=#41 id=41 data-nosnippet>41</a><span class="attr">#[cfg(not(target_arch = <span class="string">"wasm32"</span>))]
 <a href=#42 id=42 data-nosnippet>42</a></span><span class="kw">use </span>rattler_cache::package_cache::PackageCache;
-<a href=#43 id=43 data-nosnippet>43</a><span class="kw">use </span>rattler_conda_types::{Channel, ChannelRelations, MatchSpec, Platform, RepoDataRecord};
+<a href=#43 id=43 data-nosnippet>43</a><span class="kw">use </span>rattler_conda_types::{Channel, ChannelRelations, MatchSpec, RepoDataRecord, Subdir};
 <a href=#44 id=44 data-nosnippet>44</a><span class="kw">use </span>rattler_networking::LazyClient;
 <a href=#45 id=45 data-nosnippet>45</a><span class="kw">pub use </span>repo_data::{RemovedPackages, RepoData};
 <a href=#46 id=46 data-nosnippet>46</a><span class="kw">use </span>run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
 <a href=#47 id=47 data-nosnippet>47</a><span class="kw">pub use </span>run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
 <a href=#48 id=48 data-nosnippet>48</a><span class="kw">pub use </span>source::{RepoDataSource, Source};
-<a href=#49 id=49 data-nosnippet>49</a><span class="kw">use </span>subdir::Subdir;
+<a href=#49 id=49 data-nosnippet>49</a><span class="kw">use </span>subdir::SubdirState;
 <a href=#50 id=50 data-nosnippet>50</a><span class="kw">use </span>tracing::{Level, instrument};
 <a href=#51 id=51 data-nosnippet>51</a><span class="kw">pub use </span>warning::GatewayWarning;
 <a href=#52 id=52 data-nosnippet>52</a><span class="kw">pub use </span>who_needs_query::WhoNeedsQuery;
@@ -138,7 +138,7 @@
 <a href=#136 id=136 data-nosnippet>136</a>    /// ```ignore
 <a href=#137 id=137 data-nosnippet>137</a>    /// gateway.query(
 <a href=#138 id=138 data-nosnippet>138</a>    ///     vec![channel1, channel2],
-<a href=#139 id=139 data-nosnippet>139</a>    ///     vec![Platform::Linux64],
+<a href=#139 id=139 data-nosnippet>139</a>    ///     vec![Subdir::Linux64],
 <a href=#140 id=140 data-nosnippet>140</a>    ///     vec![spec],
 <a href=#141 id=141 data-nosnippet>141</a>    /// ).await
 <a href=#142 id=142 data-nosnippet>142</a>    /// ```
@@ -151,7 +151,7 @@
 <a href=#149 id=149 data-nosnippet>149</a>    ///         Source::Channel(channel),
 <a href=#150 id=150 data-nosnippet>150</a>    ///         Source::Custom(my_custom_source),
 <a href=#151 id=151 data-nosnippet>151</a>    ///     ],
-<a href=#152 id=152 data-nosnippet>152</a>    ///     vec![Platform::Linux64],
+<a href=#152 id=152 data-nosnippet>152</a>    ///     vec![Subdir::Linux64],
 <a href=#153 id=153 data-nosnippet>153</a>    ///     vec![spec],
 <a href=#154 id=154 data-nosnippet>154</a>    /// ).await
 <a href=#155 id=155 data-nosnippet>155</a>    /// ```
@@ -164,7 +164,7 @@
 <a href=#162 id=162 data-nosnippet>162</a>    <span class="kw">where
 <a href=#163 id=163 data-nosnippet>163</a>        </span>AsSource: Into&lt;Source&gt;,
 <a href=#164 id=164 data-nosnippet>164</a>        SourceIter: IntoIterator&lt;Item = AsSource&gt;,
-<a href=#165 id=165 data-nosnippet>165</a>        PlatformIter: IntoIterator&lt;Item = Platform&gt;,
+<a href=#165 id=165 data-nosnippet>165</a>        PlatformIter: IntoIterator&lt;Item = Subdir&gt;,
 <a href=#166 id=166 data-nosnippet>166</a>        &lt;PlatformIter <span class="kw">as </span>IntoIterator&gt;::IntoIter: Clone,
 <a href=#167 id=167 data-nosnippet>167</a>        PackageNameIter: IntoIterator&lt;Item = IntoMatchSpec&gt;,
 <a href=#168 id=168 data-nosnippet>168</a>        IntoMatchSpec: Into&lt;MatchSpec&gt;,
@@ -186,7 +186,7 @@
 <a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">where
 <a href=#185 id=185 data-nosnippet>185</a>        </span>AsChannel: Into&lt;Channel&gt;,
 <a href=#186 id=186 data-nosnippet>186</a>        ChannelIter: IntoIterator&lt;Item = AsChannel&gt;,
-<a href=#187 id=187 data-nosnippet>187</a>        PlatformIter: IntoIterator&lt;Item = Platform&gt;,
+<a href=#187 id=187 data-nosnippet>187</a>        PlatformIter: IntoIterator&lt;Item = Subdir&gt;,
 <a href=#188 id=188 data-nosnippet>188</a>        &lt;PlatformIter <span class="kw">as </span>IntoIterator&gt;::IntoIter: Clone,
 <a href=#189 id=189 data-nosnippet>189</a>    {
 <a href=#190 id=190 data-nosnippet>190</a>        NamesQuery::new(
@@ -220,14 +220,14 @@
 <a href=#218 id=218 data-nosnippet>218</a>    /// sharding configuration, to avoid fetching a shard for every package.
 <a href=#219 id=219 data-nosnippet>219</a>    ///
 <a href=#220 id=220 data-nosnippet>220</a>    /// ```no_run
-<a href=#221 id=221 data-nosnippet>221</a>    /// # use rattler_conda_types::{Channel, PackageName, Platform};
+<a href=#221 id=221 data-nosnippet>221</a>    /// # use rattler_conda_types::{Channel, PackageName, Subdir};
 <a href=#222 id=222 data-nosnippet>222</a>    /// # use rattler_repodata_gateway::Gateway;
 <a href=#223 id=223 data-nosnippet>223</a>    /// # async fn example(gateway: Gateway, channel: Channel) -&gt; anyhow::Result&lt;()&gt; {
 <a href=#224 id=224 data-nosnippet>224</a>    /// // Which packages of the channel depend on `polars`?
 <a href=#225 id=225 data-nosnippet>225</a>    /// let dependents = gateway
 <a href=#226 id=226 data-nosnippet>226</a>    ///     .who_needs(
 <a href=#227 id=227 data-nosnippet>227</a>    ///         vec![channel],
-<a href=#228 id=228 data-nosnippet>228</a>    ///         vec![Platform::Linux64, Platform::NoArch],
+<a href=#228 id=228 data-nosnippet>228</a>    ///         vec![Subdir::Linux64, Subdir::NoArch],
 <a href=#229 id=229 data-nosnippet>229</a>    ///         PackageName::new_unchecked("polars"),
 <a href=#230 id=230 data-nosnippet>230</a>    ///     )
 <a href=#231 id=231 data-nosnippet>231</a>    ///     .await?;
@@ -256,7 +256,7 @@
 <a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">where
 <a href=#255 id=255 data-nosnippet>255</a>        </span>AsSource: Into&lt;Source&gt;,
 <a href=#256 id=256 data-nosnippet>256</a>        SourceIter: IntoIterator&lt;Item = AsSource&gt;,
-<a href=#257 id=257 data-nosnippet>257</a>        PlatformIter: IntoIterator&lt;Item = Platform&gt;,
+<a href=#257 id=257 data-nosnippet>257</a>        PlatformIter: IntoIterator&lt;Item = Subdir&gt;,
 <a href=#258 id=258 data-nosnippet>258</a>    {
 <a href=#259 id=259 data-nosnippet>259</a>        WhoNeedsQuery::new(
 <a href=#260 id=260 data-nosnippet>260</a>            <span class="self">self</span>.inner.clone(),
@@ -289,7 +289,7 @@
 <a href=#287 id=287 data-nosnippet>287</a>    </span><span class="kw">pub async fn </span>channel_relations(
 <a href=#288 id=288 data-nosnippet>288</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#289 id=289 data-nosnippet>289</a>        channel: <span class="kw-2">&amp;</span>Channel,
-<a href=#290 id=290 data-nosnippet>290</a>        platform: Platform,
+<a href=#290 id=290 data-nosnippet>290</a>        platform: Subdir,
 <a href=#291 id=291 data-nosnippet>291</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;ChannelRelations&gt;, GatewayError&gt; {
 <a href=#292 id=292 data-nosnippet>292</a>        <span class="kw">match </span><span class="self">self
 <a href=#293 id=293 data-nosnippet>293</a>            </span>.inner
@@ -370,11 +370,11 @@
 <a href=#368 id=368 data-nosnippet>368</a>        </span><span class="kw">if </span>mode == CacheClearMode::InMemoryAndDisk {
 <a href=#369 id=369 data-nosnippet>369</a>            <span class="kw">use </span>std::str::FromStr;
 <a href=#370 id=370 data-nosnippet>370</a>
-<a href=#371 id=371 data-nosnippet>371</a>            <span class="kw">let </span>platforms_to_clear: Vec&lt;Platform&gt; = <span class="kw">match </span><span class="kw-2">&amp;</span>subdirs {
-<a href=#372 id=372 data-nosnippet>372</a>                SubdirSelection::All =&gt; Platform::all().collect(),
+<a href=#371 id=371 data-nosnippet>371</a>            <span class="kw">let </span>platforms_to_clear: Vec&lt;Subdir&gt; = <span class="kw">match </span><span class="kw-2">&amp;</span>subdirs {
+<a href=#372 id=372 data-nosnippet>372</a>                SubdirSelection::All =&gt; Subdir::all().collect(),
 <a href=#373 id=373 data-nosnippet>373</a>                SubdirSelection::Some(subdirs) =&gt; subdirs
 <a href=#374 id=374 data-nosnippet>374</a>                    .iter()
-<a href=#375 id=375 data-nosnippet>375</a>                    .filter_map(|s| Platform::from_str(s).ok())
+<a href=#375 id=375 data-nosnippet>375</a>                    .filter_map(|s| Subdir::from_str(s).ok())
 <a href=#376 id=376 data-nosnippet>376</a>                    .collect(),
 <a href=#377 id=377 data-nosnippet>377</a>            };
 <a href=#378 id=378 data-nosnippet>378</a>
@@ -408,7 +408,7 @@
 <a href=#406 id=406 data-nosnippet>406</a><span class="kw">struct </span>GatewayInner {
 <a href=#407 id=407 data-nosnippet>407</a>    <span class="doccomment">/// Subdirectories keyed by channel, platform and whether sharding is enabled.
 <a href=#408 id=408 data-nosnippet>408</a>    /// Full repodata scans must not reuse a sharded subdir from an ordinary query.
-<a href=#409 id=409 data-nosnippet>409</a>    </span>subdirs: CoalescedMap&lt;(Channel, Platform, bool), Arc&lt;Subdir&gt;&gt;,
+<a href=#409 id=409 data-nosnippet>409</a>    </span>subdirs: CoalescedMap&lt;(Channel, Subdir, bool), Arc&lt;SubdirState&gt;&gt;,
 <a href=#410 id=410 data-nosnippet>410</a>
 <a href=#411 id=411 data-nosnippet>411</a>    <span class="doccomment">/// The client to use to fetch repodata.
 <a href=#412 id=412 data-nosnippet>412</a>    </span>client: LazyClient,
@@ -463,10 +463,10 @@
 <a href=#461 id=461 data-nosnippet>461</a>    </span><span class="kw">async fn </span>get_or_create_subdir(
 <a href=#462 id=462 data-nosnippet>462</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#463 id=463 data-nosnippet>463</a>        channel: <span class="kw-2">&amp;</span>Channel,
-<a href=#464 id=464 data-nosnippet>464</a>        platform: Platform,
+<a href=#464 id=464 data-nosnippet>464</a>        platform: Subdir,
 <a href=#465 id=465 data-nosnippet>465</a>        reporter: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>Reporter&gt;&gt;,
 <a href=#466 id=466 data-nosnippet>466</a>        allow_sharded: bool,
-<a href=#467 id=467 data-nosnippet>467</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Arc&lt;Subdir&gt;, GatewayError&gt; {
+<a href=#467 id=467 data-nosnippet>467</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Arc&lt;SubdirState&gt;, GatewayError&gt; {
 <a href=#468 id=468 data-nosnippet>468</a>        <span class="kw">let </span>url = channel.platform_url(platform);
 <a href=#469 id=469 data-nosnippet>469</a>        <span class="kw">let </span>sharded_enabled = allow_sharded
 <a href=#470 id=470 data-nosnippet>470</a>            &amp;&amp; url.scheme() != <span class="string">"file"
@@ -524,7 +524,7 @@
 <a href=#522 id=522 data-nosnippet>522</a>    <span class="kw">use </span>rattler_conda_types::{
 <a href=#523 id=523 data-nosnippet>523</a>        Channel, ChannelConfig, MatchSpec, PackageName,
 <a href=#524 id=524 data-nosnippet>524</a>        ParseStrictness::{Lenient, Strict},
-<a href=#525 id=525 data-nosnippet>525</a>        Platform, RepoDataRecord,
+<a href=#525 id=525 data-nosnippet>525</a>        RepoDataRecord, Subdir,
 <a href=#526 id=526 data-nosnippet>526</a>    };
 <a href=#527 id=527 data-nosnippet>527</a>    <span class="kw">use </span>rstest::rstest;
 <a href=#528 id=528 data-nosnippet>528</a>    <span class="kw">use </span>url::Url;
@@ -567,7 +567,7 @@
 <a href=#565 id=565 data-nosnippet>565</a>        <span class="kw">let </span>records = gateway
 <a href=#566 id=566 data-nosnippet>566</a>            .query(
 <a href=#567 id=567 data-nosnippet>567</a>                <span class="macro">vec!</span>[local_conda_forge().<span class="kw">await</span>],
-<a href=#568 id=568 data-nosnippet>568</a>                <span class="macro">vec!</span>[Platform::Linux64, Platform::NoArch],
+<a href=#568 id=568 data-nosnippet>568</a>                <span class="macro">vec!</span>[Subdir::Linux64, Subdir::NoArch],
 <a href=#569 id=569 data-nosnippet>569</a>                <span class="macro">vec!</span>[PackageName::from_str(<span class="string">"rubin-env"</span>).unwrap()].into_iter(),
 <a href=#570 id=570 data-nosnippet>570</a>            )
 <a href=#571 id=571 data-nosnippet>571</a>            .recursive(<span class="bool-val">true</span>)
@@ -587,7 +587,7 @@
 <a href=#585 id=585 data-nosnippet>585</a>        <span class="kw">let </span>records = gateway
 <a href=#586 id=586 data-nosnippet>586</a>            .query(
 <a href=#587 id=587 data-nosnippet>587</a>                <span class="macro">vec!</span>[index.channel()],
-<a href=#588 id=588 data-nosnippet>588</a>                <span class="macro">vec!</span>[Platform::Linux64, Platform::Win32, Platform::NoArch],
+<a href=#588 id=588 data-nosnippet>588</a>                <span class="macro">vec!</span>[Subdir::Linux64, Subdir::Win32, Subdir::NoArch],
 <a href=#589 id=589 data-nosnippet>589</a>                <span class="macro">vec!</span>[PackageName::from_str(<span class="string">"rubin-env"</span>).unwrap()].into_iter(),
 <a href=#590 id=590 data-nosnippet>590</a>            )
 <a href=#591 id=591 data-nosnippet>591</a>            .recursive(<span class="bool-val">true</span>)
@@ -666,7 +666,7 @@
 <a href=#664 id=664 data-nosnippet>664</a>        <span class="kw">let </span>records = gateway
 <a href=#665 id=665 data-nosnippet>665</a>            .query(
 <a href=#666 id=666 data-nosnippet>666</a>                <span class="macro">vec!</span>[channel.clone()],
-<a href=#667 id=667 data-nosnippet>667</a>                <span class="macro">vec!</span>[Platform::NoArch],
+<a href=#667 id=667 data-nosnippet>667</a>                <span class="macro">vec!</span>[Subdir::NoArch],
 <a href=#668 id=668 data-nosnippet>668</a>                <span class="macro">vec!</span>[PackageName::from_str(<span class="string">"demo"</span>).unwrap()],
 <a href=#669 id=669 data-nosnippet>669</a>            )
 <a href=#670 id=670 data-nosnippet>670</a>            .with_reporter(reporter.clone())
@@ -680,7 +680,7 @@
 <a href=#678 id=678 data-nosnippet>678</a>        </span><span class="kw">let </span>records = gateway
 <a href=#679 id=679 data-nosnippet>679</a>            .query(
 <a href=#680 id=680 data-nosnippet>680</a>                <span class="macro">vec!</span>[channel],
-<a href=#681 id=681 data-nosnippet>681</a>                <span class="macro">vec!</span>[Platform::NoArch],
+<a href=#681 id=681 data-nosnippet>681</a>                <span class="macro">vec!</span>[Subdir::NoArch],
 <a href=#682 id=682 data-nosnippet>682</a>                <span class="macro">vec!</span>[PackageName::from_str(<span class="string">"demo"</span>).unwrap()],
 <a href=#683 id=683 data-nosnippet>683</a>            )
 <a href=#684 id=684 data-nosnippet>684</a>            .with_reporter(reporter.clone())
@@ -764,7 +764,7 @@
 <a href=#762 id=762 data-nosnippet>762</a>        <span class="kw">let </span>records = Gateway::new()
 <a href=#763 id=763 data-nosnippet>763</a>            .query(
 <a href=#764 id=764 data-nosnippet>764</a>                <span class="macro">vec!</span>[Channel::try_from_directory(tempdir.path()).unwrap()],
-<a href=#765 id=765 data-nosnippet>765</a>                <span class="macro">vec!</span>[Platform::NoArch],
+<a href=#765 id=765 data-nosnippet>765</a>                <span class="macro">vec!</span>[Subdir::NoArch],
 <a href=#766 id=766 data-nosnippet>766</a>                <span class="macro">vec!</span>[PackageName::from_str(<span class="string">"demo"</span>).unwrap()],
 <a href=#767 id=767 data-nosnippet>767</a>            )
 <a href=#768 id=768 data-nosnippet>768</a>            .with_reporter(reporter.clone())
@@ -809,7 +809,7 @@
 <a href=#807 id=807 data-nosnippet>807</a>        <span class="kw">let </span>output = Gateway::new()
 <a href=#808 id=808 data-nosnippet>808</a>            .query(
 <a href=#809 id=809 data-nosnippet>809</a>                <span class="macro">vec!</span>[channel.clone()],
-<a href=#810 id=810 data-nosnippet>810</a>                <span class="macro">vec!</span>[Platform::NoArch],
+<a href=#810 id=810 data-nosnippet>810</a>                <span class="macro">vec!</span>[Subdir::NoArch],
 <a href=#811 id=811 data-nosnippet>811</a>                <span class="macro">vec!</span>[PackageName::from_str(<span class="string">"demo"</span>).unwrap()],
 <a href=#812 id=812 data-nosnippet>812</a>            )
 <a href=#813 id=813 data-nosnippet>813</a>            .channel_notices(<span class="bool-val">true</span>)
@@ -824,7 +824,7 @@
 <a href=#822 id=822 data-nosnippet>822</a>        <span class="kw">let </span>output = Gateway::new()
 <a href=#823 id=823 data-nosnippet>823</a>            .query(
 <a href=#824 id=824 data-nosnippet>824</a>                <span class="macro">vec!</span>[channel],
-<a href=#825 id=825 data-nosnippet>825</a>                <span class="macro">vec!</span>[Platform::NoArch],
+<a href=#825 id=825 data-nosnippet>825</a>                <span class="macro">vec!</span>[Subdir::NoArch],
 <a href=#826 id=826 data-nosnippet>826</a>                <span class="macro">vec!</span>[PackageName::from_str(<span class="string">"demo"</span>).unwrap()],
 <a href=#827 id=827 data-nosnippet>827</a>            )
 <a href=#828 id=828 data-nosnippet>828</a>            .<span class="kw">await
@@ -969,7 +969,7 @@
 <a href=#967 id=967 data-nosnippet>967</a>        <span class="kw">let </span>records = gateway
 <a href=#968 id=968 data-nosnippet>968</a>            .query(
 <a href=#969 id=969 data-nosnippet>969</a>                <span class="macro">vec!</span>[index.clone()],
-<a href=#970 id=970 data-nosnippet>970</a>                <span class="macro">vec!</span>[Platform::Win64],
+<a href=#970 id=970 data-nosnippet>970</a>                <span class="macro">vec!</span>[Subdir::Win64],
 <a href=#971 id=971 data-nosnippet>971</a>                <span class="macro">vec!</span>[MatchSpec::from_str(
 <a href=#972 id=972 data-nosnippet>972</a>                    <span class="string">"https://conda.anaconda.org/conda-forge/win-64/openssl-3.3.1-h2466b09_1.conda"</span>,
 <a href=#973 id=973 data-nosnippet>973</a>                    Strict,
@@ -991,7 +991,7 @@
 <a href=#989 id=989 data-nosnippet>989</a>        <span class="kw">let </span>records = gateway
 <a href=#990 id=990 data-nosnippet>990</a>            .query(
 <a href=#991 id=991 data-nosnippet>991</a>                <span class="macro">vec!</span>[index],
-<a href=#992 id=992 data-nosnippet>992</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#992 id=992 data-nosnippet>992</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#993 id=993 data-nosnippet>993</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"openssl ==3.3.1 h2466b09_1"</span>, Strict).unwrap()]
 <a href=#994 id=994 data-nosnippet>994</a>                    .into_iter(),
 <a href=#995 id=995 data-nosnippet>995</a>            )
@@ -1034,7 +1034,7 @@
 <a href=#1032 id=1032 data-nosnippet>1032</a>        <span class="kw">let </span>records = gateway
 <a href=#1033 id=1033 data-nosnippet>1033</a>            .query(
 <a href=#1034 id=1034 data-nosnippet>1034</a>                <span class="macro">vec!</span>[index.clone()],
-<a href=#1035 id=1035 data-nosnippet>1035</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#1035 id=1035 data-nosnippet>1035</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#1036 id=1036 data-nosnippet>1036</a>                <span class="macro">vec!</span>[
 <a href=#1037 id=1037 data-nosnippet>1037</a>                    MatchSpec::from_str(<span class="string">"mamba ==0.9.2 py39h951de11_0"</span>, Strict).unwrap(),
 <a href=#1038 id=1038 data-nosnippet>1038</a>                    MatchSpec::from_str(openssl_url, Strict).unwrap(),
@@ -1072,7 +1072,7 @@
 <a href=#1070 id=1070 data-nosnippet>1070</a>        <span class="kw">let </span>records = gateway
 <a href=#1071 id=1071 data-nosnippet>1071</a>            .query(
 <a href=#1072 id=1072 data-nosnippet>1072</a>                <span class="macro">vec!</span>[index.clone()],
-<a href=#1073 id=1073 data-nosnippet>1073</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#1073 id=1073 data-nosnippet>1073</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#1074 id=1074 data-nosnippet>1074</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"mamba ==0.9.2 py39h951de11_0"</span>, Strict).unwrap()]
 <a href=#1075 id=1075 data-nosnippet>1075</a>                    .into_iter(),
 <a href=#1076 id=1076 data-nosnippet>1076</a>            )
@@ -1107,7 +1107,7 @@
 <a href=#1105 id=1105 data-nosnippet>1105</a>        <span class="kw">let </span>records = gateway
 <a href=#1106 id=1106 data-nosnippet>1106</a>            .query(
 <a href=#1107 id=1107 data-nosnippet>1107</a>                <span class="macro">vec!</span>[index.clone()],
-<a href=#1108 id=1108 data-nosnippet>1108</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#1108 id=1108 data-nosnippet>1108</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#1109 id=1109 data-nosnippet>1109</a>                <span class="macro">vec!</span>[matchspec].into_iter(),
 <a href=#1110 id=1110 data-nosnippet>1110</a>            )
 <a href=#1111 id=1111 data-nosnippet>1111</a>            .recursive(<span class="bool-val">false</span>)
@@ -1128,7 +1128,7 @@
 <a href=#1126 id=1126 data-nosnippet>1126</a>        <span class="kw">let </span>records = gateway
 <a href=#1127 id=1127 data-nosnippet>1127</a>            .query(
 <a href=#1128 id=1128 data-nosnippet>1128</a>                <span class="macro">vec!</span>[index.clone()],
-<a href=#1129 id=1129 data-nosnippet>1129</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#1129 id=1129 data-nosnippet>1129</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#1130 id=1130 data-nosnippet>1130</a>                <span class="macro">vec!</span>[matchspec].into_iter(),
 <a href=#1131 id=1131 data-nosnippet>1131</a>            )
 <a href=#1132 id=1132 data-nosnippet>1132</a>            .recursive(<span class="bool-val">false</span>)
@@ -1145,7 +1145,7 @@
 <a href=#1143 id=1143 data-nosnippet>1143</a>        <span class="kw">let </span>records = gateway
 <a href=#1144 id=1144 data-nosnippet>1144</a>            .query(
 <a href=#1145 id=1145 data-nosnippet>1145</a>                <span class="macro">vec!</span>[index.clone()],
-<a href=#1146 id=1146 data-nosnippet>1146</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#1146 id=1146 data-nosnippet>1146</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#1147 id=1147 data-nosnippet>1147</a>                <span class="macro">vec!</span>[matchspec1, matchspec2].into_iter(),
 <a href=#1148 id=1148 data-nosnippet>1148</a>            )
 <a href=#1149 id=1149 data-nosnippet>1149</a>            .recursive(<span class="bool-val">false</span>)
@@ -1172,7 +1172,7 @@
 <a href=#1170 id=1170 data-nosnippet>1170</a>        <span class="kw">let </span>gateway_error = gateway
 <a href=#1171 id=1171 data-nosnippet>1171</a>            .query(
 <a href=#1172 id=1172 data-nosnippet>1172</a>                <span class="macro">vec!</span>[index.clone()],
-<a href=#1173 id=1173 data-nosnippet>1173</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#1173 id=1173 data-nosnippet>1173</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#1174 id=1174 data-nosnippet>1174</a>                <span class="macro">vec!</span>[matchspec].into_iter(),
 <a href=#1175 id=1175 data-nosnippet>1175</a>            )
 <a href=#1176 id=1176 data-nosnippet>1176</a>            .recursive(<span class="bool-val">true</span>)
@@ -1196,7 +1196,7 @@
 <a href=#1194 id=1194 data-nosnippet>1194</a>        <span class="kw">let </span>err = gateway
 <a href=#1195 id=1195 data-nosnippet>1195</a>            .query(
 <a href=#1196 id=1196 data-nosnippet>1196</a>                <span class="macro">vec!</span>[Channel::from_str(channel, <span class="kw-2">&amp;</span>default_channel_config).unwrap()],
-<a href=#1197 id=1197 data-nosnippet>1197</a>                <span class="macro">vec!</span>[Platform::Linux64, Platform::NoArch],
+<a href=#1197 id=1197 data-nosnippet>1197</a>                <span class="macro">vec!</span>[Subdir::Linux64, Subdir::NoArch],
 <a href=#1198 id=1198 data-nosnippet>1198</a>                <span class="macro">vec!</span>[PackageName::from_str(<span class="string">"some-package"</span>).unwrap()].into_iter(),
 <a href=#1199 id=1199 data-nosnippet>1199</a>            )
 <a href=#1200 id=1200 data-nosnippet>1200</a>            .<span class="kw">await</span>;
@@ -1215,7 +1215,7 @@
 <a href=#1213 id=1213 data-nosnippet>1213</a>                <span class="macro">vec!</span>[Channel::from_url(
 <a href=#1214 id=1214 data-nosnippet>1214</a>                    Url::parse(<span class="string">"https://conda.anaconda.org/conda-forge"</span>).unwrap(),
 <a href=#1215 id=1215 data-nosnippet>1215</a>                )],
-<a href=#1216 id=1216 data-nosnippet>1216</a>                <span class="macro">vec!</span>[Platform::Linux64, Platform::NoArch],
+<a href=#1216 id=1216 data-nosnippet>1216</a>                <span class="macro">vec!</span>[Subdir::Linux64, Subdir::NoArch],
 <a href=#1217 id=1217 data-nosnippet>1217</a>                <span class="macro">vec!</span>[
 <a href=#1218 id=1218 data-nosnippet>1218</a>                    <span class="comment">// PackageName::from_str("rubin-env").unwrap(),
 <a href=#1219 id=1219 data-nosnippet>1219</a>                    // PackageName::from_str("jupyterlab").unwrap(),
@@ -1272,7 +1272,7 @@
 <a href=#1270 id=1270 data-nosnippet>1270</a>        </span><span class="kw">let </span>query = gateway
 <a href=#1271 id=1271 data-nosnippet>1271</a>            .query(
 <a href=#1272 id=1272 data-nosnippet>1272</a>                <span class="macro">vec!</span>[local_channel.channel()],
-<a href=#1273 id=1273 data-nosnippet>1273</a>                <span class="macro">vec!</span>[Platform::Linux64, Platform::NoArch],
+<a href=#1273 id=1273 data-nosnippet>1273</a>                <span class="macro">vec!</span>[Subdir::Linux64, Subdir::NoArch],
 <a href=#1274 id=1274 data-nosnippet>1274</a>                <span class="macro">vec!</span>[PackageName::from_str(<span class="string">"python"</span>).unwrap()].into_iter(),
 <a href=#1275 id=1275 data-nosnippet>1275</a>            )
 <a href=#1276 id=1276 data-nosnippet>1276</a>            .with_reporter(downloads.clone());
@@ -1315,7 +1315,7 @@
 <a href=#1313 id=1313 data-nosnippet>1313</a>        <span class="kw">let </span>channel = Channel::from_str(<span class="string">"conda-forge"</span>, <span class="kw-2">&amp;</span>channel_config).unwrap();
 <a href=#1314 id=1314 data-nosnippet>1314</a>
 <a href=#1315 id=1315 data-nosnippet>1315</a>        <span class="comment">// Create mock cache files for linux-64 platform
-<a href=#1316 id=1316 data-nosnippet>1316</a>        </span><span class="kw">let </span>subdir_url = channel.platform_url(Platform::Linux64);
+<a href=#1316 id=1316 data-nosnippet>1316</a>        </span><span class="kw">let </span>subdir_url = channel.platform_url(Subdir::Linux64);
 <a href=#1317 id=1317 data-nosnippet>1317</a>        <span class="kw">let </span>cache_key = <span class="kw">crate</span>::utils::url_to_cache_filename(
 <a href=#1318 id=1318 data-nosnippet>1318</a>            <span class="kw-2">&amp;</span>subdir_url.join(<span class="string">"repodata.json"</span>).expect(<span class="string">"valid filename"</span>),
 <a href=#1319 id=1319 data-nosnippet>1319</a>        );
@@ -1335,7 +1335,7 @@
 <a href=#1333 id=1333 data-nosnippet>1333</a>        <span class="macro">assert!</span>(lock_path.exists(), <span class="string">"lock file should exist before clear"</span>);
 <a href=#1334 id=1334 data-nosnippet>1334</a>
 <a href=#1335 id=1335 data-nosnippet>1335</a>        <span class="comment">// Clear the disk cache
-<a href=#1336 id=1336 data-nosnippet>1336</a>        </span>RemoteSubdirClient::clear_cache(cache_dir.path(), <span class="kw-2">&amp;</span>channel, Platform::Linux64).unwrap();
+<a href=#1336 id=1336 data-nosnippet>1336</a>        </span>RemoteSubdirClient::clear_cache(cache_dir.path(), <span class="kw-2">&amp;</span>channel, Subdir::Linux64).unwrap();
 <a href=#1337 id=1337 data-nosnippet>1337</a>
 <a href=#1338 id=1338 data-nosnippet>1338</a>        <span class="comment">// Verify json and info files are removed but lock file remains
 <a href=#1339 id=1339 data-nosnippet>1339</a>        </span><span class="macro">assert!</span>(
@@ -1368,7 +1368,7 @@
 <a href=#1366 id=1366 data-nosnippet>1366</a>        </span><span class="kw">let </span>index_base_url = channel
 <a href=#1367 id=1367 data-nosnippet>1367</a>            .base_url
 <a href=#1368 id=1368 data-nosnippet>1368</a>            .url()
-<a href=#1369 id=1369 data-nosnippet>1369</a>            .join(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}/"</span>, Platform::Linux64.as_str()))
+<a href=#1369 id=1369 data-nosnippet>1369</a>            .join(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}/"</span>, Subdir::Linux64.as_str()))
 <a href=#1370 id=1370 data-nosnippet>1370</a>            .expect(<span class="string">"invalid subdir url"</span>);
 <a href=#1371 id=1371 data-nosnippet>1371</a>        <span class="kw">let </span>canonical_shards_url = index_base_url
 <a href=#1372 id=1372 data-nosnippet>1372</a>            .join(REPODATA_SHARDS_FILENAME)
@@ -1389,7 +1389,7 @@
 <a href=#1387 id=1387 data-nosnippet>1387</a>        </span>);
 <a href=#1388 id=1388 data-nosnippet>1388</a>
 <a href=#1389 id=1389 data-nosnippet>1389</a>        <span class="comment">// Clear the disk cache
-<a href=#1390 id=1390 data-nosnippet>1390</a>        </span>ShardedSubdir::clear_cache(cache_dir.path(), <span class="kw-2">&amp;</span>channel, Platform::Linux64).unwrap();
+<a href=#1390 id=1390 data-nosnippet>1390</a>        </span>ShardedSubdir::clear_cache(cache_dir.path(), <span class="kw-2">&amp;</span>channel, Subdir::Linux64).unwrap();
 <a href=#1391 id=1391 data-nosnippet>1391</a>
 <a href=#1392 id=1392 data-nosnippet>1392</a>        <span class="comment">// Verify cache file is removed
 <a href=#1393 id=1393 data-nosnippet>1393</a>        </span><span class="macro">assert!</span>(
@@ -1409,11 +1409,11 @@
 <a href=#1407 id=1407 data-nosnippet>1407</a>        <span class="kw">let </span>channel = Channel::from_str(<span class="string">"conda-forge"</span>, <span class="kw-2">&amp;</span>channel_config).unwrap();
 <a href=#1408 id=1408 data-nosnippet>1408</a>
 <a href=#1409 id=1409 data-nosnippet>1409</a>        <span class="comment">// Clear should succeed even when there's no cache (empty directory)
-<a href=#1410 id=1410 data-nosnippet>1410</a>        </span>RemoteSubdirClient::clear_cache(cache_dir.path(), <span class="kw-2">&amp;</span>channel, Platform::Linux64).unwrap();
+<a href=#1410 id=1410 data-nosnippet>1410</a>        </span>RemoteSubdirClient::clear_cache(cache_dir.path(), <span class="kw-2">&amp;</span>channel, Subdir::Linux64).unwrap();
 <a href=#1411 id=1411 data-nosnippet>1411</a>
 <a href=#1412 id=1412 data-nosnippet>1412</a>        <span class="comment">// Clear should also succeed when the cache directory doesn't exist at all
 <a href=#1413 id=1413 data-nosnippet>1413</a>        </span><span class="kw">let </span>non_existent_dir = cache_dir.path().join(<span class="string">"does-not-exist"</span>);
-<a href=#1414 id=1414 data-nosnippet>1414</a>        RemoteSubdirClient::clear_cache(<span class="kw-2">&amp;</span>non_existent_dir, <span class="kw-2">&amp;</span>channel, Platform::Linux64).unwrap();
+<a href=#1414 id=1414 data-nosnippet>1414</a>        RemoteSubdirClient::clear_cache(<span class="kw-2">&amp;</span>non_existent_dir, <span class="kw-2">&amp;</span>channel, Subdir::Linux64).unwrap();
 <a href=#1415 id=1415 data-nosnippet>1415</a>    }
 <a href=#1416 id=1416 data-nosnippet>1416</a>
 <a href=#1417 id=1417 data-nosnippet>1417</a>    <span class="attr">#[test]
@@ -1427,11 +1427,11 @@
 <a href=#1425 id=1425 data-nosnippet>1425</a>        <span class="kw">let </span>channel = Channel::from_str(<span class="string">"conda-forge"</span>, <span class="kw-2">&amp;</span>channel_config).unwrap();
 <a href=#1426 id=1426 data-nosnippet>1426</a>
 <a href=#1427 id=1427 data-nosnippet>1427</a>        <span class="comment">// Clear should succeed even when there's no cache (empty directory)
-<a href=#1428 id=1428 data-nosnippet>1428</a>        </span>ShardedSubdir::clear_cache(cache_dir.path(), <span class="kw-2">&amp;</span>channel, Platform::Linux64).unwrap();
+<a href=#1428 id=1428 data-nosnippet>1428</a>        </span>ShardedSubdir::clear_cache(cache_dir.path(), <span class="kw-2">&amp;</span>channel, Subdir::Linux64).unwrap();
 <a href=#1429 id=1429 data-nosnippet>1429</a>
 <a href=#1430 id=1430 data-nosnippet>1430</a>        <span class="comment">// Clear should also succeed when the cache directory doesn't exist at all
 <a href=#1431 id=1431 data-nosnippet>1431</a>        </span><span class="kw">let </span>non_existent_dir = cache_dir.path().join(<span class="string">"does-not-exist"</span>);
-<a href=#1432 id=1432 data-nosnippet>1432</a>        ShardedSubdir::clear_cache(<span class="kw-2">&amp;</span>non_existent_dir, <span class="kw-2">&amp;</span>channel, Platform::Linux64).unwrap();
+<a href=#1432 id=1432 data-nosnippet>1432</a>        ShardedSubdir::clear_cache(<span class="kw-2">&amp;</span>non_existent_dir, <span class="kw-2">&amp;</span>channel, Subdir::Linux64).unwrap();
 <a href=#1433 id=1433 data-nosnippet>1433</a>    }
 <a href=#1434 id=1434 data-nosnippet>1434</a>
 <a href=#1435 id=1435 data-nosnippet>1435</a>    <span class="attr">#[test]
@@ -1557,7 +1557,7 @@
 <a href=#1555 id=1555 data-nosnippet>1555</a>        <span class="kw">let </span>unpatched = gateway
 <a href=#1556 id=1556 data-nosnippet>1556</a>            .query(
 <a href=#1557 id=1557 data-nosnippet>1557</a>                <span class="macro">vec!</span>[channel.clone()],
-<a href=#1558 id=1558 data-nosnippet>1558</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#1558 id=1558 data-nosnippet>1558</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#1559 id=1559 data-nosnippet>1559</a>                <span class="macro">vec!</span>[application()],
 <a href=#1560 id=1560 data-nosnippet>1560</a>            )
 <a href=#1561 id=1561 data-nosnippet>1561</a>            .recursive(<span class="bool-val">true</span>)
@@ -1574,7 +1574,7 @@
 <a href=#1572 id=1572 data-nosnippet>1572</a>        <span class="kw">let </span>patched = gateway
 <a href=#1573 id=1573 data-nosnippet>1573</a>            .query(
 <a href=#1574 id=1574 data-nosnippet>1574</a>                <span class="macro">vec!</span>[channel.clone()],
-<a href=#1575 id=1575 data-nosnippet>1575</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#1575 id=1575 data-nosnippet>1575</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#1576 id=1576 data-nosnippet>1576</a>                <span class="macro">vec!</span>[application()],
 <a href=#1577 id=1577 data-nosnippet>1577</a>            )
 <a href=#1578 id=1578 data-nosnippet>1578</a>            .recursive(<span class="bool-val">true</span>)
@@ -1597,7 +1597,7 @@
 <a href=#1595 id=1595 data-nosnippet>1595</a>        );
 <a href=#1596 id=1596 data-nosnippet>1596</a>
 <a href=#1597 id=1597 data-nosnippet>1597</a>        <span class="kw">let </span>unpatched_again = gateway
-<a href=#1598 id=1598 data-nosnippet>1598</a>            .query(<span class="macro">vec!</span>[channel], <span class="macro">vec!</span>[Platform::Linux64], <span class="macro">vec!</span>[application()])
+<a href=#1598 id=1598 data-nosnippet>1598</a>            .query(<span class="macro">vec!</span>[channel], <span class="macro">vec!</span>[Subdir::Linux64], <span class="macro">vec!</span>[application()])
 <a href=#1599 id=1599 data-nosnippet>1599</a>            .recursive(<span class="bool-val">true</span>)
 <a href=#1600 id=1600 data-nosnippet>1600</a>            .<span class="kw">await
 <a href=#1601 id=1601 data-nosnippet>1601</a>            </span>.unwrap();
@@ -1656,7 +1656,7 @@
 <a href=#1654 id=1654 data-nosnippet>1654</a>        <span class="kw">let </span>output = gateway
 <a href=#1655 id=1655 data-nosnippet>1655</a>            .query(
 <a href=#1656 id=1656 data-nosnippet>1656</a>                <span class="macro">vec!</span>[channel.clone()],
-<a href=#1657 id=1657 data-nosnippet>1657</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#1657 id=1657 data-nosnippet>1657</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#1658 id=1658 data-nosnippet>1658</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"foo"</span>, Lenient).unwrap()],
 <a href=#1659 id=1659 data-nosnippet>1659</a>            )
 <a href=#1660 id=1660 data-nosnippet>1660</a>            .<span class="kw">await
@@ -1721,7 +1721,7 @@
 <a href=#1719 id=1719 data-nosnippet>1719</a>        </span><span class="kw">let </span>records = gateway
 <a href=#1720 id=1720 data-nosnippet>1720</a>            .query(
 <a href=#1721 id=1721 data-nosnippet>1721</a>                <span class="macro">vec!</span>[channel.clone()],
-<a href=#1722 id=1722 data-nosnippet>1722</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#1722 id=1722 data-nosnippet>1722</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#1723 id=1723 data-nosnippet>1723</a>                <span class="macro">vec!</span>[PackageName::from_str(<span class="string">"testpkg"</span>).unwrap()].into_iter(),
 <a href=#1724 id=1724 data-nosnippet>1724</a>            )
 <a href=#1725 id=1725 data-nosnippet>1725</a>            .recursive(<span class="bool-val">false</span>)
@@ -1748,7 +1748,7 @@
 <a href=#1746 id=1746 data-nosnippet>1746</a>        </span><span class="kw">let </span>records = gateway
 <a href=#1747 id=1747 data-nosnippet>1747</a>            .query(
 <a href=#1748 id=1748 data-nosnippet>1748</a>                <span class="macro">vec!</span>[channel.clone()],
-<a href=#1749 id=1749 data-nosnippet>1749</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#1749 id=1749 data-nosnippet>1749</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#1750 id=1750 data-nosnippet>1750</a>                <span class="macro">vec!</span>[PackageName::from_str(<span class="string">"testpkg"</span>).unwrap()].into_iter(),
 <a href=#1751 id=1751 data-nosnippet>1751</a>            )
 <a href=#1752 id=1752 data-nosnippet>1752</a>            .recursive(<span class="bool-val">false</span>)
@@ -1788,7 +1788,7 @@
 <a href=#1786 id=1786 data-nosnippet>1786</a>        </span><span class="kw">let </span>records = gateway_cache_only
 <a href=#1787 id=1787 data-nosnippet>1787</a>            .query(
 <a href=#1788 id=1788 data-nosnippet>1788</a>                <span class="macro">vec!</span>[channel.clone()],
-<a href=#1789 id=1789 data-nosnippet>1789</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#1789 id=1789 data-nosnippet>1789</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#1790 id=1790 data-nosnippet>1790</a>                <span class="macro">vec!</span>[PackageName::from_str(<span class="string">"testpkg"</span>).unwrap()].into_iter(),
 <a href=#1791 id=1791 data-nosnippet>1791</a>            )
 <a href=#1792 id=1792 data-nosnippet>1792</a>            .recursive(<span class="bool-val">false</span>)
@@ -1820,7 +1820,7 @@
 <a href=#1818 id=1818 data-nosnippet>1818</a>        <span class="kw">let </span>records = gateway_fresh
 <a href=#1819 id=1819 data-nosnippet>1819</a>            .query(
 <a href=#1820 id=1820 data-nosnippet>1820</a>                <span class="macro">vec!</span>[channel.clone()],
-<a href=#1821 id=1821 data-nosnippet>1821</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#1821 id=1821 data-nosnippet>1821</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#1822 id=1822 data-nosnippet>1822</a>                <span class="macro">vec!</span>[PackageName::from_str(<span class="string">"testpkg"</span>).unwrap()].into_iter(),
 <a href=#1823 id=1823 data-nosnippet>1823</a>            )
 <a href=#1824 id=1824 data-nosnippet>1824</a>            .recursive(<span class="bool-val">false</span>)
@@ -1862,7 +1862,7 @@
 <a href=#1860 id=1860 data-nosnippet>1860</a>        <span class="kw">let </span>records = gateway
 <a href=#1861 id=1861 data-nosnippet>1861</a>            .query(
 <a href=#1862 id=1862 data-nosnippet>1862</a>                <span class="macro">vec!</span>[index.clone()],
-<a href=#1863 id=1863 data-nosnippet>1863</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#1863 id=1863 data-nosnippet>1863</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#1864 id=1864 data-nosnippet>1864</a>                <span class="macro">vec!</span>[matchspec].into_iter(),
 <a href=#1865 id=1865 data-nosnippet>1865</a>            )
 <a href=#1866 id=1866 data-nosnippet>1866</a>            .recursive(<span class="bool-val">false</span>)
@@ -1920,7 +1920,7 @@
 <a href=#1918 id=1918 data-nosnippet>1918</a>        <span class="kw">let </span>records = gateway
 <a href=#1919 id=1919 data-nosnippet>1919</a>            .query(
 <a href=#1920 id=1920 data-nosnippet>1920</a>                <span class="macro">vec!</span>[server.channel()],
-<a href=#1921 id=1921 data-nosnippet>1921</a>                <span class="macro">vec!</span>[Platform::Linux64, Platform::NoArch],
+<a href=#1921 id=1921 data-nosnippet>1921</a>                <span class="macro">vec!</span>[Subdir::Linux64, Subdir::NoArch],
 <a href=#1922 id=1922 data-nosnippet>1922</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"openssl=3.*=*_1"</span>, Lenient).unwrap()].into_iter(),
 <a href=#1923 id=1923 data-nosnippet>1923</a>            )
 <a href=#1924 id=1924 data-nosnippet>1924</a>            .recursive(<span class="bool-val">false</span>)
@@ -1990,7 +1990,7 @@
 <a href=#1988 id=1988 data-nosnippet>1988</a>
 <a href=#1989 id=1989 data-nosnippet>1989</a>    <span class="doccomment">/// A mock `RepoDataSource` for testing custom source functionality.
 <a href=#1990 id=1990 data-nosnippet>1990</a>    </span><span class="kw">struct </span>MockRepoDataSource {
-<a href=#1991 id=1991 data-nosnippet>1991</a>        records: std::collections::HashMap&lt;(Platform, PackageName), Vec&lt;RepoDataRecord&gt;&gt;,
+<a href=#1991 id=1991 data-nosnippet>1991</a>        records: std::collections::HashMap&lt;(Subdir, PackageName), Vec&lt;RepoDataRecord&gt;&gt;,
 <a href=#1992 id=1992 data-nosnippet>1992</a>    }
 <a href=#1993 id=1993 data-nosnippet>1993</a>
 <a href=#1994 id=1994 data-nosnippet>1994</a>    <span class="kw">impl </span>MockRepoDataSource {
@@ -2000,7 +2000,7 @@
 <a href=#1998 id=1998 data-nosnippet>1998</a>            }
 <a href=#1999 id=1999 data-nosnippet>1999</a>        }
 <a href=#2000 id=2000 data-nosnippet>2000</a>
-<a href=#2001 id=2001 data-nosnippet>2001</a>        <span class="kw">fn </span>add_record(<span class="kw-2">&amp;mut </span><span class="self">self</span>, platform: Platform, record: RepoDataRecord) {
+<a href=#2001 id=2001 data-nosnippet>2001</a>        <span class="kw">fn </span>add_record(<span class="kw-2">&amp;mut </span><span class="self">self</span>, platform: Subdir, record: RepoDataRecord) {
 <a href=#2002 id=2002 data-nosnippet>2002</a>            <span class="kw">let </span>name = record.package_record.name.clone();
 <a href=#2003 id=2003 data-nosnippet>2003</a>            <span class="self">self</span>.records
 <a href=#2004 id=2004 data-nosnippet>2004</a>                .entry((platform, name))
@@ -2013,7 +2013,7 @@
 <a href=#2011 id=2011 data-nosnippet>2011</a>    </span><span class="kw">impl </span><span class="kw">super</span>::RepoDataSource <span class="kw">for </span>MockRepoDataSource {
 <a href=#2012 id=2012 data-nosnippet>2012</a>        <span class="kw">async fn </span>fetch_package_records(
 <a href=#2013 id=2013 data-nosnippet>2013</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#2014 id=2014 data-nosnippet>2014</a>            platform: Platform,
+<a href=#2014 id=2014 data-nosnippet>2014</a>            platform: Subdir,
 <a href=#2015 id=2015 data-nosnippet>2015</a>            name: <span class="kw-2">&amp;</span>PackageName,
 <a href=#2016 id=2016 data-nosnippet>2016</a>        ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Arc&lt;RepoDataRecord&gt;&gt;, GatewayError&gt; {
 <a href=#2017 id=2017 data-nosnippet>2017</a>            <span class="kw">let </span>records = <span class="self">self
@@ -2024,7 +2024,7 @@
 <a href=#2022 id=2022 data-nosnippet>2022</a>            <span class="prelude-val">Ok</span>(records.into_iter().map(Arc::new).collect())
 <a href=#2023 id=2023 data-nosnippet>2023</a>        }
 <a href=#2024 id=2024 data-nosnippet>2024</a>
-<a href=#2025 id=2025 data-nosnippet>2025</a>        <span class="kw">fn </span>package_names(<span class="kw-2">&amp;</span><span class="self">self</span>, platform: Platform) -&gt; Vec&lt;String&gt; {
+<a href=#2025 id=2025 data-nosnippet>2025</a>        <span class="kw">fn </span>package_names(<span class="kw-2">&amp;</span><span class="self">self</span>, platform: Subdir) -&gt; Vec&lt;String&gt; {
 <a href=#2026 id=2026 data-nosnippet>2026</a>            <span class="self">self</span>.records
 <a href=#2027 id=2027 data-nosnippet>2027</a>                .keys()
 <a href=#2028 id=2028 data-nosnippet>2028</a>                .filter(|(p, <span class="kw">_</span>)| <span class="kw-2">*</span>p == platform)
@@ -2107,15 +2107,15 @@
 <a href=#2105 id=2105 data-nosnippet>2105</a>        <span class="comment">// Create a mock source with some records
 <a href=#2106 id=2106 data-nosnippet>2106</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>mock_source = MockRepoDataSource::new();
 <a href=#2107 id=2107 data-nosnippet>2107</a>        mock_source.add_record(
-<a href=#2108 id=2108 data-nosnippet>2108</a>            Platform::Linux64,
+<a href=#2108 id=2108 data-nosnippet>2108</a>            Subdir::Linux64,
 <a href=#2109 id=2109 data-nosnippet>2109</a>            make_test_record(<span class="string">"testpkg"</span>, <span class="string">"1.0.0"</span>, <span class="string">"linux-64"</span>),
 <a href=#2110 id=2110 data-nosnippet>2110</a>        );
 <a href=#2111 id=2111 data-nosnippet>2111</a>        mock_source.add_record(
-<a href=#2112 id=2112 data-nosnippet>2112</a>            Platform::Linux64,
+<a href=#2112 id=2112 data-nosnippet>2112</a>            Subdir::Linux64,
 <a href=#2113 id=2113 data-nosnippet>2113</a>            make_test_record(<span class="string">"testpkg"</span>, <span class="string">"2.0.0"</span>, <span class="string">"linux-64"</span>),
 <a href=#2114 id=2114 data-nosnippet>2114</a>        );
 <a href=#2115 id=2115 data-nosnippet>2115</a>        mock_source.add_record(
-<a href=#2116 id=2116 data-nosnippet>2116</a>            Platform::NoArch,
+<a href=#2116 id=2116 data-nosnippet>2116</a>            Subdir::NoArch,
 <a href=#2117 id=2117 data-nosnippet>2117</a>            make_test_record(<span class="string">"otherpkg"</span>, <span class="string">"1.0.0"</span>, <span class="string">"noarch"</span>),
 <a href=#2118 id=2118 data-nosnippet>2118</a>        );
 <a href=#2119 id=2119 data-nosnippet>2119</a>
@@ -2125,7 +2125,7 @@
 <a href=#2123 id=2123 data-nosnippet>2123</a>        </span><span class="kw">let </span>records = gateway
 <a href=#2124 id=2124 data-nosnippet>2124</a>            .query(
 <a href=#2125 id=2125 data-nosnippet>2125</a>                <span class="macro">vec!</span>[<span class="kw">super</span>::Source::Custom(source.clone())],
-<a href=#2126 id=2126 data-nosnippet>2126</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#2126 id=2126 data-nosnippet>2126</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#2127 id=2127 data-nosnippet>2127</a>                <span class="macro">vec!</span>[PackageName::from_str(<span class="string">"testpkg"</span>).unwrap()].into_iter(),
 <a href=#2128 id=2128 data-nosnippet>2128</a>            )
 <a href=#2129 id=2129 data-nosnippet>2129</a>            .recursive(<span class="bool-val">false</span>)
@@ -2147,7 +2147,7 @@
 <a href=#2145 id=2145 data-nosnippet>2145</a>        </span><span class="kw">let </span>records = gateway
 <a href=#2146 id=2146 data-nosnippet>2146</a>            .query(
 <a href=#2147 id=2147 data-nosnippet>2147</a>                <span class="macro">vec!</span>[<span class="kw">super</span>::Source::Custom(source)],
-<a href=#2148 id=2148 data-nosnippet>2148</a>                <span class="macro">vec!</span>[Platform::NoArch],
+<a href=#2148 id=2148 data-nosnippet>2148</a>                <span class="macro">vec!</span>[Subdir::NoArch],
 <a href=#2149 id=2149 data-nosnippet>2149</a>                <span class="macro">vec!</span>[PackageName::from_str(<span class="string">"otherpkg"</span>).unwrap()].into_iter(),
 <a href=#2150 id=2150 data-nosnippet>2150</a>            )
 <a href=#2151 id=2151 data-nosnippet>2151</a>            .recursive(<span class="bool-val">false</span>)
@@ -2181,7 +2181,7 @@
 <a href=#2179 id=2179 data-nosnippet>2179</a>        </span><span class="kw">let </span>records = gateway
 <a href=#2180 id=2180 data-nosnippet>2180</a>            .query(
 <a href=#2181 id=2181 data-nosnippet>2181</a>                <span class="macro">vec!</span>[<span class="kw">super</span>::Source::SparseRepoData(<span class="macro">vec!</span>[source.clone()])],
-<a href=#2182 id=2182 data-nosnippet>2182</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#2182 id=2182 data-nosnippet>2182</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#2183 id=2183 data-nosnippet>2183</a>                <span class="macro">vec!</span>[PackageName::from_str(<span class="string">"foobar"</span>).unwrap()].into_iter(),
 <a href=#2184 id=2184 data-nosnippet>2184</a>            )
 <a href=#2185 id=2185 data-nosnippet>2185</a>            .recursive(<span class="bool-val">false</span>)
@@ -2201,7 +2201,7 @@
 <a href=#2199 id=2199 data-nosnippet>2199</a>        </span><span class="kw">let </span>records = gateway
 <a href=#2200 id=2200 data-nosnippet>2200</a>            .query(
 <a href=#2201 id=2201 data-nosnippet>2201</a>                <span class="macro">vec!</span>[<span class="kw">super</span>::Source::SparseRepoData(<span class="macro">vec!</span>[source.clone()])],
-<a href=#2202 id=2202 data-nosnippet>2202</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#2202 id=2202 data-nosnippet>2202</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#2203 id=2203 data-nosnippet>2203</a>                <span class="macro">vec!</span>[PackageName::from_str(<span class="string">"foobar"</span>).unwrap()].into_iter(),
 <a href=#2204 id=2204 data-nosnippet>2204</a>            )
 <a href=#2205 id=2205 data-nosnippet>2205</a>            .recursive(<span class="bool-val">true</span>)
@@ -2221,7 +2221,7 @@
 <a href=#2219 id=2219 data-nosnippet>2219</a>        </span><span class="kw">let </span>records = gateway
 <a href=#2220 id=2220 data-nosnippet>2220</a>            .query(
 <a href=#2221 id=2221 data-nosnippet>2221</a>                <span class="macro">vec!</span>[<span class="kw">super</span>::Source::SparseRepoData(<span class="macro">vec!</span>[source])],
-<a href=#2222 id=2222 data-nosnippet>2222</a>                <span class="macro">vec!</span>[Platform::Win64],
+<a href=#2222 id=2222 data-nosnippet>2222</a>                <span class="macro">vec!</span>[Subdir::Win64],
 <a href=#2223 id=2223 data-nosnippet>2223</a>                <span class="macro">vec!</span>[PackageName::from_str(<span class="string">"foobar"</span>).unwrap()].into_iter(),
 <a href=#2224 id=2224 data-nosnippet>2224</a>            )
 <a href=#2225 id=2225 data-nosnippet>2225</a>            .recursive(<span class="bool-val">false</span>)
@@ -2242,7 +2242,7 @@
 <a href=#2240 id=2240 data-nosnippet>2240</a>        <span class="comment">// Create a mock source with a custom package
 <a href=#2241 id=2241 data-nosnippet>2241</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>mock_source = MockRepoDataSource::new();
 <a href=#2242 id=2242 data-nosnippet>2242</a>        mock_source.add_record(
-<a href=#2243 id=2243 data-nosnippet>2243</a>            Platform::Linux64,
+<a href=#2243 id=2243 data-nosnippet>2243</a>            Subdir::Linux64,
 <a href=#2244 id=2244 data-nosnippet>2244</a>            make_test_record(<span class="string">"custom-pkg"</span>, <span class="string">"1.0.0"</span>, <span class="string">"linux-64"</span>),
 <a href=#2245 id=2245 data-nosnippet>2245</a>        );
 <a href=#2246 id=2246 data-nosnippet>2246</a>
@@ -2258,7 +2258,7 @@
 <a href=#2256 id=2256 data-nosnippet>2256</a>                    <span class="kw">super</span>::Source::Channel(channel),
 <a href=#2257 id=2257 data-nosnippet>2257</a>                    <span class="kw">super</span>::Source::Custom(custom_source),
 <a href=#2258 id=2258 data-nosnippet>2258</a>                ],
-<a href=#2259 id=2259 data-nosnippet>2259</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#2259 id=2259 data-nosnippet>2259</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#2260 id=2260 data-nosnippet>2260</a>                <span class="macro">vec!</span>[
 <a href=#2261 id=2261 data-nosnippet>2261</a>                    PackageName::from_str(<span class="string">"python"</span>).unwrap(),
 <a href=#2262 id=2262 data-nosnippet>2262</a>                    PackageName::from_str(<span class="string">"custom-pkg"</span>).unwrap(),
@@ -2319,7 +2319,7 @@
 <a href=#2317 id=2317 data-nosnippet>2317</a>        <span class="kw">let </span>records = gateway
 <a href=#2318 id=2318 data-nosnippet>2318</a>            .query(
 <a href=#2319 id=2319 data-nosnippet>2319</a>                <span class="macro">vec!</span>[server.channel()],
-<a href=#2320 id=2320 data-nosnippet>2320</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#2320 id=2320 data-nosnippet>2320</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#2321 id=2321 data-nosnippet>2321</a>                <span class="macro">vec!</span>[matchspec].into_iter(),
 <a href=#2322 id=2322 data-nosnippet>2322</a>            )
 <a href=#2323 id=2323 data-nosnippet>2323</a>            .recursive(<span class="bool-val">false</span>)
@@ -2375,7 +2375,7 @@
 <a href=#2373 id=2373 data-nosnippet>2373</a>        <span class="kw">let </span>records = gateway
 <a href=#2374 id=2374 data-nosnippet>2374</a>            .query(
 <a href=#2375 id=2375 data-nosnippet>2375</a>                <span class="macro">vec!</span>[index.clone()],
-<a href=#2376 id=2376 data-nosnippet>2376</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#2376 id=2376 data-nosnippet>2376</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#2377 id=2377 data-nosnippet>2377</a>                <span class="macro">vec!</span>[matchspec].into_iter(),
 <a href=#2378 id=2378 data-nosnippet>2378</a>            )
 <a href=#2379 id=2379 data-nosnippet>2379</a>            .recursive(<span class="bool-val">false</span>)
@@ -2426,7 +2426,7 @@
 <a href=#2424 id=2424 data-nosnippet>2424</a>        <span class="kw">let </span>records = gateway
 <a href=#2425 id=2425 data-nosnippet>2425</a>            .query(
 <a href=#2426 id=2426 data-nosnippet>2426</a>                <span class="macro">vec!</span>[index.clone()],
-<a href=#2427 id=2427 data-nosnippet>2427</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#2427 id=2427 data-nosnippet>2427</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#2428 id=2428 data-nosnippet>2428</a>                <span class="macro">vec!</span>[matchspec].into_iter(),
 <a href=#2429 id=2429 data-nosnippet>2429</a>            )
 <a href=#2430 id=2430 data-nosnippet>2430</a>            .recursive(<span class="bool-val">false</span>)
@@ -2476,7 +2476,7 @@
 <a href=#2474 id=2474 data-nosnippet>2474</a>        <span class="kw">let </span>records = gateway
 <a href=#2475 id=2475 data-nosnippet>2475</a>            .query(
 <a href=#2476 id=2476 data-nosnippet>2476</a>                <span class="macro">vec!</span>[index.clone()],
-<a href=#2477 id=2477 data-nosnippet>2477</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#2477 id=2477 data-nosnippet>2477</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#2478 id=2478 data-nosnippet>2478</a>                <span class="macro">vec!</span>[matchspec].into_iter(),
 <a href=#2479 id=2479 data-nosnippet>2479</a>            )
 <a href=#2480 id=2480 data-nosnippet>2480</a>            .recursive(<span class="bool-val">false</span>)
@@ -2502,32 +2502,32 @@
 <a href=#2500 id=2500 data-nosnippet>2500</a>        <span class="comment">// --- Source A: has lib-foo on linux-64 and lib-bar on noarch ----------
 <a href=#2501 id=2501 data-nosnippet>2501</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>source_a = MockRepoDataSource::new();
 <a href=#2502 id=2502 data-nosnippet>2502</a>        source_a.add_record(
-<a href=#2503 id=2503 data-nosnippet>2503</a>            Platform::Linux64,
+<a href=#2503 id=2503 data-nosnippet>2503</a>            Subdir::Linux64,
 <a href=#2504 id=2504 data-nosnippet>2504</a>            make_test_record(<span class="string">"lib-foo"</span>, <span class="string">"1.0.0"</span>, <span class="string">"linux-64"</span>),
 <a href=#2505 id=2505 data-nosnippet>2505</a>        );
 <a href=#2506 id=2506 data-nosnippet>2506</a>        source_a.add_record(
-<a href=#2507 id=2507 data-nosnippet>2507</a>            Platform::NoArch,
+<a href=#2507 id=2507 data-nosnippet>2507</a>            Subdir::NoArch,
 <a href=#2508 id=2508 data-nosnippet>2508</a>            make_test_record(<span class="string">"lib-bar"</span>, <span class="string">"2.0.0"</span>, <span class="string">"noarch"</span>),
 <a href=#2509 id=2509 data-nosnippet>2509</a>        );
 <a href=#2510 id=2510 data-nosnippet>2510</a>        <span class="comment">// A non-matching package that should be excluded.
 <a href=#2511 id=2511 data-nosnippet>2511</a>        </span>source_a.add_record(
-<a href=#2512 id=2512 data-nosnippet>2512</a>            Platform::Linux64,
+<a href=#2512 id=2512 data-nosnippet>2512</a>            Subdir::Linux64,
 <a href=#2513 id=2513 data-nosnippet>2513</a>            make_test_record(<span class="string">"unrelated"</span>, <span class="string">"1.0.0"</span>, <span class="string">"linux-64"</span>),
 <a href=#2514 id=2514 data-nosnippet>2514</a>        );
 <a href=#2515 id=2515 data-nosnippet>2515</a>
 <a href=#2516 id=2516 data-nosnippet>2516</a>        <span class="comment">// --- Source B: has lib-baz on linux-64 and lib-qux on noarch ---------
 <a href=#2517 id=2517 data-nosnippet>2517</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>source_b = MockRepoDataSource::new();
 <a href=#2518 id=2518 data-nosnippet>2518</a>        source_b.add_record(
-<a href=#2519 id=2519 data-nosnippet>2519</a>            Platform::Linux64,
+<a href=#2519 id=2519 data-nosnippet>2519</a>            Subdir::Linux64,
 <a href=#2520 id=2520 data-nosnippet>2520</a>            make_test_record(<span class="string">"lib-baz"</span>, <span class="string">"3.0.0"</span>, <span class="string">"linux-64"</span>),
 <a href=#2521 id=2521 data-nosnippet>2521</a>        );
 <a href=#2522 id=2522 data-nosnippet>2522</a>        source_b.add_record(
-<a href=#2523 id=2523 data-nosnippet>2523</a>            Platform::NoArch,
+<a href=#2523 id=2523 data-nosnippet>2523</a>            Subdir::NoArch,
 <a href=#2524 id=2524 data-nosnippet>2524</a>            make_test_record(<span class="string">"lib-qux"</span>, <span class="string">"4.0.0"</span>, <span class="string">"noarch"</span>),
 <a href=#2525 id=2525 data-nosnippet>2525</a>        );
 <a href=#2526 id=2526 data-nosnippet>2526</a>        <span class="comment">// Another non-matching package.
 <a href=#2527 id=2527 data-nosnippet>2527</a>        </span>source_b.add_record(
-<a href=#2528 id=2528 data-nosnippet>2528</a>            Platform::NoArch,
+<a href=#2528 id=2528 data-nosnippet>2528</a>            Subdir::NoArch,
 <a href=#2529 id=2529 data-nosnippet>2529</a>            make_test_record(<span class="string">"other-pkg"</span>, <span class="string">"1.0.0"</span>, <span class="string">"noarch"</span>),
 <a href=#2530 id=2530 data-nosnippet>2530</a>        );
 <a href=#2531 id=2531 data-nosnippet>2531</a>
@@ -2547,7 +2547,7 @@
 <a href=#2545 id=2545 data-nosnippet>2545</a>        <span class="kw">let </span>records = gateway
 <a href=#2546 id=2546 data-nosnippet>2546</a>            .query(
 <a href=#2547 id=2547 data-nosnippet>2547</a>                <span class="macro">vec!</span>[<span class="kw">super</span>::Source::Custom(src_a), <span class="kw">super</span>::Source::Custom(src_b)],
-<a href=#2548 id=2548 data-nosnippet>2548</a>                <span class="macro">vec!</span>[Platform::Linux64, Platform::NoArch],
+<a href=#2548 id=2548 data-nosnippet>2548</a>                <span class="macro">vec!</span>[Subdir::Linux64, Subdir::NoArch],
 <a href=#2549 id=2549 data-nosnippet>2549</a>                <span class="macro">vec!</span>[matchspec].into_iter(),
 <a href=#2550 id=2550 data-nosnippet>2550</a>            )
 <a href=#2551 id=2551 data-nosnippet>2551</a>            .recursive(<span class="bool-val">false</span>)
@@ -2591,7 +2591,7 @@
 <a href=#2589 id=2589 data-nosnippet>2589</a>            )
 <a href=#2590 id=2590 data-nosnippet>2590</a>        }
 <a href=#2591 id=2591 data-nosnippet>2591</a>
-<a href=#2592 id=2592 data-nosnippet>2592</a>        <span class="kw">fn </span>add(<span class="kw-2">&amp;mut </span><span class="self">self</span>, platform: Platform, rec: RepoDataRecord) {
+<a href=#2592 id=2592 data-nosnippet>2592</a>        <span class="kw">fn </span>add(<span class="kw-2">&amp;mut </span><span class="self">self</span>, platform: Subdir, rec: RepoDataRecord) {
 <a href=#2593 id=2593 data-nosnippet>2593</a>            <span class="self">self</span>.inner.add_record(platform, rec);
 <a href=#2594 id=2594 data-nosnippet>2594</a>        }
 <a href=#2595 id=2595 data-nosnippet>2595</a>    }
@@ -2600,7 +2600,7 @@
 <a href=#2598 id=2598 data-nosnippet>2598</a>    </span><span class="kw">impl </span><span class="kw">super</span>::RepoDataSource <span class="kw">for </span>RecordingSource {
 <a href=#2599 id=2599 data-nosnippet>2599</a>        <span class="kw">async fn </span>fetch_package_records(
 <a href=#2600 id=2600 data-nosnippet>2600</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#2601 id=2601 data-nosnippet>2601</a>            platform: Platform,
+<a href=#2601 id=2601 data-nosnippet>2601</a>            platform: Subdir,
 <a href=#2602 id=2602 data-nosnippet>2602</a>            name: <span class="kw-2">&amp;</span>PackageName,
 <a href=#2603 id=2603 data-nosnippet>2603</a>        ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Arc&lt;RepoDataRecord&gt;&gt;, GatewayError&gt; {
 <a href=#2604 id=2604 data-nosnippet>2604</a>            <span class="self">self</span>.fetched
@@ -2610,7 +2610,7 @@
 <a href=#2608 id=2608 data-nosnippet>2608</a>            <span class="self">self</span>.inner.fetch_package_records(platform, name).<span class="kw">await
 <a href=#2609 id=2609 data-nosnippet>2609</a>        </span>}
 <a href=#2610 id=2610 data-nosnippet>2610</a>
-<a href=#2611 id=2611 data-nosnippet>2611</a>        <span class="kw">fn </span>package_names(<span class="kw-2">&amp;</span><span class="self">self</span>, platform: Platform) -&gt; Vec&lt;String&gt; {
+<a href=#2611 id=2611 data-nosnippet>2611</a>        <span class="kw">fn </span>package_names(<span class="kw-2">&amp;</span><span class="self">self</span>, platform: Subdir) -&gt; Vec&lt;String&gt; {
 <a href=#2612 id=2612 data-nosnippet>2612</a>            <span class="self">self</span>.inner.package_names(platform)
 <a href=#2613 id=2613 data-nosnippet>2613</a>        }
 <a href=#2614 id=2614 data-nosnippet>2614</a>    }
@@ -2623,11 +2623,11 @@
 <a href=#2621 id=2621 data-nosnippet>2621</a>        <span class="kw">let </span>gateway = Gateway::new();
 <a href=#2622 id=2622 data-nosnippet>2622</a>        <span class="kw">let </span>(<span class="kw-2">mut </span>src, fetched) = RecordingSource::new();
 <a href=#2623 id=2623 data-nosnippet>2623</a>        src.add(
-<a href=#2624 id=2624 data-nosnippet>2624</a>            Platform::Linux64,
+<a href=#2624 id=2624 data-nosnippet>2624</a>            Subdir::Linux64,
 <a href=#2625 id=2625 data-nosnippet>2625</a>            make_test_record_full(<span class="string">"outer"</span>, <span class="string">"1.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[<span class="string">"black"</span>], <span class="kw-2">&amp;</span>[]),
 <a href=#2626 id=2626 data-nosnippet>2626</a>        );
 <a href=#2627 id=2627 data-nosnippet>2627</a>        src.add(
-<a href=#2628 id=2628 data-nosnippet>2628</a>            Platform::Linux64,
+<a href=#2628 id=2628 data-nosnippet>2628</a>            Subdir::Linux64,
 <a href=#2629 id=2629 data-nosnippet>2629</a>            make_test_record_full(
 <a href=#2630 id=2630 data-nosnippet>2630</a>                <span class="string">"black"</span>,
 <a href=#2631 id=2631 data-nosnippet>2631</a>                <span class="string">"25.0.0"</span>,
@@ -2637,11 +2637,11 @@
 <a href=#2635 id=2635 data-nosnippet>2635</a>            ),
 <a href=#2636 id=2636 data-nosnippet>2636</a>        );
 <a href=#2637 id=2637 data-nosnippet>2637</a>        src.add(
-<a href=#2638 id=2638 data-nosnippet>2638</a>            Platform::Linux64,
+<a href=#2638 id=2638 data-nosnippet>2638</a>            Subdir::Linux64,
 <a href=#2639 id=2639 data-nosnippet>2639</a>            make_test_record_full(<span class="string">"click"</span>, <span class="string">"8.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#2640 id=2640 data-nosnippet>2640</a>        );
 <a href=#2641 id=2641 data-nosnippet>2641</a>        src.add(
-<a href=#2642 id=2642 data-nosnippet>2642</a>            Platform::Linux64,
+<a href=#2642 id=2642 data-nosnippet>2642</a>            Subdir::Linux64,
 <a href=#2643 id=2643 data-nosnippet>2643</a>            make_test_record_full(<span class="string">"aiohttp"</span>, <span class="string">"3.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#2644 id=2644 data-nosnippet>2644</a>        );
 <a href=#2645 id=2645 data-nosnippet>2645</a>        <span class="kw">let </span>source: Arc&lt;<span class="kw">dyn </span><span class="kw">super</span>::RepoDataSource&gt; = Arc::new(src);
@@ -2649,7 +2649,7 @@
 <a href=#2647 id=2647 data-nosnippet>2647</a>        gateway
 <a href=#2648 id=2648 data-nosnippet>2648</a>            .query(
 <a href=#2649 id=2649 data-nosnippet>2649</a>                <span class="macro">vec!</span>[<span class="kw">super</span>::Source::Custom(source)],
-<a href=#2650 id=2650 data-nosnippet>2650</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#2650 id=2650 data-nosnippet>2650</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#2651 id=2651 data-nosnippet>2651</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"outer"</span>, Lenient).unwrap()].into_iter(),
 <a href=#2652 id=2652 data-nosnippet>2652</a>            )
 <a href=#2653 id=2653 data-nosnippet>2653</a>            .recursive(<span class="bool-val">true</span>)
@@ -2674,11 +2674,11 @@
 <a href=#2672 id=2672 data-nosnippet>2672</a>        <span class="kw">let </span>gateway = Gateway::new();
 <a href=#2673 id=2673 data-nosnippet>2673</a>        <span class="kw">let </span>(<span class="kw-2">mut </span>src, fetched) = RecordingSource::new();
 <a href=#2674 id=2674 data-nosnippet>2674</a>        src.add(
-<a href=#2675 id=2675 data-nosnippet>2675</a>            Platform::Linux64,
+<a href=#2675 id=2675 data-nosnippet>2675</a>            Subdir::Linux64,
 <a href=#2676 id=2676 data-nosnippet>2676</a>            make_test_record_full(<span class="string">"helper"</span>, <span class="string">"1.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[<span class="string">"black[extras=[d]]"</span>], <span class="kw-2">&amp;</span>[]),
 <a href=#2677 id=2677 data-nosnippet>2677</a>        );
 <a href=#2678 id=2678 data-nosnippet>2678</a>        src.add(
-<a href=#2679 id=2679 data-nosnippet>2679</a>            Platform::Linux64,
+<a href=#2679 id=2679 data-nosnippet>2679</a>            Subdir::Linux64,
 <a href=#2680 id=2680 data-nosnippet>2680</a>            make_test_record_full(
 <a href=#2681 id=2681 data-nosnippet>2681</a>                <span class="string">"black"</span>,
 <a href=#2682 id=2682 data-nosnippet>2682</a>                <span class="string">"25.0.0"</span>,
@@ -2688,7 +2688,7 @@
 <a href=#2686 id=2686 data-nosnippet>2686</a>            ),
 <a href=#2687 id=2687 data-nosnippet>2687</a>        );
 <a href=#2688 id=2688 data-nosnippet>2688</a>        src.add(
-<a href=#2689 id=2689 data-nosnippet>2689</a>            Platform::Linux64,
+<a href=#2689 id=2689 data-nosnippet>2689</a>            Subdir::Linux64,
 <a href=#2690 id=2690 data-nosnippet>2690</a>            make_test_record_full(<span class="string">"aiohttp"</span>, <span class="string">"3.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#2691 id=2691 data-nosnippet>2691</a>        );
 <a href=#2692 id=2692 data-nosnippet>2692</a>        <span class="kw">let </span>source: Arc&lt;<span class="kw">dyn </span><span class="kw">super</span>::RepoDataSource&gt; = Arc::new(src);
@@ -2696,7 +2696,7 @@
 <a href=#2694 id=2694 data-nosnippet>2694</a>        gateway
 <a href=#2695 id=2695 data-nosnippet>2695</a>            .query(
 <a href=#2696 id=2696 data-nosnippet>2696</a>                <span class="macro">vec!</span>[<span class="kw">super</span>::Source::Custom(source)],
-<a href=#2697 id=2697 data-nosnippet>2697</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#2697 id=2697 data-nosnippet>2697</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#2698 id=2698 data-nosnippet>2698</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"helper"</span>, Lenient).unwrap()].into_iter(),
 <a href=#2699 id=2699 data-nosnippet>2699</a>            )
 <a href=#2700 id=2700 data-nosnippet>2700</a>            .recursive(<span class="bool-val">true</span>)
@@ -2722,11 +2722,11 @@
 <a href=#2720 id=2720 data-nosnippet>2720</a>        <span class="kw">let </span>gateway = Gateway::new();
 <a href=#2721 id=2721 data-nosnippet>2721</a>        <span class="kw">let </span>(<span class="kw-2">mut </span>src, fetched) = RecordingSource::new();
 <a href=#2722 id=2722 data-nosnippet>2722</a>        src.add(
-<a href=#2723 id=2723 data-nosnippet>2723</a>            Platform::Linux64,
+<a href=#2723 id=2723 data-nosnippet>2723</a>            Subdir::Linux64,
 <a href=#2724 id=2724 data-nosnippet>2724</a>            make_test_record_full(<span class="string">"helper"</span>, <span class="string">"1.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[<span class="string">"aiohttp"</span>, <span class="string">"tornado"</span>], <span class="kw-2">&amp;</span>[]),
 <a href=#2725 id=2725 data-nosnippet>2725</a>        );
 <a href=#2726 id=2726 data-nosnippet>2726</a>        src.add(
-<a href=#2727 id=2727 data-nosnippet>2727</a>            Platform::Linux64,
+<a href=#2727 id=2727 data-nosnippet>2727</a>            Subdir::Linux64,
 <a href=#2728 id=2728 data-nosnippet>2728</a>            make_test_record_full(
 <a href=#2729 id=2729 data-nosnippet>2729</a>                <span class="string">"aiohttp"</span>,
 <a href=#2730 id=2730 data-nosnippet>2730</a>                <span class="string">"3.0.0"</span>,
@@ -2736,7 +2736,7 @@
 <a href=#2734 id=2734 data-nosnippet>2734</a>            ),
 <a href=#2735 id=2735 data-nosnippet>2735</a>        );
 <a href=#2736 id=2736 data-nosnippet>2736</a>        src.add(
-<a href=#2737 id=2737 data-nosnippet>2737</a>            Platform::Linux64,
+<a href=#2737 id=2737 data-nosnippet>2737</a>            Subdir::Linux64,
 <a href=#2738 id=2738 data-nosnippet>2738</a>            make_test_record_full(
 <a href=#2739 id=2739 data-nosnippet>2739</a>                <span class="string">"tornado"</span>,
 <a href=#2740 id=2740 data-nosnippet>2740</a>                <span class="string">"6.0.0"</span>,
@@ -2746,7 +2746,7 @@
 <a href=#2744 id=2744 data-nosnippet>2744</a>            ),
 <a href=#2745 id=2745 data-nosnippet>2745</a>        );
 <a href=#2746 id=2746 data-nosnippet>2746</a>        src.add(
-<a href=#2747 id=2747 data-nosnippet>2747</a>            Platform::Linux64,
+<a href=#2747 id=2747 data-nosnippet>2747</a>            Subdir::Linux64,
 <a href=#2748 id=2748 data-nosnippet>2748</a>            make_test_record_full(<span class="string">"speedups_helper"</span>, <span class="string">"1.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#2749 id=2749 data-nosnippet>2749</a>        );
 <a href=#2750 id=2750 data-nosnippet>2750</a>        <span class="kw">let </span>source: Arc&lt;<span class="kw">dyn </span><span class="kw">super</span>::RepoDataSource&gt; = Arc::new(src);
@@ -2754,7 +2754,7 @@
 <a href=#2752 id=2752 data-nosnippet>2752</a>        gateway
 <a href=#2753 id=2753 data-nosnippet>2753</a>            .query(
 <a href=#2754 id=2754 data-nosnippet>2754</a>                <span class="macro">vec!</span>[<span class="kw">super</span>::Source::Custom(source)],
-<a href=#2755 id=2755 data-nosnippet>2755</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#2755 id=2755 data-nosnippet>2755</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#2756 id=2756 data-nosnippet>2756</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"helper"</span>, Lenient).unwrap()].into_iter(),
 <a href=#2757 id=2757 data-nosnippet>2757</a>            )
 <a href=#2758 id=2758 data-nosnippet>2758</a>            .recursive(<span class="bool-val">true</span>)
@@ -2779,11 +2779,11 @@
 <a href=#2777 id=2777 data-nosnippet>2777</a>        <span class="kw">let </span>gateway = Gateway::new();
 <a href=#2778 id=2778 data-nosnippet>2778</a>        <span class="kw">let </span>(<span class="kw-2">mut </span>src, fetched) = RecordingSource::new();
 <a href=#2779 id=2779 data-nosnippet>2779</a>        src.add(
-<a href=#2780 id=2780 data-nosnippet>2780</a>            Platform::Linux64,
+<a href=#2780 id=2780 data-nosnippet>2780</a>            Subdir::Linux64,
 <a href=#2781 id=2781 data-nosnippet>2781</a>            make_test_record_full(<span class="string">"driver"</span>, <span class="string">"1.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[<span class="string">"pkg[extras=[full]]"</span>], <span class="kw-2">&amp;</span>[]),
 <a href=#2782 id=2782 data-nosnippet>2782</a>        );
 <a href=#2783 id=2783 data-nosnippet>2783</a>        src.add(
-<a href=#2784 id=2784 data-nosnippet>2784</a>            Platform::Linux64,
+<a href=#2784 id=2784 data-nosnippet>2784</a>            Subdir::Linux64,
 <a href=#2785 id=2785 data-nosnippet>2785</a>            make_test_record_full(
 <a href=#2786 id=2786 data-nosnippet>2786</a>                <span class="string">"pkg"</span>,
 <a href=#2787 id=2787 data-nosnippet>2787</a>                <span class="string">"1.0.0"</span>,
@@ -2797,11 +2797,11 @@
 <a href=#2795 id=2795 data-nosnippet>2795</a>            ),
 <a href=#2796 id=2796 data-nosnippet>2796</a>        );
 <a href=#2797 id=2797 data-nosnippet>2797</a>        src.add(
-<a href=#2798 id=2798 data-nosnippet>2798</a>            Platform::Linux64,
+<a href=#2798 id=2798 data-nosnippet>2798</a>            Subdir::Linux64,
 <a href=#2799 id=2799 data-nosnippet>2799</a>            make_test_record_full(<span class="string">"dep_a"</span>, <span class="string">"1.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#2800 id=2800 data-nosnippet>2800</a>        );
 <a href=#2801 id=2801 data-nosnippet>2801</a>        src.add(
-<a href=#2802 id=2802 data-nosnippet>2802</a>            Platform::Linux64,
+<a href=#2802 id=2802 data-nosnippet>2802</a>            Subdir::Linux64,
 <a href=#2803 id=2803 data-nosnippet>2803</a>            make_test_record_full(<span class="string">"dep_b"</span>, <span class="string">"1.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#2804 id=2804 data-nosnippet>2804</a>        );
 <a href=#2805 id=2805 data-nosnippet>2805</a>        <span class="kw">let </span>source: Arc&lt;<span class="kw">dyn </span><span class="kw">super</span>::RepoDataSource&gt; = Arc::new(src);
@@ -2809,7 +2809,7 @@
 <a href=#2807 id=2807 data-nosnippet>2807</a>        gateway
 <a href=#2808 id=2808 data-nosnippet>2808</a>            .query(
 <a href=#2809 id=2809 data-nosnippet>2809</a>                <span class="macro">vec!</span>[<span class="kw">super</span>::Source::Custom(source)],
-<a href=#2810 id=2810 data-nosnippet>2810</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#2810 id=2810 data-nosnippet>2810</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#2811 id=2811 data-nosnippet>2811</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"driver"</span>, Lenient).unwrap()].into_iter(),
 <a href=#2812 id=2812 data-nosnippet>2812</a>            )
 <a href=#2813 id=2813 data-nosnippet>2813</a>            .recursive(<span class="bool-val">true</span>)
@@ -2839,7 +2839,7 @@
 <a href=#2837 id=2837 data-nosnippet>2837</a>        <span class="kw">let </span>gateway = Gateway::new();
 <a href=#2838 id=2838 data-nosnippet>2838</a>        <span class="kw">let </span>(<span class="kw-2">mut </span>src, fetched) = RecordingSource::new();
 <a href=#2839 id=2839 data-nosnippet>2839</a>        src.add(
-<a href=#2840 id=2840 data-nosnippet>2840</a>            Platform::Linux64,
+<a href=#2840 id=2840 data-nosnippet>2840</a>            Subdir::Linux64,
 <a href=#2841 id=2841 data-nosnippet>2841</a>            make_test_record_full(
 <a href=#2842 id=2842 data-nosnippet>2842</a>                <span class="string">"black"</span>,
 <a href=#2843 id=2843 data-nosnippet>2843</a>                <span class="string">"25.0.0"</span>,
@@ -2849,15 +2849,15 @@
 <a href=#2847 id=2847 data-nosnippet>2847</a>            ),
 <a href=#2848 id=2848 data-nosnippet>2848</a>        );
 <a href=#2849 id=2849 data-nosnippet>2849</a>        src.add(
-<a href=#2850 id=2850 data-nosnippet>2850</a>            Platform::Linux64,
+<a href=#2850 id=2850 data-nosnippet>2850</a>            Subdir::Linux64,
 <a href=#2851 id=2851 data-nosnippet>2851</a>            make_test_record_full(<span class="string">"click"</span>, <span class="string">"8.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#2852 id=2852 data-nosnippet>2852</a>        );
 <a href=#2853 id=2853 data-nosnippet>2853</a>        src.add(
-<a href=#2854 id=2854 data-nosnippet>2854</a>            Platform::Linux64,
+<a href=#2854 id=2854 data-nosnippet>2854</a>            Subdir::Linux64,
 <a href=#2855 id=2855 data-nosnippet>2855</a>            make_test_record_full(<span class="string">"aiohttp"</span>, <span class="string">"3.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#2856 id=2856 data-nosnippet>2856</a>        );
 <a href=#2857 id=2857 data-nosnippet>2857</a>        src.add(
-<a href=#2858 id=2858 data-nosnippet>2858</a>            Platform::Linux64,
+<a href=#2858 id=2858 data-nosnippet>2858</a>            Subdir::Linux64,
 <a href=#2859 id=2859 data-nosnippet>2859</a>            make_test_record_full(<span class="string">"ipython"</span>, <span class="string">"8.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#2860 id=2860 data-nosnippet>2860</a>        );
 <a href=#2861 id=2861 data-nosnippet>2861</a>        <span class="kw">let </span>source: Arc&lt;<span class="kw">dyn </span><span class="kw">super</span>::RepoDataSource&gt; = Arc::new(src);
@@ -2865,7 +2865,7 @@
 <a href=#2863 id=2863 data-nosnippet>2863</a>        gateway
 <a href=#2864 id=2864 data-nosnippet>2864</a>            .query(
 <a href=#2865 id=2865 data-nosnippet>2865</a>                <span class="macro">vec!</span>[<span class="kw">super</span>::Source::Custom(source)],
-<a href=#2866 id=2866 data-nosnippet>2866</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#2866 id=2866 data-nosnippet>2866</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#2867 id=2867 data-nosnippet>2867</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"black"</span>, Lenient).unwrap()].into_iter(),
 <a href=#2868 id=2868 data-nosnippet>2868</a>            )
 <a href=#2869 id=2869 data-nosnippet>2869</a>            .recursive(<span class="bool-val">true</span>)
@@ -2892,7 +2892,7 @@
 <a href=#2890 id=2890 data-nosnippet>2890</a>        <span class="kw">let </span>gateway = Gateway::new();
 <a href=#2891 id=2891 data-nosnippet>2891</a>        <span class="kw">let </span>(<span class="kw-2">mut </span>src, fetched) = RecordingSource::new();
 <a href=#2892 id=2892 data-nosnippet>2892</a>        src.add(
-<a href=#2893 id=2893 data-nosnippet>2893</a>            Platform::Linux64,
+<a href=#2893 id=2893 data-nosnippet>2893</a>            Subdir::Linux64,
 <a href=#2894 id=2894 data-nosnippet>2894</a>            make_test_record_full(
 <a href=#2895 id=2895 data-nosnippet>2895</a>                <span class="string">"black"</span>,
 <a href=#2896 id=2896 data-nosnippet>2896</a>                <span class="string">"25.0.0"</span>,
@@ -2902,11 +2902,11 @@
 <a href=#2900 id=2900 data-nosnippet>2900</a>            ),
 <a href=#2901 id=2901 data-nosnippet>2901</a>        );
 <a href=#2902 id=2902 data-nosnippet>2902</a>        src.add(
-<a href=#2903 id=2903 data-nosnippet>2903</a>            Platform::Linux64,
+<a href=#2903 id=2903 data-nosnippet>2903</a>            Subdir::Linux64,
 <a href=#2904 id=2904 data-nosnippet>2904</a>            make_test_record_full(<span class="string">"aiohttp"</span>, <span class="string">"3.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#2905 id=2905 data-nosnippet>2905</a>        );
 <a href=#2906 id=2906 data-nosnippet>2906</a>        src.add(
-<a href=#2907 id=2907 data-nosnippet>2907</a>            Platform::Linux64,
+<a href=#2907 id=2907 data-nosnippet>2907</a>            Subdir::Linux64,
 <a href=#2908 id=2908 data-nosnippet>2908</a>            make_test_record_full(<span class="string">"ipython"</span>, <span class="string">"8.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#2909 id=2909 data-nosnippet>2909</a>        );
 <a href=#2910 id=2910 data-nosnippet>2910</a>        <span class="kw">let </span>source: Arc&lt;<span class="kw">dyn </span><span class="kw">super</span>::RepoDataSource&gt; = Arc::new(src);
@@ -2914,7 +2914,7 @@
 <a href=#2912 id=2912 data-nosnippet>2912</a>        gateway
 <a href=#2913 id=2913 data-nosnippet>2913</a>            .query(
 <a href=#2914 id=2914 data-nosnippet>2914</a>                <span class="macro">vec!</span>[<span class="kw">super</span>::Source::Custom(source)],
-<a href=#2915 id=2915 data-nosnippet>2915</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#2915 id=2915 data-nosnippet>2915</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#2916 id=2916 data-nosnippet>2916</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"black[extras=[d]]"</span>, extras_options()).unwrap()]
 <a href=#2917 id=2917 data-nosnippet>2917</a>                    .into_iter(),
 <a href=#2918 id=2918 data-nosnippet>2918</a>            )
@@ -2939,7 +2939,7 @@
 <a href=#2937 id=2937 data-nosnippet>2937</a>        <span class="kw">let </span>gateway = Gateway::new();
 <a href=#2938 id=2938 data-nosnippet>2938</a>        <span class="kw">let </span>(<span class="kw-2">mut </span>src, fetched) = RecordingSource::new();
 <a href=#2939 id=2939 data-nosnippet>2939</a>        src.add(
-<a href=#2940 id=2940 data-nosnippet>2940</a>            Platform::Linux64,
+<a href=#2940 id=2940 data-nosnippet>2940</a>            Subdir::Linux64,
 <a href=#2941 id=2941 data-nosnippet>2941</a>            make_test_record_full(
 <a href=#2942 id=2942 data-nosnippet>2942</a>                <span class="string">"black"</span>,
 <a href=#2943 id=2943 data-nosnippet>2943</a>                <span class="string">"25.0.0"</span>,
@@ -2949,11 +2949,11 @@
 <a href=#2947 id=2947 data-nosnippet>2947</a>            ),
 <a href=#2948 id=2948 data-nosnippet>2948</a>        );
 <a href=#2949 id=2949 data-nosnippet>2949</a>        src.add(
-<a href=#2950 id=2950 data-nosnippet>2950</a>            Platform::Linux64,
+<a href=#2950 id=2950 data-nosnippet>2950</a>            Subdir::Linux64,
 <a href=#2951 id=2951 data-nosnippet>2951</a>            make_test_record_full(<span class="string">"click"</span>, <span class="string">"8.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#2952 id=2952 data-nosnippet>2952</a>        );
 <a href=#2953 id=2953 data-nosnippet>2953</a>        src.add(
-<a href=#2954 id=2954 data-nosnippet>2954</a>            Platform::Linux64,
+<a href=#2954 id=2954 data-nosnippet>2954</a>            Subdir::Linux64,
 <a href=#2955 id=2955 data-nosnippet>2955</a>            make_test_record_full(<span class="string">"aiohttp"</span>, <span class="string">"3.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#2956 id=2956 data-nosnippet>2956</a>        );
 <a href=#2957 id=2957 data-nosnippet>2957</a>        <span class="kw">let </span>source: Arc&lt;<span class="kw">dyn </span><span class="kw">super</span>::RepoDataSource&gt; = Arc::new(src);
@@ -2969,7 +2969,7 @@
 <a href=#2967 id=2967 data-nosnippet>2967</a>        gateway
 <a href=#2968 id=2968 data-nosnippet>2968</a>            .query(
 <a href=#2969 id=2969 data-nosnippet>2969</a>                <span class="macro">vec!</span>[<span class="kw">super</span>::Source::Custom(source)],
-<a href=#2970 id=2970 data-nosnippet>2970</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#2970 id=2970 data-nosnippet>2970</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#2971 id=2971 data-nosnippet>2971</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"black"</span>, Lenient).unwrap(), pattern].into_iter(),
 <a href=#2972 id=2972 data-nosnippet>2972</a>            )
 <a href=#2973 id=2973 data-nosnippet>2973</a>            .recursive(<span class="bool-val">true</span>)
@@ -2992,7 +2992,7 @@
 <a href=#2990 id=2990 data-nosnippet>2990</a>        <span class="kw">let </span>gateway = Gateway::new();
 <a href=#2991 id=2991 data-nosnippet>2991</a>        <span class="kw">let </span>(<span class="kw-2">mut </span>src, fetched) = RecordingSource::new();
 <a href=#2992 id=2992 data-nosnippet>2992</a>        src.add(
-<a href=#2993 id=2993 data-nosnippet>2993</a>            Platform::Linux64,
+<a href=#2993 id=2993 data-nosnippet>2993</a>            Subdir::Linux64,
 <a href=#2994 id=2994 data-nosnippet>2994</a>            make_test_record_full(
 <a href=#2995 id=2995 data-nosnippet>2995</a>                <span class="string">"black"</span>,
 <a href=#2996 id=2996 data-nosnippet>2996</a>                <span class="string">"25.0.0"</span>,
@@ -3002,15 +3002,15 @@
 <a href=#3000 id=3000 data-nosnippet>3000</a>            ),
 <a href=#3001 id=3001 data-nosnippet>3001</a>        );
 <a href=#3002 id=3002 data-nosnippet>3002</a>        src.add(
-<a href=#3003 id=3003 data-nosnippet>3003</a>            Platform::Linux64,
+<a href=#3003 id=3003 data-nosnippet>3003</a>            Subdir::Linux64,
 <a href=#3004 id=3004 data-nosnippet>3004</a>            make_test_record_full(<span class="string">"click"</span>, <span class="string">"8.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#3005 id=3005 data-nosnippet>3005</a>        );
 <a href=#3006 id=3006 data-nosnippet>3006</a>        src.add(
-<a href=#3007 id=3007 data-nosnippet>3007</a>            Platform::Linux64,
+<a href=#3007 id=3007 data-nosnippet>3007</a>            Subdir::Linux64,
 <a href=#3008 id=3008 data-nosnippet>3008</a>            make_test_record_full(<span class="string">"aiohttp"</span>, <span class="string">"3.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#3009 id=3009 data-nosnippet>3009</a>        );
 <a href=#3010 id=3010 data-nosnippet>3010</a>        src.add(
-<a href=#3011 id=3011 data-nosnippet>3011</a>            Platform::Linux64,
+<a href=#3011 id=3011 data-nosnippet>3011</a>            Subdir::Linux64,
 <a href=#3012 id=3012 data-nosnippet>3012</a>            make_test_record_full(<span class="string">"ipython"</span>, <span class="string">"8.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#3013 id=3013 data-nosnippet>3013</a>        );
 <a href=#3014 id=3014 data-nosnippet>3014</a>        <span class="kw">let </span>source: Arc&lt;<span class="kw">dyn </span><span class="kw">super</span>::RepoDataSource&gt; = Arc::new(src);
@@ -3026,7 +3026,7 @@
 <a href=#3024 id=3024 data-nosnippet>3024</a>        gateway
 <a href=#3025 id=3025 data-nosnippet>3025</a>            .query(
 <a href=#3026 id=3026 data-nosnippet>3026</a>                <span class="macro">vec!</span>[<span class="kw">super</span>::Source::Custom(source)],
-<a href=#3027 id=3027 data-nosnippet>3027</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#3027 id=3027 data-nosnippet>3027</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#3028 id=3028 data-nosnippet>3028</a>                <span class="macro">vec!</span>[pattern].into_iter(),
 <a href=#3029 id=3029 data-nosnippet>3029</a>            )
 <a href=#3030 id=3030 data-nosnippet>3030</a>            .recursive(<span class="bool-val">true</span>)
@@ -3053,7 +3053,7 @@
 <a href=#3051 id=3051 data-nosnippet>3051</a>        <span class="kw">let </span>(<span class="kw-2">mut </span>src, fetched) = RecordingSource::new();
 <a href=#3052 id=3052 data-nosnippet>3052</a>        <span class="comment">// Two versions of pkg with different deps in the [d] extra.
 <a href=#3053 id=3053 data-nosnippet>3053</a>        </span>src.add(
-<a href=#3054 id=3054 data-nosnippet>3054</a>            Platform::Linux64,
+<a href=#3054 id=3054 data-nosnippet>3054</a>            Subdir::Linux64,
 <a href=#3055 id=3055 data-nosnippet>3055</a>            make_test_record_full(
 <a href=#3056 id=3056 data-nosnippet>3056</a>                <span class="string">"pkg"</span>,
 <a href=#3057 id=3057 data-nosnippet>3057</a>                <span class="string">"1.0.0"</span>,
@@ -3063,7 +3063,7 @@
 <a href=#3061 id=3061 data-nosnippet>3061</a>            ),
 <a href=#3062 id=3062 data-nosnippet>3062</a>        );
 <a href=#3063 id=3063 data-nosnippet>3063</a>        src.add(
-<a href=#3064 id=3064 data-nosnippet>3064</a>            Platform::Linux64,
+<a href=#3064 id=3064 data-nosnippet>3064</a>            Subdir::Linux64,
 <a href=#3065 id=3065 data-nosnippet>3065</a>            make_test_record_full(
 <a href=#3066 id=3066 data-nosnippet>3066</a>                <span class="string">"pkg"</span>,
 <a href=#3067 id=3067 data-nosnippet>3067</a>                <span class="string">"2.0.0"</span>,
@@ -3074,15 +3074,15 @@
 <a href=#3072 id=3072 data-nosnippet>3072</a>        );
 <a href=#3073 id=3073 data-nosnippet>3073</a>        <span class="comment">// Transitive activator: introduced via a separate top-level package.
 <a href=#3074 id=3074 data-nosnippet>3074</a>        </span>src.add(
-<a href=#3075 id=3075 data-nosnippet>3075</a>            Platform::Linux64,
+<a href=#3075 id=3075 data-nosnippet>3075</a>            Subdir::Linux64,
 <a href=#3076 id=3076 data-nosnippet>3076</a>            make_test_record_full(<span class="string">"activator"</span>, <span class="string">"1.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[<span class="string">"pkg[extras=[d]]"</span>], <span class="kw-2">&amp;</span>[]),
 <a href=#3077 id=3077 data-nosnippet>3077</a>        );
 <a href=#3078 id=3078 data-nosnippet>3078</a>        src.add(
-<a href=#3079 id=3079 data-nosnippet>3079</a>            Platform::Linux64,
+<a href=#3079 id=3079 data-nosnippet>3079</a>            Subdir::Linux64,
 <a href=#3080 id=3080 data-nosnippet>3080</a>            make_test_record_full(<span class="string">"dep_for_v1"</span>, <span class="string">"1.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#3081 id=3081 data-nosnippet>3081</a>        );
 <a href=#3082 id=3082 data-nosnippet>3082</a>        src.add(
-<a href=#3083 id=3083 data-nosnippet>3083</a>            Platform::Linux64,
+<a href=#3083 id=3083 data-nosnippet>3083</a>            Subdir::Linux64,
 <a href=#3084 id=3084 data-nosnippet>3084</a>            make_test_record_full(<span class="string">"dep_for_v2"</span>, <span class="string">"1.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#3085 id=3085 data-nosnippet>3085</a>        );
 <a href=#3086 id=3086 data-nosnippet>3086</a>        <span class="kw">let </span>source: Arc&lt;<span class="kw">dyn </span><span class="kw">super</span>::RepoDataSource&gt; = Arc::new(src);
@@ -3090,7 +3090,7 @@
 <a href=#3088 id=3088 data-nosnippet>3088</a>        gateway
 <a href=#3089 id=3089 data-nosnippet>3089</a>            .query(
 <a href=#3090 id=3090 data-nosnippet>3090</a>                <span class="macro">vec!</span>[<span class="kw">super</span>::Source::Custom(source)],
-<a href=#3091 id=3091 data-nosnippet>3091</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#3091 id=3091 data-nosnippet>3091</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#3092 id=3092 data-nosnippet>3092</a>                <span class="macro">vec!</span>[
 <a href=#3093 id=3093 data-nosnippet>3093</a>                    MatchSpec::from_str(<span class="string">"pkg &gt;=2"</span>, Lenient).unwrap(),
 <a href=#3094 id=3094 data-nosnippet>3094</a>                    MatchSpec::from_str(<span class="string">"activator"</span>, Lenient).unwrap(),
@@ -3119,11 +3119,11 @@
 <a href=#3117 id=3117 data-nosnippet>3117</a>        <span class="kw">let </span>gateway = Gateway::new();
 <a href=#3118 id=3118 data-nosnippet>3118</a>        <span class="kw">let </span>(<span class="kw-2">mut </span>src, fetched) = RecordingSource::new();
 <a href=#3119 id=3119 data-nosnippet>3119</a>        src.add(
-<a href=#3120 id=3120 data-nosnippet>3120</a>            Platform::Linux64,
+<a href=#3120 id=3120 data-nosnippet>3120</a>            Subdir::Linux64,
 <a href=#3121 id=3121 data-nosnippet>3121</a>            make_test_record_full(<span class="string">"helper"</span>, <span class="string">"1.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[<span class="string">"black[extras=[d]]"</span>], <span class="kw-2">&amp;</span>[]),
 <a href=#3122 id=3122 data-nosnippet>3122</a>        );
 <a href=#3123 id=3123 data-nosnippet>3123</a>        src.add(
-<a href=#3124 id=3124 data-nosnippet>3124</a>            Platform::Linux64,
+<a href=#3124 id=3124 data-nosnippet>3124</a>            Subdir::Linux64,
 <a href=#3125 id=3125 data-nosnippet>3125</a>            make_test_record_full(
 <a href=#3126 id=3126 data-nosnippet>3126</a>                <span class="string">"black"</span>,
 <a href=#3127 id=3127 data-nosnippet>3127</a>                <span class="string">"25.0.0"</span>,
@@ -3133,11 +3133,11 @@
 <a href=#3131 id=3131 data-nosnippet>3131</a>            ),
 <a href=#3132 id=3132 data-nosnippet>3132</a>        );
 <a href=#3133 id=3133 data-nosnippet>3133</a>        src.add(
-<a href=#3134 id=3134 data-nosnippet>3134</a>            Platform::Linux64,
+<a href=#3134 id=3134 data-nosnippet>3134</a>            Subdir::Linux64,
 <a href=#3135 id=3135 data-nosnippet>3135</a>            make_test_record_full(<span class="string">"aiohttp"</span>, <span class="string">"3.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#3136 id=3136 data-nosnippet>3136</a>        );
 <a href=#3137 id=3137 data-nosnippet>3137</a>        src.add(
-<a href=#3138 id=3138 data-nosnippet>3138</a>            Platform::Linux64,
+<a href=#3138 id=3138 data-nosnippet>3138</a>            Subdir::Linux64,
 <a href=#3139 id=3139 data-nosnippet>3139</a>            make_test_record_full(<span class="string">"ipython"</span>, <span class="string">"8.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#3140 id=3140 data-nosnippet>3140</a>        );
 <a href=#3141 id=3141 data-nosnippet>3141</a>        <span class="kw">let </span>source: Arc&lt;<span class="kw">dyn </span><span class="kw">super</span>::RepoDataSource&gt; = Arc::new(src);
@@ -3145,7 +3145,7 @@
 <a href=#3143 id=3143 data-nosnippet>3143</a>        gateway
 <a href=#3144 id=3144 data-nosnippet>3144</a>            .query(
 <a href=#3145 id=3145 data-nosnippet>3145</a>                <span class="macro">vec!</span>[<span class="kw">super</span>::Source::Custom(source)],
-<a href=#3146 id=3146 data-nosnippet>3146</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#3146 id=3146 data-nosnippet>3146</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#3147 id=3147 data-nosnippet>3147</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"helper"</span>, Lenient).unwrap()].into_iter(),
 <a href=#3148 id=3148 data-nosnippet>3148</a>            )
 <a href=#3149 id=3149 data-nosnippet>3149</a>            .recursive(<span class="bool-val">true</span>)
@@ -3169,11 +3169,11 @@
 <a href=#3167 id=3167 data-nosnippet>3167</a>        <span class="kw">let </span>(<span class="kw-2">mut </span>source_b, fetched_b) = RecordingSource::new();
 <a href=#3168 id=3168 data-nosnippet>3168</a>
 <a href=#3169 id=3169 data-nosnippet>3169</a>        source_a.add(
-<a href=#3170 id=3170 data-nosnippet>3170</a>            Platform::Linux64,
+<a href=#3170 id=3170 data-nosnippet>3170</a>            Subdir::Linux64,
 <a href=#3171 id=3171 data-nosnippet>3171</a>            make_test_record_full(<span class="string">"driver"</span>, <span class="string">"1.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[<span class="string">"pkg"</span>, <span class="string">"activator"</span>], <span class="kw-2">&amp;</span>[]),
 <a href=#3172 id=3172 data-nosnippet>3172</a>        );
 <a href=#3173 id=3173 data-nosnippet>3173</a>        source_a.add(
-<a href=#3174 id=3174 data-nosnippet>3174</a>            Platform::Linux64,
+<a href=#3174 id=3174 data-nosnippet>3174</a>            Subdir::Linux64,
 <a href=#3175 id=3175 data-nosnippet>3175</a>            make_test_record_full(
 <a href=#3176 id=3176 data-nosnippet>3176</a>                <span class="string">"pkg"</span>,
 <a href=#3177 id=3177 data-nosnippet>3177</a>                <span class="string">"1.0.0"</span>,
@@ -3183,16 +3183,16 @@
 <a href=#3181 id=3181 data-nosnippet>3181</a>            ),
 <a href=#3182 id=3182 data-nosnippet>3182</a>        );
 <a href=#3183 id=3183 data-nosnippet>3183</a>        source_a.add(
-<a href=#3184 id=3184 data-nosnippet>3184</a>            Platform::Linux64,
+<a href=#3184 id=3184 data-nosnippet>3184</a>            Subdir::Linux64,
 <a href=#3185 id=3185 data-nosnippet>3185</a>            make_test_record_full(<span class="string">"dep_from_source_a"</span>, <span class="string">"1.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#3186 id=3186 data-nosnippet>3186</a>        );
 <a href=#3187 id=3187 data-nosnippet>3187</a>
 <a href=#3188 id=3188 data-nosnippet>3188</a>        source_b.add(
-<a href=#3189 id=3189 data-nosnippet>3189</a>            Platform::Linux64,
+<a href=#3189 id=3189 data-nosnippet>3189</a>            Subdir::Linux64,
 <a href=#3190 id=3190 data-nosnippet>3190</a>            make_test_record_full(<span class="string">"activator"</span>, <span class="string">"1.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[<span class="string">"pkg[extras=[d]]"</span>], <span class="kw-2">&amp;</span>[]),
 <a href=#3191 id=3191 data-nosnippet>3191</a>        );
 <a href=#3192 id=3192 data-nosnippet>3192</a>        source_b.add(
-<a href=#3193 id=3193 data-nosnippet>3193</a>            Platform::Linux64,
+<a href=#3193 id=3193 data-nosnippet>3193</a>            Subdir::Linux64,
 <a href=#3194 id=3194 data-nosnippet>3194</a>            make_test_record_full(
 <a href=#3195 id=3195 data-nosnippet>3195</a>                <span class="string">"pkg"</span>,
 <a href=#3196 id=3196 data-nosnippet>3196</a>                <span class="string">"2.0.0"</span>,
@@ -3202,7 +3202,7 @@
 <a href=#3200 id=3200 data-nosnippet>3200</a>            ),
 <a href=#3201 id=3201 data-nosnippet>3201</a>        );
 <a href=#3202 id=3202 data-nosnippet>3202</a>        source_b.add(
-<a href=#3203 id=3203 data-nosnippet>3203</a>            Platform::Linux64,
+<a href=#3203 id=3203 data-nosnippet>3203</a>            Subdir::Linux64,
 <a href=#3204 id=3204 data-nosnippet>3204</a>            make_test_record_full(<span class="string">"dep_from_source_b"</span>, <span class="string">"1.0.0"</span>, <span class="string">"linux-64"</span>, <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[]),
 <a href=#3205 id=3205 data-nosnippet>3205</a>        );
 <a href=#3206 id=3206 data-nosnippet>3206</a>
@@ -3212,7 +3212,7 @@
 <a href=#3210 id=3210 data-nosnippet>3210</a>                    <span class="kw">super</span>::Source::Custom(Arc::new(source_a)),
 <a href=#3211 id=3211 data-nosnippet>3211</a>                    <span class="kw">super</span>::Source::Custom(Arc::new(source_b)),
 <a href=#3212 id=3212 data-nosnippet>3212</a>                ],
-<a href=#3213 id=3213 data-nosnippet>3213</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#3213 id=3213 data-nosnippet>3213</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#3214 id=3214 data-nosnippet>3214</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"driver"</span>, Lenient).unwrap()].into_iter(),
 <a href=#3215 id=3215 data-nosnippet>3215</a>            )
 <a href=#3216 id=3216 data-nosnippet>3216</a>            .recursive(<span class="bool-val">true</span>)
@@ -3296,7 +3296,7 @@
 <a href=#3294 id=3294 data-nosnippet>3294</a>        <span class="kw">let </span>gateway = Gateway::new();
 <a href=#3295 id=3295 data-nosnippet>3295</a>
 <a href=#3296 id=3296 data-nosnippet>3296</a>        <span class="kw">let </span>relations = gateway
-<a href=#3297 id=3297 data-nosnippet>3297</a>            .channel_relations(<span class="kw-2">&amp;</span>channel, Platform::Linux64)
+<a href=#3297 id=3297 data-nosnippet>3297</a>            .channel_relations(<span class="kw-2">&amp;</span>channel, Subdir::Linux64)
 <a href=#3298 id=3298 data-nosnippet>3298</a>            .<span class="kw">await
 <a href=#3299 id=3299 data-nosnippet>3299</a>            </span>.unwrap()
 <a href=#3300 id=3300 data-nosnippet>3300</a>            .expect(<span class="string">"repodata declares channel_relations"</span>);
@@ -3321,7 +3321,7 @@
 <a href=#3319 id=3319 data-nosnippet>3319</a>
 <a href=#3320 id=3320 data-nosnippet>3320</a>        <span class="kw">let </span>gateway = Gateway::new();
 <a href=#3321 id=3321 data-nosnippet>3321</a>        <span class="kw">let </span>relations = gateway
-<a href=#3322 id=3322 data-nosnippet>3322</a>            .channel_relations(<span class="kw-2">&amp;</span>channel, Platform::Linux64)
+<a href=#3322 id=3322 data-nosnippet>3322</a>            .channel_relations(<span class="kw-2">&amp;</span>channel, Subdir::Linux64)
 <a href=#3323 id=3323 data-nosnippet>3323</a>            .<span class="kw">await
 <a href=#3324 id=3324 data-nosnippet>3324</a>            </span>.unwrap();
 <a href=#3325 id=3325 data-nosnippet>3325</a>        <span class="macro">assert!</span>(relations.is_none());
@@ -3345,7 +3345,7 @@
 <a href=#3343 id=3343 data-nosnippet>3343</a>        <span class="kw">let </span>channel = server.channel();
 <a href=#3344 id=3344 data-nosnippet>3344</a>
 <a href=#3345 id=3345 data-nosnippet>3345</a>        <span class="kw">let </span>gateway = Gateway::new();
-<a href=#3346 id=3346 data-nosnippet>3346</a>        <span class="kw">for </span>platform <span class="kw">in </span>[Platform::Osx64, Platform::NoArch] {
+<a href=#3346 id=3346 data-nosnippet>3346</a>        <span class="kw">for </span>platform <span class="kw">in </span>[Subdir::Osx64, Subdir::NoArch] {
 <a href=#3347 id=3347 data-nosnippet>3347</a>            <span class="kw">let </span>relations = gateway
 <a href=#3348 id=3348 data-nosnippet>3348</a>                .channel_relations(<span class="kw-2">&amp;</span>channel, platform)
 <a href=#3349 id=3349 data-nosnippet>3349</a>                .<span class="kw">await
@@ -3383,7 +3383,7 @@
 <a href=#3381 id=3381 data-nosnippet>3381</a>        <span class="kw">let </span><span class="kw-2">mut </span>q = gateway
 <a href=#3382 id=3382 data-nosnippet>3382</a>            .query(
 <a href=#3383 id=3383 data-nosnippet>3383</a>                channels,
-<a href=#3384 id=3384 data-nosnippet>3384</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#3384 id=3384 data-nosnippet>3384</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#3385 id=3385 data-nosnippet>3385</a>                <span class="macro">vec!</span>[MatchSpec::from_str(pkg, Strict).unwrap()],
 <a href=#3386 id=3386 data-nosnippet>3386</a>            )
 <a href=#3387 id=3387 data-nosnippet>3387</a>            .recursive(<span class="bool-val">false</span>);
@@ -3454,7 +3454,7 @@
 <a href=#3452 id=3452 data-nosnippet>3452</a>        <span class="kw">let </span>output = Gateway::new()
 <a href=#3453 id=3453 data-nosnippet>3453</a>            .query(
 <a href=#3454 id=3454 data-nosnippet>3454</a>                [bioconda],
-<a href=#3455 id=3455 data-nosnippet>3455</a>                [Platform::Linux64],
+<a href=#3455 id=3455 data-nosnippet>3455</a>                [Subdir::Linux64],
 <a href=#3456 id=3456 data-nosnippet>3456</a>                [MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#3457 id=3457 data-nosnippet>3457</a>            )
 <a href=#3458 id=3458 data-nosnippet>3458</a>            .channel_notices(<span class="bool-val">true</span>)
@@ -3565,7 +3565,7 @@
 <a href=#3563 id=3563 data-nosnippet>3563</a>
 <a href=#3564 id=3564 data-nosnippet>3564</a>        <span class="kw">let </span><span class="kw-2">mut </span>mock = MockRepoDataSource::new();
 <a href=#3565 id=3565 data-nosnippet>3565</a>        mock.add_record(
-<a href=#3566 id=3566 data-nosnippet>3566</a>            Platform::Linux64,
+<a href=#3566 id=3566 data-nosnippet>3566</a>            Subdir::Linux64,
 <a href=#3567 id=3567 data-nosnippet>3567</a>            make_test_record(<span class="string">"shared"</span>, <span class="string">"9.9.9"</span>, <span class="string">"linux-64"</span>),
 <a href=#3568 id=3568 data-nosnippet>3568</a>        );
 <a href=#3569 id=3569 data-nosnippet>3569</a>        <span class="kw">let </span>custom: Arc&lt;<span class="kw">dyn </span><span class="kw">super</span>::RepoDataSource&gt; = Arc::new(mock);
@@ -3577,7 +3577,7 @@
 <a href=#3575 id=3575 data-nosnippet>3575</a>                    <span class="kw">super</span>::Source::Channel(bioconda),
 <a href=#3576 id=3576 data-nosnippet>3576</a>                    <span class="kw">super</span>::Source::Custom(custom),
 <a href=#3577 id=3577 data-nosnippet>3577</a>                ],
-<a href=#3578 id=3578 data-nosnippet>3578</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#3578 id=3578 data-nosnippet>3578</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#3579 id=3579 data-nosnippet>3579</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#3580 id=3580 data-nosnippet>3580</a>            )
 <a href=#3581 id=3581 data-nosnippet>3581</a>            .recursive(<span class="bool-val">false</span>)
@@ -3610,7 +3610,7 @@
 <a href=#3608 id=3608 data-nosnippet>3608</a>        <span class="comment">// Custom source FIRST, then channel.
 <a href=#3609 id=3609 data-nosnippet>3609</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>mock = MockRepoDataSource::new();
 <a href=#3610 id=3610 data-nosnippet>3610</a>        mock.add_record(
-<a href=#3611 id=3611 data-nosnippet>3611</a>            Platform::Linux64,
+<a href=#3611 id=3611 data-nosnippet>3611</a>            Subdir::Linux64,
 <a href=#3612 id=3612 data-nosnippet>3612</a>            make_test_record(<span class="string">"shared"</span>, <span class="string">"9.9.9"</span>, <span class="string">"linux-64"</span>),
 <a href=#3613 id=3613 data-nosnippet>3613</a>        );
 <a href=#3614 id=3614 data-nosnippet>3614</a>        <span class="kw">let </span>custom: Arc&lt;<span class="kw">dyn </span><span class="kw">super</span>::RepoDataSource&gt; = Arc::new(mock);
@@ -3622,7 +3622,7 @@
 <a href=#3620 id=3620 data-nosnippet>3620</a>                    <span class="kw">super</span>::Source::Custom(custom),
 <a href=#3621 id=3621 data-nosnippet>3621</a>                    <span class="kw">super</span>::Source::Channel(conda_forge),
 <a href=#3622 id=3622 data-nosnippet>3622</a>                ],
-<a href=#3623 id=3623 data-nosnippet>3623</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#3623 id=3623 data-nosnippet>3623</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#3624 id=3624 data-nosnippet>3624</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#3625 id=3625 data-nosnippet>3625</a>            )
 <a href=#3626 id=3626 data-nosnippet>3626</a>            .recursive(<span class="bool-val">false</span>)
@@ -3703,7 +3703,7 @@
 <a href=#3701 id=3701 data-nosnippet>3701</a>
 <a href=#3702 id=3702 data-nosnippet>3702</a>        <span class="kw">let </span>gateway = Gateway::new();
 <a href=#3703 id=3703 data-nosnippet>3703</a>        <span class="kw">let </span>output = gateway
-<a href=#3704 id=3704 data-nosnippet>3704</a>            .names(<span class="macro">vec!</span>[bioconda], <span class="macro">vec!</span>[Platform::Linux64])
+<a href=#3704 id=3704 data-nosnippet>3704</a>            .names(<span class="macro">vec!</span>[bioconda], <span class="macro">vec!</span>[Subdir::Linux64])
 <a href=#3705 id=3705 data-nosnippet>3705</a>            .execute()
 <a href=#3706 id=3706 data-nosnippet>3706</a>            .<span class="kw">await
 <a href=#3707 id=3707 data-nosnippet>3707</a>            </span>.unwrap();
@@ -3733,7 +3733,7 @@
 <a href=#3731 id=3731 data-nosnippet>3731</a>
 <a href=#3732 id=3732 data-nosnippet>3732</a>        <span class="kw">let </span>gateway = Gateway::new();
 <a href=#3733 id=3733 data-nosnippet>3733</a>        <span class="kw">let </span>output = gateway
-<a href=#3734 id=3734 data-nosnippet>3734</a>            .names(<span class="macro">vec!</span>[bioconda], <span class="macro">vec!</span>[Platform::Linux64])
+<a href=#3734 id=3734 data-nosnippet>3734</a>            .names(<span class="macro">vec!</span>[bioconda], <span class="macro">vec!</span>[Subdir::Linux64])
 <a href=#3735 id=3735 data-nosnippet>3735</a>            .channel_relations(<span class="kw">crate</span>::ChannelRelationsMode::Disabled)
 <a href=#3736 id=3736 data-nosnippet>3736</a>            .execute()
 <a href=#3737 id=3737 data-nosnippet>3737</a>            .<span class="kw">await
@@ -3762,7 +3762,7 @@
 <a href=#3760 id=3760 data-nosnippet>3760</a>
 <a href=#3761 id=3761 data-nosnippet>3761</a>        <span class="kw">let </span>gateway = Gateway::new();
 <a href=#3762 id=3762 data-nosnippet>3762</a>        <span class="kw">let </span>err = gateway
-<a href=#3763 id=3763 data-nosnippet>3763</a>            .names(<span class="macro">vec!</span>[a_ch], <span class="macro">vec!</span>[Platform::Linux64])
+<a href=#3763 id=3763 data-nosnippet>3763</a>            .names(<span class="macro">vec!</span>[a_ch], <span class="macro">vec!</span>[Subdir::Linux64])
 <a href=#3764 id=3764 data-nosnippet>3764</a>            .channel_relations(<span class="kw">crate</span>::ChannelRelationsMode::Strict)
 <a href=#3765 id=3765 data-nosnippet>3765</a>            .execute()
 <a href=#3766 id=3766 data-nosnippet>3766</a>            .<span class="kw">await
@@ -3804,7 +3804,7 @@
 <a href=#3802 id=3802 data-nosnippet>3802</a>        <span class="kw">let </span>output = gateway
 <a href=#3803 id=3803 data-nosnippet>3803</a>            .query(
 <a href=#3804 id=3804 data-nosnippet>3804</a>                <span class="macro">vec!</span>[a_ch],
-<a href=#3805 id=3805 data-nosnippet>3805</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#3805 id=3805 data-nosnippet>3805</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#3806 id=3806 data-nosnippet>3806</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#3807 id=3807 data-nosnippet>3807</a>            )
 <a href=#3808 id=3808 data-nosnippet>3808</a>            .recursive(<span class="bool-val">false</span>)
@@ -3858,7 +3858,7 @@
 <a href=#3856 id=3856 data-nosnippet>3856</a>        <span class="kw">let </span>output = gateway
 <a href=#3857 id=3857 data-nosnippet>3857</a>            .query(
 <a href=#3858 id=3858 data-nosnippet>3858</a>                <span class="macro">vec!</span>[a_ch],
-<a href=#3859 id=3859 data-nosnippet>3859</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#3859 id=3859 data-nosnippet>3859</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#3860 id=3860 data-nosnippet>3860</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#3861 id=3861 data-nosnippet>3861</a>            )
 <a href=#3862 id=3862 data-nosnippet>3862</a>            .recursive(<span class="bool-val">false</span>)
@@ -3918,7 +3918,7 @@
 <a href=#3916 id=3916 data-nosnippet>3916</a>        <span class="kw">let </span>output = gateway
 <a href=#3917 id=3917 data-nosnippet>3917</a>            .query(
 <a href=#3918 id=3918 data-nosnippet>3918</a>                <span class="macro">vec!</span>[a_ch],
-<a href=#3919 id=3919 data-nosnippet>3919</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#3919 id=3919 data-nosnippet>3919</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#3920 id=3920 data-nosnippet>3920</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#3921 id=3921 data-nosnippet>3921</a>            )
 <a href=#3922 id=3922 data-nosnippet>3922</a>            .recursive(<span class="bool-val">false</span>)
@@ -3955,7 +3955,7 @@
 <a href=#3953 id=3953 data-nosnippet>3953</a>        <span class="kw">let </span>output = gateway
 <a href=#3954 id=3954 data-nosnippet>3954</a>            .query(
 <a href=#3955 id=3955 data-nosnippet>3955</a>                <span class="macro">vec!</span>[bioconda],
-<a href=#3956 id=3956 data-nosnippet>3956</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#3956 id=3956 data-nosnippet>3956</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#3957 id=3957 data-nosnippet>3957</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#3958 id=3958 data-nosnippet>3958</a>            )
 <a href=#3959 id=3959 data-nosnippet>3959</a>            .recursive(<span class="bool-val">false</span>)
@@ -4011,7 +4011,7 @@
 <a href=#4009 id=4009 data-nosnippet>4009</a>
 <a href=#4010 id=4010 data-nosnippet>4010</a>        <span class="kw">let </span><span class="kw-2">mut </span>mock = MockRepoDataSource::new();
 <a href=#4011 id=4011 data-nosnippet>4011</a>        mock.add_record(
-<a href=#4012 id=4012 data-nosnippet>4012</a>            Platform::Linux64,
+<a href=#4012 id=4012 data-nosnippet>4012</a>            Subdir::Linux64,
 <a href=#4013 id=4013 data-nosnippet>4013</a>            make_test_record(<span class="string">"shared"</span>, <span class="string">"9.9.9"</span>, <span class="string">"linux-64"</span>),
 <a href=#4014 id=4014 data-nosnippet>4014</a>        );
 <a href=#4015 id=4015 data-nosnippet>4015</a>        <span class="kw">let </span>custom: Arc&lt;<span class="kw">dyn </span><span class="kw">super</span>::RepoDataSource&gt; = Arc::new(mock);
@@ -4023,7 +4023,7 @@
 <a href=#4021 id=4021 data-nosnippet>4021</a>                    <span class="kw">super</span>::Source::Custom(custom),
 <a href=#4022 id=4022 data-nosnippet>4022</a>                    <span class="kw">super</span>::Source::Channel(bioconda),
 <a href=#4023 id=4023 data-nosnippet>4023</a>                ],
-<a href=#4024 id=4024 data-nosnippet>4024</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#4024 id=4024 data-nosnippet>4024</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#4025 id=4025 data-nosnippet>4025</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#4026 id=4026 data-nosnippet>4026</a>            )
 <a href=#4027 id=4027 data-nosnippet>4027</a>            .recursive(<span class="bool-val">false</span>)
@@ -4063,7 +4063,7 @@
 <a href=#4061 id=4061 data-nosnippet>4061</a>        </span><span class="kw">let </span>output = gateway
 <a href=#4062 id=4062 data-nosnippet>4062</a>            .query(
 <a href=#4063 id=4063 data-nosnippet>4063</a>                <span class="macro">vec!</span>[a_ch.clone()],
-<a href=#4064 id=4064 data-nosnippet>4064</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#4064 id=4064 data-nosnippet>4064</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#4065 id=4065 data-nosnippet>4065</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#4066 id=4066 data-nosnippet>4066</a>            )
 <a href=#4067 id=4067 data-nosnippet>4067</a>            .recursive(<span class="bool-val">false</span>)
@@ -4088,7 +4088,7 @@
 <a href=#4086 id=4086 data-nosnippet>4086</a>        </span><span class="kw">let </span>err = gateway
 <a href=#4087 id=4087 data-nosnippet>4087</a>            .query(
 <a href=#4088 id=4088 data-nosnippet>4088</a>                <span class="macro">vec!</span>[a_ch],
-<a href=#4089 id=4089 data-nosnippet>4089</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#4089 id=4089 data-nosnippet>4089</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#4090 id=4090 data-nosnippet>4090</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#4091 id=4091 data-nosnippet>4091</a>            )
 <a href=#4092 id=4092 data-nosnippet>4092</a>            .recursive(<span class="bool-val">false</span>)
@@ -4116,7 +4116,7 @@
 <a href=#4114 id=4114 data-nosnippet>4114</a>
 <a href=#4115 id=4115 data-nosnippet>4115</a>        <span class="kw">let </span><span class="kw-2">mut </span>mock = MockRepoDataSource::new();
 <a href=#4116 id=4116 data-nosnippet>4116</a>        mock.add_record(
-<a href=#4117 id=4117 data-nosnippet>4117</a>            Platform::Linux64,
+<a href=#4117 id=4117 data-nosnippet>4117</a>            Subdir::Linux64,
 <a href=#4118 id=4118 data-nosnippet>4118</a>            make_test_record(<span class="string">"shared"</span>, <span class="string">"9.9.9"</span>, <span class="string">"linux-64"</span>),
 <a href=#4119 id=4119 data-nosnippet>4119</a>        );
 <a href=#4120 id=4120 data-nosnippet>4120</a>        <span class="kw">let </span>custom: Arc&lt;<span class="kw">dyn </span><span class="kw">super</span>::RepoDataSource&gt; = Arc::new(mock);
@@ -4128,7 +4128,7 @@
 <a href=#4126 id=4126 data-nosnippet>4126</a>                    <span class="kw">super</span>::Source::Custom(custom),
 <a href=#4127 id=4127 data-nosnippet>4127</a>                    <span class="kw">super</span>::Source::Channel(bioconda),
 <a href=#4128 id=4128 data-nosnippet>4128</a>                ],
-<a href=#4129 id=4129 data-nosnippet>4129</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#4129 id=4129 data-nosnippet>4129</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#4130 id=4130 data-nosnippet>4130</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#4131 id=4131 data-nosnippet>4131</a>            )
 <a href=#4132 id=4132 data-nosnippet>4132</a>            .recursive(<span class="bool-val">false</span>)
@@ -4193,7 +4193,7 @@
 <a href=#4191 id=4191 data-nosnippet>4191</a>
 <a href=#4192 id=4192 data-nosnippet>4192</a>        <span class="kw">let </span><span class="kw-2">mut </span>mock = MockRepoDataSource::new();
 <a href=#4193 id=4193 data-nosnippet>4193</a>        mock.add_record(
-<a href=#4194 id=4194 data-nosnippet>4194</a>            Platform::Linux64,
+<a href=#4194 id=4194 data-nosnippet>4194</a>            Subdir::Linux64,
 <a href=#4195 id=4195 data-nosnippet>4195</a>            make_test_record(<span class="string">"shared"</span>, <span class="string">"9.9.9"</span>, <span class="string">"linux-64"</span>),
 <a href=#4196 id=4196 data-nosnippet>4196</a>        );
 <a href=#4197 id=4197 data-nosnippet>4197</a>        <span class="kw">let </span>custom: Arc&lt;<span class="kw">dyn </span><span class="kw">super</span>::RepoDataSource&gt; = Arc::new(mock);
@@ -4206,7 +4206,7 @@
 <a href=#4204 id=4204 data-nosnippet>4204</a>                    <span class="kw">super</span>::Source::Custom(custom),
 <a href=#4205 id=4205 data-nosnippet>4205</a>                    <span class="kw">super</span>::Source::Channel(bioconda),
 <a href=#4206 id=4206 data-nosnippet>4206</a>                ],
-<a href=#4207 id=4207 data-nosnippet>4207</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#4207 id=4207 data-nosnippet>4207</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#4208 id=4208 data-nosnippet>4208</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#4209 id=4209 data-nosnippet>4209</a>            )
 <a href=#4210 id=4210 data-nosnippet>4210</a>            .recursive(<span class="bool-val">false</span>)
@@ -4258,7 +4258,7 @@
 <a href=#4256 id=4256 data-nosnippet>4256</a>        <span class="kw">let </span>output = gateway
 <a href=#4257 id=4257 data-nosnippet>4257</a>            .query(
 <a href=#4258 id=4258 data-nosnippet>4258</a>                <span class="macro">vec!</span>[a_ch.clone()],
-<a href=#4259 id=4259 data-nosnippet>4259</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#4259 id=4259 data-nosnippet>4259</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#4260 id=4260 data-nosnippet>4260</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#4261 id=4261 data-nosnippet>4261</a>            )
 <a href=#4262 id=4262 data-nosnippet>4262</a>            .recursive(<span class="bool-val">false</span>)
@@ -4296,7 +4296,7 @@
 <a href=#4294 id=4294 data-nosnippet>4294</a>        <span class="kw">let </span>err = gateway
 <a href=#4295 id=4295 data-nosnippet>4295</a>            .query(
 <a href=#4296 id=4296 data-nosnippet>4296</a>                <span class="macro">vec!</span>[a_ch],
-<a href=#4297 id=4297 data-nosnippet>4297</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#4297 id=4297 data-nosnippet>4297</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#4298 id=4298 data-nosnippet>4298</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#4299 id=4299 data-nosnippet>4299</a>            )
 <a href=#4300 id=4300 data-nosnippet>4300</a>            .recursive(<span class="bool-val">false</span>)
@@ -4323,7 +4323,7 @@
 <a href=#4321 id=4321 data-nosnippet>4321</a>        <span class="kw">let </span>output = gateway
 <a href=#4322 id=4322 data-nosnippet>4322</a>            .query(
 <a href=#4323 id=4323 data-nosnippet>4323</a>                <span class="macro">vec!</span>[a_ch.clone()],
-<a href=#4324 id=4324 data-nosnippet>4324</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#4324 id=4324 data-nosnippet>4324</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#4325 id=4325 data-nosnippet>4325</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#4326 id=4326 data-nosnippet>4326</a>            )
 <a href=#4327 id=4327 data-nosnippet>4327</a>            .recursive(<span class="bool-val">false</span>)
@@ -4344,7 +4344,7 @@
 <a href=#4342 id=4342 data-nosnippet>4342</a>        <span class="kw">let </span>err = gateway
 <a href=#4343 id=4343 data-nosnippet>4343</a>            .query(
 <a href=#4344 id=4344 data-nosnippet>4344</a>                <span class="macro">vec!</span>[a_ch],
-<a href=#4345 id=4345 data-nosnippet>4345</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#4345 id=4345 data-nosnippet>4345</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#4346 id=4346 data-nosnippet>4346</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#4347 id=4347 data-nosnippet>4347</a>            )
 <a href=#4348 id=4348 data-nosnippet>4348</a>            .recursive(<span class="bool-val">false</span>)
@@ -4372,7 +4372,7 @@
 <a href=#4370 id=4370 data-nosnippet>4370</a>        <span class="kw">let </span>output = gateway
 <a href=#4371 id=4371 data-nosnippet>4371</a>            .query(
 <a href=#4372 id=4372 data-nosnippet>4372</a>                <span class="macro">vec!</span>[bioconda],
-<a href=#4373 id=4373 data-nosnippet>4373</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#4373 id=4373 data-nosnippet>4373</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#4374 id=4374 data-nosnippet>4374</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#4375 id=4375 data-nosnippet>4375</a>            )
 <a href=#4376 id=4376 data-nosnippet>4376</a>            .recursive(<span class="bool-val">false</span>)
@@ -4413,7 +4413,7 @@
 <a href=#4411 id=4411 data-nosnippet>4411</a>        <span class="kw">let </span>output = gateway
 <a href=#4412 id=4412 data-nosnippet>4412</a>            .query(
 <a href=#4413 id=4413 data-nosnippet>4413</a>                <span class="macro">vec!</span>[bioconda],
-<a href=#4414 id=4414 data-nosnippet>4414</a>                <span class="macro">vec!</span>[Platform::Linux64, Platform::NoArch],
+<a href=#4414 id=4414 data-nosnippet>4414</a>                <span class="macro">vec!</span>[Subdir::Linux64, Subdir::NoArch],
 <a href=#4415 id=4415 data-nosnippet>4415</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#4416 id=4416 data-nosnippet>4416</a>            )
 <a href=#4417 id=4417 data-nosnippet>4417</a>            .recursive(<span class="bool-val">false</span>)
@@ -4450,7 +4450,7 @@
 <a href=#4448 id=4448 data-nosnippet>4448</a>            <span class="kw">let </span>output = gateway
 <a href=#4449 id=4449 data-nosnippet>4449</a>                .query(
 <a href=#4450 id=4450 data-nosnippet>4450</a>                    <span class="macro">vec!</span>[a_ch.clone(), b_ch.clone()],
-<a href=#4451 id=4451 data-nosnippet>4451</a>                    <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#4451 id=4451 data-nosnippet>4451</a>                    <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#4452 id=4452 data-nosnippet>4452</a>                    <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#4453 id=4453 data-nosnippet>4453</a>                )
 <a href=#4454 id=4454 data-nosnippet>4454</a>                .recursive(<span class="bool-val">false</span>)
@@ -4499,7 +4499,7 @@
 <a href=#4497 id=4497 data-nosnippet>4497</a>        <span class="kw">let </span>output = gateway
 <a href=#4498 id=4498 data-nosnippet>4498</a>            .query(
 <a href=#4499 id=4499 data-nosnippet>4499</a>                <span class="macro">vec!</span>[a_ch],
-<a href=#4500 id=4500 data-nosnippet>4500</a>                <span class="macro">vec!</span>[Platform::Linux64, Platform::NoArch],
+<a href=#4500 id=4500 data-nosnippet>4500</a>                <span class="macro">vec!</span>[Subdir::Linux64, Subdir::NoArch],
 <a href=#4501 id=4501 data-nosnippet>4501</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#4502 id=4502 data-nosnippet>4502</a>            )
 <a href=#4503 id=4503 data-nosnippet>4503</a>            .recursive(<span class="bool-val">false</span>)
@@ -4546,7 +4546,7 @@
 <a href=#4544 id=4544 data-nosnippet>4544</a>        </span><span class="kw">let </span>output = gateway
 <a href=#4545 id=4545 data-nosnippet>4545</a>            .query(
 <a href=#4546 id=4546 data-nosnippet>4546</a>                <span class="macro">vec!</span>[bioconda, conda_forge],
-<a href=#4547 id=4547 data-nosnippet>4547</a>                <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#4547 id=4547 data-nosnippet>4547</a>                <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#4548 id=4548 data-nosnippet>4548</a>                <span class="macro">vec!</span>[MatchSpec::from_str(<span class="string">"shared"</span>, Strict).unwrap()],
 <a href=#4549 id=4549 data-nosnippet>4549</a>            )
 <a href=#4550 id=4550 data-nosnippet>4550</a>            .recursive(<span class="bool-val">false</span>)

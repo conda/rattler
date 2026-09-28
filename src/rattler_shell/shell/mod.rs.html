@@ -16,7 +16,7 @@
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>enum_dispatch::enum_dispatch;
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>indexmap::IndexMap;
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>itertools::Itertools;
-<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>rattler_conda_types::Platform;
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>rattler_conda_types::Subdir;
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>thiserror::Error;
 <a href=#19 id=19 data-nosnippet>19</a>
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span><span class="kw">crate</span>::activation::PathModificationBehavior;
@@ -88,7 +88,7 @@
 <a href=#86 id=86 data-nosnippet>86</a>        f: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>Write,
 <a href=#87 id=87 data-nosnippet>87</a>        paths: <span class="kw-2">&amp;</span>[PathBuf],
 <a href=#88 id=88 data-nosnippet>88</a>        modification_behavior: PathModificationBehavior,
-<a href=#89 id=89 data-nosnippet>89</a>        platform: <span class="kw-2">&amp;</span>Platform,
+<a href=#89 id=89 data-nosnippet>89</a>        platform: <span class="kw-2">&amp;</span>Subdir,
 <a href=#90 id=90 data-nosnippet>90</a>    ) -&gt; ShellResult {
 <a href=#91 id=91 data-nosnippet>91</a>        <span class="kw">let </span><span class="kw-2">mut </span>paths_vec = paths
 <a href=#92 id=92 data-nosnippet>92</a>            .iter()
@@ -118,14 +118,14 @@
 <a href=#116 id=116 data-nosnippet>116</a>    </span><span class="kw">fn </span>create_run_script_command(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>Path) -&gt; Command;
 <a href=#117 id=117 data-nosnippet>117</a>
 <a href=#118 id=118 data-nosnippet>118</a>    <span class="doccomment">/// Path separator
-<a href=#119 id=119 data-nosnippet>119</a>    </span><span class="kw">fn </span>path_separator(<span class="kw-2">&amp;</span><span class="self">self</span>, platform: <span class="kw-2">&amp;</span>Platform) -&gt; <span class="kw-2">&amp;</span>str {
+<a href=#119 id=119 data-nosnippet>119</a>    </span><span class="kw">fn </span>path_separator(<span class="kw-2">&amp;</span><span class="self">self</span>, platform: <span class="kw-2">&amp;</span>Subdir) -&gt; <span class="kw-2">&amp;</span>str {
 <a href=#120 id=120 data-nosnippet>120</a>        <span class="kw">if </span>platform.is_unix() { <span class="string">":" </span>} <span class="kw">else </span>{ <span class="string">";" </span>}
 <a href=#121 id=121 data-nosnippet>121</a>    }
 <a href=#122 id=122 data-nosnippet>122</a>
 <a href=#123 id=123 data-nosnippet>123</a>    <span class="doccomment">/// Returns the name of the PATH variable for the given platform. On
 <a href=#124 id=124 data-nosnippet>124</a>    /// Windows, path variables are case-insensitive but not all shells treat
 <a href=#125 id=125 data-nosnippet>125</a>    /// them case-insensitive.
-<a href=#126 id=126 data-nosnippet>126</a>    </span><span class="kw">fn </span>path_var(<span class="kw-2">&amp;</span><span class="self">self</span>, platform: <span class="kw-2">&amp;</span>Platform) -&gt; <span class="kw-2">&amp;</span>str {
+<a href=#126 id=126 data-nosnippet>126</a>    </span><span class="kw">fn </span>path_var(<span class="kw-2">&amp;</span><span class="self">self</span>, platform: <span class="kw-2">&amp;</span>Subdir) -&gt; <span class="kw-2">&amp;</span>str {
 <a href=#127 id=127 data-nosnippet>127</a>        <span class="kw">if </span>platform.is_windows() {
 <a href=#128 id=128 data-nosnippet>128</a>            <span class="string">"Path"
 <a href=#129 id=129 data-nosnippet>129</a>        </span>} <span class="kw">else </span>{
@@ -339,7 +339,7 @@
 <a href=#337 id=337 data-nosnippet>337</a>        f: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>Write,
 <a href=#338 id=338 data-nosnippet>338</a>        paths: <span class="kw-2">&amp;</span>[PathBuf],
 <a href=#339 id=339 data-nosnippet>339</a>        modification_behavior: PathModificationBehavior,
-<a href=#340 id=340 data-nosnippet>340</a>        platform: <span class="kw-2">&amp;</span>Platform,
+<a href=#340 id=340 data-nosnippet>340</a>        platform: <span class="kw-2">&amp;</span>Subdir,
 <a href=#341 id=341 data-nosnippet>341</a>    ) -&gt; ShellResult {
 <a href=#342 id=342 data-nosnippet>342</a>        <span class="comment">// Put paths in a vector of the correct format.
 <a href=#343 id=343 data-nosnippet>343</a>        </span><span class="kw">let </span>paths_vec = paths
@@ -381,7 +381,7 @@
 <a href=#379 id=379 data-nosnippet>379</a>    }
 <a href=#380 id=380 data-nosnippet>380</a>
 <a href=#381 id=381 data-nosnippet>381</a>    <span class="doccomment">/// For Bash, the path variable is always all capital PATH, even on Windows.
-<a href=#382 id=382 data-nosnippet>382</a>    </span><span class="kw">fn </span>path_var(<span class="kw-2">&amp;</span><span class="self">self</span>, _platform: <span class="kw-2">&amp;</span>Platform) -&gt; <span class="kw-2">&amp;</span>str {
+<a href=#382 id=382 data-nosnippet>382</a>    </span><span class="kw">fn </span>path_var(<span class="kw-2">&amp;</span><span class="self">self</span>, _platform: <span class="kw-2">&amp;</span>Subdir) -&gt; <span class="kw-2">&amp;</span>str {
 <a href=#383 id=383 data-nosnippet>383</a>        <span class="string">"PATH"
 <a href=#384 id=384 data-nosnippet>384</a>    </span>}
 <a href=#385 id=385 data-nosnippet>385</a>
@@ -912,7 +912,7 @@
 <a href=#910 id=910 data-nosnippet>910</a>        f: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>Write,
 <a href=#911 id=911 data-nosnippet>911</a>        paths: <span class="kw-2">&amp;</span>[PathBuf],
 <a href=#912 id=912 data-nosnippet>912</a>        modification_behavior: PathModificationBehavior,
-<a href=#913 id=913 data-nosnippet>913</a>        platform: <span class="kw-2">&amp;</span>Platform,
+<a href=#913 id=913 data-nosnippet>913</a>        platform: <span class="kw-2">&amp;</span>Subdir,
 <a href=#914 id=914 data-nosnippet>914</a>    ) -&gt; ShellResult {
 <a href=#915 id=915 data-nosnippet>915</a>        <span class="kw">let </span>path = paths
 <a href=#916 id=916 data-nosnippet>916</a>            .iter()
@@ -1187,12 +1187,12 @@
 <a href=#1185 id=1185 data-nosnippet>1185</a>    <span class="doccomment">/// The contents of the script.
 <a href=#1186 id=1186 data-nosnippet>1186</a>    </span>contents: String,
 <a href=#1187 id=1187 data-nosnippet>1187</a>    <span class="doccomment">/// The platform for which the script will be generated
-<a href=#1188 id=1188 data-nosnippet>1188</a>    </span>platform: Platform,
+<a href=#1188 id=1188 data-nosnippet>1188</a>    </span>platform: Subdir,
 <a href=#1189 id=1189 data-nosnippet>1189</a>}
 <a href=#1190 id=1190 data-nosnippet>1190</a>
 <a href=#1191 id=1191 data-nosnippet>1191</a><span class="kw">impl</span>&lt;T: Shell + <span class="lifetime">'static</span>&gt; ShellScript&lt;T&gt; {
 <a href=#1192 id=1192 data-nosnippet>1192</a>    <span class="doccomment">/// Create a new [`ShellScript`] for the given shell.
-<a href=#1193 id=1193 data-nosnippet>1193</a>    </span><span class="kw">pub fn </span>new(shell: T, platform: Platform) -&gt; <span class="self">Self </span>{
+<a href=#1193 id=1193 data-nosnippet>1193</a>    </span><span class="kw">pub fn </span>new(shell: T, platform: Subdir) -&gt; <span class="self">Self </span>{
 <a href=#1194 id=1194 data-nosnippet>1194</a>        <span class="self">Self </span>{
 <a href=#1195 id=1195 data-nosnippet>1195</a>            shell,
 <a href=#1196 id=1196 data-nosnippet>1196</a>            contents: String::new(),
@@ -1334,7 +1334,7 @@
 <a href=#1332 id=1332 data-nosnippet>1332</a>
 <a href=#1333 id=1333 data-nosnippet>1333</a>    <span class="attr">#[test]
 <a href=#1334 id=1334 data-nosnippet>1334</a>    </span><span class="kw">fn </span>test_bash() {
-<a href=#1335 id=1335 data-nosnippet>1335</a>        <span class="kw">let </span><span class="kw-2">mut </span>script = ShellScript::new(Bash::default(), Platform::Linux64);
+<a href=#1335 id=1335 data-nosnippet>1335</a>        <span class="kw">let </span><span class="kw-2">mut </span>script = ShellScript::new(Bash::default(), Subdir::Linux64);
 <a href=#1336 id=1336 data-nosnippet>1336</a>
 <a href=#1337 id=1337 data-nosnippet>1337</a>        <span class="kw">let </span>paths = <span class="macro">vec!</span>[PathBuf::from(<span class="string">"bar"</span>), PathBuf::from(<span class="string">"a/b"</span>)];
 <a href=#1338 id=1338 data-nosnippet>1338</a>
@@ -1365,7 +1365,7 @@
 <a href=#1363 id=1363 data-nosnippet>1363</a>
 <a href=#1364 id=1364 data-nosnippet>1364</a>    <span class="attr">#[test]
 <a href=#1365 id=1365 data-nosnippet>1365</a>    </span><span class="kw">fn </span>test_fish() {
-<a href=#1366 id=1366 data-nosnippet>1366</a>        <span class="kw">let </span><span class="kw-2">mut </span>script = ShellScript::new(Fish, Platform::Linux64);
+<a href=#1366 id=1366 data-nosnippet>1366</a>        <span class="kw">let </span><span class="kw-2">mut </span>script = ShellScript::new(Fish, Subdir::Linux64);
 <a href=#1367 id=1367 data-nosnippet>1367</a>
 <a href=#1368 id=1368 data-nosnippet>1368</a>        script
 <a href=#1369 id=1369 data-nosnippet>1369</a>            .set_env_var(<span class="string">"FOO"</span>, <span class="string">"bar"</span>)
@@ -1380,7 +1380,7 @@
 <a href=#1378 id=1378 data-nosnippet>1378</a>
 <a href=#1379 id=1379 data-nosnippet>1379</a>    <span class="attr">#[test]
 <a href=#1380 id=1380 data-nosnippet>1380</a>    </span><span class="kw">fn </span>test_xonsh_bash() {
-<a href=#1381 id=1381 data-nosnippet>1381</a>        <span class="kw">let </span><span class="kw-2">mut </span>script = ShellScript::new(Xonsh, Platform::Linux64);
+<a href=#1381 id=1381 data-nosnippet>1381</a>        <span class="kw">let </span><span class="kw-2">mut </span>script = ShellScript::new(Xonsh, Subdir::Linux64);
 <a href=#1382 id=1382 data-nosnippet>1382</a>
 <a href=#1383 id=1383 data-nosnippet>1383</a>        script
 <a href=#1384 id=1384 data-nosnippet>1384</a>            .run_script(<span class="kw-2">&amp;</span>PathBuf::from_str(<span class="string">"foo.sh"</span>).unwrap())
@@ -1391,7 +1391,7 @@
 <a href=#1389 id=1389 data-nosnippet>1389</a>
 <a href=#1390 id=1390 data-nosnippet>1390</a>    <span class="attr">#[test]
 <a href=#1391 id=1391 data-nosnippet>1391</a>    </span><span class="kw">fn </span>test_xonsh_xsh() {
-<a href=#1392 id=1392 data-nosnippet>1392</a>        <span class="kw">let </span><span class="kw-2">mut </span>script = ShellScript::new(Xonsh, Platform::Linux64);
+<a href=#1392 id=1392 data-nosnippet>1392</a>        <span class="kw">let </span><span class="kw-2">mut </span>script = ShellScript::new(Xonsh, Subdir::Linux64);
 <a href=#1393 id=1393 data-nosnippet>1393</a>        script
 <a href=#1394 id=1394 data-nosnippet>1394</a>            .set_env_var(<span class="string">"FOO"</span>, <span class="string">"bar"</span>)
 <a href=#1395 id=1395 data-nosnippet>1395</a>            .unwrap()
@@ -1418,7 +1418,7 @@
 <a href=#1416 id=1416 data-nosnippet>1416</a>
 <a href=#1417 id=1417 data-nosnippet>1417</a>    <span class="attr">#[test]
 <a href=#1418 id=1418 data-nosnippet>1418</a>    </span><span class="kw">fn </span>test_path_separator() {
-<a href=#1419 id=1419 data-nosnippet>1419</a>        <span class="kw">let </span><span class="kw-2">mut </span>script = ShellScript::new(Bash::default(), Platform::Linux64);
+<a href=#1419 id=1419 data-nosnippet>1419</a>        <span class="kw">let </span><span class="kw-2">mut </span>script = ShellScript::new(Bash::default(), Subdir::Linux64);
 <a href=#1420 id=1420 data-nosnippet>1420</a>        script
 <a href=#1421 id=1421 data-nosnippet>1421</a>            .set_path(
 <a href=#1422 id=1422 data-nosnippet>1422</a>                <span class="kw-2">&amp;</span>[PathBuf::from(<span class="string">"/foo"</span>), PathBuf::from(<span class="string">"/bar"</span>)],
@@ -1427,7 +1427,7 @@
 <a href=#1425 id=1425 data-nosnippet>1425</a>            .unwrap();
 <a href=#1426 id=1426 data-nosnippet>1426</a>        <span class="macro">assert!</span>(script.contents.contains(<span class="string">"/foo:/bar"</span>));
 <a href=#1427 id=1427 data-nosnippet>1427</a>
-<a href=#1428 id=1428 data-nosnippet>1428</a>        <span class="kw">let </span><span class="kw-2">mut </span>script = ShellScript::new(Bash::default(), Platform::Win64);
+<a href=#1428 id=1428 data-nosnippet>1428</a>        <span class="kw">let </span><span class="kw-2">mut </span>script = ShellScript::new(Bash::default(), Subdir::Win64);
 <a href=#1429 id=1429 data-nosnippet>1429</a>        script
 <a href=#1430 id=1430 data-nosnippet>1430</a>            .set_path(
 <a href=#1431 id=1431 data-nosnippet>1431</a>                <span class="kw-2">&amp;</span>[PathBuf::from(<span class="string">"/foo"</span>), PathBuf::from(<span class="string">"/bar"</span>)],
@@ -1478,7 +1478,7 @@
 <a href=#1476 id=1476 data-nosnippet>1476</a>                Bash {
 <a href=#1477 id=1477 data-nosnippet>1477</a>                    flavor: BashFlavor::Bash,
 <a href=#1478 id=1478 data-nosnippet>1478</a>                },
-<a href=#1479 id=1479 data-nosnippet>1479</a>                Platform::Linux64,
+<a href=#1479 id=1479 data-nosnippet>1479</a>                Subdir::Linux64,
 <a href=#1480 id=1480 data-nosnippet>1480</a>            );
 <a href=#1481 id=1481 data-nosnippet>1481</a>            s.set_env_var(<span class="string">"FOO"</span>, <span class="string">"bar"</span>).unwrap();
 <a href=#1482 id=1482 data-nosnippet>1482</a>            s.set_path(<span class="kw-2">&amp;</span>paths, PathModificationBehavior::Prepend)
@@ -1486,7 +1486,7 @@
 <a href=#1484 id=1484 data-nosnippet>1484</a>            s.contents
 <a href=#1485 id=1485 data-nosnippet>1485</a>        };
 <a href=#1486 id=1486 data-nosnippet>1486</a>        <span class="kw">for </span>flavor <span class="kw">in </span>flavors {
-<a href=#1487 id=1487 data-nosnippet>1487</a>            <span class="kw">let </span><span class="kw-2">mut </span>s = ShellScript::new(Bash { flavor }, Platform::Linux64);
+<a href=#1487 id=1487 data-nosnippet>1487</a>            <span class="kw">let </span><span class="kw-2">mut </span>s = ShellScript::new(Bash { flavor }, Subdir::Linux64);
 <a href=#1488 id=1488 data-nosnippet>1488</a>            s.set_env_var(<span class="string">"FOO"</span>, <span class="string">"bar"</span>).unwrap();
 <a href=#1489 id=1489 data-nosnippet>1489</a>            s.set_path(<span class="kw-2">&amp;</span>paths, PathModificationBehavior::Prepend)
 <a href=#1490 id=1490 data-nosnippet>1490</a>                .unwrap();
@@ -1562,7 +1562,7 @@
 <a href=#1560 id=1560 data-nosnippet>1560</a>
 <a href=#1561 id=1561 data-nosnippet>1561</a>    <span class="attr">#[test]
 <a href=#1562 id=1562 data-nosnippet>1562</a>    </span><span class="kw">fn </span>test_parse_env() {
-<a href=#1563 id=1563 data-nosnippet>1563</a>        <span class="kw">let </span>script = ShellScript::new(CmdExe, Platform::Win64);
+<a href=#1563 id=1563 data-nosnippet>1563</a>        <span class="kw">let </span>script = ShellScript::new(CmdExe, Subdir::Win64);
 <a href=#1564 id=1564 data-nosnippet>1564</a>        <span class="kw">let </span>input = <span class="string">"VAR1=\"value1\"\nNUM=1\nNUM2=\"2\""</span>;
 <a href=#1565 id=1565 data-nosnippet>1565</a>        <span class="kw">let </span>parsed_env = script.shell.parse_env(input);
 <a href=#1566 id=1566 data-nosnippet>1566</a>

@@ -6,7 +6,7 @@
 <a href=#4 id=4 data-nosnippet>4</a>    path::Path,
 <a href=#5 id=5 data-nosnippet>5</a>};
 <a href=#6 id=6 data-nosnippet>6</a>
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>rattler_conda_types::{PackageName, Platform, PrefixRecord};
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>rattler_conda_types::{PackageName, PrefixRecord, Subdir};
 <a href=#8 id=8 data-nosnippet>8</a>
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>super::{InstallationResultRecord, installer::result_record::ContentComparable};
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span><span class="kw">crate</span>::install::{PythonInfo, python::PythonInfoError};
@@ -116,7 +116,7 @@
 <a href=#114 id=114 data-nosnippet>114</a>    </span><span class="kw">pub </span>current_python_info: <span class="prelude-ty">Option</span>&lt;PythonInfo&gt;,
 <a href=#115 id=115 data-nosnippet>115</a>
 <a href=#116 id=116 data-nosnippet>116</a>    <span class="doccomment">/// The target platform of the transaction
-<a href=#117 id=117 data-nosnippet>117</a>    </span><span class="kw">pub </span>platform: Platform,
+<a href=#117 id=117 data-nosnippet>117</a>    </span><span class="kw">pub </span>platform: Subdir,
 <a href=#118 id=118 data-nosnippet>118</a>
 <a href=#119 id=119 data-nosnippet>119</a>    <span class="doccomment">/// The records that are not touched by the transaction.
 <a href=#120 id=120 data-nosnippet>120</a>    </span><span class="kw">pub </span>unchanged: Vec&lt;Old&gt;,
@@ -193,7 +193,7 @@
 <a href=#191 id=191 data-nosnippet>191</a>        desired: NewIter,
 <a href=#192 id=192 data-nosnippet>192</a>        reinstall: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>HashSet&lt;PackageName&gt;&gt;,
 <a href=#193 id=193 data-nosnippet>193</a>        ignored: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>HashSet&lt;PackageName&gt;&gt;,
-<a href=#194 id=194 data-nosnippet>194</a>        platform: Platform,
+<a href=#194 id=194 data-nosnippet>194</a>        platform: Subdir,
 <a href=#195 id=195 data-nosnippet>195</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, TransactionError&gt; {
 <a href=#196 id=196 data-nosnippet>196</a>        <span class="kw">let </span>current_packages = current.into_iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
 <a href=#197 id=197 data-nosnippet>197</a>        <span class="kw">let </span>desired_packages = desired.into_iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
@@ -395,7 +395,7 @@
 <a href=#393 id=393 data-nosnippet>393</a>/// none of the packages refers to a Python installation.
 <a href=#394 id=394 data-nosnippet>394</a></span><span class="kw">fn </span>find_python_info(
 <a href=#395 id=395 data-nosnippet>395</a>    records: <span class="kw">impl </span>IntoIterator&lt;Item = <span class="kw">impl </span>ContentComparable&gt;,
-<a href=#396 id=396 data-nosnippet>396</a>    platform: Platform,
+<a href=#396 id=396 data-nosnippet>396</a>    platform: Subdir,
 <a href=#397 id=397 data-nosnippet>397</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;PythonInfo&gt;, PythonInfoError&gt; {
 <a href=#398 id=398 data-nosnippet>398</a>    records
 <a href=#399 id=399 data-nosnippet>399</a>        .into_iter()
@@ -444,7 +444,7 @@
 <a href=#442 id=442 data-nosnippet>442</a>    <span class="kw">use </span>std::collections::HashSet;
 <a href=#443 id=443 data-nosnippet>443</a>
 <a href=#444 id=444 data-nosnippet>444</a>    <span class="kw">use </span>assert_matches::assert_matches;
-<a href=#445 id=445 data-nosnippet>445</a>    <span class="kw">use </span>rattler_conda_types::{Platform, prefix::Prefix};
+<a href=#445 id=445 data-nosnippet>445</a>    <span class="kw">use </span>rattler_conda_types::{Subdir, prefix::Prefix};
 <a href=#446 id=446 data-nosnippet>446</a>
 <a href=#447 id=447 data-nosnippet>447</a>    <span class="kw">use </span><span class="kw">crate</span>::install::{
 <a href=#448 id=448 data-nosnippet>448</a>        Transaction, TransactionOperation, test_utils::download_and_get_prefix_record,
@@ -468,7 +468,7 @@
 <a href=#466 id=466 data-nosnippet>466</a>            <span class="macro">vec!</span>[prefix_record.clone()],
 <a href=#467 id=467 data-nosnippet>467</a>            <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>HashSet::from_iter(<span class="macro">vec!</span>[name])),
 <a href=#468 id=468 data-nosnippet>468</a>            <span class="prelude-val">None</span>, <span class="comment">// ignored packages
-<a href=#469 id=469 data-nosnippet>469</a>            </span>Platform::current().expect(<span class="string">"host platform"</span>),
+<a href=#469 id=469 data-nosnippet>469</a>            </span>Subdir::current().expect(<span class="string">"host platform"</span>),
 <a href=#470 id=470 data-nosnippet>470</a>        )
 <a href=#471 id=471 data-nosnippet>471</a>        .unwrap();
 <a href=#472 id=472 data-nosnippet>472</a>
@@ -500,7 +500,7 @@
 <a href=#498 id=498 data-nosnippet>498</a>            <span class="macro">vec!</span>[prefix_record.repodata_record.clone()],
 <a href=#499 id=499 data-nosnippet>499</a>            <span class="prelude-val">None</span>, <span class="comment">// reinstall
 <a href=#500 id=500 data-nosnippet>500</a>            </span>ignored_packages.as_ref(),
-<a href=#501 id=501 data-nosnippet>501</a>            Platform::current().expect(<span class="string">"host platform"</span>),
+<a href=#501 id=501 data-nosnippet>501</a>            Subdir::current().expect(<span class="string">"host platform"</span>),
 <a href=#502 id=502 data-nosnippet>502</a>        )
 <a href=#503 id=503 data-nosnippet>503</a>        .unwrap();
 <a href=#504 id=504 data-nosnippet>504</a>
@@ -515,7 +515,7 @@
 <a href=#513 id=513 data-nosnippet>513</a>            Vec::&lt;rattler_conda_types::RepoDataRecord&gt;::new(), <span class="comment">// empty desired
 <a href=#514 id=514 data-nosnippet>514</a>            </span><span class="prelude-val">None</span>,                                              <span class="comment">// reinstall
 <a href=#515 id=515 data-nosnippet>515</a>            </span>ignored_packages.as_ref(),
-<a href=#516 id=516 data-nosnippet>516</a>            Platform::current().expect(<span class="string">"host platform"</span>),
+<a href=#516 id=516 data-nosnippet>516</a>            Subdir::current().expect(<span class="string">"host platform"</span>),
 <a href=#517 id=517 data-nosnippet>517</a>        )
 <a href=#518 id=518 data-nosnippet>518</a>        .unwrap();
 <a href=#519 id=519 data-nosnippet>519</a>
@@ -530,7 +530,7 @@
 <a href=#528 id=528 data-nosnippet>528</a>            </span><span class="macro">vec!</span>[prefix_record.repodata_record.clone()],
 <a href=#529 id=529 data-nosnippet>529</a>            <span class="prelude-val">None</span>, <span class="comment">// reinstall
 <a href=#530 id=530 data-nosnippet>530</a>            </span>ignored_packages.as_ref(),
-<a href=#531 id=531 data-nosnippet>531</a>            Platform::current().expect(<span class="string">"host platform"</span>),
+<a href=#531 id=531 data-nosnippet>531</a>            Subdir::current().expect(<span class="string">"host platform"</span>),
 <a href=#532 id=532 data-nosnippet>532</a>        )
 <a href=#533 id=533 data-nosnippet>533</a>        .unwrap();
 <a href=#534 id=534 data-nosnippet>534</a>

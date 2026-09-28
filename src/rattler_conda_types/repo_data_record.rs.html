@@ -7,7 +7,7 @@
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>serde::{Deserialize, Serialize};
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>url::Url;
 <a href=#7 id=7 data-nosnippet>7</a>
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>crate::{PackageName, PackageRecord, Platform, package::DistArchiveIdentifier};
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>crate::{PackageName, PackageRecord, Subdir, package::DistArchiveIdentifier};
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a><span class="doccomment">/// Information about a package from repodata. It includes a
 <a href=#11 id=11 data-nosnippet>11</a>/// [`crate::PackageRecord`] but it also stores the source of the data (like the
@@ -58,7 +58,7 @@
 <a href=#56 id=56 data-nosnippet>56</a>            <span class="kw">let </span><span class="kw-2">mut </span>out = Vec::new();
 <a href=#57 id=57 data-nosnippet>57</a>            <span class="kw">for </span>segment <span class="kw">in </span>segments {
 <a href=#58 id=58 data-nosnippet>58</a>                out.push(segment);
-<a href=#59 id=59 data-nosnippet>59</a>                <span class="kw">if </span>Platform::from_str(segment).is_ok() {
+<a href=#59 id=59 data-nosnippet>59</a>                <span class="kw">if </span>Subdir::from_str(segment).is_ok() {
 <a href=#60 id=60 data-nosnippet>60</a>                    <span class="kw">break</span>;
 <a href=#61 id=61 data-nosnippet>61</a>                }
 <a href=#62 id=62 data-nosnippet>62</a>            }

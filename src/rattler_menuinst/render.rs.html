@@ -2,7 +2,7 @@
 
 </head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">rattler_menuinst/</div>render.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! This should take a `serde_json` file, render it with all variables and then load it as a `MenuInst` struct
 <a href=#2 id=2 data-nosnippet>2</a>
-<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>rattler_conda_types::Platform;
+<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>rattler_conda_types::Subdir;
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>serde::{Deserialize, Serialize};
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>std::{collections::HashMap, path::Path};
 <a href=#6 id=6 data-nosnippet>6</a>
@@ -21,7 +21,7 @@
 <a href=#19 id=19 data-nosnippet>19</a>}
 <a href=#20 id=20 data-nosnippet>20</a>
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">impl </span>BaseMenuItemPlaceholders {
-<a href=#22 id=22 data-nosnippet>22</a>    <span class="kw">pub fn </span>new(base_prefix: <span class="kw-2">&amp;</span>Path, prefix: <span class="kw-2">&amp;</span>Path, platform: Platform) -&gt; <span class="self">Self </span>{
+<a href=#22 id=22 data-nosnippet>22</a>    <span class="kw">pub fn </span>new(base_prefix: <span class="kw-2">&amp;</span>Path, prefix: <span class="kw-2">&amp;</span>Path, platform: Subdir) -&gt; <span class="self">Self </span>{
 <a href=#23 id=23 data-nosnippet>23</a>        <span class="kw">let </span>dist_name = |p: <span class="kw-2">&amp;</span>Path| {
 <a href=#24 id=24 data-nosnippet>24</a>            p.file_name()
 <a href=#25 id=25 data-nosnippet>25</a>                .map_or_else(|| <span class="string">"empty"</span>.to_string(), |s| s.to_string_lossy().to_string())

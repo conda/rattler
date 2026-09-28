@@ -577,7 +577,7 @@
 <a href=#575 id=575 data-nosnippet>575</a>
 <a href=#576 id=576 data-nosnippet>576</a>    <span class="kw">use </span>rattler_conda_types::{
 <a href=#577 id=577 data-nosnippet>577</a>        MatchSpec, PackageName, PackageRecord, ParseMatchSpecOptions, ParseStrictness::Strict,
-<a href=#578 id=578 data-nosnippet>578</a>        Platform, RepodataRevision, Version, package::DistArchiveIdentifier,
+<a href=#578 id=578 data-nosnippet>578</a>        RepodataRevision, Subdir, Version, package::DistArchiveIdentifier,
 <a href=#579 id=579 data-nosnippet>579</a>    };
 <a href=#580 id=580 data-nosnippet>580</a>    <span class="kw">use </span>url::Url;
 <a href=#581 id=581 data-nosnippet>581</a>
@@ -609,7 +609,7 @@
 <a href=#607 id=607 data-nosnippet>607</a>        <span class="kw">let </span>lock_file = LockFile::builder()
 <a href=#608 id=608 data-nosnippet>608</a>            .with_platforms(<span class="macro">vec!</span>[PlatformData {
 <a href=#609 id=609 data-nosnippet>609</a>                name: PlatformName::try_from(<span class="string">"linux-64"</span>).unwrap(),
-<a href=#610 id=610 data-nosnippet>610</a>                subdir: rattler_conda_types::Platform::Linux64,
+<a href=#610 id=610 data-nosnippet>610</a>                subdir: rattler_conda_types::Subdir::Linux64,
 <a href=#611 id=611 data-nosnippet>611</a>                virtual_packages: Vec::new(),
 <a href=#612 id=612 data-nosnippet>612</a>            }])
 <a href=#613 id=613 data-nosnippet>613</a>            .unwrap()
@@ -720,7 +720,7 @@
 <a href=#718 id=718 data-nosnippet>718</a>    <span class="kw">fn </span>linux_64_platform() -&gt; PlatformData {
 <a href=#719 id=719 data-nosnippet>719</a>        PlatformData {
 <a href=#720 id=720 data-nosnippet>720</a>            name: PlatformName::try_from(<span class="string">"linux-64"</span>).unwrap(),
-<a href=#721 id=721 data-nosnippet>721</a>            subdir: rattler_conda_types::Platform::Linux64,
+<a href=#721 id=721 data-nosnippet>721</a>            subdir: rattler_conda_types::Subdir::Linux64,
 <a href=#722 id=722 data-nosnippet>722</a>            virtual_packages: Vec::new(),
 <a href=#723 id=723 data-nosnippet>723</a>        }
 <a href=#724 id=724 data-nosnippet>724</a>    }
@@ -957,7 +957,7 @@
 <a href=#955 id=955 data-nosnippet>955</a>        <span class="kw">let </span>lock_file = LockFile::builder()
 <a href=#956 id=956 data-nosnippet>956</a>            .with_platforms(<span class="macro">vec!</span>[PlatformData {
 <a href=#957 id=957 data-nosnippet>957</a>                name: PlatformName::try_from(<span class="string">"linux-64"</span>).unwrap(),
-<a href=#958 id=958 data-nosnippet>958</a>                subdir: Platform::Linux64,
+<a href=#958 id=958 data-nosnippet>958</a>                subdir: Subdir::Linux64,
 <a href=#959 id=959 data-nosnippet>959</a>                virtual_packages: Vec::new(),
 <a href=#960 id=960 data-nosnippet>960</a>            }])
 <a href=#961 id=961 data-nosnippet>961</a>            .unwrap()
@@ -990,7 +990,7 @@
 <a href=#988 id=988 data-nosnippet>988</a>        <span class="kw">let </span>lock_file = LockFile::builder()
 <a href=#989 id=989 data-nosnippet>989</a>            .with_platforms(<span class="macro">vec!</span>[PlatformData {
 <a href=#990 id=990 data-nosnippet>990</a>                name: PlatformName::try_from(<span class="string">"linux-64"</span>).unwrap(),
-<a href=#991 id=991 data-nosnippet>991</a>                subdir: rattler_conda_types::Platform::Linux64,
+<a href=#991 id=991 data-nosnippet>991</a>                subdir: rattler_conda_types::Subdir::Linux64,
 <a href=#992 id=992 data-nosnippet>992</a>                virtual_packages: Vec::new(),
 <a href=#993 id=993 data-nosnippet>993</a>            }])
 <a href=#994 id=994 data-nosnippet>994</a>            .unwrap()
@@ -1045,7 +1045,7 @@
 <a href=#1043 id=1043 data-nosnippet>1043</a>            <span class="kw">let </span>lock_file = LockFile::builder()
 <a href=#1044 id=1044 data-nosnippet>1044</a>                .with_platforms(<span class="macro">vec!</span>[PlatformData {
 <a href=#1045 id=1045 data-nosnippet>1045</a>                    name: PlatformName::try_from(<span class="string">"linux-64"</span>).unwrap(),
-<a href=#1046 id=1046 data-nosnippet>1046</a>                    subdir: rattler_conda_types::Platform::Linux64,
+<a href=#1046 id=1046 data-nosnippet>1046</a>                    subdir: rattler_conda_types::Subdir::Linux64,
 <a href=#1047 id=1047 data-nosnippet>1047</a>                    virtual_packages: Vec::new(),
 <a href=#1048 id=1048 data-nosnippet>1048</a>                }])
 <a href=#1049 id=1049 data-nosnippet>1049</a>                .unwrap()
@@ -1267,7 +1267,7 @@
 <a href=#1265 id=1265 data-nosnippet>1265</a>        <span class="kw">let </span><span class="kw-2">mut </span>builder = LockFile::builder()
 <a href=#1266 id=1266 data-nosnippet>1266</a>            .with_platforms(<span class="macro">vec!</span>[PlatformData {
 <a href=#1267 id=1267 data-nosnippet>1267</a>                name: PlatformName::try_from(<span class="string">"linux-64"</span>).unwrap(),
-<a href=#1268 id=1268 data-nosnippet>1268</a>                subdir: rattler_conda_types::Platform::Linux64,
+<a href=#1268 id=1268 data-nosnippet>1268</a>                subdir: rattler_conda_types::Subdir::Linux64,
 <a href=#1269 id=1269 data-nosnippet>1269</a>                virtual_packages: Vec::new(),
 <a href=#1270 id=1270 data-nosnippet>1270</a>            }])
 <a href=#1271 id=1271 data-nosnippet>1271</a>            .unwrap();

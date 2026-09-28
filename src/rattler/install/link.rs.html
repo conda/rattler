@@ -5,7 +5,7 @@
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>fs_err <span class="kw">as </span>fs;
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>memmap2::Mmap;
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>once_cell::sync::Lazy;
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>rattler_conda_types::Platform;
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>rattler_conda_types::Subdir;
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>rattler_digest::Sha256;
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>rattler_digest::{HashingWriter, Sha256Hash};
@@ -161,7 +161,7 @@
 <a href=#159 id=159 data-nosnippet>159</a>    allow_symbolic_links: bool,
 <a href=#160 id=160 data-nosnippet>160</a>    allow_hard_links: bool,
 <a href=#161 id=161 data-nosnippet>161</a>    allow_ref_links: bool,
-<a href=#162 id=162 data-nosnippet>162</a>    target_platform: Platform,
+<a href=#162 id=162 data-nosnippet>162</a>    target_platform: Subdir,
 <a href=#163 id=163 data-nosnippet>163</a>    apple_codesign_behavior: AppleCodeSignBehavior,
 <a href=#164 id=164 data-nosnippet>164</a>    modification_time: filetime::FileTime,
 <a href=#165 id=165 data-nosnippet>165</a>    external_symlink_policy: ExternalSymlinkPolicy,
@@ -651,7 +651,7 @@
 <a href=#649 id=649 data-nosnippet>649</a>    <span class="kw-2">mut </span>destination: <span class="kw">impl </span>Write,
 <a href=#650 id=650 data-nosnippet>650</a>    prefix_placeholder: <span class="kw-2">&amp;</span>str,
 <a href=#651 id=651 data-nosnippet>651</a>    target_prefix: <span class="kw-2">&amp;</span>str,
-<a href=#652 id=652 data-nosnippet>652</a>    target_platform: <span class="kw-2">&amp;</span>Platform,
+<a href=#652 id=652 data-nosnippet>652</a>    target_platform: <span class="kw-2">&amp;</span>Subdir,
 <a href=#653 id=653 data-nosnippet>653</a>    file_mode: FileMode,
 <a href=#654 id=654 data-nosnippet>654</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), std::io::Error&gt; {
 <a href=#655 id=655 data-nosnippet>655</a>    <span class="kw">match </span>file_mode {
@@ -704,7 +704,7 @@
 <a href=#702 id=702 data-nosnippet>702</a>});
 <a href=#703 id=703 data-nosnippet>703</a>
 <a href=#704 id=704 data-nosnippet>704</a><span class="doccomment">/// Finds if the shebang line length is valid.
-<a href=#705 id=705 data-nosnippet>705</a></span><span class="kw">fn </span>is_valid_shebang_length(shebang: <span class="kw-2">&amp;</span>str, platform: <span class="kw-2">&amp;</span>Platform) -&gt; bool {
+<a href=#705 id=705 data-nosnippet>705</a></span><span class="kw">fn </span>is_valid_shebang_length(shebang: <span class="kw-2">&amp;</span>str, platform: <span class="kw-2">&amp;</span>Subdir) -&gt; bool {
 <a href=#706 id=706 data-nosnippet>706</a>    <span class="kw">const </span>MAX_SHEBANG_LENGTH_LINUX: usize = <span class="number">127</span>;
 <a href=#707 id=707 data-nosnippet>707</a>    <span class="kw">const </span>MAX_SHEBANG_LENGTH_MACOS: usize = <span class="number">512</span>;
 <a href=#708 id=708 data-nosnippet>708</a>
@@ -746,7 +746,7 @@
 <a href=#744 id=744 data-nosnippet>744</a></span><span class="kw">fn </span>replace_shebang&lt;<span class="lifetime">'a</span>&gt;(
 <a href=#745 id=745 data-nosnippet>745</a>    shebang: Cow&lt;<span class="lifetime">'a</span>, str&gt;,
 <a href=#746 id=746 data-nosnippet>746</a>    old_new: (<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>str),
-<a href=#747 id=747 data-nosnippet>747</a>    platform: <span class="kw-2">&amp;</span>Platform,
+<a href=#747 id=747 data-nosnippet>747</a>    platform: <span class="kw-2">&amp;</span>Subdir,
 <a href=#748 id=748 data-nosnippet>748</a>) -&gt; Cow&lt;<span class="lifetime">'a</span>, str&gt; {
 <a href=#749 id=749 data-nosnippet>749</a>    <span class="comment">// If the new shebang would contain a space, return a `#!/usr/bin/env` shebang
 <a href=#750 id=750 data-nosnippet>750</a>    </span><span class="macro">assert!</span>(
@@ -791,7 +791,7 @@
 <a href=#789 id=789 data-nosnippet>789</a>    <span class="kw-2">mut </span>destination: <span class="kw">impl </span>Write,
 <a href=#790 id=790 data-nosnippet>790</a>    prefix_placeholder: <span class="kw-2">&amp;</span>str,
 <a href=#791 id=791 data-nosnippet>791</a>    target_prefix: <span class="kw-2">&amp;</span>str,
-<a href=#792 id=792 data-nosnippet>792</a>    target_platform: <span class="kw-2">&amp;</span>Platform,
+<a href=#792 id=792 data-nosnippet>792</a>    target_platform: <span class="kw-2">&amp;</span>Subdir,
 <a href=#793 id=793 data-nosnippet>793</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), std::io::Error&gt; {
 <a href=#794 id=794 data-nosnippet>794</a>    <span class="comment">// Get the prefixes as bytes
 <a href=#795 id=795 data-nosnippet>795</a>    </span><span class="kw">let </span>old_prefix = prefix_placeholder.as_bytes();
@@ -962,7 +962,7 @@
 <a href=#960 id=960 data-nosnippet>960</a>    <span class="kw">use </span><span class="kw">super</span>::ExternalSymlinkPolicy;
 <a href=#961 id=961 data-nosnippet>961</a>    <span class="kw">use </span><span class="kw">super</span>::PYTHON_REGEX;
 <a href=#962 id=962 data-nosnippet>962</a>    <span class="kw">use </span>fs_err <span class="kw">as </span>fs;
-<a href=#963 id=963 data-nosnippet>963</a>    <span class="kw">use </span>rattler_conda_types::Platform;
+<a href=#963 id=963 data-nosnippet>963</a>    <span class="kw">use </span>rattler_conda_types::Subdir;
 <a href=#964 id=964 data-nosnippet>964</a>    <span class="kw">use </span>rstest::rstest;
 <a href=#965 id=965 data-nosnippet>965</a>    <span class="kw">use </span>std::io::Cursor;
 <a href=#966 id=966 data-nosnippet>966</a>
@@ -1014,7 +1014,7 @@
 <a href=#1012 id=1012 data-nosnippet>1012</a>            <span class="bool-val">true</span>,
 <a href=#1013 id=1013 data-nosnippet>1013</a>            <span class="bool-val">true</span>,
 <a href=#1014 id=1014 data-nosnippet>1014</a>            <span class="bool-val">true</span>,
-<a href=#1015 id=1015 data-nosnippet>1015</a>            Platform::Linux64,
+<a href=#1015 id=1015 data-nosnippet>1015</a>            Subdir::Linux64,
 <a href=#1016 id=1016 data-nosnippet>1016</a>            AppleCodeSignBehavior::DoNothing,
 <a href=#1017 id=1017 data-nosnippet>1017</a>            modification_time,
 <a href=#1018 id=1018 data-nosnippet>1018</a>            ExternalSymlinkPolicy::Deny,
@@ -1075,7 +1075,7 @@
 <a href=#1073 id=1073 data-nosnippet>1073</a>            <span class="bool-val">true</span>,
 <a href=#1074 id=1074 data-nosnippet>1074</a>            <span class="bool-val">true</span>,
 <a href=#1075 id=1075 data-nosnippet>1075</a>            <span class="bool-val">true</span>,
-<a href=#1076 id=1076 data-nosnippet>1076</a>            Platform::Linux64,
+<a href=#1076 id=1076 data-nosnippet>1076</a>            Subdir::Linux64,
 <a href=#1077 id=1077 data-nosnippet>1077</a>            AppleCodeSignBehavior::DoNothing,
 <a href=#1078 id=1078 data-nosnippet>1078</a>            modification_time,
 <a href=#1079 id=1079 data-nosnippet>1079</a>            ExternalSymlinkPolicy::Deny,
@@ -1137,7 +1137,7 @@
 <a href=#1135 id=1135 data-nosnippet>1135</a>            <span class="bool-val">true</span>,
 <a href=#1136 id=1136 data-nosnippet>1136</a>            <span class="bool-val">true</span>,
 <a href=#1137 id=1137 data-nosnippet>1137</a>            <span class="bool-val">true</span>,
-<a href=#1138 id=1138 data-nosnippet>1138</a>            Platform::Linux64,
+<a href=#1138 id=1138 data-nosnippet>1138</a>            Subdir::Linux64,
 <a href=#1139 id=1139 data-nosnippet>1139</a>            AppleCodeSignBehavior::DoNothing,
 <a href=#1140 id=1140 data-nosnippet>1140</a>            modification_time,
 <a href=#1141 id=1141 data-nosnippet>1141</a>            ExternalSymlinkPolicy::Deny,
@@ -1174,7 +1174,7 @@
 <a href=#1172 id=1172 data-nosnippet>1172</a>            <span class="kw-2">&amp;mut </span>output,
 <a href=#1173 id=1173 data-nosnippet>1173</a>            prefix_placeholder,
 <a href=#1174 id=1174 data-nosnippet>1174</a>            target_prefix,
-<a href=#1175 id=1175 data-nosnippet>1175</a>            <span class="kw-2">&amp;</span>Platform::Linux64,
+<a href=#1175 id=1175 data-nosnippet>1175</a>            <span class="kw-2">&amp;</span>Subdir::Linux64,
 <a href=#1176 id=1176 data-nosnippet>1176</a>        )
 <a href=#1177 id=1177 data-nosnippet>1177</a>        .unwrap();
 <a href=#1178 id=1178 data-nosnippet>1178</a>        <span class="macro">assert_eq!</span>(
@@ -1250,7 +1250,7 @@
 <a href=#1248 id=1248 data-nosnippet>1248</a>        <span class="kw">let </span>replaced = <span class="kw">super</span>::replace_shebang(
 <a href=#1249 id=1249 data-nosnippet>1249</a>            shebang_with_spaces,
 <a href=#1250 id=1250 data-nosnippet>1250</a>            (<span class="string">"placeholder"</span>, <span class="string">"with space"</span>),
-<a href=#1251 id=1251 data-nosnippet>1251</a>            <span class="kw-2">&amp;</span>Platform::Linux64,
+<a href=#1251 id=1251 data-nosnippet>1251</a>            <span class="kw-2">&amp;</span>Subdir::Linux64,
 <a href=#1252 id=1252 data-nosnippet>1252</a>        );
 <a href=#1253 id=1253 data-nosnippet>1253</a>        <span class="macro">assert_eq!</span>(replaced, <span class="string">"#!/usr/bin/env executable -o test -x"</span>);
 <a href=#1254 id=1254 data-nosnippet>1254</a>    }
@@ -1258,30 +1258,30 @@
 <a href=#1256 id=1256 data-nosnippet>1256</a>    <span class="attr">#[test]
 <a href=#1257 id=1257 data-nosnippet>1257</a>    </span><span class="kw">fn </span>test_replace_long_shebang() {
 <a href=#1258 id=1258 data-nosnippet>1258</a>        <span class="kw">let </span>short_shebang = <span class="string">"#!/path/to/executable -x 123"</span>.into();
-<a href=#1259 id=1259 data-nosnippet>1259</a>        <span class="kw">let </span>replaced = <span class="kw">super</span>::replace_shebang(short_shebang, (<span class="string">""</span>, <span class="string">""</span>), <span class="kw-2">&amp;</span>Platform::Linux64);
+<a href=#1259 id=1259 data-nosnippet>1259</a>        <span class="kw">let </span>replaced = <span class="kw">super</span>::replace_shebang(short_shebang, (<span class="string">""</span>, <span class="string">""</span>), <span class="kw-2">&amp;</span>Subdir::Linux64);
 <a href=#1260 id=1260 data-nosnippet>1260</a>        <span class="macro">assert_eq!</span>(replaced, <span class="string">"#!/path/to/executable -x 123"</span>);
 <a href=#1261 id=1261 data-nosnippet>1261</a>
 <a href=#1262 id=1262 data-nosnippet>1262</a>        <span class="kw">let </span>shebang = <span class="string">"#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong/executable -o test -x"</span>;
-<a href=#1263 id=1263 data-nosnippet>1263</a>        <span class="kw">let </span>replaced = <span class="kw">super</span>::replace_shebang(shebang.into(), (<span class="string">""</span>, <span class="string">""</span>), <span class="kw-2">&amp;</span>Platform::Linux64);
+<a href=#1263 id=1263 data-nosnippet>1263</a>        <span class="kw">let </span>replaced = <span class="kw">super</span>::replace_shebang(shebang.into(), (<span class="string">""</span>, <span class="string">""</span>), <span class="kw-2">&amp;</span>Subdir::Linux64);
 <a href=#1264 id=1264 data-nosnippet>1264</a>        <span class="macro">assert_eq!</span>(replaced, <span class="string">"#!/usr/bin/env executable -o test -x"</span>);
 <a href=#1265 id=1265 data-nosnippet>1265</a>
-<a href=#1266 id=1266 data-nosnippet>1266</a>        <span class="kw">let </span>replaced = <span class="kw">super</span>::replace_shebang(shebang.into(), (<span class="string">""</span>, <span class="string">""</span>), <span class="kw-2">&amp;</span>Platform::Osx64);
+<a href=#1266 id=1266 data-nosnippet>1266</a>        <span class="kw">let </span>replaced = <span class="kw">super</span>::replace_shebang(shebang.into(), (<span class="string">""</span>, <span class="string">""</span>), <span class="kw-2">&amp;</span>Subdir::Osx64);
 <a href=#1267 id=1267 data-nosnippet>1267</a>        <span class="macro">assert_eq!</span>(replaced, shebang);
 <a href=#1268 id=1268 data-nosnippet>1268</a>
 <a href=#1269 id=1269 data-nosnippet>1269</a>        <span class="kw">let </span>shebang_with_escapes = <span class="string">"#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooo\\ oooooo\\ oooooo\\ oooooooooooooooooooooooooooooooooooong/exe\\ cutable -o test -x"</span>;
 <a href=#1270 id=1270 data-nosnippet>1270</a>        <span class="kw">let </span>replaced =
-<a href=#1271 id=1271 data-nosnippet>1271</a>            <span class="kw">super</span>::replace_shebang(shebang_with_escapes.into(), (<span class="string">""</span>, <span class="string">""</span>), <span class="kw-2">&amp;</span>Platform::Linux64);
+<a href=#1271 id=1271 data-nosnippet>1271</a>            <span class="kw">super</span>::replace_shebang(shebang_with_escapes.into(), (<span class="string">""</span>, <span class="string">""</span>), <span class="kw-2">&amp;</span>Subdir::Linux64);
 <a href=#1272 id=1272 data-nosnippet>1272</a>        <span class="macro">assert_eq!</span>(replaced, <span class="string">"#!/usr/bin/env exe\\ cutable -o test -x"</span>);
 <a href=#1273 id=1273 data-nosnippet>1273</a>
 <a href=#1274 id=1274 data-nosnippet>1274</a>        <span class="kw">let </span>shebang = <span class="string">"#!    /this/is/looooooooooooooooooooooooooooooooooooooooooooo\\ \\ ooooooo\\ oooooo\\ oooooo\\ ooooooooooooooooo\\ ooooooooooooooooooong/exe\\ cutable -o \"te  st\" -x"</span>;
-<a href=#1275 id=1275 data-nosnippet>1275</a>        <span class="kw">let </span>replaced = <span class="kw">super</span>::replace_shebang(shebang.into(), (<span class="string">""</span>, <span class="string">""</span>), <span class="kw-2">&amp;</span>Platform::Linux64);
+<a href=#1275 id=1275 data-nosnippet>1275</a>        <span class="kw">let </span>replaced = <span class="kw">super</span>::replace_shebang(shebang.into(), (<span class="string">""</span>, <span class="string">""</span>), <span class="kw-2">&amp;</span>Subdir::Linux64);
 <a href=#1276 id=1276 data-nosnippet>1276</a>        <span class="macro">assert_eq!</span>(replaced, <span class="string">"#!/usr/bin/env exe\\ cutable -o \"te  st\" -x"</span>);
 <a href=#1277 id=1277 data-nosnippet>1277</a>
 <a href=#1278 id=1278 data-nosnippet>1278</a>        <span class="kw">let </span>shebang = <span class="string">"#!/usr/bin/env perl"</span>;
 <a href=#1279 id=1279 data-nosnippet>1279</a>        <span class="kw">let </span>replaced = <span class="kw">super</span>::replace_shebang(
 <a href=#1280 id=1280 data-nosnippet>1280</a>            shebang.into(),
 <a href=#1281 id=1281 data-nosnippet>1281</a>            (<span class="string">"/placeholder"</span>, <span class="string">"/with space"</span>),
-<a href=#1282 id=1282 data-nosnippet>1282</a>            <span class="kw-2">&amp;</span>Platform::Linux64,
+<a href=#1282 id=1282 data-nosnippet>1282</a>            <span class="kw-2">&amp;</span>Subdir::Linux64,
 <a href=#1283 id=1283 data-nosnippet>1283</a>        );
 <a href=#1284 id=1284 data-nosnippet>1284</a>        <span class="macro">assert_eq!</span>(replaced, shebang);
 <a href=#1285 id=1285 data-nosnippet>1285</a>
@@ -1289,7 +1289,7 @@
 <a href=#1287 id=1287 data-nosnippet>1287</a>        <span class="kw">let </span>replaced = <span class="kw">super</span>::replace_shebang(
 <a href=#1288 id=1288 data-nosnippet>1288</a>            shebang.into(),
 <a href=#1289 id=1289 data-nosnippet>1289</a>            (<span class="string">"/placeholder"</span>, <span class="string">"/with space"</span>),
-<a href=#1290 id=1290 data-nosnippet>1290</a>            <span class="kw-2">&amp;</span>Platform::Linux64,
+<a href=#1290 id=1290 data-nosnippet>1290</a>            <span class="kw-2">&amp;</span>Subdir::Linux64,
 <a href=#1291 id=1291 data-nosnippet>1291</a>        );
 <a href=#1292 id=1292 data-nosnippet>1292</a>        <span class="macro">assert_eq!</span>(replaced, <span class="string">"#!/usr/bin/env perl"</span>);
 <a href=#1293 id=1293 data-nosnippet>1293</a>    }
@@ -1300,7 +1300,7 @@
 <a href=#1298 id=1298 data-nosnippet>1298</a>        <span class="kw">let </span>replaced = <span class="kw">super</span>::replace_shebang(
 <a href=#1299 id=1299 data-nosnippet>1299</a>            short_shebang,
 <a href=#1300 id=1300 data-nosnippet>1300</a>            (<span class="string">"/path/to"</span>, <span class="string">"/new/prefix/with spaces/bin"</span>),
-<a href=#1301 id=1301 data-nosnippet>1301</a>            <span class="kw-2">&amp;</span>Platform::Linux64,
+<a href=#1301 id=1301 data-nosnippet>1301</a>            <span class="kw-2">&amp;</span>Subdir::Linux64,
 <a href=#1302 id=1302 data-nosnippet>1302</a>        );
 <a href=#1303 id=1303 data-nosnippet>1303</a>        <span class="macro">insta::assert_snapshot!</span>(replaced);
 <a href=#1304 id=1304 data-nosnippet>1304</a>
@@ -1308,7 +1308,7 @@
 <a href=#1306 id=1306 data-nosnippet>1306</a>        <span class="kw">let </span>replaced = <span class="kw">super</span>::replace_shebang(
 <a href=#1307 id=1307 data-nosnippet>1307</a>            short_shebang,
 <a href=#1308 id=1308 data-nosnippet>1308</a>            (<span class="string">"/path/to"</span>, <span class="string">"/new/prefix/with spaces/bin"</span>),
-<a href=#1309 id=1309 data-nosnippet>1309</a>            <span class="kw-2">&amp;</span>Platform::Linux64,
+<a href=#1309 id=1309 data-nosnippet>1309</a>            <span class="kw-2">&amp;</span>Subdir::Linux64,
 <a href=#1310 id=1310 data-nosnippet>1310</a>        );
 <a href=#1311 id=1311 data-nosnippet>1311</a>        <span class="macro">insta::assert_snapshot!</span>(replaced);
 <a href=#1312 id=1312 data-nosnippet>1312</a>    }
@@ -1330,7 +1330,7 @@
 <a href=#1328 id=1328 data-nosnippet>1328</a>            <span class="kw-2">&amp;mut </span>output,
 <a href=#1329 id=1329 data-nosnippet>1329</a>            prefix_placeholder,
 <a href=#1330 id=1330 data-nosnippet>1330</a>            <span class="kw-2">&amp;</span>target_prefix,
-<a href=#1331 id=1331 data-nosnippet>1331</a>            <span class="kw-2">&amp;</span>Platform::Linux64,
+<a href=#1331 id=1331 data-nosnippet>1331</a>            <span class="kw-2">&amp;</span>Subdir::Linux64,
 <a href=#1332 id=1332 data-nosnippet>1332</a>        )
 <a href=#1333 id=1333 data-nosnippet>1333</a>        .unwrap();
 <a href=#1334 id=1334 data-nosnippet>1334</a>

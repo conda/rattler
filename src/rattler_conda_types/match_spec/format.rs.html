@@ -25,7 +25,7 @@
 <a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span><span class="kw">super</span>::parse::{escape_bracket_value, is_valid_extra_group_name};
 <a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>super::{CanonicalMatchSpecError, MatchSpec, NamelessMatchSpec};
 <a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span><span class="kw">crate</span>::flags::is_valid_matchspec_flag;
-<a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span>crate::{Channel, ChannelConfig, Platform, VersionSpec, build_spec::BuildNumberSpec};
+<a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span>crate::{Channel, ChannelConfig, Subdir, VersionSpec, build_spec::BuildNumberSpec};
 <a href=#27 id=27 data-nosnippet>27</a>
 <a href=#28 id=28 data-nosnippet>28</a><span class="doccomment">/// The dialect a match spec is rendered in.
 <a href=#29 id=29 data-nosnippet>29</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -361,7 +361,7 @@
 <a href=#359 id=359 data-nosnippet>359</a>    // trailing slash and survives.
 <a href=#360 id=360 data-nosnippet>360</a>    </span><span class="kw">if </span>name
 <a href=#361 id=361 data-nosnippet>361</a>        .rsplit_once(<span class="string">'/'</span>)
-<a href=#362 id=362 data-nosnippet>362</a>        .is_some_and(|(<span class="kw">_</span>, last)| Platform::from_str(last).is_ok())
+<a href=#362 id=362 data-nosnippet>362</a>        .is_some_and(|(<span class="kw">_</span>, last)| Subdir::from_str(last).is_ok())
 <a href=#363 id=363 data-nosnippet>363</a>    {
 <a href=#364 id=364 data-nosnippet>364</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
 <a href=#365 id=365 data-nosnippet>365</a>    }
@@ -602,7 +602,7 @@
 <a href=#600 id=600 data-nosnippet>600</a>            subdir: channel
 <a href=#601 id=601 data-nosnippet>601</a>                &amp;&amp; <span class="self">self
 <a href=#602 id=602 data-nosnippet>602</a>                    </span>.subdir
-<a href=#603 id=603 data-nosnippet>603</a>                    .is_some_and(|subdir| Platform::from_str(subdir).is_ok()),
+<a href=#603 id=603 data-nosnippet>603</a>                    .is_some_and(|subdir| Subdir::from_str(subdir).is_ok()),
 <a href=#604 id=604 data-nosnippet>604</a>            namespace: channel &amp;&amp; <span class="self">self</span>.namespace.is_some_and(is_safe_positional_token),
 <a href=#605 id=605 data-nosnippet>605</a>            version,
 <a href=#606 id=606 data-nosnippet>606</a>            <span class="comment">// Positional only after a positional version (the old

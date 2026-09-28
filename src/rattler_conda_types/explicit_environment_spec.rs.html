@@ -11,7 +11,7 @@
 <a href=#9 id=9 data-nosnippet>9</a>//!
 <a href=#10 id=10 data-nosnippet>10</a>//! To create an explicit environment file, you can use the `conda env export` command.
 <a href=#11 id=11 data-nosnippet>11</a>
-<a href=#12 id=12 data-nosnippet>12</a></span><span class="kw">use </span>crate::{ParsePlatformError, Platform};
+<a href=#12 id=12 data-nosnippet>12</a></span><span class="kw">use </span>crate::{ParseSubdirError, Subdir};
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>fs_err::{<span class="self">self </span><span class="kw">as </span>fs, File};
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>serde::{Deserialize, Serialize};
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>std::{io::Read, path::Path, str::FromStr};
@@ -28,7 +28,7 @@
 <a href=#26 id=26 data-nosnippet>26</a>    ///
 <a href=#27 id=27 data-nosnippet>27</a>    /// This can be indicated by `# platform: &lt;x&gt;` in the environment file.
 <a href=#28 id=28 data-nosnippet>28</a>    </span><span class="attr">#[serde(default, skip_serializing_if = <span class="string">"Option::is_none"</span>)]
-<a href=#29 id=29 data-nosnippet>29</a>    </span><span class="kw">pub </span>platform: <span class="prelude-ty">Option</span>&lt;Platform&gt;,
+<a href=#29 id=29 data-nosnippet>29</a>    </span><span class="kw">pub </span>platform: <span class="prelude-ty">Option</span>&lt;Subdir&gt;,
 <a href=#30 id=30 data-nosnippet>30</a>
 <a href=#31 id=31 data-nosnippet>31</a>    <span class="doccomment">/// Explicit package references
 <a href=#32 id=32 data-nosnippet>32</a>    </span><span class="kw">pub </span>packages: Vec&lt;ExplicitEnvironmentEntry&gt;,
@@ -134,7 +134,7 @@
 <a href=#132 id=132 data-nosnippet>132</a>
 <a href=#133 id=133 data-nosnippet>133</a>    <span class="doccomment">/// The platform string could not be parsed
 <a href=#134 id=134 data-nosnippet>134</a>    </span><span class="attr">#[error(transparent)]
-<a href=#135 id=135 data-nosnippet>135</a>    </span>InvalidPlatform(<span class="attr">#[from] </span>ParsePlatformError),
+<a href=#135 id=135 data-nosnippet>135</a>    </span>InvalidPlatform(<span class="attr">#[from] </span>ParseSubdirError),
 <a href=#136 id=136 data-nosnippet>136</a>
 <a href=#137 id=137 data-nosnippet>137</a>    <span class="doccomment">/// An IO error occurred
 <a href=#138 id=138 data-nosnippet>138</a>    </span><span class="attr">#[error(transparent)]
@@ -195,7 +195,7 @@
 <a href=#193 id=193 data-nosnippet>193</a>                <span class="comment">// Unless that comment line is `# platform: `. Because then we're interested in the
 <a href=#194 id=194 data-nosnippet>194</a>                // platform specifier.
 <a href=#195 id=195 data-nosnippet>195</a>                </span><span class="kw">if let </span><span class="prelude-val">Some</span>(platform_str) = comment_line.trim_start().strip_prefix(<span class="string">"platform:"</span>) {
-<a href=#196 id=196 data-nosnippet>196</a>                    platform = <span class="prelude-val">Some</span>(Platform::from_str(platform_str.trim())<span class="question-mark">?</span>);
+<a href=#196 id=196 data-nosnippet>196</a>                    platform = <span class="prelude-val">Some</span>(Subdir::from_str(platform_str.trim())<span class="question-mark">?</span>);
 <a href=#197 id=197 data-nosnippet>197</a>                }
 <a href=#198 id=198 data-nosnippet>198</a>            } <span class="kw">else if </span>line.trim() == <span class="string">"@EXPLICIT" </span>{
 <a href=#199 id=199 data-nosnippet>199</a>                is_explicit = <span class="bool-val">true</span>;

@@ -19,7 +19,7 @@
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>fs_err <span class="kw">as </span>fs;
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>indexmap::IndexMap;
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>itertools::Itertools;
-<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>rattler_conda_types::Platform;
+<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>rattler_conda_types::Subdir;
 <a href=#21 id=21 data-nosnippet>21</a><span class="attr">#[cfg(target_family = <span class="string">"unix"</span>)]
 <a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">use </span>rattler_pty::unix::PtySession;
 <a href=#23 id=23 data-nosnippet>23</a>
@@ -105,7 +105,7 @@
 <a href=#103 id=103 data-nosnippet>103</a>    </span><span class="kw">pub </span>post_activation_env_vars: IndexMap&lt;String, String&gt;,
 <a href=#104 id=104 data-nosnippet>104</a>
 <a href=#105 id=105 data-nosnippet>105</a>    <span class="doccomment">/// The platform for which to generate the Activator
-<a href=#106 id=106 data-nosnippet>106</a>    </span><span class="kw">pub </span>platform: Platform,
+<a href=#106 id=106 data-nosnippet>106</a>    </span><span class="kw">pub </span>platform: Subdir,
 <a href=#107 id=107 data-nosnippet>107</a>}
 <a href=#108 id=108 data-nosnippet>108</a>
 <a href=#109 id=109 data-nosnippet>109</a><span class="doccomment">/// Collect all script files that match a certain shell type from a given path.
@@ -302,7 +302,7 @@
 <a href=#300 id=300 data-nosnippet>300</a>/// # Returns
 <a href=#301 id=301 data-nosnippet>301</a>///
 <a href=#302 id=302 data-nosnippet>302</a>/// A vector of path entries
-<a href=#303 id=303 data-nosnippet>303</a></span><span class="kw">pub fn </span>prefix_path_entries(prefix: <span class="kw-2">&amp;</span>Path, platform: <span class="kw-2">&amp;</span>Platform) -&gt; Vec&lt;PathBuf&gt; {
+<a href=#303 id=303 data-nosnippet>303</a></span><span class="kw">pub fn </span>prefix_path_entries(prefix: <span class="kw-2">&amp;</span>Path, platform: <span class="kw-2">&amp;</span>Subdir) -&gt; Vec&lt;PathBuf&gt; {
 <a href=#304 id=304 data-nosnippet>304</a>    <span class="kw">if </span>platform.is_windows() {
 <a href=#305 id=305 data-nosnippet>305</a>        <span class="macro">vec!</span>[
 <a href=#306 id=306 data-nosnippet>306</a>            prefix.to_path_buf(),
@@ -359,17 +359,17 @@
 <a href=#357 id=357 data-nosnippet>357</a>    /// ```
 <a href=#358 id=358 data-nosnippet>358</a>    /// use rattler_shell::activation::Activator;
 <a href=#359 id=359 data-nosnippet>359</a>    /// use rattler_shell::shell;
-<a href=#360 id=360 data-nosnippet>360</a>    /// use rattler_conda_types::Platform;
+<a href=#360 id=360 data-nosnippet>360</a>    /// use rattler_conda_types::Subdir;
 <a href=#361 id=361 data-nosnippet>361</a>    /// use std::path::PathBuf;
 <a href=#362 id=362 data-nosnippet>362</a>    ///
-<a href=#363 id=363 data-nosnippet>363</a>    /// let activator = Activator::from_path(&amp;PathBuf::from("tests/fixtures/env_vars"), shell::Bash::default(), Platform::Osx64).unwrap();
+<a href=#363 id=363 data-nosnippet>363</a>    /// let activator = Activator::from_path(&amp;PathBuf::from("tests/fixtures/env_vars"), shell::Bash::default(), Subdir::Osx64).unwrap();
 <a href=#364 id=364 data-nosnippet>364</a>    /// assert_eq!(activator.paths.len(), 1);
 <a href=#365 id=365 data-nosnippet>365</a>    /// assert_eq!(activator.paths[0], PathBuf::from("tests/fixtures/env_vars/bin"));
 <a href=#366 id=366 data-nosnippet>366</a>    /// ```
 <a href=#367 id=367 data-nosnippet>367</a>    </span><span class="kw">pub fn </span>from_path(
 <a href=#368 id=368 data-nosnippet>368</a>        path: <span class="kw-2">&amp;</span>Path,
 <a href=#369 id=369 data-nosnippet>369</a>        shell_type: T,
-<a href=#370 id=370 data-nosnippet>370</a>        platform: Platform,
+<a href=#370 id=370 data-nosnippet>370</a>        platform: Subdir,
 <a href=#371 id=371 data-nosnippet>371</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Activator&lt;T&gt;, ActivationError&gt; {
 <a href=#372 id=372 data-nosnippet>372</a>        <span class="kw">let </span>activation_scripts = collect_scripts(<span class="kw-2">&amp;</span>path.join(<span class="string">"etc/conda/activate.d"</span>), <span class="kw-2">&amp;</span>shell_type)<span class="question-mark">?</span>;
 <a href=#373 id=373 data-nosnippet>373</a>
@@ -418,7 +418,7 @@
 <a href=#416 id=416 data-nosnippet>416</a>            .context(<span class="string">"Failed to create tmp file"</span>)<span class="question-mark">?</span>;
 <a href=#417 id=417 data-nosnippet>417</a>
 <a href=#418 id=418 data-nosnippet>418</a>        <span class="kw">let </span>platform =
-<a href=#419 id=419 data-nosnippet>419</a>            Platform::current().context(<span class="string">"the host platform is not a known conda platform"</span>)<span class="question-mark">?</span>;
+<a href=#419 id=419 data-nosnippet>419</a>            Subdir::current().context(<span class="string">"the host platform is not a known conda platform"</span>)<span class="question-mark">?</span>;
 <a href=#420 id=420 data-nosnippet>420</a>        <span class="kw">let </span><span class="kw-2">mut </span>shell_script = ShellScript::new(shell, platform);
 <a href=#421 id=421 data-nosnippet>421</a>        <span class="kw">for </span>(key, value) <span class="kw">in </span>env {
 <a href=#422 id=422 data-nosnippet>422</a>            shell_script
@@ -732,7 +732,7 @@
 <a href=#730 id=730 data-nosnippet>730</a>            deactivation_scripts: <span class="macro">vec!</span>[],
 <a href=#731 id=731 data-nosnippet>731</a>            env_vars: pre_env,
 <a href=#732 id=732 data-nosnippet>732</a>            post_activation_env_vars: post_env,
-<a href=#733 id=733 data-nosnippet>733</a>            platform: Platform::current().expect(<span class="string">"host platform"</span>),
+<a href=#733 id=733 data-nosnippet>733</a>            platform: Subdir::current().expect(<span class="string">"host platform"</span>),
 <a href=#734 id=734 data-nosnippet>734</a>        };
 <a href=#735 id=735 data-nosnippet>735</a>
 <a href=#736 id=736 data-nosnippet>736</a>        <span class="kw">let </span>result = activator
@@ -797,7 +797,7 @@
 <a href=#795 id=795 data-nosnippet>795</a>        <span class="macro">assert_eq!</span>(scripts[<span class="number">1</span>], script1);
 <a href=#796 id=796 data-nosnippet>796</a>        <span class="macro">assert_eq!</span>(scripts[<span class="number">2</span>], script3);
 <a href=#797 id=797 data-nosnippet>797</a>
-<a href=#798 id=798 data-nosnippet>798</a>        <span class="kw">let </span>activator = Activator::from_path(tdir.path(), shell_type, Platform::Osx64).unwrap();
+<a href=#798 id=798 data-nosnippet>798</a>        <span class="kw">let </span>activator = Activator::from_path(tdir.path(), shell_type, Subdir::Osx64).unwrap();
 <a href=#799 id=799 data-nosnippet>799</a>        <span class="macro">assert_eq!</span>(activator.activation_scripts.len(), <span class="number">3</span>);
 <a href=#800 id=800 data-nosnippet>800</a>        <span class="macro">assert_eq!</span>(activator.activation_scripts[<span class="number">0</span>], script2);
 <a href=#801 id=801 data-nosnippet>801</a>        <span class="macro">assert_eq!</span>(activator.activation_scripts[<span class="number">1</span>], script1);
@@ -917,7 +917,7 @@
 <a href=#915 id=915 data-nosnippet>915</a>    <span class="attr">#[test]
 <a href=#916 id=916 data-nosnippet>916</a>    </span><span class="kw">fn </span>test_add_to_path() {
 <a href=#917 id=917 data-nosnippet>917</a>        <span class="kw">let </span>prefix = PathBuf::from_str(<span class="string">"/opt/conda"</span>).unwrap();
-<a href=#918 id=918 data-nosnippet>918</a>        <span class="kw">let </span>new_paths = prefix_path_entries(<span class="kw-2">&amp;</span>prefix, <span class="kw-2">&amp;</span>Platform::Osx64);
+<a href=#918 id=918 data-nosnippet>918</a>        <span class="kw">let </span>new_paths = prefix_path_entries(<span class="kw-2">&amp;</span>prefix, <span class="kw-2">&amp;</span>Subdir::Osx64);
 <a href=#919 id=919 data-nosnippet>919</a>        <span class="macro">assert_eq!</span>(new_paths.len(), <span class="number">1</span>);
 <a href=#920 id=920 data-nosnippet>920</a>    }
 <a href=#921 id=921 data-nosnippet>921</a>
@@ -941,7 +941,7 @@
 <a href=#939 id=939 data-nosnippet>939</a>    ) -&gt; String {
 <a href=#940 id=940 data-nosnippet>940</a>        <span class="kw">let </span>tdir = create_temp_dir();
 <a href=#941 id=941 data-nosnippet>941</a>
-<a href=#942 id=942 data-nosnippet>942</a>        <span class="kw">let </span>activator = Activator::from_path(tdir.path(), shell_type, Platform::Osx64).unwrap();
+<a href=#942 id=942 data-nosnippet>942</a>        <span class="kw">let </span>activator = Activator::from_path(tdir.path(), shell_type, Subdir::Osx64).unwrap();
 <a href=#943 id=943 data-nosnippet>943</a>
 <a href=#944 id=944 data-nosnippet>944</a>        <span class="comment">// Create a test environment
 <a href=#945 id=945 data-nosnippet>945</a>        </span><span class="kw">let </span>test_env = HashMap::from([
@@ -1084,7 +1084,7 @@
 <a href=#1082 id=1082 data-nosnippet>1082</a>        </span><span class="kw">let </span>activator = Activator::from_path(
 <a href=#1083 id=1083 data-nosnippet>1083</a>            <span class="kw-2">&amp;</span>env,
 <a href=#1084 id=1084 data-nosnippet>1084</a>            shell.clone(),
-<a href=#1085 id=1085 data-nosnippet>1085</a>            Platform::current().expect(<span class="string">"host platform"</span>),
+<a href=#1085 id=1085 data-nosnippet>1085</a>            Subdir::current().expect(<span class="string">"host platform"</span>),
 <a href=#1086 id=1086 data-nosnippet>1086</a>        )
 <a href=#1087 id=1087 data-nosnippet>1087</a>        .unwrap();
 <a href=#1088 id=1088 data-nosnippet>1088</a>        <span class="kw">let </span>activation_env = activator
@@ -1139,7 +1139,7 @@
 <a href=#1137 id=1137 data-nosnippet>1137</a>        <span class="kw">let </span><span class="kw-2">mut </span>activator = Activator::from_path(
 <a href=#1138 id=1138 data-nosnippet>1138</a>            environment_dir.path(),
 <a href=#1139 id=1139 data-nosnippet>1139</a>            shell::Bash::default(),
-<a href=#1140 id=1140 data-nosnippet>1140</a>            Platform::current().expect(<span class="string">"host platform"</span>),
+<a href=#1140 id=1140 data-nosnippet>1140</a>            Subdir::current().expect(<span class="string">"host platform"</span>),
 <a href=#1141 id=1141 data-nosnippet>1141</a>        )
 <a href=#1142 id=1142 data-nosnippet>1142</a>        .unwrap();
 <a href=#1143 id=1143 data-nosnippet>1143</a>        activator.post_activation_env_vars = IndexMap::from_iter([(
@@ -1216,7 +1216,7 @@
 <a href=#1214 id=1214 data-nosnippet>1214</a>                deactivation_scripts: <span class="macro">vec!</span>[],
 <a href=#1215 id=1215 data-nosnippet>1215</a>                env_vars: env_vars.clone(),
 <a href=#1216 id=1216 data-nosnippet>1216</a>                post_activation_env_vars: IndexMap::new(),
-<a href=#1217 id=1217 data-nosnippet>1217</a>                platform: Platform::current().expect(<span class="string">"host platform"</span>),
+<a href=#1217 id=1217 data-nosnippet>1217</a>                platform: Subdir::current().expect(<span class="string">"host platform"</span>),
 <a href=#1218 id=1218 data-nosnippet>1218</a>            };
 <a href=#1219 id=1219 data-nosnippet>1219</a>
 <a href=#1220 id=1220 data-nosnippet>1220</a>            <span class="comment">// Test edge case: CONDA_SHLVL not set (current behavior)
@@ -1273,7 +1273,7 @@
 <a href=#1271 id=1271 data-nosnippet>1271</a>                deactivation_scripts: <span class="macro">vec!</span>[],
 <a href=#1272 id=1272 data-nosnippet>1272</a>                env_vars: env_vars.clone(),
 <a href=#1273 id=1273 data-nosnippet>1273</a>                post_activation_env_vars: IndexMap::new(),
-<a href=#1274 id=1274 data-nosnippet>1274</a>                platform: Platform::current().expect(<span class="string">"host platform"</span>),
+<a href=#1274 id=1274 data-nosnippet>1274</a>                platform: Subdir::current().expect(<span class="string">"host platform"</span>),
 <a href=#1275 id=1275 data-nosnippet>1275</a>            };
 <a href=#1276 id=1276 data-nosnippet>1276</a>
 <a href=#1277 id=1277 data-nosnippet>1277</a>            <span class="comment">// CONDA_SHLVL to set to the initial level ( 1 meaning that it's activated)
@@ -1343,7 +1343,7 @@
 <a href=#1341 id=1341 data-nosnippet>1341</a>                deactivation_scripts: <span class="macro">vec!</span>[],
 <a href=#1342 id=1342 data-nosnippet>1342</a>                env_vars: second_env_vars.clone(),
 <a href=#1343 id=1343 data-nosnippet>1343</a>                post_activation_env_vars: IndexMap::new(),
-<a href=#1344 id=1344 data-nosnippet>1344</a>                platform: Platform::current().expect(<span class="string">"host platform"</span>),
+<a href=#1344 id=1344 data-nosnippet>1344</a>                platform: Subdir::current().expect(<span class="string">"host platform"</span>),
 <a href=#1345 id=1345 data-nosnippet>1345</a>            };
 <a href=#1346 id=1346 data-nosnippet>1346</a>
 <a href=#1347 id=1347 data-nosnippet>1347</a>            <span class="kw">let </span><span class="kw-2">mut </span>existing_env_vars = HashMap::new();
@@ -1466,7 +1466,7 @@
 <a href=#1464 id=1464 data-nosnippet>1464</a>                deactivation_scripts: <span class="macro">vec!</span>[],
 <a href=#1465 id=1465 data-nosnippet>1465</a>                env_vars: second_env_vars.clone(),
 <a href=#1466 id=1466 data-nosnippet>1466</a>                post_activation_env_vars: IndexMap::new(),
-<a href=#1467 id=1467 data-nosnippet>1467</a>                platform: Platform::current().expect(<span class="string">"host platform"</span>),
+<a href=#1467 id=1467 data-nosnippet>1467</a>                platform: Subdir::current().expect(<span class="string">"host platform"</span>),
 <a href=#1468 id=1468 data-nosnippet>1468</a>            };
 <a href=#1469 id=1469 data-nosnippet>1469</a>
 <a href=#1470 id=1470 data-nosnippet>1470</a>            <span class="kw">let </span><span class="kw-2">mut </span>existing_env_vars = HashMap::new();

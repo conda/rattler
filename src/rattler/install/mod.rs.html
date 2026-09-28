@@ -60,7 +60,7 @@
 <a href=#58 id=58 data-nosnippet>58</a><span class="kw">pub use </span>link::{LinkFileError, LinkMethod, link_file};
 <a href=#59 id=59 data-nosnippet>59</a><span class="kw">pub use </span>python::PythonInfo;
 <a href=#60 id=60 data-nosnippet>60</a><span class="kw">use </span>rattler_conda_types::{
-<a href=#61 id=61 data-nosnippet>61</a>    Platform,
+<a href=#61 id=61 data-nosnippet>61</a>    Subdir,
 <a href=#62 id=62 data-nosnippet>62</a>    package::{AboutJson, IndexJson, LinkJson, NoArchLinks, PackageFile, PathsEntry, PathsJson},
 <a href=#63 id=63 data-nosnippet>63</a>    prefix::Prefix,
 <a href=#64 id=64 data-nosnippet>64</a>    prefix_record::{<span class="self">self</span>, LinkType},
@@ -229,7 +229,7 @@
 <a href=#227 id=227 data-nosnippet>227</a>    <span class="doccomment">/// The platform for which the package is installed. Some operations like
 <a href=#228 id=228 data-nosnippet>228</a>    /// signing require different behavior depending on the platform. If the
 <a href=#229 id=229 data-nosnippet>229</a>    /// field is set to `None` the current platform is used.
-<a href=#230 id=230 data-nosnippet>230</a>    </span><span class="kw">pub </span>platform: <span class="prelude-ty">Option</span>&lt;Platform&gt;,
+<a href=#230 id=230 data-nosnippet>230</a>    </span><span class="kw">pub </span>platform: <span class="prelude-ty">Option</span>&lt;Subdir&gt;,
 <a href=#231 id=231 data-nosnippet>231</a>
 <a href=#232 id=232 data-nosnippet>232</a>    <span class="doccomment">/// Python version information of the python distribution installed within
 <a href=#233 id=233 data-nosnippet>233</a>    /// the environment. This is only used when installing noarch Python
@@ -366,7 +366,7 @@
 <a href=#364 id=364 data-nosnippet>364</a>    <span class="comment">// Determine the platform to use
 <a href=#365 id=365 data-nosnippet>365</a>    </span><span class="kw">let </span>platform = options
 <a href=#366 id=366 data-nosnippet>366</a>        .platform
-<a href=#367 id=367 data-nosnippet>367</a>        .or_else(Platform::current)
+<a href=#367 id=367 data-nosnippet>367</a>        .or_else(Subdir::current)
 <a href=#368 id=368 data-nosnippet>368</a>        .ok_or(InstallError::UnknownHostPlatform)<span class="question-mark">?</span>;
 <a href=#369 id=369 data-nosnippet>369</a>
 <a href=#370 id=370 data-nosnippet>370</a>    <span class="comment">// compute all path renames
@@ -720,7 +720,7 @@
 <a href=#718 id=718 data-nosnippet>718</a>    <span class="comment">// Determine the platform to use
 <a href=#719 id=719 data-nosnippet>719</a>    </span><span class="kw">let </span>platform = options
 <a href=#720 id=720 data-nosnippet>720</a>        .platform
-<a href=#721 id=721 data-nosnippet>721</a>        .or_else(Platform::current)
+<a href=#721 id=721 data-nosnippet>721</a>        .or_else(Subdir::current)
 <a href=#722 id=722 data-nosnippet>722</a>        .ok_or(InstallError::UnknownHostPlatform)<span class="question-mark">?</span>;
 <a href=#723 id=723 data-nosnippet>723</a>
 <a href=#724 id=724 data-nosnippet>724</a>    <span class="comment">// compute all path renames
@@ -1344,7 +1344,7 @@
 <a href=#1342 id=1342 data-nosnippet>1342</a>    };
 <a href=#1343 id=1343 data-nosnippet>1343</a>    <span class="kw">use </span>futures::{StreamExt, stream};
 <a href=#1344 id=1344 data-nosnippet>1344</a>    <span class="kw">use </span>rattler_conda_types::{
-<a href=#1345 id=1345 data-nosnippet>1345</a>        ExplicitEnvironmentSpec, Platform, Version, package::CondaArchiveIdentifier,
+<a href=#1345 id=1345 data-nosnippet>1345</a>        ExplicitEnvironmentSpec, Subdir, Version, package::CondaArchiveIdentifier,
 <a href=#1346 id=1346 data-nosnippet>1346</a>    };
 <a href=#1347 id=1347 data-nosnippet>1347</a>    <span class="kw">use </span>rattler_lock::LockFile;
 <a href=#1348 id=1348 data-nosnippet>1348</a>    <span class="kw">use </span>rattler_networking::LazyClient;
@@ -1355,7 +1355,7 @@
 <a href=#1353 id=1353 data-nosnippet>1353</a>    #[tokio::test]
 <a href=#1354 id=1354 data-nosnippet>1354</a>    </span><span class="kw">pub async fn </span>test_explicit_lock() {
 <a href=#1355 id=1355 data-nosnippet>1355</a>        <span class="comment">// Load a prepared explicit environment file for the current platform.
-<a href=#1356 id=1356 data-nosnippet>1356</a>        </span><span class="kw">let </span>current_platform = Platform::current().expect(<span class="string">"host platform"</span>);
+<a href=#1356 id=1356 data-nosnippet>1356</a>        </span><span class="kw">let </span>current_platform = Subdir::current().expect(<span class="string">"host platform"</span>);
 <a href=#1357 id=1357 data-nosnippet>1357</a>        <span class="kw">let </span>explicit_env_path =
 <a href=#1358 id=1358 data-nosnippet>1358</a>            get_test_data_dir().join(<span class="macro">format!</span>(<span class="string">"python/explicit-env-{current_platform}.txt"</span>));
 <a href=#1359 id=1359 data-nosnippet>1359</a>        <span class="kw">let </span>env = ExplicitEnvironmentSpec::from_path(<span class="kw-2">&amp;</span>explicit_env_path).unwrap();
@@ -1381,7 +1381,7 @@
 <a href=#1379 id=1379 data-nosnippet>1379</a>        </span><span class="kw">let </span>lock_path = get_test_data_dir().join(<span class="string">"conda-lock/v4/python-lock.yml"</span>);
 <a href=#1380 id=1380 data-nosnippet>1380</a>        <span class="kw">let </span>lock = LockFile::from_path(<span class="kw-2">&amp;</span>lock_path).unwrap();
 <a href=#1381 id=1381 data-nosnippet>1381</a>
-<a href=#1382 id=1382 data-nosnippet>1382</a>        <span class="kw">let </span>current_platform = Platform::current().expect(<span class="string">"host platform"</span>);
+<a href=#1382 id=1382 data-nosnippet>1382</a>        <span class="kw">let </span>current_platform = Subdir::current().expect(<span class="string">"host platform"</span>);
 <a href=#1383 id=1383 data-nosnippet>1383</a>        <span class="kw">let </span>lock_env = lock
 <a href=#1384 id=1384 data-nosnippet>1384</a>            .default_environment()
 <a href=#1385 id=1385 data-nosnippet>1385</a>            .expect(<span class="string">"no default environment in lock file"</span>);
@@ -1404,7 +1404,7 @@
 <a href=#1402 id=1402 data-nosnippet>1402</a>    <span class="kw">pub async fn </span>test_install_python(
 <a href=#1403 id=1403 data-nosnippet>1403</a>        urls: <span class="kw">impl </span>Iterator&lt;Item = Url&gt;,
 <a href=#1404 id=1404 data-nosnippet>1404</a>        cache_name: <span class="kw-2">&amp;</span>str,
-<a href=#1405 id=1405 data-nosnippet>1405</a>        platform: Platform,
+<a href=#1405 id=1405 data-nosnippet>1405</a>        platform: Subdir,
 <a href=#1406 id=1406 data-nosnippet>1406</a>    ) {
 <a href=#1407 id=1407 data-nosnippet>1407</a>        <span class="comment">// Open a package cache in the systems temporary directory with a specific name.
 <a href=#1408 id=1408 data-nosnippet>1408</a>        // This allows us to reuse a package cache across multiple invocations
@@ -1461,7 +1461,7 @@
 <a href=#1459 id=1459 data-nosnippet>1459</a>            .<span class="kw">await</span>;
 <a href=#1460 id=1460 data-nosnippet>1460</a>
 <a href=#1461 id=1461 data-nosnippet>1461</a>        <span class="comment">// Run the python command and validate the version it outputs
-<a href=#1462 id=1462 data-nosnippet>1462</a>        </span><span class="kw">let </span>python_path = <span class="kw">if </span>Platform::current().expect(<span class="string">"host platform"</span>).is_windows() {
+<a href=#1462 id=1462 data-nosnippet>1462</a>        </span><span class="kw">let </span>python_path = <span class="kw">if </span>Subdir::current().expect(<span class="string">"host platform"</span>).is_windows() {
 <a href=#1463 id=1463 data-nosnippet>1463</a>            <span class="string">"python.exe"
 <a href=#1464 id=1464 data-nosnippet>1464</a>        </span>} <span class="kw">else </span>{
 <a href=#1465 id=1465 data-nosnippet>1465</a>            <span class="string">"bin/python"

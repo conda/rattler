@@ -5,7 +5,7 @@
 <a href=#3 id=3 data-nosnippet>3</a>    path::{Path, PathBuf},
 <a href=#4 id=4 data-nosnippet>4</a>};
 <a href=#5 id=5 data-nosnippet>5</a>
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>rattler_conda_types::{PackageRecord, Platform, Version};
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>rattler_conda_types::{PackageRecord, Subdir, Version};
 <a href=#7 id=7 data-nosnippet>7</a>
 <a href=#8 id=8 data-nosnippet>8</a><span class="doccomment">/// Information required for linking no-arch python packages. The struct
 <a href=#9 id=9 data-nosnippet>9</a>/// contains information about a specific Python version that is installed in an
@@ -13,7 +13,7 @@
 <a href=#11 id=11 data-nosnippet>11</a></span><span class="attr">#[derive(Debug, Clone)]
 <a href=#12 id=12 data-nosnippet>12</a></span><span class="kw">pub struct </span>PythonInfo {
 <a href=#13 id=13 data-nosnippet>13</a>    <span class="doccomment">/// The platform that the python package is installed for
-<a href=#14 id=14 data-nosnippet>14</a>    </span><span class="kw">pub </span>platform: Platform,
+<a href=#14 id=14 data-nosnippet>14</a>    </span><span class="kw">pub </span>platform: Subdir,
 <a href=#15 id=15 data-nosnippet>15</a>
 <a href=#16 id=16 data-nosnippet>16</a>    <span class="doccomment">/// The major and minor version
 <a href=#17 id=17 data-nosnippet>17</a>    </span><span class="kw">pub </span>short_version: (u64, u64),
@@ -39,7 +39,7 @@
 <a href=#37 id=37 data-nosnippet>37</a>    /// python interpreter.
 <a href=#38 id=38 data-nosnippet>38</a>    </span><span class="kw">pub fn </span>from_python_record(
 <a href=#39 id=39 data-nosnippet>39</a>        record: <span class="kw-2">&amp;</span>PackageRecord,
-<a href=#40 id=40 data-nosnippet>40</a>        platform: Platform,
+<a href=#40 id=40 data-nosnippet>40</a>        platform: Subdir,
 <a href=#41 id=41 data-nosnippet>41</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, PythonInfoError&gt; {
 <a href=#42 id=42 data-nosnippet>42</a>        <span class="self">Self</span>::from_version(
 <a href=#43 id=43 data-nosnippet>43</a>            record.version.version(),
@@ -53,7 +53,7 @@
 <a href=#51 id=51 data-nosnippet>51</a>    </span><span class="kw">pub fn </span>from_version(
 <a href=#52 id=52 data-nosnippet>52</a>        version: <span class="kw-2">&amp;</span>Version,
 <a href=#53 id=53 data-nosnippet>53</a>        site_packages_path: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;,
-<a href=#54 id=54 data-nosnippet>54</a>        platform: Platform,
+<a href=#54 id=54 data-nosnippet>54</a>        platform: Subdir,
 <a href=#55 id=55 data-nosnippet>55</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, PythonInfoError&gt; {
 <a href=#56 id=56 data-nosnippet>56</a>        <span class="comment">// Determine the major, and minor versions of the version
 <a href=#57 id=57 data-nosnippet>57</a>        </span><span class="kw">let </span>(major, minor) = version

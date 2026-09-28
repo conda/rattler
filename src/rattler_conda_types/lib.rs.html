@@ -16,12 +16,12 @@
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">pub mod </span>menuinst;
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">mod </span>no_arch_type;
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">mod </span>parse_mode;
-<a href=#17 id=17 data-nosnippet>17</a><span class="kw">pub mod </span>platform;
-<a href=#18 id=18 data-nosnippet>18</a><span class="attr">#[cfg(feature = <span class="string">"proptest"</span>)]
-<a href=#19 id=19 data-nosnippet>19</a></span><span class="kw">pub mod </span>proptest;
-<a href=#20 id=20 data-nosnippet>20</a><span class="kw">mod </span>repo_data;
-<a href=#21 id=21 data-nosnippet>21</a><span class="kw">mod </span>repo_data_record;
-<a href=#22 id=22 data-nosnippet>22</a><span class="kw">mod </span>run_export;
+<a href=#17 id=17 data-nosnippet>17</a><span class="attr">#[cfg(feature = <span class="string">"proptest"</span>)]
+<a href=#18 id=18 data-nosnippet>18</a></span><span class="kw">pub mod </span>proptest;
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">mod </span>repo_data;
+<a href=#20 id=20 data-nosnippet>20</a><span class="kw">mod </span>repo_data_record;
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">mod </span>run_export;
+<a href=#22 id=22 data-nosnippet>22</a><span class="kw">pub mod </span>subdir;
 <a href=#23 id=23 data-nosnippet>23</a><span class="kw">pub mod </span>utils;
 <a href=#24 id=24 data-nosnippet>24</a><span class="kw">pub mod </span>version_spec;
 <a href=#25 id=25 data-nosnippet>25</a>
@@ -65,31 +65,31 @@
 <a href=#63 id=63 data-nosnippet>63</a>    InvalidPackageNameError, NormalizedPackageName, PackageName, SourcePackageName,
 <a href=#64 id=64 data-nosnippet>64</a>};
 <a href=#65 id=65 data-nosnippet>65</a><span class="kw">pub use </span>parse_mode::{ParseMatchSpecOptions, ParseStrictnessWithNameMatcher};
-<a href=#66 id=66 data-nosnippet>66</a><span class="kw">pub use </span>platform::{Arch, ParseArchError, ParsePlatformError, Platform};
-<a href=#67 id=67 data-nosnippet>67</a><span class="kw">pub use </span>prefix_data::PrefixData;
-<a href=#68 id=68 data-nosnippet>68</a><span class="kw">pub use </span>prefix_record::PrefixRecord;
-<a href=#69 id=69 data-nosnippet>69</a><span class="attr">#[cfg(feature = <span class="string">"semver"</span>)]
-<a href=#70 id=70 data-nosnippet>70</a></span><span class="kw">pub use </span>rattler_conda_version::version::VersionToSemverError;
-<a href=#71 id=71 data-nosnippet>71</a><span class="kw">pub use </span>rattler_conda_version::version::{
-<a href=#72 id=72 data-nosnippet>72</a>    Component, ParseVersionError, ParseVersionErrorKind, StrictVersion, VersionBumpError,
-<a href=#73 id=73 data-nosnippet>73</a>    VersionBumpType, VersionExtendError, VersionWithSource,
-<a href=#74 id=74 data-nosnippet>74</a>};
-<a href=#75 id=75 data-nosnippet>75</a><span class="kw">pub use </span>rattler_conda_version::version_spec::{
-<a href=#76 id=76 data-nosnippet>76</a>    EqualityOperator, LogicalOperator, ParseConstraintError, ParseVersionSpecError, RangeOperator,
-<a href=#77 id=77 data-nosnippet>77</a>    StrictRangeOperator, VersionOperators,
-<a href=#78 id=78 data-nosnippet>78</a>};
-<a href=#79 id=79 data-nosnippet>79</a><span class="kw">pub use </span>rattler_conda_version::{ParseStrictness, Version, VersionSpec};
-<a href=#80 id=80 data-nosnippet>80</a><span class="kw">pub use </span>record_traits::HasArtifactIdentificationRefs;
-<a href=#81 id=81 data-nosnippet>81</a><span class="kw">pub use </span>repo_data::{
-<a href=#82 id=82 data-nosnippet>82</a>    ChannelInfo, ChannelRelations, ConvertSubdirError, PackageRecord, RecordFromPath, RepoData,
-<a href=#83 id=83 data-nosnippet>83</a>    RepodataRevision, RepodataRevisionInfo, RepodataRevisionMetadata, RepodataRevisionSelection,
-<a href=#84 id=84 data-nosnippet>84</a>    RepodataRevisions, ReservedV3ExtensionError, SubdirRunExportsJson, UrlOrPath, V3Extensions,
-<a href=#85 id=85 data-nosnippet>85</a>    V3Packages, ValidatePackageRecordsError, WhlPackageRecord, compute_package_url,
-<a href=#86 id=86 data-nosnippet>86</a>    patches::{PackageRecordPatch, PatchInstructions, RepoDataPatch},
-<a href=#87 id=87 data-nosnippet>87</a>    sharded::{Shard, ShardedRepodata, ShardedSubdirInfo},
-<a href=#88 id=88 data-nosnippet>88</a>};
-<a href=#89 id=89 data-nosnippet>89</a><span class="kw">pub use </span>repo_data_record::{RepoDataRecord, SolverResult};
-<a href=#90 id=90 data-nosnippet>90</a><span class="kw">pub use </span>run_export::RunExportKind;
+<a href=#66 id=66 data-nosnippet>66</a><span class="kw">pub use </span>prefix_data::PrefixData;
+<a href=#67 id=67 data-nosnippet>67</a><span class="kw">pub use </span>prefix_record::PrefixRecord;
+<a href=#68 id=68 data-nosnippet>68</a><span class="attr">#[cfg(feature = <span class="string">"semver"</span>)]
+<a href=#69 id=69 data-nosnippet>69</a></span><span class="kw">pub use </span>rattler_conda_version::version::VersionToSemverError;
+<a href=#70 id=70 data-nosnippet>70</a><span class="kw">pub use </span>rattler_conda_version::version::{
+<a href=#71 id=71 data-nosnippet>71</a>    Component, ParseVersionError, ParseVersionErrorKind, StrictVersion, VersionBumpError,
+<a href=#72 id=72 data-nosnippet>72</a>    VersionBumpType, VersionExtendError, VersionWithSource,
+<a href=#73 id=73 data-nosnippet>73</a>};
+<a href=#74 id=74 data-nosnippet>74</a><span class="kw">pub use </span>rattler_conda_version::version_spec::{
+<a href=#75 id=75 data-nosnippet>75</a>    EqualityOperator, LogicalOperator, ParseConstraintError, ParseVersionSpecError, RangeOperator,
+<a href=#76 id=76 data-nosnippet>76</a>    StrictRangeOperator, VersionOperators,
+<a href=#77 id=77 data-nosnippet>77</a>};
+<a href=#78 id=78 data-nosnippet>78</a><span class="kw">pub use </span>rattler_conda_version::{ParseStrictness, Version, VersionSpec};
+<a href=#79 id=79 data-nosnippet>79</a><span class="kw">pub use </span>record_traits::HasArtifactIdentificationRefs;
+<a href=#80 id=80 data-nosnippet>80</a><span class="kw">pub use </span>repo_data::{
+<a href=#81 id=81 data-nosnippet>81</a>    ChannelInfo, ChannelRelations, ConvertSubdirError, PackageRecord, RecordFromPath, RepoData,
+<a href=#82 id=82 data-nosnippet>82</a>    RepodataRevision, RepodataRevisionInfo, RepodataRevisionMetadata, RepodataRevisionSelection,
+<a href=#83 id=83 data-nosnippet>83</a>    RepodataRevisions, ReservedV3ExtensionError, SubdirRunExportsJson, UrlOrPath, V3Extensions,
+<a href=#84 id=84 data-nosnippet>84</a>    V3Packages, ValidatePackageRecordsError, WhlPackageRecord, compute_package_url,
+<a href=#85 id=85 data-nosnippet>85</a>    patches::{PackageRecordPatch, PatchInstructions, RepoDataPatch},
+<a href=#86 id=86 data-nosnippet>86</a>    sharded::{Shard, ShardedRepodata, ShardedSubdirInfo},
+<a href=#87 id=87 data-nosnippet>87</a>};
+<a href=#88 id=88 data-nosnippet>88</a><span class="kw">pub use </span>repo_data_record::{RepoDataRecord, SolverResult};
+<a href=#89 id=89 data-nosnippet>89</a><span class="kw">pub use </span>run_export::RunExportKind;
+<a href=#90 id=90 data-nosnippet>90</a><span class="kw">pub use </span>subdir::{Arch, ParseArchError, ParseSubdirError, Subdir};
 <a href=#91 id=91 data-nosnippet>91</a>
 <a href=#92 id=92 data-nosnippet>92</a><span class="doccomment">/// An package identifier that can be used to identify packages across package
 <a href=#93 id=93 data-nosnippet>93</a>/// ecosystems.

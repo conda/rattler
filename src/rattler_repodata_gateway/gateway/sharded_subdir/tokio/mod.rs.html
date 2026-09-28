@@ -8,7 +8,7 @@
 <a href=#6 id=6 data-nosnippet>6</a>    sync::Arc,
 <a href=#7 id=7 data-nosnippet>7</a>};
 <a href=#8 id=8 data-nosnippet>8</a>
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>rattler_conda_types::Platform;
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>rattler_conda_types::Subdir;
 <a href=#10 id=10 data-nosnippet>10</a>
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>super::{
 <a href=#12 id=12 data-nosnippet>12</a>    add_trailing_slash, decode_zst_bytes_async, is_missing_sharded_repodata_status, parse_records,
@@ -159,7 +159,7 @@
 <a href=#157 id=157 data-nosnippet>157</a>    </span><span class="kw">pub fn </span>clear_cache(
 <a href=#158 id=158 data-nosnippet>158</a>        cache_dir: <span class="kw-2">&amp;</span>Path,
 <a href=#159 id=159 data-nosnippet>159</a>        channel: <span class="kw-2">&amp;</span>Channel,
-<a href=#160 id=160 data-nosnippet>160</a>        platform: Platform,
+<a href=#160 id=160 data-nosnippet>160</a>        platform: Subdir,
 <a href=#161 id=161 data-nosnippet>161</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), std::io::Error&gt; {
 <a href=#162 id=162 data-nosnippet>162</a>        <span class="kw">let </span>index_base_url = channel
 <a href=#163 id=163 data-nosnippet>163</a>            .base_url

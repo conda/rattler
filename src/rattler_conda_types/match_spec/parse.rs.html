@@ -25,7 +25,7 @@
 <a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span><span class="kw">crate</span>::match_spec::condition::parse_condition_with_options;
 <a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>crate::{
 <a href=#25 id=25 data-nosnippet>25</a>    Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError, ParseMatchSpecOptions,
-<a href=#26 id=26 data-nosnippet>26</a>    ParseStrictness, ParseVersionError, Platform, VersionSpec,
+<a href=#26 id=26 data-nosnippet>26</a>    ParseStrictness, ParseVersionError, Subdir, VersionSpec,
 <a href=#27 id=27 data-nosnippet>27</a>    build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
 <a href=#28 id=28 data-nosnippet>28</a>    flags::is_valid_matchspec_flag,
 <a href=#29 id=29 data-nosnippet>29</a>    match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError},
@@ -177,7 +177,7 @@
 <a href=#175 id=175 data-nosnippet>175</a>    <span class="comment">// Any identifier followed by `=` marks a field section; unknown keys are
 <a href=#176 id=176 data-nosnippet>176</a>    // rejected later with a precise error. A key whitelist here would leave
 <a href=#177 id=177 data-nosnippet>177</a>    // quotes untracked for unknown keys, so a `#` inside a quoted value would
-<a href=#178 id=178 data-nosnippet>178</a>    // be stripped as a comment. Platform selectors (`[linux-64]`) and glob
+<a href=#178 id=178 data-nosnippet>178</a>    // be stripped as a comment. Subdir selectors (`[linux-64]`) and glob
 <a href=#179 id=179 data-nosnippet>179</a>    // character classes have no `=` and still fall through.
 <a href=#180 id=180 data-nosnippet>180</a>    </span>!key.is_empty() &amp;&amp; contents[key_end..].trim_start().starts_with(<span class="string">'='</span>)
 <a href=#181 id=181 data-nosnippet>181</a>}
@@ -1033,7 +1033,7 @@
 <a href=#1031 id=1031 data-nosnippet>1031</a>
 <a href=#1032 id=1032 data-nosnippet>1032</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>((channel, subdir)) = input.rsplit_once(<span class="string">'/'</span>) {
 <a href=#1033 id=1033 data-nosnippet>1033</a>        <span class="comment">// If the subdir is a platform, we assume the channel has a subdir
-<a href=#1034 id=1034 data-nosnippet>1034</a>        </span><span class="kw">if </span>Platform::from_str(subdir).is_ok() {
+<a href=#1034 id=1034 data-nosnippet>1034</a>        </span><span class="kw">if </span>Subdir::from_str(subdir).is_ok() {
 <a href=#1035 id=1035 data-nosnippet>1035</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>((
 <a href=#1036 id=1036 data-nosnippet>1036</a>                <span class="prelude-val">Some</span>(Channel::from_str(channel, <span class="kw-2">&amp;</span>channel_config)<span class="question-mark">?</span>),
 <a href=#1037 id=1037 data-nosnippet>1037</a>                <span class="prelude-val">Some</span>(subdir.to_string()),

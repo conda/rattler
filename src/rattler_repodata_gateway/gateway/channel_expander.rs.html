@@ -8,11 +8,11 @@
 <a href=#6 id=6 data-nosnippet>6</a>    sync::Arc,
 <a href=#7 id=7 data-nosnippet>7</a>};
 <a href=#8 id=8 data-nosnippet>8</a>
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>rattler_conda_types::{Channel, ChannelRelations, ChannelUrl, Platform};
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>rattler_conda_types::{Channel, ChannelRelations, ChannelUrl, Subdir};
 <a href=#10 id=10 data-nosnippet>10</a>
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>super::{
 <a href=#12 id=12 data-nosnippet>12</a>    channel_relations::{EdgeSource, PriorityEdge, Resolution, resolve_channel_priority},
-<a href=#13 id=13 data-nosnippet>13</a>    subdir::Subdir,
+<a href=#13 id=13 data-nosnippet>13</a>    subdir::SubdirState,
 <a href=#14 id=14 data-nosnippet>14</a>    warning::GatewayWarning,
 <a href=#15 id=15 data-nosnippet>15</a>};
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span><span class="kw">crate</span>::Reporter;
@@ -119,8 +119,8 @@
 <a href=#117 id=117 data-nosnippet>117</a>    </span>DiscoveryFetchFailed {
 <a href=#118 id=118 data-nosnippet>118</a>        <span class="doccomment">/// Channel that failed to fetch.
 <a href=#119 id=119 data-nosnippet>119</a>        </span>url: ChannelUrl,
-<a href=#120 id=120 data-nosnippet>120</a>        <span class="doccomment">/// Platform whose subdir failed to fetch.
-<a href=#121 id=121 data-nosnippet>121</a>        </span>platform: Platform,
+<a href=#120 id=120 data-nosnippet>120</a>        <span class="doccomment">/// Subdir whose subdir failed to fetch.
+<a href=#121 id=121 data-nosnippet>121</a>        </span>platform: Subdir,
 <a href=#122 id=122 data-nosnippet>122</a>        <span class="doccomment">/// Display-formatted [`GatewayError`](super::GatewayError).
 <a href=#123 id=123 data-nosnippet>123</a>        </span>error: String,
 <a href=#124 id=124 data-nosnippet>124</a>    },
@@ -171,7 +171,7 @@
 <a href=#169 id=169 data-nosnippet>169</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>ChannelExpander {
 <a href=#170 id=170 data-nosnippet>170</a>    mode: ChannelRelationsMode,
 <a href=#171 id=171 data-nosnippet>171</a>    max_depth: usize,
-<a href=#172 id=172 data-nosnippet>172</a>    platforms: Vec&lt;Platform&gt;,
+<a href=#172 id=172 data-nosnippet>172</a>    platforms: Vec&lt;Subdir&gt;,
 <a href=#173 id=173 data-nosnippet>173</a>    user_channels: Vec&lt;ChannelUrl&gt;,
 <a href=#174 id=174 data-nosnippet>174</a>    discovered: HashMap&lt;ChannelUrl, Arc&lt;Channel&gt;&gt;,
 <a href=#175 id=175 data-nosnippet>175</a>    <span class="doccomment">/// Shortest known hop distance from any user channel (user = 0).
@@ -192,7 +192,7 @@
 <a href=#190 id=190 data-nosnippet>190</a>    <span class="kw">pub fn </span>new(
 <a href=#191 id=191 data-nosnippet>191</a>        mode: ChannelRelationsMode,
 <a href=#192 id=192 data-nosnippet>192</a>        max_depth: usize,
-<a href=#193 id=193 data-nosnippet>193</a>        platforms: Vec&lt;Platform&gt;,
+<a href=#193 id=193 data-nosnippet>193</a>        platforms: Vec&lt;Subdir&gt;,
 <a href=#194 id=194 data-nosnippet>194</a>        reporter: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>Reporter&gt;&gt;,
 <a href=#195 id=195 data-nosnippet>195</a>    ) -&gt; <span class="self">Self </span>{
 <a href=#196 id=196 data-nosnippet>196</a>        <span class="self">Self </span>{
@@ -219,7 +219,7 @@
 <a href=#217 id=217 data-nosnippet>217</a>        <span class="macro">matches!</span>(<span class="self">self</span>.mode, ChannelRelationsMode::Strict)
 <a href=#218 id=218 data-nosnippet>218</a>    }
 <a href=#219 id=219 data-nosnippet>219</a>
-<a href=#220 id=220 data-nosnippet>220</a>    <span class="kw">pub fn </span>platforms(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[Platform] {
+<a href=#220 id=220 data-nosnippet>220</a>    <span class="kw">pub fn </span>platforms(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[Subdir] {
 <a href=#221 id=221 data-nosnippet>221</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.platforms
 <a href=#222 id=222 data-nosnippet>222</a>    }
 <a href=#223 id=223 data-nosnippet>223</a>
@@ -279,9 +279,9 @@
 <a href=#277 id=277 data-nosnippet>277</a>    </span><span class="kw">pub fn </span>observe(
 <a href=#278 id=278 data-nosnippet>278</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
 <a href=#279 id=279 data-nosnippet>279</a>        channel_url: <span class="kw-2">&amp;</span>ChannelUrl,
-<a href=#280 id=280 data-nosnippet>280</a>        _platform: Platform,
-<a href=#281 id=281 data-nosnippet>281</a>        subdir: <span class="kw-2">&amp;</span>Subdir,
-<a href=#282 id=282 data-nosnippet>282</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;(ChannelUrl, Arc&lt;Channel&gt;, Platform)&gt;, <span class="kw">super</span>::GatewayError&gt; {
+<a href=#280 id=280 data-nosnippet>280</a>        _platform: Subdir,
+<a href=#281 id=281 data-nosnippet>281</a>        subdir: <span class="kw-2">&amp;</span>SubdirState,
+<a href=#282 id=282 data-nosnippet>282</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;(ChannelUrl, Arc&lt;Channel&gt;, Subdir)&gt;, <span class="kw">super</span>::GatewayError&gt; {
 <a href=#283 id=283 data-nosnippet>283</a>        <span class="kw">if </span>!<span class="self">self</span>.enabled() {
 <a href=#284 id=284 data-nosnippet>284</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(Vec::new());
 <a href=#285 id=285 data-nosnippet>285</a>        }
@@ -826,7 +826,7 @@
 <a href=#824 id=824 data-nosnippet>824</a>        // depths, and discovered sets.
 <a href=#825 id=825 data-nosnippet>825</a>        </span><span class="kw">let </span>run = |order: <span class="kw-2">&amp;</span>[(<span class="kw-2">&amp;</span>ChannelUrl, ChannelRelations)]| {
 <a href=#826 id=826 data-nosnippet>826</a>            <span class="kw">let </span><span class="kw-2">mut </span>ex =
-<a href=#827 id=827 data-nosnippet>827</a>                ChannelExpander::new(ChannelRelationsMode::Warn, <span class="number">2</span>, <span class="macro">vec!</span>[Platform::Linux64], <span class="prelude-val">None</span>);
+<a href=#827 id=827 data-nosnippet>827</a>                ChannelExpander::new(ChannelRelationsMode::Warn, <span class="number">2</span>, <span class="macro">vec!</span>[Subdir::Linux64], <span class="prelude-val">None</span>);
 <a href=#828 id=828 data-nosnippet>828</a>            ex.register_user_channel(Channel::from_url(a.clone()));
 <a href=#829 id=829 data-nosnippet>829</a>            ex.register_user_channel(Channel::from_url(b.clone()));
 <a href=#830 id=830 data-nosnippet>830</a>            <span class="kw">for </span>(url, relations) <span class="kw">in </span>order {
@@ -883,7 +883,7 @@
 <a href=#881 id=881 data-nosnippet>881</a>        <span class="kw">let </span>cf = chan(<span class="string">"https://example.com/conda-forge/"</span>);
 <a href=#882 id=882 data-nosnippet>882</a>
 <a href=#883 id=883 data-nosnippet>883</a>        <span class="kw">let </span><span class="kw-2">mut </span>ex =
-<a href=#884 id=884 data-nosnippet>884</a>            ChannelExpander::new(ChannelRelationsMode::Warn, <span class="number">2</span>, <span class="macro">vec!</span>[Platform::Linux64], <span class="prelude-val">None</span>);
+<a href=#884 id=884 data-nosnippet>884</a>            ChannelExpander::new(ChannelRelationsMode::Warn, <span class="number">2</span>, <span class="macro">vec!</span>[Subdir::Linux64], <span class="prelude-val">None</span>);
 <a href=#885 id=885 data-nosnippet>885</a>        ex.register_user_channel(Channel::from_url(a.clone()));
 <a href=#886 id=886 data-nosnippet>886</a>        ex.register_user_channel(Channel::from_url(b.clone()));
 <a href=#887 id=887 data-nosnippet>887</a>
@@ -918,7 +918,7 @@
 <a href=#916 id=916 data-nosnippet>916</a>    <span class="kw">use </span>std::collections::HashMap;
 <a href=#917 id=917 data-nosnippet>917</a>
 <a href=#918 id=918 data-nosnippet>918</a>    <span class="kw">use </span>proptest::prelude::<span class="kw-2">*</span>;
-<a href=#919 id=919 data-nosnippet>919</a>    <span class="kw">use </span>rattler_conda_types::{Channel, ChannelRelations, ChannelUrl, Platform};
+<a href=#919 id=919 data-nosnippet>919</a>    <span class="kw">use </span>rattler_conda_types::{Channel, ChannelRelations, ChannelUrl, Subdir};
 <a href=#920 id=920 data-nosnippet>920</a>    <span class="kw">use </span>url::Url;
 <a href=#921 id=921 data-nosnippet>921</a>
 <a href=#922 id=922 data-nosnippet>922</a>    <span class="kw">use </span>super::{
@@ -974,7 +974,7 @@
 <a href=#972 id=972 data-nosnippet>972</a>        <span class="kw">let </span><span class="kw-2">mut </span>ex = ChannelExpander::new(
 <a href=#973 id=973 data-nosnippet>973</a>            ChannelRelationsMode::Warn,
 <a href=#974 id=974 data-nosnippet>974</a>            sc.max_depth,
-<a href=#975 id=975 data-nosnippet>975</a>            <span class="macro">vec!</span>[Platform::Linux64],
+<a href=#975 id=975 data-nosnippet>975</a>            <span class="macro">vec!</span>[Subdir::Linux64],
 <a href=#976 id=976 data-nosnippet>976</a>            <span class="prelude-val">None</span>,
 <a href=#977 id=977 data-nosnippet>977</a>        );
 <a href=#978 id=978 data-nosnippet>978</a>        <span class="kw">let </span>user_urls: Vec&lt;ChannelUrl&gt; = urls[..sc.user_count].to_vec();

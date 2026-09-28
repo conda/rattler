@@ -43,7 +43,7 @@ order, with the order within a subdir unspecified.</p>
 <p>The stream is boxed so it can be polled without pinning it first.</p>
 
 <div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">let </span><span class="kw-2">mut </span>stream = gateway
-    .who_needs(<span class="macro">vec!</span>[channel], <span class="macro">vec!</span>[Platform::Linux64], name)
+    .who_needs(<span class="macro">vec!</span>[channel], <span class="macro">vec!</span>[Subdir::Linux64], name)
     .stream();
 
 <span class="comment">// Count the dependents while holding only one record at a time.

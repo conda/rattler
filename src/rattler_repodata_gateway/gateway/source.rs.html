@@ -4,7 +4,7 @@
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>std::sync::Arc;
 <a href=#4 id=4 data-nosnippet>4</a>
-<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>rattler_conda_types::{Channel, PackageName, Platform, RepoDataRecord};
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>rattler_conda_types::{Channel, PackageName, RepoDataRecord, Subdir};
 <a href=#6 id=6 data-nosnippet>6</a>
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>super::{
 <a href=#8 id=8 data-nosnippet>8</a>    GatewayError,
@@ -27,7 +27,7 @@
 <a href=#25 id=25 data-nosnippet>25</a>    /// subdirectory the gateway is querying for.
 <a href=#26 id=26 data-nosnippet>26</a>    </span><span class="kw">async fn </span>fetch_package_records(
 <a href=#27 id=27 data-nosnippet>27</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#28 id=28 data-nosnippet>28</a>        platform: Platform,
+<a href=#28 id=28 data-nosnippet>28</a>        platform: Subdir,
 <a href=#29 id=29 data-nosnippet>29</a>        name: <span class="kw-2">&amp;</span>PackageName,
 <a href=#30 id=30 data-nosnippet>30</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Arc&lt;RepoDataRecord&gt;&gt;, GatewayError&gt;;
 <a href=#31 id=31 data-nosnippet>31</a>
@@ -35,7 +35,7 @@
 <a href=#33 id=33 data-nosnippet>33</a>    ///
 <a href=#34 id=34 data-nosnippet>34</a>    /// This is used by the gateway to know which packages are available
 <a href=#35 id=35 data-nosnippet>35</a>    /// in this source for a given platform/subdirectory.
-<a href=#36 id=36 data-nosnippet>36</a>    </span><span class="kw">fn </span>package_names(<span class="kw-2">&amp;</span><span class="self">self</span>, platform: Platform) -&gt; Vec&lt;String&gt;;
+<a href=#36 id=36 data-nosnippet>36</a>    </span><span class="kw">fn </span>package_names(<span class="kw-2">&amp;</span><span class="self">self</span>, platform: Subdir) -&gt; Vec&lt;String&gt;;
 <a href=#37 id=37 data-nosnippet>37</a>}
 <a href=#38 id=38 data-nosnippet>38</a>
 <a href=#39 id=39 data-nosnippet>39</a><span class="doccomment">/// A source of repodata, either a channel or a custom source.
@@ -86,12 +86,12 @@
 <a href=#84 id=84 data-nosnippet>84</a>/// the same way as channel subdirectories.
 <a href=#85 id=85 data-nosnippet>85</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>CustomSourceClient {
 <a href=#86 id=86 data-nosnippet>86</a>    source: Arc&lt;<span class="kw">dyn </span>RepoDataSource&gt;,
-<a href=#87 id=87 data-nosnippet>87</a>    platform: Platform,
+<a href=#87 id=87 data-nosnippet>87</a>    platform: Subdir,
 <a href=#88 id=88 data-nosnippet>88</a>}
 <a href=#89 id=89 data-nosnippet>89</a>
 <a href=#90 id=90 data-nosnippet>90</a><span class="kw">impl </span>CustomSourceClient {
 <a href=#91 id=91 data-nosnippet>91</a>    <span class="doccomment">/// Create a new adapter for the given source and platform.
-<a href=#92 id=92 data-nosnippet>92</a>    </span><span class="kw">pub fn </span>new(source: Arc&lt;<span class="kw">dyn </span>RepoDataSource&gt;, platform: Platform) -&gt; <span class="self">Self </span>{
+<a href=#92 id=92 data-nosnippet>92</a>    </span><span class="kw">pub fn </span>new(source: Arc&lt;<span class="kw">dyn </span>RepoDataSource&gt;, platform: Subdir) -&gt; <span class="self">Self </span>{
 <a href=#93 id=93 data-nosnippet>93</a>        <span class="self">Self </span>{ source, platform }
 <a href=#94 id=94 data-nosnippet>94</a>    }
 <a href=#95 id=95 data-nosnippet>95</a>}

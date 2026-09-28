@@ -24,14 +24,14 @@
 <a href=#22 id=22 data-nosnippet>22</a>    StreamExt, TryStreamExt,
 <a href=#23 id=23 data-nosnippet>23</a>    stream::{<span class="self">self</span>, FuturesUnordered},
 <a href=#24 id=24 data-nosnippet>24</a>};
-<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>rattler_conda_types::{PackageName, Platform};
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>rattler_conda_types::{PackageName, Subdir};
 <a href=#26 id=26 data-nosnippet>26</a>
 <a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>super::{
 <a href=#28 id=28 data-nosnippet>28</a>    GatewayError, GatewayInner,
 <a href=#29 id=29 data-nosnippet>29</a>    boxed::{BoxFuture, BoxStream, box_future, box_stream},
 <a href=#30 id=30 data-nosnippet>30</a>    local_subdir::LocalSubdirClient,
 <a href=#31 id=31 data-nosnippet>31</a>    source::{CustomSourceClient, Source},
-<a href=#32 id=32 data-nosnippet>32</a>    subdir::{Subdir, SubdirData},
+<a href=#32 id=32 data-nosnippet>32</a>    subdir::{SubdirData, SubdirState},
 <a href=#33 id=33 data-nosnippet>33</a>};
 <a href=#34 id=34 data-nosnippet>34</a><span class="kw">use </span>crate::{
 <a href=#35 id=35 data-nosnippet>35</a>    Reporter,
@@ -80,7 +80,7 @@
 <a href=#78 id=78 data-nosnippet>78</a></span><span class="kw">pub struct </span>WhoNeedsQuery {
 <a href=#79 id=79 data-nosnippet>79</a>    gateway: Arc&lt;GatewayInner&gt;,
 <a href=#80 id=80 data-nosnippet>80</a>    sources: Vec&lt;Source&gt;,
-<a href=#81 id=81 data-nosnippet>81</a>    platforms: Vec&lt;Platform&gt;,
+<a href=#81 id=81 data-nosnippet>81</a>    platforms: Vec&lt;Subdir&gt;,
 <a href=#82 id=82 data-nosnippet>82</a>    target: WhoNeedsTarget,
 <a href=#83 id=83 data-nosnippet>83</a>    reporter: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>Reporter&gt;&gt;,
 <a href=#84 id=84 data-nosnippet>84</a>}
@@ -91,7 +91,7 @@
 <a href=#89 id=89 data-nosnippet>89</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>new(
 <a href=#90 id=90 data-nosnippet>90</a>        gateway: Arc&lt;GatewayInner&gt;,
 <a href=#91 id=91 data-nosnippet>91</a>        sources: Vec&lt;Source&gt;,
-<a href=#92 id=92 data-nosnippet>92</a>        platforms: Vec&lt;Platform&gt;,
+<a href=#92 id=92 data-nosnippet>92</a>        platforms: Vec&lt;Subdir&gt;,
 <a href=#93 id=93 data-nosnippet>93</a>        target: WhoNeedsTarget,
 <a href=#94 id=94 data-nosnippet>94</a>    ) -&gt; <span class="self">Self </span>{
 <a href=#95 id=95 data-nosnippet>95</a>        <span class="self">Self </span>{
@@ -140,11 +140,11 @@
 <a href=#138 id=138 data-nosnippet>138</a>    ///
 <a href=#139 id=139 data-nosnippet>139</a>    /// ```no_run
 <a href=#140 id=140 data-nosnippet>140</a>    /// # use futures::TryStreamExt;
-<a href=#141 id=141 data-nosnippet>141</a>    /// # use rattler_conda_types::{Channel, PackageName, Platform};
+<a href=#141 id=141 data-nosnippet>141</a>    /// # use rattler_conda_types::{Channel, PackageName, Subdir};
 <a href=#142 id=142 data-nosnippet>142</a>    /// # use rattler_repodata_gateway::Gateway;
 <a href=#143 id=143 data-nosnippet>143</a>    /// # async fn example(gateway: Gateway, channel: Channel, name: PackageName) -&gt; anyhow::Result&lt;()&gt; {
 <a href=#144 id=144 data-nosnippet>144</a>    /// let mut stream = gateway
-<a href=#145 id=145 data-nosnippet>145</a>    ///     .who_needs(vec![channel], vec![Platform::Linux64], name)
+<a href=#145 id=145 data-nosnippet>145</a>    ///     .who_needs(vec![channel], vec![Subdir::Linux64], name)
 <a href=#146 id=146 data-nosnippet>146</a>    ///     .stream();
 <a href=#147 id=147 data-nosnippet>147</a>    ///
 <a href=#148 id=148 data-nosnippet>148</a>    /// // Count the dependents while holding only one record at a time.
@@ -160,7 +160,7 @@
 <a href=#158 id=158 data-nosnippet>158</a>        <span class="comment">// Deduplicate platforms while keeping the input order, so the
 <a href=#159 id=159 data-nosnippet>159</a>        // result order stays deterministic and no subdir is scanned twice.
 <a href=#160 id=160 data-nosnippet>160</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>seen_platforms = std::collections::HashSet::new();
-<a href=#161 id=161 data-nosnippet>161</a>        <span class="kw">let </span>platforms: Vec&lt;Platform&gt; = <span class="self">self
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="kw">let </span>platforms: Vec&lt;Subdir&gt; = <span class="self">self
 <a href=#162 id=162 data-nosnippet>162</a>            </span>.platforms
 <a href=#163 id=163 data-nosnippet>163</a>            .iter()
 <a href=#164 id=164 data-nosnippet>164</a>            .copied()
@@ -211,14 +211,14 @@
 <a href=#209 id=209 data-nosnippet>209</a></span>}
 <a href=#210 id=210 data-nosnippet>210</a>
 <a href=#211 id=211 data-nosnippet>211</a><span class="doccomment">/// A resolved subdir tagged with the index of the source it came from.
-<a href=#212 id=212 data-nosnippet>212</a></span><span class="kw">type </span>IndexedSubdir = (usize, Arc&lt;Subdir&gt;);
+<a href=#212 id=212 data-nosnippet>212</a></span><span class="kw">type </span>IndexedSubdir = (usize, Arc&lt;SubdirState&gt;);
 <a href=#213 id=213 data-nosnippet>213</a>
 <a href=#214 id=214 data-nosnippet>214</a><span class="doccomment">/// Streams the dependents of `target` found on `platform`, across the
 <a href=#215 id=215 data-nosnippet>215</a>/// subdirs of every source, in the caller's source order.
 <a href=#216 id=216 data-nosnippet>216</a></span><span class="kw">fn </span>scan_platform(
 <a href=#217 id=217 data-nosnippet>217</a>    gateway: Arc&lt;GatewayInner&gt;,
 <a href=#218 id=218 data-nosnippet>218</a>    sources: Vec&lt;Source&gt;,
-<a href=#219 id=219 data-nosnippet>219</a>    platform: Platform,
+<a href=#219 id=219 data-nosnippet>219</a>    platform: Subdir,
 <a href=#220 id=220 data-nosnippet>220</a>    target: WhoNeedsTarget,
 <a href=#221 id=221 data-nosnippet>221</a>    reporter: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>Reporter&gt;&gt;,
 <a href=#222 id=222 data-nosnippet>222</a>) -&gt; BoxStream&lt;<span class="prelude-ty">Result</span>&lt;Dependent, GatewayError&gt;&gt; {
@@ -250,7 +250,7 @@
 <a href=#248 id=248 data-nosnippet>248</a></span><span class="kw">async fn </span>resolve_subdirs(
 <a href=#249 id=249 data-nosnippet>249</a>    gateway: Arc&lt;GatewayInner&gt;,
 <a href=#250 id=250 data-nosnippet>250</a>    sources: Vec&lt;Source&gt;,
-<a href=#251 id=251 data-nosnippet>251</a>    platform: Platform,
+<a href=#251 id=251 data-nosnippet>251</a>    platform: Subdir,
 <a href=#252 id=252 data-nosnippet>252</a>    reporter: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>Reporter&gt;&gt;,
 <a href=#253 id=253 data-nosnippet>253</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;IndexedSubdir&gt;, GatewayError&gt; {
 <a href=#254 id=254 data-nosnippet>254</a>    <span class="comment">// Kick off the subdir fetch of every channel source; custom and sparse
@@ -277,7 +277,7 @@
 <a href=#275 id=275 data-nosnippet>275</a>                <span class="kw">let </span>client = CustomSourceClient::new(custom_source, platform);
 <a href=#276 id=276 data-nosnippet>276</a>                subdirs.push((
 <a href=#277 id=277 data-nosnippet>277</a>                    source_index,
-<a href=#278 id=278 data-nosnippet>278</a>                    Arc::new(Subdir::Found(SubdirData::from_client(client))),
+<a href=#278 id=278 data-nosnippet>278</a>                    Arc::new(SubdirState::Found(SubdirData::from_client(client))),
 <a href=#279 id=279 data-nosnippet>279</a>                ));
 <a href=#280 id=280 data-nosnippet>280</a>            }
 <a href=#281 id=281 data-nosnippet>281</a>            Source::SparseRepoData(sparse_list) =&gt; {
@@ -285,10 +285,10 @@
 <a href=#283 id=283 data-nosnippet>283</a>                    .iter()
 <a href=#284 id=284 data-nosnippet>284</a>                    .find(|sparse| platform.as_str() == sparse.subdir())
 <a href=#285 id=285 data-nosnippet>285</a>                {
-<a href=#286 id=286 data-nosnippet>286</a>                    <span class="prelude-val">Some</span>(sparse) =&gt; Arc::new(Subdir::Found(SubdirData::from_client(
+<a href=#286 id=286 data-nosnippet>286</a>                    <span class="prelude-val">Some</span>(sparse) =&gt; Arc::new(SubdirState::Found(SubdirData::from_client(
 <a href=#287 id=287 data-nosnippet>287</a>                        LocalSubdirClient::new(sparse.clone()),
 <a href=#288 id=288 data-nosnippet>288</a>                    ))),
-<a href=#289 id=289 data-nosnippet>289</a>                    <span class="prelude-val">None </span>=&gt; Arc::new(Subdir::NotFound),
+<a href=#289 id=289 data-nosnippet>289</a>                    <span class="prelude-val">None </span>=&gt; Arc::new(SubdirState::NotFound),
 <a href=#290 id=290 data-nosnippet>290</a>                };
 <a href=#291 id=291 data-nosnippet>291</a>                subdirs.push((source_index, subdir));
 <a href=#292 id=292 data-nosnippet>292</a>            }
@@ -321,17 +321,17 @@
 <a href=#319 id=319 data-nosnippet>319</a>/// at most [`BATCH_CONCURRENCY`] run at once, so matches reach the consumer
 <a href=#320 id=320 data-nosnippet>320</a>/// while the rest of the subdir is still being scanned.
 <a href=#321 id=321 data-nosnippet>321</a></span><span class="kw">fn </span>scan_subdir(
-<a href=#322 id=322 data-nosnippet>322</a>    subdir: Arc&lt;Subdir&gt;,
+<a href=#322 id=322 data-nosnippet>322</a>    subdir: Arc&lt;SubdirState&gt;,
 <a href=#323 id=323 data-nosnippet>323</a>    target: WhoNeedsTarget,
 <a href=#324 id=324 data-nosnippet>324</a>    reporter: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>Reporter&gt;&gt;,
 <a href=#325 id=325 data-nosnippet>325</a>) -&gt; BoxStream&lt;<span class="prelude-ty">Result</span>&lt;Dependent, GatewayError&gt;&gt; {
 <a href=#326 id=326 data-nosnippet>326</a>    <span class="kw">let </span>names: Vec&lt;PackageName&gt; = <span class="kw">match </span>subdir.as_ref() {
-<a href=#327 id=327 data-nosnippet>327</a>        Subdir::Found(subdir_data) =&gt; subdir_data
+<a href=#327 id=327 data-nosnippet>327</a>        SubdirState::Found(subdir_data) =&gt; subdir_data
 <a href=#328 id=328 data-nosnippet>328</a>            .package_names()
 <a href=#329 id=329 data-nosnippet>329</a>            .into_iter()
 <a href=#330 id=330 data-nosnippet>330</a>            .filter_map(|name| PackageName::try_from(name).ok())
 <a href=#331 id=331 data-nosnippet>331</a>            .collect(),
-<a href=#332 id=332 data-nosnippet>332</a>        Subdir::NotFound =&gt; Vec::new(),
+<a href=#332 id=332 data-nosnippet>332</a>        SubdirState::NotFound =&gt; Vec::new(),
 <a href=#333 id=333 data-nosnippet>333</a>    };
 <a href=#334 id=334 data-nosnippet>334</a>    <span class="kw">let </span>batches: Vec&lt;Vec&lt;PackageName&gt;&gt; = names
 <a href=#335 id=335 data-nosnippet>335</a>        .chunks(NAME_BATCH_SIZE)
@@ -345,7 +345,7 @@
 <a href=#343 id=343 data-nosnippet>343</a>                <span class="kw">let </span>target = target.clone();
 <a href=#344 id=344 data-nosnippet>344</a>                <span class="kw">let </span>reporter = reporter.clone();
 <a href=#345 id=345 data-nosnippet>345</a>                spawn_scan(<span class="kw">async move </span>{
-<a href=#346 id=346 data-nosnippet>346</a>                    <span class="kw">let </span>Subdir::Found(subdir_data) = subdir.as_ref() <span class="kw">else </span>{
+<a href=#346 id=346 data-nosnippet>346</a>                    <span class="kw">let </span>SubdirState::Found(subdir_data) = subdir.as_ref() <span class="kw">else </span>{
 <a href=#347 id=347 data-nosnippet>347</a>                        <span class="kw">return </span><span class="prelude-val">Ok</span>(Vec::new());
 <a href=#348 id=348 data-nosnippet>348</a>                    };
 <a href=#349 id=349 data-nosnippet>349</a>                    <span class="kw">let </span><span class="kw-2">mut </span>matches = Vec::new();
@@ -375,7 +375,7 @@
 <a href=#373 id=373 data-nosnippet>373</a></span><span class="kw">mod </span>tests {
 <a href=#374 id=374 data-nosnippet>374</a>    <span class="kw">use </span>std::{path::Path, str::FromStr};
 <a href=#375 id=375 data-nosnippet>375</a>
-<a href=#376 id=376 data-nosnippet>376</a>    <span class="kw">use </span>rattler_conda_types::{Channel, PackageName, Platform};
+<a href=#376 id=376 data-nosnippet>376</a>    <span class="kw">use </span>rattler_conda_types::{Channel, PackageName, Subdir};
 <a href=#377 id=377 data-nosnippet>377</a>
 <a href=#378 id=378 data-nosnippet>378</a>    <span class="kw">use </span><span class="kw">super</span>::<span class="kw">super</span>::Gateway;
 <a href=#379 id=379 data-nosnippet>379</a>    <span class="kw">use </span><span class="kw">crate</span>::who_needs::{DependencyKind, Dependent, WhoNeedsTarget};
@@ -424,7 +424,7 @@
 <a href=#422 id=422 data-nosnippet>422</a>    }
 <a href=#423 id=423 data-nosnippet>423</a>
 <a href=#424 id=424 data-nosnippet>424</a>    <span class="doccomment">/// The dependents of `target` in the `dummy` channel, rendered.
-<a href=#425 id=425 data-nosnippet>425</a>    </span><span class="kw">async fn </span>who_needs_dummy(channel: <span class="kw-2">&amp;</span>str, platform: Platform, target: WhoNeedsTarget) -&gt; String {
+<a href=#425 id=425 data-nosnippet>425</a>    </span><span class="kw">async fn </span>who_needs_dummy(channel: <span class="kw-2">&amp;</span>str, platform: Subdir, target: WhoNeedsTarget) -&gt; String {
 <a href=#426 id=426 data-nosnippet>426</a>        <span class="kw">let </span>dependents = Gateway::new()
 <a href=#427 id=427 data-nosnippet>427</a>            .who_needs(<span class="macro">vec!</span>[local_channel(channel)], <span class="macro">vec!</span>[platform], target)
 <a href=#428 id=428 data-nosnippet>428</a>            .execute()
@@ -441,7 +441,7 @@
 <a href=#439 id=439 data-nosnippet>439</a>        <span class="macro">insta::assert_snapshot!</span>(
 <a href=#440 id=440 data-nosnippet>440</a>            who_needs_dummy(
 <a href=#441 id=441 data-nosnippet>441</a>                <span class="string">"dummy"</span>,
-<a href=#442 id=442 data-nosnippet>442</a>                Platform::Linux64,
+<a href=#442 id=442 data-nosnippet>442</a>                Subdir::Linux64,
 <a href=#443 id=443 data-nosnippet>443</a>                PackageName::from_str(<span class="string">"bors"</span>).unwrap().into(),
 <a href=#444 id=444 data-nosnippet>444</a>            )
 <a href=#445 id=445 data-nosnippet>445</a>            .<span class="kw">await</span>,
@@ -457,9 +457,9 @@
 <a href=#455 id=455 data-nosnippet>455</a>    /// matches it: the `bors &lt;2.0` edges disappear for `bors 2.1`.
 <a href=#456 id=456 data-nosnippet>456</a>    </span><span class="attr">#[tokio::test]
 <a href=#457 id=457 data-nosnippet>457</a>    </span><span class="kw">async fn </span>test_who_needs_record_target() {
-<a href=#458 id=458 data-nosnippet>458</a>        <span class="kw">let </span>bors_1_1 = record(<span class="kw-2">&amp;</span>local_channel(<span class="string">"dummy"</span>), Platform::Linux64, <span class="string">"bors"</span>, <span class="string">"1.1"</span>).<span class="kw">await</span>;
+<a href=#458 id=458 data-nosnippet>458</a>        <span class="kw">let </span>bors_1_1 = record(<span class="kw-2">&amp;</span>local_channel(<span class="string">"dummy"</span>), Subdir::Linux64, <span class="string">"bors"</span>, <span class="string">"1.1"</span>).<span class="kw">await</span>;
 <a href=#459 id=459 data-nosnippet>459</a>        <span class="macro">insta::assert_snapshot!</span>(
-<a href=#460 id=460 data-nosnippet>460</a>            who_needs_dummy(<span class="string">"dummy"</span>, Platform::Linux64, bors_1_1.into()).<span class="kw">await</span>,
+<a href=#460 id=460 data-nosnippet>460</a>            who_needs_dummy(<span class="string">"dummy"</span>, Subdir::Linux64, bors_1_1.into()).<span class="kw">await</span>,
 <a href=#461 id=461 data-nosnippet>461</a>            @<span class="string">r###"
 <a href=#462 id=462 data-nosnippet>462</a>        constrains | foo-3.0.2-py36h1af98f8_3 | bors &lt;2.0
 <a href=#463 id=463 data-nosnippet>463</a>        depends | foobar-2.0-bla_1 | bors &lt;2.0
@@ -467,9 +467,9 @@
 <a href=#465 id=465 data-nosnippet>465</a>        "###
 <a href=#466 id=466 data-nosnippet>466</a>        </span>);
 <a href=#467 id=467 data-nosnippet>467</a>
-<a href=#468 id=468 data-nosnippet>468</a>        <span class="kw">let </span>bors_2_1 = record(<span class="kw-2">&amp;</span>local_channel(<span class="string">"dummy"</span>), Platform::Linux64, <span class="string">"bors"</span>, <span class="string">"2.1"</span>).<span class="kw">await</span>;
+<a href=#468 id=468 data-nosnippet>468</a>        <span class="kw">let </span>bors_2_1 = record(<span class="kw-2">&amp;</span>local_channel(<span class="string">"dummy"</span>), Subdir::Linux64, <span class="string">"bors"</span>, <span class="string">"2.1"</span>).<span class="kw">await</span>;
 <a href=#469 id=469 data-nosnippet>469</a>        <span class="macro">insta::assert_snapshot!</span>(
-<a href=#470 id=470 data-nosnippet>470</a>            who_needs_dummy(<span class="string">"dummy"</span>, Platform::Linux64, bors_2_1.into()).<span class="kw">await</span>,
+<a href=#470 id=470 data-nosnippet>470</a>            who_needs_dummy(<span class="string">"dummy"</span>, Subdir::Linux64, bors_2_1.into()).<span class="kw">await</span>,
 <a href=#471 id=471 data-nosnippet>471</a>            @<span class="string">""
 <a href=#472 id=472 data-nosnippet>472</a>        </span>);
 <a href=#473 id=473 data-nosnippet>473</a>    }
@@ -483,7 +483,7 @@
 <a href=#481 id=481 data-nosnippet>481</a>            build_string: <span class="string">"0"</span>.to_string(),
 <a href=#482 id=482 data-nosnippet>482</a>        };
 <a href=#483 id=483 data-nosnippet>483</a>        <span class="macro">insta::assert_snapshot!</span>(
-<a href=#484 id=484 data-nosnippet>484</a>            who_needs_dummy(<span class="string">"dummy"</span>, Platform::Linux64, cuda.into()).<span class="kw">await</span>,
+<a href=#484 id=484 data-nosnippet>484</a>            who_needs_dummy(<span class="string">"dummy"</span>, Subdir::Linux64, cuda.into()).<span class="kw">await</span>,
 <a href=#485 id=485 data-nosnippet>485</a>            @<span class="string">"constrains | cuda-version-12.5-hd4f0392_3 | __cuda &gt;=12.1"
 <a href=#486 id=486 data-nosnippet>486</a>        </span>);
 <a href=#487 id=487 data-nosnippet>487</a>    }
@@ -498,7 +498,7 @@
 <a href=#496 id=496 data-nosnippet>496</a>        <span class="macro">insta::assert_snapshot!</span>(
 <a href=#497 id=497 data-nosnippet>497</a>            who_needs_dummy(
 <a href=#498 id=498 data-nosnippet>498</a>                channel,
-<a href=#499 id=499 data-nosnippet>499</a>                Platform::NoArch,
+<a href=#499 id=499 data-nosnippet>499</a>                Subdir::NoArch,
 <a href=#500 id=500 data-nosnippet>500</a>                PackageName::from_str(<span class="string">"bar"</span>).unwrap().into(),
 <a href=#501 id=501 data-nosnippet>501</a>            )
 <a href=#502 id=502 data-nosnippet>502</a>            .<span class="kw">await</span>,
@@ -509,9 +509,9 @@
 <a href=#507 id=507 data-nosnippet>507</a>        "###
 <a href=#508 id=508 data-nosnippet>508</a>        </span>);
 <a href=#509 id=509 data-nosnippet>509</a>
-<a href=#510 id=510 data-nosnippet>510</a>        <span class="kw">let </span>bar_1 = record(<span class="kw-2">&amp;</span>local_channel(channel), Platform::NoArch, <span class="string">"bar"</span>, <span class="string">"1"</span>).<span class="kw">await</span>;
+<a href=#510 id=510 data-nosnippet>510</a>        <span class="kw">let </span>bar_1 = record(<span class="kw-2">&amp;</span>local_channel(channel), Subdir::NoArch, <span class="string">"bar"</span>, <span class="string">"1"</span>).<span class="kw">await</span>;
 <a href=#511 id=511 data-nosnippet>511</a>        <span class="macro">insta::assert_snapshot!</span>(
-<a href=#512 id=512 data-nosnippet>512</a>            who_needs_dummy(channel, Platform::NoArch, bar_1.into()).<span class="kw">await</span>,
+<a href=#512 id=512 data-nosnippet>512</a>            who_needs_dummy(channel, Subdir::NoArch, bar_1.into()).<span class="kw">await</span>,
 <a href=#513 id=513 data-nosnippet>513</a>            @<span class="string">r###"
 <a href=#514 id=514 data-nosnippet>514</a>        extra_depends[extra1] | conflicting-extras-1-xxx | bar &lt;2
 <a href=#515 id=515 data-nosnippet>515</a>        extra_depends[with-bar] | foo-1-xxx | bar &lt;2
@@ -523,7 +523,7 @@
 <a href=#521 id=521 data-nosnippet>521</a>    /// a concrete [`WhoNeedsTarget`].
 <a href=#522 id=522 data-nosnippet>522</a>    </span><span class="kw">async fn </span>record(
 <a href=#523 id=523 data-nosnippet>523</a>        channel: <span class="kw-2">&amp;</span>Channel,
-<a href=#524 id=524 data-nosnippet>524</a>        platform: Platform,
+<a href=#524 id=524 data-nosnippet>524</a>        platform: Subdir,
 <a href=#525 id=525 data-nosnippet>525</a>        name: <span class="kw-2">&amp;</span>str,
 <a href=#526 id=526 data-nosnippet>526</a>        version: <span class="kw-2">&amp;</span>str,
 <a href=#527 id=527 data-nosnippet>527</a>    ) -&gt; rattler_conda_types::PackageRecord {
@@ -556,7 +556,7 @@
 <a href=#554 id=554 data-nosnippet>554</a>            .who_needs(
 <a href=#555 id=555 data-nosnippet>555</a>                <span class="macro">vec!</span>[channel.clone()],
 <a href=#556 id=556 data-nosnippet>556</a>                <span class="comment">// The duplicate platform must be scanned only once.
-<a href=#557 id=557 data-nosnippet>557</a>                </span><span class="macro">vec!</span>[Platform::Linux64, Platform::NoArch, Platform::Linux64],
+<a href=#557 id=557 data-nosnippet>557</a>                </span><span class="macro">vec!</span>[Subdir::Linux64, Subdir::NoArch, Subdir::Linux64],
 <a href=#558 id=558 data-nosnippet>558</a>                target.clone(),
 <a href=#559 id=559 data-nosnippet>559</a>            )
 <a href=#560 id=560 data-nosnippet>560</a>            .execute()
@@ -581,199 +581,195 @@
 <a href=#579 id=579 data-nosnippet>579</a>
 <a href=#580 id=580 data-nosnippet>580</a>        <span class="comment">// The duplicate platform did not duplicate results.
 <a href=#581 id=581 data-nosnippet>581</a>        </span><span class="kw">let </span>deduplicated = gateway
-<a href=#582 id=582 data-nosnippet>582</a>            .who_needs(
-<a href=#583 id=583 data-nosnippet>583</a>                <span class="macro">vec!</span>[channel],
-<a href=#584 id=584 data-nosnippet>584</a>                <span class="macro">vec!</span>[Platform::Linux64, Platform::NoArch],
-<a href=#585 id=585 data-nosnippet>585</a>                target,
-<a href=#586 id=586 data-nosnippet>586</a>            )
-<a href=#587 id=587 data-nosnippet>587</a>            .execute()
-<a href=#588 id=588 data-nosnippet>588</a>            .<span class="kw">await
-<a href=#589 id=589 data-nosnippet>589</a>            </span>.unwrap();
-<a href=#590 id=590 data-nosnippet>590</a>        <span class="macro">assert_eq!</span>(dependents.len(), deduplicated.len());
-<a href=#591 id=591 data-nosnippet>591</a>    }
-<a href=#592 id=592 data-nosnippet>592</a>
-<a href=#593 id=593 data-nosnippet>593</a>    <span class="attr">#[tokio::test]
-<a href=#594 id=594 data-nosnippet>594</a>    </span><span class="kw">async fn </span>test_who_needs_does_not_populate_record_cache() {
-<a href=#595 id=595 data-nosnippet>595</a>        <span class="kw">let </span>channel = local_conda_forge().<span class="kw">await</span>;
-<a href=#596 id=596 data-nosnippet>596</a>        <span class="kw">let </span>gateway = Gateway::new();
-<a href=#597 id=597 data-nosnippet>597</a>
-<a href=#598 id=598 data-nosnippet>598</a>        <span class="comment">// Prime the cache with a single package through an ordinary query.
-<a href=#599 id=599 data-nosnippet>599</a>        </span><span class="kw">let </span>python = PackageName::from_str(<span class="string">"python"</span>).unwrap();
-<a href=#600 id=600 data-nosnippet>600</a>        gateway
-<a href=#601 id=601 data-nosnippet>601</a>            .query(
-<a href=#602 id=602 data-nosnippet>602</a>                <span class="macro">vec!</span>[channel.clone()],
-<a href=#603 id=603 data-nosnippet>603</a>                <span class="macro">vec!</span>[Platform::Linux64],
-<a href=#604 id=604 data-nosnippet>604</a>                <span class="macro">vec!</span>[python.clone()],
-<a href=#605 id=605 data-nosnippet>605</a>            )
-<a href=#606 id=606 data-nosnippet>606</a>            .recursive(<span class="bool-val">false</span>)
-<a href=#607 id=607 data-nosnippet>607</a>            .execute()
-<a href=#608 id=608 data-nosnippet>608</a>            .<span class="kw">await
-<a href=#609 id=609 data-nosnippet>609</a>            </span>.unwrap();
-<a href=#610 id=610 data-nosnippet>610</a>
-<a href=#611 id=611 data-nosnippet>611</a>        <span class="kw">let </span>linux_subdir = gateway
-<a href=#612 id=612 data-nosnippet>612</a>            .inner
-<a href=#613 id=613 data-nosnippet>613</a>            .get_or_create_subdir(<span class="kw-2">&amp;</span>channel, Platform::Linux64, <span class="prelude-val">None</span>, <span class="bool-val">true</span>)
-<a href=#614 id=614 data-nosnippet>614</a>            .<span class="kw">await
-<a href=#615 id=615 data-nosnippet>615</a>            </span>.unwrap();
-<a href=#616 id=616 data-nosnippet>616</a>        <span class="kw">let </span><span class="kw">super</span>::Subdir::Found(linux_data) = linux_subdir.as_ref() <span class="kw">else </span>{
-<a href=#617 id=617 data-nosnippet>617</a>            <span class="macro">panic!</span>(<span class="string">"expected the linux-64 subdir to exist"</span>);
-<a href=#618 id=618 data-nosnippet>618</a>        };
-<a href=#619 id=619 data-nosnippet>619</a>        <span class="macro">assert_eq!</span>(linux_data.cached_package_count(), <span class="number">1</span>);
-<a href=#620 id=620 data-nosnippet>620</a>
-<a href=#621 id=621 data-nosnippet>621</a>        <span class="comment">// The reverse dependency scan must reuse the cached entry without
-<a href=#622 id=622 data-nosnippet>622</a>        // inserting the thousands of other scanned packages.
-<a href=#623 id=623 data-nosnippet>623</a>        </span><span class="kw">let </span>dependents = gateway
-<a href=#624 id=624 data-nosnippet>624</a>            .who_needs(
-<a href=#625 id=625 data-nosnippet>625</a>                <span class="macro">vec!</span>[channel.clone()],
-<a href=#626 id=626 data-nosnippet>626</a>                <span class="macro">vec!</span>[Platform::Linux64, Platform::NoArch],
-<a href=#627 id=627 data-nosnippet>627</a>                PackageName::from_str(<span class="string">"python_abi"</span>).unwrap(),
-<a href=#628 id=628 data-nosnippet>628</a>            )
-<a href=#629 id=629 data-nosnippet>629</a>            .execute()
-<a href=#630 id=630 data-nosnippet>630</a>            .<span class="kw">await
-<a href=#631 id=631 data-nosnippet>631</a>            </span>.unwrap();
-<a href=#632 id=632 data-nosnippet>632</a>        <span class="macro">assert!</span>(!dependents.is_empty());
-<a href=#633 id=633 data-nosnippet>633</a>
-<a href=#634 id=634 data-nosnippet>634</a>        <span class="macro">assert_eq!</span>(linux_data.cached_package_count(), <span class="number">1</span>);
-<a href=#635 id=635 data-nosnippet>635</a>        <span class="kw">let </span>noarch_subdir = gateway
-<a href=#636 id=636 data-nosnippet>636</a>            .inner
-<a href=#637 id=637 data-nosnippet>637</a>            .get_or_create_subdir(<span class="kw-2">&amp;</span>channel, Platform::NoArch, <span class="prelude-val">None</span>, <span class="bool-val">true</span>)
-<a href=#638 id=638 data-nosnippet>638</a>            .<span class="kw">await
-<a href=#639 id=639 data-nosnippet>639</a>            </span>.unwrap();
-<a href=#640 id=640 data-nosnippet>640</a>        <span class="kw">let </span><span class="kw">super</span>::Subdir::Found(noarch_data) = noarch_subdir.as_ref() <span class="kw">else </span>{
-<a href=#641 id=641 data-nosnippet>641</a>            <span class="macro">panic!</span>(<span class="string">"expected the noarch subdir to exist"</span>);
-<a href=#642 id=642 data-nosnippet>642</a>        };
-<a href=#643 id=643 data-nosnippet>643</a>        <span class="macro">assert_eq!</span>(noarch_data.cached_package_count(), <span class="number">0</span>);
-<a href=#644 id=644 data-nosnippet>644</a>
-<a href=#645 id=645 data-nosnippet>645</a>        <span class="comment">// The previously cached records are still usable afterwards.
-<a href=#646 id=646 data-nosnippet>646</a>        </span><span class="kw">let </span>records = gateway
-<a href=#647 id=647 data-nosnippet>647</a>            .query(<span class="macro">vec!</span>[channel], <span class="macro">vec!</span>[Platform::Linux64], <span class="macro">vec!</span>[python])
-<a href=#648 id=648 data-nosnippet>648</a>            .recursive(<span class="bool-val">false</span>)
-<a href=#649 id=649 data-nosnippet>649</a>            .execute()
-<a href=#650 id=650 data-nosnippet>650</a>            .<span class="kw">await
-<a href=#651 id=651 data-nosnippet>651</a>            </span>.unwrap();
-<a href=#652 id=652 data-nosnippet>652</a>        <span class="macro">assert!</span>(records.repodata.iter().any(|repodata| !repodata.is_empty()));
-<a href=#653 id=653 data-nosnippet>653</a>    }
-<a href=#654 id=654 data-nosnippet>654</a>
-<a href=#655 id=655 data-nosnippet>655</a>    <span class="attr">#[tokio::test]
-<a href=#656 id=656 data-nosnippet>656</a>    </span><span class="kw">async fn </span>test_who_needs_propagates_errors() {
-<a href=#657 id=657 data-nosnippet>657</a>        <span class="kw">let </span>gateway = Gateway::new();
-<a href=#658 id=658 data-nosnippet>658</a>        <span class="kw">let </span>channel =
-<a href=#659 id=659 data-nosnippet>659</a>            Channel::from_url(url::Url::parse(<span class="string">"file:///definitely/does/not/exist"</span>).unwrap());
-<a href=#660 id=660 data-nosnippet>660</a>        <span class="comment">// A missing subdir is treated as empty for every platform except
-<a href=#661 id=661 data-nosnippet>661</a>        // noarch (same as `RepoDataQuery`), so query noarch to observe the
-<a href=#662 id=662 data-nosnippet>662</a>        // fetch error of a user-supplied channel propagating.
-<a href=#663 id=663 data-nosnippet>663</a>        </span><span class="kw">let </span>result = gateway
-<a href=#664 id=664 data-nosnippet>664</a>            .who_needs(
-<a href=#665 id=665 data-nosnippet>665</a>                <span class="macro">vec!</span>[channel],
-<a href=#666 id=666 data-nosnippet>666</a>                <span class="macro">vec!</span>[Platform::NoArch],
-<a href=#667 id=667 data-nosnippet>667</a>                PackageName::from_str(<span class="string">"python"</span>).unwrap(),
-<a href=#668 id=668 data-nosnippet>668</a>            )
-<a href=#669 id=669 data-nosnippet>669</a>            .execute()
-<a href=#670 id=670 data-nosnippet>670</a>            .<span class="kw">await</span>;
-<a href=#671 id=671 data-nosnippet>671</a>        <span class="macro">assert!</span>(result.is_err());
-<a href=#672 id=672 data-nosnippet>672</a>    }
-<a href=#673 id=673 data-nosnippet>673</a>
-<a href=#674 id=674 data-nosnippet>674</a>    <span class="attr">#[rstest::rstest]
-<a href=#675 id=675 data-nosnippet>675</a>    #[tokio::test]
-<a href=#676 id=676 data-nosnippet>676</a>    </span><span class="kw">async fn </span>test_who_needs_uses_full_repodata(
-<a href=#677 id=677 data-nosnippet>677</a>        <span class="attr">#[values(<span class="bool-val">false</span>, <span class="bool-val">true</span>)] </span>prime_cache: bool,
-<a href=#678 id=678 data-nosnippet>678</a>        <span class="attr">#[values(<span class="bool-val">false</span>, <span class="bool-val">true</span>)] </span>sharded_enabled: bool,
-<a href=#679 id=679 data-nosnippet>679</a>    ) {
-<a href=#680 id=680 data-nosnippet>680</a>        <span class="kw">use </span>rattler_conda_types::{RepodataRevisions, ShardedRepodata, ShardedSubdirInfo};
+<a href=#582 id=582 data-nosnippet>582</a>            .who_needs(<span class="macro">vec!</span>[channel], <span class="macro">vec!</span>[Subdir::Linux64, Subdir::NoArch], target)
+<a href=#583 id=583 data-nosnippet>583</a>            .execute()
+<a href=#584 id=584 data-nosnippet>584</a>            .<span class="kw">await
+<a href=#585 id=585 data-nosnippet>585</a>            </span>.unwrap();
+<a href=#586 id=586 data-nosnippet>586</a>        <span class="macro">assert_eq!</span>(dependents.len(), deduplicated.len());
+<a href=#587 id=587 data-nosnippet>587</a>    }
+<a href=#588 id=588 data-nosnippet>588</a>
+<a href=#589 id=589 data-nosnippet>589</a>    <span class="attr">#[tokio::test]
+<a href=#590 id=590 data-nosnippet>590</a>    </span><span class="kw">async fn </span>test_who_needs_does_not_populate_record_cache() {
+<a href=#591 id=591 data-nosnippet>591</a>        <span class="kw">let </span>channel = local_conda_forge().<span class="kw">await</span>;
+<a href=#592 id=592 data-nosnippet>592</a>        <span class="kw">let </span>gateway = Gateway::new();
+<a href=#593 id=593 data-nosnippet>593</a>
+<a href=#594 id=594 data-nosnippet>594</a>        <span class="comment">// Prime the cache with a single package through an ordinary query.
+<a href=#595 id=595 data-nosnippet>595</a>        </span><span class="kw">let </span>python = PackageName::from_str(<span class="string">"python"</span>).unwrap();
+<a href=#596 id=596 data-nosnippet>596</a>        gateway
+<a href=#597 id=597 data-nosnippet>597</a>            .query(
+<a href=#598 id=598 data-nosnippet>598</a>                <span class="macro">vec!</span>[channel.clone()],
+<a href=#599 id=599 data-nosnippet>599</a>                <span class="macro">vec!</span>[Subdir::Linux64],
+<a href=#600 id=600 data-nosnippet>600</a>                <span class="macro">vec!</span>[python.clone()],
+<a href=#601 id=601 data-nosnippet>601</a>            )
+<a href=#602 id=602 data-nosnippet>602</a>            .recursive(<span class="bool-val">false</span>)
+<a href=#603 id=603 data-nosnippet>603</a>            .execute()
+<a href=#604 id=604 data-nosnippet>604</a>            .<span class="kw">await
+<a href=#605 id=605 data-nosnippet>605</a>            </span>.unwrap();
+<a href=#606 id=606 data-nosnippet>606</a>
+<a href=#607 id=607 data-nosnippet>607</a>        <span class="kw">let </span>linux_subdir = gateway
+<a href=#608 id=608 data-nosnippet>608</a>            .inner
+<a href=#609 id=609 data-nosnippet>609</a>            .get_or_create_subdir(<span class="kw-2">&amp;</span>channel, Subdir::Linux64, <span class="prelude-val">None</span>, <span class="bool-val">true</span>)
+<a href=#610 id=610 data-nosnippet>610</a>            .<span class="kw">await
+<a href=#611 id=611 data-nosnippet>611</a>            </span>.unwrap();
+<a href=#612 id=612 data-nosnippet>612</a>        <span class="kw">let </span><span class="kw">super</span>::SubdirState::Found(linux_data) = linux_subdir.as_ref() <span class="kw">else </span>{
+<a href=#613 id=613 data-nosnippet>613</a>            <span class="macro">panic!</span>(<span class="string">"expected the linux-64 subdir to exist"</span>);
+<a href=#614 id=614 data-nosnippet>614</a>        };
+<a href=#615 id=615 data-nosnippet>615</a>        <span class="macro">assert_eq!</span>(linux_data.cached_package_count(), <span class="number">1</span>);
+<a href=#616 id=616 data-nosnippet>616</a>
+<a href=#617 id=617 data-nosnippet>617</a>        <span class="comment">// The reverse dependency scan must reuse the cached entry without
+<a href=#618 id=618 data-nosnippet>618</a>        // inserting the thousands of other scanned packages.
+<a href=#619 id=619 data-nosnippet>619</a>        </span><span class="kw">let </span>dependents = gateway
+<a href=#620 id=620 data-nosnippet>620</a>            .who_needs(
+<a href=#621 id=621 data-nosnippet>621</a>                <span class="macro">vec!</span>[channel.clone()],
+<a href=#622 id=622 data-nosnippet>622</a>                <span class="macro">vec!</span>[Subdir::Linux64, Subdir::NoArch],
+<a href=#623 id=623 data-nosnippet>623</a>                PackageName::from_str(<span class="string">"python_abi"</span>).unwrap(),
+<a href=#624 id=624 data-nosnippet>624</a>            )
+<a href=#625 id=625 data-nosnippet>625</a>            .execute()
+<a href=#626 id=626 data-nosnippet>626</a>            .<span class="kw">await
+<a href=#627 id=627 data-nosnippet>627</a>            </span>.unwrap();
+<a href=#628 id=628 data-nosnippet>628</a>        <span class="macro">assert!</span>(!dependents.is_empty());
+<a href=#629 id=629 data-nosnippet>629</a>
+<a href=#630 id=630 data-nosnippet>630</a>        <span class="macro">assert_eq!</span>(linux_data.cached_package_count(), <span class="number">1</span>);
+<a href=#631 id=631 data-nosnippet>631</a>        <span class="kw">let </span>noarch_subdir = gateway
+<a href=#632 id=632 data-nosnippet>632</a>            .inner
+<a href=#633 id=633 data-nosnippet>633</a>            .get_or_create_subdir(<span class="kw-2">&amp;</span>channel, Subdir::NoArch, <span class="prelude-val">None</span>, <span class="bool-val">true</span>)
+<a href=#634 id=634 data-nosnippet>634</a>            .<span class="kw">await
+<a href=#635 id=635 data-nosnippet>635</a>            </span>.unwrap();
+<a href=#636 id=636 data-nosnippet>636</a>        <span class="kw">let </span><span class="kw">super</span>::SubdirState::Found(noarch_data) = noarch_subdir.as_ref() <span class="kw">else </span>{
+<a href=#637 id=637 data-nosnippet>637</a>            <span class="macro">panic!</span>(<span class="string">"expected the noarch subdir to exist"</span>);
+<a href=#638 id=638 data-nosnippet>638</a>        };
+<a href=#639 id=639 data-nosnippet>639</a>        <span class="macro">assert_eq!</span>(noarch_data.cached_package_count(), <span class="number">0</span>);
+<a href=#640 id=640 data-nosnippet>640</a>
+<a href=#641 id=641 data-nosnippet>641</a>        <span class="comment">// The previously cached records are still usable afterwards.
+<a href=#642 id=642 data-nosnippet>642</a>        </span><span class="kw">let </span>records = gateway
+<a href=#643 id=643 data-nosnippet>643</a>            .query(<span class="macro">vec!</span>[channel], <span class="macro">vec!</span>[Subdir::Linux64], <span class="macro">vec!</span>[python])
+<a href=#644 id=644 data-nosnippet>644</a>            .recursive(<span class="bool-val">false</span>)
+<a href=#645 id=645 data-nosnippet>645</a>            .execute()
+<a href=#646 id=646 data-nosnippet>646</a>            .<span class="kw">await
+<a href=#647 id=647 data-nosnippet>647</a>            </span>.unwrap();
+<a href=#648 id=648 data-nosnippet>648</a>        <span class="macro">assert!</span>(records.repodata.iter().any(|repodata| !repodata.is_empty()));
+<a href=#649 id=649 data-nosnippet>649</a>    }
+<a href=#650 id=650 data-nosnippet>650</a>
+<a href=#651 id=651 data-nosnippet>651</a>    <span class="attr">#[tokio::test]
+<a href=#652 id=652 data-nosnippet>652</a>    </span><span class="kw">async fn </span>test_who_needs_propagates_errors() {
+<a href=#653 id=653 data-nosnippet>653</a>        <span class="kw">let </span>gateway = Gateway::new();
+<a href=#654 id=654 data-nosnippet>654</a>        <span class="kw">let </span>channel =
+<a href=#655 id=655 data-nosnippet>655</a>            Channel::from_url(url::Url::parse(<span class="string">"file:///definitely/does/not/exist"</span>).unwrap());
+<a href=#656 id=656 data-nosnippet>656</a>        <span class="comment">// A missing subdir is treated as empty for every platform except
+<a href=#657 id=657 data-nosnippet>657</a>        // noarch (same as `RepoDataQuery`), so query noarch to observe the
+<a href=#658 id=658 data-nosnippet>658</a>        // fetch error of a user-supplied channel propagating.
+<a href=#659 id=659 data-nosnippet>659</a>        </span><span class="kw">let </span>result = gateway
+<a href=#660 id=660 data-nosnippet>660</a>            .who_needs(
+<a href=#661 id=661 data-nosnippet>661</a>                <span class="macro">vec!</span>[channel],
+<a href=#662 id=662 data-nosnippet>662</a>                <span class="macro">vec!</span>[Subdir::NoArch],
+<a href=#663 id=663 data-nosnippet>663</a>                PackageName::from_str(<span class="string">"python"</span>).unwrap(),
+<a href=#664 id=664 data-nosnippet>664</a>            )
+<a href=#665 id=665 data-nosnippet>665</a>            .execute()
+<a href=#666 id=666 data-nosnippet>666</a>            .<span class="kw">await</span>;
+<a href=#667 id=667 data-nosnippet>667</a>        <span class="macro">assert!</span>(result.is_err());
+<a href=#668 id=668 data-nosnippet>668</a>    }
+<a href=#669 id=669 data-nosnippet>669</a>
+<a href=#670 id=670 data-nosnippet>670</a>    <span class="attr">#[rstest::rstest]
+<a href=#671 id=671 data-nosnippet>671</a>    #[tokio::test]
+<a href=#672 id=672 data-nosnippet>672</a>    </span><span class="kw">async fn </span>test_who_needs_uses_full_repodata(
+<a href=#673 id=673 data-nosnippet>673</a>        <span class="attr">#[values(<span class="bool-val">false</span>, <span class="bool-val">true</span>)] </span>prime_cache: bool,
+<a href=#674 id=674 data-nosnippet>674</a>        <span class="attr">#[values(<span class="bool-val">false</span>, <span class="bool-val">true</span>)] </span>sharded_enabled: bool,
+<a href=#675 id=675 data-nosnippet>675</a>    ) {
+<a href=#676 id=676 data-nosnippet>676</a>        <span class="kw">use </span>rattler_conda_types::{RepodataRevisions, ShardedRepodata, ShardedSubdirInfo};
+<a href=#677 id=677 data-nosnippet>677</a>
+<a href=#678 id=678 data-nosnippet>678</a>        <span class="kw">use </span>crate::{
+<a href=#679 id=679 data-nosnippet>679</a>            ChannelConfig, SourceConfig, utils::simple_channel_server::SimpleChannelServer,
+<a href=#680 id=680 data-nosnippet>680</a>        };
 <a href=#681 id=681 data-nosnippet>681</a>
-<a href=#682 id=682 data-nosnippet>682</a>        <span class="kw">use </span>crate::{
-<a href=#683 id=683 data-nosnippet>683</a>            ChannelConfig, SourceConfig, utils::simple_channel_server::SimpleChannelServer,
-<a href=#684 id=684 data-nosnippet>684</a>        };
-<a href=#685 id=685 data-nosnippet>685</a>
-<a href=#686 id=686 data-nosnippet>686</a>        <span class="kw">let </span>channel_dir = tempfile::tempdir().unwrap();
-<a href=#687 id=687 data-nosnippet>687</a>        <span class="kw">let </span>subdir = channel_dir.path().join(<span class="string">"linux-64"</span>);
-<a href=#688 id=688 data-nosnippet>688</a>        std::fs::create_dir(<span class="kw-2">&amp;</span>subdir).unwrap();
-<a href=#689 id=689 data-nosnippet>689</a>        std::fs::write(
-<a href=#690 id=690 data-nosnippet>690</a>            subdir.join(<span class="string">"repodata.json"</span>),
-<a href=#691 id=691 data-nosnippet>691</a>            <span class="macro">include_str!</span>(<span class="string">"../../../../test-data/channels/dummy/linux-64/repodata.json"</span>),
-<a href=#692 id=692 data-nosnippet>692</a>        )
-<a href=#693 id=693 data-nosnippet>693</a>        .unwrap();
-<a href=#694 id=694 data-nosnippet>694</a>
-<a href=#695 id=695 data-nosnippet>695</a>        <span class="comment">// Advertise a shard that cannot be fetched. The scan must use full
-<a href=#696 id=696 data-nosnippet>696</a>        // repodata even when an earlier names query has cached this index.
-<a href=#697 id=697 data-nosnippet>697</a>        </span><span class="kw">let </span>index = ShardedRepodata {
-<a href=#698 id=698 data-nosnippet>698</a>            info: ShardedSubdirInfo {
-<a href=#699 id=699 data-nosnippet>699</a>                subdir: <span class="string">"linux-64"</span>.into(),
-<a href=#700 id=700 data-nosnippet>700</a>                base_url: <span class="string">"./"</span>.into(),
-<a href=#701 id=701 data-nosnippet>701</a>                shards_base_url: <span class="string">"./shards/"</span>.into(),
-<a href=#702 id=702 data-nosnippet>702</a>                created_at: <span class="prelude-val">None</span>,
-<a href=#703 id=703 data-nosnippet>703</a>                repodata_revisions: RepodataRevisions::default(),
-<a href=#704 id=704 data-nosnippet>704</a>                channel_relations: <span class="prelude-val">None</span>,
-<a href=#705 id=705 data-nosnippet>705</a>            },
-<a href=#706 id=706 data-nosnippet>706</a>            shards: [(<span class="string">"missing-shard"</span>.into(), [<span class="number">0u8</span>; <span class="number">32</span>].into())]
-<a href=#707 id=707 data-nosnippet>707</a>                .into_iter()
-<a href=#708 id=708 data-nosnippet>708</a>                .collect(),
-<a href=#709 id=709 data-nosnippet>709</a>        };
-<a href=#710 id=710 data-nosnippet>710</a>        <span class="kw">let </span>index_bytes = rmp_serde::to_vec_named(<span class="kw-2">&amp;</span>index).unwrap();
-<a href=#711 id=711 data-nosnippet>711</a>        std::fs::write(
-<a href=#712 id=712 data-nosnippet>712</a>            subdir.join(<span class="string">"repodata_shards.msgpack.zst"</span>),
-<a href=#713 id=713 data-nosnippet>713</a>            zstd::encode_all(index_bytes.as_slice(), <span class="number">0</span>).unwrap(),
-<a href=#714 id=714 data-nosnippet>714</a>        )
-<a href=#715 id=715 data-nosnippet>715</a>        .unwrap();
-<a href=#716 id=716 data-nosnippet>716</a>
-<a href=#717 id=717 data-nosnippet>717</a>        <span class="kw">let </span>server = SimpleChannelServer::new(channel_dir.path()).<span class="kw">await</span>;
-<a href=#718 id=718 data-nosnippet>718</a>        <span class="kw">let </span>url = server.url();
-<a href=#719 id=719 data-nosnippet>719</a>        <span class="kw">let </span>channel = Channel::from_url(url.clone());
-<a href=#720 id=720 data-nosnippet>720</a>        <span class="kw">let </span>cache_dir = tempfile::tempdir().unwrap();
-<a href=#721 id=721 data-nosnippet>721</a>        <span class="kw">let </span>gateway = Gateway::builder()
-<a href=#722 id=722 data-nosnippet>722</a>            .with_client(reqwest::Client::builder().no_proxy().build().unwrap())
-<a href=#723 id=723 data-nosnippet>723</a>            .with_cache_dir(cache_dir.path())
-<a href=#724 id=724 data-nosnippet>724</a>            .with_channel_config(ChannelConfig {
-<a href=#725 id=725 data-nosnippet>725</a>                default: SourceConfig {
-<a href=#726 id=726 data-nosnippet>726</a>                    sharded_enabled: <span class="bool-val">false</span>,
-<a href=#727 id=727 data-nosnippet>727</a>                    ..SourceConfig::default()
-<a href=#728 id=728 data-nosnippet>728</a>                },
-<a href=#729 id=729 data-nosnippet>729</a>                <span class="comment">// Exercise the per-channel sharding configuration.
-<a href=#730 id=730 data-nosnippet>730</a>                </span>per_channel: [(
-<a href=#731 id=731 data-nosnippet>731</a>                    url,
-<a href=#732 id=732 data-nosnippet>732</a>                    SourceConfig {
-<a href=#733 id=733 data-nosnippet>733</a>                        sharded_enabled,
-<a href=#734 id=734 data-nosnippet>734</a>                        ..SourceConfig::default()
-<a href=#735 id=735 data-nosnippet>735</a>                    },
-<a href=#736 id=736 data-nosnippet>736</a>                )]
-<a href=#737 id=737 data-nosnippet>737</a>                .into_iter()
-<a href=#738 id=738 data-nosnippet>738</a>                .collect(),
-<a href=#739 id=739 data-nosnippet>739</a>            })
-<a href=#740 id=740 data-nosnippet>740</a>            .finish();
-<a href=#741 id=741 data-nosnippet>741</a>
-<a href=#742 id=742 data-nosnippet>742</a>        <span class="kw">if </span>prime_cache {
-<a href=#743 id=743 data-nosnippet>743</a>            gateway
-<a href=#744 id=744 data-nosnippet>744</a>                .names([channel.clone()], [Platform::Linux64])
-<a href=#745 id=745 data-nosnippet>745</a>                .<span class="kw">await
-<a href=#746 id=746 data-nosnippet>746</a>                </span>.unwrap();
-<a href=#747 id=747 data-nosnippet>747</a>        }
-<a href=#748 id=748 data-nosnippet>748</a>
-<a href=#749 id=749 data-nosnippet>749</a>        <span class="kw">let </span>dependents = gateway
-<a href=#750 id=750 data-nosnippet>750</a>            .who_needs(
-<a href=#751 id=751 data-nosnippet>751</a>                [channel.clone()],
-<a href=#752 id=752 data-nosnippet>752</a>                [Platform::Linux64],
-<a href=#753 id=753 data-nosnippet>753</a>                PackageName::new_unchecked(<span class="string">"bors"</span>),
-<a href=#754 id=754 data-nosnippet>754</a>            )
-<a href=#755 id=755 data-nosnippet>755</a>            .<span class="kw">await
-<a href=#756 id=756 data-nosnippet>756</a>            </span>.unwrap();
-<a href=#757 id=757 data-nosnippet>757</a>        <span class="macro">assert_eq!</span>(dependents.len(), <span class="number">3</span>);
-<a href=#758 id=758 data-nosnippet>758</a>
-<a href=#759 id=759 data-nosnippet>759</a>        <span class="comment">// Ordinary queries must still follow the sharding configuration,
-<a href=#760 id=760 data-nosnippet>760</a>        // including when who_needs was the first query on this gateway.
-<a href=#761 id=761 data-nosnippet>761</a>        </span><span class="kw">let </span>names = gateway.names([channel], [Platform::Linux64]).<span class="kw">await</span>.unwrap();
-<a href=#762 id=762 data-nosnippet>762</a>        <span class="kw">if </span>sharded_enabled {
-<a href=#763 id=763 data-nosnippet>763</a>            <span class="macro">assert_eq!</span>(
-<a href=#764 id=764 data-nosnippet>764</a>                names.names,
-<a href=#765 id=765 data-nosnippet>765</a>                <span class="macro">vec!</span>[PackageName::new_unchecked(<span class="string">"missing-shard"</span>)]
-<a href=#766 id=766 data-nosnippet>766</a>            );
-<a href=#767 id=767 data-nosnippet>767</a>        } <span class="kw">else </span>{
-<a href=#768 id=768 data-nosnippet>768</a>            <span class="macro">assert!</span>(names.names.contains(<span class="kw-2">&amp;</span>PackageName::new_unchecked(<span class="string">"bors"</span>)));
-<a href=#769 id=769 data-nosnippet>769</a>            <span class="macro">assert!</span>(
-<a href=#770 id=770 data-nosnippet>770</a>                !names
-<a href=#771 id=771 data-nosnippet>771</a>                    .names
-<a href=#772 id=772 data-nosnippet>772</a>                    .contains(<span class="kw-2">&amp;</span>PackageName::new_unchecked(<span class="string">"missing-shard"</span>))
-<a href=#773 id=773 data-nosnippet>773</a>            );
-<a href=#774 id=774 data-nosnippet>774</a>        }
-<a href=#775 id=775 data-nosnippet>775</a>    }
-<a href=#776 id=776 data-nosnippet>776</a>}
+<a href=#682 id=682 data-nosnippet>682</a>        <span class="kw">let </span>channel_dir = tempfile::tempdir().unwrap();
+<a href=#683 id=683 data-nosnippet>683</a>        <span class="kw">let </span>subdir = channel_dir.path().join(<span class="string">"linux-64"</span>);
+<a href=#684 id=684 data-nosnippet>684</a>        std::fs::create_dir(<span class="kw-2">&amp;</span>subdir).unwrap();
+<a href=#685 id=685 data-nosnippet>685</a>        std::fs::write(
+<a href=#686 id=686 data-nosnippet>686</a>            subdir.join(<span class="string">"repodata.json"</span>),
+<a href=#687 id=687 data-nosnippet>687</a>            <span class="macro">include_str!</span>(<span class="string">"../../../../test-data/channels/dummy/linux-64/repodata.json"</span>),
+<a href=#688 id=688 data-nosnippet>688</a>        )
+<a href=#689 id=689 data-nosnippet>689</a>        .unwrap();
+<a href=#690 id=690 data-nosnippet>690</a>
+<a href=#691 id=691 data-nosnippet>691</a>        <span class="comment">// Advertise a shard that cannot be fetched. The scan must use full
+<a href=#692 id=692 data-nosnippet>692</a>        // repodata even when an earlier names query has cached this index.
+<a href=#693 id=693 data-nosnippet>693</a>        </span><span class="kw">let </span>index = ShardedRepodata {
+<a href=#694 id=694 data-nosnippet>694</a>            info: ShardedSubdirInfo {
+<a href=#695 id=695 data-nosnippet>695</a>                subdir: <span class="string">"linux-64"</span>.into(),
+<a href=#696 id=696 data-nosnippet>696</a>                base_url: <span class="string">"./"</span>.into(),
+<a href=#697 id=697 data-nosnippet>697</a>                shards_base_url: <span class="string">"./shards/"</span>.into(),
+<a href=#698 id=698 data-nosnippet>698</a>                created_at: <span class="prelude-val">None</span>,
+<a href=#699 id=699 data-nosnippet>699</a>                repodata_revisions: RepodataRevisions::default(),
+<a href=#700 id=700 data-nosnippet>700</a>                channel_relations: <span class="prelude-val">None</span>,
+<a href=#701 id=701 data-nosnippet>701</a>            },
+<a href=#702 id=702 data-nosnippet>702</a>            shards: [(<span class="string">"missing-shard"</span>.into(), [<span class="number">0u8</span>; <span class="number">32</span>].into())]
+<a href=#703 id=703 data-nosnippet>703</a>                .into_iter()
+<a href=#704 id=704 data-nosnippet>704</a>                .collect(),
+<a href=#705 id=705 data-nosnippet>705</a>        };
+<a href=#706 id=706 data-nosnippet>706</a>        <span class="kw">let </span>index_bytes = rmp_serde::to_vec_named(<span class="kw-2">&amp;</span>index).unwrap();
+<a href=#707 id=707 data-nosnippet>707</a>        std::fs::write(
+<a href=#708 id=708 data-nosnippet>708</a>            subdir.join(<span class="string">"repodata_shards.msgpack.zst"</span>),
+<a href=#709 id=709 data-nosnippet>709</a>            zstd::encode_all(index_bytes.as_slice(), <span class="number">0</span>).unwrap(),
+<a href=#710 id=710 data-nosnippet>710</a>        )
+<a href=#711 id=711 data-nosnippet>711</a>        .unwrap();
+<a href=#712 id=712 data-nosnippet>712</a>
+<a href=#713 id=713 data-nosnippet>713</a>        <span class="kw">let </span>server = SimpleChannelServer::new(channel_dir.path()).<span class="kw">await</span>;
+<a href=#714 id=714 data-nosnippet>714</a>        <span class="kw">let </span>url = server.url();
+<a href=#715 id=715 data-nosnippet>715</a>        <span class="kw">let </span>channel = Channel::from_url(url.clone());
+<a href=#716 id=716 data-nosnippet>716</a>        <span class="kw">let </span>cache_dir = tempfile::tempdir().unwrap();
+<a href=#717 id=717 data-nosnippet>717</a>        <span class="kw">let </span>gateway = Gateway::builder()
+<a href=#718 id=718 data-nosnippet>718</a>            .with_client(reqwest::Client::builder().no_proxy().build().unwrap())
+<a href=#719 id=719 data-nosnippet>719</a>            .with_cache_dir(cache_dir.path())
+<a href=#720 id=720 data-nosnippet>720</a>            .with_channel_config(ChannelConfig {
+<a href=#721 id=721 data-nosnippet>721</a>                default: SourceConfig {
+<a href=#722 id=722 data-nosnippet>722</a>                    sharded_enabled: <span class="bool-val">false</span>,
+<a href=#723 id=723 data-nosnippet>723</a>                    ..SourceConfig::default()
+<a href=#724 id=724 data-nosnippet>724</a>                },
+<a href=#725 id=725 data-nosnippet>725</a>                <span class="comment">// Exercise the per-channel sharding configuration.
+<a href=#726 id=726 data-nosnippet>726</a>                </span>per_channel: [(
+<a href=#727 id=727 data-nosnippet>727</a>                    url,
+<a href=#728 id=728 data-nosnippet>728</a>                    SourceConfig {
+<a href=#729 id=729 data-nosnippet>729</a>                        sharded_enabled,
+<a href=#730 id=730 data-nosnippet>730</a>                        ..SourceConfig::default()
+<a href=#731 id=731 data-nosnippet>731</a>                    },
+<a href=#732 id=732 data-nosnippet>732</a>                )]
+<a href=#733 id=733 data-nosnippet>733</a>                .into_iter()
+<a href=#734 id=734 data-nosnippet>734</a>                .collect(),
+<a href=#735 id=735 data-nosnippet>735</a>            })
+<a href=#736 id=736 data-nosnippet>736</a>            .finish();
+<a href=#737 id=737 data-nosnippet>737</a>
+<a href=#738 id=738 data-nosnippet>738</a>        <span class="kw">if </span>prime_cache {
+<a href=#739 id=739 data-nosnippet>739</a>            gateway
+<a href=#740 id=740 data-nosnippet>740</a>                .names([channel.clone()], [Subdir::Linux64])
+<a href=#741 id=741 data-nosnippet>741</a>                .<span class="kw">await
+<a href=#742 id=742 data-nosnippet>742</a>                </span>.unwrap();
+<a href=#743 id=743 data-nosnippet>743</a>        }
+<a href=#744 id=744 data-nosnippet>744</a>
+<a href=#745 id=745 data-nosnippet>745</a>        <span class="kw">let </span>dependents = gateway
+<a href=#746 id=746 data-nosnippet>746</a>            .who_needs(
+<a href=#747 id=747 data-nosnippet>747</a>                [channel.clone()],
+<a href=#748 id=748 data-nosnippet>748</a>                [Subdir::Linux64],
+<a href=#749 id=749 data-nosnippet>749</a>                PackageName::new_unchecked(<span class="string">"bors"</span>),
+<a href=#750 id=750 data-nosnippet>750</a>            )
+<a href=#751 id=751 data-nosnippet>751</a>            .<span class="kw">await
+<a href=#752 id=752 data-nosnippet>752</a>            </span>.unwrap();
+<a href=#753 id=753 data-nosnippet>753</a>        <span class="macro">assert_eq!</span>(dependents.len(), <span class="number">3</span>);
+<a href=#754 id=754 data-nosnippet>754</a>
+<a href=#755 id=755 data-nosnippet>755</a>        <span class="comment">// Ordinary queries must still follow the sharding configuration,
+<a href=#756 id=756 data-nosnippet>756</a>        // including when who_needs was the first query on this gateway.
+<a href=#757 id=757 data-nosnippet>757</a>        </span><span class="kw">let </span>names = gateway.names([channel], [Subdir::Linux64]).<span class="kw">await</span>.unwrap();
+<a href=#758 id=758 data-nosnippet>758</a>        <span class="kw">if </span>sharded_enabled {
+<a href=#759 id=759 data-nosnippet>759</a>            <span class="macro">assert_eq!</span>(
+<a href=#760 id=760 data-nosnippet>760</a>                names.names,
+<a href=#761 id=761 data-nosnippet>761</a>                <span class="macro">vec!</span>[PackageName::new_unchecked(<span class="string">"missing-shard"</span>)]
+<a href=#762 id=762 data-nosnippet>762</a>            );
+<a href=#763 id=763 data-nosnippet>763</a>        } <span class="kw">else </span>{
+<a href=#764 id=764 data-nosnippet>764</a>            <span class="macro">assert!</span>(names.names.contains(<span class="kw-2">&amp;</span>PackageName::new_unchecked(<span class="string">"bors"</span>)));
+<a href=#765 id=765 data-nosnippet>765</a>            <span class="macro">assert!</span>(
+<a href=#766 id=766 data-nosnippet>766</a>                !names
+<a href=#767 id=767 data-nosnippet>767</a>                    .names
+<a href=#768 id=768 data-nosnippet>768</a>                    .contains(<span class="kw-2">&amp;</span>PackageName::new_unchecked(<span class="string">"missing-shard"</span>))
+<a href=#769 id=769 data-nosnippet>769</a>            );
+<a href=#770 id=770 data-nosnippet>770</a>        }
+<a href=#771 id=771 data-nosnippet>771</a>    }
+<a href=#772 id=772 data-nosnippet>772</a>}
 </code></pre></div></section></main></body></html>

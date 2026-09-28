@@ -3,7 +3,7 @@
 </head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">rattler_repodata_gateway/gateway/</div>subdir_builder.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::{path::Path, sync::Arc};
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>file_url::url_to_path;
-<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>rattler_conda_types::{Channel, Platform};
+<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>rattler_conda_types::{Channel, Subdir};
 <a href=#5 id=5 data-nosnippet>5</a>
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>crate::{
 <a href=#7 id=7 data-nosnippet>7</a>    GatewayError, Reporter, SourceConfig,
@@ -13,14 +13,14 @@
 <a href=#11 id=11 data-nosnippet>11</a>        error::SubdirNotFoundError,
 <a href=#12 id=12 data-nosnippet>12</a>        local_subdir::LocalSubdirClient,
 <a href=#13 id=13 data-nosnippet>13</a>        remote_subdir, sharded_subdir,
-<a href=#14 id=14 data-nosnippet>14</a>        subdir::{Subdir, SubdirData},
+<a href=#14 id=14 data-nosnippet>14</a>        subdir::{SubdirData, SubdirState},
 <a href=#15 id=15 data-nosnippet>15</a>    },
 <a href=#16 id=16 data-nosnippet>16</a>};
 <a href=#17 id=17 data-nosnippet>17</a>
 <a href=#18 id=18 data-nosnippet>18</a><span class="doccomment">/// Builder for creating a `Subdir` instance.
 <a href=#19 id=19 data-nosnippet>19</a></span><span class="kw">pub struct </span>SubdirBuilder&lt;<span class="lifetime">'g</span>&gt; {
 <a href=#20 id=20 data-nosnippet>20</a>    channel: Channel,
-<a href=#21 id=21 data-nosnippet>21</a>    platform: Platform,
+<a href=#21 id=21 data-nosnippet>21</a>    platform: Subdir,
 <a href=#22 id=22 data-nosnippet>22</a>    reporter: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>Reporter&gt;&gt;,
 <a href=#23 id=23 data-nosnippet>23</a>    gateway: <span class="kw-2">&amp;</span><span class="lifetime">'g </span>GatewayInner,
 <a href=#24 id=24 data-nosnippet>24</a>    sharded_enabled: bool,
@@ -30,7 +30,7 @@
 <a href=#28 id=28 data-nosnippet>28</a>    <span class="kw">pub fn </span>new(
 <a href=#29 id=29 data-nosnippet>29</a>        gateway: <span class="kw-2">&amp;</span><span class="lifetime">'g </span>GatewayInner,
 <a href=#30 id=30 data-nosnippet>30</a>        channel: Channel,
-<a href=#31 id=31 data-nosnippet>31</a>        platform: Platform,
+<a href=#31 id=31 data-nosnippet>31</a>        platform: Subdir,
 <a href=#32 id=32 data-nosnippet>32</a>        reporter: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>Reporter&gt;&gt;,
 <a href=#33 id=33 data-nosnippet>33</a>        sharded_enabled: bool,
 <a href=#34 id=34 data-nosnippet>34</a>    ) -&gt; <span class="self">Self </span>{
@@ -43,7 +43,7 @@
 <a href=#41 id=41 data-nosnippet>41</a>        }
 <a href=#42 id=42 data-nosnippet>42</a>    }
 <a href=#43 id=43 data-nosnippet>43</a>
-<a href=#44 id=44 data-nosnippet>44</a>    <span class="kw">pub async fn </span>build(<span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Subdir, GatewayError&gt; {
+<a href=#44 id=44 data-nosnippet>44</a>    <span class="kw">pub async fn </span>build(<span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;SubdirState, GatewayError&gt; {
 <a href=#45 id=45 data-nosnippet>45</a>        <span class="kw">let </span>url = <span class="self">self</span>.channel.platform_url(<span class="self">self</span>.platform);
 <a href=#46 id=46 data-nosnippet>46</a>
 <a href=#47 id=47 data-nosnippet>47</a>        <span class="kw">let </span>subdir_data = <span class="kw">if </span>url.scheme() == <span class="string">"file" </span>{
@@ -102,8 +102,8 @@
 <a href=#100 id=100 data-nosnippet>100</a>        };
 <a href=#101 id=101 data-nosnippet>101</a>
 <a href=#102 id=102 data-nosnippet>102</a>        <span class="kw">match </span>subdir_data {
-<a href=#103 id=103 data-nosnippet>103</a>            <span class="prelude-val">Ok</span>(client) =&gt; <span class="prelude-val">Ok</span>(Subdir::Found(client)),
-<a href=#104 id=104 data-nosnippet>104</a>            <span class="prelude-val">Err</span>(GatewayError::SubdirNotFoundError(err)) <span class="kw">if </span><span class="self">self</span>.platform != Platform::NoArch =&gt; {
+<a href=#103 id=103 data-nosnippet>103</a>            <span class="prelude-val">Ok</span>(client) =&gt; <span class="prelude-val">Ok</span>(SubdirState::Found(client)),
+<a href=#104 id=104 data-nosnippet>104</a>            <span class="prelude-val">Err</span>(GatewayError::SubdirNotFoundError(err)) <span class="kw">if </span><span class="self">self</span>.platform != Subdir::NoArch =&gt; {
 <a href=#105 id=105 data-nosnippet>105</a>                <span class="comment">// If the subdir was not found and the platform is not `noarch` we assume its
 <a href=#106 id=106 data-nosnippet>106</a>                // just empty.
 <a href=#107 id=107 data-nosnippet>107</a>                </span><span class="macro">tracing::info!</span>(
@@ -111,7 +111,7 @@
 <a href=#109 id=109 data-nosnippet>109</a>                    err.subdir,
 <a href=#110 id=110 data-nosnippet>110</a>                    err.channel.canonical_name()
 <a href=#111 id=111 data-nosnippet>111</a>                );
-<a href=#112 id=112 data-nosnippet>112</a>                <span class="prelude-val">Ok</span>(Subdir::NotFound)
+<a href=#112 id=112 data-nosnippet>112</a>                <span class="prelude-val">Ok</span>(SubdirState::NotFound)
 <a href=#113 id=113 data-nosnippet>113</a>            }
 <a href=#114 id=114 data-nosnippet>114</a>            <span class="prelude-val">Err</span>(GatewayError::FetchRepoDataError(FetchRepoDataError::NotFound(err))) =&gt; {
 <a href=#115 id=115 data-nosnippet>115</a>                <span class="prelude-val">Err</span>(Box::new(SubdirNotFoundError {

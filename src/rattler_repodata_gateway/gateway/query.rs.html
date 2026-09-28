@@ -4,8 +4,8 @@
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>futures::{StreamExt, select_biased, stream::FuturesUnordered};
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>rattler_conda_types::{
-<a href=#5 id=5 data-nosnippet>5</a>    Channel, ChannelUrl, MatchSpec, Matches, PackageName, PackageNameMatcher, Platform,
-<a href=#6 id=6 data-nosnippet>6</a>    RepoDataRecord,
+<a href=#5 id=5 data-nosnippet>5</a>    Channel, ChannelUrl, MatchSpec, Matches, PackageName, PackageNameMatcher, RepoDataRecord,
+<a href=#6 id=6 data-nosnippet>6</a>    Subdir,
 <a href=#7 id=7 data-nosnippet>7</a>};
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>url::Url;
 <a href=#9 id=9 data-nosnippet>9</a>
@@ -16,7 +16,7 @@
 <a href=#14 id=14 data-nosnippet>14</a>    channel_relations::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
 <a href=#15 id=15 data-nosnippet>15</a>    local_subdir::LocalSubdirClient,
 <a href=#16 id=16 data-nosnippet>16</a>    source::{CustomSourceClient, Source},
-<a href=#17 id=17 data-nosnippet>17</a>    subdir::{PackageRecords, Subdir, SubdirData, extract_unique_deps_split},
+<a href=#17 id=17 data-nosnippet>17</a>    subdir::{PackageRecords, SubdirData, SubdirState, extract_unique_deps_split},
 <a href=#18 id=18 data-nosnippet>18</a>};
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span><span class="kw">crate</span>::Reporter;
 <a href=#20 id=20 data-nosnippet>20</a>
@@ -130,7 +130,7 @@
 <a href=#128 id=128 data-nosnippet>128</a>    </span>sources: Vec&lt;Source&gt;,
 <a href=#129 id=129 data-nosnippet>129</a>
 <a href=#130 id=130 data-nosnippet>130</a>    <span class="doccomment">/// The platforms the fetch from
-<a href=#131 id=131 data-nosnippet>131</a>    </span>platforms: Vec&lt;Platform&gt;,
+<a href=#131 id=131 data-nosnippet>131</a>    </span>platforms: Vec&lt;Subdir&gt;,
 <a href=#132 id=132 data-nosnippet>132</a>
 <a href=#133 id=133 data-nosnippet>133</a>    <span class="doccomment">/// The specs to fetch records for
 <a href=#134 id=134 data-nosnippet>134</a>    </span>specs: Vec&lt;MatchSpec&gt;,
@@ -197,7 +197,7 @@
 <a href=#195 id=195 data-nosnippet>195</a><span class="doccomment">/// Subdirectory slot: its in-flight fetch barrier, source-kind
 <a href=#196 id=196 data-nosnippet>196</a>/// metadata, and the accumulated records.
 <a href=#197 id=197 data-nosnippet>197</a></span><span class="kw">struct </span>SubdirHandle {
-<a href=#198 id=198 data-nosnippet>198</a>    barrier: Arc&lt;BarrierCell&lt;Arc&lt;Subdir&gt;&gt;&gt;,
+<a href=#198 id=198 data-nosnippet>198</a>    barrier: Arc&lt;BarrierCell&lt;Arc&lt;SubdirState&gt;&gt;&gt;,
 <a href=#199 id=199 data-nosnippet>199</a>    kind: SubdirKind,
 <a href=#200 id=200 data-nosnippet>200</a>    data: RepoData,
 <a href=#201 id=201 data-nosnippet>201</a>    <span class="doccomment">/// Index in the caller's `sources` list; `None` for transitively
@@ -211,7 +211,7 @@
 <a href=#209 id=209 data-nosnippet>209</a></span><span class="kw">enum </span>SubdirKind {
 <a href=#210 id=210 data-nosnippet>210</a>    <span class="doccomment">/// Channel subdirectory; `url` is the canonical base URL used as
 <a href=#211 id=211 data-nosnippet>211</a>    /// the CEP-42 resolver's identifier.
-<a href=#212 id=212 data-nosnippet>212</a>    </span>Channel { url: ChannelUrl, platform: Platform },
+<a href=#212 id=212 data-nosnippet>212</a>    </span>Channel { url: ChannelUrl, platform: Subdir },
 <a href=#213 id=213 data-nosnippet>213</a>    <span class="doccomment">/// Custom source; not subject to CEP-42 ordering.
 <a href=#214 id=214 data-nosnippet>214</a>    </span>Custom,
 <a href=#215 id=215 data-nosnippet>215</a>}
@@ -222,7 +222,7 @@
 <a href=#220 id=220 data-nosnippet>220</a>    <span class="comment">// Only constructed by `spawn_direct_url_fetches` which is non-wasm.
 <a href=#221 id=221 data-nosnippet>221</a>    </span><span class="attr">#[cfg_attr(target_arch = <span class="string">"wasm32"</span>, allow(dead_code))]
 <a href=#222 id=222 data-nosnippet>222</a>    </span>DirectUrl,
-<a href=#223 id=223 data-nosnippet>223</a>    Subdir(usize),
+<a href=#223 id=223 data-nosnippet>223</a>    SubdirIndex(usize),
 <a href=#224 id=224 data-nosnippet>224</a>}
 <a href=#225 id=225 data-nosnippet>225</a>
 <a href=#226 id=226 data-nosnippet>226</a><span class="kw">impl </span>RepoDataQuery {
@@ -231,7 +231,7 @@
 <a href=#229 id=229 data-nosnippet>229</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>new(
 <a href=#230 id=230 data-nosnippet>230</a>        gateway: Arc&lt;GatewayInner&gt;,
 <a href=#231 id=231 data-nosnippet>231</a>        sources: Vec&lt;Source&gt;,
-<a href=#232 id=232 data-nosnippet>232</a>        platforms: Vec&lt;Platform&gt;,
+<a href=#232 id=232 data-nosnippet>232</a>        platforms: Vec&lt;Subdir&gt;,
 <a href=#233 id=233 data-nosnippet>233</a>        specs: Vec&lt;MatchSpec&gt;,
 <a href=#234 id=234 data-nosnippet>234</a>    ) -&gt; <span class="self">Self </span>{
 <a href=#235 id=235 data-nosnippet>235</a>        <span class="self">Self </span>{
@@ -551,7 +551,7 @@
 <a href=#549 id=549 data-nosnippet>549</a>                    }
 <a href=#550 id=550 data-nosnippet>550</a>                    Source::Custom(custom_source) =&gt; {
 <a href=#551 id=551 data-nosnippet>551</a>                        <span class="kw">let </span>client = CustomSourceClient::new(custom_source, platform);
-<a href=#552 id=552 data-nosnippet>552</a>                        <span class="kw">let </span>subdir = Arc::new(Subdir::Found(SubdirData::from_client(client)));
+<a href=#552 id=552 data-nosnippet>552</a>                        <span class="kw">let </span>subdir = Arc::new(SubdirState::Found(SubdirData::from_client(client)));
 <a href=#553 id=553 data-nosnippet>553</a>                        <span class="kw">let </span>b = barrier.clone();
 <a href=#554 id=554 data-nosnippet>554</a>                        <span class="kw">let </span>fut = box_future(<span class="kw">async move </span>{
 <a href=#555 id=555 data-nosnippet>555</a>                            b.set(subdir.clone()).expect(<span class="string">"subdir was set twice"</span>);
@@ -581,10 +581,10 @@
 <a href=#579 id=579 data-nosnippet>579</a>                            <span class="prelude-val">None </span>=&gt; SubdirKind::Custom,
 <a href=#580 id=580 data-nosnippet>580</a>                        };
 <a href=#581 id=581 data-nosnippet>581</a>                        <span class="kw">let </span>subdir = <span class="kw">match </span>matching {
-<a href=#582 id=582 data-nosnippet>582</a>                            <span class="prelude-val">Some</span>(sparse) =&gt; Arc::new(Subdir::Found(SubdirData::from_client(
+<a href=#582 id=582 data-nosnippet>582</a>                            <span class="prelude-val">Some</span>(sparse) =&gt; Arc::new(SubdirState::Found(SubdirData::from_client(
 <a href=#583 id=583 data-nosnippet>583</a>                                LocalSubdirClient::new(sparse),
 <a href=#584 id=584 data-nosnippet>584</a>                            ))),
-<a href=#585 id=585 data-nosnippet>585</a>                            <span class="prelude-val">None </span>=&gt; Arc::new(Subdir::NotFound),
+<a href=#585 id=585 data-nosnippet>585</a>                            <span class="prelude-val">None </span>=&gt; Arc::new(SubdirState::NotFound),
 <a href=#586 id=586 data-nosnippet>586</a>                        };
 <a href=#587 id=587 data-nosnippet>587</a>                        <span class="kw">let </span>b = barrier.clone();
 <a href=#588 id=588 data-nosnippet>588</a>                        <span class="kw">let </span>fut = box_future(<span class="kw">async move </span>{
@@ -706,7 +706,7 @@
 <a href=#704 id=704 data-nosnippet>704</a>                    pending_records,
 <a href=#705 id=705 data-nosnippet>705</a>                    package_name.clone(),
 <a href=#706 id=706 data-nosnippet>706</a>                    request.clone(),
-<a href=#707 id=707 data-nosnippet>707</a>                    AccumulateTarget::Subdir(idx),
+<a href=#707 id=707 data-nosnippet>707</a>                    AccumulateTarget::SubdirIndex(idx),
 <a href=#708 id=708 data-nosnippet>708</a>                    handle.barrier.clone(),
 <a href=#709 id=709 data-nosnippet>709</a>                    reporter.clone(),
 <a href=#710 id=710 data-nosnippet>710</a>                );
@@ -724,7 +724,7 @@
 <a href=#722 id=722 data-nosnippet>722</a>                <span class="kw-2">&amp;mut </span><span class="self">self</span>.pending_records,
 <a href=#723 id=723 data-nosnippet>723</a>                package_name.clone(),
 <a href=#724 id=724 data-nosnippet>724</a>                request.clone(),
-<a href=#725 id=725 data-nosnippet>725</a>                AccumulateTarget::Subdir(handle_idx),
+<a href=#725 id=725 data-nosnippet>725</a>                AccumulateTarget::SubdirIndex(handle_idx),
 <a href=#726 id=726 data-nosnippet>726</a>                barrier.clone(),
 <a href=#727 id=727 data-nosnippet>727</a>                <span class="self">self</span>.reporter.clone(),
 <a href=#728 id=728 data-nosnippet>728</a>            );
@@ -915,7 +915,7 @@
 <a href=#913 id=913 data-nosnippet>913</a>                </span>.direct_url_result
 <a href=#914 id=914 data-nosnippet>914</a>                .as_mut()
 <a href=#915 id=915 data-nosnippet>915</a>                .expect(<span class="string">"direct-url fetch spawned without a direct-url bucket"</span>),
-<a href=#916 id=916 data-nosnippet>916</a>            AccumulateTarget::Subdir(idx) =&gt; <span class="kw-2">&amp;mut </span><span class="self">self</span>.subdir_handles[idx].data,
+<a href=#916 id=916 data-nosnippet>916</a>            AccumulateTarget::SubdirIndex(idx) =&gt; <span class="kw-2">&amp;mut </span><span class="self">self</span>.subdir_handles[idx].data,
 <a href=#917 id=917 data-nosnippet>917</a>        };
 <a href=#918 id=918 data-nosnippet>918</a>
 <a href=#919 id=919 data-nosnippet>919</a>        <span class="kw">let </span>PackageRecords {
@@ -938,7 +938,7 @@
 <a href=#936 id=936 data-nosnippet>936</a>    }
 <a href=#937 id=937 data-nosnippet>937</a>
 <a href=#938 id=938 data-nosnippet>938</a>    <span class="doccomment">/// Expand pattern specs based on the names provided by a resolved subdir.
-<a href=#939 id=939 data-nosnippet>939</a>    </span><span class="kw">fn </span>expand_pattern_specs_for_subdir(<span class="kw-2">&amp;mut </span><span class="self">self</span>, subdir: <span class="kw-2">&amp;</span>Subdir) {
+<a href=#939 id=939 data-nosnippet>939</a>    </span><span class="kw">fn </span>expand_pattern_specs_for_subdir(<span class="kw-2">&amp;mut </span><span class="self">self</span>, subdir: <span class="kw-2">&amp;</span>SubdirState) {
 <a href=#940 id=940 data-nosnippet>940</a>        <span class="kw">if </span><span class="self">self</span>.pending_pattern_specs.is_empty() {
 <a href=#941 id=941 data-nosnippet>941</a>            <span class="kw">return</span>;
 <a href=#942 id=942 data-nosnippet>942</a>        }
@@ -1049,8 +1049,8 @@
 <a href=#1047 id=1047 data-nosnippet>1047</a>    </span><span class="kw">fn </span>expand_relations_for_subdir(
 <a href=#1048 id=1048 data-nosnippet>1048</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
 <a href=#1049 id=1049 data-nosnippet>1049</a>        channel_url: <span class="kw-2">&amp;</span>ChannelUrl,
-<a href=#1050 id=1050 data-nosnippet>1050</a>        platform: Platform,
-<a href=#1051 id=1051 data-nosnippet>1051</a>        subdir: <span class="kw-2">&amp;</span>Subdir,
+<a href=#1050 id=1050 data-nosnippet>1050</a>        platform: Subdir,
+<a href=#1051 id=1051 data-nosnippet>1051</a>        subdir: <span class="kw-2">&amp;</span>SubdirState,
 <a href=#1052 id=1052 data-nosnippet>1052</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), GatewayError&gt; {
 <a href=#1053 id=1053 data-nosnippet>1053</a>        <span class="kw">let </span>new_pairs = <span class="self">self</span>.expander.observe(channel_url, platform, subdir)<span class="question-mark">?</span>;
 <a href=#1054 id=1054 data-nosnippet>1054</a>        <span class="kw">for </span>(url, channel, plat) <span class="kw">in </span>new_pairs {
@@ -1066,7 +1066,7 @@
 <a href=#1064 id=1064 data-nosnippet>1064</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
 <a href=#1065 id=1065 data-nosnippet>1065</a>        url: ChannelUrl,
 <a href=#1066 id=1066 data-nosnippet>1066</a>        channel: Arc&lt;Channel&gt;,
-<a href=#1067 id=1067 data-nosnippet>1067</a>        platform: Platform,
+<a href=#1067 id=1067 data-nosnippet>1067</a>        platform: Subdir,
 <a href=#1068 id=1068 data-nosnippet>1068</a>    ) {
 <a href=#1069 id=1069 data-nosnippet>1069</a>        <span class="self">self</span>.notices
 <a href=#1070 id=1070 data-nosnippet>1070</a>            .queue(<span class="kw-2">&amp;</span><span class="self">self</span>.gateway, <span class="kw-2">&amp;</span>url, channel.clone(), <span class="self">self</span>.reporter.clone());
@@ -1118,7 +1118,7 @@
 <a href=#1116 id=1116 data-nosnippet>1116</a>                .enumerate()
 <a href=#1117 id=1117 data-nosnippet>1117</a>                .map(|(i, u)| (u, i))
 <a href=#1118 id=1118 data-nosnippet>1118</a>                .collect();
-<a href=#1119 id=1119 data-nosnippet>1119</a>            <span class="kw">let </span>platform_idx_of: std::collections::HashMap&lt;Platform, usize&gt; = <span class="self">self
+<a href=#1119 id=1119 data-nosnippet>1119</a>            <span class="kw">let </span>platform_idx_of: std::collections::HashMap&lt;Subdir, usize&gt; = <span class="self">self
 <a href=#1120 id=1120 data-nosnippet>1120</a>                </span>.expander
 <a href=#1121 id=1121 data-nosnippet>1121</a>                .platforms()
 <a href=#1122 id=1122 data-nosnippet>1122</a>                .iter()
@@ -1220,10 +1220,10 @@
 <a href=#1218 id=1218 data-nosnippet>1218</a></span><span class="kw">fn </span>build_channel_subdir_future(
 <a href=#1219 id=1219 data-nosnippet>1219</a>    gateway: Arc&lt;GatewayInner&gt;,
 <a href=#1220 id=1220 data-nosnippet>1220</a>    channel: Arc&lt;Channel&gt;,
-<a href=#1221 id=1221 data-nosnippet>1221</a>    platform: Platform,
+<a href=#1221 id=1221 data-nosnippet>1221</a>    platform: Subdir,
 <a href=#1222 id=1222 data-nosnippet>1222</a>    url: ChannelUrl,
 <a href=#1223 id=1223 data-nosnippet>1223</a>    reporter: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>Reporter&gt;&gt;,
-<a href=#1224 id=1224 data-nosnippet>1224</a>    barrier: Arc&lt;BarrierCell&lt;Arc&lt;Subdir&gt;&gt;&gt;,
+<a href=#1224 id=1224 data-nosnippet>1224</a>    barrier: Arc&lt;BarrierCell&lt;Arc&lt;SubdirState&gt;&gt;&gt;,
 <a href=#1225 id=1225 data-nosnippet>1225</a>    policy: FetchErrorPolicy,
 <a href=#1226 id=1226 data-nosnippet>1226</a>) -&gt; BoxFuture&lt;PendingSubdirResult&gt; {
 <a href=#1227 id=1227 data-nosnippet>1227</a>    box_future(<span class="kw">async move </span>{
@@ -1246,11 +1246,11 @@
 <a href=#1244 id=1244 data-nosnippet>1244</a></span><span class="kw">async fn </span>fetch_subdir_with_policy(
 <a href=#1245 id=1245 data-nosnippet>1245</a>    gateway: <span class="kw-2">&amp;</span>GatewayInner,
 <a href=#1246 id=1246 data-nosnippet>1246</a>    channel: <span class="kw-2">&amp;</span>Channel,
-<a href=#1247 id=1247 data-nosnippet>1247</a>    platform: Platform,
+<a href=#1247 id=1247 data-nosnippet>1247</a>    platform: Subdir,
 <a href=#1248 id=1248 data-nosnippet>1248</a>    url: <span class="kw-2">&amp;</span>ChannelUrl,
 <a href=#1249 id=1249 data-nosnippet>1249</a>    reporter: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>Reporter&gt;&gt;,
 <a href=#1250 id=1250 data-nosnippet>1250</a>    policy: FetchErrorPolicy,
-<a href=#1251 id=1251 data-nosnippet>1251</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(Arc&lt;Subdir&gt;, <span class="prelude-ty">Option</span>&lt;ChannelRelationsWarning&gt;), GatewayError&gt; {
+<a href=#1251 id=1251 data-nosnippet>1251</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(Arc&lt;SubdirState&gt;, <span class="prelude-ty">Option</span>&lt;ChannelRelationsWarning&gt;), GatewayError&gt; {
 <a href=#1252 id=1252 data-nosnippet>1252</a>    <span class="kw">match </span>gateway
 <a href=#1253 id=1253 data-nosnippet>1253</a>        .get_or_create_subdir(channel, platform, reporter, <span class="bool-val">true</span>)
 <a href=#1254 id=1254 data-nosnippet>1254</a>        .<span class="kw">await
@@ -1261,23 +1261,23 @@
 <a href=#1259 id=1259 data-nosnippet>1259</a>}
 <a href=#1260 id=1260 data-nosnippet>1260</a>
 <a href=#1261 id=1261 data-nosnippet>1261</a><span class="doccomment">/// Translate a subdir fetch error into the policy-prescribed outcome.
-<a href=#1262 id=1262 data-nosnippet>1262</a>/// Returns `Ok((Subdir::NotFound, Some(warning)))` for
+<a href=#1262 id=1262 data-nosnippet>1262</a>/// Returns `Ok((SubdirState::NotFound, Some(warning)))` for
 <a href=#1263 id=1263 data-nosnippet>1263</a>/// `SwallowAsWarning` so callers can proceed as if the subdir were
 <a href=#1264 id=1264 data-nosnippet>1264</a>/// absent; returns `Err` for `Propagate` or
 <a href=#1265 id=1265 data-nosnippet>1265</a>/// `WrapAsChannelRelationsError`.
 <a href=#1266 id=1266 data-nosnippet>1266</a></span><span class="kw">fn </span>apply_fetch_error_policy(
 <a href=#1267 id=1267 data-nosnippet>1267</a>    err: GatewayError,
 <a href=#1268 id=1268 data-nosnippet>1268</a>    url: <span class="kw-2">&amp;</span>ChannelUrl,
-<a href=#1269 id=1269 data-nosnippet>1269</a>    platform: Platform,
+<a href=#1269 id=1269 data-nosnippet>1269</a>    platform: Subdir,
 <a href=#1270 id=1270 data-nosnippet>1270</a>    policy: FetchErrorPolicy,
-<a href=#1271 id=1271 data-nosnippet>1271</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(Arc&lt;Subdir&gt;, <span class="prelude-ty">Option</span>&lt;ChannelRelationsWarning&gt;), GatewayError&gt; {
+<a href=#1271 id=1271 data-nosnippet>1271</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(Arc&lt;SubdirState&gt;, <span class="prelude-ty">Option</span>&lt;ChannelRelationsWarning&gt;), GatewayError&gt; {
 <a href=#1272 id=1272 data-nosnippet>1272</a>    <span class="comment">// A channel publishing only some platforms is valid; treat a
 <a href=#1273 id=1273 data-nosnippet>1273</a>    // missing subdir as empty. The subdir builder already does this
 <a href=#1274 id=1274 data-nosnippet>1274</a>    // for every platform except noarch.
 <a href=#1275 id=1275 data-nosnippet>1275</a>    </span><span class="kw">if </span>!<span class="macro">matches!</span>(policy, FetchErrorPolicy::Propagate)
 <a href=#1276 id=1276 data-nosnippet>1276</a>        &amp;&amp; <span class="macro">matches!</span>(err, GatewayError::SubdirNotFoundError(<span class="kw">_</span>))
 <a href=#1277 id=1277 data-nosnippet>1277</a>    {
-<a href=#1278 id=1278 data-nosnippet>1278</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>((Arc::new(Subdir::NotFound), <span class="prelude-val">None</span>));
+<a href=#1278 id=1278 data-nosnippet>1278</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>((Arc::new(SubdirState::NotFound), <span class="prelude-val">None</span>));
 <a href=#1279 id=1279 data-nosnippet>1279</a>    }
 <a href=#1280 id=1280 data-nosnippet>1280</a>    <span class="kw">match </span>policy {
 <a href=#1281 id=1281 data-nosnippet>1281</a>        FetchErrorPolicy::Propagate =&gt; <span class="prelude-val">Err</span>(err),
@@ -1290,7 +1290,7 @@
 <a href=#1288 id=1288 data-nosnippet>1288</a>            <span class="kw">if </span><span class="macro">matches!</span>(policy, FetchErrorPolicy::WrapAsChannelRelationsError) {
 <a href=#1289 id=1289 data-nosnippet>1289</a>                <span class="prelude-val">Err</span>(GatewayError::ChannelRelationsError(warning.to_string()))
 <a href=#1290 id=1290 data-nosnippet>1290</a>            } <span class="kw">else </span>{
-<a href=#1291 id=1291 data-nosnippet>1291</a>                <span class="prelude-val">Ok</span>((Arc::new(Subdir::NotFound), <span class="prelude-val">Some</span>(warning)))
+<a href=#1291 id=1291 data-nosnippet>1291</a>                <span class="prelude-val">Ok</span>((Arc::new(SubdirState::NotFound), <span class="prelude-val">Some</span>(warning)))
 <a href=#1292 id=1292 data-nosnippet>1292</a>            }
 <a href=#1293 id=1293 data-nosnippet>1293</a>        }
 <a href=#1294 id=1294 data-nosnippet>1294</a>    }
@@ -1302,8 +1302,8 @@
 <a href=#1300 id=1300 data-nosnippet>1300</a>/// warning when the [`FetchErrorPolicy::SwallowAsWarning`] policy was
 <a href=#1301 id=1301 data-nosnippet>1301</a>/// applied.
 <a href=#1302 id=1302 data-nosnippet>1302</a></span><span class="kw">struct </span>PendingSubdirOk {
-<a href=#1303 id=1303 data-nosnippet>1303</a>    subdir: Arc&lt;Subdir&gt;,
-<a href=#1304 id=1304 data-nosnippet>1304</a>    kind_url_and_platform: <span class="prelude-ty">Option</span>&lt;(ChannelUrl, Platform)&gt;,
+<a href=#1303 id=1303 data-nosnippet>1303</a>    subdir: Arc&lt;SubdirState&gt;,
+<a href=#1304 id=1304 data-nosnippet>1304</a>    kind_url_and_platform: <span class="prelude-ty">Option</span>&lt;(ChannelUrl, Subdir)&gt;,
 <a href=#1305 id=1305 data-nosnippet>1305</a>    warning: <span class="prelude-ty">Option</span>&lt;ChannelRelationsWarning&gt;,
 <a href=#1306 id=1306 data-nosnippet>1306</a>}
 <a href=#1307 id=1307 data-nosnippet>1307</a>
@@ -1315,17 +1315,17 @@
 <a href=#1313 id=1313 data-nosnippet>1313</a>    package_name: PackageName,
 <a href=#1314 id=1314 data-nosnippet>1314</a>    request: PendingRequest,
 <a href=#1315 id=1315 data-nosnippet>1315</a>    target: AccumulateTarget,
-<a href=#1316 id=1316 data-nosnippet>1316</a>    barrier: Arc&lt;BarrierCell&lt;Arc&lt;Subdir&gt;&gt;&gt;,
+<a href=#1316 id=1316 data-nosnippet>1316</a>    barrier: Arc&lt;BarrierCell&lt;Arc&lt;SubdirState&gt;&gt;&gt;,
 <a href=#1317 id=1317 data-nosnippet>1317</a>    reporter: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>Reporter&gt;&gt;,
 <a href=#1318 id=1318 data-nosnippet>1318</a>) {
 <a href=#1319 id=1319 data-nosnippet>1319</a>    pending_records.push(box_future(<span class="kw">async move </span>{
 <a href=#1320 id=1320 data-nosnippet>1320</a>        <span class="kw">let </span>subdir = barrier.wait().<span class="kw">await</span>;
 <a href=#1321 id=1321 data-nosnippet>1321</a>        <span class="kw">match </span>subdir.as_ref() {
-<a href=#1322 id=1322 data-nosnippet>1322</a>            Subdir::Found(subdir) =&gt; subdir
+<a href=#1322 id=1322 data-nosnippet>1322</a>            SubdirState::Found(subdir) =&gt; subdir
 <a href=#1323 id=1323 data-nosnippet>1323</a>                .get_or_fetch_package_records(<span class="kw-2">&amp;</span>package_name, reporter)
 <a href=#1324 id=1324 data-nosnippet>1324</a>                .<span class="kw">await
 <a href=#1325 id=1325 data-nosnippet>1325</a>                </span>.map(|pkg| (target, request, pkg)),
-<a href=#1326 id=1326 data-nosnippet>1326</a>            Subdir::NotFound =&gt; <span class="prelude-val">Ok</span>((target, request, PackageRecords::default())),
+<a href=#1326 id=1326 data-nosnippet>1326</a>            SubdirState::NotFound =&gt; <span class="prelude-val">Ok</span>((target, request, PackageRecords::default())),
 <a href=#1327 id=1327 data-nosnippet>1327</a>        }
 <a href=#1328 id=1328 data-nosnippet>1328</a>    }));
 <a href=#1329 id=1329 data-nosnippet>1329</a>}
@@ -1357,7 +1357,7 @@
 <a href=#1355 id=1355 data-nosnippet>1355</a>    </span>channels: Vec&lt;Channel&gt;,
 <a href=#1356 id=1356 data-nosnippet>1356</a>
 <a href=#1357 id=1357 data-nosnippet>1357</a>    <span class="doccomment">/// The platforms the fetch from
-<a href=#1358 id=1358 data-nosnippet>1358</a>    </span>platforms: Vec&lt;Platform&gt;,
+<a href=#1358 id=1358 data-nosnippet>1358</a>    </span>platforms: Vec&lt;Subdir&gt;,
 <a href=#1359 id=1359 data-nosnippet>1359</a>
 <a href=#1360 id=1360 data-nosnippet>1360</a>    <span class="doccomment">/// The reporter to use by the query.
 <a href=#1361 id=1361 data-nosnippet>1361</a>    </span>reporter: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>Reporter&gt;&gt;,
@@ -1378,7 +1378,7 @@
 <a href=#1376 id=1376 data-nosnippet>1376</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>new(
 <a href=#1377 id=1377 data-nosnippet>1377</a>        gateway: Arc&lt;GatewayInner&gt;,
 <a href=#1378 id=1378 data-nosnippet>1378</a>        channels: Vec&lt;Channel&gt;,
-<a href=#1379 id=1379 data-nosnippet>1379</a>        platforms: Vec&lt;Platform&gt;,
+<a href=#1379 id=1379 data-nosnippet>1379</a>        platforms: Vec&lt;Subdir&gt;,
 <a href=#1380 id=1380 data-nosnippet>1380</a>    ) -&gt; <span class="self">Self </span>{
 <a href=#1381 id=1381 data-nosnippet>1381</a>        <span class="self">Self </span>{
 <a href=#1382 id=1382 data-nosnippet>1382</a>            gateway,
@@ -1531,8 +1531,8 @@
 <a href=#1529 id=1529 data-nosnippet>1529</a><span class="kw">type </span>NamesFetchResult = <span class="prelude-ty">Result</span>&lt;
 <a href=#1530 id=1530 data-nosnippet>1530</a>    (
 <a href=#1531 id=1531 data-nosnippet>1531</a>        ChannelUrl,
-<a href=#1532 id=1532 data-nosnippet>1532</a>        Platform,
-<a href=#1533 id=1533 data-nosnippet>1533</a>        Arc&lt;Subdir&gt;,
+<a href=#1532 id=1532 data-nosnippet>1532</a>        Subdir,
+<a href=#1533 id=1533 data-nosnippet>1533</a>        Arc&lt;SubdirState&gt;,
 <a href=#1534 id=1534 data-nosnippet>1534</a>        <span class="prelude-ty">Option</span>&lt;ChannelRelationsWarning&gt;,
 <a href=#1535 id=1535 data-nosnippet>1535</a>    ),
 <a href=#1536 id=1536 data-nosnippet>1536</a>    GatewayError,
@@ -1543,7 +1543,7 @@
 <a href=#1541 id=1541 data-nosnippet>1541</a></span><span class="kw">fn </span>spawn_names_fetch(
 <a href=#1542 id=1542 data-nosnippet>1542</a>    gateway: Arc&lt;GatewayInner&gt;,
 <a href=#1543 id=1543 data-nosnippet>1543</a>    channel: Arc&lt;Channel&gt;,
-<a href=#1544 id=1544 data-nosnippet>1544</a>    platform: Platform,
+<a href=#1544 id=1544 data-nosnippet>1544</a>    platform: Subdir,
 <a href=#1545 id=1545 data-nosnippet>1545</a>    url: ChannelUrl,
 <a href=#1546 id=1546 data-nosnippet>1546</a>    reporter: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>Reporter&gt;&gt;,
 <a href=#1547 id=1547 data-nosnippet>1547</a>    policy: FetchErrorPolicy,

@@ -8,7 +8,7 @@
 <a href=#6 id=6 data-nosnippet>6</a>    path::Path,
 <a href=#7 id=7 data-nosnippet>7</a>};
 <a href=#8 id=8 data-nosnippet>8</a>
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>rattler_conda_types::{PackageName, PackageRecord, Platform, PrefixRecord};
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>rattler_conda_types::{PackageName, PackageRecord, PrefixRecord, Subdir};
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>rattler_shell::shell::{Bash, CmdExe, ShellEnum};
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>thiserror::Error;
 <a href=#12 id=12 data-nosnippet>12</a>
@@ -36,7 +36,7 @@
 <a href=#34 id=34 data-nosnippet>34</a>
 <a href=#35 id=35 data-nosnippet>35</a><span class="kw">impl </span>LinkScriptType {
 <a href=#36 id=36 data-nosnippet>36</a>    <span class="doccomment">/// Get the path to the link script for a given package record and platform
-<a href=#37 id=37 data-nosnippet>37</a>    </span><span class="kw">pub fn </span>get_path(<span class="kw-2">&amp;</span><span class="self">self</span>, package_record: <span class="kw-2">&amp;</span>PackageRecord, platform: <span class="kw-2">&amp;</span>Platform) -&gt; String {
+<a href=#37 id=37 data-nosnippet>37</a>    </span><span class="kw">pub fn </span>get_path(<span class="kw-2">&amp;</span><span class="self">self</span>, package_record: <span class="kw-2">&amp;</span>PackageRecord, platform: <span class="kw-2">&amp;</span>Subdir) -&gt; String {
 <a href=#38 id=38 data-nosnippet>38</a>        <span class="kw">let </span>name = <span class="kw-2">&amp;</span>package_record.name.as_normalized();
 <a href=#39 id=39 data-nosnippet>39</a>        <span class="kw">if </span>platform.is_windows() {
 <a href=#40 id=40 data-nosnippet>40</a>            <span class="kw">match </span><span class="self">self </span>{
@@ -92,7 +92,7 @@
 <a href=#90 id=90 data-nosnippet>90</a>    link_script_type: LinkScriptType,
 <a href=#91 id=91 data-nosnippet>91</a>    prefix_records: <span class="kw">impl </span>Iterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'a </span>PrefixRecord&gt;,
 <a href=#92 id=92 data-nosnippet>92</a>    target_prefix: <span class="kw-2">&amp;</span>Path,
-<a href=#93 id=93 data-nosnippet>93</a>    platform: <span class="kw-2">&amp;</span>Platform,
+<a href=#93 id=93 data-nosnippet>93</a>    platform: <span class="kw-2">&amp;</span>Subdir,
 <a href=#94 id=94 data-nosnippet>94</a>    reporter: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>Reporter&gt;,
 <a href=#95 id=95 data-nosnippet>95</a>) -&gt; <span class="prelude-ty">Result</span>&lt;PrePostLinkResult, LinkScriptError&gt; {
 <a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">let </span><span class="kw-2">mut </span>env = HashMap::new();
@@ -272,7 +272,7 @@
 <a href=#270 id=270 data-nosnippet>270</a>        },
 <a href=#271 id=271 data-nosnippet>271</a>        package_cache::PackageCache,
 <a href=#272 id=272 data-nosnippet>272</a>    };
-<a href=#273 id=273 data-nosnippet>273</a>    <span class="kw">use </span>rattler_conda_types::{Platform, PrefixRecord, RepoDataRecord, prefix::Prefix};
+<a href=#273 id=273 data-nosnippet>273</a>    <span class="kw">use </span>rattler_conda_types::{PrefixRecord, RepoDataRecord, Subdir, prefix::Prefix};
 <a href=#274 id=274 data-nosnippet>274</a>    <span class="kw">use </span>rattler_networking::LazyClient;
 <a href=#275 id=275 data-nosnippet>275</a>
 <a href=#276 id=276 data-nosnippet>276</a>    <span class="kw">fn </span>test_operations() -&gt; Vec&lt;TransactionOperation&lt;PrefixRecord, RepoDataRecord&gt;&gt; {
@@ -294,7 +294,7 @@
 <a href=#292 id=292 data-nosnippet>292</a>            operations,
 <a href=#293 id=293 data-nosnippet>293</a>            python_info: <span class="prelude-val">None</span>,
 <a href=#294 id=294 data-nosnippet>294</a>            current_python_info: <span class="prelude-val">None</span>,
-<a href=#295 id=295 data-nosnippet>295</a>            platform: Platform::current().expect(<span class="string">"host platform"</span>),
+<a href=#295 id=295 data-nosnippet>295</a>            platform: Subdir::current().expect(<span class="string">"host platform"</span>),
 <a href=#296 id=296 data-nosnippet>296</a>            unchanged: Vec::new(),
 <a href=#297 id=297 data-nosnippet>297</a>        };
 <a href=#298 id=298 data-nosnippet>298</a>
@@ -322,7 +322,7 @@
 <a href=#320 id=320 data-nosnippet>320</a>            operations: <span class="macro">vec!</span>[TransactionOperation::Remove(prefix_records[<span class="number">0</span>].clone())],
 <a href=#321 id=321 data-nosnippet>321</a>            python_info: <span class="prelude-val">None</span>,
 <a href=#322 id=322 data-nosnippet>322</a>            current_python_info: <span class="prelude-val">None</span>,
-<a href=#323 id=323 data-nosnippet>323</a>            platform: Platform::current().expect(<span class="string">"host platform"</span>),
+<a href=#323 id=323 data-nosnippet>323</a>            platform: Subdir::current().expect(<span class="string">"host platform"</span>),
 <a href=#324 id=324 data-nosnippet>324</a>            unchanged: Vec::new(),
 <a href=#325 id=325 data-nosnippet>325</a>        };
 <a href=#326 id=326 data-nosnippet>326</a>

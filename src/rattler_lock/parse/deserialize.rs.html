@@ -70,8 +70,8 @@
 <a href=#68 id=68 data-nosnippet>68</a>
 <a href=#69 id=69 data-nosnippet>69</a>    <span class="kw">fn </span>try_from(value: <span class="kw-2">&amp;</span>DeserializablePlatformData) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Error&gt; {
 <a href=#70 id=70 data-nosnippet>70</a>        <span class="kw">let </span>subdir = value.subdir.as_ref().map_or_else(
-<a href=#71 id=71 data-nosnippet>71</a>            || rattler_conda_types::Platform::from_str(<span class="kw-2">&amp;</span>value.name),
-<a href=#72 id=72 data-nosnippet>72</a>            |s| rattler_conda_types::Platform::from_str(s),
+<a href=#71 id=71 data-nosnippet>71</a>            || rattler_conda_types::Subdir::from_str(<span class="kw-2">&amp;</span>value.name),
+<a href=#72 id=72 data-nosnippet>72</a>            |s| rattler_conda_types::Subdir::from_str(s),
 <a href=#73 id=73 data-nosnippet>73</a>        )<span class="question-mark">?</span>;
 <a href=#74 id=74 data-nosnippet>74</a>
 <a href=#75 id=75 data-nosnippet>75</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
@@ -186,7 +186,7 @@
 <a href=#184 id=184 data-nosnippet>184</a>    </span>indexes: <span class="prelude-ty">Option</span>&lt;PypiIndexes&gt;,
 <a href=#185 id=185 data-nosnippet>185</a>    <span class="attr">#[serde(default)]
 <a href=#186 id=186 data-nosnippet>186</a>    </span>options: SolveOptions,
-<a href=#187 id=187 data-nosnippet>187</a>    packages: BTreeMap&lt;rattler_conda_types::Platform, Vec&lt;LegacyPackageSelector&gt;&gt;,
+<a href=#187 id=187 data-nosnippet>187</a>    packages: BTreeMap&lt;rattler_conda_types::Subdir, Vec&lt;LegacyPackageSelector&gt;&gt;,
 <a href=#188 id=188 data-nosnippet>188</a>}
 <a href=#189 id=189 data-nosnippet>189</a>
 <a href=#190 id=190 data-nosnippet>190</a><span class="kw">impl</span>&lt;<span class="lifetime">'de</span>&gt; DeserializeAs&lt;<span class="lifetime">'de</span>, LegacyPackageData&gt; <span class="kw">for </span>V5 {
@@ -739,7 +739,7 @@
 <a href=#737 id=737 data-nosnippet>737</a>
 <a href=#738 id=738 data-nosnippet>738</a><span class="doccomment">/// Create a new `Vec&lt;Platform&gt;` from a legacy lock file.
 <a href=#739 id=739 data-nosnippet>739</a>///
-<a href=#740 id=740 data-nosnippet>740</a>/// Iterate over the environments and take the `rattler_conda_types::Platform`
+<a href=#740 id=740 data-nosnippet>740</a>/// Iterate over the environments and take the `rattler_conda_types::Subdir`
 <a href=#741 id=741 data-nosnippet>741</a>/// listed there and turn those into `Platform`.
 <a href=#742 id=742 data-nosnippet>742</a></span><span class="kw">fn </span>create_legacy_platforms&lt;P&gt;(
 <a href=#743 id=743 data-nosnippet>743</a>    raw: <span class="kw-2">&amp;</span>DeserializableLockFileLegacy&lt;P&gt;,
@@ -993,7 +993,7 @@
 <a href=#991 id=991 data-nosnippet>991</a></span><span class="kw">fn </span>resolve_package_selector(
 <a href=#992 id=992 data-nosnippet>992</a>    selector: DeserializablePackageSelector,
 <a href=#993 id=993 data-nosnippet>993</a>    env_name: <span class="kw-2">&amp;</span>str,
-<a href=#994 id=994 data-nosnippet>994</a>    platform: rattler_conda_types::Platform,
+<a href=#994 id=994 data-nosnippet>994</a>    platform: rattler_conda_types::Subdir,
 <a href=#995 id=995 data-nosnippet>995</a>    selector_index: <span class="kw-2">&amp;</span>[(SelectorId, PackageIndex)],
 <a href=#996 id=996 data-nosnippet>996</a>) -&gt; <span class="prelude-ty">Result</span>&lt;PackageIndex, ParseCondaLockError&gt; {
 <a href=#997 id=997 data-nosnippet>997</a>    <span class="kw">let </span>(kind, id) = <span class="kw">match </span>selector {

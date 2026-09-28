@@ -85,7 +85,7 @@
 <a href=#83 id=83 data-nosnippet>83</a>    (Arc::from(base), Arc::new(per_extra))
 <a href=#84 id=84 data-nosnippet>84</a>}
 <a href=#85 id=85 data-nosnippet>85</a>
-<a href=#86 id=86 data-nosnippet>86</a><span class="kw">pub enum </span>Subdir {
+<a href=#86 id=86 data-nosnippet>86</a><span class="kw">pub enum </span>SubdirState {
 <a href=#87 id=87 data-nosnippet>87</a>    <span class="doccomment">/// The subdirectory is missing from the channel, it is considered empty.
 <a href=#88 id=88 data-nosnippet>88</a>    </span>NotFound,
 <a href=#89 id=89 data-nosnippet>89</a>
@@ -93,20 +93,20 @@
 <a href=#91 id=91 data-nosnippet>91</a>    </span>Found(SubdirData),
 <a href=#92 id=92 data-nosnippet>92</a>}
 <a href=#93 id=93 data-nosnippet>93</a>
-<a href=#94 id=94 data-nosnippet>94</a><span class="kw">impl </span>Subdir {
+<a href=#94 id=94 data-nosnippet>94</a><span class="kw">impl </span>SubdirState {
 <a href=#95 id=95 data-nosnippet>95</a>    <span class="doccomment">/// Returns the names of all packages in the subdirectory.
 <a href=#96 id=96 data-nosnippet>96</a>    </span><span class="kw">pub fn </span>package_names(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Vec&lt;String&gt;&gt; {
 <a href=#97 id=97 data-nosnippet>97</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#98 id=98 data-nosnippet>98</a>            Subdir::Found(subdir) =&gt; <span class="prelude-val">Some</span>(subdir.package_names()),
-<a href=#99 id=99 data-nosnippet>99</a>            Subdir::NotFound =&gt; <span class="prelude-val">None</span>,
+<a href=#98 id=98 data-nosnippet>98</a>            SubdirState::Found(subdir) =&gt; <span class="prelude-val">Some</span>(subdir.package_names()),
+<a href=#99 id=99 data-nosnippet>99</a>            SubdirState::NotFound =&gt; <span class="prelude-val">None</span>,
 <a href=#100 id=100 data-nosnippet>100</a>        }
 <a href=#101 id=101 data-nosnippet>101</a>    }
 <a href=#102 id=102 data-nosnippet>102</a>
 <a href=#103 id=103 data-nosnippet>103</a>    <span class="doccomment">/// Returns repodata revisions advertised by this subdirectory.
 <a href=#104 id=104 data-nosnippet>104</a>    </span><span class="kw">pub fn </span>repodata_revisions(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>RepodataRevisions {
 <a href=#105 id=105 data-nosnippet>105</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#106 id=106 data-nosnippet>106</a>            Subdir::Found(subdir) =&gt; subdir.repodata_revisions(),
-<a href=#107 id=107 data-nosnippet>107</a>            Subdir::NotFound =&gt; empty_repodata_revisions(),
+<a href=#106 id=106 data-nosnippet>106</a>            SubdirState::Found(subdir) =&gt; subdir.repodata_revisions(),
+<a href=#107 id=107 data-nosnippet>107</a>            SubdirState::NotFound =&gt; empty_repodata_revisions(),
 <a href=#108 id=108 data-nosnippet>108</a>        }
 <a href=#109 id=109 data-nosnippet>109</a>    }
 <a href=#110 id=110 data-nosnippet>110</a>
@@ -116,8 +116,8 @@
 <a href=#114 id=114 data-nosnippet>114</a>    /// [CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
 <a href=#115 id=115 data-nosnippet>115</a>    </span><span class="kw">pub fn </span>channel_relations(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ChannelRelations&gt; {
 <a href=#116 id=116 data-nosnippet>116</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#117 id=117 data-nosnippet>117</a>            Subdir::Found(subdir) =&gt; subdir.channel_relations(),
-<a href=#118 id=118 data-nosnippet>118</a>            Subdir::NotFound =&gt; <span class="prelude-val">None</span>,
+<a href=#117 id=117 data-nosnippet>117</a>            SubdirState::Found(subdir) =&gt; subdir.channel_relations(),
+<a href=#118 id=118 data-nosnippet>118</a>            SubdirState::NotFound =&gt; <span class="prelude-val">None</span>,
 <a href=#119 id=119 data-nosnippet>119</a>        }
 <a href=#120 id=120 data-nosnippet>120</a>    }
 <a href=#121 id=121 data-nosnippet>121</a>}
