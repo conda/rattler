@@ -35,18 +35,14 @@ pub struct Opt {
     #[clap(required = true)]
     package: String,
 
-    /// Channels to search in when inspecting a matchspec
-    #[clap(short, long, default_value = "conda-forge")]
-    channels: Vec<String>,
+    /// Channels to search in when inspecting a matchspec [default: conda-forge]
+    #[clap(short, long)]
+    channels: Option<Vec<String>>,
 
     /// Subdir to search in when inspecting a matchspec. Defaults to the
     /// platform of the current host (noarch is always searched as well).
     #[clap(short, long)]
     platform: Option<Subdir>,
-
-    /// Enable sharded repodata when inspecting a matchspec
-    #[clap(long, default_value = "true", action = clap::ArgAction::Set)]
-    sharded: bool,
 
     /// Number of files to print (a negative value prints all files)
     #[clap(long, default_value_t = 10, allow_hyphen_values = true)]
@@ -72,6 +68,11 @@ struct Metadata {
 
 pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
     let source = if is_package_location(&opt.package) {
+        if opt.channels.is_some() || opt.platform.is_some() {
+            miette::bail!(
+                "--channels and --platform can only be used when inspecting a matchspec, not a package path or URL"
+            );
+        }
         PackageSource::parse(&opt.package)
     } else {
         let record = find_newest_record(&opt, offline).await?;
@@ -154,6 +155,8 @@ async fn find_newest_record(opt: &Opt, offline: bool) -> miette::Result<RepoData
         ChannelConfig::default_with_root_dir(std::env::current_dir().into_diagnostic()?);
     let channels = opt
         .channels
+        .as_deref()
+        .unwrap_or(&["conda-forge".to_string()])
         .iter()
         .map(|channel| Channel::from_str(channel, &channel_config))
         .collect::<Result<Vec<_>, _>>()
@@ -161,7 +164,7 @@ async fn find_newest_record(opt: &Opt, offline: bool) -> miette::Result<RepoData
     let platform = opt.platform.map_or_else(crate::host_platform, Ok)?;
 
     let client = super::client::create_client_with_middleware(offline)?;
-    let gateway = build_gateway(client, &load_config()?, offline, opt.sharded)?;
+    let gateway = build_gateway(client, &load_config()?, offline, true)?;
     let repo_data = gateway
         .query(channels, [platform, Subdir::NoArch], [matchspec])
         .recursive(false)
