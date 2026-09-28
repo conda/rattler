@@ -902,6 +902,66 @@ mod resolvo {
         ");
     }
 
+    /// A conflict that a single branch cannot explain: `app` pins one `node`
+    /// major per build while `tool` needs one of two entirely different ones.
+    ///
+    /// Every branch of the report is printed in full, so the same `tool` subtree
+    /// appears under each of `app`'s builds. Requirements printed more than once
+    /// therefore get an `(A)`-style label where a conflict message points at
+    /// them, and requirements printed once are named outright.
+    #[test]
+    fn test_unsat_repeated_subtrees_are_labelled() {
+        // `PackageBuilder` leaves the archive identifier at its default, and
+        // records that share one are deduplicated before they reach the solver.
+        fn record(name: &str, version: &str, build: &str, depends: &[&str]) -> RepoDataRecord {
+            let mut record = PackageBuilder::new(name)
+                .version(version)
+                .build_string(build)
+                .depends(depends.to_vec())
+                .build();
+            record.identifier.identifier.version = version.to_string();
+            record.identifier.identifier.build_string = build.to_string();
+            record
+        }
+
+        let repo_data: Vec<RepoDataRecord> = [
+            // Two `node` lines `tool` can be built against, and two more that
+            // `app` pins. `4.1` and `4.2` behave identically in the graph and so
+            // merge into one line, spelled out as `version=build` pairs because
+            // they do not share a build string. `5.1` fails for a reason of its
+            // own, so the branch that pins it shows both kinds of dead end.
+            record("node", "2.1", "hnode_0", &[]),
+            record("node", "2.2", "hnode_0", &[]),
+            record("node", "2.3", "hnode_0", &[]),
+            record("node", "3.1", "hnode_0", &[]),
+            record("node", "3.2", "hnode_0", &[]),
+            record("node", "4.1", "hnode_0", &[]),
+            record("node", "4.2", "hnode_1", &[]),
+            record("node", "5.0", "hnode_0", &[]),
+            record("node", "5.1", "hnode_0", &["libc >=2"]),
+            record("libc", "1.0", "hlibc_0", &[]),
+            record("tool", "1.0", "hold_0", &["node 2.*"]),
+            record("tool", "1.0", "hnew_0", &["node 3.*"]),
+        ]
+        .into_iter()
+        // Two versions of `app` per build, so that the branches show a merged
+        // version list rather than a single version.
+        .chain(["1.0", "1.1"].into_iter().flat_map(|version| {
+            [("hcpu_0", "node >=4,<5"), ("hgpu_0", "node >=5,<6")]
+                .into_iter()
+                .map(move |(build, pin)| record("app", version, build, &["tool", pin]))
+        }))
+        .collect();
+
+        let task = SolverTask {
+            specs: vec![MatchSpec::from_str("app", ParseStrictness::Lenient).unwrap()],
+            ..SolverTask::from_iter([&repo_data])
+        };
+
+        let err = rattler_solve::resolvo::Solver.solve(task).unwrap_err();
+        insta::assert_snapshot!(err);
+    }
+
     #[test]
     fn test_flags_select_matching_variant() {
         crate::variant_flags_tests::solve_flags_select_matching_variant::<
