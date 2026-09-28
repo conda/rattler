@@ -60,6 +60,14 @@ pub struct ShardedSubdirInfo {
     /// [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
     #[serde(default, skip_serializing_if = "ChannelRelations::is_none_or_empty")]
     pub channel_relations: Option<ChannelRelations>,
+
+    /// The url of the manifest of the lookup index of this subdirectory, which
+    /// answers questions like "which artifacts contain this file?". Can be an
+    /// absolute or a relative url, resolved against the url of this index file.
+    ///
+    /// Only set by channels that publish such an index.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lookup_url: Option<String>,
 }
 
 #[cfg(test)]
@@ -121,6 +129,7 @@ mod tests {
                 created_at: None,
                 repodata_revisions: IndexMap::default(),
                 channel_relations: None,
+                lookup_url: None,
             },
             shards: ahash::HashMap::default(),
         };
@@ -160,6 +169,7 @@ mod tests {
                 created_at: None,
                 repodata_revisions: IndexMap::default(),
                 channel_relations,
+                lookup_url: None,
             };
             let json = serde_json::to_string(&info).unwrap();
             assert!(!json.contains("channel_relations"));

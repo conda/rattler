@@ -107,6 +107,15 @@ pub struct ChannelInfo {
     /// [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
     #[serde(default, skip_serializing_if = "ChannelRelations::is_none_or_empty")]
     pub channel_relations: Option<ChannelRelations>,
+
+    /// The url of the manifest of the lookup index of this subdirectory, which
+    /// answers questions like "which artifacts contain this file?". Can be an
+    /// absolute or a relative url, resolved against the url of this repodata
+    /// file.
+    ///
+    /// Only set by channels that publish such an index.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lookup_url: Option<String>,
 }
 
 /// Repodata revisions keyed by revision, mirroring the `vN` dictionary of the
@@ -1361,6 +1370,7 @@ mod test {
                     base: Some("../conda-forge".to_string()),
                     overrides: None,
                 }),
+                lookup_url: None,
             }),
             packages: IndexMap::default(),
             conda_packages: IndexMap::default(),
@@ -1383,6 +1393,7 @@ mod test {
                     base_url: None,
                     repodata_revisions: IndexMap::default(),
                     channel_relations,
+                    lookup_url: None,
                 }),
                 packages: IndexMap::default(),
                 conda_packages: IndexMap::default(),
