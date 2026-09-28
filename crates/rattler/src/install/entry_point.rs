@@ -1,7 +1,7 @@
 use crate::install::PythonInfo;
 use digest::Output;
 use rattler_conda_types::{
-    Platform,
+    Subdir,
     package::EntryPoint,
     prefix_record::{PathType, PathsEntry},
 };
@@ -86,11 +86,11 @@ fn ensure_entry_point_relative_path(
 /// `scripts/update-launchers.py` for how to refresh them.
 ///
 /// [`conda/conda-launchers`]: https://github.com/conda/conda-launchers/releases
-pub fn get_windows_launcher(platform: &Platform) -> &'static [u8] {
+pub fn get_windows_launcher(platform: &Subdir) -> &'static [u8] {
     match platform {
-        Platform::Win32 => include_bytes!("../../resources/cli-32.exe"),
-        Platform::Win64 => include_bytes!("../../resources/cli-64.exe"),
-        Platform::WinArm64 => include_bytes!("../../resources/cli-arm64.exe"),
+        Subdir::Win32 => include_bytes!("../../resources/cli-32.exe"),
+        Subdir::Win64 => include_bytes!("../../resources/cli-64.exe"),
+        Subdir::WinArm64 => include_bytes!("../../resources/cli-arm64.exe"),
         _ => panic!("unsupported platform for a Windows entry point launcher: {platform}"),
     }
 }
@@ -115,7 +115,7 @@ pub fn create_windows_python_entry_point(
     target_prefix: &str,
     entry_point: &EntryPoint,
     python_info: &PythonInfo,
-    target_platform: &Platform,
+    target_platform: &Subdir,
 ) -> Result<[PathsEntry; 2], std::io::Error> {
     let relative_path_script_py = ensure_entry_point_relative_path(
         &python_info
@@ -306,7 +306,7 @@ mod test {
     use super::ensure_entry_point_relative_path;
     use crate::install::PythonInfo;
     use rattler_conda_types::package::EntryPoint;
-    use rattler_conda_types::{Platform, Version};
+    use rattler_conda_types::{Subdir, Version};
     use std::path::{Path, PathBuf};
     use std::str::FromStr;
 
@@ -353,12 +353,8 @@ mod test {
             "/prefix",
             false,
             &EntryPoint::from_str("jupyter-lab = jupyterlab.labapp:main").unwrap(),
-            &PythonInfo::from_version(
-                &Version::from_str("3.11.0").unwrap(),
-                None,
-                Platform::Linux64,
-            )
-            .unwrap(),
+            &PythonInfo::from_version(&Version::from_str("3.11.0").unwrap(), None, Subdir::Linux64)
+                .unwrap(),
         );
         insta::assert_snapshot!(script);
 
@@ -366,12 +362,8 @@ mod test {
             "/prefix",
             true,
             &EntryPoint::from_str("jupyter-lab = jupyterlab.labapp:main").unwrap(),
-            &PythonInfo::from_version(
-                &Version::from_str("3.11.0").unwrap(),
-                None,
-                Platform::Linux64,
-            )
-            .unwrap(),
+            &PythonInfo::from_version(&Version::from_str("3.11.0").unwrap(), None, Subdir::Linux64)
+                .unwrap(),
         );
         insta::assert_snapshot!("windows", script);
     }

@@ -1,6 +1,8 @@
 name: Detect breaking changes - Comment
 
-on:
+# This workflow only reads the artifact of the trusted `Detect breaking changes`
+# run and posts a comment; it never checks out or executes PR code.
+on: # zizmor: ignore[dangerous-triggers]
   workflow_run:
     workflows: [Detect breaking changes]
     types: [completed]

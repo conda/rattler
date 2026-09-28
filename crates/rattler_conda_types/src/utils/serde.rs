@@ -225,6 +225,24 @@ impl Serialize for TimestampMs {
     }
 }
 
+/// Strict Unix millisecond encoding for server-assigned index timestamps.
+pub(crate) struct StrictTimestampMs;
+
+impl SerializeAs<TimestampMs> for StrictTimestampMs {
+    fn serialize_as<S: Serializer>(source: &TimestampMs, serializer: S) -> Result<S::Ok, S::Error> {
+        source.timestamp_millis().serialize(serializer)
+    }
+}
+
+impl<'de> DeserializeAs<'de, TimestampMs> for StrictTimestampMs {
+    fn deserialize_as<D: Deserializer<'de>>(deserializer: D) -> Result<TimestampMs, D::Error> {
+        let millis = i64::deserialize(deserializer)?;
+        jiff::Timestamp::from_millisecond(millis)
+            .map(TimestampMs::from_timestamp_millis)
+            .map_err(D::Error::custom)
+    }
+}
+
 /// A helper struct to deserialize types from a string without checking the
 /// string.
 pub struct DeserializeFromStrUnchecked;

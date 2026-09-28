@@ -3,7 +3,7 @@ use std::{path::PathBuf, str::FromStr};
 use pyo3::{PyResult, pyclass, pymethods};
 use rattler_conda_types::{ExplicitEnvironmentEntry, ExplicitEnvironmentSpec};
 
-use crate::{error::PyRattlerError, platform::PyPlatform};
+use crate::{error::PyRattlerError, subdir::PySubdir};
 
 /// The explicit environment (e.g. env.txt) file that contains a list of
 /// all URLs in a environment
@@ -50,8 +50,8 @@ impl PyExplicitEnvironmentSpec {
     }
 
     /// Returns the platform specified in the explicit environment specification
-    pub fn platform(&self) -> Option<PyPlatform> {
-        self.inner.platform.map(PyPlatform::from)
+    pub fn platform(&self) -> Option<PySubdir> {
+        self.inner.platform.map(PySubdir::from)
     }
 
     /// Returns the environment entries (URLs) specified in the explicit environment specification

@@ -1,8 +1,8 @@
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
 use rattler_conda_types::{
-    Channel, ChannelNoticeLevel, MatchSpec, ParseMatchSpecOptions, Platform, RepoDataRecord,
-    RepodataRevision,
+    Channel, ChannelNoticeLevel, MatchSpec, ParseMatchSpecOptions, RepoDataRecord,
+    RepodataRevision, Subdir,
 };
 use rattler_repodata_gateway::{
     ChannelConfig, Gateway, GatewayWarning, SourceConfig, fetch::CacheAction,
@@ -248,7 +248,7 @@ impl JsGateway {
             .collect::<Result<Vec<_>, _>>()?;
         let platforms = platforms
             .into_iter()
-            .map(|p| Platform::from_str(&p))
+            .map(|p| Subdir::from_str(&p))
             .collect::<Result<Vec<_>, _>>()?;
 
         let output = self
@@ -300,7 +300,7 @@ impl JsGateway {
             .collect::<Result<Vec<_>, _>>()?;
         let platforms = platforms
             .into_iter()
-            .map(|p| Platform::from_str(&p))
+            .map(|p| Subdir::from_str(&p))
             .collect::<Result<Vec<_>, _>>()?;
         let specs = specs
             .into_iter()

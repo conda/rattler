@@ -3,7 +3,7 @@
 use fs_err as fs;
 use memmap2::Mmap;
 use once_cell::sync::Lazy;
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_digest::Sha256;
 use rattler_digest::{HashingWriter, Sha256Hash};
@@ -159,7 +159,7 @@ pub fn link_file(
     allow_symbolic_links: bool,
     allow_hard_links: bool,
     allow_ref_links: bool,
-    target_platform: Platform,
+    target_platform: Subdir,
     apple_codesign_behavior: AppleCodeSignBehavior,
     modification_time: filetime::FileTime,
     external_symlink_policy: ExternalSymlinkPolicy,
@@ -185,12 +185,26 @@ pub fn link_file(
         // Detect file type from the content
         let file_type = FileType::detect(source.as_ref());
 
-        // Open the destination file
-        let destination = BufWriter::with_capacity(
-            50 * 1024,
-            fs::File::create(&destination_path)
-                .map_err(LinkFileError::FailedToOpenDestinationFile)?,
-        );
+        // Open the destination file. An existing file is replaced rather than truncated: in a
+        // shared prefix it may belong to another user, and then setting its permissions below
+        // would fail after the content has already been written (see
+        // `remove_existing_destination`). `create_new` detects this in the same syscall, so a
+        // fresh install does not pay for it.
+        let create_destination = || {
+            fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&destination_path)
+        };
+        let destination = match create_destination() {
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                remove_existing_destination(&destination_path)?;
+                create_destination()
+            }
+            result => result,
+        }
+        .map_err(LinkFileError::FailedToOpenDestinationFile)?;
+        let destination = BufWriter::with_capacity(50 * 1024, destination);
         let mut destination_writer = HashingWriter::<_, rattler_digest::Sha256>::new(destination);
 
         // Convert back-slashes (\) on windows with forward-slashes (/) to avoid problems with
@@ -571,32 +585,45 @@ fn symlink_to_destination(
     }
 }
 
-/// Copy the specified file from the source (or cached) directory. If the file already exists it is
-/// removed and the operation is retried.
+/// Copy the specified file from the source (or cached) directory. If an existing file cannot be
+/// overwritten it is removed and the copy is retried.
 fn copy_to_destination(
     source_path: &Path,
     destination_path: &Path,
 ) -> Result<LinkMethod, LinkFileError> {
-    loop {
-        match fs::copy(source_path, destination_path) {
-            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                // If the file already exists, remove it and try again.
-                fs::remove_file(destination_path).map_err(|err| {
-                    LinkFileError::IoError(String::from("removing clobbered file"), err)
-                })?;
-            }
-            Ok(_) => {
-                // Copy file modification times, fs::copy transfers file permissions automatically
-                let metadata = fs::symlink_metadata(source_path)
-                    .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
-                let file_time = filetime::FileTime::from_last_modification_time(&metadata);
-                filetime::set_file_times(destination_path, file_time, file_time)
-                    .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
-
-                return Ok(LinkMethod::Copy);
-            }
-            Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Copy, e)),
+    // `fs::copy` overwrites an existing file in place and then sets its permissions, which
+    // requires owning (or being able to write) that file. If that is denied, replace the file
+    // instead (see `remove_existing_destination`).
+    match fs::copy(source_path, destination_path) {
+        Err(e) if e.kind() == ErrorKind::PermissionDenied => {
+            remove_existing_destination(destination_path)?;
+            fs::copy(source_path, destination_path)
         }
+        result => result,
+    }
+    .map_err(|e| LinkFileError::FailedToLink(LinkMethod::Copy, e))?;
+
+    // Copy file modification times, fs::copy transfers file permissions automatically
+    let metadata =
+        fs::symlink_metadata(source_path).map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+    let file_time = filetime::FileTime::from_last_modification_time(&metadata);
+    filetime::set_file_times(destination_path, file_time, file_time)
+        .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
+
+    Ok(LinkMethod::Copy)
+}
+
+/// Removes a file or symlink that exists at `destination_path`, so that it is replaced
+/// rather than overwritten in place. Replacing only requires write access to the directory, while
+/// overwriting a file and setting its permissions and timestamps requires owning it. This matters
+/// in shared prefixes, where the file may belong to another user of the same group.
+fn remove_existing_destination(destination_path: &Path) -> Result<(), LinkFileError> {
+    match fs::remove_file(destination_path) {
+        Err(e) if e.kind() != ErrorKind::NotFound => Err(LinkFileError::IoError(
+            String::from("removing clobbered file"),
+            e,
+        )),
+        _ => Ok(()),
     }
 }
 
@@ -622,7 +649,7 @@ pub fn copy_and_replace_placeholders(
     mut destination: impl Write,
     prefix_placeholder: &str,
     target_prefix: &str,
-    target_platform: &Platform,
+    target_platform: &Subdir,
     file_mode: FileMode,
 ) -> Result<(), std::io::Error> {
     match file_mode {
@@ -675,7 +702,7 @@ static PYTHON_REGEX: Lazy<Regex> = Lazy::new(|| {
 });
 
 /// Finds if the shebang line length is valid.
-fn is_valid_shebang_length(shebang: &str, platform: &Platform) -> bool {
+fn is_valid_shebang_length(shebang: &str, platform: &Subdir) -> bool {
     const MAX_SHEBANG_LENGTH_LINUX: usize = 127;
     const MAX_SHEBANG_LENGTH_MACOS: usize = 512;
 
@@ -717,7 +744,7 @@ fn convert_shebang_to_env(shebang: Cow<'_, str>) -> Cow<'_, str> {
 fn replace_shebang<'a>(
     shebang: Cow<'a, str>,
     old_new: (&str, &str),
-    platform: &Platform,
+    platform: &Subdir,
 ) -> Cow<'a, str> {
     // If the new shebang would contain a space, return a `#!/usr/bin/env` shebang
     assert!(
@@ -762,7 +789,7 @@ pub fn copy_and_replace_textual_placeholder(
     mut destination: impl Write,
     prefix_placeholder: &str,
     target_prefix: &str,
-    target_platform: &Platform,
+    target_platform: &Subdir,
 ) -> Result<(), std::io::Error> {
     // Get the prefixes as bytes
     let old_prefix = prefix_placeholder.as_bytes();
@@ -933,7 +960,7 @@ mod test {
     use super::ExternalSymlinkPolicy;
     use super::PYTHON_REGEX;
     use fs_err as fs;
-    use rattler_conda_types::Platform;
+    use rattler_conda_types::Subdir;
     use rstest::rstest;
     use std::io::Cursor;
 
@@ -985,7 +1012,7 @@ mod test {
             true,
             true,
             true,
-            Platform::Linux64,
+            Subdir::Linux64,
             AppleCodeSignBehavior::DoNothing,
             modification_time,
             ExternalSymlinkPolicy::Deny,
@@ -1046,7 +1073,7 @@ mod test {
             true,
             true,
             true,
-            Platform::Linux64,
+            Subdir::Linux64,
             AppleCodeSignBehavior::DoNothing,
             modification_time,
             ExternalSymlinkPolicy::Deny,
@@ -1108,7 +1135,7 @@ mod test {
             true,
             true,
             true,
-            Platform::Linux64,
+            Subdir::Linux64,
             AppleCodeSignBehavior::DoNothing,
             modification_time,
             ExternalSymlinkPolicy::Deny,
@@ -1145,7 +1172,7 @@ mod test {
             &mut output,
             prefix_placeholder,
             target_prefix,
-            &Platform::Linux64,
+            &Subdir::Linux64,
         )
         .unwrap();
         assert_eq!(
@@ -1221,7 +1248,7 @@ mod test {
         let replaced = super::replace_shebang(
             shebang_with_spaces,
             ("placeholder", "with space"),
-            &Platform::Linux64,
+            &Subdir::Linux64,
         );
         assert_eq!(replaced, "#!/usr/bin/env executable -o test -x");
     }
@@ -1229,30 +1256,30 @@ mod test {
     #[test]
     fn test_replace_long_shebang() {
         let short_shebang = "#!/path/to/executable -x 123".into();
-        let replaced = super::replace_shebang(short_shebang, ("", ""), &Platform::Linux64);
+        let replaced = super::replace_shebang(short_shebang, ("", ""), &Subdir::Linux64);
         assert_eq!(replaced, "#!/path/to/executable -x 123");
 
         let shebang = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong/executable -o test -x";
-        let replaced = super::replace_shebang(shebang.into(), ("", ""), &Platform::Linux64);
+        let replaced = super::replace_shebang(shebang.into(), ("", ""), &Subdir::Linux64);
         assert_eq!(replaced, "#!/usr/bin/env executable -o test -x");
 
-        let replaced = super::replace_shebang(shebang.into(), ("", ""), &Platform::Osx64);
+        let replaced = super::replace_shebang(shebang.into(), ("", ""), &Subdir::Osx64);
         assert_eq!(replaced, shebang);
 
         let shebang_with_escapes = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooo\\ oooooo\\ oooooo\\ oooooooooooooooooooooooooooooooooooong/exe\\ cutable -o test -x";
         let replaced =
-            super::replace_shebang(shebang_with_escapes.into(), ("", ""), &Platform::Linux64);
+            super::replace_shebang(shebang_with_escapes.into(), ("", ""), &Subdir::Linux64);
         assert_eq!(replaced, "#!/usr/bin/env exe\\ cutable -o test -x");
 
         let shebang = "#!    /this/is/looooooooooooooooooooooooooooooooooooooooooooo\\ \\ ooooooo\\ oooooo\\ oooooo\\ ooooooooooooooooo\\ ooooooooooooooooooong/exe\\ cutable -o \"te  st\" -x";
-        let replaced = super::replace_shebang(shebang.into(), ("", ""), &Platform::Linux64);
+        let replaced = super::replace_shebang(shebang.into(), ("", ""), &Subdir::Linux64);
         assert_eq!(replaced, "#!/usr/bin/env exe\\ cutable -o \"te  st\" -x");
 
         let shebang = "#!/usr/bin/env perl";
         let replaced = super::replace_shebang(
             shebang.into(),
             ("/placeholder", "/with space"),
-            &Platform::Linux64,
+            &Subdir::Linux64,
         );
         assert_eq!(replaced, shebang);
 
@@ -1260,7 +1287,7 @@ mod test {
         let replaced = super::replace_shebang(
             shebang.into(),
             ("/placeholder", "/with space"),
-            &Platform::Linux64,
+            &Subdir::Linux64,
         );
         assert_eq!(replaced, "#!/usr/bin/env perl");
     }
@@ -1271,7 +1298,7 @@ mod test {
         let replaced = super::replace_shebang(
             short_shebang,
             ("/path/to", "/new/prefix/with spaces/bin"),
-            &Platform::Linux64,
+            &Subdir::Linux64,
         );
         insta::assert_snapshot!(replaced);
 
@@ -1279,7 +1306,7 @@ mod test {
         let replaced = super::replace_shebang(
             short_shebang,
             ("/path/to", "/new/prefix/with spaces/bin"),
-            &Platform::Linux64,
+            &Subdir::Linux64,
         );
         insta::assert_snapshot!(replaced);
     }
@@ -1301,7 +1328,7 @@ mod test {
             &mut output,
             prefix_placeholder,
             &target_prefix,
-            &Platform::Linux64,
+            &Subdir::Linux64,
         )
         .unwrap();
 
@@ -1426,6 +1453,87 @@ mod test {
             ExternalSymlinkPolicy::Deny,
         );
         assert!(result.is_ok());
+    }
+
+    /// An existing destination file that cannot be overwritten in place (here:
+    /// read-only; in shared prefixes: owned by another user) must be replaced,
+    /// as long as the directory is writable.
+    #[cfg(unix)]
+    #[test]
+    fn test_copy_replaces_read_only_destination() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let source = tmp.path().join("source");
+        let dest = tmp.path().join("dest");
+        fs::write(&source, b"new").unwrap();
+        fs::write(&dest, b"old").unwrap();
+        fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o444)).unwrap();
+
+        let method = super::copy_to_destination(&source, &dest)
+            .expect("replacing a read-only file in a writable directory should succeed");
+
+        assert_eq!(method, super::LinkMethod::Copy);
+        assert_eq!(fs::read(&dest).unwrap(), b"new");
+    }
+
+    /// Same as above for files whose prefix placeholder is patched on install.
+    #[cfg(unix)]
+    #[test]
+    fn test_patched_file_replaces_read_only_destination() {
+        use super::AppleCodeSignBehavior;
+        use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
+        use rattler_conda_types::prefix::Prefix;
+        use std::os::unix::fs::PermissionsExt;
+        use std::path::PathBuf;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let package_dir = temp_dir.path().join("package");
+        fs::create_dir_all(&package_dir).unwrap();
+        fs::write(
+            package_dir.join("config.py"),
+            "prefix = '/old/placeholder/path'\n",
+        )
+        .unwrap();
+
+        let target_dir = Prefix::create(temp_dir.path().join("target")).unwrap();
+        let destination = target_dir.path().join("config.py");
+        fs::write(&destination, "old content\n").unwrap();
+        fs::set_permissions(&destination, std::fs::Permissions::from_mode(0o444)).unwrap();
+
+        let entry = PathsEntry {
+            relative_path: PathBuf::from("config.py"),
+            no_link: false,
+            path_type: PathType::HardLink,
+            prefix_placeholder: Some(PrefixPlaceholder {
+                file_mode: FileMode::Text,
+                placeholder: "/old/placeholder/path".to_string(),
+            }),
+            sha256: None,
+            size_in_bytes: None,
+        };
+
+        let result = super::link_file(
+            &entry,
+            PathBuf::from("config.py"),
+            &package_dir,
+            &target_dir,
+            target_dir.path().to_str().unwrap(),
+            true,
+            true,
+            true,
+            Subdir::Linux64,
+            AppleCodeSignBehavior::DoNothing,
+            filetime::FileTime::now(),
+            ExternalSymlinkPolicy::Deny,
+        )
+        .expect("replacing a read-only file in a writable directory should succeed")
+        .unwrap();
+
+        assert_eq!(result.method, super::LinkMethod::Patched(FileMode::Text));
+        let content = fs::read_to_string(&destination).unwrap();
+        assert!(content.contains(target_dir.path().to_str().unwrap()));
     }
 
     #[cfg_attr(
