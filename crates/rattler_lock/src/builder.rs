@@ -597,7 +597,7 @@ mod test {
 
     use rattler_conda_types::{
         MatchSpec, PackageName, PackageRecord, ParseMatchSpecOptions, ParseStrictness::Strict,
-        Platform, RepodataRevision, Version, package::DistArchiveIdentifier,
+        RepodataRevision, Subdir, Version, package::DistArchiveIdentifier,
     };
     use url::Url;
 
@@ -629,7 +629,7 @@ mod test {
         let lock_file = LockFile::builder()
             .with_platforms(vec![PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: rattler_conda_types::Platform::Linux64,
+                subdir: rattler_conda_types::Subdir::Linux64,
                 virtual_packages: Vec::new(),
             }])
             .unwrap()
@@ -740,7 +740,7 @@ mod test {
     fn linux_64_platform() -> PlatformData {
         PlatformData {
             name: PlatformName::try_from("linux-64").unwrap(),
-            subdir: rattler_conda_types::Platform::Linux64,
+            subdir: rattler_conda_types::Subdir::Linux64,
             virtual_packages: Vec::new(),
         }
     }
@@ -977,7 +977,7 @@ mod test {
         let lock_file = LockFile::builder()
             .with_platforms(vec![PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: Platform::Linux64,
+                subdir: Subdir::Linux64,
                 virtual_packages: Vec::new(),
             }])
             .unwrap()
@@ -1010,7 +1010,7 @@ mod test {
         let lock_file = LockFile::builder()
             .with_platforms(vec![PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: rattler_conda_types::Platform::Linux64,
+                subdir: rattler_conda_types::Subdir::Linux64,
                 virtual_packages: Vec::new(),
             }])
             .unwrap()
@@ -1065,7 +1065,7 @@ mod test {
             let lock_file = LockFile::builder()
                 .with_platforms(vec![PlatformData {
                     name: PlatformName::try_from("linux-64").unwrap(),
-                    subdir: rattler_conda_types::Platform::Linux64,
+                    subdir: rattler_conda_types::Subdir::Linux64,
                     virtual_packages: Vec::new(),
                 }])
                 .unwrap()
@@ -1287,7 +1287,7 @@ mod test {
         let mut builder = LockFile::builder()
             .with_platforms(vec![PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: rattler_conda_types::Platform::Linux64,
+                subdir: rattler_conda_types::Subdir::Linux64,
                 virtual_packages: Vec::new(),
             }])
             .unwrap();

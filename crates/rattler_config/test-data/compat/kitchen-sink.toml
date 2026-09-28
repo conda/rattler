@@ -37,7 +37,7 @@ non-proxy-hosts = ["localhost", "127.0.0.1"]
 [s3-options.my-bucket]
 endpoint-url = "https://s3.example.com"
 region = "eu-central-1"
-force-path-style = true
+addressing-style = "path"
 
 [index-config]
 write-zst = true

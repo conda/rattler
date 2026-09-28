@@ -1,11 +1,12 @@
 from __future__ import annotations
+
 import os
-from typing import List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING
+
 from rattler.lock.channel import LockChannel
 from rattler.lock.environment import Environment
-from rattler.repo_data.record import RepoDataRecord
-
 from rattler.rattler import PyLockFile
+from rattler.repo_data.record import RepoDataRecord
 
 if TYPE_CHECKING:
     from rattler.lock.platform import LockPlatform
@@ -19,7 +20,7 @@ class LockFile:
 
     _lock_file: PyLockFile
 
-    def __init__(self, platforms: List[LockPlatform]) -> None:
+    def __init__(self, platforms: list[LockPlatform]) -> None:
         """
         Create a new rattler-lock file with the given platforms.
 
@@ -63,7 +64,7 @@ class LockFile:
         """
         return self._lock_file.to_path(path)
 
-    def environments(self) -> List[Tuple[str, Environment]]:
+    def environments(self) -> list[tuple[str, Environment]]:
         """
         Returns an iterator over all environments defined in the lock-file.
 
@@ -78,7 +79,7 @@ class LockFile:
         """
         return [(name, Environment._from_py_environment(e)) for (name, e) in self._lock_file.environments()]
 
-    def environment(self, name: str) -> Optional[Environment]:
+    def environment(self, name: str) -> Environment | None:
         """
         Returns the environment with the given name.
 
@@ -96,7 +97,7 @@ class LockFile:
             return Environment._from_py_environment(env)
         return None
 
-    def default_environment(self) -> Optional[Environment]:
+    def default_environment(self) -> Environment | None:
         """
         Returns the environment with the default name as defined by [`DEFAULT_ENVIRONMENT_NAME`].
 
@@ -111,7 +112,7 @@ class LockFile:
         """
         return Environment._from_py_environment(self._lock_file.default_environment())
 
-    def platforms(self) -> List[LockPlatform]:
+    def platforms(self) -> list[LockPlatform]:
         """
         Returns all platforms defined in the lock-file.
 
@@ -129,7 +130,7 @@ class LockFile:
 
         return [LockPlatform._from_py_lock_platform(p) for p in self._lock_file.platforms()]
 
-    def set_channels(self, environment: str, channels: List[LockChannel]) -> None:
+    def set_channels(self, environment: str, channels: list[LockChannel]) -> None:
         """
         Sets the channels for the given environment.
 

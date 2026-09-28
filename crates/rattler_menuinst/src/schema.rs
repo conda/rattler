@@ -611,7 +611,7 @@ pub struct MenuInstSchema {
 #[cfg(test)]
 mod test {
     use crate::render::BaseMenuItemPlaceholders;
-    use rattler_conda_types::Platform;
+    use rattler_conda_types::Subdir;
     use std::path::{Path, PathBuf};
 
     pub(crate) fn test_data() -> PathBuf {
@@ -658,7 +658,7 @@ mod test {
         let placeholders = BaseMenuItemPlaceholders::new(
             Path::new("base_prefix"),
             Path::new("prefix"),
-            Platform::Linux64,
+            Subdir::Linux64,
         );
 
         assert_eq!(

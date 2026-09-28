@@ -5,7 +5,7 @@ import pytest
 import requests
 from pytest import TempPathFactory
 
-from rattler import Gateway, Channel
+from rattler import Channel, Gateway
 
 
 @pytest.fixture(scope="session")

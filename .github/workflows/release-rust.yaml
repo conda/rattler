@@ -20,6 +20,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    environment: release
     steps:
       - name: Obtain GitHub app token
         id: octo-sts
@@ -51,13 +52,16 @@ jobs:
 
           # Verify configs are gone
           git config --global --list
+      - name: Authenticate with crates.io
+        id: crates-io-auth
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
       - name: Run release-plz
-        uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
+        uses: release-plz/action@b8d6b54b02889ff2ae2bb82e8b57c3a8fc1683a5 # v0.5.139
         with:
           command: release
         env:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
 
   # Create a PR with the new versions and changelog, preparing the next release.
   release-plz-pr:
@@ -99,13 +103,12 @@ jobs:
           git config --global --list
 
       - name: Run release-plz
-        uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
+        uses: release-plz/action@b8d6b54b02889ff2ae2bb82e8b57c3a8fc1683a5 # v0.5.139
         id: release-plz
         with:
           command: release-pr
         env:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
       - name: Update bindings lockfiles
         if: steps.release-plz.outputs.prs_created == 'true'

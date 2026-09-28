@@ -52,3 +52,50 @@ fn test_compare_different_packages() {
         CLOBBER_PACKAGE
     ]));
 }
+
+/// `test-data` doubles as a prefix here: its `conda-meta` directory holds a
+/// fixed set of prefix records. It carries more than one record for a few
+/// package names, of which `PrefixData` keeps the last one by file name, so the
+/// listing is the same on every platform.
+const FIXTURE_PREFIX: &str = "test-data";
+
+#[test]
+fn test_list_urls() {
+    insta::assert_snapshot!(run_rattler(&[
+        "list",
+        "-p",
+        FIXTURE_PREFIX,
+        "--format",
+        "urls"
+    ]));
+}
+
+#[test]
+fn test_list_json() {
+    // A single record keeps the snapshot readable; the format is the same for
+    // the whole listing.
+    insta::assert_snapshot!(run_rattler(&[
+        "list",
+        "-p",
+        FIXTURE_PREFIX,
+        "--full-name",
+        "bzip2",
+        "--format",
+        "json"
+    ]));
+}
+
+/// The skill embeds the crate version, which is replaced so the snapshot does
+/// not change on every release.
+///
+/// The command tree depends on the enabled cargo features (`sigstore` adds
+/// `rattler verify-attestation` and the attestation flags), so the snapshot only
+/// describes a fully featured build. Configurations that turn features off (the
+/// musl CI jobs and `pixi run test` build with `--no-default-features`) skip
+/// this test instead of carrying a snapshot per feature combination.
+#[cfg(feature = "sigstore")]
+#[test]
+fn test_skill() {
+    let skill = run_rattler(&["skill"]).replace(env!("CARGO_PKG_VERSION"), "[VERSION]");
+    insta::assert_snapshot!(skill);
+}

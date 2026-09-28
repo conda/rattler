@@ -144,7 +144,6 @@ impl IndexJson {
             .depends
             .iter()
             .chain(self.constrains.iter())
-            .chain(self.extra_depends.values().flatten())
             .any(|spec| matchspec_requires_v3(spec, parse_options))
         {
             RepodataRevision::V3
@@ -185,7 +184,6 @@ impl IndexJson {
                 || depends
                     .iter()
                     .chain(constrains.iter())
-                    .chain(extra_depends.values().flatten())
                     .any(|spec| spec.required_repodata_revision() == RepodataRevision::V3)
             {
                 RepodataRevision::V3
@@ -206,16 +204,9 @@ impl IndexJson {
         }
 
         if required_revision.uses_legacy_package_layout() {
-            for (field, specs) in std::iter::once(("depends".to_string(), &depends))
-                .chain(std::iter::once(("constrains".to_string(), &constrains)))
-                .chain(
-                    extra_depends
-                        .iter()
-                        .map(|(group, specs)| (format!("extra_depends.{group}"), specs)),
-                )
-            {
+            for (field, specs) in [("depends", &depends), ("constrains", &constrains)] {
                 for spec in specs {
-                    validate_legacy_matchspec(&field, spec)?;
+                    validate_legacy_matchspec(field, spec)?;
                 }
             }
         }
@@ -461,7 +452,7 @@ mod test {
                 "build": "0",
                 "build_number": 0,
                 "extra_depends": {
-                    "test": ["pytest[when=\"python >=3.10\"]"]
+                    "all": ["demo[extras=[benchmark,serve]]"]
                 },
                 "name": "demo",
                 "version": "1.0"
@@ -470,7 +461,7 @@ mod test {
         .unwrap();
         assert_eq!(
             inferred_revision.required_repodata_revision(),
-            RepodataRevision::V3
+            RepodataRevision::Legacy
         );
         inferred_revision.validate().unwrap();
 
@@ -630,10 +621,7 @@ mod test {
             }"#,
         )
         .unwrap();
-        assert!(matches!(
-            conditional_extra_dependency.validate(),
-            Err(ValidateIndexJsonError::LegacyMatchSpecCondition { .. })
-        ));
+        conditional_extra_dependency.validate().unwrap();
 
         let flags: IndexJson = serde_json::from_str(
             r#"{

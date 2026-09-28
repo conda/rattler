@@ -1,17 +1,17 @@
-use std::{collections::HashMap, env, io::Write, time::Instant};
+use std::{collections::HashMap, env, time::Instant};
 
 use indexmap::IndexMap;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::{
-    Channel, ChannelConfig, MatchSpec, ParseMatchSpecOptions, Platform, RepoDataRecord,
+    Channel, ChannelConfig, MatchSpec, ParseMatchSpecOptions, RepoDataRecord, Subdir,
 };
 use rattler_repodata_gateway::RepoData;
 
 use crate::commands::gateway::{build_gateway, load_config};
 
-use super::QueryOutputFormat;
+use super::{QueryOutputFormat, print_url_lines};
 
 /// Search for packages in conda channels using glob or regex patterns.
 #[derive(Debug, clap::Parser)]
@@ -32,9 +32,9 @@ pub struct Opt {
     #[clap(short, long, default_value = "conda-forge")]
     channels: Vec<String>,
 
-    /// Platform to search for
-    #[clap(short, long, default_value_t = Platform::current())]
-    platform: Platform,
+    /// Subdir to search for. Defaults to the platform of the current host.
+    #[clap(short, long)]
+    platform: Option<Subdir>,
 
     /// Maximum number of packages to display
     #[clap(long, default_value = "3")]
@@ -61,7 +61,8 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
 
-    eprintln!("Searching for '{}' on {}", opt.matchspec, opt.platform);
+    let platform = opt.platform.map_or_else(crate::host_platform, Ok)?;
+    eprintln!("Searching for '{}' on {}", opt.matchspec, platform);
 
     // Parse the pattern as a matchspec with glob/regex support
     let matchspec = MatchSpec::from_str(
@@ -104,7 +105,7 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
     let repo_data = gateway
         .query(
             channels,
-            [opt.platform, Platform::NoArch],
+            [platform, Subdir::NoArch],
             vec![matchspec.clone()],
         )
         .recursive(false) // Don't fetch dependencies for search
@@ -142,23 +143,7 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
                 .then_with(|| b.cmp(a))
         });
 
-        // This output is meant to be piped (e.g. into `head`), so a closed
-        // stdout is a normal way to end instead of an error.
-        let mut stdout = std::io::stdout().lock();
-        for record in records {
-            if let Err(err) = writeln!(stdout, "{}", record.url) {
-                if err.kind() == std::io::ErrorKind::BrokenPipe {
-                    return Ok(());
-                }
-                return Err(err).into_diagnostic();
-            }
-        }
-        if let Err(err) = stdout.flush()
-            && err.kind() != std::io::ErrorKind::BrokenPipe
-        {
-            return Err(err).into_diagnostic();
-        }
-        return Ok(());
+        return print_url_lines(records.iter().map(|record| &record.url));
     }
 
     // Collect all records

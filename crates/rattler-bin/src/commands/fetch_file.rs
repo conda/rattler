@@ -6,6 +6,9 @@ use super::package_source::{PackageSource, client_for};
 
 /// Read a file from inside a local or remote conda package.
 #[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler fetch-file ./pkg.conda info/index.json
+  rattler fetch-file https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda info/recipe/meta.yaml"#)]
 pub struct Opt {
     /// Path or URL of the conda package (.conda or .tar.bz2 archive)
     #[clap(required = true)]

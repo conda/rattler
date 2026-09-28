@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.54.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.53.0...rattler_conda_types-v0.54.0) - 2026-09-23
+
+### Added
+
+- add standalone Sigstore attestation verification ([#2794](https://github.com/conda/rattler/pull/2794))
+- Add attestations to PackageRecord and rattler-index/upload ([#2773](https://github.com/conda/rattler/pull/2773))
+
+## [0.53.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.52.1...rattler_conda_types-v0.53.0) - 2026-09-17
+
+### Added
+
+- *(rattler_conda_types)* Add indexed_timestamp ([#2790](https://github.com/conda/rattler/pull/2790))
+
+### Fixed
+
+- keep v3-only extra dependencies in legacy repodata ([#2809](https://github.com/conda/rattler/pull/2809))
+- *(rattler_conda_types)* load prefix records in a deterministic order ([#2782](https://github.com/conda/rattler/pull/2782))
+
+### Other
+
+- [**breaking**] Remove timestamp_for_indexing function ([#2799](https://github.com/conda/rattler/pull/2799))
+- [**breaking**] remove Platform::Unknown, make Platform::current() return Option ([#2786](https://github.com/conda/rattler/pull/2786))
+
 ## [0.52.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.52.0...rattler_conda_types-v0.52.1) - 2026-08-27
 
 ### Other
