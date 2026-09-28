@@ -127,7 +127,7 @@ class Subdir(metaclass=SubdirSingleton):
         >>> next(Subdir.all())
         Subdir(noarch)
         >>> len(list(Subdir.all()))
-        32
+        34
         >>>
         """
         return (cls._from_py_subdir(p) for p in PySubdir.all())
