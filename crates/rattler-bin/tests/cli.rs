@@ -237,9 +237,17 @@ fn test_whoprovides_fails_without_index() {
         .output()
         .unwrap();
     assert!(!output.status.success());
+    // miette wraps the message to the terminal width, and a long temporary
+    // directory (macOS, Windows) can split the phrase over two lines, so the
+    // wrapping is undone before matching.
     let stderr = String::from_utf8_lossy(&output.stderr);
+    let unwrapped = stderr
+        .split_whitespace()
+        .filter(|word| *word != "|")
+        .collect::<Vec<_>>()
+        .join(" ");
     assert!(
-        stderr.contains("no lookup index for noarch"),
+        unwrapped.contains("no lookup index for noarch"),
         "unexpected stderr: {stderr}"
     );
 }

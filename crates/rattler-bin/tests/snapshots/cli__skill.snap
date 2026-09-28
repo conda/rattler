@@ -36,7 +36,7 @@ workflows use pixi instead.
 - `rattler whoprovides include/zlib.h` (or a pattern such as `'**/zlib.h'`,
   `'**/libssl.so*'`, `'site-packages/polars/*'`) lists the packages that ship
   a file, using the lookup index of the channel (`info.lookup_url` in its
-  repodata; `--lookup-url` points to an index hosted elsewhere).
+  repodata); `-c` selects the channel, a URL or a local directory.
 - `--offline` (global) disables all network access and only uses cached
   repodata and packages. `-v`/`--verbose` (global) enables debug logging;
   `RUST_LOG` gives finer control.
@@ -207,7 +207,7 @@ rattler whoprovides '**/zlib.h'                 # ... wherever it is in the pack
 rattler whoprovides '**/libssl.so*' -p linux-64 # file names with a literal start
 rattler whoprovides 'site-packages/polars/*'    # files directly below a directory
 rattler whoprovides bin/git --format urls       # print only the urls of the packages
-rattler whoprovides bin/git --lookup-url https://example.org/index   # an index hosted elsewhere
+rattler whoprovides bin/git -c https://example.org/channel   # another channel (URL or directory)
 
 Patterns use `*` and `?` within a path component and `**` for any number of
 components. A pattern needs a literal start (`site-packages/polars/*`), or
