@@ -249,3 +249,7 @@ rattler_virtual_packages = { path = "crates/rattler_virtual_packages", version =
 
 # This is also a rattler crate, but we only pin it to minor version
 simple_spawn_blocking = { path = "crates/simple_spawn_blocking", version = "1.1", default-features = false }
+
+[patch.crates-io]
+# TODO: remove once prefix-dev/resolvo#306 is released.
+resolvo = { git = "https://github.com/baszalmstra/resolvo", branch = "feat/favored-decision-order" }
