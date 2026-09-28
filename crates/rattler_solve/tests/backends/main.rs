@@ -895,11 +895,11 @@ mod resolvo {
         };
 
         let err = rattler_solve::resolvo::Solver.solve(task).unwrap_err();
-        insta::assert_snapshot!(err, @r###"
-        Cannot solve the request because of: foo * cannot be installed because there are no viable options:
+        insta::assert_snapshot!(err, @"
+        foo * cannot be installed because there are no viable options:
         └─ foo 1.0 | 2.0 | ... | 8.0 would require
            └─ bar ==1.0, for which no candidates were found.
-        "###);
+        ");
     }
 
     #[test]
@@ -1337,8 +1337,8 @@ mod resolvo {
             },
         );
 
-        insta::assert_snapshot!(result.unwrap_err(), @r###"
-        Cannot solve the request because of: The following packages are incompatible
+        insta::assert_snapshot!(result.unwrap_err(), @"
+        The following packages are incompatible
         ├─ conflicting-extras[extra1] can be installed with any of the following options:
         │  └─ conflicting-extras[extra1]
         ├─ conflicting-extras[extra2] can be installed with any of the following options:
@@ -1349,7 +1349,7 @@ mod resolvo {
               │  └─ bar 2
               └─ bar <2, which cannot be installed because there are no viable options:
                  └─ bar 1, which conflicts with the versions reported above.
-        "###);
+        ");
     }
 
     /// A test that checks that extras can cause conflicts with other package
@@ -1364,8 +1364,8 @@ mod resolvo {
             },
         );
 
-        insta::assert_snapshot!(result.unwrap_err(), @r###"
-        Cannot solve the request because of: The following packages are incompatible
+        insta::assert_snapshot!(result.unwrap_err(), @"
+        The following packages are incompatible
         ├─ conflicting-extras[extra1] can be installed with any of the following options:
         │  └─ conflicting-extras[extra1]
         ├─ bar >=2 can be installed with any of the following options:
@@ -1374,7 +1374,7 @@ mod resolvo {
            └─ conflicting-extras 1 would require
               └─ bar <2, which cannot be installed because there are no viable options:
                  └─ bar 1, which conflicts with the versions reported above.
-        "###);
+        ");
     }
 
     #[test]

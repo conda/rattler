@@ -2,7 +2,7 @@
 source: crates/rattler_solve/tests/backends/main.rs
 expression: err
 ---
-Cannot solve the request because of: The following packages are incompatible
+The following packages are incompatible
 ├─ bors >=2 cannot be installed because there are no viable options:
 │  ├─ bors 2.1, which conflicts with the versions reported above.
 │  └─ bors 2.0, which conflicts with the versions reported above.

@@ -65,11 +65,10 @@ impl fmt::Display for SolveError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SolveError::Unsolvable(operations) => {
-                write!(
-                    f,
-                    "Cannot solve the request because of: {}",
-                    operations.join(", ")
-                )
+                // Each entry is a multi-line, pre-formatted report that already
+                // explains itself, so keep them on their own lines instead of
+                // joining them into one long sentence.
+                write!(f, "{}", operations.join("\n"))
             }
             SolveError::UnsupportedOperations(operations) => {
                 write!(f, "Unsupported operations: {}", operations.join(", "))
