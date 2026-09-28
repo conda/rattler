@@ -14,12 +14,12 @@ pub mod match_spec;
 pub mod menuinst;
 mod no_arch_type;
 mod parse_mode;
-pub mod platform;
 #[cfg(feature = "proptest")]
 pub mod proptest;
 mod repo_data;
 mod repo_data_record;
 mod run_export;
+pub mod subdir;
 pub mod utils;
 pub mod version_spec;
 
@@ -63,7 +63,6 @@ pub use package_name::{
     InvalidPackageNameError, NormalizedPackageName, PackageName, SourcePackageName,
 };
 pub use parse_mode::{ParseMatchSpecOptions, ParseStrictnessWithNameMatcher};
-pub use platform::{Arch, ParseArchError, ParsePlatformError, Platform};
 pub use prefix_data::PrefixData;
 pub use prefix_record::PrefixRecord;
 #[cfg(feature = "semver")]
@@ -88,6 +87,7 @@ pub use repo_data::{
 };
 pub use repo_data_record::{RepoDataRecord, SolverResult};
 pub use run_export::RunExportKind;
+pub use subdir::{Arch, ParseArchError, ParseSubdirError, Subdir};
 
 /// An package identifier that can be used to identify packages across package
 /// ecosystems.

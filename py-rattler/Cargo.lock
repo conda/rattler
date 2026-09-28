@@ -2000,7 +2000,6 @@ version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
- "serde",
  "typenum",
  "version_check",
  "zeroize",
@@ -4153,7 +4152,6 @@ version = "1.4.0"
 dependencies = [
  "blake2",
  "digest 0.11.3",
- "generic-array",
  "hex",
  "md-5",
  "serde",
@@ -4209,6 +4207,7 @@ version = "0.33.1"
 dependencies = [
  "ahash",
  "file_url",
+ "hex",
  "indexmap 2.14.0",
  "itertools 0.15.0",
  "jiff",
@@ -4444,6 +4443,8 @@ dependencies = [
  "clap",
  "opendal",
  "rattler_networking",
+ "reqsign-aws-v4",
+ "reqsign-core",
  "serde",
  "thiserror 2.0.20",
  "url",
