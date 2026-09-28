@@ -1,4 +1,5 @@
 import pytest
+
 from rattler import Version, VersionSpec, VersionWithSource
 
 
@@ -90,7 +91,7 @@ def test_version_spec_equality() -> None:
 
     assert spec1 == spec2
     assert spec1 != spec3
-    assert not (spec1 == spec3)
+    assert spec1 != spec3
 
 
 def test_version_spec_hash() -> None:

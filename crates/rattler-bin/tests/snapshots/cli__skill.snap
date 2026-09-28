@@ -93,6 +93,7 @@ The examples below are the same ones `rattler <command> --help` prints.
 | `rattler whoneeds` | Show packages that depend on the given package (reverse dependencies) |
 | `rattler shell-hook` | Print the shell activation hook for a conda prefix to stdout |
 | `rattler virtual-packages` | Print detected virtual packages |
+| `rattler verify-attestation` | Verify Sigstore attestations for a conda package |
 | `rattler install-menu` | Install menu items for an installed package |
 | `rattler remove-menu` | Remove installed menu items for a package |
 | `rattler run` | Run a command in an activated conda environment |
@@ -179,6 +180,7 @@ rattler search xtensor --format urls  # print only the package urls
 rattler solve python numpy                 # print the solved environment as a table
 rattler solve python --format json         # print the solved records as JSON
 rattler solve python --format urls         # print only the urls of the solved packages
+rattler solve python --verify-attestations require --issuer github --identity 'https://github.com/org/*'
 ```
 
 ### `rattler whoneeds`

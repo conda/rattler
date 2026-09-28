@@ -1,12 +1,12 @@
 from __future__ import annotations
+
 import os
 from enum import Enum
-from typing import List, Optional
-
-from rattler.rattler import PyRecord, PyLink
-from rattler.prefix.prefix_paths import PrefixPaths
-from rattler.repo_data.record import RepoDataRecord
 from pathlib import Path
+
+from rattler.prefix.prefix_paths import PrefixPaths
+from rattler.rattler import PyLink, PyRecord
+from rattler.repo_data.record import RepoDataRecord
 
 
 class LinkType(Enum):
@@ -29,7 +29,7 @@ class Link:
 
     _inner: PyLink
 
-    def __init__(self, path: os.PathLike[str], type: Optional[LinkType]) -> None:
+    def __init__(self, path: os.PathLike[str], type: LinkType | None) -> None:
         self._inner = PyLink(path, type.value if type else None)
 
 
@@ -48,12 +48,12 @@ class PrefixRecord(RepoDataRecord):
         self,
         repodata_record: RepoDataRecord,
         paths_data: PrefixPaths,
-        link: Optional[Link] = None,
-        package_tarball_full_path: Optional[os.PathLike[str]] = None,
-        extracted_package_dir: Optional[os.PathLike[str]] = None,
-        requested_spec: Optional[str] = None,
-        requested_specs: Optional[List[str]] = None,
-        files: Optional[List[os.PathLike[str]]] = None,
+        link: Link | None = None,
+        package_tarball_full_path: os.PathLike[str] | None = None,
+        extracted_package_dir: os.PathLike[str] | None = None,
+        requested_spec: str | None = None,
+        requested_specs: list[str] | None = None,
+        files: list[os.PathLike[str]] | None = None,
     ) -> None:
         record = PyRecord.create_prefix_record(
             repodata_record=repodata_record._record,
@@ -91,7 +91,7 @@ class PrefixRecord(RepoDataRecord):
         self._record.write_to_path(path, pretty)
 
     @property
-    def package_tarball_full_path(self) -> Optional[Path]:
+    def package_tarball_full_path(self) -> Path | None:
         """
         The path to where the archive of the package was stored on disk.
 
@@ -109,11 +109,11 @@ class PrefixRecord(RepoDataRecord):
         return self._record.package_tarball_full_path
 
     @package_tarball_full_path.setter
-    def package_tarball_full_path(self, value: Optional[os.PathLike[str]]) -> None:
+    def package_tarball_full_path(self, value: os.PathLike[str] | None) -> None:
         self._record.package_tarball_full_path = value
 
     @property
-    def extracted_package_dir(self) -> Optional[Path]:
+    def extracted_package_dir(self) -> Path | None:
         """
         The path that contains the extracted package content.
 
@@ -131,11 +131,11 @@ class PrefixRecord(RepoDataRecord):
         return self._record.extracted_package_dir
 
     @extracted_package_dir.setter
-    def extracted_package_dir(self, value: Optional[os.PathLike[str]]) -> None:
+    def extracted_package_dir(self, value: os.PathLike[str] | None) -> None:
         self._record.extracted_package_dir = value
 
     @property
-    def files(self) -> List[Path]:
+    def files(self) -> list[Path]:
         """
         A sorted list of all files included in this package
 
@@ -153,7 +153,7 @@ class PrefixRecord(RepoDataRecord):
         return self._record.files
 
     @files.setter
-    def files(self, value: List[os.PathLike[str]]) -> None:
+    def files(self, value: list[os.PathLike[str]]) -> None:
         self._record.files = value
 
     @property
@@ -179,7 +179,7 @@ class PrefixRecord(RepoDataRecord):
         self._record.paths_data = value._paths
 
     @property
-    def requested_spec(self) -> Optional[str]:
+    def requested_spec(self) -> str | None:
         """
         The spec that was used when this package was installed (deprecated).
         Use requested_specs instead.
@@ -198,11 +198,11 @@ class PrefixRecord(RepoDataRecord):
         return self._record.requested_spec
 
     @requested_spec.setter
-    def requested_spec(self, value: Optional[str]) -> None:
+    def requested_spec(self, value: str | None) -> None:
         self._record.requested_spec = value
 
     @property
-    def requested_specs(self) -> List[str]:
+    def requested_specs(self) -> list[str]:
         """
         The specs that were used when this package was installed.
         If this package was not directly requested by the user but was instead
@@ -223,7 +223,7 @@ class PrefixRecord(RepoDataRecord):
         return self._record.requested_specs
 
     @requested_specs.setter
-    def requested_specs(self, value: List[str]) -> None:
+    def requested_specs(self, value: list[str]) -> None:
         self._record.requested_specs = value
 
     def __repr__(self) -> str:

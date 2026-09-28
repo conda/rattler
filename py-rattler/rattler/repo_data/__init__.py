@@ -1,9 +1,3 @@
-from rattler.repo_data.package_record import PackageRecord
-from rattler.repo_data.repo_data import ChannelInfo, ChannelRelations, RepoData
-from rattler.repo_data.patch_instructions import PatchInstructions
-from rattler.repo_data.record import RepoDataRecord
-from rattler.repo_data.whl_package_record import WhlPackageRecord
-from rattler.repo_data.sparse import SparseRepoData, PackageFormatSelection
 from rattler.repo_data.gateway import (
     ChannelNotice,
     Gateway,
@@ -11,28 +5,34 @@ from rattler.repo_data.gateway import (
     GatewayQueryResult,
     SourceConfig,
 )
-from rattler.repo_data.who_needs import Dependent
-from rattler.repo_data.source import RepoDataSource
+from rattler.repo_data.package_record import PackageRecord
+from rattler.repo_data.patch_instructions import PatchInstructions
+from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.removed_package import RemovedPackage
+from rattler.repo_data.repo_data import ChannelInfo, ChannelRelations, RepoData
 from rattler.repo_data.revisions import RepodataRevisionMetadata
+from rattler.repo_data.source import RepoDataSource
+from rattler.repo_data.sparse import PackageFormatSelection, SparseRepoData
+from rattler.repo_data.whl_package_record import WhlPackageRecord
+from rattler.repo_data.who_needs import Dependent
 
 __all__ = [
     "ChannelInfo",
-    "ChannelRelations",
     "ChannelNotice",
-    "PackageRecord",
-    "RepoData",
-    "PatchInstructions",
-    "RemovedPackage",
-    "RepoDataRecord",
-    "WhlPackageRecord",
-    "SparseRepoData",
+    "ChannelRelations",
+    "Dependent",
     "Gateway",
     "GatewayNamesResult",
     "GatewayQueryResult",
-    "SourceConfig",
     "PackageFormatSelection",
+    "PackageRecord",
+    "PatchInstructions",
+    "RemovedPackage",
+    "RepoData",
+    "RepoDataRecord",
     "RepoDataSource",
-    "Dependent",
     "RepodataRevisionMetadata",
+    "SourceConfig",
+    "SparseRepoData",
+    "WhlPackageRecord",
 ]

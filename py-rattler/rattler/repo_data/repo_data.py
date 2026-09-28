@@ -1,10 +1,11 @@
 from __future__ import annotations
-from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from os import PathLike
+
     from rattler.channel import Channel
     from rattler.repo_data import PatchInstructions, RepoDataRecord
 
@@ -32,12 +33,12 @@ class ChannelRelations:
         return instance
 
     @property
-    def base(self) -> Optional[str]:
+    def base(self) -> str | None:
         """A reference to a channel with higher priority than the declaring channel."""
         return self._inner.base
 
     @property
-    def overrides(self) -> Optional[str]:
+    def overrides(self) -> str | None:
         """A reference to a channel with lower priority than the declaring channel."""
         return self._inner.overrides
 
@@ -62,17 +63,17 @@ class ChannelInfo:
         return instance
 
     @property
-    def subdir(self) -> Optional[str]:
+    def subdir(self) -> str | None:
         """The channel's subdirectory (e.g. ``"linux-64"``)."""
         return self._inner.subdir
 
     @property
-    def base_url(self) -> Optional[str]:
+    def base_url(self) -> str | None:
         """The base URL for all package URLs in this channel, if any."""
         return self._inner.base_url
 
     @property
-    def channel_relations(self) -> Optional[ChannelRelations]:
+    def channel_relations(self) -> ChannelRelations | None:
         """
         Channel relations declared by this channel, see
         [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
@@ -85,7 +86,7 @@ class ChannelInfo:
         return ChannelRelations._from_inner(relations)
 
     @property
-    def repodata_revisions(self) -> Dict[str, RepodataRevisionMetadata]:
+    def repodata_revisions(self) -> dict[str, RepodataRevisionMetadata]:
         """Revisions advertised in ``info.repodata_revisions``, keyed by ``vN``.
 
         Each value contains indexer-derived package statistics when available
@@ -110,7 +111,7 @@ class RepoData:
     _repo_data: PyRepoData
 
     @classmethod
-    def from_path(cls, path: Union[str, PathLike[str]]) -> RepoData:
+    def from_path(cls, path: str | PathLike[str]) -> RepoData:
         """
         Load a `RepoData` from a ``repodata.json`` file on disk.
 
@@ -130,7 +131,7 @@ class RepoData:
         return cls._from_py_repo_data(PyRepoData.from_path(path))
 
     @property
-    def info(self) -> Optional[ChannelInfo]:
+    def info(self) -> ChannelInfo | None:
         """Returns the channel info contained in the repodata, if any."""
         info = self._repo_data.info
         if info is None:
@@ -138,12 +139,12 @@ class RepoData:
         return ChannelInfo._from_inner(info)
 
     @property
-    def version(self) -> Optional[int]:
+    def version(self) -> int | None:
         """Returns the repodata format version, if any."""
         return self._repo_data.version
 
     @property
-    def repodata_revisions(self) -> Dict[str, RepodataRevisionMetadata]:
+    def repodata_revisions(self) -> dict[str, RepodataRevisionMetadata]:
         """Revisions advertised by this repodata, keyed by ``vN``.
 
         Each value includes the optional publisher-supplied ``message`` and
@@ -158,7 +159,7 @@ class RepoData:
         """
         self._repo_data.apply_patches(instructions._patch_instructions)
 
-    def into_repo_data(self, channel: Channel) -> List[RepoDataRecord]:
+    def into_repo_data(self, channel: Channel) -> list[RepoDataRecord]:
         """
         Builds a `List[RepoDataRecord]` from the packages in a
         `RepoData` given the source of the data.

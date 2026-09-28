@@ -1,8 +1,8 @@
+import select
 import sys
 import time
-import select
-import pytest
 
+import pytest
 
 # PTY functionality is only available on Unix platforms
 skip_on_windows = pytest.mark.skipif(sys.platform == "win32", reason="PTY is Unix-only")
@@ -240,6 +240,7 @@ def test_pty_process_get_file_handle() -> None:
 async def test_pty_process_async_read_write() -> None:
     """Test async read and write operations."""
     import asyncio
+
     from rattler import PtyProcess
 
     process = PtyProcess(["bash", "-c", "echo 'hello async world'"])
@@ -258,6 +259,7 @@ async def test_pty_process_async_read_write() -> None:
 async def test_pty_process_async_wait() -> None:
     """Test async waiting for process to exit."""
     import asyncio
+
     from rattler import PtyProcess
 
     process = PtyProcess(["sleep", "0.1"])
@@ -276,6 +278,7 @@ async def test_pty_process_async_wait() -> None:
 async def test_pty_process_async_exit() -> None:
     """Test async process termination."""
     import asyncio
+
     from rattler import PtyProcess
 
     process = PtyProcess(["sleep", "100"])
@@ -295,6 +298,7 @@ async def test_pty_process_async_exit() -> None:
 async def test_pty_process_multiple_async_operations() -> None:
     """Test multiple concurrent async operations."""
     import asyncio
+
     from rattler import PtyProcess
 
     # Create multiple processes

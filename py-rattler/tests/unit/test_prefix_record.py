@@ -1,13 +1,14 @@
 import json
 import os
 from pathlib import Path
+
 from rattler import (
-    PrefixRecord,
+    FileMode,
+    PackageRecord,
     PrefixPaths,
     PrefixPathsEntry,
     PrefixPathType,
-    FileMode,
-    PackageRecord,
+    PrefixRecord,
     RepoDataRecord,
     VersionWithSource,
 )
