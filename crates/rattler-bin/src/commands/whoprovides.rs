@@ -7,7 +7,7 @@ use futures_util::future::try_join_all;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
-use rattler_conda_types::{Channel, ChannelConfig, Platform, package::CondaArchiveIdentifier};
+use rattler_conda_types::{Channel, ChannelConfig, Subdir, package::CondaArchiveIdentifier};
 use rattler_lookup::{Kind, Location, Matches, Query, SubdirIndex, discovery};
 
 use super::{QueryOutputFormat, print_url_lines};
@@ -40,10 +40,10 @@ pub struct Opt {
     #[clap(short, long, default_value = "conda-forge")]
     channels: Vec<String>,
 
-    /// Platform to search for. Defaults to the platform of the current host.
+    /// Subdir to search for. Defaults to the platform of the current host.
     /// `noarch` is always searched, too.
     #[clap(short, long)]
-    platform: Option<Platform>,
+    platform: Option<Subdir>,
 
     /// Maximum number of packages to display
     #[clap(long, default_value = "100")]
@@ -76,7 +76,7 @@ struct Found {
 /// The manifest locations of the subdirs to search.
 async fn locate_indexes(
     opt: &Opt,
-    subdirs: &[Platform],
+    subdirs: &[Subdir],
     client: &reqwest_middleware::ClientWithMiddleware,
 ) -> miette::Result<Vec<Location>> {
     let mut locations = Vec::new();
@@ -131,7 +131,7 @@ pub async fn whoprovides(opt: Opt, offline: bool) -> miette::Result<()> {
 
     let client = super::client::create_client_with_middleware(offline)?;
     let platform = opt.platform.map_or_else(crate::host_platform, Ok)?;
-    let subdirs: Vec<Platform> = [platform, Platform::NoArch].into_iter().dedup().collect();
+    let subdirs: Vec<Subdir> = [platform, Subdir::NoArch].into_iter().dedup().collect();
 
     let pb = ProgressBar::new_spinner();
     pb.enable_steady_tick(std::time::Duration::from_millis(100));

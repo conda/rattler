@@ -30,7 +30,7 @@ rustls = [
   "rattler_lookup?/rustls",
   "opendal/reqwest-rustls-tls",
 ]
-s3 = ["opendal/services-s3", "dep:rattler_s3"]
+s3 = ["opendal/services-s3", "dep:rattler_s3", "rattler_s3/opendal"]
 
 [[bin]]
 name = "rattler-index"

@@ -6,7 +6,7 @@ use std::{
     path::Path,
 };
 
-use rattler_conda_types::{PackageName, PackageRecord, Platform, PrefixRecord};
+use rattler_conda_types::{PackageName, PackageRecord, PrefixRecord, Subdir};
 use rattler_shell::shell::{Bash, CmdExe, ShellEnum};
 use thiserror::Error;
 
@@ -34,7 +34,7 @@ pub enum LinkScriptType {
 
 impl LinkScriptType {
     /// Get the path to the link script for a given package record and platform
-    pub fn get_path(&self, package_record: &PackageRecord, platform: &Platform) -> String {
+    pub fn get_path(&self, package_record: &PackageRecord, platform: &Subdir) -> String {
         let name = &package_record.name.as_normalized();
         if platform.is_windows() {
             match self {
@@ -90,7 +90,7 @@ pub fn run_link_scripts<'a>(
     link_script_type: LinkScriptType,
     prefix_records: impl Iterator<Item = &'a PrefixRecord>,
     target_prefix: &Path,
-    platform: &Platform,
+    platform: &Subdir,
     reporter: Option<&dyn Reporter>,
 ) -> Result<PrePostLinkResult, LinkScriptError> {
     let mut env = HashMap::new();
@@ -270,7 +270,7 @@ mod tests {
         },
         package_cache::PackageCache,
     };
-    use rattler_conda_types::{Platform, PrefixRecord, RepoDataRecord, prefix::Prefix};
+    use rattler_conda_types::{PrefixRecord, RepoDataRecord, Subdir, prefix::Prefix};
     use rattler_networking::LazyClient;
 
     fn test_operations() -> Vec<TransactionOperation<PrefixRecord, RepoDataRecord>> {
@@ -292,7 +292,7 @@ mod tests {
             operations,
             python_info: None,
             current_python_info: None,
-            platform: Platform::current().expect("host platform"),
+            platform: Subdir::current().expect("host platform"),
             unchanged: Vec::new(),
         };
 
@@ -320,7 +320,7 @@ mod tests {
             operations: vec![TransactionOperation::Remove(prefix_records[0].clone())],
             python_info: None,
             current_python_info: None,
-            platform: Platform::current().expect("host platform"),
+            platform: Subdir::current().expect("host platform"),
             unchanged: Vec::new(),
         };
 

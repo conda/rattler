@@ -14,7 +14,7 @@ use std::{
 };
 
 use opendal::Operator;
-use rattler_conda_types::{Platform, package::DistArchiveIdentifier};
+use rattler_conda_types::{Subdir, package::DistArchiveIdentifier};
 use rattler_lookup::{
     Kind, Location, Manifest, WriteOptions, bulk,
     manifest::{LOOKUP_DIR, manifest_path},
@@ -55,7 +55,7 @@ impl ExistingLookup {
 /// Returns `None` if the subdir has no index.
 pub(crate) async fn read_existing(
     op: &Operator,
-    subdir: Platform,
+    subdir: Subdir,
     metadata: &RepodataFileMetadata,
 ) -> Result<Option<ExistingLookup>, RepodataError> {
     let path = manifest_path(subdir.as_str());
@@ -84,14 +84,14 @@ pub(crate) async fn read_existing(
     }))
 }
 
-fn layer_file_location(subdir: Platform, file: &str) -> Location {
+fn layer_file_location(subdir: Subdir, file: &str) -> Location {
     Location::parse(&format!("{subdir}/{LOOKUP_DIR}/{file}"))
 }
 
 /// Reads a complete layer file and verifies its size and SHA-256.
 async fn read_layer_file(
     op: &Operator,
-    subdir: Platform,
+    subdir: Subdir,
     file: &str,
     expected_size: u64,
 ) -> Result<bytes::Bytes, RepodataError> {
@@ -120,7 +120,7 @@ async fn read_layer_file(
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn write_index(
     op: &Operator,
-    subdir: Platform,
+    subdir: Subdir,
     channel: &str,
     existing: Option<ExistingLookup>,
     uploaded: &HashSet<DistArchiveIdentifier>,

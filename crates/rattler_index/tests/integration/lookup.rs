@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use rattler_conda_types::{Platform, ShardedRepodata};
+use rattler_conda_types::{ShardedRepodata, Subdir};
 use rattler_index::{IndexFsConfig, PackageRevisionAssignment, index_fs};
 use rattler_lookup::{Kind, Location, Manifest, Query, SubdirIndex, bulk, discovery};
 use serde_json::Value;
@@ -87,7 +87,7 @@ impl FsConfigBuilder {
     fn new(channel: &Path, write_lookup: bool, force: bool) -> Self {
         Self(IndexFsConfig {
             channel: channel.to_path_buf(),
-            target_platform: Some(Platform::Win64),
+            target_platform: Some(Subdir::Win64),
             repodata_patch: None,
             write_zst: true,
             write_shards: true,
@@ -136,7 +136,7 @@ async fn test_index_writes_lookup_index() {
     // With it, a base layer with both packages is written and the repodata
     // (and the sharded index) point to the manifest.
     let stats = index(channel, true, false).await;
-    let lookup_stats = stats.subdirs[&Platform::Win64].lookup.as_ref().unwrap();
+    let lookup_stats = stats.subdirs[&Subdir::Win64].lookup.as_ref().unwrap();
     assert_eq!(lookup_stats.packages_added, 2);
     assert_eq!(lookup_stats.packages_removed, 0);
     assert_eq!(lookup_stats.layers, 1);
@@ -247,7 +247,7 @@ async fn test_lookup_index_layers_removals_and_compaction() {
     // Re-indexing without changes adds no layer.
     let stats = index(channel, true, false).await;
     assert_eq!(
-        stats.subdirs[&Platform::Win64]
+        stats.subdirs[&Subdir::Win64]
             .lookup
             .as_ref()
             .unwrap()
@@ -261,7 +261,7 @@ async fn test_lookup_index_layers_removals_and_compaction() {
     fs::remove_file(subdir.join(TAR_BZ2_PACKAGE)).unwrap();
     let stats = index(channel, true, false).await;
     assert_eq!(
-        stats.subdirs[&Platform::Win64]
+        stats.subdirs[&Subdir::Win64]
             .lookup
             .as_ref()
             .unwrap()
@@ -307,7 +307,7 @@ async fn test_lookup_index_layers_removals_and_compaction() {
         fs::copy(&empty, subdir.join(&filename)).unwrap();
         extra.push(filename);
         let stats = index(channel, true, false).await;
-        let lookup_stats = stats.subdirs[&Platform::Win64].lookup.as_ref().unwrap();
+        let lookup_stats = stats.subdirs[&Subdir::Win64].lookup.as_ref().unwrap();
         assert_eq!(lookup_stats.packages_added, 1);
         let manifest = read_manifest(channel);
         if i + 1 < rattler_index::MAX_LOOKUP_LAYERS {
@@ -338,7 +338,7 @@ async fn test_lookup_index_layers_removals_and_compaction() {
     // A forced re-index writes a new base layer, without the deleted package.
     fs::remove_file(subdir.join(CONDA_PACKAGE)).unwrap();
     let stats = index(channel, true, true).await;
-    let lookup_stats = stats.subdirs[&Platform::Win64].lookup.as_ref().unwrap();
+    let lookup_stats = stats.subdirs[&Subdir::Win64].lookup.as_ref().unwrap();
     assert!(lookup_stats.compacted);
     let manifest = read_manifest(channel);
     assert_eq!(manifest.layers.len(), 1);

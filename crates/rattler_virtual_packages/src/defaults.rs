@@ -3,7 +3,7 @@
 //! for a platform other than the current one (see
 //! [`crate::VirtualPackages::detect_for_platform`]).
 
-use rattler_conda_types::{Platform, Version};
+use rattler_conda_types::{Subdir, Version};
 
 /// The default `glibc` version to use when the version cannot be detected.
 ///
@@ -11,9 +11,9 @@ use rattler_conda_types::{Platform, Version};
 /// platforms that never had a `glibc` that old: `riscv64` support only landed in
 /// `glibc` 2.27 upstream, and conda-forge builds for `linux-riscv64` against
 /// 2.39, so assuming 2.28 there makes every package look uninstallable.
-pub fn default_glibc_version(platform: Platform) -> Version {
+pub fn default_glibc_version(platform: Subdir) -> Version {
     match platform {
-        Platform::LinuxRiscv64 => "2.39".parse().unwrap(),
+        Subdir::LinuxRiscv64 => "2.39".parse().unwrap(),
         _ => "2.28".parse().unwrap(),
     }
 }
@@ -33,9 +33,9 @@ pub fn default_windows_version() -> Version {
 
 /// Returns the default macOS version to use when the version cannot be
 /// detected, or `None` if the given platform is not a macOS platform.
-pub fn default_mac_os_version(platform: Platform) -> Option<Version> {
+pub fn default_mac_os_version(platform: Subdir) -> Option<Version> {
     match platform {
-        Platform::Osx64 | Platform::OsxArm64 => Some("13.0".parse().unwrap()),
+        Subdir::Osx64 | Subdir::OsxArm64 => Some("13.0".parse().unwrap()),
         _ => None,
     }
 }

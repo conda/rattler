@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     import os
 
     from rattler.channel import Channel
-    from rattler.platform import Platform
+    from rattler.platform import Subdir
 
 
 CacheAction = Literal["cache-or-fetch", "use-cache-only", "force-cache-only", "no-cache"]
@@ -85,7 +85,7 @@ class FetchRepoDataOptions:
 async def fetch_repo_data(
     *,
     channels: list[Channel],
-    platforms: list[Platform],
+    platforms: list[Subdir],
     cache_path: str | os.PathLike[str],
     callback: Callable[[int, int], None] | None,
     client: Client | None = None,
@@ -96,7 +96,7 @@ async def fetch_repo_data(
 
     Arguments:
         channels: A list of `Channel`s to fetch repo data.
-        platforms: A list of `Platform`s for which the repo data
+        platforms: A list of `Subdir`s for which the repo data
                    should be fetched.
         cache_path: A `os.PathLike[str]` where the repo data should
                     be downloaded.
