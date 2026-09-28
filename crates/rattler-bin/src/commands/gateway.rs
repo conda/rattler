@@ -21,18 +21,16 @@ pub fn load_config() -> miette::Result<ConfigBase<NoExtension>> {
 
 /// Resolves the channels to query: the channels given on the command line,
 /// otherwise the `default-channels` from the configuration, otherwise
-/// conda-forge. Relative channel paths resolve against the current directory.
+/// conda-forge.
 pub fn resolve_channels(
     cli_channels: Option<&[String]>,
     config: &ConfigBase<NoExtension>,
+    channel_config: &rattler_conda_types::ChannelConfig,
 ) -> miette::Result<Vec<Channel>> {
-    let channel_config = rattler_conda_types::ChannelConfig::default_with_root_dir(
-        std::env::current_dir().into_diagnostic()?,
-    );
     match cli_channels {
         Some(channels) => channels
             .iter()
-            .map(|channel| Channel::from_str(channel, &channel_config))
+            .map(|channel| Channel::from_str(channel, channel_config))
             .collect::<Result<_, _>>()
             .into_diagnostic(),
         None => config
@@ -40,7 +38,7 @@ pub fn resolve_channels(
             .clone()
             .unwrap_or_else(|| vec![NamedChannelOrUrl::Name("conda-forge".to_string())])
             .into_iter()
-            .map(|channel| channel.into_channel(&channel_config))
+            .map(|channel| channel.into_channel(channel_config))
             .collect::<Result<_, _>>()
             .into_diagnostic(),
     }

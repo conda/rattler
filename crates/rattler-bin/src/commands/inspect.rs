@@ -6,7 +6,9 @@ use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::package::{
     AboutJson, CondaArchiveType, IndexJson, PackageFile, PathsJson, RunExportsJson,
 };
-use rattler_conda_types::{MatchSpec, NoArchKind, ParseMatchSpecOptions, RepoDataRecord, Subdir};
+use rattler_conda_types::{
+    ChannelConfig, MatchSpec, NoArchKind, ParseMatchSpecOptions, RepoDataRecord, Subdir,
+};
 use rattler_repodata_gateway::RepoData;
 use serde::Serialize;
 use url::Url;
@@ -151,7 +153,9 @@ async fn find_newest_record(opt: &Opt, offline: bool) -> miette::Result<RepoData
     })?;
 
     let config = load_config()?;
-    let channels = resolve_channels(opt.channels.as_deref(), &config)?;
+    let channel_config =
+        ChannelConfig::default_with_root_dir(std::env::current_dir().into_diagnostic()?);
+    let channels = resolve_channels(opt.channels.as_deref(), &config, &channel_config)?;
     let platform = opt.platform.map_or_else(crate::host_platform, Ok)?;
 
     let client = super::client::create_client_with_middleware(offline)?;

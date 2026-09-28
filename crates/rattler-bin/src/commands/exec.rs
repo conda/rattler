@@ -10,6 +10,7 @@ use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
     ParseMatchSpecOptions, Subdir,
 };
+use rattler_config::{ConfigBase, NoExtension};
 use rattler_repodata_gateway::RepoData;
 use rattler_shell::shell::ShellEnum;
 use rattler_solve::{SolverImpl, SolverTask, resolvo::Solver};
@@ -25,7 +26,7 @@ use std::{
 use crate::{
     commands::{
         client::create_client_with_middleware,
-        gateway::{build_gateway, load_config},
+        gateway::{build_gateway, load_config, resolve_channels},
         progress::{wrap_in_async_progress, wrap_in_progress},
         table::{Cell, Table},
     },
@@ -54,7 +55,8 @@ pub struct Opt {
     #[clap(long, short = 'w', conflicts_with = "specs")]
     pub with: Vec<String>,
 
-    /// Channels to search for packages.
+    /// Channels to search for packages. Defaults to the `default-channels`
+    /// from the rattler configuration, or conda-forge.
     #[clap(short, long = "channel")]
     pub channels: Option<Vec<String>>,
 
@@ -90,14 +92,8 @@ pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
         )
     })?;
 
-    // Parse channels (default: conda-forge)
-    let channels = opt
-        .channels
-        .unwrap_or_else(|| vec![String::from("conda-forge")])
-        .into_iter()
-        .map(|c| Channel::from_str(&c, &channel_config))
-        .collect::<Result<Vec<_>, _>>()
-        .into_diagnostic()?;
+    let config = load_config()?;
+    let channels = resolve_channels(opt.channels.as_deref(), &config, &channel_config)?;
 
     // Determine the specs for installation and for the environment name.
     let explicit_specs = parse_specs(&opt.specs)?;
@@ -124,6 +120,7 @@ pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
     let prefix = create_exec_prefix(CreateExecPrefixOptions {
         specs: &install_specs,
         channels: &channels,
+        config: &config,
         platform: opt.platform.map_or_else(crate::host_platform, Ok)?,
         dir_prefix,
         force_reinstall: opt.force_reinstall,
@@ -188,6 +185,7 @@ pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
 struct CreateExecPrefixOptions<'a> {
     specs: &'a [MatchSpec],
     channels: &'a [Channel],
+    config: &'a ConfigBase<NoExtension>,
     platform: Subdir,
     dir_prefix: Option<String>,
     force_reinstall: bool,
@@ -201,6 +199,7 @@ async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Res
     let CreateExecPrefixOptions {
         specs,
         channels,
+        config,
         platform,
         dir_prefix,
         force_reinstall,
@@ -229,8 +228,7 @@ async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Res
 
     let download_client = create_client_with_middleware(offline)?;
 
-    let config = load_config()?;
-    let gateway = build_gateway(download_client.clone(), &config, offline, true)?;
+    let gateway = build_gateway(download_client.clone(), config, offline, true)?;
 
     let repo_data = wrap_in_async_progress(
         "fetching repodata",

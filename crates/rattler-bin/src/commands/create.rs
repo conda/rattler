@@ -72,7 +72,7 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     // Determine the channels to use from the command line or select the default.
     // Like matchspecs this also requires the use of the `channel_config` so we
     // have to do this manually.
-    let channels = opt.solver.channels(&channel_config)?;
+    let channels = opt.solver.channels(&config, &channel_config)?;
     let exclude_newer = opt.solver.exclude_newer(&channel_config)?;
 
     // Determine the packages that are currently installed in the environment.

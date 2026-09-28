@@ -8,9 +8,11 @@ use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
     ParseMatchSpecOptions, RepoDataRecord, SolverResult, Subdir, Version,
 };
+use rattler_config::{ConfigBase, NoExtension};
 use rattler_solve::{IntoRepoData, SolveError, SolverImpl, SolverTask, libsolv_c, resolvo};
 use rattler_virtual_packages::{VirtualPackageOverrides, VirtualPackages};
 
+use crate::commands::gateway::resolve_channels;
 use crate::exclude_newer::{ExcludeNewer, NamedCutoff};
 
 /// Options that configure how an environment is solved.
@@ -19,7 +21,8 @@ use crate::exclude_newer::{ExcludeNewer, NamedCutoff};
 /// every solving command accepts the same set of flags.
 #[derive(Debug, clap::Args)]
 pub struct SolverArgs {
-    /// Channel to search for packages.
+    /// Channel to search for packages. Defaults to the `default-channels`
+    /// from the rattler configuration, or conda-forge.
     ///
     /// Example: -c conda-forge -c main
     #[clap(short, long = "channel")]
@@ -201,15 +204,13 @@ impl SolverArgs {
         Self::parse_specs(&self.constraints)
     }
 
-    /// The channels to solve from, defaulting to `conda-forge`.
-    pub fn channels(&self, channel_config: &ChannelConfig) -> miette::Result<Vec<Channel>> {
-        self.channels
-            .clone()
-            .unwrap_or_else(|| vec![String::from("conda-forge")])
-            .into_iter()
-            .map(|channel_str| Channel::from_str(channel_str, channel_config))
-            .collect::<Result<Vec<_>, _>>()
-            .into_diagnostic()
+    /// The channels to solve from, see [`resolve_channels`].
+    pub fn channels(
+        &self,
+        config: &ConfigBase<NoExtension>,
+        channel_config: &ChannelConfig,
+    ) -> miette::Result<Vec<Channel>> {
+        resolve_channels(self.channels.as_deref(), config, channel_config)
     }
 
     /// The platform to solve for, either as given on the command line or the
