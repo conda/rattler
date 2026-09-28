@@ -167,6 +167,12 @@ fn unpack_tar_archive_sync<R: Read>(
     // `dunce` keeps Windows paths in their normal form instead of the `\\?\`
     // verbatim form that `std::fs::canonicalize` returns.
     let destination = dunce::canonicalize(destination).map_err(ExtractError::IoError)?;
+    // Containment checks compare `std::fs::canonicalize` results on both
+    // sides. `dunce` only strips the `\\?\` prefix from paths shorter than
+    // MAX_PATH, so mixing its output for a short destination and a long
+    // entry directory would make valid long paths look like they escape.
+    let canonical_destination =
+        std::fs::canonicalize(&destination).map_err(ExtractError::IoError)?;
     let mut validated_parents: HashSet<PathBuf> = HashSet::new();
 
     for entry in archive.entries().map_err(ExtractError::IoError)? {
@@ -202,7 +208,7 @@ fn unpack_tar_archive_sync<R: Read>(
         }
 
         if !validated_parents.contains(parent) {
-            ensure_dir_inside(&destination, parent)
+            ensure_dir_inside(&canonical_destination, parent)
                 .map_err(|err| unpack_error(&entry_path, err))?;
             validated_parents.insert(parent.to_path_buf());
         }
@@ -212,7 +218,7 @@ fn unpack_tar_archive_sync<R: Read>(
                 .map_err(|err| unpack_error(&entry_path, err))?;
         } else {
             if entry_type.is_hard_link() {
-                unpack_hard_link(&destination, &entry, &file_dst)
+                unpack_hard_link(&destination, &canonical_destination, &entry, &file_dst)
             } else {
                 entry.unpack(&file_dst).map(|_| ())
             }
@@ -321,10 +327,11 @@ fn ensure_dir_inside(destination: &Path, dir: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Errors when the canonical form of `path` is not inside `destination`.
-fn validate_inside(destination: &Path, path: &Path) -> std::io::Result<()> {
-    let canonical = dunce::canonicalize(path)?;
-    if canonical.starts_with(destination) {
+/// Errors when the canonical form of `path` is not inside
+/// `canonical_destination`, which must come from [`std::fs::canonicalize`].
+fn validate_inside(canonical_destination: &Path, path: &Path) -> std::io::Result<()> {
+    let canonical = std::fs::canonicalize(path)?;
+    if canonical.starts_with(canonical_destination) {
         Ok(())
     } else {
         Err(std::io::Error::new(
@@ -341,6 +348,7 @@ fn validate_inside(destination: &Path, path: &Path) -> std::io::Result<()> {
 /// is resolved relative to the destination and must already exist inside it.
 fn unpack_hard_link<R: Read>(
     destination: &Path,
+    canonical_destination: &Path,
     entry: &tar::Entry<'_, R>,
     file_dst: &Path,
 ) -> std::io::Result<()> {
@@ -359,7 +367,7 @@ fn unpack_hard_link<R: Read>(
             ),
         )
     })?;
-    validate_inside(destination, &link_src)?;
+    validate_inside(canonical_destination, &link_src)?;
     match std::fs::hard_link(&link_src, file_dst) {
         // A retried extraction into the same destination finds the link from
         // the previous attempt.
