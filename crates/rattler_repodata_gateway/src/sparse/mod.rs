@@ -1365,9 +1365,25 @@ fn deserialize_filename_and_raw_record<'d, D: Deserializer<'d>>(
     // Since (in most cases) the repodata is already ordered by filename which does
     // closely resemble ordering by package name this sort operation will most
     // likely be very fast.
-    entries.sort_unstable_by(|(a, _), (b, _)| a.package.cmp(b.package));
+    //
+    // Within a package the entries are ordered by their filename without the
+    // archive extension. `parse_records` merges the entries of the different
+    // archive formats on that name to deduplicate them, which only works if
+    // every slice is sorted the same way. The extension is ignored because the
+    // keys in the `v3` maps don't have one.
+    entries.sort_unstable_by(|(a, _), (b, _)| {
+        a.package.cmp(b.package).then_with(|| {
+            strip_archive_extension(a.filename).cmp(strip_archive_extension(b.filename))
+        })
+    });
 
     Ok(entries)
+}
+
+/// Returns the filename without its archive extension, or the filename itself
+/// if it has no known extension.
+fn strip_archive_extension(filename: &str) -> &str {
+    DistArchiveType::split_str(filename).map_or(filename, |(stem, _)| stem)
 }
 
 /// Deserializes a list of file names and sorts it by package name so entries
@@ -1777,6 +1793,77 @@ mod test {
         ");
     }
 
+    /// The entries of a package don't have to be listed in order in the
+    /// repodata, preferring an archive format should still deduplicate them.
+    #[rstest]
+    #[case::prefer_conda(
+        PackageFormatSelection::PreferConda,
+        &["foo-1.0-0.tar.bz2", "foo-2.0-0.conda", "foo-3.0-0.conda"],
+    )]
+    #[case::prefer_conda_with_whl(
+        PackageFormatSelection::PreferCondaWithWhl,
+        &["foo-1.0-0.whl", "foo-2.0-0.conda", "foo-3.0-0.conda", "foo-4.0-0.whl"],
+    )]
+    fn prefer_conda_deduplicates_unsorted_records(
+        #[case] variant: PackageFormatSelection,
+        #[case] expected: &[&str],
+    ) {
+        let json = r#"{
+            "packages": {
+                "foo-2.0-0.tar.bz2": {
+                    "name": "foo", "version": "2.0", "build": "0", "build_number": 0,
+                    "subdir": "noarch"
+                },
+                "foo-1.0-0.tar.bz2": {
+                    "name": "foo", "version": "1.0", "build": "0", "build_number": 0,
+                    "subdir": "noarch"
+                }
+            },
+            "packages.conda": {
+                "foo-3.0-0.conda": {
+                    "name": "foo", "version": "3.0", "build": "0", "build_number": 0,
+                    "subdir": "noarch"
+                },
+                "foo-2.0-0.conda": {
+                    "name": "foo", "version": "2.0", "build": "0", "build_number": 0,
+                    "subdir": "noarch"
+                }
+            },
+            "v3": {
+                "whl": {
+                    "foo-4.0-0": {
+                        "name": "foo", "version": "4.0", "build": "0", "build_number": 0,
+                        "subdir": "noarch",
+                        "url": "https://example.com/foo-4.0-py3-none-any.whl"
+                    },
+                    "foo-3.0-0": {
+                        "name": "foo", "version": "3.0", "build": "0", "build_number": 0,
+                        "subdir": "noarch",
+                        "url": "https://example.com/foo-3.0-py3-none-any.whl"
+                    },
+                    "foo-1.0-0": {
+                        "name": "foo", "version": "1.0", "build": "0", "build_number": 0,
+                        "subdir": "noarch",
+                        "url": "https://example.com/foo-1.0-py3-none-any.whl"
+                    }
+                }
+            }
+        }"#;
+        let channel = Channel::from_url(Url::parse("https://example.com/channel/").unwrap());
+        let sparse =
+            SparseRepoData::from_bytes(channel, "noarch", Bytes::from(json), None).unwrap();
+
+        let records = sparse
+            .load_records(&PackageName::try_from("foo").unwrap(), variant)
+            .unwrap()
+            .into_iter()
+            .map(|record| record.identifier.to_file_name())
+            .sorted()
+            .collect::<Vec<_>>();
+        assert_eq!(records, expected);
+        assert_eq!(sparse.record_count(variant), expected.len());
+    }
+
     #[rstest]
     #[case::both(PackageFormatSelection::Both)]
     #[case::prefer_conda(PackageFormatSelection::PreferConda)]
@@ -1925,8 +2012,8 @@ mod test {
 
     #[rstest]
     #[case::both(PackageFormatSelection::Both, 6)]
-    #[case::prefer_conda(PackageFormatSelection::PreferConda, 6)]
-    #[case::prefer_conda_with_whl(PackageFormatSelection::PreferCondaWithWhl, 51)]
+    #[case::prefer_conda(PackageFormatSelection::PreferConda, 4)]
+    #[case::prefer_conda_with_whl(PackageFormatSelection::PreferCondaWithWhl, 45)]
     #[case::only_tar_bz2(PackageFormatSelection::OnlyTarBz2, 3)]
     #[case::only_conda(PackageFormatSelection::OnlyConda, 3)]
     #[case::only_conda(PackageFormatSelection::All, 51)]
