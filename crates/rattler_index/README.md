@@ -36,13 +36,14 @@ interrupted and resumed:
 - **Broken packages do not abort the run.** A package that cannot be read or
   parsed is left out of the repodata, reported at the end, and makes the
   process exit with status 1. Everything else in the subdir is still indexed.
-- **`--cache-dir <DIR>`** persists the parsed metadata of every package (one
-  JSON-lines file per subdir). A package is only downloaded again when its
-  `ETag`, modification time or size changed, and packages that failed to parse
-  are not retried until the file changes. This is what makes a run resumable:
-  after a crash or an interrupt, the next run continues from the cache. The
-  same directory can also be set through `RATTLER_INDEX_CACHE_DIR`. Do not
-  share one cache directory between indexers that run at the same time.
+- **`--cache`** persists the parsed metadata of every package in the channel
+  itself, as one small object per package under `<subdir>/.cache/`. A package
+  is only downloaded again when its `ETag`, modification time or size changed,
+  and packages that failed to parse are not retried until the file changes.
+  This is what makes a run resumable: after a crash or an interrupt, the next
+  run continues from the cache. Because the cache lives next to the packages
+  and needs no coordination, several machines can index the same channel at
+  the same time, for example one per subdir with `--target-platform`.
 - **Ctrl-C finishes cleanly.** The first `SIGINT` stops starting new packages,
   lets the ones in flight finish, saves them to the cache and exits with status
   130. The repodata of the interrupted subdir is left untouched; the next run
@@ -53,14 +54,11 @@ interrupted and resumed:
   `SIZE` is still processed, on its own.
 
 ```shell
-rattler-index --cache-dir ~/.cache/rattler-index/my-channel \
-  --max-parallel 16 --max-in-flight-bytes 4GiB \
+rattler-index --cache --max-parallel 16 --max-in-flight-bytes 4GiB \
   s3 s3://my-bucket/my-channel
 ```
 
-Subdirs are indexed one after another in alphabetical order. To spread a large
-channel over several machines, run one process per subdir with
-`--target-platform`.
+Subdirs are indexed one after another in alphabetical order.
 
 ## Per-channel index configuration
 

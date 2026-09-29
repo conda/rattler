@@ -5,19 +5,25 @@
 //! 1. **Retries within a run.** When indexing is retried because another
 //!    process modified the repodata concurrently, previously parsed packages
 //!    are reused instead of being downloaded and parsed again.
-//! 2. **Resumability across runs.** With a [`PackageRecordCache::with_store`]
-//!    backing file, every parsed package is appended to disk as soon as it is
-//!    available. A run that is interrupted (crash, `SIGINT`, out of memory)
-//!    loses only the packages that were in flight, and the next run picks up
-//!    where it left off.
+//! 2. **Resumability across runs and machines.** With a channel store
+//!    ([`PackageRecordCache::with_channel_store`]) every parsed package is
+//!    written to the channel itself, as one small object per package under
+//!    `<subdir>/.cache/`. A run that is interrupted (crash, `SIGINT`, out of
+//!    memory) loses only the packages that were in flight, and the next run,
+//!    on any machine, picks up where it left off.
 //!
-//! Entries are validated against the current file metadata (`ETag`, then
-//! `last_modified`, then size) before they are used, so a replaced package is
-//! always re-parsed. Packages that could not be parsed are recorded as broken so
-//! they are not downloaded again until the file changes.
+//! Several indexers may work on the same channel at the same time. The store
+//! needs no coordination for that: the name of a cache object encodes the
+//! metadata (`ETag`, else modification time and size) of the package it was
+//! derived from, so a single listing tells every indexer which entries are
+//! current, and two indexers writing the same entry produce identical objects,
+//! written with `if-not-exists` so the loser of the race is a no-op.
+//!
+//! Packages that could not be parsed are recorded as broken so they are not
+//! downloaded again until the file changes.
 //!
 //! The cache does not store the derived [`rattler_conda_types::PackageRecord`].
-//! It stores the raw `info/index.json`, `info/run_exports.json` and the archive
+//! It stores the `info/index.json`, `info/run_exports.json` and the archive
 //! digests, and re-derives the record on every hit. A cached package is
 //! therefore indistinguishable from a freshly parsed one, and changes to how
 //! records are derived apply to cached packages as well.
@@ -27,15 +33,13 @@
 //! (filesystem).
 
 use std::{
-    collections::HashSet,
-    io::{BufRead, BufReader, BufWriter, Write},
-    path::{Path, PathBuf},
-    sync::{Arc, Mutex as StdMutex},
+    collections::{HashMap, HashSet},
+    sync::Arc,
     time::SystemTime,
 };
 
-use fs_err as fs;
 use opendal::{Operator, raw::Timestamp};
+use rattler_conda_types::Subdir;
 use rattler_networking::retry_policies::default_retry_policy;
 use retry_policies::{RetryDecision, RetryPolicy};
 use serde::{Deserialize, Serialize};
@@ -43,8 +47,11 @@ use tokio::sync::RwLock;
 
 use crate::{ParsedPackage, RepodataFileMetadata};
 
-/// Version of the on-disk cache format. It is written as the first line of a
-/// cache file; a file with a different version is rejected when loading.
+/// Name of the directory inside a subdir that holds the cache objects.
+pub const CACHE_DIR: &str = ".cache";
+
+/// Version of the cache object format. Objects with a different version are
+/// treated as misses.
 const CACHE_FORMAT_VERSION: u32 = 1;
 
 /// File metadata used to validate a cache entry.
@@ -87,6 +94,37 @@ impl CachedFileMetadata {
         }
         false
     }
+
+    /// A short identifier of this version of the file, used in the name of
+    /// its cache object. Two machines that see the same file compute the same
+    /// tag. `None` if the backend provided nothing to identify the version.
+    ///
+    /// Tags never contain a `.`, so the package filename can be split off the
+    /// object name unambiguously.
+    fn tag(&self) -> Option<String> {
+        if let Some(etag) = &self.etag {
+            let etag = etag.trim_matches('"');
+            let safe = etag
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+            return Some(if safe {
+                format!("etag-{etag}")
+            } else {
+                format!("etagx-{}", hex::encode(etag))
+            });
+        }
+        match (self.last_modified, self.size) {
+            (Some(modified), size) => {
+                let nanos = modified.into_inner().as_nanosecond();
+                Some(match size {
+                    Some(size) => format!("mtime{nanos}-size{size}"),
+                    None => format!("mtime{nanos}"),
+                })
+            }
+            (None, Some(size)) => Some(format!("size{size}")),
+            (None, None) => None,
+        }
+    }
 }
 
 /// What the cache knows about a package file.
@@ -118,16 +156,10 @@ pub(crate) enum CacheResult {
     Miss(CachedFileMetadata),
 }
 
-/// The first line of the on-disk cache file.
+/// The body of one cache object.
 #[derive(Debug, Serialize, Deserialize)]
-struct CacheHeader {
+struct CacheEntry {
     version: u32,
-}
-
-/// One entry line of the on-disk cache file.
-#[derive(Debug, Serialize, Deserialize)]
-struct CacheLine {
-    path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     etag: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -140,14 +172,14 @@ struct CacheLine {
     error: Option<String>,
 }
 
-impl CacheLine {
-    fn new(path: &str, cached: &CachedPackage) -> Self {
+impl CacheEntry {
+    fn new(cached: &CachedPackage) -> Self {
         let (package, error) = match &cached.outcome {
             CachedOutcome::Parsed(package) => (Some(ParsedPackage::clone(package)), None),
             CachedOutcome::Broken(error) => (None, Some(error.clone())),
         };
         Self {
-            path: path.to_owned(),
+            version: CACHE_FORMAT_VERSION,
             etag: cached.metadata.etag.clone(),
             last_modified: cached.metadata.last_modified.map(Timestamp::into_inner),
             size: cached.metadata.size,
@@ -156,99 +188,207 @@ impl CacheLine {
         }
     }
 
-    fn into_entry(self) -> Option<(String, CachedPackage)> {
+    fn into_cached(self) -> Option<CachedPackage> {
+        if self.version != CACHE_FORMAT_VERSION {
+            return None;
+        }
         let outcome = match (self.package, self.error) {
             (Some(package), _) => CachedOutcome::Parsed(Arc::new(package)),
             (None, Some(error)) => CachedOutcome::Broken(error),
             (None, None) => return None,
         };
-        Some((
-            self.path,
-            CachedPackage {
-                metadata: CachedFileMetadata {
-                    etag: self.etag,
-                    last_modified: self.last_modified.map(Timestamp::from),
-                    size: self.size,
-                },
-                outcome,
+        Some(CachedPackage {
+            metadata: CachedFileMetadata {
+                etag: self.etag,
+                last_modified: self.last_modified.map(Timestamp::from),
+                size: self.size,
             },
-        ))
+            outcome,
+        })
     }
 }
 
-/// The on-disk backing store of a cache: an append-only file of JSON lines.
+/// The cache objects of one subdir, stored in the channel under
+/// `<subdir>/.cache/<package filename>.<tag>.json`.
 #[derive(Debug)]
-struct DiskStore {
-    path: PathBuf,
-    /// Writer for appending new entries. `None` after the store has been
-    /// compacted or if opening the file for appending failed.
-    writer: StdMutex<Option<BufWriter<fs::File>>>,
-    /// Whether entries were appended since the last compaction.
-    dirty: StdMutex<bool>,
+struct ChannelStore {
+    op: Operator,
+    prefix: String,
+    /// Object tags known to exist, per package filename. Filled from one
+    /// listing when the store is opened and kept up to date with our writes.
+    listed: RwLock<HashMap<String, HashSet<String>>>,
 }
 
-fn write_header(writer: &mut impl Write) -> std::io::Result<()> {
-    serde_json::to_writer(
-        &mut *writer,
-        &CacheHeader {
-            version: CACHE_FORMAT_VERSION,
-        },
-    )?;
-    writer.write_all(b"\n")
-}
-
-/// Reads the header line and checks the format version. An empty file has no
-/// header yet and is accepted.
-fn check_header(path: &Path, first_line: Option<&str>) -> std::io::Result<()> {
-    let Some(first_line) = first_line else {
-        return Ok(());
-    };
-    let header: CacheHeader = serde_json::from_str(first_line).map_err(|err| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!(
-                "cache file {} does not start with a valid header ({err}); delete it to start over",
-                path.display()
-            ),
-        )
-    })?;
-    if header.version != CACHE_FORMAT_VERSION {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!(
-                "cache file {} has format version {}, but this version of rattler-index writes version {CACHE_FORMAT_VERSION}; delete it to start over",
-                path.display(),
-                header.version
-            ),
-        ));
+impl ChannelStore {
+    async fn open(op: Operator, subdir: Subdir) -> opendal::Result<Self> {
+        let prefix = format!("{}/{CACHE_DIR}/", subdir.as_str());
+        let mut listed: HashMap<String, HashSet<String>> = HashMap::new();
+        match op.list_with(&prefix).await {
+            Ok(entries) => {
+                for entry in entries {
+                    if !entry.metadata().mode().is_file() {
+                        continue;
+                    }
+                    if let Some((filename, tag)) = Self::split_object_name(entry.name()) {
+                        listed
+                            .entry(filename.to_owned())
+                            .or_default()
+                            .insert(tag.to_owned());
+                    }
+                }
+            }
+            Err(err) if err.kind() == opendal::ErrorKind::NotFound => {}
+            Err(err) => return Err(err),
+        }
+        tracing::info!(
+            "Found cache entries for {} packages in {prefix}",
+            listed.len()
+        );
+        Ok(Self {
+            op,
+            prefix,
+            listed: RwLock::new(listed),
+        })
     }
-    Ok(())
-}
 
-impl DiskStore {
-    fn append(&self, line: &CacheLine) -> std::io::Result<()> {
-        let mut guard = self.writer.lock().expect("cache writer lock poisoned");
-        let Some(writer) = guard.as_mut() else {
-            return Ok(());
-        };
-        serde_json::to_writer(&mut *writer, line)?;
-        writer.write_all(b"\n")?;
-        // Flush on every append: entries are small compared to the package
-        // downloads they represent, and an interrupted run must not lose them.
-        writer.flush()?;
-        *self.dirty.lock().expect("cache dirty lock poisoned") = true;
+    fn object_name(filename: &str, tag: &str) -> String {
+        format!("{filename}.{tag}.json")
+    }
+
+    /// Inverse of [`Self::object_name`]. Tags contain no `.`, so the last two
+    /// components are the tag and the `json` extension.
+    fn split_object_name(name: &str) -> Option<(&str, &str)> {
+        name.strip_suffix(".json")?.rsplit_once('.')
+    }
+
+    fn object_path(&self, filename: &str, tag: &str) -> String {
+        format!("{}{}", self.prefix, Self::object_name(filename, tag))
+    }
+
+    async fn has(&self, filename: &str, tag: &str) -> bool {
+        self.listed
+            .read()
+            .await
+            .get(filename)
+            .is_some_and(|tags| tags.contains(tag))
+    }
+
+    /// Reads the entry for this version of the package. `None` if it does not
+    /// exist (anymore) or cannot be used.
+    async fn read(&self, filename: &str, tag: &str) -> opendal::Result<Option<CachedPackage>> {
+        let path = self.object_path(filename, tag);
+        match self.op.read(&path).await {
+            Ok(buffer) => match serde_json::from_slice::<CacheEntry>(&buffer.to_bytes()) {
+                Ok(entry) => Ok(entry.into_cached()),
+                Err(err) => {
+                    tracing::warn!("Ignoring unreadable cache object {path}: {err}");
+                    Ok(None)
+                }
+            },
+            Err(err) if err.kind() == opendal::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Writes the entry for this version of the package. Another indexer may
+    /// have written the identical object already; that is not an error.
+    async fn write(
+        &self,
+        filename: &str,
+        tag: &str,
+        cached: &CachedPackage,
+    ) -> opendal::Result<()> {
+        let path = self.object_path(filename, tag);
+        let body = serde_json::to_vec(&CacheEntry::new(cached)).map_err(|err| {
+            opendal::Error::new(
+                opendal::ErrorKind::Unexpected,
+                "failed to serialize cache entry",
+            )
+            .set_source(err)
+        })?;
+        match self
+            .op
+            .write_with(&path, body)
+            .if_not_exists(true)
+            .content_type("application/json")
+            .await
+        {
+            Ok(_) => {}
+            Err(err)
+                if matches!(
+                    err.kind(),
+                    opendal::ErrorKind::ConditionNotMatch | opendal::ErrorKind::AlreadyExists
+                ) =>
+            {
+                tracing::trace!("Cache object {path} was written by another indexer");
+            }
+            Err(err) => return Err(err),
+        }
+        self.listed
+            .write()
+            .await
+            .entry(filename.to_owned())
+            .or_default()
+            .insert(tag.to_owned());
         Ok(())
     }
+
+    /// Deletes objects for packages that no longer exist and objects for
+    /// superseded versions of packages whose current tag is known.
+    async fn prune(
+        &self,
+        existing: &HashSet<String>,
+        current_tags: &HashMap<String, String>,
+    ) -> opendal::Result<usize> {
+        let stale = {
+            let listed = self.listed.read().await;
+            listed
+                .iter()
+                .flat_map(|(filename, tags)| {
+                    tags.iter().filter_map(move |tag| {
+                        let keep = existing.contains(filename)
+                            && current_tags
+                                .get(filename)
+                                .is_none_or(|current| current == tag);
+                        (!keep).then(|| (filename.clone(), tag.clone()))
+                    })
+                })
+                .collect::<Vec<_>>()
+        };
+        if stale.is_empty() {
+            return Ok(0);
+        }
+        let paths = stale
+            .iter()
+            .map(|(filename, tag)| self.object_path(filename, tag))
+            .collect::<Vec<_>>();
+        self.op.delete_iter(paths).await?;
+        let mut listed = self.listed.write().await;
+        for (filename, tag) in &stale {
+            if let Some(tags) = listed.get_mut(filename) {
+                tags.remove(tag);
+                if tags.is_empty() {
+                    listed.remove(filename);
+                }
+            }
+        }
+        Ok(stale.len())
+    }
 }
 
-/// Cache for parsed packages keyed by file path.
+/// Cache for parsed packages keyed by package filename.
 ///
 /// Thread-safe with `Arc<RwLock<>>` - cheap to clone, all clones share the same
 /// storage.
 #[derive(Debug, Clone, Default)]
 pub struct PackageRecordCache {
     inner: Arc<RwLock<ahash::HashMap<String, CachedPackage>>>,
-    store: Option<Arc<DiskStore>>,
+    store: Option<Arc<ChannelStore>>,
+}
+
+/// The package filename of a `<subdir>/<filename>` path.
+fn filename_of(path: &str) -> &str {
+    path.rsplit('/').next().unwrap_or(path)
 }
 
 impl PackageRecordCache {
@@ -257,99 +397,20 @@ impl PackageRecordCache {
         Self::default()
     }
 
-    /// Create a cache backed by the JSON lines file at `path`.
-    ///
-    /// Existing entries are loaded from the file. A file written with a
-    /// different format version is rejected; malformed entry lines (for
-    /// example a line cut short by a crash) are skipped with a warning. The
-    /// parent directory is created if it does not exist.
-    pub fn with_store(path: impl Into<PathBuf>) -> std::io::Result<Self> {
-        let path = path.into();
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        let mut entries: ahash::HashMap<String, CachedPackage> = ahash::HashMap::default();
-        let mut has_header = false;
-        match fs::File::open(&path) {
-            Ok(file) => {
-                let mut skipped = 0usize;
-                let mut lines = BufReader::new(file).lines();
-                let first_line = lines.next().transpose()?;
-                check_header(&path, first_line.as_deref().map(str::trim))?;
-                has_header = first_line.is_some();
-                for (line_number, line) in lines.enumerate() {
-                    let line = line?;
-                    if line.trim().is_empty() {
-                        continue;
-                    }
-                    match serde_json::from_str::<CacheLine>(&line) {
-                        Ok(parsed) => match parsed.into_entry() {
-                            Some((path, cached)) => {
-                                // Later lines override earlier ones.
-                                entries.insert(path, cached);
-                            }
-                            None => skipped += 1,
-                        },
-                        Err(err) => {
-                            skipped += 1;
-                            tracing::debug!(
-                                "Skipping malformed line {} in cache file {}: {err}",
-                                line_number + 2,
-                                path.display()
-                            );
-                        }
-                    }
-                }
-                if skipped > 0 {
-                    tracing::warn!(
-                        "Skipped {skipped} unreadable entries in cache file {}",
-                        path.display()
-                    );
-                }
-                tracing::info!(
-                    "Loaded {} cached package entries from {}",
-                    entries.len(),
-                    path.display()
-                );
-            }
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => return Err(err),
-        }
-
-        let file = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)?;
-        let mut writer = BufWriter::new(file);
-        if !has_header {
-            write_header(&mut writer)?;
-            writer.flush()?;
-        }
-
+    /// Create a cache that persists entries in the channel under
+    /// `<subdir>/.cache/`, so that later runs and other machines can reuse
+    /// them. Lists the existing entries once.
+    pub async fn with_channel_store(op: &Operator, subdir: Subdir) -> opendal::Result<Self> {
+        let store = ChannelStore::open(op.clone(), subdir).await?;
         Ok(Self {
-            inner: Arc::new(RwLock::new(entries)),
-            store: Some(Arc::new(DiskStore {
-                path,
-                writer: StdMutex::new(Some(writer)),
-                dirty: StdMutex::new(false),
-            })),
+            inner: Arc::default(),
+            store: Some(Arc::new(store)),
         })
     }
 
-    /// The path of the backing file, if this cache is persisted.
-    pub fn store_path(&self) -> Option<&Path> {
-        self.store.as_ref().map(|store| store.path.as_path())
-    }
-
-    /// The number of entries in the cache.
-    pub async fn len(&self) -> usize {
-        self.inner.read().await.len()
-    }
-
-    /// Whether the cache holds no entries.
-    pub async fn is_empty(&self) -> bool {
-        self.len().await == 0
+    /// Whether entries are persisted in the channel.
+    pub fn is_persistent(&self) -> bool {
+        self.store.is_some()
     }
 
     /// Get a cached package if valid, or return current file metadata.
@@ -375,45 +436,72 @@ impl PackageRecordCache {
             }
         };
         let current = CachedFileMetadata::from_opendal(&metadata);
+        let filename = filename_of(path);
 
         let cached = {
             let guard = self.inner.read().await;
-            guard.get(path).cloned()
+            guard.get(filename).cloned()
         };
-
-        match cached {
+        let cached = match cached {
             Some(cached) if cached.metadata.matches(&current) => {
                 tracing::debug!("Cache hit for {path}");
-                Ok(match cached.outcome {
-                    CachedOutcome::Parsed(package) => CacheResult::Hit(package),
-                    CachedOutcome::Broken(error) => CacheResult::Broken(error),
-                })
+                Some(cached)
             }
             Some(_) => {
-                tracing::debug!("Cache entry for {path} is stale, treating as miss");
-                Ok(CacheResult::Miss(current))
+                tracing::debug!("Cache entry for {path} is stale");
+                None
             }
+            None => None,
+        };
+
+        // Not in memory: look in the channel store.
+        let cached = match (cached, &self.store, current.tag()) {
+            (Some(cached), _, _) => Some(cached),
+            (None, Some(store), Some(tag)) if store.has(filename, &tag).await => {
+                let cached = store.read(filename, &tag).await?;
+                if let Some(cached) = &cached {
+                    tracing::debug!("Cache hit for {path} in the channel store");
+                    self.inner
+                        .write()
+                        .await
+                        .insert(filename.to_owned(), cached.clone());
+                }
+                cached
+            }
+            _ => None,
+        };
+
+        Ok(match cached {
+            Some(CachedPackage {
+                outcome: CachedOutcome::Parsed(package),
+                ..
+            }) => CacheResult::Hit(package),
+            Some(CachedPackage {
+                outcome: CachedOutcome::Broken(error),
+                ..
+            }) => CacheResult::Broken(error),
             None => {
-                tracing::debug!("Cache miss for {path} (not in cache)");
-                Ok(CacheResult::Miss(current))
+                tracing::debug!("Cache miss for {path}");
+                CacheResult::Miss(current)
             }
-        }
+        })
     }
 
     async fn store(&self, path: &str, cached: CachedPackage) {
+        let filename = filename_of(path);
         if let Some(store) = &self.store {
-            let line = CacheLine::new(path, &cached);
-            // Appending is a small synchronous write; do it before taking the
-            // async lock so a slow disk does not hold up other lookups.
-            if let Err(err) = store.append(&line) {
-                tracing::warn!(
-                    "Failed to append {path} to cache file {}: {err}",
-                    store.path.display()
+            if let Some(tag) = cached.metadata.tag() {
+                if let Err(err) = store.write(filename, &tag, &cached).await {
+                    tracing::warn!("Failed to write cache entry for {path}: {err}");
+                }
+            } else {
+                tracing::debug!(
+                    "Not persisting cache entry for {path}: the backend provided no metadata to identify the file version"
                 );
             }
         }
         let mut guard = self.inner.write().await;
-        guard.insert(path.to_string(), cached);
+        guard.insert(filename.to_owned(), cached);
     }
 
     /// Insert a parsed package into the cache with its file metadata.
@@ -455,56 +543,28 @@ impl PackageRecordCache {
         .await;
     }
 
-    /// Rewrite the backing file so it contains exactly one line per entry.
-    ///
-    /// Entries whose path is not in `keep` are dropped, which removes packages
-    /// that no longer exist in the channel. Does nothing for an in-memory cache
-    /// or if nothing was appended since the last compaction and no entries are
-    /// dropped. The file is replaced atomically.
-    pub async fn compact(&self, keep: &HashSet<String>) -> std::io::Result<()> {
+    /// Removes persisted entries that can no longer be used: those of
+    /// packages not in `existing_filenames`, and superseded versions of the
+    /// packages looked up during this run. Does nothing for an in-memory
+    /// cache.
+    pub async fn prune(&self, existing_filenames: &HashSet<String>) -> opendal::Result<usize> {
         let Some(store) = &self.store else {
-            return Ok(());
+            return Ok(0);
         };
-
-        let mut entries = self.inner.write().await;
-        let before = entries.len();
-        entries.retain(|path, _| keep.contains(path));
-        let dirty = *store.dirty.lock().expect("cache dirty lock poisoned");
-        if !dirty && entries.len() == before {
-            return Ok(());
+        let current_tags = {
+            let guard = self.inner.read().await;
+            guard
+                .iter()
+                .filter_map(|(filename, cached)| {
+                    cached.metadata.tag().map(|tag| (filename.clone(), tag))
+                })
+                .collect::<HashMap<_, _>>()
+        };
+        let pruned = store.prune(existing_filenames, &current_tags).await?;
+        if pruned > 0 {
+            tracing::debug!("Pruned {pruned} stale cache objects from {}", store.prefix);
         }
-
-        let lines = entries
-            .iter()
-            .map(|(path, cached)| CacheLine::new(path, cached))
-            .collect::<Vec<_>>();
-        drop(entries);
-
-        let tmp_path = store.path.with_extension("jsonl.tmp");
-        {
-            let mut writer = BufWriter::new(fs::File::create(&tmp_path)?);
-            write_header(&mut writer)?;
-            for line in &lines {
-                serde_json::to_writer(&mut writer, line)?;
-                writer.write_all(b"\n")?;
-            }
-            writer.flush()?;
-            writer.get_ref().sync_all()?;
-        }
-
-        // Swap the append writer for one on the new file before renaming so no
-        // append lands in the old file after the rename.
-        let mut writer = store.writer.lock().expect("cache writer lock poisoned");
-        fs::rename(&tmp_path, &store.path)?;
-        let file = fs::OpenOptions::new().append(true).open(&store.path)?;
-        *writer = Some(BufWriter::new(file));
-        *store.dirty.lock().expect("cache dirty lock poisoned") = false;
-        tracing::debug!(
-            "Compacted cache file {} to {} entries",
-            store.path.display(),
-            lines.len()
-        );
-        Ok(())
+        Ok(pruned)
     }
 }
 
@@ -598,7 +658,7 @@ mod tests {
     fn test_cache_creation() {
         let cache = PackageRecordCache::new();
         assert!(cache.inner.try_read().is_ok());
-        assert!(cache.store_path().is_none());
+        assert!(!cache.is_persistent());
     }
 
     #[test]
@@ -635,5 +695,34 @@ mod tests {
             ..cached.clone()
         }));
         assert!(!CachedFileMetadata::default().matches(&CachedFileMetadata::default()));
+    }
+
+    #[test]
+    fn test_tags_have_no_dots_and_round_trip_through_object_names() {
+        let quoted_etag = CachedFileMetadata {
+            etag: Some("\"abc123-2\"".into()),
+            last_modified: None,
+            size: None,
+        };
+        let odd_etag = CachedFileMetadata {
+            etag: Some("a/b.c".into()),
+            ..quoted_etag.clone()
+        };
+        let mtime_only = CachedFileMetadata {
+            etag: None,
+            last_modified: Some(Timestamp::from_second(1_700_000_000).unwrap()),
+            size: Some(42),
+        };
+        for metadata in [quoted_etag, odd_etag, mtime_only] {
+            let tag = metadata.tag().unwrap();
+            assert!(!tag.contains('.'), "{tag}");
+            let filename = "pkg-1.0-0.tar.bz2";
+            let name = ChannelStore::object_name(filename, &tag);
+            assert_eq!(
+                ChannelStore::split_object_name(&name),
+                Some((filename, tag.as_str()))
+            );
+        }
+        assert_eq!(CachedFileMetadata::default().tag(), None);
     }
 }

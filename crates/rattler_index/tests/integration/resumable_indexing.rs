@@ -1,11 +1,10 @@
 //! Tests for the behaviour that makes indexing large channels practical:
-//! tolerating broken packages, caching parsed packages on disk, and
+//! tolerating broken packages, caching parsed packages in the channel, and
 //! cooperative cancellation.
 
 use std::{
     fs,
     fs::File,
-    io::{BufRead, BufReader},
     path::Path,
     sync::{
         Arc,
@@ -133,31 +132,44 @@ async fn test_broken_packages_are_skipped_and_reported() {
     assert_eq!(package_names(&repodata), [valid]);
 }
 
-/// Returns the entry lines of a cache file, after checking its header line.
-fn cache_lines(path: &Path) -> Vec<serde_json::Value> {
-    let mut lines = BufReader::new(File::open(path).unwrap())
-        .lines()
+/// Returns the cache objects of a subdir as `(object name, body)`.
+fn cache_objects(subdir_path: &Path) -> Vec<(String, serde_json::Value)> {
+    let cache_dir = subdir_path.join(".cache");
+    if !cache_dir.exists() {
+        return Vec::new();
+    }
+    let mut objects = fs::read_dir(cache_dir)
+        .unwrap()
         .map(Result::unwrap)
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| serde_json::from_str::<serde_json::Value>(&line).unwrap());
-    assert_eq!(lines.next().unwrap(), serde_json::json!({ "version": 1 }));
-    lines.collect()
+        .map(|entry| {
+            let body = serde_json::from_slice(&fs::read(entry.path()).unwrap()).unwrap();
+            (entry.file_name().to_string_lossy().into_owned(), body)
+        })
+        .collect::<Vec<_>>();
+    objects.sort_by(|a, b| a.0.cmp(&b.0));
+    objects
 }
 
-/// Validates the on-disk package cache.
+fn with_cache() -> IndexProcessingOptions {
+    IndexProcessingOptions {
+        cache: true,
+        ..IndexProcessingOptions::default()
+    }
+}
+
+/// Validates the package cache stored in the channel.
 ///
-/// - Parsed and broken packages are both recorded, one line per package.
+/// - Parsed and broken packages are both recorded, one object per package.
 /// - A second run serves records from the cache. This is made observable by
 ///   replacing the package contents with garbage while keeping size and
 ///   modification time: without the cache the package would fail, with the
 ///   cache its record is reused.
 /// - Changing the file (its size) invalidates the entry and the package is
 ///   parsed again.
-/// - Entries for files that disappeared are dropped on compaction.
+/// - Objects for files that disappeared or were replaced are pruned.
 #[tokio::test]
-async fn test_disk_cache_is_reused_and_invalidated() {
+async fn test_channel_cache_is_reused_and_invalidated() {
     let channel = tempfile::tempdir().unwrap();
-    let cache_dir = tempfile::tempdir().unwrap();
     let subdir_path = channel.path().join("noarch");
     fs::create_dir_all(&subdir_path).unwrap();
     let valid = write_package(&subdir_path, "valid");
@@ -167,34 +179,30 @@ async fn test_disk_cache_is_reused_and_invalidated() {
     )
     .unwrap();
 
-    let processing = || IndexProcessingOptions {
-        cache_dir: Some(cache_dir.path().to_path_buf()),
-        ..IndexProcessingOptions::default()
-    };
-
     // First run: both packages are parsed, one succeeds.
-    let stats = index_fs(fs_config(channel.path(), processing()))
+    let stats = index_fs(fs_config(channel.path(), with_cache()))
         .await
         .unwrap();
     assert_eq!(stats.subdirs[&Subdir::NoArch].packages_added, 1);
     assert_eq!(stats.subdirs[&Subdir::NoArch].failed_packages.len(), 1);
 
-    let cache_file = cache_dir.path().join("noarch.jsonl");
-    let lines = cache_lines(&cache_file);
-    assert_eq!(lines.len(), 2, "one line per package: {lines:?}");
-    let by_path = |path: &str| {
-        lines
+    let objects = cache_objects(&subdir_path);
+    assert_eq!(objects.len(), 2, "one object per package: {objects:?}");
+    let by_prefix = |prefix: &str| {
+        objects
             .iter()
-            .find(|line| line["path"] == path)
-            .unwrap_or_else(|| panic!("no cache line for {path}"))
+            .find(|(name, _)| name.starts_with(prefix))
+            .unwrap_or_else(|| panic!("no cache object for {prefix}"))
     };
-    let valid_line = by_path(&format!("noarch/{valid}"));
-    assert_eq!(valid_line["package"]["index_json"]["name"], "valid");
-    assert!(valid_line["package"]["sha256"].is_string());
-    assert!(valid_line["error"].is_null());
-    let broken_line = by_path("noarch/broken-1.0-0.conda");
-    assert!(broken_line["package"].is_null());
-    assert!(broken_line["error"].is_string());
+    let (valid_name, valid_body) = by_prefix(&format!("{valid}."));
+    assert!(valid_name.ends_with(".json"));
+    assert_eq!(valid_body["version"], 1);
+    assert_eq!(valid_body["package"]["index_json"]["name"], "valid");
+    assert!(valid_body["package"]["sha256"].is_string());
+    assert!(valid_body["error"].is_null());
+    let (_, broken_body) = by_prefix("broken-1.0-0.conda.");
+    assert!(broken_body["package"].is_null());
+    assert!(broken_body["error"].is_string());
     let expected_sha256 = read_repodata(channel.path())
         .packages
         .values()
@@ -219,7 +227,7 @@ async fn test_disk_cache_is_reused_and_invalidated() {
 
     // Second run with the cache: the record comes from the cache, the broken
     // package is reported from the cache without being parsed again.
-    let stats = index_fs(fs_config(channel.path(), processing()))
+    let stats = index_fs(fs_config(channel.path(), with_cache()))
         .await
         .unwrap();
     let noarch = &stats.subdirs[&Subdir::NoArch];
@@ -245,13 +253,19 @@ async fn test_disk_cache_is_reused_and_invalidated() {
         .unwrap();
     assert_eq!(stats.subdirs[&Subdir::NoArch].packages_added, 0);
     assert_eq!(stats.subdirs[&Subdir::NoArch].failed_packages.len(), 2);
+    assert_eq!(
+        cache_objects(&subdir_path).len(),
+        2,
+        "no cache: nothing changes"
+    );
 
     // Changing the size invalidates the cache entry and the package is parsed
-    // again, which now fails. Removing the broken package drops its entry.
+    // again, which now fails. Removing the broken package drops its object,
+    // and the superseded object of the changed package is pruned too.
     fs::write(&package_path, vec![b'x'; original_len + 1]).unwrap();
     fs::remove_file(subdir_path.join("broken-1.0-0.conda")).unwrap();
     fs::remove_file(channel.path().join("noarch/repodata.json")).unwrap();
-    let stats = index_fs(fs_config(channel.path(), processing()))
+    let stats = index_fs(fs_config(channel.path(), with_cache()))
         .await
         .unwrap();
     let noarch = &stats.subdirs[&Subdir::NoArch];
@@ -260,15 +274,99 @@ async fn test_disk_cache_is_reused_and_invalidated() {
     assert_eq!(noarch.failed_packages[0].filename, valid);
     assert!(!noarch.failed_packages[0].error.contains("cached failure"));
 
-    let lines = cache_lines(&cache_file);
+    let objects = cache_objects(&subdir_path);
     assert_eq!(
-        lines.len(),
+        objects.len(),
         1,
-        "compaction keeps one line per existing file"
+        "one object per existing file version: {objects:?}"
     );
-    assert_eq!(lines[0]["path"], format!("noarch/{valid}"));
-    assert!(lines[0]["error"].is_string());
-    assert_eq!(lines[0]["size"], (original_len + 1) as u64);
+    assert!(objects[0].0.starts_with(&format!("{valid}.")));
+    assert!(objects[0].1["error"].is_string());
+    assert_eq!(objects[0].1["size"], (original_len + 1) as u64);
+}
+
+/// Validates that a cache object written by another format version is ignored
+/// and the package is parsed again.
+#[tokio::test]
+async fn test_channel_cache_ignores_other_format_version() {
+    let channel = tempfile::tempdir().unwrap();
+    let subdir_path = channel.path().join("noarch");
+    fs::create_dir_all(&subdir_path).unwrap();
+    let valid = write_package(&subdir_path, "valid");
+
+    // Learn the object name from a real run, then replace the body.
+    index_fs(fs_config(channel.path(), with_cache()))
+        .await
+        .unwrap();
+    let objects = cache_objects(&subdir_path);
+    assert_eq!(objects.len(), 1);
+    let object_path = subdir_path.join(".cache").join(&objects[0].0);
+    fs::write(
+        &object_path,
+        serde_json::to_vec(&serde_json::json!({ "version": 99, "error": "from the future" }))
+            .unwrap(),
+    )
+    .unwrap();
+    fs::remove_file(channel.path().join("noarch/repodata.json")).unwrap();
+
+    let stats = index_fs(fs_config(channel.path(), with_cache()))
+        .await
+        .unwrap();
+    assert!(!stats.has_failures());
+    assert_eq!(stats.subdirs[&Subdir::NoArch].packages_added, 1);
+    assert_eq!(package_names(&read_repodata(channel.path())), [valid]);
+}
+
+/// Validates that two indexers sharing one channel cache do not interfere:
+/// both finish, every package ends up in the repodata, and there is exactly
+/// one cache object per package.
+#[tokio::test]
+async fn test_channel_cache_is_shared_between_concurrent_indexers() {
+    let op = Operator::new(ETagMemoryBuilder::default())
+        .unwrap()
+        .finish();
+    let source = tempfile::tempdir().unwrap();
+    let mut filenames = Vec::new();
+    for name in ["a", "b", "c", "d"] {
+        let filename = write_package(source.path(), name);
+        let bytes = fs::read(source.path().join(&filename)).unwrap();
+        op.write(&format!("noarch/{filename}"), bytes)
+            .await
+            .unwrap();
+        filenames.push(filename);
+    }
+    let options = || IndexOptions {
+        target_platform: Some(Subdir::NoArch),
+        max_parallel: 2,
+        precondition_checks: PreconditionChecks::Enabled,
+        processing: with_cache(),
+        ..IndexOptions::default()
+    };
+
+    let (first, second) = tokio::join!(
+        index_with_options(op.clone(), options()),
+        index_with_options(op.clone(), options()),
+    );
+    let (first, second) = (first.unwrap(), second.unwrap());
+    assert!(!first.has_failures() && !second.has_failures());
+
+    let repodata: RepoData =
+        serde_json::from_slice(&op.read("noarch/repodata.json").await.unwrap().to_bytes()).unwrap();
+    assert_eq!(package_names(&repodata), filenames);
+
+    let mut cached = op
+        .list_with("noarch/.cache/")
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|entry| entry.metadata().mode().is_file())
+        .map(|entry| entry.name().to_owned())
+        .collect::<Vec<_>>();
+    cached.sort();
+    assert_eq!(cached.len(), filenames.len(), "{cached:?}");
+    for (object, filename) in cached.iter().zip(&filenames) {
+        assert!(object.starts_with(&format!("{filename}.")), "{object}");
+    }
 }
 
 /// Sets up a memory backend with three packages whose first package read
@@ -350,27 +448,6 @@ async fn test_cancellation_finishes_in_flight_package_and_skips_the_rest() {
     let repodata: RepoData =
         serde_json::from_slice(&op.read("noarch/repodata.json").await.unwrap().to_bytes()).unwrap();
     assert_eq!(package_names(&repodata), filenames);
-}
-
-/// Validates that a cache file written by another format version is rejected
-/// instead of being silently reused.
-#[tokio::test]
-async fn test_disk_cache_rejects_other_format_version() {
-    let channel = tempfile::tempdir().unwrap();
-    let cache_dir = tempfile::tempdir().unwrap();
-    fs::create_dir_all(channel.path().join("noarch")).unwrap();
-    fs::write(cache_dir.path().join("noarch.jsonl"), "{\"version\":99}\n").unwrap();
-
-    let err = index_fs(fs_config(
-        channel.path(),
-        IndexProcessingOptions {
-            cache_dir: Some(cache_dir.path().to_path_buf()),
-            ..IndexProcessingOptions::default()
-        },
-    ))
-    .await
-    .unwrap_err();
-    assert!(format!("{err:#}").contains("format version 99"), "{err:#}");
 }
 
 /// Validates that a byte budget smaller than a single package still lets the

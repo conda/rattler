@@ -64,11 +64,12 @@ struct Cli {
     #[arg(long, global = true, default_value = "2GiB")]
     max_in_flight_bytes: ByteSize,
 
-    /// Directory in which parsed package metadata is cached between runs.
-    /// A package is only downloaded and parsed again when it changed, and an
-    /// interrupted run resumes from what was already cached.
-    #[arg(long, global = true, env = "RATTLER_INDEX_CACHE_DIR")]
-    cache_dir: Option<PathBuf>,
+    /// Persist parsed package metadata in the channel under `<subdir>/.cache/`.
+    /// A package is only downloaded and parsed again when it changed, an
+    /// interrupted run resumes from what was already cached, and several
+    /// machines can index the same channel at once.
+    #[arg(long, global = true, default_value = "false")]
+    cache: bool,
 
     /// A specific platform to index.
     /// Defaults to all platforms available in the channel.
@@ -155,7 +156,7 @@ async fn main() -> anyhow::Result<()> {
     let cancellation_token = CancellationToken::new();
     spawn_ctrl_c_handler(cancellation_token.clone());
     let processing = IndexProcessingOptions {
-        cache_dir: cli.cache_dir,
+        cache: cli.cache,
         max_in_flight_bytes: Some(cli.max_in_flight_bytes.as_u64()),
         cancellation_token: Some(cancellation_token.clone()),
     };

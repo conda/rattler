@@ -1119,14 +1119,14 @@ async fn index_subdir_inner(params: SubdirIndexParams) -> Result<SubdirIndexStat
         packages_skipped
     );
 
-    // Persist what was learned about this subdir, dropping entries for files
-    // that no longer exist in the channel.
-    let known_paths = uploaded_packages
+    // Drop persisted cache entries for files that no longer exist in the
+    // channel or were replaced.
+    let existing_filenames = uploaded_packages
         .iter()
-        .map(|identifier| format!("{subdir}/{}", identifier.to_file_name()))
+        .map(DistArchiveIdentifier::to_file_name)
         .collect::<HashSet<_>>();
-    if let Err(err) = cache.compact(&known_paths).await {
-        tracing::warn!("Failed to compact the package cache for {subdir}: {err}");
+    if let Err(err) = cache.prune(&existing_filenames).await {
+        tracing::warn!("Failed to prune the package cache for {subdir}: {err}");
     }
 
     let stats = SubdirIndexStats {
@@ -1906,19 +1906,19 @@ pub async fn write_repodata(
 /// and how to react to cancellation.
 #[derive(Debug, Clone, Default)]
 pub struct IndexProcessingOptions {
-    /// Directory in which parsed package metadata is cached across runs, one
-    /// file per subdir. When set, a package is only downloaded and parsed
-    /// again if its `ETag`, modification time or size changed, and packages
-    /// that could not be parsed are not retried until the file changes.
+    /// Whether to persist parsed package metadata in the channel, as one
+    /// small object per package under `<subdir>/.cache/`. A package is then
+    /// only downloaded and parsed again if its `ETag`, modification time or
+    /// size changed, and packages that could not be parsed are not retried
+    /// until the file changes.
     ///
     /// This is what makes an interrupted run resumable: everything parsed so
-    /// far is on disk and the next run continues from there.
+    /// far is in the channel and the next run, on any machine, continues from
+    /// there. Several indexers may work on the same channel at once; the
+    /// cache needs no coordination between them.
     ///
-    /// The directory must not be shared by processes that index at the same
-    /// time; give each concurrent indexer its own directory.
-    ///
-    /// `None` keeps parsed metadata in memory only.
-    pub cache_dir: Option<PathBuf>,
+    /// `false` keeps parsed metadata in memory only.
+    pub cache: bool,
     /// Upper bound on the package bytes held in memory at once.
     ///
     /// `None` only limits the number of packages in flight (`max_parallel`).
@@ -2242,7 +2242,7 @@ pub struct IndexOptions {
 /// When the [`IndexProcessingOptions::cancellation_token`] is cancelled, no new
 /// package is started, packages in flight finish, and
 /// [`IndexStats::cancelled`] is set. Combined with a
-/// [`IndexProcessingOptions::cache_dir`], the next run continues where this
+/// [`IndexProcessingOptions::cache`], the next run continues where this
 /// one stopped.
 pub async fn index_with_options(op: Operator, options: IndexOptions) -> anyhow::Result<IndexStats> {
     let IndexOptions {
@@ -2345,13 +2345,13 @@ pub async fn index_with_options(op: Operator, options: IndexOptions) -> anyhow::
 
         // Create a separate cache for each subdir.
         // The cache persists across retry attempts for this specific subdir
-        // and, with a cache directory, across runs.
-        let cache = match &processing.cache_dir {
-            Some(cache_dir) => cache::PackageRecordCache::with_store(
-                cache_dir.join(format!("{}.jsonl", subdir.as_str())),
-            )
-            .with_context(|| format!("failed to open the package cache for {subdir}"))?,
-            None => cache::PackageRecordCache::new(),
+        // and, when enabled, in the channel across runs and machines.
+        let cache = if processing.cache {
+            cache::PackageRecordCache::with_channel_store(&op, subdir)
+                .await
+                .with_context(|| format!("failed to open the package cache for {subdir}"))?
+        } else {
+            cache::PackageRecordCache::new()
         };
 
         let task = index_subdir(SubdirIndexParams {
