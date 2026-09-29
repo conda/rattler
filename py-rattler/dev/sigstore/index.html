@@ -572,6 +572,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rattler.sigstore.CertificateClaims" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CertificateClaims
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rattler.sigstore.ChannelCheck" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -649,6 +660,17 @@
     <span class="md-ellipsis">
       
         __repr__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.sigstore.TrustedRoot.embedded" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        embedded
       
     </span>
   </a>
@@ -759,6 +781,67 @@
     <span class="md-ellipsis">
       
         VerifiedAttestation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="VerifiedAttestation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rattler.sigstore.VerifiedAttestation.claims" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        claims
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.sigstore.VerifiedAttestation.log_index" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        log_index
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.sigstore.VerifiedAttestation.log_origin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        log_origin
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.sigstore.VerifiedAttestation.signed_at" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        signed_at
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rattler.sigstore.VerifiedChecks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        VerifiedChecks
       
     </span>
   </a>
@@ -4002,6 +4085,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rattler.sigstore.CertificateClaims" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CertificateClaims
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rattler.sigstore.ChannelCheck" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4079,6 +4173,17 @@
     <span class="md-ellipsis">
       
         __repr__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.sigstore.TrustedRoot.embedded" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        embedded
       
     </span>
   </a>
@@ -4193,6 +4298,67 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="VerifiedAttestation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rattler.sigstore.VerifiedAttestation.claims" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        claims
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.sigstore.VerifiedAttestation.log_index" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        log_index
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.sigstore.VerifiedAttestation.log_origin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        log_origin
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.sigstore.VerifiedAttestation.signed_at" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        signed_at
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rattler.sigstore.VerifiedChecks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        VerifiedChecks
+      
+    </span>
+  </a>
+  
 </li>
       
         <li class="md-nav__item">
@@ -4233,6 +4399,7 @@
 
 <h1 id="sigstore-attestations">Sigstore attestations<a class="headerlink" href="#sigstore-attestations" title="Permanent link">#</a></h1>
 <p>Py-rattler can verify the Sigstore attestations advertised by conda package records and apply the same policy while installing packages.</p>
+<p>Attestations use the format and verification rules of <a href="https://conda.org/learn/ceps/cep-0027">CEP 27</a> and are distributed as described by <a href="https://conda.org/learn/ceps/cep-0050">CEP 50</a>: a <code>.sigs</code> sidecar next to the package, advertised through the <code>attestations_sha256</code> field of the repodata. Which signing identities to trust is not covered by either CEP and is up to the policy you pass in.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">Issuer</span><span class="p">,</span> <span class="n">Publisher</span><span class="p">,</span> <span class="n">VerificationPolicy</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">publisher</span> <span class="o">=</span> <span class="n">Publisher</span><span class="p">(</span>
@@ -4253,6 +4420,10 @@
 </span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">outcome</span> <span class="o">=</span> <span class="k">await</span> <span class="n">verify_attestation</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">trusted_root</span><span class="o">=</span><span class="n">trusted_root</span><span class="p">)</span>
 </span></code></pre></div>
 <p>A pinned root stays usable as the Sigstore infrastructure rotates its keys, because a bundle's certificate chain is validated against the point in time it was signed at. It does not pick up new certificate authorities, so a bundle issued under one the file does not carry fails to verify until the file is refreshed.</p>
+<p>If you have no <code>trusted_root.json</code> to point at, <code>TrustedRoot.embedded()</code> returns the public good instance's trust anchors that ship with py-rattler, which is what makes verification work with no network access beyond the sidecar at all.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">outcome</span> <span class="o">=</span> <span class="k">await</span> <span class="n">verify_attestation</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">trusted_root</span><span class="o">=</span><span class="n">TrustedRoot</span><span class="o">.</span><span class="n">embedded</span><span class="p">())</span>
+</span></code></pre></div>
+<p>Reach for this when <code>tuf-repo-cdn.sigstore.dev</code> is unreachable rather than as a general way to skip the network. The snapshot is taken when py-rattler's Sigstore dependencies are released, so it carries the same staleness caveat as any pinned root and can only be refreshed by upgrading py-rattler.</p>
 
 
 <div class="doc doc-object doc-module">
@@ -4280,6 +4451,60 @@
 
 
 
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="rattler.sigstore.CertificateClaims" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">CertificateClaims</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#rattler.sigstore.CertificateClaims" class="headerlink" title="Permanent link">#</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>The claims a Fulcio signing certificate makes about the CI workload that signed a package.</p>
+<p>Every claim is optional: Sigstore only records them for a certificate issued
+to a CI workload, and which of them are set depends on the identity
+provider. The names are provider-neutral, so GitHub Actions, GitLab CI and
+Buildkite all populate the same claims.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-class">
 
@@ -4496,7 +4721,7 @@
 <p>Verification normally loads the production trusted root over TUF, which
 needs network access. Supplying one of these instead makes verification use
 the given trust material, so it can run against a pinned
-<code>trusted_root.json</code>.</p>
+<code>trusted_root.json</code> or against the snapshot embedded in py-rattler.</p>
 
 
 
@@ -4537,6 +4762,49 @@ the given trust material, so it can run against a pinned
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">root</span> <span class="o">=</span> <span class="n">TrustedRoot</span><span class="o">.</span><span class="n">from_json</span><span class="p">(</span><span class="s1">&#39;{&quot;mediaType&quot;: &quot;application/vnd.dev.sigstore.trustedroot+json;version=0.1&quot;}&#39;</span><span class="p">)</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="nb">repr</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="s1">&#39;TrustedRoot()&#39;</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span>
+</span></code></pre></div>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="rattler.sigstore.TrustedRoot.embedded" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">embedded</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
+  </span>
+
+<a href="#rattler.sigstore.TrustedRoot.embedded" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">embedded</span><span class="p">()</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the trust anchors of the public good instance that ship with py-rattler.</p>
+<p>This is the root to reach for when <code>tuf-repo-cdn.sigstore.dev</code> cannot be
+reached, not a general way to avoid the network. It is a snapshot taken
+when py-rattler's Sigstore dependencies were released, so unlike the
+root loaded over TUF it does not pick up key rotations or revocations
+and ages with the installed version of py-rattler. Prefer
+<a class="autorefs autorefs-internal" title="from_path
+
+
+  
+      classmethod
+  " href="#rattler.sigstore.TrustedRoot.from_path"><code>TrustedRoot.from_path</code></a> with a
+<code>trusted_root.json</code> you refresh yourself if you need a pinned root that
+can be updated independently.</p>
+<h5 id="rattler.sigstore.TrustedRoot.embedded--examples">Examples<a class="headerlink" href="#rattler.sigstore.TrustedRoot.embedded--examples" title="Permanent link">#</a></h5>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">root</span> <span class="o">=</span> <span class="n">TrustedRoot</span><span class="o">.</span><span class="n">embedded</span><span class="p">()</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">root</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">TrustedRoot</span><span class="p">()</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
@@ -4899,7 +5167,153 @@ Sigstore trusted root.</p>
 
 
 
-        <p>A Sigstore bundle that passed signature, CEP 27, and publisher checks.</p>
+        <p>A Sigstore bundle that passed signature, <a href="https://conda.org/learn/ceps/cep-0027">CEP 27</a>, and publisher checks.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rattler.sigstore.VerifiedAttestation.claims" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">claims</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#rattler.sigstore.VerifiedAttestation.claims" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">claims</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The claims of the signing certificate, if it was issued to a CI workload.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rattler.sigstore.VerifiedAttestation.log_index" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">log_index</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#rattler.sigstore.VerifiedAttestation.log_index" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">log_index</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The index that identifies the signature within its transparency log.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rattler.sigstore.VerifiedAttestation.log_origin" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">log_origin</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#rattler.sigstore.VerifiedAttestation.log_origin" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">log_origin</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The name the transparency log gives itself in its signed checkpoint.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rattler.sigstore.VerifiedAttestation.signed_at" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">signed_at</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#rattler.sigstore.VerifiedAttestation.signed_at" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">signed_at</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>When the signing certificate was issued, which approximates the signing time.</p>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="rattler.sigstore.VerifiedChecks" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">VerifiedChecks</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#rattler.sigstore.VerifiedChecks" class="headerlink" title="Permanent link">#</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Which parts of the Sigstore verification of a bundle were performed.</p>
 
 
 
