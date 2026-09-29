@@ -204,6 +204,23 @@ impl S3CredentialSource {
     }
 }
 
+impl From<S3CredentialSource> for rattler_networking::s3_middleware::S3Config {
+    /// Configure the S3 middleware to sign its requests with this source.
+    ///
+    /// The middleware then asks the provider for credentials whenever it
+    /// presigns a request, instead of taking a single fixed set out of the
+    /// authentication storage, which is what keeps `s3://` channels readable
+    /// past the lifetime of temporary credentials.
+    fn from(source: S3CredentialSource) -> Self {
+        Self::Custom {
+            endpoint_url: source.endpoint_url,
+            region: source.region,
+            addressing_style: source.addressing_style,
+            credentials_provider: Some(source.credentials_provider),
+        }
+    }
+}
+
 impl From<ResolvedS3Credentials> for S3CredentialSource {
     fn from(credentials: ResolvedS3Credentials) -> Self {
         Self {

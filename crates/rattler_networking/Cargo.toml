@@ -85,6 +85,7 @@ windows-native-keyring-store = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }
 
 [dev-dependencies]
+aws-credential-types = { workspace = true }
 insta = { workspace = true, features = ["json"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "time"] }
