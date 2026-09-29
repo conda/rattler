@@ -30,7 +30,6 @@ use std::{
     collections::HashSet,
     io::{BufRead, BufReader, BufWriter, Write},
     path::{Path, PathBuf},
-    str::FromStr,
     sync::{Arc, Mutex as StdMutex},
     time::SystemTime,
 };
@@ -44,8 +43,8 @@ use tokio::sync::RwLock;
 
 use crate::{ParsedPackage, RepodataFileMetadata};
 
-/// Version of the on-disk cache format. Lines with a different version are
-/// ignored when loading.
+/// Version of the on-disk cache format. It is written as the first line of a
+/// cache file; a file with a different version is rejected when loading.
 const CACHE_FORMAT_VERSION: u32 = 1;
 
 /// File metadata used to validate a cache entry.
@@ -64,7 +63,9 @@ impl CachedFileMetadata {
         Self {
             etag: metadata.etag().map(str::to_owned),
             last_modified: metadata.last_modified(),
-            size: Some(metadata.content_length()),
+            // opendal reports `0` when the backend did not provide a length. A
+            // package archive is never empty, so treat `0` as unknown.
+            size: Some(metadata.content_length()).filter(|size| *size > 0),
         }
     }
 
@@ -117,15 +118,20 @@ pub(crate) enum CacheResult {
     Miss(CachedFileMetadata),
 }
 
-/// One line of the on-disk cache file.
+/// The first line of the on-disk cache file.
+#[derive(Debug, Serialize, Deserialize)]
+struct CacheHeader {
+    version: u32,
+}
+
+/// One entry line of the on-disk cache file.
 #[derive(Debug, Serialize, Deserialize)]
 struct CacheLine {
-    v: u32,
     path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     etag: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    last_modified: Option<String>,
+    last_modified: Option<jiff::Timestamp>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     size: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -141,10 +147,9 @@ impl CacheLine {
             CachedOutcome::Broken(error) => (None, Some(error.clone())),
         };
         Self {
-            v: CACHE_FORMAT_VERSION,
             path: path.to_owned(),
             etag: cached.metadata.etag.clone(),
-            last_modified: cached.metadata.last_modified.map(|ts| ts.to_string()),
+            last_modified: cached.metadata.last_modified.map(Timestamp::into_inner),
             size: cached.metadata.size,
             package,
             error,
@@ -152,24 +157,17 @@ impl CacheLine {
     }
 
     fn into_entry(self) -> Option<(String, CachedPackage)> {
-        if self.v != CACHE_FORMAT_VERSION {
-            return None;
-        }
         let outcome = match (self.package, self.error) {
             (Some(package), _) => CachedOutcome::Parsed(Arc::new(package)),
             (None, Some(error)) => CachedOutcome::Broken(error),
             (None, None) => return None,
         };
-        let last_modified = self
-            .last_modified
-            .as_deref()
-            .and_then(|ts| Timestamp::from_str(ts).ok());
         Some((
             self.path,
             CachedPackage {
                 metadata: CachedFileMetadata {
                     etag: self.etag,
-                    last_modified,
+                    last_modified: self.last_modified.map(Timestamp::from),
                     size: self.size,
                 },
                 outcome,
@@ -187,6 +185,44 @@ struct DiskStore {
     writer: StdMutex<Option<BufWriter<fs::File>>>,
     /// Whether entries were appended since the last compaction.
     dirty: StdMutex<bool>,
+}
+
+fn write_header(writer: &mut impl Write) -> std::io::Result<()> {
+    serde_json::to_writer(
+        &mut *writer,
+        &CacheHeader {
+            version: CACHE_FORMAT_VERSION,
+        },
+    )?;
+    writer.write_all(b"\n")
+}
+
+/// Reads the header line and checks the format version. An empty file has no
+/// header yet and is accepted.
+fn check_header(path: &Path, first_line: Option<&str>) -> std::io::Result<()> {
+    let Some(first_line) = first_line else {
+        return Ok(());
+    };
+    let header: CacheHeader = serde_json::from_str(first_line).map_err(|err| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "cache file {} does not start with a valid header ({err}); delete it to start over",
+                path.display()
+            ),
+        )
+    })?;
+    if header.version != CACHE_FORMAT_VERSION {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "cache file {} has format version {}, but this version of rattler-index writes version {CACHE_FORMAT_VERSION}; delete it to start over",
+                path.display(),
+                header.version
+            ),
+        ));
+    }
+    Ok(())
 }
 
 impl DiskStore {
@@ -223,8 +259,9 @@ impl PackageRecordCache {
 
     /// Create a cache backed by the JSON lines file at `path`.
     ///
-    /// Existing entries are loaded from the file. Malformed lines and lines
-    /// written by a different format version are skipped with a warning. The
+    /// Existing entries are loaded from the file. A file written with a
+    /// different format version is rejected; malformed entry lines (for
+    /// example a line cut short by a crash) are skipped with a warning. The
     /// parent directory is created if it does not exist.
     pub fn with_store(path: impl Into<PathBuf>) -> std::io::Result<Self> {
         let path = path.into();
@@ -233,10 +270,15 @@ impl PackageRecordCache {
         }
 
         let mut entries: ahash::HashMap<String, CachedPackage> = ahash::HashMap::default();
+        let mut has_header = false;
         match fs::File::open(&path) {
             Ok(file) => {
                 let mut skipped = 0usize;
-                for (line_number, line) in BufReader::new(file).lines().enumerate() {
+                let mut lines = BufReader::new(file).lines();
+                let first_line = lines.next().transpose()?;
+                check_header(&path, first_line.as_deref().map(str::trim))?;
+                has_header = first_line.is_some();
+                for (line_number, line) in lines.enumerate() {
                     let line = line?;
                     if line.trim().is_empty() {
                         continue;
@@ -253,7 +295,7 @@ impl PackageRecordCache {
                             skipped += 1;
                             tracing::debug!(
                                 "Skipping malformed line {} in cache file {}: {err}",
-                                line_number + 1,
+                                line_number + 2,
                                 path.display()
                             );
                         }
@@ -279,12 +321,17 @@ impl PackageRecordCache {
             .create(true)
             .append(true)
             .open(&path)?;
+        let mut writer = BufWriter::new(file);
+        if !has_header {
+            write_header(&mut writer)?;
+            writer.flush()?;
+        }
 
         Ok(Self {
             inner: Arc::new(RwLock::new(entries)),
             store: Some(Arc::new(DiskStore {
                 path,
-                writer: StdMutex::new(Some(BufWriter::new(file))),
+                writer: StdMutex::new(Some(writer)),
                 dirty: StdMutex::new(false),
             })),
         })
@@ -436,6 +483,7 @@ impl PackageRecordCache {
         let tmp_path = store.path.with_extension("jsonl.tmp");
         {
             let mut writer = BufWriter::new(fs::File::create(&tmp_path)?);
+            write_header(&mut writer)?;
             for line in &lines {
                 serde_json::to_writer(&mut writer, line)?;
                 writer.write_all(b"\n")?;

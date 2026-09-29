@@ -133,14 +133,15 @@ async fn test_broken_packages_are_skipped_and_reported() {
     assert_eq!(package_names(&repodata), [valid]);
 }
 
-/// Counts the non-empty lines of a cache file.
+/// Returns the entry lines of a cache file, after checking its header line.
 fn cache_lines(path: &Path) -> Vec<serde_json::Value> {
-    BufReader::new(File::open(path).unwrap())
+    let mut lines = BufReader::new(File::open(path).unwrap())
         .lines()
         .map(Result::unwrap)
         .filter(|line| !line.trim().is_empty())
-        .map(|line| serde_json::from_str(&line).unwrap())
-        .collect()
+        .map(|line| serde_json::from_str::<serde_json::Value>(&line).unwrap());
+    assert_eq!(lines.next().unwrap(), serde_json::json!({ "version": 1 }));
+    lines.collect()
 }
 
 /// Validates the on-disk package cache.
@@ -349,6 +350,27 @@ async fn test_cancellation_finishes_in_flight_package_and_skips_the_rest() {
     let repodata: RepoData =
         serde_json::from_slice(&op.read("noarch/repodata.json").await.unwrap().to_bytes()).unwrap();
     assert_eq!(package_names(&repodata), filenames);
+}
+
+/// Validates that a cache file written by another format version is rejected
+/// instead of being silently reused.
+#[tokio::test]
+async fn test_disk_cache_rejects_other_format_version() {
+    let channel = tempfile::tempdir().unwrap();
+    let cache_dir = tempfile::tempdir().unwrap();
+    fs::create_dir_all(channel.path().join("noarch")).unwrap();
+    fs::write(cache_dir.path().join("noarch.jsonl"), "{\"version\":99}\n").unwrap();
+
+    let err = index_fs(fs_config(
+        channel.path(),
+        IndexProcessingOptions {
+            cache_dir: Some(cache_dir.path().to_path_buf()),
+            ..IndexProcessingOptions::default()
+        },
+    ))
+    .await
+    .unwrap_err();
+    assert!(format!("{err:#}").contains("format version 99"), "{err:#}");
 }
 
 /// Validates that a byte budget smaller than a single package still lets the
