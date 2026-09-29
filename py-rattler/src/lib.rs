@@ -86,8 +86,8 @@ use repo_data::{
 use run_exports_json::PyRunExportsJson;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
 use sigstore::{
-    PyTrustedRoot, PyVerificationOutcome, PyVerificationPolicy, PyVerifiedAttestation,
-    py_verify_attestation,
+    PyCertificateClaims, PyTrustedRoot, PyVerificationOutcome, PyVerificationPolicy,
+    PyVerifiedAttestation, PyVerifiedChecks, py_verify_attestation,
 };
 use solver::{py_solve, py_solve_with_sparse_repodata};
 use subdir::{PyArch, PySubdir};
@@ -139,6 +139,8 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyClientWithMiddleware>()?;
     m.add_class::<PyVerificationPolicy>()?;
     m.add_class::<PyVerifiedAttestation>()?;
+    m.add_class::<PyCertificateClaims>()?;
+    m.add_class::<PyVerifiedChecks>()?;
     m.add_class::<PyVerificationOutcome>()?;
     m.add_class::<PyTrustedRoot>()?;
     m.add_function(wrap_pyfunction!(py_verify_attestation, &m)?)?;
