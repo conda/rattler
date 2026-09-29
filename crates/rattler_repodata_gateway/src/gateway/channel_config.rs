@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
+use indexmap::IndexSet;
 use rattler_conda_types::ChannelUrl;
 use url::Url;
 
-use crate::fetch::CacheAction;
+use crate::fetch::{CacheAction, Variant};
 
 /// Describes additional properties that influence how the gateway fetches
 /// repodata for a specific channel.
@@ -23,6 +24,9 @@ pub struct SourceConfig {
     /// Describes fetching repodata from a channel should interact with any
     /// caches.
     pub cache_action: CacheAction,
+
+    /// Ordered repodata variants to try. `None` fetches only `repodata.json`.
+    pub repodata_variants: Option<IndexSet<Variant>>,
 
     /// When the gateway may only read from the cache, report a package whose
     /// shard is absent as having no records instead of failing the query.
@@ -47,6 +51,7 @@ impl Default for SourceConfig {
             bz2_enabled: true,
             sharded_enabled: true,
             cache_action: CacheAction::default(),
+            repodata_variants: None,
             missing_shards_are_empty: false,
         }
     }
@@ -60,6 +65,7 @@ impl From<rattler_config::config::repodata_config::RepodataChannelConfig> for So
             bz2_enabled: !value.disable_bzip2.unwrap_or(false),
             sharded_enabled: !value.disable_sharded.unwrap_or(false),
             cache_action: CacheAction::default(),
+            repodata_variants: None,
             missing_shards_are_empty: false,
         }
     }
