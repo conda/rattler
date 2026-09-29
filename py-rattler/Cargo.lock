@@ -4315,7 +4315,6 @@ dependencies = [
  "async-compression",
  "bytes",
  "bzip2",
- "dunce",
  "filetime",
  "fs-err",
  "futures",
