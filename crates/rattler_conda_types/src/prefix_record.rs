@@ -453,17 +453,28 @@ mod test {
     use crate::get_test_data_dir;
 
     #[rstest]
-    #[case::xz_5_2_6_h8d14728_0("xz-5.2.6-h8d14728_0.json")]
     #[case::libsqlite_3_40_0_hcfcfb64_0("libsqlite-3.40.0-hcfcfb64_0.json")]
-    #[case::menuinst_1_4_19_py311h1ea47a8_1("menuinst-1.4.19-py311h1ea47a8_1.json")]
     #[case::pip_23_0_pyhd8ed1ab_0_json("pip-23.0-pyhd8ed1ab_0.json")]
-    #[case::pysocks_1_7_1_pyh0701188_6("pysocks-1.7.1-pyh0701188_6.json")]
-    #[case::requests_2_28_2_pyhd8ed1ab_0("requests-2.28.2-pyhd8ed1ab_0.json")]
     #[case::tk_8_6_12_h8ffe710_0("tk-8.6.12-h8ffe710_0.json")]
-    #[case::urllib3_1_26_14_pyhd8ed1ab_0("urllib3-1.26.14-pyhd8ed1ab_0.json")]
     #[case::vc_14_3_hb6edc58_10_json("vc-14.3-hb6edc58_10.json")]
     #[case::wheel_0_38_4_pyhd8ed1ab_0("wheel-0.38.4-pyhd8ed1ab_0.json")]
     fn parse_prefix_record(#[case] path_name: &str) {
+        let path = get_test_data_dir().join("conda-meta").join(path_name);
+        let prefix_record = super::PrefixRecord::from_path(path).unwrap();
+        insta::assert_yaml_snapshot!(path_name.replace('.', "_"), prefix_record);
+    }
+
+    /// These records were written on Windows and separate the components of
+    /// `files` and `paths_data` with `\`, which is only a path separator on
+    /// Windows.
+    #[cfg(windows)]
+    #[rstest]
+    #[case::xz_5_2_6_h8d14728_0("xz-5.2.6-h8d14728_0.json")]
+    #[case::menuinst_1_4_19_py311h1ea47a8_1("menuinst-1.4.19-py311h1ea47a8_1.json")]
+    #[case::pysocks_1_7_1_pyh0701188_6("pysocks-1.7.1-pyh0701188_6.json")]
+    #[case::requests_2_28_2_pyhd8ed1ab_0("requests-2.28.2-pyhd8ed1ab_0.json")]
+    #[case::urllib3_1_26_14_pyhd8ed1ab_0("urllib3-1.26.14-pyhd8ed1ab_0.json")]
+    fn parse_windows_prefix_record(#[case] path_name: &str) {
         let path = get_test_data_dir().join("conda-meta").join(path_name);
         let prefix_record = super::PrefixRecord::from_path(path).unwrap();
         insta::assert_yaml_snapshot!(path_name.replace('.', "_"), prefix_record);

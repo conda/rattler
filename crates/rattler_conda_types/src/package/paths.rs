@@ -262,6 +262,8 @@ fn is_no_link_default(value: &bool) -> bool {
 
 #[cfg(test)]
 mod test {
+    use std::path::Path;
+
     use crate::package::PackageFile;
 
     use super::{PathsEntry, PathsJson};
@@ -330,7 +332,7 @@ mod test {
         let mut paths = vec![];
         for i in 0..15 {
             paths.push(PathsEntry {
-                relative_path: format!("rel\\path_{i}").into(),
+                relative_path: Path::new("rel").join(format!("path_{i}")),
                 path_type: super::PathType::HardLink,
                 prefix_placeholder: None,
                 no_link: false,
@@ -347,5 +349,41 @@ mod test {
             paths,
             paths_version: 1
         });
+    }
+
+    #[test]
+    #[cfg(unix)]
+    pub fn test_backslash_in_file_name() {
+        // On Unix a backslash is an ordinary character in a file name, not a
+        // path separator.
+        let paths_json = PathsJson {
+            paths: vec![PathsEntry {
+                relative_path: Path::new("share").join("a\\b.txt"),
+                path_type: super::PathType::HardLink,
+                prefix_placeholder: None,
+                no_link: false,
+                sha256: None,
+                size_in_bytes: Some(0),
+            }],
+            paths_version: 1,
+        };
+
+        let json = serde_json::to_string_pretty(&paths_json).unwrap();
+        insta::assert_snapshot!(json, @r#"
+        {
+          "paths": [
+            {
+              "_path": "share/a\\b.txt",
+              "path_type": "hardlink",
+              "size_in_bytes": 0
+            }
+          ],
+          "paths_version": 1
+        }
+        "#);
+        assert_eq!(
+            serde_json::from_str::<PathsJson>(&json).unwrap(),
+            paths_json
+        );
     }
 }
