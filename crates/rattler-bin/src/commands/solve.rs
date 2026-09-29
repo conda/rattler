@@ -261,7 +261,7 @@ fn print_records(
         let channel_cell = Cell::styled(
             hyperlink::maybe_link(
                 record.channel.as_deref().and_then(hyperlink::channel_page),
-                console::style(&channel).dim(),
+                &channel,
             ),
             channel,
         );

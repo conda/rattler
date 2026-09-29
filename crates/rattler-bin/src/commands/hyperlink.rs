@@ -66,7 +66,9 @@ pub fn enabled(stream: Stream) -> bool {
 
 /// Wraps `text` in an OSC 8 escape sequence pointing at `url`.
 fn osc8(url: &Url, text: &str) -> String {
-    format!("\x1b]8;;{url}\x1b\\{text}\x1b]8;;\x1b\\")
+    // Underline marks the clickable span without replacing its color or bold
+    // styling. Reset only underline, leaving surrounding styles intact.
+    format!("\x1b]8;;{url}\x1b\\\x1b[4m{text}\x1b[24m\x1b]8;;\x1b\\")
 }
 
 /// Renders `text` on stdout as a hyperlink to `url`, or unchanged when there is
@@ -196,7 +198,7 @@ mod tests {
         let url = Url::parse("https://prefix.dev/channels/conda-forge").unwrap();
         assert_eq!(
             osc8(&url, "conda-forge"),
-            "\u{1b}]8;;https://prefix.dev/channels/conda-forge\u{1b}\\conda-forge\u{1b}]8;;\u{1b}\\"
+            "\u{1b}]8;;https://prefix.dev/channels/conda-forge\u{1b}\\\u{1b}[4mconda-forge\u{1b}[24m\u{1b}]8;;\u{1b}\\"
         );
     }
 

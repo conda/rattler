@@ -25,14 +25,68 @@ use super::{
 };
 use crate::publisher_args::PublisherArgs;
 
-/// The page a signing identity refers to, if any.
-///
-/// A workflow identity carries the git reference it ran from after an `@`
-/// (`https://github.com/org/repo/.github/workflows/build.yml@refs/heads/main`),
-/// which is not part of the URL that serves the workflow.
-fn identity_url(identity: &str) -> Option<Url> {
-    let (url, _reference) = identity.rsplit_once('@').unwrap_or((identity, ""));
-    hyperlink::web(&Url::parse(url).ok()?)
+/// A GitHub workflow's file page, pinned to its build-config revision.
+fn workflow_url(uri: &str, claims: &ClaimsReport) -> Option<Url> {
+    let (base, reference) = uri.rsplit_once('@').unwrap_or((uri, ""));
+    let url = hyperlink::web(&Url::parse(base).ok()?)?;
+    let slug = github_slug(&url)?;
+    let path = url.path().strip_prefix(&format!("/{slug}/"))?;
+    let revision = claims.build_config_digest.as_deref().unwrap_or_else(|| {
+        reference
+            .strip_prefix("refs/heads/")
+            .or_else(|| reference.strip_prefix("refs/tags/"))
+            .unwrap_or(reference)
+    });
+    if path.is_empty() || revision.is_empty() {
+        return None;
+    }
+    Url::parse(&format!("https://github.com/{slug}/blob/{revision}/{path}")).ok()
+}
+
+fn github_slug(url: &Url) -> Option<String> {
+    if url.host_str()? != "github.com" {
+        return None;
+    }
+    let mut segments = url.path_segments()?;
+    let owner = segments.next().filter(|s| !s.is_empty())?;
+    let repo = segments.next().filter(|s| !s.is_empty())?;
+    Some(format!("{owner}/{repo}"))
+}
+
+/// Compact labels are used only when the full destination is clickable.
+fn compact_link(url: Option<Url>, label: &str, fallback: &str) -> String {
+    if url.is_some() && hyperlink::enabled(Stream::Stdout) {
+        hyperlink::maybe_link(url, label)
+    } else {
+        fallback.to_string()
+    }
+}
+
+fn run_label(url: &Url) -> Option<String> {
+    github_slug(url)?;
+    let segments: Vec<_> = url.path_segments()?.collect();
+    match segments.as_slice() {
+        [_, _, "actions", "runs", id] => Some(format!("run {id}")),
+        [_, _, "actions", "runs", id, "attempts", attempt] => {
+            Some(format!("run {id}, attempt {attempt}"))
+        }
+        _ => None,
+    }
+}
+
+fn sidecar_label(url: &Url) -> String {
+    let name = url
+        .path_segments()
+        .and_then(|mut s| s.next_back())
+        .unwrap_or(url.as_str());
+    match name.rsplit_once('.') {
+        Some((head, digest))
+            if digest.len() == 64 && digest.bytes().all(|b| b.is_ascii_hexdigit()) =>
+        {
+            format!("{head}.{}…", &digest[..10])
+        }
+        _ => name.to_string(),
+    }
 }
 
 /// The sidecar `url` itself, if it can be opened from a terminal.
@@ -438,8 +492,11 @@ fn print_report(report: &Report) {
     field("SHA-256", &report.sha256);
     field(
         "Attestation",
-        &hyperlink::maybe_link(
+        &compact_link(
             attestation_link(&report.attestation_url),
+            &Url::parse(&report.attestation_url)
+                .map(|url| sidecar_label(&url))
+                .unwrap_or_else(|_| report.attestation_url.clone()),
             &report.attestation_url,
         ),
     );
@@ -457,10 +514,8 @@ fn print_report(report: &Report) {
 
 fn print_bundle(bundle: &BundleReport) {
     let identity = bundle.identity.as_deref().unwrap_or(UNKNOWN);
-    indented(
-        "Identity",
-        &hyperlink::maybe_link(identity_url(identity), identity),
-    );
+    // A certificate identity is a literal policy value, not a web page.
+    indented("Identity", identity);
     indented("Issuer", bundle.issuer.as_deref().unwrap_or(UNKNOWN));
 
     if let Some(certificate) = &bundle.certificate {
@@ -483,11 +538,15 @@ fn print_bundle(bundle: &BundleReport) {
             }
             // Only the repository URL is linked, not the annotations that
             // follow it, so that what the link covers is what it points at.
-            let link = hyperlink::maybe_link(
+            let link = compact_link(
                 Url::parse(repository)
                     .ok()
                     .as_ref()
                     .and_then(hyperlink::web),
+                &Url::parse(repository)
+                    .ok()
+                    .and_then(|url| github_slug(&url))
+                    .unwrap_or_else(|| repository.clone()),
                 repository,
             );
             if annotations.is_empty() {
@@ -516,8 +575,11 @@ fn print_bundle(bundle: &BundleReport) {
         if let Some(uri) = &claims.build_config_uri {
             // The text is shortened to the path in the repository, so the link
             // is what restores the full URI the claim carried.
-            let workflow =
-                hyperlink::maybe_link(identity_url(uri), shorten_build_config(uri, claims));
+            let workflow = compact_link(
+                workflow_url(uri, claims),
+                &shorten_build_config(uri, claims),
+                uri,
+            );
             indented(
                 "Workflow",
                 &claims.build_trigger.as_ref().map_or_else(
@@ -538,7 +600,15 @@ fn print_bundle(bundle: &BundleReport) {
         if let Some(run) = &claims.run_invocation_uri {
             indented(
                 "Build",
-                &hyperlink::maybe_link(Url::parse(run).ok().as_ref().and_then(hyperlink::web), run),
+                &compact_link(
+                    Url::parse(run).ok().as_ref().and_then(hyperlink::web),
+                    &Url::parse(run)
+                        .ok()
+                        .as_ref()
+                        .and_then(run_label)
+                        .unwrap_or_else(|| run.clone()),
+                    run,
+                ),
             );
         }
         indented("Signed at", &certificate.not_before);
@@ -758,16 +828,34 @@ mod tests {
     }
 
     #[test]
-    fn identity_is_linked_without_the_git_reference() {
+    fn workflow_links_use_the_build_config_revision() {
+        let mut claims = ClaimsReport::default();
+        let uri = "https://github.com/org/repo/.github/workflows/publish.yml@refs/heads/main";
         assert_eq!(
-            identity_url(
-                "https://github.com/org/repo/.github/workflows/publish.yml@refs/heads/main"
-            )
-            .map(Url::into),
-            Some("https://github.com/org/repo/.github/workflows/publish.yml".to_string())
+            workflow_url(uri, &claims).unwrap().as_str(),
+            "https://github.com/org/repo/blob/main/.github/workflows/publish.yml"
         );
-        // An identity that is not a URL, as an email identity is, has no page.
-        assert_eq!(identity_url("someone@example.com"), None);
+        claims.build_config_digest = Some("abc123".into());
+        claims.source_repository_digest = Some("different-source-commit".into());
+        assert_eq!(
+            workflow_url(uri, &claims).unwrap().as_str(),
+            "https://github.com/org/repo/blob/abc123/.github/workflows/publish.yml"
+        );
+        assert!(workflow_url("https://example.com/org/repo/workflow@main", &claims).is_none());
+        assert!(workflow_url("someone@example.com", &claims).is_none());
+    }
+
+    #[test]
+    fn compact_attestation_labels() {
+        let run = Url::parse("https://github.com/org/repo/actions/runs/123/attempts/2").unwrap();
+        assert_eq!(run_label(&run).as_deref(), Some("run 123, attempt 2"));
+        assert!(run_label(&Url::parse("https://example.com/actions/runs/123").unwrap()).is_none());
+        let sidecar = Url::parse(&format!(
+            "https://example.com/pkg.conda.sigs.{}",
+            "a".repeat(64)
+        ))
+        .unwrap();
+        assert_eq!(sidecar_label(&sidecar), "pkg.conda.sigs.aaaaaaaaaa…");
     }
 
     #[test]

@@ -21,6 +21,7 @@ fn run_rattler(args: &[&str]) -> String {
 fn run_rattler_with_env(args: &[&str], env: &[(&str, &str)]) -> String {
     let output = Command::new(env!("CARGO_BIN_EXE_rattler"))
         .args(args)
+        .env_remove("FORCE_HYPERLINK")
         .envs(env.iter().copied())
         .current_dir(WORKSPACE_ROOT)
         .output()
@@ -129,7 +130,7 @@ fn test_hyperlinks_can_be_forced() {
     // still there in full.
     assert!(
         output.contains(&format!(
-            "{OSC8}https://prefix.dev/channels/conda-forge/packages/bzip2\u{1b}\\bzip2\u{1b}]8;;\u{1b}\\"
+            "{OSC8}https://prefix.dev/channels/conda-forge/packages/bzip2\u{1b}\\\u{1b}[4mbzip2\u{1b}[24m\u{1b}]8;;\u{1b}\\"
         )),
         "expected a hyperlinked package name, got:\n{output}"
     );
@@ -139,6 +140,15 @@ fn test_hyperlinks_can_be_forced() {
         &[("FORCE_HYPERLINK", "1")],
     );
     assert!(!urls.contains(OSC8), "got hyperlinks in --format urls");
+    let json = run_rattler_with_env(
+        &["list", "-p", FIXTURE_PREFIX, "--format", "json"],
+        &[("FORCE_HYPERLINK", "1")],
+    );
+    serde_json::from_str::<serde_json::Value>(&json).expect("plain JSON with forced links");
+    assert!(!json.contains(OSC8));
+    let plain = run_rattler_with_env(&["list", "-p", FIXTURE_PREFIX], &[("FORCE_HYPERLINK", "0")]);
+    assert!(!plain.contains(OSC8));
+    assert!(!plain.contains("\u{1b}[4m"));
 }
 
 /// The skill embeds the crate version, which is replaced so the snapshot does
@@ -245,6 +255,35 @@ mod attestation {
     #[test]
     fn test_verify_attestation() {
         insta::assert_snapshot!(run_verify_attestation(&[]));
+    }
+
+    #[test]
+    fn test_verify_attestation_links() {
+        let output = super::run_rattler_with_env(
+            &[
+                "--offline",
+                "verify-attestation",
+                "--attestation",
+                SIDECAR,
+                PACKAGE,
+                "--channel",
+                CHANNEL,
+            ],
+            &[("FORCE_HYPERLINK", "1")],
+        );
+        let identity = output
+            .lines()
+            .find(|line| line.trim_start().starts_with("Identity:"))
+            .unwrap();
+        assert!(!identity.contains(super::OSC8));
+        let workflow = output
+            .lines()
+            .find(|line| line.trim_start().starts_with("Workflow:"))
+            .unwrap();
+        assert!(workflow.contains("https://github.com/pavelzw/skill-forge/blob/"));
+        assert!(workflow.contains("\u{1b}[4m.github/workflows/package.yml\u{1b}[24m"));
+        assert!(output.contains("\u{1b}[4mrun 36007002754, attempt 1\u{1b}[24m"));
+        assert!(output.contains("\u{1b}[4mpavelzw/skill-forge\u{1b}[24m"));
     }
 
     /// The JSON output carries every claim of the signing certificate and the

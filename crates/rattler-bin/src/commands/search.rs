@@ -209,7 +209,7 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
                 record.package_record.subdir,
                 hyperlink::maybe_link(
                     record.channel.as_deref().and_then(hyperlink::channel_page),
-                    console::style(channel).dim()
+                    channel
                 )
             );
         }
