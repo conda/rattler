@@ -31,7 +31,6 @@ features = ["gcs", "s3"]
 
 [dependencies]
 ambient-id = { workspace = true, features = ["reqwest-middleware"] }
-anyhow = { workspace = true }
 async-once-cell = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
@@ -86,7 +85,6 @@ windows-native-keyring-store = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }
 
 [dev-dependencies]
-anyhow = { workspace = true }
 insta = { workspace = true, features = ["json"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "time"] }

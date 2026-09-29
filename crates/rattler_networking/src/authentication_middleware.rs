@@ -186,8 +186,6 @@ mod tests {
         atomic::{AtomicUsize, Ordering},
     };
 
-    #[cfg(feature = "keyring")]
-    use anyhow::anyhow;
     use axum::{
         Json, Router,
         extract::State,
@@ -221,9 +219,9 @@ mod tests {
                 .send(req)
                 .await
                 .expect("failed to capture request");
-            Err(reqwest_middleware::Error::Middleware(anyhow!(
-                "captured request, aborting"
-            )))
+            Err(reqwest_middleware::Error::middleware(
+                std::io::Error::other("captured request, aborting"),
+            ))
         }
     }
 
@@ -246,28 +244,27 @@ mod tests {
     }
 
     #[test]
-    fn test_store_fallback() -> anyhow::Result<()> {
-        let tdir = tempdir()?;
+    fn test_store_fallback() {
+        let tdir = tempdir().unwrap();
         let mut storage = AuthenticationStorage::empty();
-        storage.add_backend(Arc::from(FileStorage::from_path(
-            tdir.path().to_path_buf().join("auth.json"),
-        )?));
+        storage.add_backend(Arc::from(
+            FileStorage::from_path(tdir.path().to_path_buf().join("auth.json")).unwrap(),
+        ));
 
         let host = "test.example.com";
         let authentication = Authentication::CondaToken("testtoken".to_string());
-        storage.store(host, &authentication)?;
-        storage.delete(host)?;
-        Ok(())
+        storage.store(host, &authentication).unwrap();
+        storage.delete(host).unwrap();
     }
 
     #[cfg(feature = "keyring")]
     #[tokio::test]
-    async fn test_conda_token_storage() -> anyhow::Result<()> {
-        let tdir = tempdir()?;
+    async fn test_conda_token_storage() {
+        let tdir = tempdir().unwrap();
         let mut storage = AuthenticationStorage::empty();
-        storage.add_backend(Arc::from(FileStorage::from_path(
-            tdir.path().to_path_buf().join("auth.json"),
-        )?));
+        storage.add_backend(Arc::from(
+            FileStorage::from_path(tdir.path().to_path_buf().join("auth.json")).unwrap(),
+        ));
 
         let host = "conda.example.com";
 
@@ -286,7 +283,7 @@ mod tests {
           "CondaToken": "testtoken"
         }
         "###);
-        storage.store(host, &authentication)?;
+        storage.store(host, &authentication).unwrap();
 
         let retrieved = storage.get(host);
         assert!(retrieved.is_ok());
@@ -298,7 +295,7 @@ mod tests {
         let (client, mut captured_rx) = make_client_harness(&storage);
 
         let request = client.get("https://conda.example.com/conda-forge/noarch/testpkg.tar.bz2");
-        let request = request.build()?;
+        let request = request.build().unwrap();
 
         // we expect middleware error. if auth middleware fails, tests below will detect
         // it
@@ -307,18 +304,17 @@ mod tests {
         let captured_request = captured_rx.recv().await.unwrap();
         assert!(captured_request.url().path().starts_with("/t/testtoken"));
 
-        storage.delete(host)?;
-        Ok(())
+        storage.delete(host).unwrap();
     }
 
     #[cfg(feature = "keyring")]
     #[tokio::test]
-    async fn test_bearer_storage() -> anyhow::Result<()> {
-        let tdir = tempdir()?;
+    async fn test_bearer_storage() {
+        let tdir = tempdir().unwrap();
         let mut storage = AuthenticationStorage::empty();
-        storage.add_backend(Arc::from(FileStorage::from_path(
-            tdir.path().to_path_buf().join("auth.json"),
-        )?));
+        storage.add_backend(Arc::from(
+            FileStorage::from_path(tdir.path().to_path_buf().join("auth.json")).unwrap(),
+        ));
         let host = "bearer.example.com";
 
         let retrieved = storage.get(host);
@@ -338,7 +334,7 @@ mod tests {
         }
         "###);
 
-        storage.store(host, &authentication)?;
+        storage.store(host, &authentication).unwrap();
 
         let retrieved = storage.get(host);
         assert!(retrieved.is_ok());
@@ -363,18 +359,17 @@ mod tests {
             "Bearer xyztokytoken"
         );
 
-        storage.delete(host)?;
-        Ok(())
+        storage.delete(host).unwrap();
     }
 
     #[cfg(feature = "keyring")]
     #[tokio::test]
-    async fn test_basic_auth_storage() -> anyhow::Result<()> {
-        let tdir = tempdir()?;
+    async fn test_basic_auth_storage() {
+        let tdir = tempdir().unwrap();
         let mut storage = AuthenticationStorage::empty();
-        storage.add_backend(Arc::from(FileStorage::from_path(
-            tdir.path().to_path_buf().join("auth.json"),
-        )?));
+        storage.add_backend(Arc::from(
+            FileStorage::from_path(tdir.path().to_path_buf().join("auth.json")).unwrap(),
+        ));
         let host = "basic.example.com";
 
         let retrieved = storage.get(host);
@@ -398,7 +393,7 @@ mod tests {
           }
         }
         "###);
-        storage.store(host, &authentication)?;
+        storage.store(host, &authentication).unwrap();
 
         let retrieved = storage.get(host);
         assert!(retrieved.is_ok());
@@ -427,12 +422,11 @@ mod tests {
             "Basic dGVzdHVzZXI6dGVzdHBhc3N3b3Jk"
         );
 
-        storage.delete(host)?;
-        Ok(())
+        storage.delete(host).unwrap();
     }
 
     #[test]
-    fn test_host_wildcard_expansion() -> anyhow::Result<()> {
+    fn test_host_wildcard_expansion() {
         for (host, should_succeed) in [
             ("repo.prefix.dev", true),
             ("*.repo.prefix.dev", true),
@@ -443,18 +437,19 @@ mod tests {
             ("*.notprefix.dev", false),
             ("*.com", false),
         ] {
-            let tdir = tempdir()?;
+            let tdir = tempdir().unwrap();
             let mut storage = AuthenticationStorage::empty();
-            storage.add_backend(Arc::from(FileStorage::from_path(
-                tdir.path().to_path_buf().join("auth.json"),
-            )?));
+            storage.add_backend(Arc::from(
+                FileStorage::from_path(tdir.path().to_path_buf().join("auth.json")).unwrap(),
+            ));
 
             let authentication = Authentication::BearerToken("testtoken".to_string());
 
-            storage.store(host, &authentication)?;
+            storage.store(host, &authentication).unwrap();
 
-            let retrieved =
-                storage.get_by_url("https://repo.prefix.dev/conda-forge/noarch/repodata.json")?;
+            let retrieved = storage
+                .get_by_url("https://repo.prefix.dev/conda-forge/noarch/repodata.json")
+                .unwrap();
 
             if should_succeed {
                 assert_eq!(retrieved.1, Some(authentication));
@@ -462,13 +457,10 @@ mod tests {
                 assert_eq!(retrieved.1, None);
             }
         }
-
-        Ok(())
     }
 
     #[tokio::test]
-    async fn concurrent_oauth_refresh_is_coalesced_by_authentication_middleware()
-    -> anyhow::Result<()> {
+    async fn concurrent_oauth_refresh_is_coalesced_by_authentication_middleware() {
         #[derive(Clone)]
         struct TestState {
             refresh_count: Arc<AtomicUsize>,
@@ -504,24 +496,26 @@ mod tests {
             .route("/token", post(token))
             .route("/repo", post(repo))
             .with_state(state.clone());
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-        let addr = listener.local_addr()?;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
         tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
 
         let host = "127.0.0.1";
         let mut storage = AuthenticationStorage::empty();
         storage.add_backend(Arc::new(MemoryStorage::new()));
-        storage.store(
-            host,
-            &Authentication::OAuth {
-                access_token: "expired-access-token".to_string(),
-                refresh_token: Some("refresh-token".to_string()),
-                expires_at: Some(0),
-                token_endpoint: format!("http://{addr}/token"),
-                revocation_endpoint: None,
-                client_id: "client-id".to_string(),
-            },
-        )?;
+        storage
+            .store(
+                host,
+                &Authentication::OAuth {
+                    access_token: "expired-access-token".to_string(),
+                    refresh_token: Some("refresh-token".to_string()),
+                    expires_at: Some(0),
+                    token_endpoint: format!("http://{addr}/token"),
+                    revocation_endpoint: None,
+                    client_id: "client-id".to_string(),
+                },
+            )
+            .unwrap();
 
         let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::default())
             .with(AuthenticationMiddleware::from_auth_storage(storage))
@@ -530,7 +524,7 @@ mod tests {
 
         let responses = join_all((0..8).map(|_| client.post(&repo_url).send())).await;
         for response in responses {
-            assert_eq!(response?.status(), StatusCode::OK);
+            assert_eq!(response.unwrap().status(), StatusCode::OK);
         }
 
         assert_eq!(state.refresh_count.load(Ordering::SeqCst), 1);
@@ -541,13 +535,10 @@ mod tests {
                 .iter()
                 .all(|auth| { auth.as_deref() == Some("Bearer fresh-access-token") })
         );
-
-        Ok(())
     }
 
     #[tokio::test]
-    async fn expired_oauth_with_failed_refresh_sends_no_authorization_header() -> anyhow::Result<()>
-    {
+    async fn expired_oauth_with_failed_refresh_sends_no_authorization_header() {
         #[derive(Clone)]
         struct TestState {
             seen_authorization: Arc<Mutex<Vec<Option<String>>>>,
@@ -577,43 +568,47 @@ mod tests {
             .route("/token", post(token))
             .route("/repo", post(repo))
             .with_state(state.clone());
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-        let addr = listener.local_addr()?;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
         tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
 
         let host = "127.0.0.1";
         let mut storage = AuthenticationStorage::empty();
         storage.add_backend(Arc::new(MemoryStorage::new()));
-        storage.store(
-            host,
-            &Authentication::OAuth {
-                access_token: "expired-access-token".to_string(),
-                refresh_token: Some("refresh-token".to_string()),
-                expires_at: Some(0),
-                token_endpoint: format!("http://{addr}/token"),
-                revocation_endpoint: None,
-                client_id: "client-id".to_string(),
-            },
-        )?;
+        storage
+            .store(
+                host,
+                &Authentication::OAuth {
+                    access_token: "expired-access-token".to_string(),
+                    refresh_token: Some("refresh-token".to_string()),
+                    expires_at: Some(0),
+                    token_endpoint: format!("http://{addr}/token"),
+                    revocation_endpoint: None,
+                    client_id: "client-id".to_string(),
+                },
+            )
+            .unwrap();
 
         let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::default())
             .with(AuthenticationMiddleware::from_auth_storage(storage))
             .build();
 
-        let response = client.post(format!("http://{addr}/repo")).send().await?;
+        let response = client
+            .post(format!("http://{addr}/repo"))
+            .send()
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
         // Refresh failed and the access token is expired, so no expired bearer
         // token should leak to the backend.
         let seen_authorization = state.seen_authorization.lock().unwrap();
         assert_eq!(seen_authorization.as_slice(), &[None]);
-
-        Ok(())
     }
 
     #[test]
-    fn test_rattler_auth_file_env_var_handling() -> anyhow::Result<()> {
-        let tdir = tempdir()?;
+    fn test_rattler_auth_file_env_var_handling() {
+        let tdir = tempdir().unwrap();
 
         let storage = temp_env::with_var(
             "RATTLER_AUTH_FILE",
@@ -629,14 +624,12 @@ mod tests {
 
         let host = "test.example.com";
         let authentication = Authentication::CondaToken("testtoken".to_string());
-        storage.store(host, &authentication)?;
+        storage.store(host, &authentication).unwrap();
 
         let file = tdir.path().join("auth.json");
         assert_eq!(
-            std::fs::read_to_string(file)?,
+            std::fs::read_to_string(file).unwrap(),
             "{\"test.example.com\":{\"CondaToken\":\"testtoken\"}}"
         );
-
-        Ok(())
     }
 }

@@ -5390,7 +5390,6 @@ name = "rattler_networking"
 version = "0.30.10"
 dependencies = [
  "ambient-id",
- "anyhow",
  "apple-native-keyring-store",
  "astral-reqwest-middleware",
  "astral-reqwest-retry",

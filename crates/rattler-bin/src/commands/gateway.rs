@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use miette::{Context, IntoDiagnostic};
 use rattler::{default_cache_dir, package_cache::PackageCache};
+use rattler_conda_types::{Channel, NamedChannelOrUrl};
 use rattler_config::{ConfigBase, NoExtension};
 use rattler_repodata_gateway::{ChannelConfig, Gateway, SourceConfig};
 use reqwest_middleware::ClientWithMiddleware;
@@ -16,6 +17,31 @@ pub fn load_config() -> miette::Result<ConfigBase<NoExtension>> {
     ConfigBase::<NoExtension>::load_from_default_locations("rattler")
         .into_diagnostic()
         .context("failed to load configuration")
+}
+
+/// Resolves the channels to query: the channels given on the command line,
+/// otherwise the `default-channels` from the configuration, otherwise
+/// conda-forge.
+pub fn resolve_channels(
+    cli_channels: Option<&[String]>,
+    config: &ConfigBase<NoExtension>,
+    channel_config: &rattler_conda_types::ChannelConfig,
+) -> miette::Result<Vec<Channel>> {
+    match cli_channels {
+        Some(channels) => channels
+            .iter()
+            .map(|channel| Channel::from_str(channel, channel_config))
+            .collect::<Result<_, _>>()
+            .into_diagnostic(),
+        None => config
+            .default_channels
+            .clone()
+            .unwrap_or_else(|| vec![NamedChannelOrUrl::Name("conda-forge".to_string())])
+            .into_iter()
+            .map(|channel| channel.into_channel(channel_config))
+            .collect::<Result<_, _>>()
+            .into_diagnostic(),
+    }
 }
 
 /// Builds the repodata gateway with the settings shared by every command:
