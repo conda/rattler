@@ -136,6 +136,22 @@ impl PyVirtualPackageOverrides {
         self.inner.cuda_arch = value.map(Into::into);
     }
     #[getter]
+    pub fn get_amdgpu(&self) -> Option<PyOverride> {
+        self.inner.amdgpu.clone().map(Into::into)
+    }
+    #[setter]
+    pub fn set_amdgpu(&mut self, value: Option<PyOverride>) {
+        self.inner.amdgpu = value.map(Into::into);
+    }
+    #[getter]
+    pub fn get_amdgpu_arch(&self) -> Option<PyOverride> {
+        self.inner.amdgpu_arch.clone().map(Into::into)
+    }
+    #[setter]
+    pub fn set_amdgpu_arch(&mut self, value: Option<PyOverride>) {
+        self.inner.amdgpu_arch = value.map(Into::into);
+    }
+    #[getter]
     pub fn get_libc(&self) -> Option<PyOverride> {
         self.inner.libc.clone().map(Into::into)
     }

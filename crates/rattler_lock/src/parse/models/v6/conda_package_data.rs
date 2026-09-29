@@ -170,6 +170,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for LegacyCondaPackageData {
         let (derived_arch, derived_platform) = derived_fields::derive_arch_and_platform(&subdir);
 
         let package_record = PackageRecord {
+            attestations_sha256: None,
             build,
             build_number,
             constrains: value.constrains.into_owned(),
@@ -195,6 +196,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for LegacyCondaPackageData {
             size: value.size.into_owned(),
             subdir,
             timestamp: value.timestamp.map(Into::into),
+            indexed_timestamp: None,
             track_features: value.track_features.into_owned(),
             version: value
                 .version

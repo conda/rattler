@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from rattler.version import Version
 from rattler.package import PackageName
-
 from rattler.rattler import PyGenericVirtualPackage
+from rattler.version import Version
 
 
 class GenericVirtualPackage:

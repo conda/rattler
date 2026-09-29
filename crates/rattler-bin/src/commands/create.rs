@@ -2,18 +2,16 @@ use std::{collections::HashMap, env, path::PathBuf, time::Instant};
 
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
-use rattler::{
-    default_cache_dir,
-    install::{IndicatifReporter, Installer, Transaction, TransactionOperation},
-    package_cache::PackageCache,
-};
-use rattler_conda_types::{ChannelConfig, PackageName, Platform, PrefixRecord, RepoDataRecord};
-use rattler_config::{ConfigBase, NoExtension};
-use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
+use rattler::install::{IndicatifReporter, Installer, Transaction, TransactionOperation};
+use rattler_conda_types::{ChannelConfig, PackageName, PrefixRecord, RepoDataRecord, Subdir};
+use rattler_repodata_gateway::RepoData;
 use rattler_solve::SolverTask;
 
 use crate::{
-    commands::progress::{wrap_in_async_progress, wrap_in_progress},
+    commands::{
+        gateway::{build_gateway, load_config},
+        progress::{wrap_in_async_progress, wrap_in_progress},
+    },
     global_multi_progress,
     solver_args::SolverArgs,
 };
@@ -23,6 +21,11 @@ use crate::{
 /// Resolves and installs the specified packages into a target prefix,
 /// pulling from the configured channels.
 #[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler create python numpy                          # install into ./.prefix from conda-forge
+  rattler create -p ./env -c conda-forge python=3.12   # choose the prefix and the channel
+  rattler create python --dry-run --platform linux-64  # show the transaction without installing
+  rattler create python --constraint "numpy<2"         # constrain a package without requiring it"#)]
 pub struct Opt {
     /// Package specs to install
     #[clap(required = true)]
@@ -35,6 +38,10 @@ pub struct Opt {
     #[clap(long)]
     dry_run: bool,
 
+    #[cfg(feature = "sigstore")]
+    #[clap(flatten)]
+    attestations: crate::attestation_args::AttestationPolicyArgs,
+
     /// Target prefix (environment path) for package installation
     #[clap(
         short = 'p',
@@ -46,15 +53,13 @@ pub struct Opt {
 }
 
 pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
-    let config = ConfigBase::<NoExtension>::load_from_default_locations("rattler")
-        .into_diagnostic()
-        .context("failed to load configuration")?;
+    let config = load_config()?;
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
     // Make the target prefix absolute
     let target_prefix = std::path::absolute(opt.target_prefix).into_diagnostic()?;
 
-    let install_platform = opt.solver.platform;
+    let install_platform = opt.solver.platform()?;
 
     println!("Installing for platform: {install_platform}");
 
@@ -64,16 +69,11 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     let specs = SolverArgs::parse_specs(&opt.specs)?;
     let constraints = opt.solver.constraints()?;
 
-    // Find the default cache directory. Create it if it doesn't exist yet.
-    let cache_dir = default_cache_dir()
-        .map_err(|e| miette::miette!("could not determine default cache directory: {}", e))?;
-    rattler_cache::ensure_cache_dir(&cache_dir)
-        .map_err(|e| miette::miette!("could not create cache directory: {}", e))?;
-
     // Determine the channels to use from the command line or select the default.
     // Like matchspecs this also requires the use of the `channel_config` so we
     // have to do this manually.
     let channels = opt.solver.channels(&channel_config)?;
+    let exclude_newer = opt.solver.exclude_newer(&channel_config)?;
 
     // Determine the packages that are currently installed in the environment.
     let installed_packages =
@@ -87,32 +87,13 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
 
     // Get the package names from the matchspecs so we can only load the package
     // records that we need.
-    let gateway = Gateway::builder()
-        .with_cache_dir(cache_dir.join(rattler_cache::REPODATA_CACHE_DIR))
-        .with_package_cache(PackageCache::new(
-            cache_dir.join(rattler_cache::PACKAGE_CACHE_DIR),
-        ))
-        .with_client(download_client.clone())
-        .with_max_concurrent_requests(config.concurrency.downloads)
-        .with_channel_config(rattler_repodata_gateway::ChannelConfig {
-            default: SourceConfig {
-                sharded_enabled: true,
-                cache_action: super::client::repodata_cache_action(offline),
-                ..SourceConfig::default()
-            },
-            per_channel: HashMap::new(),
-        })
-        .finish();
+    let gateway = build_gateway(download_client.clone(), &config, offline, true)?;
 
     let start_load_repo_data = Instant::now();
     let repo_data = wrap_in_async_progress(
         "loading repodata",
         gateway
-            .query(
-                channels,
-                [install_platform, Platform::NoArch],
-                specs.clone(),
-            )
+            .query(channels, [install_platform, Subdir::NoArch], specs.clone())
             .recursive(true),
     )
     .await
@@ -172,7 +153,7 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
         timeout: opt.solver.timeout(),
         strategy: opt.solver.strategy(),
         channel_priority: opt.solver.channel_priority(),
-        exclude_newer: opt.solver.exclude_newer(),
+        exclude_newer,
         ..SolverTask::from_iter(&repo_data)
     };
 
@@ -206,7 +187,10 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     }
 
     let install_start = Instant::now();
-    let result = Installer::new()
+    let installer = Installer::new();
+    #[cfg(feature = "sigstore")]
+    let installer = installer.with_attestation_policy(opt.attestations.policy());
+    let result = installer
         .with_download_client(download_client)
         .with_max_concurrent_requests(config.concurrency.downloads)
         .with_target_platform(install_platform)

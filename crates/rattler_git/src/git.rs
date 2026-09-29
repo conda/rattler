@@ -29,6 +29,26 @@ const CHECKOUT_READY_LOCK: &str = ".ok";
 /// `git-lfs` was unavailable. Such a checkout is reusable while `git-lfs`
 /// remains unavailable, but must be recreated once it becomes available.
 const CHECKOUT_LFS_DEGRADED: &str = "lfs-degraded";
+/// Git configuration that keeps a fetch's housekeeping in the foreground.
+///
+/// `git fetch` ends by running `git maintenance run --auto`, which detaches by
+/// default and rewrites the object store in the background. The database it
+/// just fetched into is read by `git clone --local`, and a local clone is a
+/// plain copy of the object store: objects a background repack removes while
+/// the copy runs are simply absent from the checkout, which then fails to write
+/// the refs that point at them. Keeping maintenance in the foreground holds it
+/// inside the fetch, so the object store is settled before anything clones from
+/// it. Both keys are needed: git only learned `maintenance.autoDetach` in 2.47,
+/// older versions detach from `git gc --auto` and honour `gc.autoDetach` alone.
+///
+/// Passed per command rather than written to the database, so a read-only or
+/// shared cache is never modified just to be read.
+const FOREGROUND_MAINTENANCE_ARGS: [&str; 4] = [
+    "-c",
+    "maintenance.autoDetach=false",
+    "-c",
+    "gc.autoDetach=false",
+];
 pub const GIT_DIR: &str = "GIT_DIR";
 pub const GIT_TERMINAL_PROMPT: &str = "GIT_TERMINAL_PROMPT";
 pub const GIT_LFS_SKIP_SMUDGE: &str = "GIT_LFS_SKIP_SMUDGE";
@@ -297,47 +317,60 @@ impl GitRemote {
         let locked_ref = locked_rev.map(|oid| GitReference::FullCommit(oid.to_string()));
         let reference = locked_ref.as_ref().unwrap_or(reference);
         if let Some(mut db) = db {
-            fetch(&mut db.repo, self.url.as_str(), reference, client)?;
+            // A database that lost objects fails the fetch only when git still
+            // has to transfer something; a commit-graph vouching for a missing
+            // object hides it from the fetch entirely, and the checkout is left
+            // to notice. Either way fetching cannot restore the object, so a
+            // database that fails the fetch is rebuilt below.
+            match fetch(&mut db.repo, self.url.as_str(), reference, client) {
+                Ok(()) => {
+                    let resolved_commit_hash = match locked_rev {
+                        Some(rev) => db.contains(rev).then_some(rev),
+                        None => reference.resolve(&db.repo).ok(),
+                    };
 
-            let resolved_commit_hash = match locked_rev {
-                Some(rev) => db.contains(rev).then_some(rev),
-                None => reference.resolve(&db.repo).ok(),
-            };
-
-            if let Some(rev) = resolved_commit_hash {
-                let ready = (options.lfs == Some(true))
-                    .then(|| {
-                        maybe_fetch_lfs(&mut db.repo, self.url.as_str(), rev, &options.lfs_filter)
-                    })
-                    .flatten();
-                return Ok((db.with_lfs_ready(ready), rev));
+                    if let Some(rev) = resolved_commit_hash {
+                        let ready = (options.lfs == Some(true))
+                            .then(|| {
+                                maybe_fetch_lfs(
+                                    &mut db.repo,
+                                    self.url.as_str(),
+                                    rev,
+                                    &options.lfs_filter,
+                                )
+                            })
+                            .flatten();
+                        return Ok((db.with_lfs_ready(ready), rev));
+                    }
+                }
+                Err(err) if db.is_connected() => return Err(err),
+                Err(err) => tracing::warn!(
+                    "Git database at `{}` is missing objects its refs point to ({err}); rebuilding it",
+                    into.display()
+                ),
             }
         }
 
         // Otherwise start from scratch to handle corrupt git repositories.
-        // After our fetch (which is interpreted as a clone now) we do the same
-        // resolution to figure out what we cloned.
+        // The replacement is built beside the existing database and swapped in
+        // once it resolves, so a failure here leaves whatever was cached
+        // untouched and reports its own error.
+        let parent = into.parent().expect("database path must have a parent");
+        fs_err::create_dir_all(parent)?;
+        let staging = tempfile::Builder::new()
+            .prefix(".rebuild-")
+            .tempdir_in(parent)?;
+
+        // A failed rebuild drops the staging directory, so the cache is only
+        // replaced by a database that actually resolves the reference.
+        let rev = self.populate(staging.path(), reference, locked_rev, client)?;
+
         if into.exists() {
             fs_err::remove_dir_all(into)?;
         }
+        fs_err::rename(staging.keep(), into)?;
 
-        fs_err::create_dir_all(into)?;
-        let mut repo = GitRepository::init(into)?;
-        fetch(&mut repo, self.url.as_str(), reference, client)?;
-        let rev = match locked_rev {
-            Some(rev) => rev,
-            None => reference.resolve(&repo).map_err(|err| {
-                let mut repository = self.url.clone();
-                let _ = repository.set_password(None);
-                let _ = repository.set_username("");
-                GitError::ReferenceNotFound {
-                    reference: reference.as_rev().to_string(),
-                    repository: repository.to_string(),
-                    source: Box::new(err),
-                }
-            })?,
-        };
-
+        let mut repo = GitRepository::open(into)?;
         let ready = (options.lfs == Some(true))
             .then(|| maybe_fetch_lfs(&mut repo, self.url.as_str(), rev, &options.lfs_filter))
             .flatten();
@@ -350,6 +383,33 @@ impl GitRemote {
             .with_lfs_ready(ready),
             rev,
         ))
+    }
+
+    /// Initializes a database at `path` and fetches `reference` into it,
+    /// returning the revision it resolves to.
+    fn populate(
+        &self,
+        path: &Path,
+        reference: &GitReference,
+        locked_rev: Option<GitOid>,
+        client: &LazyClient,
+    ) -> Result<GitOid, GitError> {
+        let mut repo = GitRepository::init(path)?;
+        fetch(&mut repo, self.url.as_str(), reference, client)?;
+
+        match locked_rev {
+            Some(rev) => Ok(rev),
+            None => reference.resolve(&repo).map_err(|err| {
+                let mut repository = self.url.clone();
+                let _ = repository.set_password(None);
+                let _ = repository.set_username("");
+                GitError::ReferenceNotFound {
+                    reference: reference.as_rev().to_string(),
+                    repository: repository.to_string(),
+                    source: Box::new(err),
+                }
+            }),
+        }
     }
 
     /// Creates a [`GitDatabase`] of this remote at `db_path`.
@@ -513,6 +573,15 @@ impl GitDatabase {
     pub(crate) fn contains(&self, oid: GitOid) -> bool {
         self.repo.rev_parse(&format!("{oid}^0")).is_ok()
     }
+
+    /// Whether every ref in this database resolves to an object it has.
+    ///
+    /// A database that fails this check still opens and still accepts fetches,
+    /// but `git clone --local` refuses to write a ref whose object is absent,
+    /// so every checkout from it fails until it is rebuilt.
+    pub(crate) fn is_connected(&self) -> bool {
+        self.repo.is_connected()
+    }
 }
 
 /// A local Git repository.
@@ -555,6 +624,54 @@ impl GitRepository {
         Ok(GitRepository {
             path: path.to_path_buf(),
         })
+    }
+
+    /// Whether every ref resolves to an object this repository actually has.
+    ///
+    /// Reflogs and the commit-graph are excluded: both can report problems in a
+    /// database whose refs are entirely intact, and only the refs decide
+    /// whether a local clone of this repository can succeed.
+    ///
+    /// Returns `false` only when git reports connectivity problems. When
+    /// `git fsck` itself cannot run, the repository is reported as connected so
+    /// callers keep the original failure instead of discarding a cache for an
+    /// unrelated reason.
+    fn is_connected(&self) -> bool {
+        let output = Command::new(match GIT.as_ref() {
+            Ok(git) => git,
+            Err(err) => {
+                tracing::warn!(
+                    "failed to locate git to check {}: {err}",
+                    self.path.display()
+                );
+                return true;
+            }
+        })
+        .args(["-c", "core.commitGraph=false"])
+        .args([
+            "fsck",
+            "--connectivity-only",
+            "--no-progress",
+            "--no-reflogs",
+        ])
+        .current_dir(&self.path)
+        .output();
+
+        match output {
+            Ok(out) if out.status.success() => true,
+            Ok(out) => {
+                tracing::debug!(
+                    "`git fsck` reported problems in {}: {}",
+                    self.path.display(),
+                    String::from_utf8_lossy(&out.stderr).trim()
+                );
+                false
+            }
+            Err(err) => {
+                tracing::warn!("failed to run `git fsck` in {}: {err}", self.path.display());
+                true
+            }
+        }
     }
 
     /// Parses the object ID of the given `refname`.
@@ -993,7 +1110,7 @@ fn fetch_with_cli(
     tags: bool,
 ) -> Result<(), GitError> {
     let mut cmd = Command::new(GIT.as_ref().map_err(Clone::clone)?);
-    cmd.arg("fetch");
+    cmd.args(FOREGROUND_MAINTENANCE_ARGS).arg("fetch");
     if tags {
         cmd.arg("--tags");
     }

@@ -1,7 +1,8 @@
 from __future__ import annotations
+
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 from rattler.rattler import PyRunExportsJson
 
@@ -19,11 +20,11 @@ class RunExportsJson:
 
     def __init__(
         self,
-        weak: List[str] | None = None,
-        strong: List[str] | None = None,
-        noarch: List[str] | None = None,
-        weak_constrains: List[str] | None = None,
-        strong_constrains: List[str] | None = None,
+        weak: list[str] | None = None,
+        strong: list[str] | None = None,
+        noarch: list[str] | None = None,
+        weak_constrains: list[str] | None = None,
+        strong_constrains: list[str] | None = None,
     ) -> None:
         """
         Create a new RunExportsJson instance.
@@ -121,7 +122,7 @@ class RunExportsJson:
         return RunExportsJson._from_py_run_exports_json(PyRunExportsJson.from_str(string))
 
     @classmethod
-    async def from_remote_url(cls, client: Client, url: str) -> Optional[RunExportsJson]:
+    async def from_remote_url(cls, client: Client, url: str) -> RunExportsJson | None:
         """
         Fetches `info/run_exports.json` from a remote package archive URL.
         """
@@ -141,7 +142,7 @@ class RunExportsJson:
         return PyRunExportsJson.package_path()
 
     @property
-    def weak(self) -> List[str]:
+    def weak(self) -> list[str]:
         """
         Weak run exports apply a dependency from host to run.
 
@@ -162,11 +163,11 @@ class RunExportsJson:
         return self._inner.weak
 
     @weak.setter
-    def weak(self, value: List[str]) -> None:
+    def weak(self, value: list[str]) -> None:
         self._inner.weak = value
 
     @property
-    def strong(self) -> List[str]:
+    def strong(self) -> list[str]:
         """
         Strong run exports apply a dependency from build to host and run.
 
@@ -187,11 +188,11 @@ class RunExportsJson:
         return self._inner.strong
 
     @strong.setter
-    def strong(self, value: List[str]) -> None:
+    def strong(self, value: list[str]) -> None:
         self._inner.strong = value
 
     @property
-    def noarch(self) -> List[str]:
+    def noarch(self) -> list[str]:
         """
         NoArch run exports apply a run export only to noarch packages (other run exports are ignored).
         For example, python uses this to apply a dependency on python to all noarch packages, but not to
@@ -214,11 +215,11 @@ class RunExportsJson:
         return self._inner.noarch
 
     @noarch.setter
-    def noarch(self, value: List[str]) -> None:
+    def noarch(self, value: list[str]) -> None:
         self._inner.noarch = value
 
     @property
-    def weak_constrains(self) -> List[str]:
+    def weak_constrains(self) -> list[str]:
         """
         Weak constrains apply a constrain dependency from host to build, or run to host.
 
@@ -239,11 +240,11 @@ class RunExportsJson:
         return self._inner.weak_constrains
 
     @weak_constrains.setter
-    def weak_constrains(self, value: List[str]) -> None:
+    def weak_constrains(self, value: list[str]) -> None:
         self._inner.weak_constrains = value
 
     @property
-    def strong_constrains(self) -> List[str]:
+    def strong_constrains(self) -> list[str]:
         """
         Strong constrains apply a constrain dependency from build to host and run.
 
@@ -264,7 +265,7 @@ class RunExportsJson:
         return self._inner.strong_constrains
 
     @strong_constrains.setter
-    def strong_constrains(self, value: List[str]) -> None:
+    def strong_constrains(self, value: list[str]) -> None:
         self._inner.strong_constrains = value
 
     @classmethod

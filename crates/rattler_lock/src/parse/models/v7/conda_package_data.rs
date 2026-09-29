@@ -82,6 +82,11 @@ pub(crate) struct CondaPackageDataModel<'a> {
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
     pub legacy_bz2_md5: Option<Md5Hash>,
 
+    /// SHA256 of the Sigstore attestation sidecar advertised for this package.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
+    pub attestations_sha256: Option<Sha256Hash>,
+
     // Dependencies
     #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
     pub depends: Cow<'a, [String]>,
@@ -127,6 +132,10 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub timestamp: Option<jiff::Timestamp>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde_as(as = "Option<crate::utils::serde::IndexedTimestamp>")]
+    pub indexed_timestamp: Option<jiff::Timestamp>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub python_site_packages_path: Cow<'a, Option<String>>,
 }
 
@@ -161,6 +170,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaBinaryData {
         let (derived_arch, derived_platform) = derived_fields::derive_arch_and_platform(&subdir);
 
         let package_record = PackageRecord {
+            attestations_sha256: value.attestations_sha256,
             build,
             build_number,
             constrains: value.constrains.into_owned(),
@@ -186,6 +196,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaBinaryData {
             size: value.size.into_owned(),
             subdir,
             timestamp: value.timestamp.map(Into::into),
+            indexed_timestamp: value.indexed_timestamp.map(Into::into),
             track_features: value.track_features.into_owned(),
             version: value
                 .version
@@ -282,9 +293,13 @@ impl<'a> From<&'a CondaBinaryData> for CondaPackageDataModel<'a> {
             md5: package_record.md5,
             legacy_bz2_md5: package_record.legacy_bz2_md5,
             sha256: package_record.sha256,
+            attestations_sha256: package_record.attestations_sha256,
             size: Cow::Borrowed(&package_record.size),
             legacy_bz2_size: Cow::Borrowed(&package_record.legacy_bz2_size),
             timestamp: package_record.timestamp.map(|ts| ts.jiff_timestamp()),
+            indexed_timestamp: package_record
+                .indexed_timestamp
+                .map(|ts| ts.jiff_timestamp()),
             features: Cow::Borrowed(&package_record.features),
             flags: Cow::Borrowed(&package_record.flags),
             track_features: Cow::Borrowed(&package_record.track_features),
@@ -305,5 +320,35 @@ fn strip_trailing_slash(url: &Url) -> Cow<'_, Url> {
         Cow::Owned(updated_url)
     } else {
         Cow::Borrowed(url)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[rstest::rstest]
+    #[case(0)]
+    #[case(1)]
+    #[case(-1)]
+    #[case(1_789_300_800_123)]
+    fn indexed_timestamp_roundtrip(#[case] millis: i64) {
+        let input = format!(
+            "conda: https://example.com/linux-64/demo-1.0-0.conda\nindexed_timestamp: {millis}\n"
+        );
+        let model: CondaPackageDataModel<'_> = serde_yaml::from_str(&input).unwrap();
+        let binary = CondaBinaryData::try_from(model).unwrap();
+        let indexed = binary.package_record.indexed_timestamp.unwrap();
+        assert_eq!(indexed.timestamp_millis(), millis);
+        let model = CondaPackageDataModel::from(&binary);
+        let yaml = serde_yaml::to_string(&model).unwrap();
+        let decoded: CondaPackageDataModel<'_> = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(
+            CondaBinaryData::try_from(decoded)
+                .unwrap()
+                .package_record
+                .indexed_timestamp,
+            Some(indexed)
+        );
     }
 }

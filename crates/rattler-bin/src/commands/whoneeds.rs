@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, io::Write, path::Path, time::Instant};
+use std::{env, path::Path, time::Instant};
 
 use futures_util::TryStreamExt;
 use indexmap::IndexMap;
@@ -6,15 +6,13 @@ use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::{
-    Channel, ChannelConfig, PackageName, PackageRecord, Platform, Version, package::IndexJson,
+    Channel, ChannelConfig, PackageName, PackageRecord, Subdir, Version, package::IndexJson,
 };
-use rattler_repodata_gateway::{
-    Gateway, SourceConfig,
-    who_needs::{DependencyKind, Dependent, WhoNeedsTarget},
-};
+use rattler_repodata_gateway::who_needs::{DependencyKind, Dependent, WhoNeedsTarget};
 use url::Url;
 
-use super::QueryOutputFormat;
+use super::{QueryOutputFormat, print_url_lines};
+use crate::commands::gateway::{build_gateway, load_config};
 
 /// Show packages that depend on the given package (reverse dependencies).
 #[derive(Debug, clap::Parser)]
@@ -38,9 +36,9 @@ pub struct Opt {
     #[clap(short, long, default_value = "conda-forge")]
     channels: Vec<String>,
 
-    /// Platform to search for
-    #[clap(short, long, default_value_t = Platform::current())]
-    platform: Platform,
+    /// Subdir to search for. Defaults to the platform of the current host.
+    #[clap(short, long)]
+    platform: Option<Subdir>,
 
     /// Maximum number of packages to display
     #[clap(long, default_value = "100")]
@@ -116,10 +114,8 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
 
     let (target, target_display) = resolve_target(&opt.package, &download_client).await?;
 
-    eprintln!(
-        "Searching for packages that depend on '{}' on {}",
-        target_display, opt.platform
-    );
+    let platform = opt.platform.map_or_else(crate::host_platform, Ok)?;
+    eprintln!("Searching for packages that depend on '{target_display}' on {platform}");
 
     // Determine the channels
     let channels = opt
@@ -134,21 +130,8 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
         channels.iter().map(Channel::canonical_name).join(", ")
     );
 
-    // Create gateway. Sharded repodata is disabled because a reverse
-    // dependency lookup needs the records of every package in the channel,
-    // which is one request per package with shards but a single request
-    // with a full repodata.json.
-    let gateway = Gateway::builder()
-        .with_client(download_client)
-        .with_channel_config(rattler_repodata_gateway::ChannelConfig {
-            default: SourceConfig {
-                sharded_enabled: false,
-                cache_action: super::client::repodata_cache_action(offline),
-                ..SourceConfig::default()
-            },
-            per_channel: HashMap::new(),
-        })
-        .finish();
+    let config = load_config()?;
+    let gateway = build_gateway(download_client, &config, offline, true)?;
 
     // Show progress while loading repodata
     let pb = ProgressBar::new_spinner();
@@ -158,7 +141,7 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
 
     let start = Instant::now();
     let mut stream = gateway
-        .who_needs(channels, [opt.platform, Platform::NoArch], target)
+        .who_needs(channels, [platform, Subdir::NoArch], target)
         .stream();
 
     // All output modes reduce every dependent to something much smaller
@@ -196,23 +179,7 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
         });
         records.dedup_by(|a, b| a.3 == b.3);
 
-        // This output is meant to be piped (e.g. into `head`), so a closed
-        // stdout is a normal way to end instead of an error.
-        let mut stdout = std::io::stdout().lock();
-        for (_, _, _, url) in records {
-            if let Err(err) = writeln!(stdout, "{url}") {
-                if err.kind() == std::io::ErrorKind::BrokenPipe {
-                    return Ok(());
-                }
-                return Err(err).into_diagnostic();
-            }
-        }
-        if let Err(err) = stdout.flush()
-            && err.kind() != std::io::ErrorKind::BrokenPipe
-        {
-            return Err(err).into_diagnostic();
-        }
-        return Ok(());
+        return print_url_lines(records.into_iter().map(|(_, _, _, url)| url));
     }
 
     if opt.format == Some(QueryOutputFormat::Json) {

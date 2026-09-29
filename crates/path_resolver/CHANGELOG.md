@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.14](https://github.com/conda/rattler/compare/path_resolver-v0.2.13...path_resolver-v0.2.14) - 2026-09-23
+
+### Added
+
+- add standalone Sigstore attestation verification ([#2794](https://github.com/conda/rattler/pull/2794))
+
 ## [0.2.13](https://github.com/conda/rattler/compare/path_resolver-v0.2.12...path_resolver-v0.2.13) - 2026-08-21
 
 ### Other

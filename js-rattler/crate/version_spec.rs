@@ -34,7 +34,7 @@ impl AsRef<VersionSpec> for JsVersionSpec {
 
 #[wasm_bindgen(js_class = "VersionSpec")]
 impl JsVersionSpec {
-    /// Constructs a new VersionSpec object from a string representation.
+    /// Constructs a new `VersionSpec` object from a string representation.
     #[wasm_bindgen(constructor)]
     pub fn new(
         #[wasm_bindgen(param_description = "The string representation of the version spec.")]
