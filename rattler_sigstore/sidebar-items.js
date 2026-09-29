@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["error","policy","sidecar","verify"],"struct":["Bundle","TrustedRoot"]};
+window.SIDEBAR_ITEMS = {"mod":["error","policy","sidecar","verify"],"struct":["Bundle","CertificateInfo","FulcioCiClaims","TransparencyLogEntry","TrustedRoot"]};

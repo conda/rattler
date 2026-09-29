@@ -98,27 +98,31 @@
 <a href=#96 id=96 data-nosnippet>96</a>        </span>message: String,
 <a href=#97 id=97 data-nosnippet>97</a>    },
 <a href=#98 id=98 data-nosnippet>98</a>
-<a href=#99 id=99 data-nosnippet>99</a>    <span class="doccomment">/// The Sigstore trusted root could not be loaded.
-<a href=#100 id=100 data-nosnippet>100</a>    </span><span class="attr">#[error(<span class="string">"failed to load the Sigstore trusted root: {0}"</span>)]
-<a href=#101 id=101 data-nosnippet>101</a>    </span>TrustedRoot(String),
+<a href=#99 id=99 data-nosnippet>99</a>    <span class="doccomment">/// The signing certificate of a bundle could not be parsed.
+<a href=#100 id=100 data-nosnippet>100</a>    </span><span class="attr">#[error(<span class="string">"{0}"</span>)]
+<a href=#101 id=101 data-nosnippet>101</a>    </span>InvalidCertificate(String),
 <a href=#102 id=102 data-nosnippet>102</a>
-<a href=#103 id=103 data-nosnippet>103</a>    <span class="doccomment">/// None of the attestations in the sidecar passed verification.
-<a href=#104 id=104 data-nosnippet>104</a>    </span><span class="attr">#[error(<span class="string">"no attestation for {package} passed verification:{}"</span>, format_reasons(.reasons))]
-<a href=#105 id=105 data-nosnippet>105</a>    </span>VerificationFailed {
-<a href=#106 id=106 data-nosnippet>106</a>        <span class="doccomment">/// The package filename.
-<a href=#107 id=107 data-nosnippet>107</a>        </span>package: String,
-<a href=#108 id=108 data-nosnippet>108</a>        <span class="doccomment">/// One reason per rejected bundle.
-<a href=#109 id=109 data-nosnippet>109</a>        </span>reasons: Vec&lt;String&gt;,
-<a href=#110 id=110 data-nosnippet>110</a>    },
-<a href=#111 id=111 data-nosnippet>111</a>}
-<a href=#112 id=112 data-nosnippet>112</a>
-<a href=#113 id=113 data-nosnippet>113</a><span class="kw">fn </span>format_reasons(reasons: <span class="kw-2">&amp;</span>[String]) -&gt; String {
-<a href=#114 id=114 data-nosnippet>114</a>    reasons
-<a href=#115 id=115 data-nosnippet>115</a>        .iter()
-<a href=#116 id=116 data-nosnippet>116</a>        .map(|reason| <span class="macro">format!</span>(<span class="string">"\n  - {reason}"</span>))
-<a href=#117 id=117 data-nosnippet>117</a>        .collect()
-<a href=#118 id=118 data-nosnippet>118</a>}
-<a href=#119 id=119 data-nosnippet>119</a>
-<a href=#120 id=120 data-nosnippet>120</a><span class="doccomment">/// A convenience alias for results in this crate.
-<a href=#121 id=121 data-nosnippet>121</a></span><span class="kw">pub type </span>SigstoreResult&lt;T&gt; = <span class="prelude-ty">Result</span>&lt;T, SigstoreError&gt;;
+<a href=#103 id=103 data-nosnippet>103</a>    <span class="doccomment">/// The Sigstore trusted root could not be loaded.
+<a href=#104 id=104 data-nosnippet>104</a>    </span><span class="attr">#[error(<span class="string">"failed to load the Sigstore trusted root: {0}"</span>)]
+<a href=#105 id=105 data-nosnippet>105</a>    </span>TrustedRoot(String),
+<a href=#106 id=106 data-nosnippet>106</a>
+<a href=#107 id=107 data-nosnippet>107</a>    <span class="doccomment">/// None of the attestations in the sidecar passed verification.
+<a href=#108 id=108 data-nosnippet>108</a>    </span><span class="attr">#[error(<span class="string">"no attestation for {package} passed verification:{}"</span>, format_reasons(.reasons))]
+<a href=#109 id=109 data-nosnippet>109</a>    </span>VerificationFailed {
+<a href=#110 id=110 data-nosnippet>110</a>        <span class="doccomment">/// The package filename.
+<a href=#111 id=111 data-nosnippet>111</a>        </span>package: String,
+<a href=#112 id=112 data-nosnippet>112</a>        <span class="doccomment">/// One reason per rejected bundle.
+<a href=#113 id=113 data-nosnippet>113</a>        </span>reasons: Vec&lt;String&gt;,
+<a href=#114 id=114 data-nosnippet>114</a>    },
+<a href=#115 id=115 data-nosnippet>115</a>}
+<a href=#116 id=116 data-nosnippet>116</a>
+<a href=#117 id=117 data-nosnippet>117</a><span class="kw">fn </span>format_reasons(reasons: <span class="kw-2">&amp;</span>[String]) -&gt; String {
+<a href=#118 id=118 data-nosnippet>118</a>    reasons
+<a href=#119 id=119 data-nosnippet>119</a>        .iter()
+<a href=#120 id=120 data-nosnippet>120</a>        .map(|reason| <span class="macro">format!</span>(<span class="string">"\n  - {reason}"</span>))
+<a href=#121 id=121 data-nosnippet>121</a>        .collect()
+<a href=#122 id=122 data-nosnippet>122</a>}
+<a href=#123 id=123 data-nosnippet>123</a>
+<a href=#124 id=124 data-nosnippet>124</a><span class="doccomment">/// A convenience alias for results in this crate.
+<a href=#125 id=125 data-nosnippet>125</a></span><span class="kw">pub type </span>SigstoreResult&lt;T&gt; = <span class="prelude-ty">Result</span>&lt;T, SigstoreError&gt;;
 </code></pre></div></section></main></body></html>

@@ -9,7 +9,7 @@
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>reqwest_middleware::ClientWithMiddleware;
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>serde::{Deserialize, Serialize};
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>serde_json::json;
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>sigstore_sign::{Attestation, SigningConfig, SigningContext, oidc::IdentityToken};
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>sigstore_sign::{Attestation, SigningContext, SigningServices, oidc::IdentityToken};
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>sigstore_trust_root::SigningConfig <span class="kw">as </span>TufSigningConfig;
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>std::path::Path;
 <a href=#13 id=13 data-nosnippet>13</a>
@@ -85,11 +85,11 @@
 <a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">let </span>tuf_config = TufSigningConfig::production()
 <a href=#84 id=84 data-nosnippet>84</a>        .<span class="kw">await
 <a href=#85 id=85 data-nosnippet>85</a>        </span>.map_err(|e| <span class="macro">miette::miette!</span>(<span class="string">"Failed to fetch Sigstore TUF signing config: {}"</span>, e))<span class="question-mark">?</span>;
-<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">let </span>signing_config = SigningConfig::from_tuf_config(<span class="kw-2">&amp;</span>tuf_config)
+<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">let </span>signing_services = SigningServices::from_tuf_config(<span class="kw-2">&amp;</span>tuf_config)
 <a href=#87 id=87 data-nosnippet>87</a>        .map_err(|e| <span class="macro">miette::miette!</span>(<span class="string">"Failed to build Sigstore signing config: {}"</span>, e))<span class="question-mark">?</span>;
 <a href=#88 id=88 data-nosnippet>88</a>
 <a href=#89 id=89 data-nosnippet>89</a>    <span class="macro">tracing::info!</span>(<span class="string">"Signing attestation with Sigstore..."</span>);
-<a href=#90 id=90 data-nosnippet>90</a>    <span class="kw">let </span>context = SigningContext::with_config(signing_config);
+<a href=#90 id=90 data-nosnippet>90</a>    <span class="kw">let </span>context = SigningContext::new(signing_services);
 <a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">let </span>signer = context.signer(identity_token);
 <a href=#92 id=92 data-nosnippet>92</a>
 <a href=#93 id=93 data-nosnippet>93</a>    <span class="kw">let </span>bundle = signer
