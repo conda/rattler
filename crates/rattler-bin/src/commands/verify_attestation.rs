@@ -494,9 +494,10 @@ fn print_report(report: &Report) {
         "Attestation",
         &compact_link(
             attestation_link(&report.attestation_url),
-            &Url::parse(&report.attestation_url)
-                .map(|url| sidecar_label(&url))
-                .unwrap_or_else(|_| report.attestation_url.clone()),
+            &Url::parse(&report.attestation_url).map_or_else(
+                |_| report.attestation_url.clone(),
+                |url| sidecar_label(&url),
+            ),
             &report.attestation_url,
         ),
     );
