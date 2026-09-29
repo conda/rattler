@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["GCSMiddleware"]};
+window.SIDEBAR_ITEMS = {"enum":["GcsMiddlewareError"],"struct":["GCSMiddleware"]};
