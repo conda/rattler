@@ -75,12 +75,12 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
     let specs = SolverArgs::parse_specs(&opt.specs)?;
     let constraints = opt.solver.constraints()?;
 
-    let channels = opt.solver.channels(&channel_config)?;
+    let config = load_config()?;
+    let channels = opt.solver.channels(&config, &channel_config)?;
     let exclude_newer = opt.solver.exclude_newer(&channel_config)?;
 
     let download_client = super::client::create_client_with_middleware(offline)?;
 
-    let config = load_config()?;
     let gateway = build_gateway(download_client.clone(), &config, offline, true)?;
 
     let start_load_repo_data = Instant::now();

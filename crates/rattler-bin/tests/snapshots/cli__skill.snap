@@ -92,7 +92,7 @@ The examples below are the same ones `rattler <command> --help` prints.
 | `rattler download` | Download an arbitrary file |
 | `rattler fetch-file` | Read a file from inside a local or remote conda package |
 | `rattler info` | Show information about this `rattler` build and the host system |
-| `rattler inspect` | Inspect package metadata from a local or remote conda package |
+| `rattler inspect` | Inspect package metadata from a local or remote conda package, or a matchspec |
 | `rattler search` | Search for packages in conda channels using glob or regex patterns |
 | `rattler solve` | Solve a conda environment without installing it |
 | `rattler whoneeds` | Show packages that depend on the given package (reverse dependencies) |
@@ -168,6 +168,8 @@ rattler inspect ./numpy-2.1.0-py312h1234_0.conda     # metadata and the first 10
 rattler inspect https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda
 rattler inspect ./pkg.conda --json                    # machine-readable metadata
 rattler inspect ./pkg.conda --limit -1                # list all files
+rattler inspect numpy                                 # newest numpy on conda-forge
+rattler inspect 'python 3.12.*' -c conda-forge -p linux-64
 ```
 
 ### `rattler search`
