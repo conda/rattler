@@ -23,8 +23,34 @@ configures S3 credentials, concurrency, and per-channel index options under the
 `[index-config]` section.
 
 When `--config` is omitted, `rattler-index` falls back to its built-in defaults
-(`write-zst = true`, `write-shards = true`, no advertised repodata revisions,
-`from-index-json` revision assignment, no channel metadata).
+(`write-zst = true`, `write-shards = true`, `write-lookup = false`, no
+advertised repodata revisions, `from-index-json` revision assignment, no
+channel metadata).
+
+## Lookup index (CEP XXXX)
+
+With `--write-lookup` (or `write-lookup = true` in the config), `rattler-index`
+also maintains the *lookup index* of every subdir in `<subdir>/lookup/`: a set
+of static, content-addressed Parquet files that map the files shipped by the
+subdir's packages to the packages containing them, and points to it with
+`info.lookup_url` in `repodata.json` and `repodata_shards.msgpack.zst`. Clients
+such as `rattler whoprovides include/zlib.h` answer "which package provides
+this file?" with a few HTTP range requests against these files, without
+downloading the index.
+
+```shell
+rattler-index --write-lookup fs ./channel
+```
+
+Every run adds a *layer* with the packages that are not indexed yet (their
+`info/paths.json` is read while the packages are indexed) and lists packages
+that disappeared from the subdir in the manifest's `removed`. Layer files are
+immutable and can be cached forever; only `manifest.json` changes. Once an
+index has eight layers, or when `--force` is given, all layers are merged into
+a new base layer. Files of superseded layers are left in place so that clients
+with a cached manifest can finish their lookups; they can be deleted after a
+grace period. The format is implemented by the `rattler_lookup` crate; the
+feature can be disabled with `--no-default-features` (`lookup` feature).
 
 ## Per-channel index configuration
 

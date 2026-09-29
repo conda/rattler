@@ -161,6 +161,14 @@ impl PyChannelInfo {
     pub fn channel_relations(&self) -> Option<PyChannelRelations> {
         self.inner.channel_relations.clone().map(Into::into)
     }
+
+    /// The URL of the `manifest.json` of the subdir's lookup index (which
+    /// packages contain a file), absolute or relative to the repodata file.
+    /// `None` when the channel publishes no lookup index.
+    #[getter]
+    pub fn lookup_url(&self) -> Option<String> {
+        self.inner.lookup_url.clone()
+    }
 }
 
 /// Python wrapper around [`ChannelRelations`] — see

@@ -30,6 +30,8 @@ pub mod table;
 pub mod verify_attestation;
 pub mod virtual_packages;
 pub mod whoneeds;
+#[cfg(feature = "lookup")]
+pub mod whoprovides;
 
 /// Machine-readable output formats for package queries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]

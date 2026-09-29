@@ -22,6 +22,8 @@ use crate::{IndexedPackageRecord, RepodataFileMetadata};
 struct CachedPackage {
     /// The computed package record
     record: IndexedPackageRecord,
+    /// The paths of the files in the package, if they were extracted
+    paths: Option<Vec<String>>,
     /// The `ETag` when this record was computed (if available)
     etag: Option<String>,
     /// The last modified time when this record was computed (if available)
@@ -31,8 +33,9 @@ struct CachedPackage {
 /// Result of a cache lookup operation from [`PackageRecordCache::get_or_stat`].
 #[derive(Debug)]
 pub(crate) enum CacheResult {
-    /// Cache hit - the cached record is still valid (metadata matches).
-    Hit(Box<IndexedPackageRecord>),
+    /// Cache hit - the cached record is still valid (metadata matches). The
+    /// paths are present if they were requested.
+    Hit(Box<(IndexedPackageRecord, Option<Vec<String>>)>),
 
     /// Cache miss - need to read and parse the file.
     /// Contains current file metadata for conditional reading.
@@ -71,6 +74,7 @@ impl PackageRecordCache {
         &self,
         op: &Operator,
         path: &str,
+        need_paths: bool,
     ) -> opendal::Result<CacheResult> {
         // Get current file metadata
         let metadata = match op.stat(path).await {
@@ -95,11 +99,21 @@ impl PackageRecordCache {
         };
 
         if let Some(cached) = cached {
+            if need_paths && cached.paths.is_none() {
+                tracing::debug!(
+                    "Cache entry for {} has no file paths, treating as miss",
+                    path
+                );
+                return Ok(CacheResult::Miss {
+                    etag: current_etag,
+                    last_modified: current_last_modified,
+                });
+            }
             // Validate using ETag first (preferred)
             if let (Some(cached_etag), Some(current_etag)) = (&cached.etag, &current_etag) {
                 if cached_etag == current_etag {
                     tracing::debug!("Cache hit for {} (etag validated)", path);
-                    return Ok(CacheResult::Hit(Box::new(cached.record)));
+                    return Ok(CacheResult::Hit(Box::new((cached.record, cached.paths))));
                 } else {
                     tracing::debug!(
                         "Cache entry for {} has mismatched etag, treating as miss",
@@ -118,7 +132,7 @@ impl PackageRecordCache {
             {
                 if cached_modified == current_modified {
                     tracing::debug!("Cache hit for {} (last_modified validated)", path);
-                    return Ok(CacheResult::Hit(Box::new(cached.record)));
+                    return Ok(CacheResult::Hit(Box::new((cached.record, cached.paths))));
                 } else {
                     tracing::debug!(
                         "Cache entry for {} has mismatched last_modified, treating as miss",
@@ -154,11 +168,13 @@ impl PackageRecordCache {
         &self,
         path: &str,
         record: IndexedPackageRecord,
+        paths: Option<Vec<String>>,
         etag: Option<String>,
         last_modified: Option<Timestamp>,
     ) {
         let cached = CachedPackage {
             record,
+            paths,
             etag,
             last_modified,
         };

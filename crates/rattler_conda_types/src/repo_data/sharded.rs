@@ -60,6 +60,12 @@ pub struct ShardedSubdirInfo {
     /// [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
     #[serde(default, skip_serializing_if = "ChannelRelations::is_none_or_empty")]
     pub channel_relations: Option<ChannelRelations>,
+
+    /// The URL of the `manifest.json` of the subdir's lookup index (which
+    /// packages contain a file), absolute or relative to this index file.
+    /// Absent if the channel publishes no lookup index.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lookup_url: Option<String>,
 }
 
 #[cfg(test)]
@@ -121,6 +127,7 @@ mod tests {
                 created_at: None,
                 repodata_revisions: IndexMap::default(),
                 channel_relations: None,
+                lookup_url: None,
             },
             shards: ahash::HashMap::default(),
         };
@@ -160,10 +167,26 @@ mod tests {
                 created_at: None,
                 repodata_revisions: IndexMap::default(),
                 channel_relations,
+                lookup_url: None,
             };
             let json = serde_json::to_string(&info).unwrap();
             assert!(!json.contains("channel_relations"));
+            assert!(!json.contains("lookup_url"));
         }
+    }
+
+    #[test]
+    fn test_sharded_subdir_info_lookup_url() {
+        let raw = r#"{
+            "subdir": "linux-64",
+            "base_url": "./",
+            "shards_base_url": "./shards/",
+            "lookup_url": "./lookup/manifest.json"
+        }"#;
+        let info: ShardedSubdirInfo = serde_json::from_str(raw).unwrap();
+        assert_eq!(info.lookup_url.as_deref(), Some("./lookup/manifest.json"));
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains(r#""lookup_url":"./lookup/manifest.json""#));
     }
 }
 

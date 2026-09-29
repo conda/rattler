@@ -61,7 +61,7 @@ rattler_virtual_packages = { path = "../crates/rattler_virtual_packages", defaul
 rattler_solve = { path = "../crates/rattler_solve", default-features = false, features = [
   "resolvo",
 ] }
-rattler_index = { path = "../crates/rattler_index" }
+rattler_index = { path = "../crates/rattler_index", features = ["lookup"] }
 rattler_lock = { path = "../crates/rattler_lock", default-features = false }
 rattler_package_streaming = { path = "../crates/rattler_package_streaming", default-features = false, features = ["reqwest"] }
 pyo3 = { version = "0.29", features = [

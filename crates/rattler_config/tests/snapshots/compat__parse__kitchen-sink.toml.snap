@@ -214,6 +214,7 @@ expression: "(unused, normalized(config))"
                     write_shards: Some(
                         false,
                     ),
+                    write_lookup: None,
                     repodata_revisions: None,
                     package_revision_assignment: None,
                     base_url: None,
@@ -224,6 +225,7 @@ expression: "(unused, normalized(config))"
                     "s3://my-bucket/staging": IndexChannelConfig {
                         write_zst: None,
                         write_shards: None,
+                        write_lookup: None,
                         repodata_revisions: None,
                         package_revision_assignment: None,
                         base_url: Some(
