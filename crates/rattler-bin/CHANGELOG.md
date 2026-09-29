@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/conda/rattler/compare/rattler-bin-v0.4.1...rattler-bin-v0.5.0) - 2026-09-29
+
+### Added
+
+- *(rattler-bin)* support matchspecs in `rattler inspect` ([#2867](https://github.com/conda/rattler/pull/2867))
+- *(sigstore)* add FulcioCiClaims from `1.3.6.1.4.1.57264.1` ([#2844](https://github.com/conda/rattler/pull/2844))
+
+### Fixed
+
+- *(rattler-bin)* ignore broken pipe in fetch-file and download ([#2874](https://github.com/conda/rattler/pull/2874))
+
+### Other
+
+- [**breaking**] rename Platform to Subdir and validate names against CEP 26 ([#2787](https://github.com/conda/rattler/pull/2787))
+
 ## [0.4.1](https://github.com/conda/rattler/compare/rattler-bin-v0.4.0...rattler-bin-v0.4.1) - 2026-09-23
 
 ### Added
