@@ -21,6 +21,15 @@ policy = VerificationPolicy.require(publisher)
 await install(records, target_prefix, attestation_policy=policy)
 ```
 
+A verified attestation also says where the package came from. `VerifiedAttestation.claims` carries what the signing certificate recorded about the CI workload that signed it: repository, commit, ref, workflow, trigger, runner and deployment environment.
+
+```python
+outcome = await verify_attestation(record, policy)
+if outcome.attestation is not None and outcome.attestation.claims is not None:
+    claims = outcome.attestation.claims
+    print(claims.source_repository_uri, claims.source_repository_digest, claims.build_config_uri)
+```
+
 **Breaking: `S3Config`'s `force_path_style` is `addressing_style` now.** The boolean flag is gone in favor of an explicit `"path"` or `"virtual-host"` string, on both the Python constructor and the `[s3-options.<bucket>]` TOML `Config` reads. A `force-path-style` key left over in an existing config is not rejected: it is silently ignored, and the bucket falls back to virtual-host addressing, so double-check any config using RustFS or another path-style-only S3 endpoint.
 
 ```python
@@ -49,6 +58,8 @@ addressing-style = "path"
 
 - Verify Sigstore attestations with `verify_attestation()`, `VerificationPolicy`, `Publisher` and `Issuer`, and check them during `install()` with the new `attestation_policy` argument in [#2814](https://github.com/conda/rattler/pull/2814)
 - Verify against a pinned trust anchor with `TrustedRoot`, avoiding the TUF fetch of the production Sigstore root in [#2834](https://github.com/conda/rattler/pull/2834)
+- Read the provenance of a verified package from `VerifiedAttestation.claims`, the Fulcio CI claims of the signing certificate, together with `signed_at`, `log_index`, `log_origin` and `checks`, which records which parts of the Sigstore verification were performed in [#2844](https://github.com/conda/rattler/pull/2844)
+- `TrustedRoot.embedded()`, the public good instance's trust anchors that ship with py-rattler, so verification works when `tuf-repo-cdn.sigstore.dev` is unreachable in [#2844](https://github.com/conda/rattler/pull/2844)
 - `PackageRecord.attestations_sha256`, the sha256 of a package's Sigstore attestation sidecar, in [#2773](https://github.com/conda/rattler/pull/2773)
 - `PackageRecord.indexed_timestamp`, the server-assigned time an artifact first entered the channel index, in [#2790](https://github.com/conda/rattler/pull/2790)
 - `timestamp_policy` on `solve()`/`solve_with_sparse_repodata()`, controlling whether `exclude_newer` filtering prefers `indexed_timestamp`, falls back to the build `timestamp`, or requires one of them explicitly, in [#2798](https://github.com/conda/rattler/pull/2798)
@@ -69,6 +80,7 @@ addressing-style = "path"
 - Stop writing a `v0` entry into `repodata_revisions` for channels indexed with `index_fs`/`index_s3` that only hold legacy-layout packages in [#2785](https://github.com/conda/rattler/pull/2785)
 - Stop excluding a package from legacy repodata written by `index_fs`/`index_s3` just because one of its extras requires the v3 layout in [#2809](https://github.com/conda/rattler/pull/2809)
 - Replace a file `install()` can't overwrite in place, such as one owned by another user in a shared prefix, instead of failing in [#2827](https://github.com/conda/rattler/pull/2827)
+- Extract packages that carry a directory past Windows' `MAX_PATH` instead of rejecting their entries with `trying to unpack outside of destination path`, which broke `install()` for a deep directory under a short prefix in [#2857](https://github.com/conda/rattler/pull/2857)
 
 ## [0.26.0] - 2026-09-10
 
