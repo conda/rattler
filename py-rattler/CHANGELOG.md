@@ -21,8 +21,6 @@ policy = VerificationPolicy.require(publisher)
 await install(records, target_prefix, attestation_policy=policy)
 ```
 
-Verification fetches the production Sigstore trusted root over TUF the first time it runs. Pass a `TrustedRoot.from_path("trusted_root.json")` to verify against pinned trust material instead, leaving the sidecar download as the only request.
-
 **Breaking: `S3Config`'s `force_path_style` is `addressing_style` now.** The boolean flag is gone in favor of an explicit `"path"` or `"virtual-host"` string, on both the Python constructor and the `[s3-options.<bucket>]` TOML `Config` reads. A `force-path-style` key left over in an existing config is not rejected: it is silently ignored, and the bucket falls back to virtual-host addressing, so double-check any config using MinIO or another path-style-only S3 endpoint.
 
 ```python
