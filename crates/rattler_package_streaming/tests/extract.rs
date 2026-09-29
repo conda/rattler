@@ -903,6 +903,23 @@ fn empty_files_directories_and_long_names() {
     assert_eq!(std::fs::read(dest.join("last.txt")).unwrap(), b"last");
 }
 
+/// On Windows, canonical paths past `MAX_PATH` keep the `\\?\` prefix. The
+/// second file makes the containment check canonicalize the existing long
+/// directory, which must still count as inside the destination.
+#[test]
+fn directories_longer_than_max_path() {
+    let deep_dir = vec!["d".repeat(50); 6].join("/");
+    let tar_bz2 = RawTar::default()
+        .long_file(&format!("{deep_dir}/a.txt"), b"a")
+        .long_file(&format!("{deep_dir}/sub/b.txt"), b"b")
+        .finish_bz2();
+    let dest = fresh_dir("longer_than_max_path");
+    extract_tar_bz2(Cursor::new(tar_bz2), &dest).unwrap();
+
+    let sub_file = dest.join(&deep_dir).join("sub/b.txt");
+    assert_eq!(std::fs::read(sub_file).unwrap(), b"b");
+}
+
 #[test]
 fn lying_size_headers_do_not_panic() {
     let data = b"0123456789";
