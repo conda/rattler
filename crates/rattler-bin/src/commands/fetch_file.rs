@@ -1,8 +1,9 @@
-use std::io::Write;
-
 use miette::{Context, IntoDiagnostic};
 
-use super::package_source::{PackageSource, client_for};
+use super::{
+    package_source::{PackageSource, client_for},
+    write_all_to_stdout,
+};
 
 /// Read a file from inside a local or remote conda package.
 #[derive(Debug, clap::Parser)]
@@ -33,9 +34,5 @@ pub async fn fetch_file(opt: Opt, offline: bool) -> miette::Result<()> {
         .with_context(|| format!("failed to read '{path}' from package {source}"))?
         .ok_or_else(|| miette::miette!("file '{path}' not found in package"))?;
 
-    std::io::stdout()
-        .write_all(&bytes)
-        .into_diagnostic()
-        .context("failed to write to stdout")?;
-    Ok(())
+    write_all_to_stdout(&bytes)
 }
