@@ -261,4 +261,4 @@ simple_spawn_blocking = { path = "crates/simple_spawn_blocking", version = "1.1"
 # Drop this once the fix is released upstream.
 # https://github.com/prefix-dev/resolvo
 [patch.crates-io]
-resolvo = { git = "https://github.com/pavelzw/resolvo", rev = "76df3974056f4755e016b8ec6074af1240b0902a" }
+resolvo = { git = "https://github.com/pavelzw/resolvo", rev = "9c793e54151e2da1acd329e6db4e18e66606e528" }

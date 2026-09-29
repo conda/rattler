@@ -5987,7 +5987,7 @@ dependencies = [
 [[package]]
 name = "resolvo"
 version = "0.12.1"
-source = "git+https://github.com/pavelzw/resolvo?rev=76df3974056f4755e016b8ec6074af1240b0902a#76df3974056f4755e016b8ec6074af1240b0902a"
+source = "git+https://github.com/pavelzw/resolvo?rev=9c793e54151e2da1acd329e6db4e18e66606e528#9c793e54151e2da1acd329e6db4e18e66606e528"
 dependencies = [
  "ahash",
  "elsa",

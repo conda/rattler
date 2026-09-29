@@ -1405,10 +1405,10 @@ mod resolvo {
         │  └─ conflicting-extras[extra2]
         └─ conflicting-extras [extras=[extra1, extra2]] cannot be installed because there are no viable options:
            └─ conflicting-extras 1 (build xxx) would require
-              ├─ bar >=2, which can be installed with any of the following options:
+              ├─ (A) bar >=2, which can be installed with any of the following options:
               │  └─ bar 2 (build xxx)
               └─ bar <2, which cannot be installed because there are no viable options:
-                 └─ bar 1 (build xxx), which conflicts with bar >=2
+                 └─ bar 1 (build xxx), which conflicts with bar >=2 (A)
         ");
     }
 
@@ -1428,12 +1428,12 @@ mod resolvo {
         The following packages are incompatible
         ├─ conflicting-extras[extra1] can be installed with any of the following options:
         │  └─ conflicting-extras[extra1]
-        ├─ bar >=2 can be installed with any of the following options:
+        ├─ (A) bar >=2 can be installed with any of the following options:
         │  └─ bar 2 (build xxx)
         └─ conflicting-extras [extras=[extra1]] cannot be installed because there are no viable options:
            └─ conflicting-extras 1 (build xxx) would require
               └─ bar <2, which cannot be installed because there are no viable options:
-                 └─ bar 1 (build xxx), which conflicts with bar >=2
+                 └─ bar 1 (build xxx), which conflicts with bar >=2 (A)
         ");
     }
 

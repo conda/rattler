@@ -3,9 +3,9 @@ source: crates/rattler_solve/tests/backends/main.rs
 expression: err
 ---
 The following packages are incompatible
-├─ bors >=2 cannot be installed because there are no viable options:
-│  └─ bors 2.0 | 2.1 (build bla_1), which conflicts with bors <2.0
+├─ (A) bors >=2 cannot be installed because there are no viable options:
+│  └─ bors 2.0 | 2.1 (build bla_1), which conflicts with bors <2.0 (B)
 └─ foobar >=2 cannot be installed because there are no viable options:
    └─ foobar 2.0 | 2.1 (build bla_1) would require
-      └─ bors <2.0, which cannot be installed because there are no viable options:
-         └─ bors 1.0 | 1.1 | 1.2.1 (build bla_1), which conflicts with bors >=2
+      └─ (B) bors <2.0, which cannot be installed because there are no viable options:
+         └─ bors 1.0 | 1.1 | 1.2.1 (build bla_1), which conflicts with bors >=2 (A)

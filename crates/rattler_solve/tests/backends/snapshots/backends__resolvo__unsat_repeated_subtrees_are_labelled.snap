@@ -8,21 +8,21 @@ The following packages are incompatible
    │  ├─ tool *, which cannot be installed because there are no viable options:
    │  │  ├─ tool 1.0 (build hnew_0) would require
    │  │  │  └─ (A) node 3.*, which cannot be installed because there are no viable options:
-   │  │  │     └─ node 3.1 | 3.2 (build hnode_0), which conflicts with node >=5,<6
+   │  │  │     └─ node 3.1 | 3.2 (build hnode_0), which conflicts with node >=5,<6 (C)
    │  │  └─ tool 1.0 (build hold_0) would require
    │  │     └─ (B) node 2.*, which cannot be installed because there are no viable options:
-   │  │        └─ node 2.1 | 2.2 | 2.3 (build hnode_0), which conflicts with node >=5,<6
-   │  └─ node >=5,<6, which cannot be installed because there are no viable options:
+   │  │        └─ node 2.1 | 2.2 | 2.3 (build hnode_0), which conflicts with node >=5,<6 (C)
+   │  └─ (C) node >=5,<6, which cannot be installed because there are no viable options:
    │     ├─ node 5.1 (build hnode_0) would require
    │     │  └─ libc >=2, for which no candidates were found.
-   │     └─ node 5.0 (build hnode_0), which conflicts with node 2.* (B) and node 3.* (A)
+   │     └─ node 5.0 (build hnode_0), which conflicts with node 3.* (A) and 2.* (B)
    └─ app 1.0 | 1.1 (build hcpu_0) would require
-      ├─ node >=4,<5, which cannot be installed because there are no viable options:
-      │  └─ node 4.1=hnode_0 | 4.2=hnode_1, which conflicts with node 2.* (D) and node 3.* (C)
+      ├─ (D) node >=4,<5, which cannot be installed because there are no viable options:
+      │  └─ node 4.1=hnode_0 | 4.2=hnode_1, which conflicts with node 3.* (E) and 2.* (F)
       └─ tool *, which cannot be installed because there are no viable options:
          ├─ tool 1.0 (build hnew_0) would require
-         │  └─ (C) node 3.*, which cannot be installed because there are no viable options:
-         │     └─ node 3.1 | 3.2 (build hnode_0), which conflicts with node >=4,<5
+         │  └─ (E) node 3.*, which cannot be installed because there are no viable options:
+         │     └─ node 3.1 | 3.2 (build hnode_0), which conflicts with node >=4,<5 (D)
          └─ tool 1.0 (build hold_0) would require
-            └─ (D) node 2.*, which cannot be installed because there are no viable options:
-               └─ node 2.1 | 2.2 | 2.3 (build hnode_0), which conflicts with node >=4,<5
+            └─ (F) node 2.*, which cannot be installed because there are no viable options:
+               └─ node 2.1 | 2.2 | 2.3 (build hnode_0), which conflicts with node >=4,<5 (D)
