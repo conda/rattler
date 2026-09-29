@@ -47,6 +47,7 @@ pre-commit:
       exclude:
         - test-data/recipes/test-parsing/*.yaml
         - test-data/conda-forge/**/*
+        - test-data/cep37/**/*
       group:
         jobs:
           - name: dprint check

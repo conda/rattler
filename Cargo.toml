@@ -80,9 +80,6 @@ fs-err = { version = "3" }
 fslock = "0.2"
 futures = "0.3"
 futures-util = "0.3"
-# lots of other crates are still stuck on older version which breaks `deserialize`
-# pinning to 0.14.7 because 0.14.8 introduces deprecation notices.
-generic-array = "=0.14.7"
 getrandom = { version = "0.4", default-features = false }
 glob = "0.3"
 google-cloud-auth = { version = "1", default-features = false, features = [
@@ -138,6 +135,12 @@ rand = "0.10"
 rayon = "1"
 reflink-copy = "0.1"
 regex = "1"
+# `reqsign` is the request signer that `opendal` uses for S3. We hand it a
+# credential provider of our own, so these have to stay compatible with the
+# versions that `opendal` builds its S3 service from; `opendal` does not
+# re-export them (https://github.com/apache/opendal/pull/8346 would fix that).
+reqsign-aws-v4 = { version = "3", default-features = false }
+reqsign-core = { version = "3", default-features = false }
 reqwest = { version = "0.13", default-features = false }
 reqwest-middleware = { package = "astral-reqwest-middleware", version = "0.5" }
 reqwest-retry = { package = "astral-reqwest-retry", version = "0.9" }
@@ -156,10 +159,12 @@ serde = { version = "1" }
 serde_bytes = { version = "0.11" }
 serde_ignored = "0.1"
 serde_json = { version = "1" }
+serde-json-python-formatter = "0.1"
 serde_repr = "0.1"
 serde-value = "0.7"
 serde_with = "3"
 serde_yaml = "0.9"
+serde-saphyr = "1.2"
 serde-untagged = "0.1"
 sha2 = "0.11"
 shlex = "2"
@@ -222,6 +227,7 @@ file_url = { path = "crates/file_url", version = "=0.3.2", default-features = fa
 path_resolver = { path = "crates/path_resolver", version = "=0.2.14", default-features = false }
 rattler = { path = "crates/rattler", version = "=0.50.0", default-features = false }
 rattler_cache = { path = "crates/rattler_cache", version = "=0.10.12", default-features = false }
+rattler_conda_lock = { path = "crates/rattler_conda_lock", version = "=0.1.0", default-features = false }
 rattler_conda_types = { path = "crates/rattler_conda_types", version = "=0.54.0", default-features = false }
 rattler_conda_version = { path = "crates/rattler_conda_version", version = "=0.1.2", default-features = false }
 rattler_config = { path = "crates/rattler_config", version = "=0.7.6", default-features = false }

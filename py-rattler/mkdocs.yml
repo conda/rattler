@@ -133,9 +133,9 @@ nav:
           - download & extract: package_streaming.md
           - PackageArchive: package_archive.md
           - ArchiveEntry: archive_entry.md
-      - platform:
+      - subdir:
           - Arch: arch.md
-          - Platform: platform.md
+          - Subdir: subdir.md
       - prefix:
           - PrefixPaths: prefix_paths.md
           - PrefixRecord: prefix_record.md
@@ -182,7 +182,7 @@ nav:
           - IoError: io_error.md
           - LinkError: link_error.md
           - ParseArchError: parse_arch_error.md
-          - ParsePlatformError: parse_platform_error.md
+          - ParseSubdirError: parse_subdir_error.md
           - SolverError: solver_error.md
           - TransactionError: transaction_error.md
 

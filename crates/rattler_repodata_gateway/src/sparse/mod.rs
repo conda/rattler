@@ -510,11 +510,11 @@ impl SparseRepoData {
     }
 
     /// Given a set of [`SparseRepoData`]s load all the records for the packages
-    /// with the specified names and all the packages these records depend
-    /// on.
+    /// with the specified names and all packages referenced by their regular
+    /// or optional dependencies.
     ///
-    /// This will parse the records for the specified packages as well as all
-    /// the packages these records depend on.
+    /// This parses the records for the specified packages as well as all
+    /// packages they may depend on, including packages in `extra_depends`.
     pub fn load_records_recursive<'a>(
         repo_data: impl IntoIterator<Item = &'a SparseRepoData>,
         package_names: impl IntoIterator<Item = PackageName>,
@@ -559,7 +559,12 @@ impl SparseRepoData {
 
                 // Iterate over all packages to find recursive dependencies.
                 for record in records.iter() {
-                    for dependency in &record.package_record.depends {
+                    for dependency in record
+                        .package_record
+                        .depends
+                        .iter()
+                        .chain(record.package_record.extra_depends.values().flatten())
+                    {
                         let dependency_name = PackageName::from_matchspec_str_unchecked(dependency);
                         if !seen.contains(&dependency_name) {
                             pending.push_back(dependency_name.clone());

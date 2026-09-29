@@ -5,7 +5,7 @@ use std::{collections::HashMap, str::FromStr, vec::Vec};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{PackageName, PackageRecord, Platform, package::DistArchiveIdentifier};
+use crate::{PackageName, PackageRecord, Subdir, package::DistArchiveIdentifier};
 
 /// Information about a package from repodata. It includes a
 /// [`crate::PackageRecord`] but it also stores the source of the data (like the
@@ -56,7 +56,7 @@ impl RepoDataRecord {
             let mut out = Vec::new();
             for segment in segments {
                 out.push(segment);
-                if Platform::from_str(segment).is_ok() {
+                if Subdir::from_str(segment).is_ok() {
                     break;
                 }
             }
