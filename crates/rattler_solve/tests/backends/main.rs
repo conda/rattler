@@ -55,6 +55,18 @@ fn dummy_channel_with_optional_dependencies_json_path() -> String {
     )
 }
 
+/// The records `rattler solve 'diffle!=0.0.2' vscode-langservers-extracted`
+/// loads on `osx-arm64`, as conda-forge served them on 2026-09-28. Both specs
+/// end up needing `nodejs`, but different majors of it.
+fn nodejs_conflict_json_paths() -> [String; 2] {
+    ["osx-arm64", "noarch"].map(|subdir| {
+        format!(
+            "{}/../../test-data/channels/nodejs-conflict/{subdir}/repodata.json",
+            env!("CARGO_MANIFEST_DIR")
+        )
+    })
+}
+
 pub(crate) fn dummy_md5_hash() -> rattler_digest::Md5Hash {
     rattler_digest::parse_digest_from_hex::<rattler_digest::Md5>("b3af409bb8423187c75e6c7f5b683908")
         .unwrap()
@@ -81,6 +93,14 @@ fn read_sparse_repodata(path: &str) -> SparseRepoData {
         None,
     )
     .unwrap()
+}
+
+fn virtual_package(name: &str, version: &str, build_string: &str) -> GenericVirtualPackage {
+    GenericVirtualPackage {
+        name: name.parse().unwrap(),
+        version: Version::from_str(version).unwrap(),
+        build_string: build_string.to_string(),
+    }
 }
 
 fn installed_package(
@@ -864,7 +884,8 @@ mod resolvo {
     use super::dummy_channel_with_optional_dependencies_json_path;
     use super::{
         FromStr, GenericVirtualPackage, PackageBuilder, SimpleSolveTask, SolveError, Version,
-        dummy_channel_json_path, installed_package, solve, solve_real_world,
+        dummy_channel_json_path, installed_package, nodejs_conflict_json_paths, solve,
+        solve_real_world, virtual_package,
     };
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);
@@ -906,9 +927,10 @@ mod resolvo {
     /// major per build while `tool` needs one of two entirely different ones.
     ///
     /// Every branch of the report is printed in full, so the same `tool` subtree
-    /// appears under each of `app`'s builds. Requirements printed more than once
-    /// therefore get an `(A)`-style label where a conflict message points at
-    /// them, and requirements printed once are named outright.
+    /// appears under each of `app`'s builds. Every requirement a conflict message
+    /// points at therefore carries an `(A)`-style label, and the messages name
+    /// that label alongside the version set so the reader can jump to the line
+    /// the conflict came from.
     #[test]
     fn test_unsat_repeated_subtrees_are_labelled() {
         // `PackageBuilder` leaves the archive identifier at its default, and
@@ -960,6 +982,32 @@ mod resolvo {
 
         let err = rattler_solve::resolvo::Solver.solve(task).unwrap_err();
         insta::assert_snapshot!(err);
+    }
+
+    /// The same shape of conflict as
+    /// [`test_unsat_repeated_subtrees_are_labelled`], but from real repodata:
+    /// `rattler solve 'diffle!=0.0.2' vscode-langservers-extracted
+    /// --exclude-newer 2026-09-28`. Every `diffle` build needs a `nodejs` of at
+    /// least 24 while `vscode-langservers-extracted` only has builds for 20 and
+    /// 22, and conda-forge ships enough `nodejs` builds that the report leans on
+    /// both merged candidate lists and labels to stay readable.
+    #[test]
+    fn test_unsat_real_world_nodejs_conflict() {
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            &nodejs_conflict_json_paths(),
+            SimpleSolveTask {
+                specs: &["diffle!=0.0.2", "vscode-langservers-extracted"],
+                exclude_newer: Some("2026-09-28T00:00:00Z".parse::<Timestamp>().unwrap().into()),
+                virtual_packages: vec![
+                    virtual_package("__unix", "0", "0"),
+                    virtual_package("__osx", "27.0.1", "0"),
+                    virtual_package("__archspec", "1", "m1"),
+                ],
+                ..SimpleSolveTask::default()
+            },
+        );
+
+        insta::assert_snapshot!(result.unwrap_err());
     }
 
     #[test]
