@@ -5446,7 +5446,6 @@ dependencies = [
  "axum",
  "bytes",
  "bzip2",
- "dunce",
  "filetime",
  "fs-err",
  "futures",
