@@ -89,21 +89,14 @@ enum Command {
 }
 
 /// Entry point of the `rattler` cli.
-/// Configures how `miette` renders errors.
-///
-/// Errors such as the solver's "packages are incompatible" report are
-/// pre-formatted trees whose indentation carries meaning. Miette's default
-/// handler hard-wraps at the terminal width, which breaks a wrapped line out of
-/// the tree and makes the report very hard to follow. Disable wrapping so those
-/// reports survive intact.
-fn install_error_handler() {
+fn main() -> miette::Result<()> {
+    // Errors such as the solver's "packages are incompatible" report are
+    // pre-formatted trees whose indentation carries meaning. Miette's default
+    // handler hard-wraps at the terminal width, which breaks a wrapped line out
+    // of the tree and makes the report very hard to follow, so turn wrapping off.
     let _ = miette::set_hook(Box::new(|_| {
         Box::new(miette::MietteHandlerOpts::new().width(usize::MAX).build())
     }));
-}
-
-fn main() -> miette::Result<()> {
-    install_error_handler();
 
     let num_cores = std::thread::available_parallelism()
         .map_or(2, std::num::NonZero::get)

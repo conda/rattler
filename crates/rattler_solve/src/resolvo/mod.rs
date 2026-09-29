@@ -767,25 +767,14 @@ impl Interner for CondaDependencyProvider<'_> {
             .all_equal_value()
             .ok()
             .flatten();
-        let (versions, suffix) = match common_build {
-            Some(build) => (
-                variants
-                    .iter()
-                    .map(|(version, _)| version.to_string())
-                    .collect::<Vec<_>>(),
-                format!(" (build {build})"),
-            ),
-            None => (
-                variants
-                    .iter()
-                    .map(|(version, build)| match build {
-                        Some(build) => format!("{version}={build}"),
-                        None => version.to_string(),
-                    })
-                    .collect::<Vec<_>>(),
-                String::new(),
-            ),
-        };
+        let versions = variants
+            .iter()
+            .map(|(version, build)| match build {
+                Some(build) if common_build.is_none() => format!("{version}={build}"),
+                _ => version.to_string(),
+            })
+            .collect::<Vec<_>>();
+        let suffix = common_build.map_or(String::new(), |build| format!(" (build {build})"));
 
         // Abbreviate long lists with an ellipsis so a package with many versions
         // does not flood the error message, similar to micromamba.

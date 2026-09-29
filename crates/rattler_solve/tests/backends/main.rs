@@ -188,13 +188,18 @@ impl PackageBuilder {
         self
     }
 
+    // The archive identifier is kept in step with the record: records that share
+    // one are deduplicated before they reach the solver, so builders that only
+    // differ in version or build string have to differ in their identifier too.
     fn version(mut self, version: &str) -> Self {
         self.record.package_record.version = Version::from_str(version).unwrap().into();
+        self.record.identifier.identifier.version = version.to_string();
         self
     }
 
     fn build_string(mut self, build: &str) -> Self {
         self.record.package_record.build = build.to_string();
+        self.record.identifier.identifier.build_string = build.to_string();
         self
     }
 
@@ -933,17 +938,12 @@ mod resolvo {
     /// the conflict came from.
     #[test]
     fn test_unsat_repeated_subtrees_are_labelled() {
-        // `PackageBuilder` leaves the archive identifier at its default, and
-        // records that share one are deduplicated before they reach the solver.
         fn record(name: &str, version: &str, build: &str, depends: &[&str]) -> RepoDataRecord {
-            let mut record = PackageBuilder::new(name)
+            PackageBuilder::new(name)
                 .version(version)
                 .build_string(build)
                 .depends(depends.to_vec())
-                .build();
-            record.identifier.identifier.version = version.to_string();
-            record.identifier.identifier.build_string = build.to_string();
-            record
+                .build()
         }
 
         let repo_data: Vec<RepoDataRecord> = [
