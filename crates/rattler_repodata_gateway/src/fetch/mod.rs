@@ -1,7 +1,7 @@
 //! This module provides functionality to download and cache `repodata.json`
 //! from a remote location.
 
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 use cfg_if::cfg_if;
 use rattler_redaction::Redact;
@@ -145,6 +145,20 @@ impl Variant {
             Variant::Current => "current_repodata.json",
         }
     }
+}
+
+/// Controls how long cached repodata is considered fresh.
+#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
+pub enum CacheFreshness {
+    /// Follow the response's HTTP cache-control headers.
+    #[default]
+    HttpCacheControl,
+
+    /// Always conditionally revalidate cached repodata.
+    AlwaysRevalidate,
+
+    /// Override the response's freshness lifetime with the given duration.
+    Override(Duration),
 }
 
 /// Defines how to use the repodata cache.
