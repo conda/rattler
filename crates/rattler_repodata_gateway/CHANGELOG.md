@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.33.6...rattler_repodata_gateway-v0.34.0) - 2026-09-29
+
+### Fixed
+
+- resolve extras from sparse repodata ([#2830](https://github.com/conda/rattler/pull/2830))
+
+### Other
+
+- [**breaking**] rename Platform to Subdir and validate names against CEP 26 ([#2787](https://github.com/conda/rattler/pull/2787))
+
 ## [0.33.6](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.33.5...rattler_repodata_gateway-v0.33.6) - 2026-09-23
 
 ### Added

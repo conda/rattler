@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.0](https://github.com/conda/rattler/compare/rattler_lock-v0.33.1...rattler_lock-v0.34.0) - 2026-09-29
+
+### Added
+
+- *(conda_lock)* read and write CEP-37 lockfiles ([#2781](https://github.com/conda/rattler/pull/2781))
+
+### Other
+
+- [**breaking**] rename Platform to Subdir and validate names against CEP 26 ([#2787](https://github.com/conda/rattler/pull/2787))
+
 ## [0.33.1](https://github.com/conda/rattler/compare/rattler_lock-v0.33.0...rattler_lock-v0.33.1) - 2026-09-23
 
 ### Added

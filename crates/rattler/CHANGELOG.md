@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.51.0](https://github.com/conda/rattler/compare/rattler-v0.50.0...rattler-v0.51.0) - 2026-09-29
+
+### Fixed
+
+- replace existing files instead of overwriting them when copying ([#2827](https://github.com/conda/rattler/pull/2827))
+
+### Other
+
+- *(networking)* [**breaking**] replace anyhow with typed thiserror ([#2869](https://github.com/conda/rattler/pull/2869))
+- *(ci)* Update Rust crate generic-array to v0.14.9 ([#2747](https://github.com/conda/rattler/pull/2747))
+- [**breaking**] rename Platform to Subdir and validate names against CEP 26 ([#2787](https://github.com/conda/rattler/pull/2787))
+
 ## [0.50.0](https://github.com/conda/rattler/compare/rattler-v0.49.0...rattler-v0.50.0) - 2026-09-23
 
 ### Added
