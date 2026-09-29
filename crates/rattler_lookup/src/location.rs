@@ -28,7 +28,10 @@ impl Location {
             Ok(url) if matches!(url.scheme(), "http" | "https") => Self::Url(url),
             Ok(url) if url.scheme() == "file" => match url.to_file_path() {
                 Ok(path) => Self::Path(path),
-                Err(()) => Self::Path(PathBuf::from(location)),
+                // Not a native path on this platform (a URL without a drive
+                // letter on Windows, say): keep the URL's path rather than the
+                // `file:` text.
+                Err(()) => Self::Path(PathBuf::from(url.path())),
             },
             _ => Self::Path(PathBuf::from(location)),
         }
