@@ -21,15 +21,15 @@ policy = VerificationPolicy.require(publisher)
 await install(records, target_prefix, attestation_policy=policy)
 ```
 
-**Breaking: `S3Config`'s `force_path_style` is `addressing_style` now.** The boolean flag is gone in favor of an explicit `"path"` or `"virtual-host"` string, on both the Python constructor and the `[s3-options.<bucket>]` TOML `Config` reads. A `force-path-style` key left over in an existing config is not rejected: it is silently ignored, and the bucket falls back to virtual-host addressing, so double-check any config using MinIO or another path-style-only S3 endpoint.
+**Breaking: `S3Config`'s `force_path_style` is `addressing_style` now.** The boolean flag is gone in favor of an explicit `"path"` or `"virtual-host"` string, on both the Python constructor and the `[s3-options.<bucket>]` TOML `Config` reads. A `force-path-style` key left over in an existing config is not rejected: it is silently ignored, and the bucket falls back to virtual-host addressing, so double-check any config using RustFS or another path-style-only S3 endpoint.
 
 ```python
 from rattler.networking.middleware import S3Config
 
 # before
-S3Config("https://minio.example.com", "us-east-1", True)
+S3Config(endpoint_url="https://s3.example.com", region="us-east-1", force_path_style=True)
 # now
-S3Config("https://minio.example.com", "us-east-1", "path")
+S3Config(endpoint_url="https://s3.example.com", region="us-east-1", addressing_style="path")
 ```
 
 ```toml
