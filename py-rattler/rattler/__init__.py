@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+from rattler import platform as _platform
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
 from rattler.config import Config, RunPostLinkScripts, TlsRootCerts
 from rattler.index import index
@@ -29,7 +34,7 @@ from rattler.package import (
     PrefixPlaceholder,
     RunExportsJson,
 )
-from rattler.platform import Platform
+from rattler.platform import Subdir
 from rattler.prefix import Link, LinkType, PrefixPaths, PrefixPathsEntry, PrefixPathType, PrefixRecord
 from rattler.repo_data import (
     ChannelInfo,
@@ -52,6 +57,7 @@ from rattler.repo_data import (
     WhlPackageRecord,
 )
 from rattler.sigstore import (
+    CertificateClaims,
     ChannelCheck,
     Issuer,
     Publisher,
@@ -60,6 +66,7 @@ from rattler.sigstore import (
     VerificationOutcome,
     VerificationPolicy,
     VerifiedAttestation,
+    VerifiedChecks,
     verify_attestation,
 )
 from rattler.solver import solve, solve_with_sparse_repodata
@@ -72,6 +79,7 @@ del _get_rattler_version
 
 __all__ = [
     "AboutJson",
+    "CertificateClaims",
     "Channel",
     "ChannelCheck",
     "ChannelConfig",
@@ -130,12 +138,14 @@ __all__ = [
     "RunPostLinkScripts",
     "SourceConfig",
     "SparseRepoData",
+    "Subdir",
     "TlsRootCerts",
     "TrustedRoot",
     "VerificationMode",
     "VerificationOutcome",
     "VerificationPolicy",
     "VerifiedAttestation",
+    "VerifiedChecks",
     "Version",
     "VersionSpec",
     "VersionWithSource",
@@ -157,3 +167,16 @@ try:
     __all__.extend(["PtyProcess", "PtyProcessOptions", "PtySession"])
 except ImportError:
     pass
+
+
+_DEPRECATED_ALIASES = {"Platform": "Subdir"}
+
+if TYPE_CHECKING:
+    Platform = Subdir
+else:
+
+    def __getattr__(name: str) -> Any:
+        """Forward the deprecated `Platform` name to `rattler.platform`, which warns."""
+        if name in _DEPRECATED_ALIASES:
+            return getattr(_platform, name)
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rattler_conda_types::{Channel, Platform};
+use rattler_conda_types::{Channel, Subdir};
 use rattler_networking::LazyClient;
 
 use crate::{
@@ -22,7 +22,7 @@ pub struct RemoteSubdirClient {
 impl RemoteSubdirClient {
     pub async fn new(
         channel: Channel,
-        platform: Platform,
+        platform: Subdir,
         client: LazyClient,
         js_fetch: Option<JsFetcher>,
         source_config: SourceConfig,

@@ -13,7 +13,7 @@
 
 use std::{fmt::Display, path::Path, str::FromStr, sync::LazyLock};
 
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 pub use supports_hyperlinks::Stream;
 use url::Url;
 
@@ -36,7 +36,10 @@ const PREFIX_DEV_MIRRORS: &[&str] = &[
 /// every call site would otherwise repeat the terminal probing. Each stream is
 /// decided on its own, so redirecting only stdout keeps the links in the
 /// progress messages on stderr.
-fn enabled(stream: Stream) -> bool {
+///
+/// Public so that output which would otherwise print a URL on a line of its own
+/// can leave it out when the text above it is already clickable.
+pub fn enabled(stream: Stream) -> bool {
     fn detect(stream: Stream) -> bool {
         // An explicit request wins over the terminal detection, in both
         // directions.
@@ -134,7 +137,7 @@ fn parse_channel(channel: &str) -> Option<(Host, String)> {
     // A channel is sometimes referred to by one of its subdirs; the web pages
     // are per channel, so the subdir is dropped.
     if let Some(last) = segments.last()
-        && Platform::from_str(last).is_ok()
+        && Subdir::from_str(last).is_ok()
     {
         segments.pop();
     }
