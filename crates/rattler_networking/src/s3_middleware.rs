@@ -1,17 +1,82 @@
 //! Middleware to handle `s3://` URLs to pull artifacts from an S3 bucket
 use std::{collections::HashMap, sync::Arc};
 
-use anyhow::{Context, Error};
 use async_once_cell::OnceCell;
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
-use aws_sdk_s3::{config::SharedCredentialsProvider, presigning::PresigningConfig};
+use aws_sdk_s3::{
+    config::SharedCredentialsProvider,
+    presigning::{PresigningConfig, PresigningConfigError},
+};
 use http::Method;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 use url::Url;
 
 use crate::{Authentication, AuthenticationStorage};
+
+/// An error that occurred while turning an `s3://` request into a presigned
+/// HTTPS one.
+#[derive(Debug, thiserror::Error)]
+pub enum S3MiddlewareError {
+    /// The URL has no host, so there is no bucket to talk to.
+    #[error("no bucket name in the S3 URL '{0}'")]
+    MissingBucket(Url),
+
+    /// The URL's path does not name an object within the bucket.
+    #[error("no object key in the S3 URL '{0}'")]
+    MissingKey(Url),
+
+    /// The URL could not be interpreted as a URL at all. Only reachable through
+    /// the generic [`reqwest::IntoUrl`] bound of the authentication storage
+    /// lookup.
+    #[error(transparent)]
+    InvalidUrl(#[from] reqwest::Error),
+
+    /// The authentication storage holds credentials for the bucket, but not of a
+    /// kind that can sign an S3 request.
+    #[error("the credentials stored for '{0}' are not S3 credentials")]
+    UnsupportedAuthentication(Url),
+
+    /// The requested expiry is not one the AWS SDK accepts for a presigned URL.
+    #[error("cannot presign an S3 request that expires in {}s", expiration.as_secs())]
+    Expiration {
+        /// The expiry that was asked for.
+        expiration: std::time::Duration,
+        /// The reason the AWS SDK rejected it.
+        #[source]
+        source: PresigningConfigError,
+    },
+
+    /// The AWS SDK could not sign the request — most commonly because it could
+    /// not resolve credentials for the bucket, or because the ones it resolved
+    /// have expired.
+    #[error("failed to presign the S3 {method} request for '{url}'")]
+    Presign {
+        /// The HTTP method the request was to be signed for.
+        method: Method,
+        /// The `s3://` URL that was being signed.
+        url: Url,
+        /// The error reported by the AWS SDK. Boxed because the SDK's
+        /// per-operation error types are large and differ per method.
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
+    /// The AWS SDK handed back a presigned URI that is not a valid URL.
+    #[error("the AWS SDK returned an unparsable presigned URL '{uri}'")]
+    InvalidPresignedUrl {
+        /// The URI as the SDK returned it.
+        uri: String,
+        /// The reason it could not be parsed.
+        #[source]
+        source: url::ParseError,
+    },
+
+    /// The request cannot be replayed against the presigned URL.
+    #[error("cannot send the presigned S3 request: its body is a stream that cannot be cloned")]
+    UnclonableRequest,
+}
 
 /// How to address an S3 bucket.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -166,7 +231,10 @@ impl S3 {
     /// * `url` - The S3 URL to obtain authentication information from the
     ///   authentication storage. Only respected for custom (non-AWS-based)
     ///   configuration without a credential provider of its own.
-    pub async fn create_s3_client(&self, url: Url) -> Result<aws_sdk_s3::Client, Error> {
+    pub async fn create_s3_client(
+        &self,
+        url: Url,
+    ) -> Result<aws_sdk_s3::Client, S3MiddlewareError> {
         let sdk_config = self
             .default_client
             .get_or_init(aws_config::defaults(BehaviorVersion::latest()).load())
@@ -174,7 +242,7 @@ impl S3 {
 
         let bucket_name = url
             .host_str()
-            .ok_or_else(|| anyhow::anyhow!("host should be present in S3 URL"))?
+            .ok_or_else(|| S3MiddlewareError::MissingBucket(url.clone()))?
             .to_owned();
         if let S3Config::Custom {
             endpoint_url,
@@ -198,7 +266,7 @@ impl S3 {
             let config_builder = if let Some(credentials_provider) = credentials_provider {
                 config_builder.credentials_provider(credentials_provider)
             } else {
-                match self.auth_storage.get_by_url(url)? {
+                match self.auth_storage.get_by_url(url.clone())? {
                     (
                         _,
                         Some(Authentication::S3Credentials {
@@ -214,7 +282,7 @@ impl S3 {
                         "rattler",
                     )),
                     (_, Some(_)) => {
-                        return Err(anyhow::anyhow!("unsupported authentication method"));
+                        return Err(S3MiddlewareError::UnsupportedAuthentication(url));
                     }
                     (_, None) => {
                         tracing::debug!(
@@ -251,20 +319,36 @@ impl S3 {
     }
 
     /// Generate a pre-signed S3 `GetObject` request.
-    async fn generate_presigned_s3_url(&self, url: Url, method: &Method) -> MiddlewareResult<Url> {
+    async fn generate_presigned_s3_url(
+        &self,
+        url: Url,
+        method: &Method,
+    ) -> Result<Url, S3MiddlewareError> {
         let client = self.create_s3_client(url.clone()).await?;
 
-        let presign_config = PresigningConfig::expires_in(self.expiration)
-            .map_err(reqwest_middleware::Error::middleware)?;
+        let presign_config = PresigningConfig::expires_in(self.expiration).map_err(|source| {
+            S3MiddlewareError::Expiration {
+                expiration: self.expiration,
+                source,
+            }
+        })?;
 
         let bucket_name = url
             .host_str()
-            .ok_or_else(|| anyhow::anyhow!("host should be present in S3 URL"))?;
+            .ok_or_else(|| S3MiddlewareError::MissingBucket(url.clone()))?;
         let key = url
             .path()
             .strip_prefix("/")
-            .ok_or_else(|| anyhow::anyhow!("invalid s3 url: {url}"))?;
+            .ok_or_else(|| S3MiddlewareError::MissingKey(url.clone()))?;
 
+        // Every arm signs with the same bucket and key, and reports a failure to
+        // sign the same way; only the operation the SDK is asked for differs.
+        let presign_failed =
+            |source: Box<dyn std::error::Error + Send + Sync>| S3MiddlewareError::Presign {
+                method: method.clone(),
+                url: url.clone(),
+                source,
+            };
         let presigned_request = match *method {
             Method::HEAD => client
                 .head_object()
@@ -272,25 +356,30 @@ impl S3 {
                 .key(key)
                 .presigned(presign_config)
                 .await
-                .context("failed to presign S3 HEAD request")?,
+                .map_err(|e| presign_failed(Box::new(e)))?,
             Method::POST => client
                 .put_object()
                 .bucket(bucket_name)
                 .key(key)
                 .presigned(presign_config)
                 .await
-                .context("failed to presign S3 PUT request")?,
+                .map_err(|e| presign_failed(Box::new(e)))?,
             Method::GET => client
                 .get_object()
                 .bucket(bucket_name)
                 .key(key)
                 .presigned(presign_config)
                 .await
-                .context("failed to presign S3 GET request")?,
+                .map_err(|e| presign_failed(Box::new(e)))?,
             _ => unimplemented!("Only HEAD, POST and GET are supported for S3 requests"),
         };
 
-        Ok(Url::parse(presigned_request.uri()).context("failed to parse presigned S3 URL")?)
+        Url::parse(presigned_request.uri()).map_err(|source| {
+            S3MiddlewareError::InvalidPresignedUrl {
+                uri: presigned_request.uri().to_string(),
+                source,
+            }
+        })
     }
 }
 
@@ -309,12 +398,14 @@ impl Middleware for S3Middleware {
         }
 
         let url = req.url().clone();
-        let presigned_url = self.s3.generate_presigned_s3_url(url, req.method()).await?;
+        let presigned_url = self
+            .s3
+            .generate_presigned_s3_url(url, req.method())
+            .await
+            .map_err(reqwest_middleware::Error::middleware)?;
         *req.url_mut() = presigned_url;
         let cloned_req = req.try_clone().ok_or_else(|| {
-            reqwest_middleware::Error::Middleware(anyhow::anyhow!(
-                "Failed to clone S3 request: request body is a non-cloneable stream"
-            ))
+            reqwest_middleware::Error::middleware(S3MiddlewareError::UnclonableRequest)
         })?;
         next.run(cloned_req, extensions).await
     }

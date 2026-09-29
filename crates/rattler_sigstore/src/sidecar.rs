@@ -1,6 +1,6 @@
 //! Discovery and retrieval of attestation sidecars.
 //!
-//! The conda CEP on distribution of Sigstore attestations serves the
+//! Under [CEP 50](https://conda.org/learn/ceps/cep-0050) a channel serves the
 //! attestations of a package at `<package_url>.sigs` (mutable) and at
 //! `<package_url>.sigs.<sha256>` (immutable, content-addressed). The hash is
 //! advertised in the repodata through the `attestations_sha256` field of the
