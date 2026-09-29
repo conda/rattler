@@ -211,6 +211,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<package_streaming::archive::PyPackageArchive>()?;
     m.add_class::<package_streaming::archive::PySectionStream>()?;
     m.add_class::<package_streaming::archive::PyArchiveEntry>()?;
+    m.add_class::<package_streaming::archive::PyFileRanges>()?;
 
     // Explicit environment specification
     m.add_class::<PyExplicitEnvironmentSpec>()?;

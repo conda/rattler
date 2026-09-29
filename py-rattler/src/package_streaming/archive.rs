@@ -1,14 +1,14 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use pyo3::exceptions::{PyRuntimeError, PyStopAsyncIteration, PyValueError};
+use pyo3::exceptions::{PyRuntimeError, PyStopAsyncIteration, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict};
+use pyo3::types::{PyBytes, PyDict, PySlice};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::package::{AboutJson, IndexJson, PathsJson, RunExportsJson};
 use rattler_package_streaming::archive::{
-    ArchiveAccess, ArchiveEntryKind, PackageArchive, RemoteArchiveOptions, Section, SectionEntry,
-    SectionStream, SparsePolicy,
+    ArchiveAccess, ArchiveEntryKind, ByteRange, FileRanges, PackageArchive, RemoteArchiveOptions,
+    Section, SectionEntry, SectionStream, SparsePolicy,
 };
 use url::Url;
 
@@ -37,6 +37,80 @@ fn parse_section(section: &str) -> PyResult<Section> {
         _ => Err(PyValueError::new_err(format!(
             "invalid section {section:?}: expected 'info' or 'pkg'"
         ))),
+    }
+}
+
+/// Converts Python `slice` objects into byte ranges.
+///
+/// Slice semantics apply: negative bounds count from the end of the file and
+/// `None` bounds mean the start or end. A step other than `None` or `1` is
+/// rejected with a `ValueError`; anything that is not a `slice` with a
+/// `TypeError`.
+fn parse_ranges(ranges: &[Bound<'_, PyAny>]) -> PyResult<Vec<ByteRange>> {
+    ranges
+        .iter()
+        .map(|range| {
+            let Ok(slice) = range.cast::<PySlice>() else {
+                return Err(PyTypeError::new_err(format!(
+                    "ranges must be slice objects, got {}",
+                    range
+                        .get_type()
+                        .name()
+                        .map_or_else(|_err| "<unknown>".to_owned(), |name| name.to_string())
+                )));
+            };
+            let step: Option<i64> = slice.getattr("step")?.extract()?;
+            if !matches!(step, None | Some(1)) {
+                return Err(PyValueError::new_err(
+                    "byte ranges must be contiguous: slice step must be None or 1",
+                ));
+            }
+            let start: Option<i64> = slice.getattr("start")?.extract()?;
+            let stop: Option<i64> = slice.getattr("stop")?.extract()?;
+            let start = start.unwrap_or(0);
+            Ok(match (start, stop) {
+                (start, Some(end)) if start >= 0 && end >= 0 => ByteRange::Bounded {
+                    start: start as u64,
+                    end: end as u64,
+                },
+                (start, None) if start >= 0 => ByteRange::From(start as u64),
+                (start, None) => ByteRange::Suffix(start.unsigned_abs()),
+                (start, end) => ByteRange::Slice { start, end },
+            })
+        })
+        .collect()
+}
+
+/// The result of a ranged read of one file: its size and one `bytes` object
+/// per requested range, in request order.
+#[pyclass]
+pub struct PyFileRanges {
+    #[pyo3(get)]
+    size: u64,
+    chunks: Vec<Py<PyBytes>>,
+}
+
+impl PyFileRanges {
+    fn new(py: Python<'_>, ranges: FileRanges) -> Self {
+        Self {
+            size: ranges.size,
+            chunks: ranges
+                .chunks
+                .iter()
+                .map(|chunk| PyBytes::new(py, chunk).unbind())
+                .collect(),
+        }
+    }
+}
+
+#[pymethods]
+impl PyFileRanges {
+    #[getter]
+    fn chunks(&self, py: Python<'_>) -> Vec<Py<PyBytes>> {
+        self.chunks
+            .iter()
+            .map(|chunk| chunk.clone_ref(py))
+            .collect()
     }
 }
 
@@ -105,6 +179,25 @@ impl PyPackageArchive {
                     None => py.None(),
                 })
             })
+        })
+    }
+
+    /// Reads only the given byte ranges (Python slices) of a single file in
+    /// one forward pass; `None` if the file does not exist.
+    pub fn read_file_ranges<'a>(
+        &self,
+        py: Python<'a>,
+        path: String,
+        ranges: Vec<Bound<'a, PyAny>>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let inner = self.inner.clone();
+        let ranges = parse_ranges(&ranges)?;
+        future_into_py(py, async move {
+            let result = inner
+                .read_file_ranges(&path, &ranges)
+                .await
+                .map_err(io_error)?;
+            Python::attach(|py| Ok(result.map(|ranges| PyFileRanges::new(py, ranges))))
         })
     }
 
@@ -302,6 +395,36 @@ impl PyArchiveEntry {
             let buf = entry.read().await.map_err(io_error)?;
             guard.current = None;
             Python::attach(|py| Ok(PyBytes::new(py, &buf).unbind()))
+        })
+    }
+
+    /// Reads only the given byte ranges (Python slices) of this entry in one
+    /// forward pass. Like `read()`, this consumes the entry: it can be called
+    /// once, and not after `read()`.
+    pub fn read_ranges<'a>(
+        &self,
+        py: Python<'a>,
+        ranges: Vec<Bound<'a, PyAny>>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let state = self.state.clone();
+        let generation = self.generation;
+        let ranges = parse_ranges(&ranges)?;
+        future_into_py(py, async move {
+            let mut guard = state.lock().await;
+            if guard.generation != generation {
+                return Err(PyRuntimeError::new_err(
+                    "entry is no longer readable because the stream has advanced past it",
+                ));
+            }
+            let entry = guard
+                .current
+                .as_mut()
+                .ok_or_else(|| PyRuntimeError::new_err("entry has already been read"))?;
+            let result = entry.read_ranges(&ranges).await.map_err(io_error)?;
+            // The body has been consumed up to the largest requested end; a
+            // second read would continue from there.
+            guard.current = None;
+            Python::attach(|py| Ok(PyFileRanges::new(py, result)))
         })
     }
 }

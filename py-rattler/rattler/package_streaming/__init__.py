@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from os import PathLike
-from typing import AsyncIterator, Dict, Iterable, List, Literal, Optional, Tuple
+from typing import AsyncIterator, Dict, Iterable, List, Literal, Optional, Sequence, Tuple
 
 from rattler.networking.client import Client
 from rattler.package.about_json import AboutJson
 from rattler.package.index_json import IndexJson
 from rattler.package.paths_json import PathsJson
 from rattler.package.run_exports_json import RunExportsJson
-from rattler.rattler import PyArchiveEntry, PyPackageArchive
+from rattler.rattler import PyArchiveEntry, PyFileRanges, PyPackageArchive
 from rattler.rattler import download_bytes as py_download_bytes
 from rattler.rattler import download_to_path as py_download_to_path
 from rattler.rattler import download_to_writer as py_download_to_writer
@@ -79,6 +79,35 @@ async def fetch_raw_package_file_from_url(client: Client, url: str, path: str) -
     return await py_fetch_raw_package_file_from_url(client._client, url, path)
 
 
+class FileRanges:
+    """
+    The result of a ranged read of one file: the size of the whole file and
+    one `bytes` object per requested range, in request order.
+
+    Ranges are Python slices with slice semantics (see
+    `PackageArchive.read_file_ranges`), so a range past the end of the file
+    yields empty bytes rather than an error.
+    """
+
+    _inner: PyFileRanges
+
+    def __init__(self, inner: PyFileRanges) -> None:
+        self._inner = inner
+
+    @property
+    def size(self) -> int:
+        """The size of the whole file in bytes."""
+        return self._inner.size
+
+    @property
+    def chunks(self) -> List[bytes]:
+        """The bytes of every requested range, in request order."""
+        return self._inner.chunks
+
+    def __repr__(self) -> str:
+        return f"FileRanges(size={self.size}, chunks={[len(chunk) for chunk in self.chunks]})"
+
+
 class ArchiveEntry:
     """
     One tar entry yielded while streaming a section of a package archive.
@@ -129,6 +158,25 @@ class ArchiveEntry:
     async def read(self) -> bytes:
         """Reads the contents of this entry. Raises `OSError` for links."""
         return await self._inner.read()
+
+    async def read_ranges(self, ranges: Sequence[slice]) -> FileRanges:
+        """
+        Reads only the given byte ranges of this entry in a single forward
+        pass, stopping at the end of the last requested range. Like `read()`,
+        this consumes the entry: call it at most once, and before advancing
+        the stream. See `PackageArchive.read_file_ranges` for the range
+        semantics. Raises `OSError` for links and `ValueError` for a slice
+        step other than `None` or `1`.
+
+        Examples
+        --------
+        ```python
+        async for entry in pkg.stream("pkg"):
+            if entry.is_file:
+                head, tail = (await entry.read_ranges([slice(0, 4096), slice(-4096, None)])).chunks
+        ```
+        """
+        return FileRanges(await self._inner.read_ranges(list(ranges)))
 
     def __repr__(self) -> str:
         return f"ArchiveEntry(name={self.name!r}, size={self.size})"
@@ -221,6 +269,45 @@ class PackageArchive:
         ```
         """
         return await self._inner.read_file(path)
+
+    async def read_file_ranges(self, path: str, ranges: Sequence[slice]) -> Optional[FileRanges]:
+        """
+        Reads only the given byte ranges of a single file, all served from
+        one forward pass over the containing section. Returns the size of the
+        file together with one `bytes` object per range (in request order),
+        or `None` if the path does not exist in the archive.
+
+        Ranges are `slice` objects with slice semantics, resolved against the
+        size of the file: `slice(0, 4096)` is the first 4 KiB,
+        `slice(-4096, None)` the last 4 KiB, `slice(100, None)` everything
+        from byte 100 and `slice(-8, -4)` four bytes near the end. Ranges may
+        overlap and come in any order; a range past the end of the file yields
+        empty bytes. A slice step other than `None` or `1` raises a
+        `ValueError`.
+
+        Bytes between the ranges are skipped without being buffered and the
+        read stops at the end of the last range: for a sparse remote `.conda`
+        archive the transfer is aborted there, so reading only the head of a
+        large file does not download the rest of it. Open-ended and negative
+        ranges (`slice(100, None)`, `slice(-4096, None)`) necessarily read
+        through the end of the file. An empty range list only returns the
+        size. Requesting a path that is a link raises an `OSError`; links are
+        not followed.
+
+        Examples
+        --------
+        ```python
+        # The first and last 4 KiB of a file, e.g. to sniff its content type.
+        result = await pkg.read_file_ranges("lib/libfoo.so", [slice(0, 4096), slice(-4096, None)])
+        if result is not None:
+            head, tail = result.chunks
+            print(f"{result.size} bytes, magic {head[:4]!r}")
+        ```
+        """
+        result = await self._inner.read_file_ranges(path, list(ranges))
+        if result is None:
+            return None
+        return FileRanges(result)
 
     async def read_files(self, paths: Iterable[str]) -> Dict[str, Optional[bytes]]:
         """

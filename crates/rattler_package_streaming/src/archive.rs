@@ -257,6 +257,73 @@ impl ArchiveEntryKind {
     }
 }
 
+/// A byte range of a file, resolved against the file's size (like an HTTP
+/// `Range` header or a Python slice).
+///
+/// Every variant is clamped to the file: a range that starts at or past the
+/// end resolves to an empty range, and an end past the end of the file is
+/// truncated to it. See [`SectionEntry::read_ranges`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ByteRange {
+    /// Bytes `[start, end)`, clamped to the file size. Empty when `start >=
+    /// end`.
+    Bounded {
+        /// Offset of the first byte.
+        start: u64,
+        /// Offset one past the last byte.
+        end: u64,
+    },
+    /// Bytes `[start, size)`.
+    From(u64),
+    /// The last `n` bytes: `[size - n, size)`, clamped at 0.
+    Suffix(u64),
+    /// Python slice bounds: a negative bound counts from the end of the file
+    /// (`-n` means `size - n`, clamped at 0) and a `None` end means the end
+    /// of the file. `Slice { start: -8, end: Some(-4) }` is `file[-8:-4]`.
+    Slice {
+        /// Offset of the first byte, or a negative offset from the end.
+        start: i64,
+        /// Offset one past the last byte (negative: from the end), or `None`
+        /// for the end of the file.
+        end: Option<i64>,
+    },
+}
+
+impl ByteRange {
+    /// Resolves the range against a file size into a half-open range that
+    /// lies within `0..=size`. Returns an empty range (`start == end`) when
+    /// the range selects no bytes.
+    pub fn resolve(self, size: u64) -> std::ops::Range<u64> {
+        fn from_end(bound: i64, size: u64) -> u64 {
+            if bound < 0 {
+                size.saturating_sub(bound.unsigned_abs())
+            } else {
+                bound.unsigned_abs().min(size)
+            }
+        }
+        let (start, end) = match self {
+            Self::Bounded { start, end } => (start.min(size), end.min(size)),
+            Self::From(start) => (start.min(size), size),
+            Self::Suffix(n) => (size.saturating_sub(n), size),
+            Self::Slice { start, end } => (
+                from_end(start, size),
+                end.map_or(size, |end| from_end(end, size)),
+            ),
+        };
+        start..end.max(start)
+    }
+}
+
+/// The result of a ranged read of one file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileRanges {
+    /// Size of the whole file in bytes (from the tar header).
+    pub size: u64,
+    /// One buffer per requested range, in request order. A range past the
+    /// end of the file yields an empty buffer.
+    pub chunks: Vec<Vec<u8>>,
+}
+
 /// An entry yielded by [`SectionStream::next_entry`].
 ///
 /// The underlying tar implementation is intentionally hidden so it can be
@@ -306,6 +373,28 @@ impl SectionEntry {
             return Err(ExtractError::LinksNotFollowed(vec![link]));
         }
         read_raw_entry_contents(&mut self.inner).await
+    }
+
+    /// Reads only the requested byte ranges of the entry body in a single
+    /// forward pass, returning them in request order together with the
+    /// entry size.
+    ///
+    /// Ranges are resolved against the size in the tar header, may overlap
+    /// and may be given in any order. Bytes outside the union of the ranges
+    /// are skipped without being buffered, and the read stops at the largest
+    /// resolved end without consuming the rest of the entry. Note that
+    /// [`ByteRange::From`] and [`ByteRange::Suffix`] ranges (and open-ended
+    /// [`ByteRange::Slice`]s) therefore read through the end of the file.
+    /// An empty range list returns only the size.
+    ///
+    /// The entry body is consumed up to the largest resolved end, so call
+    /// this at most once per entry and do not combine it with
+    /// [`SectionEntry::read`]. Links are rejected exactly like `read`.
+    pub async fn read_ranges(&mut self, ranges: &[ByteRange]) -> Result<FileRanges, ExtractError> {
+        if let Some(link) = describe_link(self)? {
+            return Err(ExtractError::LinksNotFollowed(vec![link]));
+        }
+        read_raw_entry_ranges(&mut self.inner, ranges).await
     }
 }
 
@@ -409,6 +498,58 @@ impl PackageArchive {
         let path = normalize(path.as_ref())?.into_owned();
         let mut result = self.read_files([path.clone()]).await?;
         Ok(result.remove(&path).flatten())
+    }
+
+    /// Like [`PackageArchive::read_file`], but returns only the requested
+    /// byte ranges of the file (in request order) together with its size.
+    /// Returns `None` if the path does not exist.
+    ///
+    /// All ranges are served from a single forward pass over the containing
+    /// section that stops at the largest resolved end: for a sparse remote
+    /// `.conda` archive the ranged transfer is aborted there, so requesting
+    /// only the head of a large file does not download the rest of it. Bytes
+    /// between ranges are skipped without being buffered. See
+    /// [`SectionEntry::read_ranges`] for the range semantics.
+    ///
+    /// ```rust,no_run
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// # let archive = rattler_package_streaming::archive::PackageArchive::from_path("pkg.conda").await.unwrap();
+    /// use rattler_package_streaming::archive::ByteRange;
+    ///
+    /// // The first and last 4 KiB of a shared library, e.g. for a content sniffer.
+    /// let ranges = [ByteRange::Bounded { start: 0, end: 4096 }, ByteRange::Suffix(4096)];
+    /// if let Some(file) = archive.read_file_ranges("lib/libfoo.so", &ranges).await.unwrap() {
+    ///     println!("{} bytes; head {:?}", file.size, &file.chunks[0][..4.min(file.chunks[0].len())]);
+    /// }
+    /// # }
+    /// ```
+    pub async fn read_file_ranges(
+        &self,
+        path: impl AsRef<Path>,
+        ranges: &[ByteRange],
+    ) -> Result<Option<FileRanges>, ExtractError> {
+        let path = normalize(path.as_ref())?;
+
+        // A .tar.bz2 archive is one flat tar: scan it once, unfiltered.
+        let mut stream = match &*self.backend {
+            Backend::TarBz2 { path: archive, .. } => Self::tar_bz2_stream(archive, None).await?,
+            Backend::Conda { .. } => match self.stream(Section::containing(&path)).await {
+                Ok(stream) => stream,
+                // A section absent from the archive does not contain the path.
+                Err(ExtractError::MissingComponent) => return Ok(None),
+                Err(err) => return Err(err),
+            },
+        };
+
+        // Dropping `stream` afterwards aborts any underlying transfer, so
+        // nothing past the largest requested end is fetched.
+        while let Some(mut entry) = stream.next_entry().await? {
+            if entry.path() == &*path {
+                return entry.read_ranges(ranges).await.map(Some);
+            }
+        }
+        Ok(None)
     }
 
     /// Reads multiple files in one pass per touched section (sections are
@@ -969,6 +1110,109 @@ pub(crate) async fn read_raw_entry_contents<R: AsyncRead + Unpin>(
     let mut buf = Vec::with_capacity(size.min(MAX_PREALLOC) as usize);
     entry.read_to_end(&mut buf).await?;
     Ok(buf)
+}
+
+/// Reads the requested byte ranges of a raw tar entry in one forward pass.
+///
+/// The ranges are resolved against the header size and merged into a sorted
+/// union; every gap is skipped through a sink and every merged interval is
+/// read into one buffer, which the requested chunks are then sliced out of.
+/// Reading stops at the largest resolved end, so the rest of the entry (and
+/// the underlying stream) is left untouched.
+pub(crate) async fn read_raw_entry_ranges<R: AsyncRead + Unpin>(
+    entry: &mut tokio_tar::Entry<R>,
+    ranges: &[ByteRange],
+) -> Result<FileRanges, ExtractError> {
+    let size = entry.header().size()?;
+    let resolved: Vec<std::ops::Range<u64>> = ranges.iter().map(|r| r.resolve(size)).collect();
+    let intervals = merge_ranges(&resolved);
+
+    // One buffer per merged interval, filled in a single forward pass. The
+    // preallocation is capped because the header size is untrusted; the
+    // buffers grow with the bytes actually read.
+    let mut buffers: Vec<(u64, Vec<u8>)> = Vec::with_capacity(intervals.len());
+    let mut pos = 0u64;
+    for interval in &intervals {
+        let gap = interval.start - pos;
+        if gap > 0 {
+            let skipped =
+                tokio::io::copy(&mut (&mut *entry).take(gap), &mut tokio::io::sink()).await?;
+            if skipped != gap {
+                return Err(truncated_entry(size));
+            }
+        }
+        let len = interval.end - interval.start;
+        let mut buf = Vec::with_capacity(len.min(MAX_PREALLOC) as usize);
+        let read = (&mut *entry).take(len).read_to_end(&mut buf).await?;
+        if read as u64 != len {
+            return Err(truncated_entry(size));
+        }
+        buffers.push((interval.start, buf));
+        pos = interval.end;
+    }
+
+    // Slice every requested chunk out of its merged interval. A buffer that
+    // serves exactly one range is moved instead of copied, which keeps the
+    // common single-range case free of a second allocation.
+    let mut owners = vec![0usize; buffers.len()];
+    for range in &resolved {
+        if let Some(index) = find_interval(&intervals, range) {
+            owners[index] += 1;
+        }
+    }
+    let mut chunks = Vec::with_capacity(resolved.len());
+    for range in &resolved {
+        let Some(index) = find_interval(&intervals, range) else {
+            chunks.push(Vec::new());
+            continue;
+        };
+        let (start, buf) = &mut buffers[index];
+        let local = (range.start - *start) as usize..(range.end - *start) as usize;
+        owners[index] -= 1;
+        if owners[index] == 0 && local.start == 0 && local.end == buf.len() {
+            chunks.push(std::mem::take(buf));
+        } else {
+            chunks.push(buf[local].to_vec());
+        }
+    }
+
+    Ok(FileRanges { size, chunks })
+}
+
+/// Merges resolved ranges into sorted, disjoint, non-empty intervals.
+fn merge_ranges(ranges: &[std::ops::Range<u64>]) -> Vec<std::ops::Range<u64>> {
+    let mut sorted: Vec<_> = ranges.iter().filter(|r| !r.is_empty()).cloned().collect();
+    sorted.sort_unstable_by_key(|r| (r.start, r.end));
+    let mut merged: Vec<std::ops::Range<u64>> = Vec::with_capacity(sorted.len());
+    for range in sorted {
+        match merged.last_mut() {
+            Some(last) if range.start <= last.end => last.end = last.end.max(range.end),
+            _ => merged.push(range),
+        }
+    }
+    merged
+}
+
+/// Finds the merged interval that contains a (non-empty) resolved range.
+fn find_interval(
+    intervals: &[std::ops::Range<u64>],
+    range: &std::ops::Range<u64>,
+) -> Option<usize> {
+    if range.is_empty() {
+        return None;
+    }
+    let index = intervals.partition_point(|interval| interval.end < range.end);
+    intervals
+        .get(index)
+        .filter(|interval| interval.start <= range.start && range.end <= interval.end)
+        .map(|_| index)
+}
+
+fn truncated_entry(size: u64) -> ExtractError {
+    ExtractError::IoError(std::io::Error::new(
+        std::io::ErrorKind::UnexpectedEof,
+        format!("archive entry is shorter than the {size} bytes declared in its header"),
+    ))
 }
 
 /// Parses the raw bytes of a typed [`PackageFile`].
@@ -1561,5 +1805,475 @@ mod tests {
         assert_eq!(index.name.as_normalized(), "clobber-fd-1");
         let content = archive.read_file("clobber").await.unwrap().unwrap();
         assert_eq!(String::from_utf8(content).unwrap(), "clobber-fd-1\n");
+    }
+
+    // -----------------------------------------------------------------
+    // ranged reads
+    // -----------------------------------------------------------------
+
+    /// Ranges that together cover every [`ByteRange`] shape against a file of
+    /// `size` bytes: overlapping, unordered, clamped, past the end and empty.
+    fn sample_ranges(size: u64) -> Vec<ByteRange> {
+        let mid = size / 2;
+        vec![
+            ByteRange::Bounded {
+                start: 0,
+                end: 4096,
+            },
+            ByteRange::Suffix(4096),
+            ByteRange::From(size.saturating_sub(100)),
+            // Unordered: a range that starts before the previous ones.
+            ByteRange::Bounded {
+                start: mid,
+                end: mid + 1000,
+            },
+            // Overlapping the previous one.
+            ByteRange::Bounded {
+                start: mid + 500,
+                end: mid + 2000,
+            },
+            // Adjacent to it.
+            ByteRange::Bounded {
+                start: mid + 2000,
+                end: mid + 2001,
+            },
+            // Duplicate.
+            ByteRange::Bounded {
+                start: 0,
+                end: 4096,
+            },
+            // Past the end: empty chunk.
+            ByteRange::Bounded {
+                start: size + 10,
+                end: size + 20,
+            },
+            ByteRange::From(size + 1),
+            // Clamped at the end.
+            ByteRange::Bounded {
+                start: size.saturating_sub(10),
+                end: size + 1_000_000,
+            },
+            // Inverted: empty chunk.
+            ByteRange::Bounded { start: 10, end: 5 },
+            ByteRange::Suffix(0),
+            ByteRange::Suffix(u64::MAX),
+            ByteRange::Slice {
+                start: -8,
+                end: Some(-4),
+            },
+            ByteRange::Slice {
+                start: 100,
+                end: Some(-4),
+            },
+            ByteRange::Slice {
+                start: -(size as i64) - 100,
+                end: None,
+            },
+            ByteRange::Slice {
+                start: -8,
+                end: Some(4),
+            },
+            ByteRange::From(0),
+        ]
+    }
+
+    /// Slices `data` the way Python would for `ByteRange::Slice`, as the
+    /// reference for every variant.
+    fn python_slice(data: &[u8], range: ByteRange) -> &[u8] {
+        let size = data.len() as i64;
+        let (start, end) = match range {
+            ByteRange::Bounded { start, end } => (start as i64, end as i64),
+            ByteRange::From(start) => (start as i64, size),
+            ByteRange::Suffix(n) => (size.saturating_sub(n.min(i64::MAX as u64) as i64), size),
+            ByteRange::Slice { start, end } => (start, end.unwrap_or(size)),
+        };
+        let clamp = |b: i64| if b < 0 { (size + b).max(0) } else { b.min(size) } as usize;
+        let (start, end) = (clamp(start), clamp(end));
+        &data[start..end.max(start)]
+    }
+
+    async fn assert_ranges_match(archive: &PackageArchive, path: &str) {
+        let expected = archive.read_file(path).await.unwrap().unwrap();
+        let ranges = sample_ranges(expected.len() as u64);
+        let result = archive
+            .read_file_ranges(path, &ranges)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(result.size, expected.len() as u64, "{path}");
+        assert_eq!(result.chunks.len(), ranges.len(), "{path}");
+        for (range, chunk) in ranges.iter().zip(&result.chunks) {
+            assert_eq!(chunk, python_slice(&expected, *range), "{path}: {range:?}");
+        }
+        // An empty range list only reports the size.
+        let result = archive.read_file_ranges(path, &[]).await.unwrap().unwrap();
+        assert_eq!(result.size, expected.len() as u64);
+        assert!(result.chunks.is_empty());
+    }
+
+    fn sparse_fixture() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/sparse/sparse-test-1.0.0-0.conda")
+    }
+
+    /// Writes a `.conda` archive with the given files (paths relative to the
+    /// package root) into `dir` and returns its path.
+    fn build_conda(dir: &Path, name: &str, files: &[(&str, &[u8])]) -> PathBuf {
+        use rattler_conda_types::compression_level::CompressionLevel;
+        let root = dir.join(format!("{name}-root"));
+        let mut paths = Vec::with_capacity(files.len() + 1);
+        let index =
+            format!(r#"{{"name":"{name}","version":"1.0.0","build":"0","build_number":0}}"#);
+        for (path, data) in files
+            .iter()
+            .copied()
+            .chain([("info/index.json", index.as_bytes())])
+        {
+            let full = root.join(path);
+            std::fs::create_dir_all(full.parent().unwrap()).unwrap();
+            std::fs::write(&full, data).unwrap();
+            paths.push(full);
+        }
+        let out = dir.join(format!("{name}-1.0.0-0.conda"));
+        crate::write::write_conda_package(
+            std::fs::File::create(&out).unwrap(),
+            &root,
+            &paths,
+            CompressionLevel::Lowest,
+            Some(1),
+            &format!("{name}-1.0.0-0"),
+            None,
+            None,
+        )
+        .unwrap();
+        out
+    }
+
+    /// Incompressible bytes so that the compressed payload member is as large
+    /// as the file itself.
+    fn random_bytes(len: usize) -> Vec<u8> {
+        let mut state = 0x2545_f491_4f6c_dd1du64;
+        (0..len)
+            .map(|_| {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                state as u8
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_byte_range_resolve() {
+        assert_eq!(ByteRange::Bounded { start: 2, end: 5 }.resolve(10), 2..5);
+        assert_eq!(ByteRange::Bounded { start: 2, end: 50 }.resolve(10), 2..10);
+        assert_eq!(
+            ByteRange::Bounded { start: 20, end: 50 }.resolve(10),
+            10..10
+        );
+        assert_eq!(ByteRange::Bounded { start: 5, end: 2 }.resolve(10), 5..5);
+        assert_eq!(ByteRange::From(3).resolve(10), 3..10);
+        assert_eq!(ByteRange::From(30).resolve(10), 10..10);
+        assert_eq!(ByteRange::Suffix(3).resolve(10), 7..10);
+        assert_eq!(ByteRange::Suffix(30).resolve(10), 0..10);
+        assert_eq!(ByteRange::Suffix(0).resolve(10), 10..10);
+        let slice = |start, end| ByteRange::Slice { start, end }.resolve(10);
+        assert_eq!(slice(-8, Some(-4)), 2..6);
+        assert_eq!(slice(-4, Some(-8)), 6..6);
+        assert_eq!(slice(-80, Some(-4)), 0..6);
+        assert_eq!(slice(3, None), 3..10);
+        assert_eq!(slice(3, Some(-1)), 3..9);
+        assert_eq!(slice(-3, Some(100)), 7..10);
+        assert_eq!(slice(i64::MIN, Some(i64::MAX)), 0..10);
+        assert_eq!(ByteRange::From(0).resolve(0), 0..0);
+        assert_eq!(ByteRange::Suffix(4).resolve(0), 0..0);
+    }
+
+    #[test]
+    fn test_merge_ranges() {
+        assert_eq!(
+            merge_ranges(&[5..10, 0..3, 8..12, 12..13, 20..20, 15..16]),
+            vec![0..3, 5..13, 15..16]
+        );
+        assert!(merge_ranges(&[]).is_empty());
+        assert!(merge_ranges(&[4..4, 7..7]).is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_read_file_ranges_local_conda() {
+        let archive = PackageArchive::from_path(sparse_fixture()).await.unwrap();
+        assert_ranges_match(&archive, "lib/blob.bin").await;
+        assert_ranges_match(&archive, "bin/first-file.txt").await;
+        assert_ranges_match(&archive, "info/paths.json").await;
+        // Path normalization matches `read_file`.
+        let result = archive
+            .read_file_ranges("./lib/blob.bin", &[ByteRange::Bounded { start: 0, end: 4 }])
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(result.size, 150_000);
+        assert_eq!(result.chunks[0].len(), 4);
+    }
+
+    #[tokio::test]
+    async fn test_read_file_ranges_sparse_and_spooled_conda() {
+        for ranges_supported in [true, false] {
+            let url = if ranges_supported {
+                test_server::serve_file(sparse_fixture()).await
+            } else {
+                test_server::serve_file_no_ranges(sparse_fixture()).await
+            };
+            let (client, _) = counting_client();
+            let archive = PackageArchive::from_url(client, url).await.unwrap();
+            assert_ranges_match(&archive, "lib/blob.bin").await;
+            assert_ranges_match(&archive, "share/last-file.txt").await;
+            assert_ranges_match(&archive, "info/index.json").await;
+        }
+    }
+
+    #[tokio::test]
+    async fn test_read_file_ranges_tar_bz2() {
+        let archive = PackageArchive::from_path(tar_bz2_test_file())
+            .await
+            .unwrap();
+        assert_ranges_match(&archive, "clobber.txt").await;
+        assert_ranges_match(&archive, "info/index.json").await;
+        assert!(
+            archive
+                .read_file_ranges("missing.txt", &[ByteRange::From(0)])
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_read_file_ranges_missing_links_and_invalid_paths() {
+        let archive = PackageArchive::from_path(sparse_fixture()).await.unwrap();
+        let ranges = [ByteRange::Bounded { start: 0, end: 4 }];
+        assert!(
+            archive
+                .read_file_ranges("lib/missing.bin", &ranges)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            archive
+                .read_file_ranges("lib/missing.bin", &[])
+                .await
+                .unwrap()
+                .is_none()
+        );
+        for path in ["", ".", "../x", "/x"] {
+            assert!(matches!(
+                archive.read_file_ranges(path, &ranges).await,
+                Err(ExtractError::InvalidArchivePath(_))
+            ));
+            assert!(matches!(
+                archive.read_file_ranges(path, &[]).await,
+                Err(ExtractError::InvalidArchivePath(_))
+            ));
+        }
+
+        // A section absent from the archive reads as `None`.
+        let info_only = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/sparse/info-only-1.0.0-0.conda");
+        let archive = PackageArchive::from_path(info_only).await.unwrap();
+        assert!(
+            archive
+                .read_file_ranges("bin/missing", &ranges)
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        // Links are rejected like `read_file`, even for an empty range list.
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/sparse/symlink-test-1.0.0-0.conda");
+        let archive = PackageArchive::from_path(fixture).await.unwrap();
+        for link in ["lib/liblink.so", "lib/libhard.so"] {
+            for ranges in [&ranges[..], &[]] {
+                let err = archive.read_file_ranges(link, ranges).await.unwrap_err();
+                assert!(
+                    matches!(&err, ExtractError::LinksNotFollowed(links) if links[0].contains(link)),
+                    "{link}: {err}"
+                );
+            }
+        }
+        let real = archive
+            .read_file_ranges("lib/libreal.so.1", &[ByteRange::Suffix(5)])
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(real.chunks, vec![b"bytes".to_vec()]);
+    }
+
+    #[tokio::test]
+    async fn test_read_file_ranges_empty_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = build_conda(
+            dir.path(),
+            "empty-test",
+            &[("data/empty.bin", &[]), ("data/one.bin", b"x")],
+        );
+        let archive = PackageArchive::from_path(path).await.unwrap();
+        assert_ranges_match(&archive, "data/empty.bin").await;
+        assert_ranges_match(&archive, "data/one.bin").await;
+        let result = archive
+            .read_file_ranges(
+                "data/empty.bin",
+                &[
+                    ByteRange::From(0),
+                    ByteRange::Suffix(4096),
+                    ByteRange::Bounded { start: 0, end: 1 },
+                ],
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(result.size, 0);
+        assert_eq!(result.chunks, vec![Vec::<u8>::new(); 3]);
+    }
+
+    /// `SectionEntry::read_ranges` leaves the stream positioned so that the
+    /// following entries are still read correctly.
+    #[tokio::test]
+    async fn test_section_entry_read_ranges() {
+        let archive = PackageArchive::from_path(sparse_fixture()).await.unwrap();
+        let blob = archive.read_file("lib/blob.bin").await.unwrap().unwrap();
+
+        let mut stream = archive.stream(Section::Content).await.unwrap();
+        let mut seen = Vec::new();
+        while let Some(mut entry) = stream.next_entry().await.unwrap() {
+            let name = entry.path().display().to_string();
+            match name.as_str() {
+                "bin/first-file.txt" => {
+                    let head = entry
+                        .read_ranges(&[ByteRange::Bounded { start: 0, end: 5 }])
+                        .await
+                        .unwrap();
+                    assert_eq!(head.size, 19);
+                    assert_eq!(head.chunks, vec![b"first".to_vec()]);
+                }
+                "lib/blob.bin" => {
+                    let ranges = [
+                        ByteRange::Bounded {
+                            start: 1000,
+                            end: 2000,
+                        },
+                        ByteRange::Bounded { start: 0, end: 16 },
+                    ];
+                    let result = entry.read_ranges(&ranges).await.unwrap();
+                    assert_eq!(result.size, blob.len() as u64);
+                    assert_eq!(result.chunks[0], &blob[1000..2000]);
+                    assert_eq!(result.chunks[1], &blob[..16]);
+                }
+                "share/last-file.txt" => {
+                    assert_eq!(entry.read().await.unwrap(), b"last payload file\n");
+                }
+                _ => {}
+            }
+            seen.push(name);
+        }
+        assert_eq!(
+            seen,
+            ["bin/first-file.txt", "lib/blob.bin", "share/last-file.txt"]
+        );
+
+        // Links are rejected, whatever the ranges.
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/sparse/symlink-test-1.0.0-0.conda");
+        let archive = PackageArchive::from_path(fixture).await.unwrap();
+        let mut stream = archive.stream(Section::Content).await.unwrap();
+        while let Some(mut entry) = stream.next_entry().await.unwrap() {
+            if entry.kind().is_link() {
+                assert!(matches!(
+                    entry.read_ranges(&[]).await,
+                    Err(ExtractError::LinksNotFollowed(_))
+                ));
+            }
+        }
+    }
+
+    /// Reading only the head of a large payload file from a sparse remote
+    /// archive must abort the ranged transfer instead of streaming the whole
+    /// member.
+    #[tokio::test]
+    async fn test_read_file_ranges_sparse_aborts_early() {
+        // Incompressible payload well beyond what socket buffers can hold
+        // between the server writing and the client hanging up.
+        const BLOB_SIZE: usize = 32 * 1024 * 1024;
+        let blob = random_bytes(BLOB_SIZE);
+        let dir = tempfile::tempdir().unwrap();
+        let path = build_conda(
+            dir.path(),
+            "ranges-test",
+            &[
+                ("bin/head.txt", b"head\n"),
+                ("lib/blob.bin", &blob),
+                ("share/tail.txt", b"tail\n"),
+            ],
+        );
+        let archive_size = std::fs::metadata(&path).unwrap().len();
+        assert!(
+            archive_size > BLOB_SIZE as u64,
+            "payload must be incompressible"
+        );
+
+        let (url, sent) = test_server::serve_file_counting(&path).await;
+        let (client, requests) = counting_client();
+        let archive = PackageArchive::from_url(client, url).await.unwrap();
+        assert_eq!(archive.access(), ArchiveAccess::Sparse);
+        let opened = sent.load(Ordering::Relaxed);
+        assert!(opened <= TAIL_SIZE, "open fetches only the tail: {opened}");
+
+        let result = archive
+            .read_file_ranges(
+                "lib/blob.bin",
+                &[
+                    ByteRange::Bounded {
+                        start: 0,
+                        end: 4096,
+                    },
+                    ByteRange::Bounded {
+                        start: 8192,
+                        end: 8200,
+                    },
+                ],
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(requests.load(Ordering::Relaxed), 2, "one ranged GET");
+        assert_eq!(result.size, BLOB_SIZE as u64);
+        assert_eq!(result.chunks[0], &blob[..4096]);
+        assert_eq!(result.chunks[1], &blob[8192..8200]);
+
+        // Give the server a moment to notice the closed connection, then
+        // check that it never got to stream most of the member.
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        let streamed = sent.load(Ordering::Relaxed) - opened;
+        assert!(
+            streamed < archive_size / 2,
+            "server sent {streamed} of {archive_size} bytes for a 4 KiB head read"
+        );
+
+        // A suffix range reads through the end of the file: everything is
+        // streamed, and the bytes are right.
+        let result = archive
+            .read_file_ranges("lib/blob.bin", &[ByteRange::Suffix(4096)])
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(result.chunks[0], &blob[BLOB_SIZE - 4096..]);
+        let files = archive
+            .read_files(["bin/head.txt", "share/tail.txt"])
+            .await
+            .unwrap();
+        assert_eq!(
+            files[Path::new("share/tail.txt")].as_deref(),
+            Some(b"tail\n".as_slice())
+        );
     }
 }

@@ -1,5 +1,7 @@
 use std::net::SocketAddr;
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use axum::extract::{Request, State};
 use axum::middleware::{self, Next};
@@ -20,6 +22,26 @@ pub async fn serve_file(file_path: impl AsRef<Path>) -> Url {
         ))
     })
     .await
+}
+
+/// Like [`serve_file`], but also counts the response body bytes the server
+/// hands to the transport. Aborting a request on the client side stops the
+/// count (up to what already sits in socket buffers).
+pub async fn serve_file_counting(file_path: impl AsRef<Path>) -> (Url, Arc<AtomicU64>) {
+    let file_path = file_path.as_ref();
+    let file_size = std::fs::metadata(file_path).unwrap().len();
+    let sent = Arc::new(AtomicU64::new(0));
+    let counter = sent.clone();
+    let url = serve(file_path, move |router| {
+        router
+            .layer(middleware::from_fn_with_state(counter, count_body_bytes))
+            .layer(middleware::from_fn_with_state(
+                file_size,
+                clamp_suffix_range,
+            ))
+    })
+    .await;
+    (url, sent)
 }
 
 /// Spawn a local file server that does NOT support range requests: incoming
@@ -58,6 +80,22 @@ async fn serve(file_path: &Path, layer: impl FnOnce(axum::Router) -> axum::Route
     format!("http://{}:{}/{file_name}", addr.ip(), addr.port())
         .parse()
         .unwrap()
+}
+
+async fn count_body_bytes(
+    State(sent): State<Arc<AtomicU64>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    use futures_util::StreamExt;
+    let response = next.run(req).await;
+    response.map(|body| {
+        axum::body::Body::from_stream(body.into_data_stream().inspect(move |chunk| {
+            if let Ok(chunk) = chunk {
+                sent.fetch_add(chunk.len() as u64, Ordering::Relaxed);
+            }
+        }))
+    })
 }
 
 async fn reject_suffix_range(req: Request, next: Next) -> Response {

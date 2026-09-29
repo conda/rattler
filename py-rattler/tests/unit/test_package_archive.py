@@ -4,7 +4,7 @@ import threading
 
 import pytest
 
-from rattler.package_streaming import PackageArchive
+from rattler.package_streaming import FileRanges, PackageArchive
 
 
 @pytest.fixture
@@ -15,6 +15,33 @@ def conda_package(test_data_dir: str) -> str:
 @pytest.fixture
 def tar_bz2_package(test_data_dir: str) -> str:
     return os.path.join(test_data_dir, "clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2")
+
+
+@pytest.fixture
+def sparse_package(test_data_dir: str) -> str:
+    return os.path.join(test_data_dir, "sparse/sparse-test-1.0.0-0.conda")
+
+
+# Slices covering every shape: head, tail, open-ended, negative on both ends,
+# mixed signs, overlapping, unordered, past the end, inverted and empty.
+RANGE_SLICES = [
+    slice(0, 4096),
+    slice(-4096, None),
+    slice(100, None),
+    slice(-8, -4),
+    slice(100, -4),
+    slice(-8, 4),
+    slice(None, 16),
+    slice(None, None),
+    slice(50_000, 60_000),
+    slice(55_000, 70_000),
+    slice(10, 20),
+    slice(0, 4096),
+    slice(1_000_000, 2_000_000),
+    slice(-1_000_000, None),
+    slice(20, 10),
+    slice(0, 0),
+]
 
 
 @pytest.mark.asyncio
@@ -155,3 +182,95 @@ async def test_remote_fallback_policy(conda_package: str) -> None:
     finally:
         server.shutdown()
         server.server_close()
+
+
+@pytest.mark.asyncio
+async def test_read_file_ranges(sparse_package: str) -> None:
+    archive = await PackageArchive.from_path(sparse_package)
+    for path in ["lib/blob.bin", "bin/first-file.txt", "info/index.json"]:
+        expected = await archive.read_file(path)
+        assert expected is not None
+        result = await archive.read_file_ranges(path, RANGE_SLICES)
+        assert isinstance(result, FileRanges)
+        assert result.size == len(expected)
+        assert result.chunks == [expected[s] for s in RANGE_SLICES]
+
+    # An empty range list only returns the size.
+    result = await archive.read_file_ranges("lib/blob.bin", [])
+    assert result is not None
+    assert result.size == 150_000 and result.chunks == []
+
+    assert await archive.read_file_ranges("lib/missing.bin", [slice(0, 4)]) is None
+    with pytest.raises(OSError, match="invalid package-relative archive path"):
+        await archive.read_file_ranges("../blob.bin", [slice(0, 4)])
+
+
+@pytest.mark.asyncio
+async def test_read_file_ranges_tar_bz2(tar_bz2_package: str) -> None:
+    archive = await PackageArchive.from_path(tar_bz2_package)
+    expected = await archive.read_file("clobber.txt")
+    assert expected is not None
+    result = await archive.read_file_ranges("clobber.txt", [slice(0, 3), slice(-3, None), slice(1, -1)])
+    assert result is not None
+    assert result.size == len(expected)
+    assert result.chunks == [expected[:3], expected[-3:], expected[1:-1]]
+
+
+@pytest.mark.asyncio
+async def test_read_file_ranges_rejects_bad_slices(sparse_package: str) -> None:
+    archive = await PackageArchive.from_path(sparse_package)
+    with pytest.raises(ValueError, match="step"):
+        await archive.read_file_ranges("lib/blob.bin", [slice(0, 10, 2)])
+    with pytest.raises(ValueError, match="step"):
+        await archive.read_file_ranges("lib/blob.bin", [slice(None, None, -1)])
+    with pytest.raises(TypeError, match="slice"):
+        await archive.read_file_ranges("lib/blob.bin", [(0, 10)])  # type: ignore[list-item]
+    with pytest.raises(TypeError):
+        await archive.read_file_ranges("lib/blob.bin", [slice("a", "b")])
+
+
+@pytest.mark.asyncio
+async def test_read_file_ranges_links_not_followed(test_data_dir: str) -> None:
+    archive = await PackageArchive.from_path(os.path.join(test_data_dir, "sparse/symlink-test-1.0.0-0.conda"))
+    for link in ["lib/liblink.so", "lib/libhard.so"]:
+        with pytest.raises(OSError, match="links are not followed"):
+            await archive.read_file_ranges(link, [slice(0, 4)])
+        with pytest.raises(OSError, match="links are not followed"):
+            await archive.read_file_ranges(link, [])
+    result = await archive.read_file_ranges("lib/libreal.so.1", [slice(-5, None)])
+    assert result is not None
+    assert result.chunks == [b"bytes"]
+
+
+@pytest.mark.asyncio
+async def test_entry_read_ranges(sparse_package: str) -> None:
+    archive = await PackageArchive.from_path(sparse_package)
+    blob = await archive.read_file("lib/blob.bin")
+    assert blob is not None
+
+    seen = []
+    async for entry in archive.stream("pkg"):
+        seen.append(entry.name)
+        if entry.name == "lib/blob.bin":
+            result = await entry.read_ranges(RANGE_SLICES)
+            assert result.size == len(blob) == entry.size
+            assert result.chunks == [blob[s] for s in RANGE_SLICES]
+            # Like read(), a ranged read consumes the entry.
+            with pytest.raises(RuntimeError, match="already been read"):
+                await entry.read_ranges([slice(0, 4)])
+            with pytest.raises(RuntimeError, match="already been read"):
+                await entry.read()
+            stale = entry
+        elif entry.name == "share/last-file.txt":
+            # The stream is still positioned correctly after a partial read.
+            assert await entry.read() == b"last payload file\n"
+    assert seen == ["bin/first-file.txt", "lib/blob.bin", "share/last-file.txt"]
+    with pytest.raises(RuntimeError, match="stream has advanced"):
+        await stale.read_ranges([slice(0, 4)])
+
+    async for entry in archive.stream("pkg"):
+        if entry.name == "lib/blob.bin":
+            with pytest.raises(ValueError, match="step"):
+                await entry.read_ranges([slice(0, 10, 2)])
+            # A rejected range list does not consume the entry.
+            assert (await entry.read_ranges([])).chunks == []
