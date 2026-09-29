@@ -344,7 +344,7 @@ impl BundleReport {
 impl TransparencyLogReport {
     fn new(attestation: &VerifiedAttestation) -> Option<Self> {
         let entry = attestation.log_entry.as_ref()?;
-        let log_index = entry.log_index.value();
+        let log_index = entry.log_index.get();
         let origin = attestation.log_origin();
         Some(Self {
             log_index,

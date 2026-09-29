@@ -114,7 +114,7 @@ impl VerifiedAttestation {
     /// The index of the transparency log entry, which identifies the signature
     /// within its log.
     pub fn log_index(&self) -> Option<u64> {
-        Some(self.log_entry.as_ref()?.log_index.value())
+        Some(self.log_entry.as_ref()?.log_index.get())
     }
 
     /// The origin of the transparency log the signature was recorded in, e.g.
@@ -229,7 +229,7 @@ pub fn verify_bundles(
         .as_ref()
         .ok_or_else(|| SigstoreError::MissingPackageSha256(filename.clone()))?;
     let artifact = Artifact::from_digest(
-        sigstore_types::Sha256Hash::try_from_slice(sha256.as_slice())
+        sigstore_types::Sha256Hash::try_from(sha256.as_slice())
             .expect("rattler SHA-256 digests always contain 32 bytes"),
     );
     let expected_channel = expected_channel(record);
@@ -300,7 +300,7 @@ fn verify_bundle(
 
     Ok(VerifiedAttestation {
         index: 0,
-        identity: outcome.identity().map(str::to_owned),
+        identity: outcome.identity().map(ToString::to_string),
         issuer: outcome.issuer().map(str::to_owned),
         integrated_time: outcome.integrated_time(),
         target_channel,
@@ -367,7 +367,7 @@ fn statement_of(bundle: &Bundle) -> Result<CondaPublishStatement, String> {
     let SignatureContent::DsseEnvelope(envelope) = &bundle.content else {
         return Err("the bundle is not a DSSE attestation".to_string());
     };
-    serde_json::from_slice(&envelope.decode_payload())
+    serde_json::from_slice(envelope.payload.as_bytes())
         .map_err(|err| format!("the DSSE payload is not an in-toto statement: {err}"))
 }
 
