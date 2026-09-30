@@ -1,7 +1,10 @@
 use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, ParseMatchSpecOptions, RepoDataRecord,
 };
-use rattler_solve::{ExcludeNewer, SolveStrategy, SolverImpl, SolverTask};
+use rattler_solve::{
+    ChannelPriority, ChannelRepoData, ExcludeNewer, SolveError, SolveStrategy, SolverImpl,
+    SolverTask,
+};
 use std::collections::HashMap;
 
 /// Shared building blocks that keep the integration tests concise and data driven.
@@ -18,7 +21,8 @@ use std::collections::HashMap;
 #[derive(Clone)]
 pub struct SolverCase<'a> {
     name: &'a str,
-    repositories: Vec<Vec<RepoDataRecord>>,
+    repositories: Vec<Repository<'a>>,
+    channel_priority: ChannelPriority,
     specs: Vec<MatchSpec>,
     constraints: Vec<MatchSpec>,
     locked_packages: Vec<RepoDataRecord>,
@@ -30,6 +34,21 @@ pub struct SolverCase<'a> {
     expect_present: Vec<PkgMatcher>,
     expect_absent: Vec<PkgMatcher>,
     expect_extras: HashMap<String, Vec<String>>,
+    outcome: ExpectedOutcome,
+}
+
+/// A synthetic repository and the multichannel it belongs to, if any.
+#[derive(Clone)]
+struct Repository<'a> {
+    records: Vec<RepoDataRecord>,
+    multi_channel: Option<&'a str>,
+}
+
+/// Whether the solver is expected to find a solution.
+#[derive(Clone, Copy)]
+enum ExpectedOutcome {
+    Solvable,
+    Unsolvable,
 }
 
 impl<'a> SolverCase<'a> {
@@ -38,6 +57,7 @@ impl<'a> SolverCase<'a> {
         Self {
             name,
             repositories: Vec::new(),
+            channel_priority: ChannelPriority::default(),
             specs: Vec::new(),
             constraints: Vec::new(),
             locked_packages: Vec::new(),
@@ -49,12 +69,36 @@ impl<'a> SolverCase<'a> {
             expect_present: Vec::new(),
             expect_absent: Vec::new(),
             expect_extras: HashMap::new(),
+            outcome: ExpectedOutcome::Solvable,
         }
     }
 
     /// Adds a synthetic repository snapshot to the scenario.
     pub fn repository(mut self, repo: impl IntoIterator<Item = RepoDataRecord>) -> Self {
-        self.repositories.push(repo.into_iter().collect());
+        self.repositories.push(Repository {
+            records: repo.into_iter().collect(),
+            multi_channel: None,
+        });
+        self
+    }
+
+    /// Adds a synthetic repository snapshot that belongs to the multichannel
+    /// called `multi_channel`, see [`ChannelRepoData`].
+    pub fn multi_channel_repository(
+        mut self,
+        multi_channel: &'a str,
+        repo: impl IntoIterator<Item = RepoDataRecord>,
+    ) -> Self {
+        self.repositories.push(Repository {
+            records: repo.into_iter().collect(),
+            multi_channel: Some(multi_channel),
+        });
+        self
+    }
+
+    /// Sets how the solver prioritizes the repositories.
+    pub fn channel_priority(mut self, channel_priority: ChannelPriority) -> Self {
+        self.channel_priority = channel_priority;
         self
     }
 
@@ -182,8 +226,13 @@ impl<'a> SolverCase<'a> {
         self
     }
 
+    /// Expects that the solver finds no solution.
+    pub fn expect_unsolvable(mut self) -> Self {
+        self.outcome = ExpectedOutcome::Unsolvable;
+        self
+    }
+
     pub fn run<T: SolverImpl + Default>(&self) {
-        let repo_refs: Vec<_> = self.repositories.iter().collect();
         let task = SolverTask {
             specs: self.specs.clone(),
             constraints: self.constraints.clone(),
@@ -192,13 +241,34 @@ impl<'a> SolverCase<'a> {
             virtual_packages: self.virtual_packages.clone(),
             exclude_newer: self.exclude_newer.clone(),
             strategy: self.strategy,
+            channel_priority: self.channel_priority,
             dependency_overrides: self.dependency_overrides.clone(),
-            ..SolverTask::from_iter(repo_refs)
+            ..self
+                .repositories
+                .iter()
+                .map(|repository| ChannelRepoData {
+                    records: &repository.records,
+                    multi_channel: repository.multi_channel,
+                })
+                .collect::<SolverTask<'_, _>>()
         };
 
-        let solution = T::default().solve(task).unwrap_or_else(|err| {
-            panic!("solver case '{}' failed:\n{err}", self.name);
-        });
+        let solution = match (self.outcome, T::default().solve(task)) {
+            (ExpectedOutcome::Solvable, Ok(solution)) => solution,
+            (ExpectedOutcome::Solvable, Err(err)) => {
+                panic!("solver case '{}' failed:\n{err}", self.name)
+            }
+            (ExpectedOutcome::Unsolvable, Err(SolveError::Unsolvable(_))) => return,
+            (ExpectedOutcome::Unsolvable, Ok(solution)) => panic!(
+                "solver case '{}' expected no solution, found packages: {}",
+                self.name,
+                format_records(&solution.records)
+            ),
+            (ExpectedOutcome::Unsolvable, Err(err)) => panic!(
+                "solver case '{}' expected no solution, but the solver failed:\n{err}",
+                self.name
+            ),
+        };
 
         println!(
             "solver case '{}': solution = [{}]",
@@ -339,12 +409,7 @@ pub trait IntoPkgMatcher {
 impl IntoPkgMatcher for &RepoDataRecord {
     fn into_pkg_matcher(self) -> PkgMatcher {
         PkgMatcher {
-            display: format!(
-                "{}={}={}",
-                self.package_record.name.as_normalized(),
-                self.package_record.version,
-                self.package_record.build
-            ),
+            display: format_record(self),
             kind: MatcherKind::Exact {
                 fingerprint: PackageFingerprint::new(self),
             },
@@ -436,14 +501,20 @@ fn format_records(records: &[RepoDataRecord]) -> String {
 
     records
         .iter()
-        .map(|record| {
-            format!(
-                "{}={}={}",
-                record.package_record.name.as_normalized(),
-                record.package_record.version,
-                record.package_record.build
-            )
-        })
+        .map(format_record)
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+fn format_record(record: &RepoDataRecord) -> String {
+    let package = format!(
+        "{}={}={}",
+        record.package_record.name.as_normalized(),
+        record.package_record.version,
+        record.package_record.build
+    );
+    match &record.channel {
+        Some(channel) => format!("{package} from {channel}"),
+        None => package,
+    }
 }
