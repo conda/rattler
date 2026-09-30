@@ -13,7 +13,7 @@ use crate::{
         progress::{wrap_in_async_progress, wrap_in_progress},
     },
     global_multi_progress,
-    solver_args::SolverArgs,
+    solver_args::{SolverArgs, task_for_repodata},
 };
 
 /// Create a conda environment from package listing
@@ -154,7 +154,7 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
         strategy: opt.solver.strategy(),
         channel_priority: opt.solver.channel_priority(),
         exclude_newer,
-        ..SolverTask::from_iter(&repo_data)
+        ..task_for_repodata(&repo_data)
     };
 
     // Next, use a solver to solve this specific problem. This provides us with all
