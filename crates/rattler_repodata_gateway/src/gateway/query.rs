@@ -13,7 +13,7 @@ use super::{
     channel_expander::{ChannelExpander, ChannelRelationsMode, ChannelRelationsWarning},
     channel_relations::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
     local_subdir::LocalSubdirClient,
-    source::{CustomSourceClient, Source},
+    source::{CustomSourceClient, ExpandedSource, Source, SourcePosition},
     subdir::{PackageRecords, SubdirData, SubdirState, extract_unique_deps_split},
 };
 use crate::Reporter;
@@ -27,8 +27,9 @@ type RecordPatch = dyn Fn(&RepoDataRecord) -> Option<RepoDataRecord> + Send + Sy
 /// it like a `Vec<RepoData>`.
 #[derive(Debug, Default)]
 pub struct RepoDataQueryOutput {
-    /// One bucket per source. CEP-42-discovered channels are inserted
-    /// next to the channel that introduced them; caller-supplied
+    /// One bucket per source and platform, where every channel of a
+    /// multichannel is a separate source. CEP-42-discovered channels are
+    /// inserted next to the channel that introduced them; caller-supplied
     /// sources keep their positions.
     pub repodata: Vec<RepoData>,
     /// CEP-6 notices published by the queried channels. Also streamed to
@@ -198,10 +199,10 @@ struct SubdirHandle {
     barrier: Arc<BarrierCell<Arc<SubdirState>>>,
     kind: SubdirKind,
     data: RepoData,
-    /// Index in the caller's `sources` list; `None` for transitively
+    /// Position in the caller's `sources` list; `None` for transitively
     /// discovered channels. Anchors the finalize sort so caller
     /// sources keep their positions.
-    caller_source_idx: Option<usize>,
+    position: Option<SourcePosition>,
 }
 
 /// Origin of a [`SubdirHandle`]; drives final-result reordering.
@@ -212,6 +213,35 @@ enum SubdirKind {
     Channel { url: ChannelUrl, platform: Subdir },
     /// Custom source; not subject to CEP-42 ordering.
     Custom,
+}
+
+/// Where a bucket lands relative to the caller source it is anchored to.
+///
+/// A discovered channel is placed around the whole caller source, so for a
+/// multichannel it outranks or is outranked by all members at once: the
+/// members share a priority tier and cannot be split.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Placement {
+    /// A discovered channel that outranks the channel that introduced it.
+    BeforeSource,
+    /// A caller-supplied source, or a member of a caller-supplied group.
+    Source,
+    /// A discovered channel that the channel that introduced it outranks.
+    AfterSource,
+}
+
+/// The key the final buckets are sorted by when CEP-42 relations were
+/// observed. Fields compare in declaration order.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct BucketOrder {
+    /// Index of the caller source the bucket is anchored to.
+    anchor: usize,
+    placement: Placement,
+    /// Member index for caller sources, CEP-42 priority for discovered
+    /// channels.
+    priority: usize,
+    platform: usize,
+    original_index: usize,
 }
 
 /// Where a fetched batch of records should land.
@@ -514,22 +544,24 @@ impl QueryExecutor {
             reporter.clone(),
         );
 
-        // Iterate per caller-source index then per platform, so each
-        // handle remembers which slot in the caller's `sources` list
-        // it came from.
-        let sources_with_idx: Vec<(usize, Source)> = sources.into_iter().enumerate().collect();
-        let total_handles = sources_with_idx.len() * platforms.len();
+        // Iterate per caller-source position then per platform, so each
+        // handle remembers where in the caller's `sources` list it came
+        // from. The channels of a multichannel share the position of the
+        // multichannel, so CEP-42 reordering keeps them together and in
+        // the order of the multichannel.
+        let sources_with_position = ExpandedSource::expand(sources);
+        let total_handles = sources_with_position.len() * platforms.len();
         let mut subdir_handles = Vec::with_capacity(total_handles);
         let pending_subdirs = FuturesUnordered::new();
         let mut notices = NoticeCollector::new(channel_notices);
 
-        for (caller_idx, source) in sources_with_idx {
+        for (position, source) in sources_with_position {
             for &platform in &platforms {
                 let source_clone = source.clone();
                 let barrier = Arc::new(BarrierCell::new());
 
-                let (kind, pending) = match source_clone {
-                    Source::Channel(channel) => {
+                let (kind, multi_channel, pending) = match source_clone {
+                    ExpandedSource::Channel(channel, multi_channel) => {
                         let (url, channel) = expander.register_user_channel(channel);
                         notices.queue(&gateway, &url, channel.clone(), reporter.clone());
                         let kind = SubdirKind::Channel {
@@ -545,9 +577,9 @@ impl QueryExecutor {
                             barrier.clone(),
                             FetchErrorPolicy::Propagate,
                         );
-                        (kind, fut)
+                        (kind, multi_channel, fut)
                     }
-                    Source::Custom(custom_source) => {
+                    ExpandedSource::Custom(custom_source, multi_channel) => {
                         let client = CustomSourceClient::new(custom_source, platform);
                         let subdir = Arc::new(SubdirState::Found(SubdirData::from_client(client)));
                         let b = barrier.clone();
@@ -559,9 +591,9 @@ impl QueryExecutor {
                                 warning: None,
                             })
                         });
-                        (SubdirKind::Custom, fut)
+                        (SubdirKind::Custom, multi_channel, fut)
                     }
-                    Source::SparseRepoData(sparse_list) => {
+                    ExpandedSource::SparseRepoData(sparse_list, multi_channel) => {
                         // Each entry represents a different subdir, so find the one
                         // matching the requested platform; if none matches, treat it
                         // as having no records, same as a channel that doesn't
@@ -593,15 +625,18 @@ impl QueryExecutor {
                                 warning: None,
                             })
                         });
-                        (kind, fut)
+                        (kind, multi_channel, fut)
                     }
                 };
 
                 subdir_handles.push(SubdirHandle {
                     barrier,
                     kind,
-                    data: RepoData::default(),
-                    caller_source_idx: Some(caller_idx),
+                    data: RepoData {
+                        multi_channel,
+                        ..RepoData::default()
+                    },
+                    position: Some(position),
                 });
                 pending_subdirs.push(pending);
             }
@@ -1091,18 +1126,19 @@ impl QueryExecutor {
             barrier,
             kind: SubdirKind::Channel { url, platform },
             data: RepoData::default(),
-            caller_source_idx: None,
+            position: None,
         });
         self.spawn_package_fetches_for_new_handle(handle_idx);
     }
 
     /// Build the final [`RepoDataQueryOutput`]. When relations were
     /// observed, buckets sort by
-    /// `(caller anchor, CEP-42 priority, platform, original index)`:
-    /// caller-supplied sources keep their positions (discovered
-    /// channels inherit the anchor of the user channel that
-    /// introduced them) and priority orders channels within an
-    /// anchor, placing bases before the declaring channel.
+    /// `(caller anchor, placement, priority, platform, original index)`:
+    /// caller-supplied sources keep their positions, and discovered
+    /// channels inherit the anchor of the user channel that introduced
+    /// them and are placed before or after that whole caller source,
+    /// depending on whether they outrank the introducing channel.
+    /// Within a placement, CEP-42 priority orders the discovered channels.
     fn finalize_channel_relations(mut self) -> Result<RepoDataQueryOutput, GatewayError> {
         let direct = self.direct_url_result;
         let mut handles = self.subdir_handles;
@@ -1125,56 +1161,76 @@ impl QueryExecutor {
                 .map(|(i, p)| (p, i))
                 .collect();
 
-            // Caller-source index per user channel URL.
-            let user_channel_caller_idx: std::collections::HashMap<ChannelUrl, usize> = handles
-                .iter()
-                .filter_map(|h| match (&h.kind, h.caller_source_idx) {
-                    (SubdirKind::Channel { url, .. }, Some(i)) => Some((url.clone(), i)),
-                    _ => None,
-                })
-                .collect();
+            // Caller-source position per user channel URL.
+            let user_channel_position: std::collections::HashMap<ChannelUrl, SourcePosition> =
+                handles
+                    .iter()
+                    .filter_map(|h| match (&h.kind, h.position) {
+                        (SubdirKind::Channel { url, .. }, Some(position)) => {
+                            Some((url.clone(), position))
+                        }
+                        _ => None,
+                    })
+                    .collect();
 
             // Anchors derive from the final edge set, independent of
             // fetch completion order.
-            let mut users_by_caller_idx: Vec<(usize, ChannelUrl)> = user_channel_caller_idx
+            let mut users_by_position: Vec<(SourcePosition, ChannelUrl)> = user_channel_position
                 .iter()
-                .map(|(url, idx)| (*idx, url.clone()))
+                .map(|(url, position)| (*position, url.clone()))
                 .collect();
-            users_by_caller_idx.sort();
-            let user_priority: Vec<ChannelUrl> = users_by_caller_idx
-                .into_iter()
-                .map(|(_, url)| url)
-                .collect();
+            users_by_position.sort();
+            let user_priority: Vec<ChannelUrl> =
+                users_by_position.into_iter().map(|(_, url)| url).collect();
             let anchor_of = self.expander.anchors(&user_priority);
 
-            let mut tagged: Vec<((usize, usize, usize, usize), SubdirHandle)> = handles
+            let mut tagged: Vec<(BucketOrder, SubdirHandle)> = handles
                 .into_iter()
                 .enumerate()
-                .map(|(orig_idx, h)| {
-                    let (anchor, prio, plat) = match (&h.kind, h.caller_source_idx) {
-                        (SubdirKind::Custom, Some(i)) => (i, 0_usize, 0_usize),
-                        (SubdirKind::Channel { url, platform }, Some(i)) => {
-                            let r = priority_of.get(url).copied().unwrap_or(usize::MAX);
+                .map(|(original_index, h)| {
+                    let (anchor, placement, priority, platform) = match (&h.kind, h.position) {
+                        (SubdirKind::Custom, Some(position)) => {
+                            (position.source, Placement::Source, position.member, 0_usize)
+                        }
+                        (SubdirKind::Channel { platform, .. }, Some(position)) => {
                             let p = platform_idx_of.get(platform).copied().unwrap_or(usize::MAX);
-                            (i, r, p)
+                            (position.source, Placement::Source, position.member, p)
                         }
                         (SubdirKind::Channel { url, platform }, None) => {
-                            let anchor = anchor_of
-                                .get(url)
-                                .and_then(|u| user_channel_caller_idx.get(u).copied())
-                                .unwrap_or(usize::MAX);
                             let r = priority_of.get(url).copied().unwrap_or(usize::MAX);
                             let p = platform_idx_of.get(platform).copied().unwrap_or(usize::MAX);
-                            (anchor, r, p)
+                            let introduced_by = anchor_of.get(url).and_then(|introducing| {
+                                Some((introducing, user_channel_position.get(introducing)?))
+                            });
+                            match introduced_by {
+                                Some((introducing, position)) => {
+                                    let introducing_rank =
+                                        priority_of.get(introducing).copied().unwrap_or(usize::MAX);
+                                    let placement = if r < introducing_rank {
+                                        Placement::BeforeSource
+                                    } else {
+                                        Placement::AfterSource
+                                    };
+                                    (position.source, placement, r, p)
+                                }
+                                None => (usize::MAX, Placement::AfterSource, r, p),
+                            }
                         }
                         (SubdirKind::Custom, None) => {
                             unreachable!("custom sources are always caller-supplied")
                         }
                     };
-                    ((anchor, prio, plat, orig_idx), h)
+                    let order = BucketOrder {
+                        anchor,
+                        placement,
+                        priority,
+                        platform,
+                        original_index,
+                    };
+                    (order, h)
                 })
                 .collect();
-            tagged.sort_by_key(|(key, _)| *key);
+            tagged.sort_by_key(|(order, _)| *order);
             handles = tagged.into_iter().map(|(_, h)| h).collect();
         }
 

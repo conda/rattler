@@ -45,7 +45,7 @@ use rattler_networking::LazyClient;
 pub use repo_data::{RemovedPackages, RepoData};
 use run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
 pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
-pub use source::{RepoDataSource, Source};
+pub use source::{MultiSource, MultiSourceError, RepoDataSource, Source};
 use subdir::SubdirState;
 use tracing::{Level, instrument};
 pub use warning::GatewayWarning;
@@ -128,6 +128,8 @@ impl Gateway {
     /// The `sources` parameter accepts any type that implements `Into<Source>`.
     /// This includes:
     /// - `Channel` - traditional conda channels
+    /// - `MultiSource` - a named group of sources, each queried as if it was
+    ///   passed on its own; see [`RepoData::multi_channel`]
     /// - `Arc<dyn RepoDataSource>` - custom repodata sources
     /// - `Source` - the enum itself
     ///
@@ -2291,6 +2293,117 @@ mod test {
             "should have custom-pkg from mock source"
         );
         assert_eq!(custom_records[0].package_record.version.as_str(), "1.0.0");
+    }
+
+    fn multichannel_test_channel(name: &str) -> Channel {
+        Channel::try_from_directory(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../test-data/channels/{name}")),
+        )
+        .unwrap()
+    }
+
+    fn multichannel_test_sparse_repo_data(name: &str) -> Arc<crate::sparse::SparseRepoData> {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
+            "../../test-data/channels/{name}/noarch/repodata.json"
+        ));
+        Arc::new(
+            crate::sparse::SparseRepoData::from_file(
+                multichannel_test_channel(name),
+                "noarch",
+                path,
+                None,
+            )
+            .unwrap(),
+        )
+    }
+
+    /// One line per bucket: the multichannel it is marked with and the
+    /// channel its records refer to.
+    fn render_multichannel_buckets(output: &[RepoData]) -> String {
+        output
+            .iter()
+            .map(|repo_data| {
+                let channels = repo_data
+                    .iter()
+                    .filter_map(|record| record.channel.as_deref())
+                    .map(|channel| channel.trim_end_matches('/').rsplit('/').next().unwrap())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{} | {channels}", repo_data.multi_channel().unwrap_or("-"))
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Every source of a group is queried as if it was passed on its own, and
+    /// its records end up in their own bucket, in the order of the group,
+    /// marked with the name of the group.
+    #[rstest]
+    #[case::channels(false)]
+    #[case::sparse_repo_data(true)]
+    #[tokio::test]
+    async fn test_multi_source(#[case] sparse: bool) {
+        let source = |name: &str| {
+            if sparse {
+                super::Source::from(multichannel_test_sparse_repo_data(name))
+            } else {
+                super::Source::from(multichannel_test_channel(name))
+            }
+        };
+        let multi_source = super::MultiSource::new(
+            "grp",
+            vec![source("multichannel-b"), source("multichannel-a")],
+        )
+        .unwrap();
+
+        let output = Gateway::new()
+            .query(
+                vec![super::Source::from(multi_source), source("multichannel-c")],
+                vec![Subdir::NoArch],
+                vec![PackageName::from_str("pkg").unwrap()],
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        insta::allow_duplicates! {
+            insta::assert_snapshot!(render_multichannel_buckets(&output), @r"
+            grp | multichannel-b
+            grp | multichannel-a
+            - | multichannel-c
+            ");
+        }
+    }
+
+    #[test]
+    fn test_invalid_multi_source() {
+        let channel = || super::Source::from(multichannel_test_channel("multichannel-a"));
+        let sparse = || super::Source::from(multichannel_test_sparse_repo_data("multichannel-a"));
+        let nested = super::MultiSource::new("inner", vec![channel()]).unwrap();
+
+        let errors = [
+            super::MultiSource::new("grp", Vec::new()),
+            super::MultiSource::new("grp", vec![channel(), super::Source::from(nested)]),
+            super::MultiSource::new("grp", vec![channel(), channel()]),
+            super::MultiSource::new("grp", vec![sparse(), sparse()]),
+        ]
+        .into_iter()
+        .map(|result| {
+            result.err().unwrap().to_string().replace(
+                &multichannel_test_channel("multichannel-a")
+                    .base_url
+                    .to_string(),
+                "[CHANNEL]",
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+        insta::assert_snapshot!(errors, @r"
+        multichannel 'grp' does not contain any sources
+        multichannel 'grp' cannot contain another multichannel ('inner')
+        multichannel 'grp' contains '[CHANNEL]' more than once
+        multichannel 'grp' contains 'noarch' of '[CHANNEL]' more than once
+        ");
     }
 
     /// Test that ensures `run_exports` fallback works when `run_exports.json` exists
@@ -4473,6 +4586,49 @@ mod test {
                 "bucket order must be deterministic and respect the base edge"
             );
         }
+    }
+
+    /// The channels of a multichannel share one priority tier, so a channel
+    /// that a member relates to must outrank or be outranked by the whole
+    /// multichannel: a `base` of any member comes before the first member and
+    /// an `overrides` target comes after the last one. The related channels
+    /// do not join the multichannel.
+    #[tokio::test]
+    async fn test_cep42_relations_of_multichannel_members_surround_the_multichannel() {
+        let dir = tempfile::tempdir().unwrap();
+        write_test_subdir(&dir.path().join("a"), "shared", "1.0.0", None, Some("../y"));
+        write_test_subdir(&dir.path().join("b"), "shared", "2.0.0", Some("../x"), None);
+        write_test_subdir(&dir.path().join("x"), "shared", "3.0.0", None, None);
+        write_test_subdir(&dir.path().join("y"), "shared", "4.0.0", None, None);
+        write_test_subdir(&dir.path().join("c"), "shared", "5.0.0", None, None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let channel = |name: &str| {
+            super::Source::from(Channel::from_url(
+                server.url().join(&format!("{name}/")).unwrap(),
+            ))
+        };
+        let multi_source =
+            super::MultiSource::new("grp", vec![channel("a"), channel("b")]).unwrap();
+
+        let output = Gateway::new()
+            .query(
+                vec![super::Source::from(multi_source), channel("c")],
+                vec![Subdir::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+
+        insta::assert_snapshot!(render_multichannel_buckets(&output.repodata), @r"
+        - | x
+        grp | a
+        grp | b
+        - | y
+        - | c
+        ");
     }
 
     /// One malformed declaration must produce ONE warning, not one
