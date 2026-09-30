@@ -153,6 +153,7 @@ nav:
           - Repodata: repo_data.md
           - WhoNeeds: who_needs.md
           - SparseRepoData: sparse_repo_data.md
+          - MultiSource: multi_source.md
           - RepoDataSource: repo_data_source.md
       - version:
           - Version: version.md

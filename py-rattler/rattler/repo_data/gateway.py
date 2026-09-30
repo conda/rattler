@@ -20,6 +20,7 @@ from rattler.repo_data.repo_data import ChannelRelations
 from rattler.repo_data.who_needs import Dependent, _target_to_py
 
 if TYPE_CHECKING:
+    from rattler.repo_data.multi_source import MultiSource
     from rattler.repo_data.package_record import PackageRecord
     from rattler.repo_data.source import RepoDataSource
     from rattler.virtual_package.generic import GenericVirtualPackage
@@ -293,7 +294,7 @@ class Gateway:
 
     async def query(
         self,
-        sources: Iterable[Channel | str | RepoDataSource],
+        sources: Iterable[Channel | MultiSource | str | RepoDataSource],
         platforms: Iterable[Subdir | SubdirLiteral],
         specs: Iterable[MatchSpec | PackageName | str],
         recursive: bool = True,
@@ -321,8 +322,8 @@ class Gateway:
         is needed for custom sources, it must be implemented within the source itself.
 
         Arguments:
-            sources: The sources to query. Can be channels (by name, URL, or Channel object)
-                     or custom RepoDataSource implementations.
+            sources: The sources to query. Can be channels (by name, URL, or Channel object),
+                     `MultiSource` groups or custom RepoDataSource implementations.
             platforms: The platforms to query.
             specs: The specs to query.
             recursive: Whether recursively fetch dependencies or not.
@@ -384,7 +385,7 @@ class Gateway:
 
     async def who_needs(
         self,
-        sources: Iterable[Channel | str | RepoDataSource],
+        sources: Iterable[Channel | MultiSource | str | RepoDataSource],
         platforms: Iterable[Subdir | SubdirLiteral],
         target: str | PackageName | PackageRecord | GenericVirtualPackage,
     ) -> list[Dependent]:
@@ -407,8 +408,8 @@ class Gateway:
         every package name in the channel.
 
         Arguments:
-            sources: The sources to query. Can be channels (by name, URL, or Channel object)
-                     or custom RepoDataSource implementations.
+            sources: The sources to query. Can be channels (by name, URL, or Channel object),
+                     `MultiSource` groups or custom RepoDataSource implementations.
             platforms: The platforms to query.
             target: The package to find reverse dependencies for.
 
@@ -427,7 +428,7 @@ class Gateway:
 
     async def names(
         self,
-        sources: Iterable[Channel | str | RepoDataSource],
+        sources: Iterable[Channel | MultiSource | str | RepoDataSource],
         platforms: Iterable[Subdir | SubdirLiteral],
         channel_relations: ChannelRelationsMode | None = None,
         channel_relations_max_depth: int | None = None,
@@ -436,8 +437,8 @@ class Gateway:
         """Queries all the names of packages in channels or custom sources.
 
         Arguments:
-            sources: The sources to query. Can be channels (by name, URL, or Channel object)
-                     or custom RepoDataSource implementations.
+            sources: The sources to query. Can be channels (by name, URL, or Channel object),
+                     `MultiSource` groups or custom RepoDataSource implementations.
             platforms: The platforms to query.
             channel_relations: How to treat CEP-42 ``channel_relations`` metadata. ``None``
                                uses the gateway default (``"warn"``).
@@ -571,12 +572,13 @@ def _convert_sources(sources: Iterable[Any]) -> list[Any]:
     Channels are converted to their internal PyChannel representation.
     Custom RepoDataSource implementations are wrapped in an adapter that
     converts between FFI types and Python wrapper types.
-    SparseRepoData objects are converted to their internal PySparseRepoData
+    SparseRepoData and MultiSource objects are converted to their internal
     representation.
 
     Raises:
         TypeError: If a source doesn't implement the required interface.
     """
+    from rattler.repo_data.multi_source import MultiSource
     from rattler.repo_data.source import RepoDataSource
     from rattler.repo_data.sparse import SparseRepoData
 
@@ -588,6 +590,8 @@ def _convert_sources(sources: Iterable[Any]) -> list[Any]:
         elif isinstance(source, Channel):
             # Channel object - extract PyChannel
             converted.append(source._channel)
+        elif isinstance(source, MultiSource):
+            converted.append(source._multi_source)
         elif isinstance(source, SparseRepoData):
             # SparseRepoData object - extract PySparseRepoData
             converted.append(source._sparse)
@@ -596,7 +600,7 @@ def _convert_sources(sources: Iterable[Any]) -> list[Any]:
             converted.append(_RepoDataSourceAdapter(source))
         else:
             raise TypeError(
-                f"Expected Channel, str, SparseRepoData, or object implementing RepoDataSource protocol, "
+                f"Expected Channel, MultiSource, str, SparseRepoData, or object implementing RepoDataSource protocol, "
                 f"got {type(source).__name__}. "
                 f"See rattler.RepoDataSource for the required interface."
             )
