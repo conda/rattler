@@ -8,10 +8,10 @@
 //! `--format urls`) and the snapshot tests free of escape codes.
 //!
 //! `FORCE_HYPERLINK=1` turns links on regardless (useful when piping into a
-//! renderer), `FORCE_HYPERLINK=0` turns them off; `NO_COLOR` and `CLICOLOR=0`
-//! disable them along with the rest of the styling.
+//! renderer) and `FORCE_HYPERLINK=0` turns them off, following the convention
+//! of the crate that does the detection.
 
-use std::{fmt::Display, path::Path, str::FromStr, sync::LazyLock};
+use std::{fmt::Display, path::Path, str::FromStr};
 
 use rattler_conda_types::Subdir;
 pub use supports_hyperlinks::Stream;
@@ -32,36 +32,13 @@ const PREFIX_DEV_MIRRORS: &[&str] = &[
 
 /// Whether hyperlinks should be written to `stream`.
 ///
-/// Determined once per stream: the environment does not change during a run and
-/// every call site would otherwise repeat the terminal probing. Each stream is
-/// decided on its own, so redirecting only stdout keeps the links in the
-/// progress messages on stderr.
+/// Each stream is decided on its own, so redirecting only stdout keeps the
+/// links in the progress messages on stderr.
 ///
 /// Public so that output which would otherwise print a URL on a line of its own
 /// can leave it out when the text above it is already clickable.
 pub fn enabled(stream: Stream) -> bool {
-    fn detect(stream: Stream) -> bool {
-        // An explicit request wins over the terminal detection, in both
-        // directions.
-        if let Ok(force) = std::env::var("FORCE_HYPERLINK") {
-            return force.trim() != "0";
-        }
-        // Styling and hyperlinks are turned off by the same signals
-        // (`NO_COLOR`, `CLICOLOR=0`, a redirected stream), so they are decided
-        // together.
-        let colors_enabled = match stream {
-            Stream::Stdout => console::colors_enabled(),
-            Stream::Stderr => console::colors_enabled_stderr(),
-        };
-        colors_enabled && supports_hyperlinks::on(stream)
-    }
-
-    static STDOUT: LazyLock<bool> = LazyLock::new(|| detect(Stream::Stdout));
-    static STDERR: LazyLock<bool> = LazyLock::new(|| detect(Stream::Stderr));
-    match stream {
-        Stream::Stdout => *STDOUT,
-        Stream::Stderr => *STDERR,
-    }
+    supports_hyperlinks::on(stream)
 }
 
 /// Wraps `text` in an OSC 8 escape sequence pointing at `url`.
