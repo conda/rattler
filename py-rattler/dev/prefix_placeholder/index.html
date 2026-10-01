@@ -1490,6 +1490,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rattler.package.paths_json.PrefixPlaceholder.experimental_offsets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        experimental_offsets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rattler.package.paths_json.PrefixPlaceholder.experimental_shebang_length" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        experimental_shebang_length
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rattler.package.paths_json.PrefixPlaceholder.file_mode" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3819,6 +3841,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rattler.package.paths_json.PrefixPlaceholder.experimental_offsets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        experimental_offsets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rattler.package.paths_json.PrefixPlaceholder.experimental_shebang_length" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        experimental_shebang_length
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rattler.package.paths_json.PrefixPlaceholder.file_mode" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3919,6 +3963,76 @@ when installing the file into the prefix.</p>
 
 
 
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="rattler.package.paths_json.PrefixPlaceholder.experimental_offsets" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">experimental_offsets</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#rattler.package.paths_json.PrefixPlaceholder.experimental_offsets" class="headerlink" title="Permanent link">#</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">experimental_offsets</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The placeholder's occurrences in the file, recorded per encoding.</p>
+<p>Returns <code>None</code> when the field is absent or invalid, or a list of offset groups mirroring
+the JSON: <code>[{"encoding": str, "ranges": list[int] | list[list[int]]}]</code>. <code>ranges</code> is a
+<code>list[int]</code> for text-mode files and a <code>list[list[int]]</code> for binary-mode files (grouped by
+c-string). Occurrences inside the shebang region (see <code>shebang_length</code>) are excluded.</p>
+<h4 id="rattler.package.paths_json.PrefixPlaceholder.experimental_offsets--examples">Examples<a class="headerlink" href="#rattler.package.paths_json.PrefixPlaceholder.experimental_offsets--examples" title="Permanent link">#</a></h4>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">paths_json</span> <span class="o">=</span> <span class="n">PathsJson</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">...</span>     <span class="s2">&quot;../test-data/conda-22.9.0-py38haa244fe_2-paths.json&quot;</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">...</span> <span class="p">)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">entry</span> <span class="o">=</span> <span class="n">paths_json</span><span class="o">.</span><span class="n">paths</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">entry</span><span class="o">.</span><span class="n">prefix_placeholder</span><span class="o">.</span><span class="n">experimental_offsets</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span>
+</span></code></pre></div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="rattler.package.paths_json.PrefixPlaceholder.experimental_shebang_length" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">experimental_shebang_length</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#rattler.package.paths_json.PrefixPlaceholder.experimental_shebang_length" class="headerlink" title="Permanent link">#</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">experimental_shebang_length</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The length in bytes of the file's shebang region (the first line including its trailing
+newline), or <code>None</code> when the file has no recorded shebang region or the recorded offsets
+are invalid.</p>
+<h4 id="rattler.package.paths_json.PrefixPlaceholder.experimental_shebang_length--examples">Examples<a class="headerlink" href="#rattler.package.paths_json.PrefixPlaceholder.experimental_shebang_length--examples" title="Permanent link">#</a></h4>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">paths_json</span> <span class="o">=</span> <span class="n">PathsJson</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">...</span>     <span class="s2">&quot;../test-data/conda-22.9.0-py38haa244fe_2-paths.json&quot;</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">...</span> <span class="p">)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">entry</span> <span class="o">=</span> <span class="n">paths_json</span><span class="o">.</span><span class="n">paths</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">entry</span><span class="o">.</span><span class="n">prefix_placeholder</span><span class="o">.</span><span class="n">experimental_shebang_length</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span>
+</span></code></pre></div>
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-attribute">
 
