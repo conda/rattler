@@ -218,17 +218,28 @@ impl SolverArgs {
         self.platform.map_or_else(crate::host_platform, Ok)
     }
 
-    /// The virtual packages to solve with, either as given on the command line
-    /// or detected from the current system.
+    /// Whether explicit CLI capabilities replace all automatic detection.
+    pub fn has_explicit_virtual_packages(&self) -> bool {
+        self.virtual_package.is_some()
+    }
+
+    /// Builtin host capabilities, with environment overrides, for detector solves.
+    pub fn builtin_virtual_packages(
+        platform: Subdir,
+    ) -> miette::Result<Vec<GenericVirtualPackage>> {
+        VirtualPackages::detect_for_platform(
+            platform,
+            &VirtualPackageOverrides::from_env(),
+            rattler::default_cache_dir().ok().as_deref(),
+        )
+        .map(|packages| packages.into_generic_virtual_packages().collect())
+        .into_diagnostic()
+    }
+
+    /// The explicitly supplied capabilities, or the target's builtin capabilities.
     pub fn virtual_packages(&self) -> miette::Result<Vec<GenericVirtualPackage>> {
         let Some(virtual_packages) = &self.virtual_package else {
-            return VirtualPackages::detect_for_platform(
-                self.platform()?,
-                &VirtualPackageOverrides::from_env(),
-                rattler::default_cache_dir().ok().as_deref(),
-            )
-            .map(|vpkgs| vpkgs.into_generic_virtual_packages().collect::<Vec<_>>())
-            .into_diagnostic();
+            return Self::builtin_virtual_packages(self.platform()?);
         };
 
         virtual_packages

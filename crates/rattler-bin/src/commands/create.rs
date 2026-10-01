@@ -9,6 +9,7 @@ use rattler_solve::SolverTask;
 
 use crate::{
     commands::{
+        detectors::{DetectorContext, determine_virtual_packages},
         gateway::{build_gateway, load_config},
         progress::{wrap_in_async_progress, wrap_in_progress},
     },
@@ -93,7 +94,11 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     let repo_data = wrap_in_async_progress(
         "loading repodata",
         gateway
-            .query(channels, [install_platform, Subdir::NoArch], specs.clone())
+            .query(
+                channels.iter().cloned(),
+                [install_platform, Subdir::NoArch],
+                specs.clone(),
+            )
             .recursive(true),
     )
     .await
@@ -113,12 +118,20 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
         start_load_repo_data.elapsed()
     );
 
-    // Determine virtual packages of the system. These packages define the
-    // capabilities of the system. Some packages depend on these virtual
-    // packages to indicate compatibility with the hardware of the system.
-    let virtual_packages = wrap_in_progress("determining virtual packages", || {
-        opt.solver.virtual_packages()
-    })?;
+    let virtual_packages = determine_virtual_packages(
+        &opt.solver,
+        DetectorContext {
+            gateway: &gateway,
+            config: &config,
+            channels: &channels,
+            download_client: &download_client,
+            repodata: &repo_data.repodata,
+            specs: &specs,
+            constraints: &constraints,
+            target_platform: install_platform,
+        },
+    )
+    .await?;
 
     println!(
         "Virtual packages:\n{}\n",
