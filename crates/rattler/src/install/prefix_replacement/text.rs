@@ -6,7 +6,9 @@ use std::io::Write;
 
 use once_cell::sync::Lazy;
 use rattler_conda_types::Subdir;
-use rattler_conda_types::package::{InvalidOffsetsError, OffsetGroup, OffsetRanges};
+use rattler_conda_types::package::{
+    InvalidOffsetsError, OffsetEncoding, OffsetGroup, OffsetRanges,
+};
 use regex::Regex;
 
 use super::{
@@ -160,32 +162,57 @@ pub fn copy_and_replace_textual_placeholder(
 /// Finds every placeholder occurrence that starts at or after `from`, under every encoding,
 /// ordered by position in the file.
 ///
-/// Occurrences are the leftmost non-overlapping matches over the whole file, which is how the
-/// draft CEP defines them, and how a producer records them; the ones before `from` are dropped
-/// afterwards. Searching only `source_bytes[from..]` instead would find matches a producer's
-/// file-wide scan consumed as part of an earlier, overlapping occurrence.
+/// Per encoding, occurrences are the leftmost non-overlapping matches over the whole file, which
+/// is how the draft CEP defines them; the ones before `from` are dropped afterwards. Searching only
+/// `source_bytes[from..]` instead would find matches a producer's file-wide scan consumed as part
+/// of an earlier, overlapping occurrence.
+///
+/// Matches of different encodings can overlap, because the encodings of an ASCII placeholder are
+/// byte-shifted variants of one another: in UTF-16-LE text every occurrence has a spurious
+/// UTF-16-BE twin one byte earlier. Of two overlapping matches the one preferred is the UTF-8
+/// match, then the one whose offset is code-unit aligned (as every character of a wide-encoded
+/// text file is), then the earlier one.
 fn find_text_patches<'a>(
     source_bytes: &[u8],
     from: usize,
     prefixes: &'a [EncodedPrefix],
 ) -> Vec<TextPatch<'a>> {
-    let mut patches = Vec::new();
+    let mut candidates = Vec::new();
     for prefix in prefixes {
-        patches.extend(
+        candidates.extend(
             memchr::memmem::find_iter(source_bytes, &prefix.placeholder)
                 .map(|offset| TextPatch { offset, prefix }),
         );
     }
+    candidates.sort_by_key(|patch| patch.offset);
 
-    patches.sort_by_key(|patch| patch.offset);
-    let mut end = 0;
-    patches.retain(|patch| {
-        let disjoint = patch.offset >= end;
-        if disjoint {
-            end = patch.offset + patch.prefix.placeholder.len();
+    let rank = |patch: &TextPatch<'_>| match patch.prefix.encoding {
+        OffsetEncoding::Utf8 => 0u8,
+        OffsetEncoding::Utf16Le
+        | OffsetEncoding::Utf16Be
+        | OffsetEncoding::Utf32Le
+        | OffsetEncoding::Utf32Be => {
+            if patch.offset.is_multiple_of(patch.prefix.code_unit_size()) {
+                1
+            } else {
+                2
+            }
         }
-        disjoint
-    });
+    };
+    let mut patches: Vec<TextPatch<'a>> = Vec::with_capacity(candidates.len());
+    for candidate in candidates {
+        // The kept patches are disjoint and sorted, and the candidate starts at or after the last
+        // one, so only the last one can overlap it.
+        match patches.last() {
+            Some(last) if candidate.offset < last.offset + last.prefix.placeholder.len() => {
+                if rank(&candidate) < rank(last) {
+                    patches.pop();
+                    patches.push(candidate);
+                }
+            }
+            Some(_) | None => patches.push(candidate),
+        }
+    }
     patches.retain(|patch| patch.offset >= from);
     patches
 }

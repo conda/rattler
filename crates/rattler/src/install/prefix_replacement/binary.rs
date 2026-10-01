@@ -3,6 +3,7 @@
 //! terminator is filled with zeros.
 
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::io::Write;
 
 use rattler_conda_types::package::{
@@ -58,6 +59,11 @@ pub fn copy_and_replace_cstring_placeholder(
 /// terminator over one that runs to end-of-file, and finally the earlier offset. A candidate that
 /// loses leaves its placeholder in place, which is what rattler did before it replaced wide
 /// strings at all; writing another encoding's bytes over the string instead would corrupt it.
+///
+/// A candidate collects every occurrence up to its terminator, so a later occurrence at the same
+/// alignment inside that range is skipped instead of starting a candidate of its own: it would
+/// lose to the earlier one anyway, and building it rescans the c-string, which is quadratic for
+/// long c-strings with many occurrences.
 fn find_cstring_patches<'a>(
     source_bytes: &[u8],
     prefixes: &'a [EncodedPrefix],
@@ -66,10 +72,20 @@ fn find_cstring_patches<'a>(
     for prefix in prefixes {
         let placeholder = prefix.placeholder.as_slice();
         let unit = prefix.code_unit_size();
+        // Per alignment class (offset modulo the code unit size), the end of the last candidate.
+        let mut covered_until = vec![0; unit];
         let mut search_from = 0;
         while let Some(found) = memchr::memmem::find(&source_bytes[search_from..], placeholder) {
             let first = search_from + found;
             let after_first = first + placeholder.len();
+            // Resume right after this occurrence, not after its c-string: an occurrence of the
+            // same encoding at a different alignment can start before this terminator.
+            search_from = after_first;
+            let alignment = first % unit;
+            if first < covered_until[alignment] {
+                continue;
+            }
+
             let nul_pos = cstring_end(source_bytes, after_first, unit);
 
             // Collect the remaining occurrences in the same c-string: they share its terminator
@@ -81,8 +97,9 @@ fn find_cstring_patches<'a>(
                 offsets.push(next + found);
                 next += found + placeholder.len();
             }
+            covered_until[alignment] = end;
 
-            let rank = match (&prefix.encoding, first % unit == 0, nul_pos.is_some()) {
+            let rank = match (&prefix.encoding, alignment == 0, nul_pos.is_some()) {
                 (OffsetEncoding::Utf8, _, _) => 0u8,
                 (_, true, true) => 1,
                 (_, true, false) => 2,
@@ -97,24 +114,28 @@ fn find_cstring_patches<'a>(
                     prefix,
                 },
             ));
-            // Resume right after the first occurrence, not after the c-string: an occurrence of
-            // the same encoding at a different byte parity can start before this terminator.
-            search_from = after_first;
         }
     }
 
+    // Keep the best candidates whose c-strings do not overlap a better one. The kept c-strings
+    // are disjoint, so only the nearest kept c-string on either side can overlap a candidate.
     candidates.sort_by_key(|(rank, patch)| (*rank, patch.offsets[0]));
-    let mut patches: Vec<CStringPatch<'a>> = Vec::with_capacity(candidates.len());
+    let mut kept: BTreeMap<usize, CStringPatch<'a>> = BTreeMap::new();
     for (_, candidate) in candidates {
-        let overlaps = patches
-            .iter()
-            .any(|kept| candidate.offsets[0] < kept.nul_pos && kept.offsets[0] < candidate.nul_pos);
-        if !overlaps {
-            patches.push(candidate);
+        let start = candidate.offsets[0];
+        let overlaps_earlier = kept
+            .range(..=start)
+            .next_back()
+            .is_some_and(|(_, earlier)| start < earlier.nul_pos);
+        let overlaps_later = kept
+            .range(start..)
+            .next()
+            .is_some_and(|(&later_start, _)| later_start < candidate.nul_pos);
+        if !overlaps_earlier && !overlaps_later {
+            kept.insert(start, candidate);
         }
     }
-    patches.sort_by_key(|patch| patch.offsets[0]);
-    patches
+    kept.into_values().collect()
 }
 
 /// Finds the end of the c-string containing a placeholder occurrence: the offset of the first zero
@@ -201,9 +222,11 @@ pub fn copy_and_replace_cstring_placeholder_offsets(
     let prefixes = EncodedPrefix::all(prefix_placeholder, target_prefix);
 
     let patches = cstring_patches_from_groups(groups, &prefixes)?;
-    // Only the encodings the metadata actually records constrain the target prefix.
-    reject_growing_prefix(patches.iter().map(|patch| patch.prefix))?;
     validate_cstring_patches(source_bytes, &patches)?;
+    // Only the encodings whose recorded occurrences are present in the file constrain the target
+    // prefix. Checking this after the validation keeps bogus metadata a fallback rather than an
+    // install failure.
+    reject_growing_prefix(patches.iter().map(|patch| patch.prefix))?;
 
     // --- The metadata is consistent; write the patched file. ---
     write_patched_cstrings(destination, source_bytes, &patches)?;

@@ -823,6 +823,43 @@ fn test_shebang_region_replaces_every_encoding_on_non_unix() {
     assert_eq!(searched.into_inner(), spliced, "both paths must agree");
 }
 
+/// In UTF-16-LE text every ASCII character is preceded by a zero byte, so the UTF-16-BE needle
+/// matches one byte before each little-endian occurrence. The aligned little-endian match must
+/// win, otherwise a target prefix outside Latin-1 is written with the wrong byte order.
+#[test]
+fn test_text_search_prefers_aligned_wide_occurrence() {
+    let placeholder = "/pfx";
+    let target = "/\u{100}";
+    let mut input = vec![0xff, 0xfe];
+    input.extend_from_slice(&OffsetEncoding::Utf16Le.encode("x=/pfx/lib\n"));
+    let mut expected = vec![0xff, 0xfe];
+    expected.extend_from_slice(&OffsetEncoding::Utf16Le.encode("x=/\u{100}/lib\n"));
+
+    let mut searched = Cursor::new(Vec::new());
+    super::copy_and_replace_textual_placeholder(
+        &input,
+        &mut searched,
+        placeholder,
+        target,
+        &Subdir::Linux64,
+    )
+    .unwrap();
+    assert_eq!(searched.into_inner(), expected);
+
+    let mut spliced = Cursor::new(Vec::new());
+    super::copy_and_replace_textual_placeholder_offsets(
+        &input,
+        &mut spliced,
+        placeholder,
+        target,
+        &Subdir::Linux64,
+        &[OffsetGroup::new(OffsetEncoding::Utf16Le, OffsetRanges::Text(vec![6])).unwrap()],
+        None,
+    )
+    .unwrap();
+    assert_eq!(spliced.into_inner(), expected, "both paths must agree");
+}
+
 /// An empty `prefix_placeholder` means there is nothing to replace. An empty needle matches at
 /// every byte, so searching for it would insert the target prefix between all of them; both
 /// paths must copy the file verbatim instead.
@@ -898,6 +935,30 @@ fn test_binary_growing_prefix_rejected_for_encoding_in_use() {
     let mut out = Cursor::new(Vec::new());
     let result = super::copy_and_replace_cstring_placeholder(&input, &mut out, "/\u{e9}", "/ab");
     assert_eq!(result.unwrap_err().kind(), std::io::ErrorKind::InvalidData);
+}
+
+/// A recorded group whose occurrences are not in the file is inconsistent metadata, even when the
+/// target prefix would not fit under its encoding: the installer falls back to searching, which
+/// finds nothing to replace, instead of failing the install.
+#[test]
+fn test_binary_growing_prefix_with_bogus_group_is_inconsistent() {
+    let input = b"\x7fELF\0\0nothing to see here\0";
+    let mut output = Cursor::new(Vec::new());
+    let result = super::copy_and_replace_cstring_placeholder_offsets(
+        input,
+        &mut output,
+        "/opt/placeholder",
+        "/a/much/longer/target/prefix",
+        &utf8_binary_groups(&[vec![6, 24]]),
+    );
+    assert!(
+        matches!(
+            result,
+            Err(super::OffsetReplaceError::InconsistentMetadata(_))
+        ),
+        "{result:?}"
+    );
+    assert!(output.into_inner().is_empty());
 }
 
 /// The encodings of an ASCII placeholder are byte-shifted variants of one another, so a

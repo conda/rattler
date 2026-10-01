@@ -409,10 +409,11 @@ impl PyPrefixPlaceholder {
         self.inner.file_mode.into()
     }
 
-    /// Set the file mode
+    /// Set the file mode. The recorded offsets no longer describe the file and are removed.
     #[setter]
     pub fn set_file_mode(&mut self, mode: PyFileMode) {
         self.inner.file_mode = mode.into();
+        self.inner.experimental_offsets = None;
     }
 
     /// The placeholder prefix used in the file. This is the path of the prefix when the package
@@ -422,10 +423,12 @@ impl PyPrefixPlaceholder {
         self.inner.placeholder.clone()
     }
 
-    /// Set the placeholder prefix
+    /// Set the placeholder prefix. The recorded offsets no longer describe the file and are
+    /// removed.
     #[setter]
     pub fn set_placeholder(&mut self, placeholder: String) {
         self.inner.placeholder = placeholder;
+        self.inner.experimental_offsets = None;
     }
 
     /// The placeholder's occurrences in the file, recorded per encoding.

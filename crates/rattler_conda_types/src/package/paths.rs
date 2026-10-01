@@ -197,7 +197,7 @@ pub struct PrefixPlaceholder {
     /// as offset groups (such as the flat lists written by earlier drafts of the field); callers
     /// locate the occurrences by searching the file contents. `Some(Err(_))` when the recorded
     /// offsets violate the draft CEP; callers search the file contents as well and may report
-    /// the error. Only valid offsets are serialized.
+    /// the error. Only valid offsets recorded for [`Self::file_mode`] are serialized.
     ///
     /// **Experimental**: the Rust field is prefixed until
     /// [conda/ceps#179](https://github.com/conda/ceps/pull/179) is finalized.
@@ -211,9 +211,10 @@ impl Serialize for PrefixPlaceholder {
     where
         S: Serializer,
     {
+        // Offsets recorded for another file mode no longer describe the file.
         let offsets = match &self.experimental_offsets {
-            Some(Ok(offsets)) => Some(offsets),
-            Some(Err(_)) | None => None,
+            Some(Ok(offsets)) if offsets.file_mode() == self.file_mode => Some(offsets),
+            Some(Ok(_) | Err(_)) | None => None,
         };
         SerializedPrefixPlaceholder {
             file_mode: self.file_mode,
@@ -232,11 +233,20 @@ impl<'de> Deserialize<'de> for PrefixPlaceholder {
     {
         let raw = RawPrefixPlaceholder::deserialize(deserializer)?;
         let experimental_offsets = raw.offsets.map(|groups| {
+            let shebang_length = raw
+                .shebang_length
+                .map(|value| {
+                    value
+                        .as_u64()
+                        .and_then(|length| usize::try_from(length).ok())
+                        .ok_or(InvalidOffsetsError::MalformedShebangLength)
+                })
+                .transpose()?;
             let groups = groups
                 .into_iter()
                 .map(RawOffsetGroup::into_offset_group)
                 .collect::<Result<Vec<_>, _>>()?;
-            PrefixOffsets::new(raw.file_mode, groups, raw.shebang_length)
+            PrefixOffsets::new(raw.file_mode, groups, shebang_length)
         });
         Ok(PrefixPlaceholder {
             file_mode: raw.file_mode,
@@ -266,8 +276,10 @@ struct RawPrefixPlaceholder {
     placeholder: String,
     #[serde(default, deserialize_with = "deserialize_offset_groups")]
     offsets: Option<Vec<RawOffsetGroup>>,
+    /// Kept as a raw value so that a malformed length invalidates the offsets rather than the
+    /// whole placeholder.
     #[serde(default)]
-    shebang_length: Option<usize>,
+    shebang_length: Option<serde_json::Value>,
 }
 
 /// An [`OffsetGroup`] as it appears in `paths.json`, before it is validated.
@@ -505,7 +517,8 @@ impl OffsetRanges {
 /// without groups only occurs for a text file whose occurrences all lie inside its shebang
 /// region, and [`Self::shebang_length`] is only recorded for text files. Whether the offsets
 /// match the file contents (ordering, bounds, the placeholder bytes being present) can only be
-/// checked against those contents, which the prefix replacement in `rattler` does.
+/// checked against those contents, which the prefix replacement in `rattler` does. Offsets are
+/// trusted to list every occurrence: an occurrence they leave out keeps the placeholder.
 ///
 /// [draft CEP]: https://github.com/conda/ceps/pull/179
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -622,6 +635,10 @@ pub enum InvalidOffsetsError {
     /// `shebang_length` is recorded for an entry that is not a text file.
     #[error("shebang_length is only valid for a text file")]
     ShebangLengthOnBinary,
+
+    /// `shebang_length` is recorded but is not a byte length.
+    #[error("shebang_length is not a byte length")]
+    MalformedShebangLength,
 }
 
 /// Deserializes `offsets` leniently: a value that does not parse as a list of
@@ -1084,6 +1101,52 @@ mod test {
                 encoding: OffsetEncoding::Utf8,
                 members: vec![String::from("padding")],
             }))
+        );
+    }
+
+    /// A malformed `shebang_length` invalidates the recorded offsets, but the
+    /// placeholder itself is kept so that the file is still relocated.
+    #[test]
+    pub fn test_malformed_shebang_length_keeps_placeholder() {
+        for shebang_length in ["-1", r#""30""#, "30.0", "18446744073709551616"] {
+            let entry: PathsEntry = serde_json::from_str(&format!(
+                r#"{{
+                    "_path": "bin/example",
+                    "path_type": "hardlink",
+                    "file_mode": "text",
+                    "prefix_placeholder": "/opt/conda",
+                    "offsets": [{{"encoding": "utf-8", "ranges": [40]}}],
+                    "shebang_length": {shebang_length}
+                }}"#
+            ))
+            .unwrap();
+            assert_eq!(
+                entry
+                    .prefix_placeholder
+                    .map(|placeholder| placeholder.experimental_offsets),
+                Some(Some(Err(InvalidOffsetsError::MalformedShebangLength))),
+                "shebang_length {shebang_length}"
+            );
+        }
+    }
+
+    /// Offsets recorded for another file mode no longer describe the file, so
+    /// they are not serialized.
+    #[test]
+    pub fn test_offsets_for_other_file_mode_are_not_serialized() {
+        let placeholder = PrefixPlaceholder {
+            file_mode: FileMode::Binary,
+            placeholder: String::from("/opt/conda"),
+            experimental_offsets: Some(Ok(PrefixOffsets::new(
+                FileMode::Text,
+                vec![group(OffsetEncoding::Utf8, OffsetRanges::Text(vec![10]))],
+                None,
+            )
+            .unwrap())),
+        };
+        insta::assert_snapshot!(
+            serde_json::to_string(&placeholder).unwrap(),
+            @r#"{"file_mode":"binary","prefix_placeholder":"/opt/conda"}"#
         );
     }
 
