@@ -16,7 +16,7 @@ use super::{
     source::{CustomSourceClient, Source},
     subdir::{PackageRecords, SubdirData, SubdirState, extract_unique_deps_split},
 };
-use crate::Reporter;
+use crate::{Reporter, sparse::PackageFormatSelection};
 
 type RecordPatch = dyn Fn(&RepoDataRecord) -> Option<RepoDataRecord> + Send + Sync;
 
@@ -136,6 +136,9 @@ pub struct RepoDataQuery {
     /// Whether to recursively fetch dependencies
     recursive: bool,
 
+    /// Which archive formats of a package are used.
+    package_format_selection: PackageFormatSelection,
+
     /// A query-local patch applied to repodata records.
     record_patch: Option<Arc<RecordPatch>>,
 
@@ -239,6 +242,7 @@ impl RepoDataQuery {
             specs,
 
             recursive: false,
+            package_format_selection: PackageFormatSelection::default(),
             record_patch: None,
             reporter: None,
             channel_notices: false,
@@ -286,6 +290,22 @@ impl RepoDataQuery {
     #[must_use]
     pub fn recursive(self, recursive: bool) -> Self {
         Self { recursive, ..self }
+    }
+
+    /// Selects which archive formats of a package the query returns when the
+    /// same build is available in more than one format. Defaults to
+    /// [`PackageFormatSelection::PreferConda`]. The selection applies to
+    /// every source of the query, and only the dependencies of selected
+    /// records are followed by a recursive query.
+    #[must_use]
+    pub fn package_format_selection(
+        self,
+        package_format_selection: PackageFormatSelection,
+    ) -> Self {
+        Self {
+            package_format_selection,
+            ..self
+        }
     }
 
     /// Applies a query-local patch to repodata records.
@@ -337,6 +357,7 @@ struct QueryExecutor {
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     gateway: Arc<GatewayInner>,
     recursive: bool,
+    package_format_selection: PackageFormatSelection,
     record_patch: Option<Arc<RecordPatch>>,
     reporter: Option<Arc<dyn Reporter>>,
 
@@ -444,6 +465,7 @@ impl QueryExecutor {
             platforms,
             specs,
             recursive,
+            package_format_selection,
             record_patch,
             reporter,
             channel_notices,
@@ -610,6 +632,7 @@ impl QueryExecutor {
         Ok(Self {
             gateway,
             recursive,
+            package_format_selection,
             record_patch,
             reporter,
             direct_url_specs,
@@ -662,7 +685,7 @@ impl QueryExecutor {
                 }
 
                 let (unique_base_deps, unique_extra_deps) =
-                    super::subdir::extract_unique_deps_split(records.iter().map(|r| &**r));
+                    extract_unique_deps_split(records.iter().map(AsRef::as_ref));
                 Ok((
                     AccumulateTarget::DirectUrl,
                     PendingRequest {
@@ -670,8 +693,8 @@ impl QueryExecutor {
                         specs: SourceSpecs::Input(vec![spec]),
                     },
                     PackageRecords {
-                        records,
-                        removed: Vec::new(),
+                        records: records.into(),
+                        removed: Arc::default(),
                         unique_base_deps,
                         unique_extra_deps,
                     },
@@ -698,6 +721,7 @@ impl QueryExecutor {
         let pending_records = &mut self.pending_records;
         let reporter = &self.reporter;
         let subdir_handles = &self.subdir_handles;
+        let package_format_selection = self.package_format_selection;
         for (package_name, request) in self.pending_package_specs.drain() {
             for (idx, handle) in subdir_handles.iter().enumerate() {
                 spawn_one_package_fetch(
@@ -706,6 +730,7 @@ impl QueryExecutor {
                     request.clone(),
                     AccumulateTarget::SubdirIndex(idx),
                     handle.barrier.clone(),
+                    package_format_selection,
                     reporter.clone(),
                 );
             }
@@ -724,6 +749,7 @@ impl QueryExecutor {
                 request.clone(),
                 AccumulateTarget::SubdirIndex(handle_idx),
                 barrier.clone(),
+                self.package_format_selection,
                 self.reporter.clone(),
             );
         }
@@ -753,7 +779,7 @@ impl QueryExecutor {
                 }
             }
             SourceSpecs::Input(specs) => {
-                for record in &pkg.records {
+                for record in pkg.records.iter() {
                     if !specs.iter().any(|s| s.matches(record.as_ref())) {
                         continue;
                     }
@@ -779,16 +805,22 @@ impl QueryExecutor {
         };
 
         let mut changed = false;
-        for record in &mut pkg.records {
-            if let Some(patched) = patch(record.as_ref()) {
-                *record = Arc::new(patched);
-                changed = true;
-            }
-        }
+        let records: Vec<Arc<RepoDataRecord>> = pkg
+            .records
+            .iter()
+            .map(|record| match patch(record.as_ref()) {
+                Some(patched) => {
+                    changed = true;
+                    Arc::new(patched)
+                }
+                None => record.clone(),
+            })
+            .collect();
 
         if changed {
             (pkg.unique_base_deps, pkg.unique_extra_deps) =
-                extract_unique_deps_split(pkg.records.iter().map(AsRef::as_ref));
+                extract_unique_deps_split(records.iter().map(AsRef::as_ref));
+            pkg.records = records.into();
         }
 
         pkg
@@ -919,14 +951,14 @@ impl QueryExecutor {
         let PackageRecords {
             records, removed, ..
         } = pkg;
-        result.removed.extend(removed);
+        result.removed.extend(removed.iter().cloned());
 
         match &request.specs {
             SourceSpecs::Transitive => {
-                result.records.extend(records);
+                result.records.extend(records.iter().cloned());
             }
             SourceSpecs::Input(specs) => {
-                for record in &records {
+                for record in records.iter() {
                     if specs.iter().any(|s| s.matches(record.as_ref())) {
                         result.records.push(record.clone());
                     }
@@ -1314,13 +1346,18 @@ fn spawn_one_package_fetch(
     request: PendingRequest,
     target: AccumulateTarget,
     barrier: Arc<BarrierCell<Arc<SubdirState>>>,
+    package_format_selection: PackageFormatSelection,
     reporter: Option<Arc<dyn Reporter>>,
 ) {
     pending_records.push(box_future(async move {
         let subdir = barrier.wait().await;
         match subdir.as_ref() {
             SubdirState::Found(subdir) => subdir
-                .get_or_fetch_package_records(&package_name, reporter)
+                .get_or_fetch_package_records(
+                    &package_name,
+                    package_format_selection,
+                    reporter.as_deref(),
+                )
                 .await
                 .map(|pkg| (target, request, pkg)),
             SubdirState::NotFound => Ok((target, request, PackageRecords::default())),

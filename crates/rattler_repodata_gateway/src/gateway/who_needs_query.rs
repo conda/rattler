@@ -61,6 +61,9 @@ const NAME_BATCH_SIZE: usize = 100;
 /// Channel sources always use full repodata, even if sharding is enabled
 /// or a previous query has already loaded a sharded subdir.
 ///
+/// The records are scanned in the default
+/// [`PackageFormatSelection`](crate::sparse::PackageFormatSelection).
+///
 /// The matches themselves can still be numerous enough to dominate memory —
 /// half a million records depend on `python` in conda-forge. Use
 /// [`stream`](Self::stream) to fold them as they arrive;
@@ -349,7 +352,7 @@ fn scan_subdir(
                     let mut matches = Vec::new();
                     for name in batch {
                         let records = subdir_data
-                            .fetch_package_records_uncached(&name, reporter.as_deref())
+                            .scan_package_records(&name, reporter.as_deref())
                             .await?;
                         matches.extend(who_needs(&records, &target));
                         // The scanned records are dropped here; only the

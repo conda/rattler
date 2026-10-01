@@ -1,19 +1,18 @@
 use std::borrow::Cow;
+use std::io;
 use std::sync::Arc;
 
 use cfg_if::cfg_if;
 use http::StatusCode;
 use rattler_conda_types::{
-    ChannelUrl, RepoDataRecord, Shard, UrlOrPath, WhlPackageRecord,
-    package::{CondaArchiveType, DistArchiveIdentifier, WheelArchiveType},
+    ChannelUrl, PackageRecord, RepoDataRecord, Shard, UrlOrPath, WhlPackageRecord,
+    package::{CondaArchiveType, DistArchiveIdentifier, DistArchiveType, WheelArchiveType},
 };
 use rattler_redaction::Redact;
 use url::Url;
 
 use crate::{
-    GatewayError,
-    fetch::FetchRepoDataError,
-    gateway::subdir::{PackageRecords, extract_unique_deps_split},
+    GatewayError, fetch::FetchRepoDataError, gateway::subdir::FetchedPackage,
     sparse::RemovedPackage,
 };
 
@@ -89,97 +88,131 @@ async fn decode_zst_bytes_async<R: AsRef<[u8]> + Send + 'static>(
     simple_spawn_blocking::tokio::run_blocking_task(decode).await
 }
 
+/// Parses the records of a shard. Removed packages are dropped, and a file
+/// that is listed both in a legacy map and in `v3` is described by its `v3`
+/// entry. The records of every bucket are returned.
 async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
     bytes: R,
     channel_base_url: ChannelUrl,
     base_url: Url,
-) -> Result<PackageRecords, GatewayError> {
-    let parse =
-        move || {
-            let shard = rmp_serde::from_slice::<Shard>(bytes.as_ref())
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
-                .map_err(FetchRepoDataError::IoError)?;
+) -> Result<FetchedPackage, GatewayError> {
+    let parse = move || {
+        let Shard {
+            packages,
+            conda_packages,
+            v3,
+            removed,
+        } = rmp_serde::from_slice::<Shard>(bytes.as_ref())
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))
+            .map_err(FetchRepoDataError::IoError)?;
 
-            // Chain v3 tar.bz2/conda packages into the main iteration
-            let v3_tar_bz2 = shard.v3.tar_bz2.into_iter().map(|(id, rec)| {
-                (
-                    DistArchiveIdentifier::new(id, CondaArchiveType::TarBz2),
-                    rec,
+        let channel = channel_base_url.url().clone().redact().to_string();
+        let base_url = base_url.as_str();
+        let package_url = |path: &str| {
+            Url::parse(&format!("{base_url}{path}")).map_err(|err| {
+                GatewayError::IoError(
+                    format!("invalid package url for '{path}' in shard"),
+                    io::Error::new(io::ErrorKind::InvalidData, err),
                 )
-            });
-            let v3_conda =
-                shard.v3.conda.into_iter().map(|(id, rec)| {
-                    (DistArchiveIdentifier::new(id, CondaArchiveType::Conda), rec)
-                });
-
-            let packages = itertools::chain(shard.packages, shard.conda_packages)
-                .chain(v3_tar_bz2)
-                .chain(v3_conda)
-                .filter(|(name, _record)| !shard.removed.contains(name));
-
-            let channel_str = channel_base_url.url().clone().redact().to_string();
-            let base_url_str = base_url.as_str();
-            let mut records: Vec<Arc<RepoDataRecord>> = packages
-                .map(|(file_name, package_record)| {
-                    let file_name_str = file_name.to_file_name();
-                    Arc::new(RepoDataRecord {
-                        url: Url::parse(&format!("{base_url_str}{file_name_str}"))
-                            .expect("filename is not a valid url"),
-                        channel: Some(channel_str.clone()),
-                        package_record,
-                        identifier: file_name,
-                    })
-                })
-                .collect();
-
-            // Handle v3 whl packages separately (different URL resolution)
-            for (
-                id,
-                WhlPackageRecord {
-                    url,
-                    package_record,
-                },
-            ) in shard.v3.whl
-            {
-                let dist_id = DistArchiveIdentifier::new(id, WheelArchiveType::Whl);
-                let url = match url {
-                    UrlOrPath::Path(path) => Url::parse(&format!("{base_url_str}{path}"))
-                        .expect("path is not a valid url"),
-                    UrlOrPath::Url(url) => url,
-                };
-                records.push(Arc::new(RepoDataRecord {
-                    url,
-                    channel: Some(channel_str.clone()),
-                    package_record,
-                    identifier: dist_id,
-                }));
-            }
-
-            // Sort the removed set so the result does not depend on hash order.
-            let mut removed: Vec<RemovedPackage> = shard
-                .removed
-                .into_iter()
-                .map(|identifier| {
-                    let file_name = identifier.to_file_name();
-                    RemovedPackage {
-                        url: Url::parse(&format!("{base_url_str}{file_name}"))
-                            .expect("filename is not a valid url"),
-                        identifier,
-                        channel: Some(channel_str.clone()),
-                    }
-                })
-                .collect();
-            removed.sort_by(|a, b| a.identifier.cmp(&b.identifier));
-
-            let (unique_base_deps, unique_extra_deps) =
-                extract_unique_deps_split(records.iter().map(|r| &**r));
-            Ok(PackageRecords {
-                records,
-                removed,
-                unique_base_deps,
-                unique_extra_deps,
             })
         };
+        let record = |identifier: DistArchiveIdentifier, package_record: PackageRecord| {
+            Ok::<_, GatewayError>(Arc::new(RepoDataRecord {
+                url: package_url(&identifier.to_file_name())?,
+                channel: Some(channel.clone()),
+                package_record,
+                identifier,
+            }))
+        };
+
+        let mut records = Vec::with_capacity(
+            packages.len()
+                + conda_packages.len()
+                + v3.tar_bz2.len()
+                + v3.conda.len()
+                + v3.whl.len(),
+        );
+
+        // A file listed both in a legacy map and in `v3` is described by its
+        // `v3` entry.
+        let is_listed_in_v3 = |identifier: &DistArchiveIdentifier| match identifier.archive_type {
+            DistArchiveType::Conda(CondaArchiveType::Conda) => {
+                v3.conda.contains_key(&identifier.identifier)
+            }
+            DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
+                v3.tar_bz2.contains_key(&identifier.identifier)
+            }
+            DistArchiveType::Wheel(WheelArchiveType::Whl) => {
+                v3.whl.contains_key(&identifier.identifier)
+            }
+        };
+        for (identifier, package_record) in packages.into_iter().chain(conda_packages) {
+            if !is_listed_in_v3(&identifier) && !removed.contains(&identifier) {
+                records.push(record(identifier, package_record)?);
+            }
+        }
+
+        let v3_conda = v3
+            .tar_bz2
+            .into_iter()
+            .map(|(identifier, package_record)| {
+                (
+                    DistArchiveIdentifier::new(identifier, CondaArchiveType::TarBz2),
+                    package_record,
+                )
+            })
+            .chain(v3.conda.into_iter().map(|(identifier, package_record)| {
+                (
+                    DistArchiveIdentifier::new(identifier, CondaArchiveType::Conda),
+                    package_record,
+                )
+            }));
+        for (identifier, package_record) in v3_conda {
+            if !removed.contains(&identifier) {
+                records.push(record(identifier, package_record)?);
+            }
+        }
+
+        // Wheels may point to an absolute URL instead of a file next to the
+        // shard.
+        for (
+            identifier,
+            WhlPackageRecord {
+                url,
+                package_record,
+            },
+        ) in v3.whl
+        {
+            let identifier = DistArchiveIdentifier::new(identifier, WheelArchiveType::Whl);
+            if removed.contains(&identifier) {
+                continue;
+            }
+            records.push(Arc::new(RepoDataRecord {
+                url: match url {
+                    UrlOrPath::Path(path) => package_url(path.as_str())?,
+                    UrlOrPath::Url(url) => url,
+                },
+                channel: Some(channel.clone()),
+                package_record,
+                identifier,
+            }));
+        }
+
+        // Sort the removed set so the result does not depend on hash order.
+        let mut removed = removed
+            .into_iter()
+            .map(|identifier| {
+                Ok(RemovedPackage {
+                    url: package_url(&identifier.to_file_name())?,
+                    identifier,
+                    channel: Some(channel.clone()),
+                })
+            })
+            .collect::<Result<Vec<_>, GatewayError>>()?;
+        removed.sort_by(|a, b| a.identifier.cmp(&b.identifier));
+
+        Ok(FetchedPackage::from_records(records, removed))
+    };
 
     #[cfg(target_arch = "wasm32")]
     return parse();
@@ -194,6 +227,7 @@ mod tests {
     use crate::fetch::CacheAction;
     use crate::gateway::error::GatewayError;
     use crate::gateway::subdir::SubdirClient;
+    use crate::sparse::FormatBucketSet;
     use crate::utils::url_to_cache_filename;
     use axum::{
         Router,
@@ -414,7 +448,9 @@ mod tests {
         .unwrap();
 
         let package_name = "test-package".parse().unwrap();
-        let result = subdir.fetch_package_records(&package_name, None).await;
+        let result = subdir
+            .fetch_package_records(&package_name, FormatBucketSet::ALL, None)
+            .await;
 
         let err = result.expect_err("should fail with empty response");
         let err_string = err.to_string();
@@ -525,7 +561,9 @@ mod tests {
         .unwrap();
 
         let package_name = "test-package".parse().unwrap();
-        let result = subdir.fetch_package_records(&package_name, None).await;
+        let result = subdir
+            .fetch_package_records(&package_name, FormatBucketSet::ALL, None)
+            .await;
 
         let err = result.expect_err("should fail with truncated response");
         let err_string = err.to_string();
@@ -694,7 +732,7 @@ mod tests {
                 cache_only_subdir_with_cold_shard(cache_dir.path(), &server, action, false).await;
 
             let err = subdir
-                .fetch_package_records(&"test-package".parse().unwrap(), None)
+                .fetch_package_records(&"test-package".parse().unwrap(), FormatBucketSet::ALL, None)
                 .await
                 .expect_err("a cold shard fails a cache-only query");
 
@@ -724,11 +762,11 @@ mod tests {
                 cache_only_subdir_with_cold_shard(cache_dir.path(), &server, action, true).await;
 
             let records = subdir
-                .fetch_package_records(&"test-package".parse().unwrap(), None)
+                .fetch_package_records(&"test-package".parse().unwrap(), FormatBucketSet::ALL, None)
                 .await
                 .expect("a cold shard is not an error when opted in");
 
-            assert!(records.records.is_empty());
+            assert_eq!(records.records().count(), 0);
             assert_eq!(
                 server.shard_request_count(),
                 0,
@@ -772,11 +810,11 @@ mod tests {
         .await
         .unwrap();
 
-        let urls = records.records.iter().map(|record| &record.url).join("\n");
+        let urls = records.records().map(|(_, record)| &record.url).join("\n");
         insta::assert_snapshot!(urls, @"https://example.com/channel/linux-64/foo-1.0-0.conda");
 
         let removed = records
-            .removed
+            .removed()
             .iter()
             .map(|removed| {
                 format!(
