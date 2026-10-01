@@ -87,9 +87,14 @@ impl Harness {
                 multi_progress: None,
             },
             ChannelMetadata {
-                virtual_package_detectors: Some(serde_json::json!({
-                    "cli-detect": ["__cuda", "__cli_capability"]
-                })),
+                virtual_package_detectors: Some(
+                    [(
+                        "cli-detect".to_string(),
+                        vec!["__cuda".to_string(), "__cli_capability".to_string()],
+                    )]
+                    .into_iter()
+                    .collect(),
+                ),
                 ..ChannelMetadata::default()
             },
         )

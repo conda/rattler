@@ -245,12 +245,15 @@ fn parse_virtual_packages(
             ));
         };
         let result = parse_result(key, value)?;
-        if results.insert(declared.clone(), result).is_some() {
+        if results
+            .insert(declared.as_package_name().clone(), result)
+            .is_some()
+        {
             return Err(ReportError::DuplicateName(name.as_normalized().to_string()));
         }
     }
     for declared in &registration.virtual_packages {
-        if !results.contains_key(declared) {
+        if !results.contains_key(declared.as_package_name()) {
             return Err(ReportError::MissingName(
                 declared.as_normalized().to_string(),
             ));
@@ -403,6 +406,7 @@ fn parse_watch_list(
 #[cfg(test)]
 mod tests {
     use indexmap::IndexSet;
+    use rattler_conda_types::virtual_package_detector::VirtualPackageName;
 
     use super::*;
 
@@ -411,7 +415,7 @@ mod tests {
             detector: PackageName::try_from("mpi-detect").unwrap(),
             virtual_packages: names
                 .iter()
-                .map(|name| PackageName::try_from(*name).unwrap())
+                .map(|name| VirtualPackageName::try_from(*name).unwrap())
                 .collect::<IndexSet<_>>(),
         }
     }

@@ -5,13 +5,13 @@ use std::{
 
 use miette::{Context, IntoDiagnostic};
 use rattler::package_cache::PackageCache;
-use rattler_conda_types::{Channel, GenericVirtualPackage, MatchSpec, Subdir};
+use rattler_conda_types::{Channel, GenericVirtualPackage, MatchSpec, Subdir, VirtualPackageName};
 use rattler_config::{
     ConfigBase, NoExtension, config::virtual_package_detectors::DetectorDecision,
 };
 use rattler_repodata_gateway::{Gateway, RepoData};
 use rattler_virtual_package_detectors::{
-    CacheClock, ConfiguredConsent, DenyAll, DetectOptions, EnvironmentOptions,
+    CacheClock, ConfiguredConsent, DenyAll, DetectOptions, EnvironmentOptions, EnvironmentSnapshot,
     RattlerEnvironmentProvider, SkipReason, WantedNames, detect, merge_results, read_override,
     referenced_virtual_packages,
 };
@@ -60,7 +60,10 @@ pub(super) async fn determine_virtual_packages(
 
     let discovery = context
         .gateway
-        .virtual_package_detectors(context.channels.iter().cloned(), context.target_platform)
+        .virtual_package_detectors(
+            context.channels.iter().cloned(),
+            [context.target_platform, Subdir::NoArch],
+        )
         .await
         .into_diagnostic()
         .context("failed to discover virtual package detectors")?;
@@ -72,12 +75,17 @@ pub(super) async fn determine_virtual_packages(
     }
 
     let host_platform = crate::host_platform()?;
+    let environment = EnvironmentSnapshot::from_system();
     let mut detector_config = context.config.virtual_package_detectors.clone();
     if context.target_platform == host_platform {
         for registration in &discovery.registrations {
             let mut needs_run = false;
             for name in &registration.registration.virtual_packages {
-                if wanted.contains(name) && read_override(name).into_diagnostic()?.is_none() {
+                if wanted.contains(name.as_package_name())
+                    && read_override(name, &environment)
+                        .into_diagnostic()?
+                        .is_none()
+                {
                     needs_run = true;
                 }
             }
@@ -116,6 +124,7 @@ pub(super) async fn determine_virtual_packages(
         &discovery.registrations,
         DetectOptions {
             environment_provider: &provider,
+            environment: &environment,
             root: &root,
             host_platform,
             target_platform: context.target_platform,
@@ -156,7 +165,13 @@ pub(super) async fn determine_virtual_packages(
     let registered: HashSet<_> = discovery
         .registrations
         .iter()
-        .flat_map(|registration| &registration.registration.virtual_packages)
+        .flat_map(|registration| {
+            registration
+                .registration
+                .virtual_packages
+                .iter()
+                .map(VirtualPackageName::as_package_name)
+        })
         .collect();
     virtual_packages.retain(|package| !registered.contains(&package.name));
     Ok(merge_results(virtual_packages, &outcome.results))

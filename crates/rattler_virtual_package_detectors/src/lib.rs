@@ -8,11 +8,11 @@
 //! checking its report against what the channel registered. The modules follow
 //! that pipeline:
 //!
-//! - [`digest`] fingerprints a resolved detector environment.
+//! - [`rattler_environment_digest`] fingerprints a resolved detector environment.
 //! - [`environment`] lets clients provide detector environments, with a standalone
 //!   solver and installer implementation keyed by the environment digest.
 //! - [`activation`] computes the environment variables of the activated prefix.
-//! - [`process`] runs a child process within a time and an output bound.
+//! - [`rattler_shell::process`] bounds both activation and detector processes.
 //! - [`runner`] finds and runs the executable within the protocol's limits.
 //! - [`report`] parses the report and holds it to the registration.
 //! - [`cache`] stores results and expires them as the report asked.
@@ -31,6 +31,10 @@
 //! Registrations denied before resolution require no environment work. Otherwise
 //! resolution precedes post-solve consent and cache lookup; installation happens
 //! only after consent and on a result cache miss.
+//! Supply an [`EnvironmentSnapshot`] in [`DetectOptions`] for overrides,
+//! activation inheritance and watched-variable cache validation. Capture the
+//! host environment explicitly with [`EnvironmentSnapshot::from_system`] when
+//! desired, or construct an isolated snapshot without modifying process globals.
 //!
 //! Failed report validation preserves captured diagnostics. Concurrent result
 //! publications are atomic, and watched environment variable names follow the
@@ -44,14 +48,12 @@ pub mod cache;
 pub mod consent;
 pub mod demand;
 pub mod detect;
-pub mod digest;
 pub mod environment;
 pub mod overrides;
-pub mod process;
 pub mod report;
 pub mod runner;
 
-pub use activation::{ActivationError, activated_environment, current_environment};
+pub use activation::{ActivationError, activated_environment};
 pub use cache::{CacheClock, CacheError, CacheKey, CachedResult, ResultCache};
 pub use consent::{AllowAll, ConfiguredConsent, Consent, ConsentRequest, DenyAll, DetectorConsent};
 pub use demand::referenced_virtual_packages;
@@ -59,12 +61,12 @@ pub use detect::{
     DetectError, DetectOptions, DetectedValue, DetectionOutcome, DetectionSource, DetectorFailure,
     DetectorResult, SkipReason, SkippedRegistration, WantedNames, detect, merge_results,
 };
-pub use digest::environment_digest;
 pub use environment::{
     DetectorEnvironment, DetectorEnvironmentProvider, EnvironmentError, EnvironmentOptions,
     RattlerEnvironmentProvider, ResolvedDetector, ensure_environment, resolve_detector,
 };
 pub use overrides::{OverrideError, OverrideValue, read_override};
+pub use rattler_shell::environment::EnvironmentSnapshot;
 pub use report::{
     CacheHints, CacheLifetime, DetectedVersion, DetectorReport, PROTOCOL_VERSION, ReportError,
     parse_report,

@@ -449,11 +449,10 @@ impl PyGateway {
     }
 
     /// Collects the virtual package detectors registered by `channels` and
-    /// the channels they relate to for `subdir`, accepted or rejected in
-    /// CEP 42 channel order.
+    /// their related channels for the supplied subdirs, in CEP 42 channel order.
     #[pyo3(signature = (
         channels,
-        subdir,
+        subdirs,
         channel_relations=None,
         channel_relations_max_depth=None,
     ))]
@@ -461,7 +460,7 @@ impl PyGateway {
         &self,
         py: Python<'a>,
         channels: Vec<PyChannel>,
-        subdir: PySubdir,
+        subdirs: Vec<PySubdir>,
         channel_relations: Option<Wrap<ChannelRelationsMode>>,
         channel_relations_max_depth: Option<usize>,
     ) -> PyResult<Bound<'a, PyAny>> {
@@ -470,7 +469,10 @@ impl PyGateway {
             channels.into_iter().map(|channel| channel.inner).collect();
         let show_progress = self.show_progress;
         future_into_py(py, async move {
-            let mut query = gateway.virtual_package_detectors(channels, subdir.inner);
+            let mut query = gateway.virtual_package_detectors(
+                channels,
+                subdirs.into_iter().map(|subdir| subdir.inner),
+            );
             if let Some(mode) = channel_relations {
                 query = query.channel_relations(mode.0);
             }

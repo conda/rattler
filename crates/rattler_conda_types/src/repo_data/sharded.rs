@@ -4,6 +4,7 @@ use crate::PackageRecord;
 use crate::package::DistArchiveIdentifier;
 use crate::repo_data::{ChannelRelations, RepodataRevisions, V3Packages};
 use crate::utils::serde::{sort_index_map_alphabetically, sort_set_alphabetically};
+use crate::virtual_package_detector::DetectorRegistrationMetadata;
 use indexmap::IndexMap;
 use jiff::Timestamp;
 use rattler_digest::{Sha256, Sha256Hash, serde::SerializableHash};
@@ -69,13 +70,16 @@ pub struct ShardedSubdirInfo {
         skip_serializing_if = "Option::is_none",
         deserialize_with = "crate::virtual_package_detector::deserialize_present"
     )]
-    pub virtual_package_detectors: Option<serde_json::Value>,
+    pub virtual_package_detectors: Option<DetectorRegistrationMetadata>,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{PackageName, Version};
+    use crate::virtual_package_detector::{
+        ChannelDetectorRegistrations, SubdirDetectorRegistrations,
+    };
+    use crate::{PackageName, Version, VirtualPackageName};
 
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -176,6 +180,65 @@ mod tests {
             let json = serde_json::to_string(&info).unwrap();
             assert!(!json.contains("channel_relations"));
         }
+    }
+
+    #[test]
+    fn detector_metadata_rejects_malformed_json_and_msgpack() {
+        for metadata in [
+            serde_json::Value::Null,
+            serde_json::json!([]),
+            serde_json::json!({"mpi-detect": null}),
+            serde_json::json!({"mpi-detect": "__cuda"}),
+            serde_json::json!({"mpi-detect": {"__cuda": true}}),
+            serde_json::json!({"mpi-detect": ["__cuda", 5]}),
+        ] {
+            let raw = serde_json::json!({
+                "info": {
+                    "subdir": "linux-64",
+                    "base_url": "./",
+                    "shards_base_url": "./shards/",
+                    "virtual_package_detectors": metadata,
+                },
+                "shards": {},
+            });
+            assert!(
+                serde_json::from_value::<ShardedRepodata>(raw.clone()).is_err(),
+                "{metadata}"
+            );
+            let encoded = rmp_serde::to_vec_named(&raw).unwrap();
+            assert!(
+                rmp_serde::from_slice::<ShardedRepodata>(&encoded).is_err(),
+                "{metadata}"
+            );
+        }
+    }
+
+    #[test]
+    fn detector_metadata_preserves_raw_names_through_msgpack() {
+        let raw = serde_json::json!({
+            "info": {
+                "subdir": "linux-64",
+                "base_url": "./",
+                "shards_base_url": "./shards/",
+                "virtual_package_detectors": {"mpi-detect": ["__cuda", "CUDA"]},
+            },
+            "shards": {},
+        });
+        let encoded = rmp_serde::to_vec_named(&raw).unwrap();
+        let decoded: ShardedRepodata = rmp_serde::from_slice(&encoded).unwrap();
+        let parsed =
+            SubdirDetectorRegistrations::parse(decoded.info.virtual_package_detectors.as_ref())
+                .unwrap();
+        let combined = ChannelDetectorRegistrations::combine([&parsed]).unwrap();
+        assert_eq!(
+            combined.registrations()[0]
+                .virtual_packages
+                .iter()
+                .map(VirtualPackageName::as_normalized)
+                .collect::<Vec<_>>(),
+            ["__cuda"]
+        );
+        assert_eq!(combined.dropped_names()[0].name, "CUDA");
     }
 }
 

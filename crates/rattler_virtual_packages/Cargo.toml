@@ -14,6 +14,7 @@ readme.workspace = true
 libloading = { workspace = true }
 nom = { workspace = true }
 once_cell = { workspace = true }
+rattler_boot_id = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
@@ -24,14 +25,11 @@ tracing = { workspace = true }
 archspec = { workspace = true }
 
 [target.'cfg(target_os="macos")'.dependencies]
-libc = { workspace = true }
 plist = { workspace = true }
 
 [target.'cfg(target_os="windows")'.dependencies]
 winver = { workspace = true }
 windows-sys = { workspace = true, features = [
-    "Win32_System_SystemInformation",
-    "Win32_System_Registry",
     "Win32_Devices_DeviceAndDriverInstallation",
 ] }
 

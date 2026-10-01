@@ -29,6 +29,7 @@ use rattler_index::{
 use rattler_networking::LazyClient;
 use rattler_package_streaming::write::write_tar_bz2_package;
 use rattler_repodata_gateway::{AcceptedDetectorRegistration, Gateway};
+use rattler_virtual_package_detectors::EnvironmentSnapshot;
 use rattler_virtual_package_detectors::{
     AllowAll, CacheClock, ConfiguredConsent, DetectError, DetectOptions, DetectedValue,
     DetectionOutcome, DetectionSource, DetectorConsent, DetectorEnvironment,
@@ -249,7 +250,9 @@ async fn build_channel(root: &Path) -> Channel {
             multi_progress: None,
         },
         ChannelMetadata {
-            virtual_package_detectors: Some(serde_json::Value::Object(registrations)),
+            virtual_package_detectors: Some(
+                serde_json::from_value(serde_json::Value::Object(registrations)).unwrap(),
+            ),
             ..ChannelMetadata::default()
         },
     )
@@ -265,6 +268,7 @@ struct Harness {
     package_cache: PackageCache,
     channel: Channel,
     host: Subdir,
+    environment: EnvironmentSnapshot,
 }
 
 impl Harness {
@@ -283,13 +287,14 @@ impl Harness {
             package_cache,
             channel,
             host: Subdir::current().unwrap(),
+            environment: EnvironmentSnapshot::from_system(),
         }
     }
 
     async fn registrations(&self) -> Vec<AcceptedDetectorRegistration> {
         let output = self
             .gateway
-            .virtual_package_detectors([self.channel.clone()], self.host)
+            .virtual_package_detectors([self.channel.clone()], [self.host, Subdir::NoArch])
             .await
             .unwrap();
         assert!(output.warnings.is_empty(), "{:?}", output.warnings);
@@ -309,6 +314,7 @@ impl Harness {
     fn options<'a>(&'a self, consent: &'a dyn DetectorConsent) -> DetectOptions<'a> {
         DetectOptions {
             environment_provider: self,
+            environment: &self.environment,
             root: &self.root,
             host_platform: self.host,
             target_platform: self.host,
@@ -526,9 +532,10 @@ async fn channel_denial_skips_all_detectors_before_resolving() {
 
 #[tokio::test]
 async fn overrides_replace_results_and_can_make_a_detector_unnecessary() {
-    let harness = Harness::new().await;
-    // SAFETY: nextest runs every test in its own process.
-    unsafe { std::env::set_var("CONDA_OVERRIDE_TEST_GOOD", "9.9=custom") };
+    let mut harness = Harness::new().await;
+    harness
+        .environment
+        .insert("CONDA_OVERRIDE_TEST_GOOD", "9.9=custom");
     let outcome = harness.run(&["good-detect"], &AllowAll).await;
     assert_eq!(
         values(&outcome),
@@ -554,7 +561,7 @@ async fn overrides_replace_results_and_can_make_a_detector_unnecessary() {
     }
 
     // Overriding every name leaves nothing for the detector to do.
-    unsafe { std::env::set_var("CONDA_OVERRIDE_TEST_ABSENT", "") };
+    harness.environment.insert("CONDA_OVERRIDE_TEST_ABSENT", "");
     let outcome = harness.run(&["good-detect"], &AllowAll).await;
     assert_eq!(outcome.skipped.len(), 1);
     assert_eq!(outcome.skipped[0].reason, SkipReason::NoWantedName);
@@ -567,7 +574,9 @@ async fn overrides_replace_results_and_can_make_a_detector_unnecessary() {
     );
 
     // An invalid override is an error.
-    unsafe { std::env::set_var("CONDA_OVERRIDE_TEST_ABSENT", "not a version!") };
+    harness
+        .environment
+        .insert("CONDA_OVERRIDE_TEST_ABSENT", "not a version!");
     let registrations = Harness::only(harness.registrations().await, &["good-detect"]);
     let err = detect(&registrations, harness.options(&AllowAll))
         .await
@@ -703,7 +712,7 @@ impl DetectorEnvironmentProvider for ClientEnvironmentProvider<'_> {
             .find(|record| record.package_record.name == registration.registration.detector)
             .unwrap();
         detector.package_record.version = self.revision.to_string().parse().unwrap();
-        resolved.digest = rattler_virtual_package_detectors::environment_digest(&resolved.records);
+        resolved.digest = rattler_environment_digest::environment_digest(&resolved.records);
         Ok(resolved)
     }
 

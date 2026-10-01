@@ -33,7 +33,7 @@ use rattler_repodata_gateway::{
 use rattler_solve::{SolveError, SolverImpl, SolverTask};
 use thiserror::Error;
 
-use crate::digest::environment_digest;
+use rattler_environment_digest::environment_digest;
 
 /// What resolving and installing a detector needs from the client.
 #[derive(Clone)]

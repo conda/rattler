@@ -11,8 +11,9 @@
 use std::{ffi::OsString, str::FromStr};
 
 use rattler_conda_types::{
-    PackageName, ParseVersionError, Version, virtual_package_detector::override_variable,
+    ParseVersionError, Version, virtual_package_detector::VirtualPackageName,
 };
+use rattler_shell::environment::EnvironmentSnapshot;
 use thiserror::Error;
 
 use crate::report::DetectedVersion;
@@ -56,18 +57,25 @@ pub enum OverrideError {
     },
 }
 
-/// Reads the override for `name` from the process environment.
+/// Reads the override for `name` from an explicit environment snapshot.
 ///
 /// Returns `Ok(None)` when the variable is unset.
-pub fn read_override(name: &PackageName) -> Result<Option<OverrideValue>, OverrideError> {
-    let variable = override_variable(name);
-    parse_override_for(name, &variable, std::env::var_os(&variable))
+pub fn read_override(
+    name: &VirtualPackageName,
+    environment: &EnvironmentSnapshot,
+) -> Result<Option<OverrideValue>, OverrideError> {
+    let variable = name.override_variable();
+    parse_override_for(
+        name,
+        &variable,
+        environment.get(&variable).map(OsString::from),
+    )
 }
 
 /// Parses the raw value of `variable` for `name`, `None` meaning unset,
 /// honoring the rules of standardized names.
 pub fn parse_override_for(
-    name: &PackageName,
+    name: &VirtualPackageName,
     variable: &str,
     value: Option<OsString>,
 ) -> Result<Option<OverrideValue>, OverrideError> {
@@ -144,6 +152,8 @@ fn validate_build_string(variable: &str, build_string: &str) -> Result<(), Overr
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStringExt;
 
     fn parse(value: Option<&str>) -> Result<Option<OverrideValue>, OverrideError> {
         parse_override("CONDA_OVERRIDE_CONDA_FORGE_MPI", value.map(OsString::from))
@@ -194,7 +204,7 @@ mod tests {
 
     #[test]
     fn standardized_names_keep_their_own_rules() {
-        let archspec = PackageName::try_from("__archspec").unwrap();
+        let archspec = VirtualPackageName::try_from("__archspec").unwrap();
         assert_eq!(
             parse_override_for(&archspec, "CONDA_OVERRIDE_ARCHSPEC", Some("zen3".into())).unwrap(),
             Some(OverrideValue::Present(DetectedVersion {
@@ -206,9 +216,31 @@ mod tests {
             parse_override_for(&archspec, "CONDA_OVERRIDE_ARCHSPEC", Some("".into())).unwrap(),
             Some(OverrideValue::Absent)
         );
-        let unix = PackageName::try_from("__unix").unwrap();
+        let unix = VirtualPackageName::try_from("__unix").unwrap();
         assert_eq!(
             parse_override_for(&unix, "CONDA_OVERRIDE_UNIX", Some("1".into())).unwrap(),
+            None
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn snapshot_overrides_keep_native_values_and_distinguish_unset_and_empty() {
+        let name = VirtualPackageName::try_from("__test_native").unwrap();
+        let mut environment = EnvironmentSnapshot::default();
+        assert_eq!(read_override(&name, &environment).unwrap(), None);
+        environment.insert(name.override_variable(), "");
+        assert_eq!(
+            read_override(&name, &environment).unwrap(),
+            Some(OverrideValue::Absent)
+        );
+        environment.insert(name.override_variable(), OsString::from_vec(vec![0xff]));
+        assert!(matches!(
+            read_override(&name, &environment),
+            Err(OverrideError::NotUtf8 { .. })
+        ));
+        assert_eq!(
+            read_override(&name, &EnvironmentSnapshot::default()).unwrap(),
             None
         );
     }
