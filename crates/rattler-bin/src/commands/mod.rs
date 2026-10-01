@@ -7,6 +7,7 @@ pub mod client;
 pub mod compare_packages;
 pub mod completion;
 pub mod create;
+mod detectors;
 pub mod download;
 pub mod exec;
 pub mod extract;

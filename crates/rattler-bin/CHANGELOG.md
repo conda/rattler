@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Run trusted channel virtual package detectors in `rattler solve` and `rattler create`, including offline operation and explicit overrides.
+
 ## [0.5.1](https://github.com/conda/rattler/compare/rattler-bin-v0.5.0...rattler-bin-v0.5.1) - 2026-10-05
 
 ### Added
