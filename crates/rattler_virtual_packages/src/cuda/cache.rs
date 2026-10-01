@@ -16,9 +16,9 @@
 //! file or use the `CONDA_OVERRIDE_CUDA*` variables to bypass it.
 
 use super::{CudaArchInfo, CudaDetectionMethod, CudaInfo, CudaInfoSources, DetectedCudaInfo};
-use crate::boot::BootId;
 #[cfg(target_os = "windows")]
 use crate::win;
+use rattler_boot_id::BootId;
 use rattler_conda_types::Version;
 use serde::{Deserialize, Serialize};
 use std::{

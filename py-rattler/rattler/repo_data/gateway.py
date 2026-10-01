@@ -518,21 +518,21 @@ class Gateway:
     async def virtual_package_detectors(
         self,
         channels: Iterable[Channel | str],
-        subdir: Subdir | SubdirLiteral,
+        subdirs: Iterable[Subdir | SubdirLiteral],
         channel_relations: ChannelRelationsMode | None = None,
         channel_relations_max_depth: int | None = None,
     ) -> DetectorRegistrations:
-        """Collects the virtual package detectors that ``channels`` and the
-        channels they relate to register for ``subdir``.
+        """Collects the virtual package detectors that ``channels`` and their
+        related channels register for the supplied ``subdirs``.
 
-        Registrations of ``subdir`` and ``noarch`` are combined per channel and
-        then accepted or rejected in CEP-42 channel order, so every accepted
-        virtual package name has exactly one detector. Non-fatal problems such
-        as invalid registrations are emitted as warnings.
+        Registrations are combined per channel and accepted or rejected in
+        CEP-42 channel order. Include the target subdir and ``noarch`` explicitly
+        when collecting registrations for a solve. Semantic registration errors
+        are emitted as warnings. Malformed metadata shapes may fail discovery.
 
         Arguments:
             channels: The channels to read registrations from.
-            subdir: The subdir to combine with ``noarch``.
+            subdirs: The subdirs whose registrations should be combined.
             channel_relations: How to treat CEP-42 ``channel_relations`` metadata.
             channel_relations_max_depth: Maximum recursion depth when following
                                          ``channel_relations``.
@@ -544,7 +544,7 @@ class Gateway:
         ]
         accepted, rejected = await self._gateway.virtual_package_detectors(
             py_channels,
-            subdir._inner if isinstance(subdir, Subdir) else Subdir(subdir)._inner,
+            [subdir._inner if isinstance(subdir, Subdir) else Subdir(subdir)._inner for subdir in subdirs],
             channel_relations,
             channel_relations_max_depth,
         )

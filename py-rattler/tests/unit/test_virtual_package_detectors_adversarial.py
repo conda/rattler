@@ -100,7 +100,7 @@ def _write_channel(root: Path, registrations: dict[str, list[str]]) -> Channel:
 async def _detect(tmp_path: Path, consent: Any) -> Any:
     channel = _write_channel(tmp_path / "channel", {"good-detect": ["__test_good"]})
     gateway = Gateway(cache_dir=tmp_path / "cache")
-    registrations = await gateway.virtual_package_detectors([channel], Subdir.current())
+    registrations = await gateway.virtual_package_detectors([channel], [Subdir.current(), "noarch"])
     assert len(registrations.accepted) == 1
     return await detect_virtual_packages(
         registrations.accepted,

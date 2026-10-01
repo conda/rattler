@@ -103,7 +103,7 @@ def _write_channel(root: Path, registrations: dict[str, list[str]]) -> Channel:
     return Channel(str(root))
 
 
-def test_channel_info_exposes_raw_registrations(tmp_path: Path) -> None:
+def test_channel_info_exposes_registrations(tmp_path: Path) -> None:
     _write_channel(tmp_path, {"good-detect": ["__test_good", "__test_absent"]})
     repodata = RepoData.from_path(tmp_path / "noarch" / "repodata.json")
     assert repodata.info is not None
@@ -116,7 +116,9 @@ async def test_gateway_collects_registrations(tmp_path: Path) -> None:
         tmp_path,
         {"good-detect": ["__test_good", "__test_absent"], "other-detect": ["__test_other"]},
     )
-    registrations = await Gateway(cache_dir=tmp_path / "cache").virtual_package_detectors([channel], Subdir.current())
+    registrations = await Gateway(cache_dir=tmp_path / "cache").virtual_package_detectors(
+        [channel], [Subdir.current(), "noarch"]
+    )
     assert registrations.rejected == []
     assert [r.detector.normalized for r in registrations.accepted] == ["good-detect", "other-detect"]
     good = registrations.accepted[0]
@@ -130,7 +132,7 @@ async def test_conflicting_registrations_are_rejected_in_channel_order(tmp_path:
     first = _write_channel(tmp_path / "first", {"a-detect": ["__test_x"]})
     second = _write_channel(tmp_path / "second", {"b-detect": ["__test_x", "__test_y"]})
     registrations = await Gateway(cache_dir=tmp_path / "cache").virtual_package_detectors(
-        [first, second], Subdir.current()
+        [first, second], [Subdir.current(), "noarch"]
     )
     assert [r.detector.normalized for r in registrations.accepted] == ["a-detect"]
     (rejected,) = registrations.rejected
@@ -146,7 +148,7 @@ async def test_conflicting_registrations_are_rejected_in_channel_order(tmp_path:
 async def test_detects_with_a_consent_callback(tmp_path: Path) -> None:
     channel = _write_channel(tmp_path / "channel", {"good-detect": ["__test_good", "__test_absent"]})
     gateway = Gateway(cache_dir=tmp_path / "cache")
-    registrations = await gateway.virtual_package_detectors([channel], Subdir.current())
+    registrations = await gateway.virtual_package_detectors([channel], [Subdir.current(), "noarch"])
     asked: list[ConsentRequest] = []
 
     def consent(request: ConsentRequest) -> bool:

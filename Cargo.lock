@@ -5046,6 +5046,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_boot_id"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "rattler_cache"
 version = "0.10.13"
 dependencies = [
@@ -5220,6 +5230,16 @@ dependencies = [
  "sha2 0.11.0",
  "tempfile",
  "tokio",
+ "url",
+]
+
+[[package]]
+name = "rattler_environment_digest"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "rattler_conda_types",
+ "rattler_digest",
  "url",
 ]
 
@@ -5615,6 +5635,7 @@ dependencies = [
  "indexmap 2.14.2",
  "insta",
  "itertools 0.15.0",
+ "libc",
  "rattler_conda_types",
  "rattler_pty",
  "serde_json",
@@ -5624,6 +5645,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tracing",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5730,12 +5752,13 @@ dependencies = [
  "indexmap 2.14.2",
  "insta",
  "jiff",
- "libc",
  "rattler",
+ "rattler_boot_id",
  "rattler_cache",
  "rattler_conda_types",
  "rattler_config",
  "rattler_digest",
+ "rattler_environment_digest",
  "rattler_index",
  "rattler_networking",
  "rattler_package_streaming",
@@ -5743,7 +5766,6 @@ dependencies = [
  "rattler_repodata_gateway",
  "rattler_shell",
  "rattler_solve",
- "rattler_virtual_packages",
  "rstest",
  "serde",
  "serde_json",
@@ -5752,7 +5774,6 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5760,11 +5781,11 @@ name = "rattler_virtual_packages"
 version = "8.0.0"
 dependencies = [
  "archspec",
- "libc",
  "libloading 0.9.0",
  "nom 8.0.0",
  "once_cell",
  "plist",
+ "rattler_boot_id",
  "rattler_conda_types",
  "regex",
  "serde",

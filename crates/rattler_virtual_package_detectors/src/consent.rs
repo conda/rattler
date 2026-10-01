@@ -184,7 +184,7 @@ impl<F: DetectorConsent> DetectorConsent for ConfiguredConsent<F> {
 #[cfg(test)]
 mod tests {
     use indexmap::IndexSet;
-    use rattler_conda_types::PackageName;
+    use rattler_conda_types::{PackageName, virtual_package_detector::VirtualPackageName};
     use url::Url;
 
     use super::*;
@@ -196,7 +196,9 @@ mod tests {
     fn registration(detector: &str, virtual_package: &str) -> DetectorRegistration {
         DetectorRegistration {
             detector: PackageName::try_from(detector).unwrap(),
-            virtual_packages: IndexSet::from([PackageName::try_from(virtual_package).unwrap()]),
+            virtual_packages: IndexSet::from([
+                VirtualPackageName::try_from(virtual_package).unwrap()
+            ]),
         }
     }
 
