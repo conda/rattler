@@ -1,5 +1,5 @@
 ---
-source: crates/rattler/src/install/link.rs
+source: crates/rattler/src/install/prefix_replacement/tests.rs
 expression: replaced
 ---
 #!/bin/sh
