@@ -1206,8 +1206,9 @@ mod tests {
     use crate::match_spec::parse::parse_extras;
     use crate::{
         BuildNumberSpec, Channel, ChannelConfig, MatchSpecCondition, NamelessMatchSpec,
-        ParseChannelError, ParseMatchSpecOptions, ParseStrictness, ParseStrictness::*, Version,
-        VersionSpec, match_spec::parse::parse_bracket_list,
+        ParseChannelError, ParseConstraintError, ParseMatchSpecOptions, ParseStrictness,
+        ParseStrictness::*, ParseVersionSpecError, Version, VersionSpec,
+        match_spec::parse::parse_bracket_list,
     };
 
     fn channel_config() -> ChannelConfig {
@@ -1681,6 +1682,40 @@ mod tests {
         insta::assert_yaml_snapshot!(
             format!("test_nameless_from_string_{strictness:?}"),
             evaluated
+        );
+    }
+
+    #[test]
+    fn test_leading_glob_version() {
+        // A leading glob is a glob pattern which is not supported, but the error should
+        // point at that instead of at the version parser. See issue #2679.
+        assert_matches!(
+            MatchSpec::from_str("python[version=*3.1]", Lenient),
+            Err(ParseMatchSpecError::InvalidVersionSpec(
+                ParseVersionSpecError::InvalidConstraint(
+                    ParseConstraintError::RegexConstraintsNotSupported
+                )
+            ))
+        );
+
+        // Trailing globs and plain versions are unaffected.
+        assert_eq!(
+            MatchSpec::from_str("python[version=3.1*]", Lenient)
+                .unwrap()
+                .version,
+            Some(VersionSpec::from_str("3.1*", Lenient).unwrap())
+        );
+        assert_eq!(
+            MatchSpec::from_str("python[version=3.1]", Lenient)
+                .unwrap()
+                .version,
+            Some(VersionSpec::from_str("3.1", Lenient).unwrap())
+        );
+        assert_eq!(
+            MatchSpec::from_str("python[version=*]", Lenient)
+                .unwrap()
+                .version,
+            Some(VersionSpec::Any)
         );
     }
 
