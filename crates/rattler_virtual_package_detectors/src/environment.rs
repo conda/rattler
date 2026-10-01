@@ -1,7 +1,9 @@
 //! Resolving a detector and installing it into an environment of its own.
 //!
-//! The detector is resolved by name, qualified with its registering channel,
-//! against the registration's resolution channels for the host platform. The
+//! Clients can implement [`DetectorEnvironmentProvider`] to use their own
+//! environment flow. The standalone [`RattlerEnvironmentProvider`] resolves the
+//! detector by name, qualified with its registering channel, against the
+//! registration's resolution channels for the host platform. The
 //! only virtual packages available to that solve are the client's own. The
 //! resolved records are fingerprinted with the [environment
 //! digest](crate::digest), and the environment lives in a directory named
@@ -18,6 +20,7 @@ use std::{
     sync::Arc,
 };
 
+use async_trait::async_trait;
 use rattler::install::Installer;
 use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{GenericVirtualPackage, MatchSpec, RepoDataRecord, Subdir};
@@ -50,12 +53,67 @@ pub struct EnvironmentOptions<'a> {
     pub virtual_packages: Vec<GenericVirtualPackage>,
 }
 
+/// Lets a client resolve and create isolated detector environments using its
+/// own environment machinery.
+///
+/// Resolution must use only the client's builtin virtual packages, qualify the
+/// detector with its registering channel, and use the registration's already
+/// expanded resolution channels without expanding them again. Detector results
+/// must never participate in this solve. Installation must disable link scripts,
+/// guard concurrent creation and repair interrupted installations. The engine
+/// calls `install` only after consent and only when no valid result is cached.
+#[async_trait]
+pub trait DetectorEnvironmentProvider: Send + Sync {
+    /// Resolves the detector against current repodata without installing it.
+    async fn resolve(
+        &self,
+        registration: &AcceptedDetectorRegistration,
+    ) -> Result<ResolvedDetector, EnvironmentError>;
+
+    /// Returns a complete environment for the resolved detector.
+    async fn install(
+        &self,
+        resolved: ResolvedDetector,
+    ) -> Result<DetectorEnvironment, EnvironmentError>;
+}
+
+/// The standalone Rattler solver and installer implementation.
+pub struct RattlerEnvironmentProvider<'a> {
+    options: EnvironmentOptions<'a>,
+}
+
+impl<'a> RattlerEnvironmentProvider<'a> {
+    /// Creates a provider whose environment root and solve configuration are
+    /// supplied by the client.
+    pub fn new(options: EnvironmentOptions<'a>) -> Self {
+        Self { options }
+    }
+}
+
+#[async_trait]
+impl DetectorEnvironmentProvider for RattlerEnvironmentProvider<'_> {
+    async fn resolve(
+        &self,
+        registration: &AcceptedDetectorRegistration,
+    ) -> Result<ResolvedDetector, EnvironmentError> {
+        resolve_detector(registration, &self.options).await
+    }
+
+    async fn install(
+        &self,
+        resolved: ResolvedDetector,
+    ) -> Result<DetectorEnvironment, EnvironmentError> {
+        ensure_environment(resolved, &self.options).await
+    }
+}
+
 /// A detector resolved against current repodata.
 #[derive(Clone, Debug)]
 pub struct ResolvedDetector {
     /// The detector and its resolved dependencies.
     pub records: Vec<RepoDataRecord>,
-    /// The environment digest of `records`.
+    /// The [`environment_digest`] of `records`, used for consent and result
+    /// cache invalidation.
     pub digest: Sha256Hash,
 }
 
@@ -64,8 +122,6 @@ pub struct ResolvedDetector {
 pub struct DetectorEnvironment {
     /// The prefix the detector is installed in.
     pub prefix: PathBuf,
-    /// The records the prefix contains.
-    pub resolved: ResolvedDetector,
     /// Whether this call installed the environment rather than reusing it.
     pub installed: bool,
 }
@@ -98,6 +154,10 @@ pub enum EnvironmentError {
         #[source]
         source: std::io::Error,
     },
+
+    /// A client-provided environment implementation failed.
+    #[error("failed to prepare the detector environment: {0}")]
+    Provider(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
 /// The prefix a detector environment with `digest` lives in under `root`.
@@ -168,7 +228,6 @@ pub async fn ensure_environment(
         tracing::debug!(prefix = %prefix.display(), "reusing detector environment");
         return Ok(DetectorEnvironment {
             prefix,
-            resolved,
             installed: false,
         });
     }
@@ -180,13 +239,12 @@ pub async fn ensure_environment(
         .with_download_client(options.download_client.clone())
         .with_target_platform(options.host_platform)
         .with_execute_link_scripts(false)
-        .install(&prefix, resolved.records.iter().cloned())
+        .install(&prefix, resolved.records)
         .await?;
     write_guard.finish().await.map_err(guard_error)?;
 
     Ok(DetectorEnvironment {
         prefix,
-        resolved,
         installed: true,
     })
 }

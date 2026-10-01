@@ -190,17 +190,21 @@ async def test_detects_with_a_consent_callback(tmp_path: Path) -> None:
     assert [skipped.reason for skipped in denied.skipped] == ["consent-denied"]
 
 
-def test_config_exposes_consent() -> None:
+def test_config_exposes_channel_consent() -> None:
     config = Config.from_toml(
         """
         [virtual-package-detectors]
         timeout-seconds = 60
 
-        [virtual-package-detectors.consent."https://conda.anaconda.org/conda-forge"]
-        mpi-detect = "allow"
+        [virtual-package-detectors.consent]
+        "https://conda.anaconda.org/conda-forge" = "allow"
+        "https://prefix.dev/internal" = "deny"
         """
     )
     section = config.virtual_package_detectors
     assert section["timeout-seconds"] == 60
-    assert section["consent"]["https://conda.anaconda.org/conda-forge"] == {"mpi-detect": "allow"}
+    assert section["consent"] == {
+        "https://conda.anaconda.org/conda-forge": "allow",
+        "https://prefix.dev/internal": "deny",
+    }
     assert Config().virtual_package_detectors == {}

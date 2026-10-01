@@ -12,11 +12,15 @@ use std::{
     time::Duration,
 };
 
+use async_trait::async_trait;
 use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::compression_level::CompressionLevel;
 use rattler_conda_types::{
     Channel, GenericVirtualPackage, PackageName, Subdir,
     package::{IndexJson, PathType, PathsEntry, PathsJson},
+};
+use rattler_config::config::virtual_package_detectors::{
+    DetectorDecision, VirtualPackageDetectorsConfig,
 };
 use rattler_digest::{Sha256, compute_bytes_digest};
 use rattler_index::{
@@ -26,9 +30,18 @@ use rattler_networking::LazyClient;
 use rattler_package_streaming::write::write_tar_bz2_package;
 use rattler_repodata_gateway::{AcceptedDetectorRegistration, Gateway};
 use rattler_virtual_package_detectors::{
-    AllowAll, CacheClock, DenyAll, DetectError, DetectOptions, DetectedValue, DetectionOutcome,
-    DetectionSource, DetectorConsent, RunError, SkipReason, WantedNames, detect,
+    AllowAll, CacheClock, ConfiguredConsent, DetectError, DetectOptions, DetectedValue,
+    DetectionOutcome, DetectionSource, DetectorConsent, DetectorEnvironment,
+    DetectorEnvironmentProvider, EnvironmentError, EnvironmentOptions, RattlerEnvironmentProvider,
+    ResolvedDetector, RunError, SkipReason, WantedNames, detect,
 };
+
+#[cfg(unix)]
+use rattler_prefix_guard::AsyncPrefixGuard;
+#[cfg(unix)]
+use rattler_virtual_package_detectors::{Consent, ConsentRequest, DenyAll};
+#[cfg(unix)]
+use std::{error::Error, os::unix::fs::PermissionsExt};
 
 /// A detector package: an executable and the virtual packages it reports.
 struct Fixture {
@@ -138,7 +151,6 @@ fn write_package(fixture: &Fixture, subdir: &Path, staging: &Path) {
         std::fs::write(&path, contents).unwrap();
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
         paths.push(PathsEntry {
@@ -296,13 +308,10 @@ impl Harness {
 
     fn options<'a>(&'a self, consent: &'a dyn DetectorConsent) -> DetectOptions<'a> {
         DetectOptions {
-            gateway: &self.gateway,
-            package_cache: &self.package_cache,
-            download_client: LazyClient::default(),
+            environment_provider: self,
             root: &self.root,
             host_platform: self.host,
             target_platform: self.host,
-            client_virtual_packages: Vec::new(),
             timeout: Duration::from_secs(60),
             consent,
             wanted: WantedNames::All,
@@ -314,6 +323,43 @@ impl Harness {
     async fn run(&self, detectors: &[&str], consent: &dyn DetectorConsent) -> DetectionOutcome {
         let registrations = Self::only(self.registrations().await, detectors);
         detect(&registrations, self.options(consent)).await.unwrap()
+    }
+}
+
+#[async_trait]
+impl DetectorEnvironmentProvider for Harness {
+    async fn resolve(
+        &self,
+        registration: &AcceptedDetectorRegistration,
+    ) -> Result<ResolvedDetector, EnvironmentError> {
+        let root = self.root.join("envs");
+        RattlerEnvironmentProvider::new(EnvironmentOptions {
+            gateway: &self.gateway,
+            package_cache: &self.package_cache,
+            download_client: LazyClient::default(),
+            root: &root,
+            host_platform: self.host,
+            virtual_packages: Vec::new(),
+        })
+        .resolve(registration)
+        .await
+    }
+
+    async fn install(
+        &self,
+        resolved: ResolvedDetector,
+    ) -> Result<DetectorEnvironment, EnvironmentError> {
+        let root = self.root.join("envs");
+        RattlerEnvironmentProvider::new(EnvironmentOptions {
+            gateway: &self.gateway,
+            package_cache: &self.package_cache,
+            download_client: LazyClient::default(),
+            root: &root,
+            host_platform: self.host,
+            virtual_packages: Vec::new(),
+        })
+        .install(resolved)
+        .await
     }
 }
 
@@ -442,13 +488,39 @@ async fn failures_discard_the_detector_and_keep_the_others() {
 }
 
 #[tokio::test]
-async fn denied_consent_skips_without_installing() {
+async fn channel_denial_skips_all_detectors_before_resolving() {
     let harness = Harness::new().await;
-    let outcome = harness.run(&["good-detect"], &DenyAll).await;
+    let mut config = VirtualPackageDetectorsConfig::default();
+    config.set_consent(harness.channel.base_url.clone(), DetectorDecision::Deny);
+    let consent = ConfiguredConsent::new(config, AllowAll);
+    let mut registrations = Harness::only(
+        harness.registrations().await,
+        &["good-detect", "activated-detect"],
+    );
+    for registration in &mut registrations {
+        if registration.registration.detector.as_normalized() == "activated-detect" {
+            registration.registration.detector = PackageName::try_from("missing-detect").unwrap();
+        }
+    }
+    let outcome = detect(&registrations, harness.options(&consent))
+        .await
+        .unwrap();
     assert!(outcome.results.is_empty());
     assert!(outcome.failures.is_empty());
-    assert_eq!(outcome.skipped.len(), 1);
-    assert_eq!(outcome.skipped[0].reason, SkipReason::ConsentDenied);
+    assert_eq!(
+        outcome
+            .skipped
+            .iter()
+            .map(|skipped| skipped.detector.as_normalized())
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(["good-detect", "missing-detect"])
+    );
+    assert!(
+        outcome
+            .skipped
+            .iter()
+            .all(|skipped| skipped.reason == SkipReason::ConsentDenied)
+    );
     assert!(!harness.root.join("envs").exists());
 }
 
@@ -573,4 +645,221 @@ async fn results_merge_over_client_virtual_packages() {
     let merged = rattler_virtual_package_detectors::merge_results(client, &outcome.results);
     assert_eq!(merged.len(), 1);
     assert_eq!(merged[0].version.to_string(), "1.2.3");
+}
+
+#[cfg(unix)]
+enum ProviderFailure {
+    Resolve,
+    Install,
+}
+
+/// A client creates its own prefix and executable instead of using Rattler's
+/// installer. The activation script supplies the resolved detector's version.
+#[cfg(unix)]
+struct ClientEnvironmentProvider<'a> {
+    harness: &'a Harness,
+    root: PathBuf,
+    revision: usize,
+    failure: Option<ProviderFailure>,
+}
+
+#[cfg(unix)]
+impl<'a> ClientEnvironmentProvider<'a> {
+    fn new(harness: &'a Harness) -> Self {
+        Self {
+            harness,
+            root: harness._dir.path().join("client-environments"),
+            revision: 1,
+            failure: None,
+        }
+    }
+
+    async fn detect(&self, consent: &dyn DetectorConsent) -> DetectionOutcome {
+        let registrations = Harness::only(self.harness.registrations().await, &["good-detect"]);
+        let mut options = self.harness.options(consent);
+        options.environment_provider = self;
+        detect(&registrations, options).await.unwrap()
+    }
+
+    fn error(message: &'static str) -> EnvironmentError {
+        EnvironmentError::Provider(Box::new(std::io::Error::other(message)))
+    }
+}
+
+#[cfg(unix)]
+#[async_trait]
+impl DetectorEnvironmentProvider for ClientEnvironmentProvider<'_> {
+    async fn resolve(
+        &self,
+        registration: &AcceptedDetectorRegistration,
+    ) -> Result<ResolvedDetector, EnvironmentError> {
+        if matches!(self.failure, Some(ProviderFailure::Resolve)) {
+            return Err(Self::error("client resolution failed"));
+        }
+        let mut resolved = self.harness.resolve(registration).await?;
+        let detector = resolved
+            .records
+            .iter_mut()
+            .find(|record| record.package_record.name == registration.registration.detector)
+            .unwrap();
+        detector.package_record.version = self.revision.to_string().parse().unwrap();
+        resolved.digest = rattler_virtual_package_detectors::environment_digest(&resolved.records);
+        Ok(resolved)
+    }
+
+    async fn install(
+        &self,
+        resolved: ResolvedDetector,
+    ) -> Result<DetectorEnvironment, EnvironmentError> {
+        if matches!(self.failure, Some(ProviderFailure::Install)) {
+            return Err(Self::error("client installation failed"));
+        }
+        let prefix = rattler_virtual_package_detectors::environment::prefix_for(
+            &self.root,
+            &resolved.digest,
+        );
+        let guard_error = |source| EnvironmentError::Guard {
+            prefix: prefix.clone(),
+            source,
+        };
+        let guard = AsyncPrefixGuard::new(&prefix).await.map_err(guard_error)?;
+        let mut write_guard = guard.write().await.map_err(guard_error)?;
+        let installed = !write_guard.is_ready();
+        if installed {
+            write_guard.begin().await.map_err(guard_error)?;
+            let detector = resolved
+                .records
+                .iter()
+                .find(|record| record.package_record.name.as_normalized() == "good-detect")
+                .unwrap();
+            let activation_dir = prefix.join("etc/conda/activate.d");
+            std::fs::create_dir_all(&activation_dir).unwrap();
+            std::fs::write(
+                activation_dir.join("client.sh"),
+                format!(
+                    "export CLIENT_DETECTOR_VERSION={}\n",
+                    detector.package_record.version
+                ),
+            )
+            .unwrap();
+            let bin = prefix.join("bin");
+            std::fs::create_dir_all(&bin).unwrap();
+            let executable = bin.join("good-detect");
+            std::fs::write(
+                &executable,
+                "#!/bin/sh\necho \"{\\\"version\\\":1,\\\"virtual_packages\\\":{\\\"__test_good\\\":{\\\"version\\\":\\\"$CLIENT_DETECTOR_VERSION\\\"},\\\"__test_absent\\\":null},\\\"cache\\\":{\\\"ttl_seconds\\\":3600}}\"\n",
+            )
+            .unwrap();
+            std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+            write_guard.finish().await.map_err(guard_error)?;
+        }
+        Ok(DetectorEnvironment { prefix, installed })
+    }
+}
+
+#[cfg(unix)]
+struct DenyAfterResolution;
+
+#[cfg(unix)]
+#[async_trait]
+impl DetectorConsent for DenyAfterResolution {
+    async fn decide(&self, request: &ConsentRequest<'_>) -> Consent {
+        assert!(request
+            .records
+            .iter()
+            .any(|record| record.package_record.name.as_normalized() == "good-detect"));
+        Consent::Deny
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn custom_provider_never_creates_an_environment_without_consent() {
+    let harness = Harness::new().await;
+    let provider = ClientEnvironmentProvider::new(&harness);
+    for consent in [&DenyAll as &dyn DetectorConsent, &DenyAfterResolution] {
+        let outcome = provider.detect(consent).await;
+        assert!(outcome.results.is_empty());
+        assert!(outcome.failures.is_empty());
+        assert!(matches!(
+            outcome.skipped.as_slice(),
+            [skipped] if skipped.reason == SkipReason::ConsentDenied
+        ));
+        assert!(!provider.root.exists());
+        assert!(!harness.root.exists());
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn custom_provider_runs_activates_and_invalidates_cached_records() {
+    let harness = Harness::new().await;
+    let mut provider = ClientEnvironmentProvider::new(&harness);
+    let initial = provider.detect(&AllowAll).await;
+    assert!(initial.failures.is_empty(), "{:?}", initial.failures);
+    assert_eq!(values(&initial)["__test_good"], Some("1".to_string()));
+    assert_eq!(values(&initial)["__test_absent"], None);
+    assert!(!harness.root.join("envs").exists());
+
+    std::fs::remove_dir_all(&provider.root).unwrap();
+    provider.failure = Some(ProviderFailure::Install);
+    let cached = provider.detect(&AllowAll).await;
+    assert!(cached.failures.is_empty(), "{:?}", cached.failures);
+    assert_eq!(values(&cached), values(&initial));
+    assert!(cached.results.iter().all(|result| matches!(
+        result.source,
+        DetectionSource::Detector { from_cache: true, .. }
+    )));
+    assert!(!provider.root.exists());
+
+    provider.failure = None;
+    provider.revision = 2;
+    let refreshed = provider.detect(&AllowAll).await;
+    assert!(refreshed.failures.is_empty(), "{:?}", refreshed.failures);
+    assert_eq!(values(&refreshed)["__test_good"], Some("2".to_string()));
+    assert!(refreshed.results.iter().all(|result| matches!(
+        result.source,
+        DetectionSource::Detector { from_cache: false, .. }
+    )));
+    assert!(matches!(
+        (&initial.results[0].source, &refreshed.results[0].source),
+        (DetectionSource::Detector { digest: before, .. }, DetectionSource::Detector { digest: after, .. }) if before != after
+    ));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn custom_provider_failures_discard_results_and_preserve_the_cause() {
+    let harness = Harness::new().await;
+    let mut provider = ClientEnvironmentProvider::new(&harness);
+    provider.failure = Some(ProviderFailure::Install);
+    let install = provider.detect(&AllowAll).await;
+    assert!(install.results.is_empty());
+    assert!(install.skipped.is_empty());
+    assert!(matches!(
+        install.failures.as_slice(),
+        [failure] if matches!(failure.error, DetectError::Environment(EnvironmentError::Provider(_)))
+    ));
+    assert_eq!(
+        install.failures[0].error.source().unwrap().to_string(),
+        "client installation failed"
+    );
+    assert!(!provider.root.exists());
+
+    provider.failure = None;
+    let populated = provider.detect(&AllowAll).await;
+    assert_eq!(values(&populated)["__test_good"], Some("1".to_string()));
+
+    provider.failure = Some(ProviderFailure::Resolve);
+    let resolve = provider.detect(&AllowAll).await;
+    assert!(resolve.results.is_empty());
+    assert!(resolve.skipped.is_empty());
+    assert!(matches!(
+        resolve.failures.as_slice(),
+        [failure] if matches!(failure.error, DetectError::Environment(EnvironmentError::Provider(_)))
+    ));
+    assert_eq!(
+        resolve.failures[0].error.source().unwrap().to_string(),
+        "client resolution failed"
+    );
 }

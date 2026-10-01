@@ -15,7 +15,8 @@ use rattler_repodata_gateway::{
 use rattler_virtual_package_detectors::{
     AllowAll, CacheClock, Consent, ConsentRequest, DenyAll, DetectOptions, DetectedValue,
     DetectionOutcome, DetectionSource, DetectorConsent, DetectorFailure, DetectorResult,
-    SkipReason, SkippedRegistration, WantedNames, detect, limits,
+    EnvironmentOptions, RattlerEnvironmentProvider, SkipReason, SkippedRegistration, WantedNames,
+    detect, limits,
 };
 
 use crate::{
@@ -588,16 +589,22 @@ pub fn py_detect_virtual_packages<'py>(
 
     future_into_py(py, async move {
         let root = cache_dir.join("virtual-package-detectors");
+        let environment_root = root.join("envs");
+        let environment_provider = RattlerEnvironmentProvider::new(EnvironmentOptions {
+            gateway: &gateway.inner,
+            package_cache: &package_cache,
+            download_client,
+            root: &environment_root,
+            host_platform: host_platform.inner,
+            virtual_packages: client_virtual_packages,
+        });
         let outcome = detect(
             &registrations,
             DetectOptions {
-                gateway: &gateway.inner,
-                package_cache: &package_cache,
-                download_client,
+                environment_provider: &environment_provider,
                 root: &root,
                 host_platform: host_platform.inner,
                 target_platform: target_platform.inner,
-                client_virtual_packages,
                 timeout,
                 consent: consent.as_dyn(),
                 wanted,

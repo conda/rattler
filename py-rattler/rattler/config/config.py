@@ -419,8 +419,9 @@ class Config:
     def virtual_package_detectors(self) -> dict[str, Any]:
         """
         The `virtual-package-detectors` section: the optional
-        `timeout-seconds` and the `consent` decisions keyed by registration
-        origin, then detector name.
+        `timeout-seconds` and the `consent` decisions keyed by the registering
+        channel's canonical base URL. Each decision covers all detectors
+        registered by that channel and their resolved dependencies.
 
         Examples
         --------
@@ -428,12 +429,12 @@ class Config:
         >>> config = Config.from_toml('''
         ... [virtual-package-detectors]
         ... timeout-seconds = 60
-        ... [virtual-package-detectors.consent."https://conda.anaconda.org/conda-forge"]
-        ... mpi-detect = "allow"
+        ... [virtual-package-detectors.consent]
+        ... "https://conda.anaconda.org/conda-forge" = "allow"
         ... ''')
         >>> config.virtual_package_detectors["timeout-seconds"]
         60
-        >>> config.virtual_package_detectors["consent"]["https://conda.anaconda.org/conda-forge"]["mpi-detect"]
+        >>> config.virtual_package_detectors["consent"]["https://conda.anaconda.org/conda-forge"]
         'allow'
         >>>
         ```
