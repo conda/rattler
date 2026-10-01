@@ -764,10 +764,12 @@ struct DenyAfterResolution;
 #[async_trait]
 impl DetectorConsent for DenyAfterResolution {
     async fn decide(&self, request: &ConsentRequest<'_>) -> Consent {
-        assert!(request
-            .records
-            .iter()
-            .any(|record| record.package_record.name.as_normalized() == "good-detect"));
+        assert!(
+            request
+                .records
+                .iter()
+                .any(|record| record.package_record.name.as_normalized() == "good-detect")
+        );
         Consent::Deny
     }
 }
@@ -808,7 +810,10 @@ async fn custom_provider_runs_activates_and_invalidates_cached_records() {
     assert_eq!(values(&cached), values(&initial));
     assert!(cached.results.iter().all(|result| matches!(
         result.source,
-        DetectionSource::Detector { from_cache: true, .. }
+        DetectionSource::Detector {
+            from_cache: true,
+            ..
+        }
     )));
     assert!(!provider.root.exists());
 
@@ -819,7 +824,10 @@ async fn custom_provider_runs_activates_and_invalidates_cached_records() {
     assert_eq!(values(&refreshed)["__test_good"], Some("2".to_string()));
     assert!(refreshed.results.iter().all(|result| matches!(
         result.source,
-        DetectionSource::Detector { from_cache: false, .. }
+        DetectionSource::Detector {
+            from_cache: false,
+            ..
+        }
     )));
     assert!(matches!(
         (&initial.results[0].source, &refreshed.results[0].source),
