@@ -398,7 +398,6 @@ impl PyPrefixPlaceholder {
                 file_mode: file_mode.into(),
                 placeholder: placeholder.to_string(),
                 experimental_offsets: None,
-                experimental_shebang_length: None,
             },
         })
     }
@@ -431,23 +430,23 @@ impl PyPrefixPlaceholder {
 
     /// The placeholder's occurrences in the file, recorded per encoding.
     ///
-    /// Returns `None` when the field is absent, or a list of offset groups mirroring the JSON:
-    /// `[{"encoding": str, "ranges": list[int] | list[list[int]]}]`. `ranges` is a `list[int]`
-    /// for text-mode files and a `list[list[int]]` for binary-mode files (grouped by c-string).
-    /// Occurrences inside the shebang region (see `shebang_length`) are excluded.
+    /// Returns `None` when the field is absent or invalid, or a list of offset groups mirroring
+    /// the JSON: `[{"encoding": str, "ranges": list[int] | list[list[int]]}]`. `ranges` is a
+    /// `list[int]` for text-mode files and a `list[list[int]]` for binary-mode files (grouped by
+    /// c-string). Occurrences inside the shebang region (see `shebang_length`) are excluded.
     #[getter]
     pub fn experimental_offsets<'py>(
         &self,
         py: Python<'py>,
     ) -> PyResult<Option<Bound<'py, PyAny>>> {
-        let Some(groups) = &self.inner.experimental_offsets else {
+        let Some(Ok(offsets)) = &self.inner.experimental_offsets else {
             return Ok(None);
         };
         let list = PyList::empty(py);
-        for group in groups {
+        for group in offsets.groups() {
             let entry = PyDict::new(py);
-            entry.set_item("encoding", group.encoding.as_str())?;
-            match &group.ranges {
+            entry.set_item("encoding", group.encoding().as_str())?;
+            match group.ranges() {
                 OffsetRanges::Text(positions) => entry.set_item("ranges", positions.clone())?,
                 OffsetRanges::Binary(cstrings) => entry.set_item("ranges", cstrings.clone())?,
             }
@@ -457,10 +456,13 @@ impl PyPrefixPlaceholder {
     }
 
     /// The length in bytes of the file's shebang region (first line including its newline), or
-    /// `None` when the file has no recorded shebang region.
+    /// `None` when the file has no recorded shebang region or the recorded offsets are invalid.
     #[getter]
     pub fn experimental_shebang_length(&self) -> Option<usize> {
-        self.inner.experimental_shebang_length
+        match &self.inner.experimental_offsets {
+            Some(Ok(offsets)) => offsets.shebang_length(),
+            Some(Err(_)) | None => None,
+        }
     }
 }
 

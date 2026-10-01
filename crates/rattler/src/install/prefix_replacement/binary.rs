@@ -5,11 +5,13 @@
 use std::borrow::Cow;
 use std::io::Write;
 
-use rattler_conda_types::package::{OffsetEncoding, OffsetGroup, OffsetRanges};
+use rattler_conda_types::package::{
+    InvalidOffsetsError, OffsetEncoding, OffsetGroup, OffsetRanges,
+};
 
 use super::{
-    CStringPatch, EncodedPrefix, OffsetReplaceError, encoded_prefix_for, reject_growing_prefix,
-    write_replacement_range,
+    CStringPatch, EncodedPrefix, InconsistentOffsetsError, OffsetReplaceError, encoded_prefix_for,
+    reject_growing_prefix, write_replacement_range,
 };
 
 /// Given the contents of a file, copies it to the `destination` and in the process replace any
@@ -153,10 +155,10 @@ fn write_patched_cstrings(
         // Write the remaining bytes of the c-string, which for an unterminated final c-string runs
         // to the end of the file, and fill the gap the replacements left with zeros.
         write_replacement_range(&mut destination, source_bytes, last_pos, patch.nul_pos)?;
-        let padding = patch.offsets.len()
-            * prefix
-                .shrinks_by()
-                .expect("callers reject a target prefix that does not fit");
+        let Some(shrinks_by) = prefix.shrinks_by() else {
+            return Err(prefix.growing_prefix_error());
+        };
+        let padding = patch.offsets.len() * shrinks_by;
         if padding > 0 {
             destination.write_all(&vec![0; padding])?;
         }
@@ -213,26 +215,21 @@ pub fn copy_and_replace_cstring_placeholder_offsets(
 fn cstring_patches_from_groups<'a>(
     groups: &'a [OffsetGroup],
     prefixes: &'a [EncodedPrefix],
-) -> Result<Vec<CStringPatch<'a>>, OffsetReplaceError> {
+) -> Result<Vec<CStringPatch<'a>>, InconsistentOffsetsError> {
     let mut patches = Vec::new();
     for group in groups {
-        let prefix = encoded_prefix_for(prefixes, &group.encoding)?;
-        let OffsetRanges::Binary(cstrings) = &group.ranges else {
-            return Err(OffsetReplaceError::inconsistent(
-                "ranges shape does not match file mode",
-            ));
+        let encoding = group.encoding();
+        let prefix = encoded_prefix_for(prefixes, encoding)?;
+        let OffsetRanges::Binary(cstrings) = group.ranges() else {
+            return Err(InvalidOffsetsError::RangesShapeMismatch(encoding).into());
         };
         for cstring in cstrings {
             // Each c-string lists its prefix offsets followed by the NUL terminator position.
             let Some((&nul_pos, offsets)) = cstring.split_last() else {
-                return Err(OffsetReplaceError::inconsistent(
-                    "binary offset group is empty",
-                ));
+                return Err(InvalidOffsetsError::ShortCStringRanges(encoding).into());
             };
             if offsets.is_empty() {
-                return Err(OffsetReplaceError::inconsistent(
-                    "binary offset group has no prefix offsets",
-                ));
+                return Err(InvalidOffsetsError::ShortCStringRanges(encoding).into());
             }
             patches.push(CStringPatch {
                 offsets: Cow::Borrowed(offsets),
@@ -244,9 +241,7 @@ fn cstring_patches_from_groups<'a>(
 
     // The binary form must list at least one c-string.
     if patches.is_empty() {
-        return Err(OffsetReplaceError::inconsistent(
-            "binary offsets outer list is empty",
-        ));
+        return Err(InvalidOffsetsError::EmptyList.into());
     }
 
     patches.sort_by_key(|patch| patch.offsets[0]);
@@ -265,59 +260,42 @@ fn cstring_patches_from_groups<'a>(
 fn validate_cstring_patches(
     source_bytes: &[u8],
     patches: &[CStringPatch<'_>],
-) -> Result<(), OffsetReplaceError> {
+) -> Result<(), InconsistentOffsetsError> {
     let mut prev_end = 0usize;
     for patch in patches {
+        let terminator = patch.nul_pos;
         let placeholder = patch.prefix.placeholder.as_slice();
         let unit = patch.prefix.code_unit_size();
-        if patch.nul_pos > source_bytes.len() {
-            return Err(OffsetReplaceError::inconsistent(format!(
-                "NUL offset {} is out of range for content of length {}",
-                patch.nul_pos,
-                source_bytes.len()
-            )));
-        }
-        let terminator = &source_bytes[patch.nul_pos..];
-        if !terminator.is_empty()
-            && !terminator
+        let Some(terminator_bytes) = source_bytes.get(terminator..) else {
+            return Err(InconsistentOffsetsError::TerminatorOutOfRange {
+                terminator,
+                file_size: source_bytes.len(),
+            });
+        };
+        if !terminator_bytes.is_empty()
+            && !terminator_bytes
                 .get(..unit)
                 .is_some_and(|unit| unit.iter().all(|&byte| byte == 0))
         {
-            return Err(OffsetReplaceError::inconsistent(format!(
-                "the bytes at recorded NUL offset {} are not a zero code unit",
-                patch.nul_pos
-            )));
+            return Err(InconsistentOffsetsError::TerminatorNotZero { terminator });
         }
         for &offset in patch.offsets.iter() {
             if offset < prev_end {
-                return Err(OffsetReplaceError::inconsistent(
-                    "binary offsets are not sorted / c-string ranges overlap",
-                ));
+                return Err(InconsistentOffsetsError::UnsortedOffset { offset });
             }
             let end = offset
                 .checked_add(placeholder.len())
-                .filter(|&end| end <= patch.nul_pos)
-                .ok_or_else(|| {
-                    OffsetReplaceError::inconsistent(format!(
-                        "offset {offset} does not fit before its NUL terminator {}",
-                        patch.nul_pos
-                    ))
-                })?;
-            if (patch.nul_pos - offset) % unit != 0 {
-                return Err(OffsetReplaceError::inconsistent(format!(
-                    "offset {offset} is not a whole number of code units before its NUL \
-                     terminator {}",
-                    patch.nul_pos
-                )));
+                .filter(|&end| end <= terminator)
+                .ok_or(InconsistentOffsetsError::OffsetPastTerminator { offset, terminator })?;
+            if (terminator - offset) % unit != 0 {
+                return Err(InconsistentOffsetsError::MisalignedOffset { offset, terminator });
             }
             if &source_bytes[offset..end] != placeholder {
-                return Err(OffsetReplaceError::inconsistent(format!(
-                    "placeholder bytes are not present at recorded offset {offset}"
-                )));
+                return Err(InconsistentOffsetsError::PlaceholderNotFound { offset });
             }
             prev_end = end;
         }
-        prev_end = patch.nul_pos;
+        prev_end = terminator;
     }
     Ok(())
 }

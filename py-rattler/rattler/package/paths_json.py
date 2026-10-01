@@ -615,10 +615,10 @@ class PrefixPlaceholder:
         """
         The placeholder's occurrences in the file, recorded per encoding.
 
-        Returns `None` when the field is absent, or a list of offset groups mirroring the JSON:
-        `[{"encoding": str, "ranges": list[int] | list[list[int]]}]`. `ranges` is a `list[int]`
-        for text-mode files and a `list[list[int]]` for binary-mode files (grouped by c-string).
-        Occurrences inside the shebang region (see `shebang_length`) are excluded.
+        Returns `None` when the field is absent or invalid, or a list of offset groups mirroring
+        the JSON: `[{"encoding": str, "ranges": list[int] | list[list[int]]}]`. `ranges` is a
+        `list[int]` for text-mode files and a `list[list[int]]` for binary-mode files (grouped by
+        c-string). Occurrences inside the shebang region (see `shebang_length`) are excluded.
 
         Examples
         --------
@@ -637,7 +637,8 @@ class PrefixPlaceholder:
     def experimental_shebang_length(self) -> int | None:
         """
         The length in bytes of the file's shebang region (the first line including its trailing
-        newline), or `None` when the file has no recorded shebang region.
+        newline), or `None` when the file has no recorded shebang region or the recorded offsets
+        are invalid.
 
         Examples
         --------

@@ -1,16 +1,12 @@
 use fs_err as fs;
 use rattler_conda_types::Subdir;
-use rattler_conda_types::package::{OffsetEncoding, OffsetGroup, OffsetRanges};
+use rattler_conda_types::package::{OffsetEncoding, OffsetGroup, OffsetRanges, PrefixOffsets};
 use rstest::rstest;
 use std::io::Cursor;
 
 /// Builds the UTF-8 offset group a producer conformant with the draft CEP would emit.
 fn utf8_group(ranges: OffsetRanges) -> OffsetGroup {
-    OffsetGroup {
-        encoding: OffsetEncoding::Utf8,
-        ranges,
-        unknown_members: vec![],
-    }
+    OffsetGroup::new(OffsetEncoding::Utf8, ranges).unwrap()
 }
 
 /// Builds the offset group a producer conformant with the draft CEP emits for a text file whose
@@ -27,11 +23,6 @@ fn utf8_text_groups(offsets: &[usize]) -> Vec<OffsetGroup> {
 /// whose occurrences are all UTF-8, grouped by c-string.
 fn utf8_binary_groups(cstrings: &[Vec<usize>]) -> Vec<OffsetGroup> {
     vec![utf8_group(OffsetRanges::Binary(cstrings.to_vec()))]
-}
-
-/// Encodes `text` with `encoding`, for building wide-string test fixtures.
-fn encode(encoding: &OffsetEncoding, text: &str) -> Vec<u8> {
-    encoding.encode(text).expect("a defined encoding")
 }
 
 #[rstest]
@@ -629,8 +620,12 @@ fn test_offset_groups_text_utf8_group_applied() {
         "fabulous",
         &Subdir::Linux64,
         super::FileMode::Text,
-        &[utf8_group(OffsetRanges::Text(vec![7]))],
-        None,
+        &PrefixOffsets::new(
+            super::FileMode::Text,
+            vec![utf8_group(OffsetRanges::Text(vec![7]))],
+            None,
+        )
+        .unwrap(),
     )
     .unwrap();
     assert_eq!(output.into_inner(), b"Hello, fabulous world!");
@@ -648,21 +643,26 @@ fn test_offset_groups_binary_multi_encoding() {
     // A UTF-8 c-string with the placeholder at offset 1 (NUL at 9),
     // followed by a UTF-16-LE wide string with the placeholder at offset
     // 10 (two-byte NUL terminator starting at 28), followed by a tail.
-    let wide = encode(&OffsetEncoding::Utf16Le, "/pfx/wide");
+    let wide = OffsetEncoding::Utf16Le.encode("/pfx/wide");
     let mut input = b"A/pfx/lib\0".to_vec();
     assert_eq!(input.len(), 10);
     input.extend_from_slice(&wide);
     input.extend_from_slice(&[0, 0]);
     input.extend_from_slice(b"tail");
 
-    let groups = [
-        OffsetGroup {
-            encoding: OffsetEncoding::Utf16Le,
-            ranges: OffsetRanges::Binary(vec![vec![10, 28]]),
-            unknown_members: vec![],
-        },
-        utf8_group(OffsetRanges::Binary(vec![vec![1, 9]])),
-    ];
+    let offsets = PrefixOffsets::new(
+        super::FileMode::Binary,
+        vec![
+            OffsetGroup::new(
+                OffsetEncoding::Utf16Le,
+                OffsetRanges::Binary(vec![vec![10, 28]]),
+            )
+            .unwrap(),
+            utf8_group(OffsetRanges::Binary(vec![vec![1, 9]])),
+        ],
+        None,
+    )
+    .unwrap();
 
     let mut output = Cursor::new(Vec::new());
     super::copy_and_replace_placeholders_with_offsets(
@@ -672,8 +672,7 @@ fn test_offset_groups_binary_multi_encoding() {
         target,
         &Subdir::Linux64,
         super::FileMode::Binary,
-        &groups,
-        None,
+        &offsets,
     )
     .unwrap();
 
@@ -682,7 +681,7 @@ fn test_offset_groups_binary_multi_encoding() {
     // The UTF-8 c-string is patched, with padding restoring its length.
     assert_eq!(&out[..10], b"A/np/lib\0\0");
     // The wide string is patched under its own encoding, padded with a zero code unit.
-    let mut expected_wide = encode(&OffsetEncoding::Utf16Le, "/np/wide");
+    let mut expected_wide = OffsetEncoding::Utf16Le.encode("/np/wide");
     expected_wide.extend_from_slice(&[0, 0]);
     assert_eq!(&out[10..28], expected_wide.as_slice());
     assert_eq!(&out[28..], &input[28..], "the tail is copied verbatim");
@@ -705,10 +704,10 @@ fn test_offset_groups_binary_multi_encoding() {
 fn test_offsets_and_search_agree_per_encoding(#[case] encoding: OffsetEncoding) {
     let placeholder = "/placeholder";
     let target = "/tgt";
-    let unit = encoding.code_unit_size().unwrap();
+    let unit = encoding.code_unit_size();
 
     // `head` + the encoded string + its NUL terminator + a tail.
-    let encoded = encode(&encoding, "/placeholder/lib");
+    let encoded = encoding.encode("/placeholder/lib");
     let offset = 8;
     let nul_pos = offset + encoded.len();
     let mut input = b"headhead".to_vec();
@@ -717,11 +716,8 @@ fn test_offsets_and_search_agree_per_encoding(#[case] encoding: OffsetEncoding) 
     input.extend_from_slice(b"tail");
 
     // Binary: the offsets path and the search must agree and preserve the length.
-    let groups = [OffsetGroup {
-        encoding: encoding.clone(),
-        ranges: OffsetRanges::Binary(vec![vec![offset, nul_pos]]),
-        unknown_members: vec![],
-    }];
+    let groups =
+        [OffsetGroup::new(encoding, OffsetRanges::Binary(vec![vec![offset, nul_pos]])).unwrap()];
     let mut spliced = Cursor::new(Vec::new());
     super::copy_and_replace_cstring_placeholder_offsets(
         &input,
@@ -741,7 +737,7 @@ fn test_offsets_and_search_agree_per_encoding(#[case] encoding: OffsetEncoding) 
 
     let freed = (placeholder.len() - target.len()) * unit;
     let mut expected = b"headhead".to_vec();
-    expected.extend_from_slice(&encode(&encoding, "/tgt/lib"));
+    expected.extend_from_slice(&encoding.encode("/tgt/lib"));
     // The bytes the shorter target frees up are zeroed, then the original terminator and the
     // tail follow.
     expected.extend(std::iter::repeat_n(0u8, freed));
@@ -750,11 +746,7 @@ fn test_offsets_and_search_agree_per_encoding(#[case] encoding: OffsetEncoding) 
     assert_eq!(spliced, expected);
 
     // Text: the same occurrence is replaced without padding, and both paths agree.
-    let groups = [OffsetGroup {
-        encoding: encoding.clone(),
-        ranges: OffsetRanges::Text(vec![offset]),
-        unknown_members: vec![],
-    }];
+    let groups = [OffsetGroup::new(encoding, OffsetRanges::Text(vec![offset])).unwrap()];
     let mut spliced = Cursor::new(Vec::new());
     super::copy_and_replace_textual_placeholder_offsets(
         &input,
@@ -794,7 +786,7 @@ fn test_shebang_region_replaces_every_encoding_on_non_unix() {
     let target = "/t";
 
     let mut input = b"#!/pfx/python ".to_vec();
-    input.extend_from_slice(&encode(&OffsetEncoding::Utf16Le, placeholder));
+    input.extend_from_slice(&OffsetEncoding::Utf16Le.encode(placeholder));
     input.extend_from_slice(b"\nbody /pfx\n");
     // The first newline sits at 22, so the region is the first 23 bytes and the only body
     // occurrence is the UTF-8 one at 28.
@@ -815,7 +807,7 @@ fn test_shebang_region_replaces_every_encoding_on_non_unix() {
     let spliced = spliced.into_inner();
 
     let mut expected = b"#!/t/python ".to_vec();
-    expected.extend_from_slice(&encode(&OffsetEncoding::Utf16Le, target));
+    expected.extend_from_slice(&OffsetEncoding::Utf16Le.encode(target));
     expected.extend_from_slice(b"\nbody /t\n");
     assert_eq!(spliced, expected);
 
@@ -869,8 +861,8 @@ fn test_binary_growing_prefix_only_rejected_for_encodings_in_use() {
     let target = "/ab";
     assert_eq!(placeholder.len(), target.len());
     assert!(
-        encode(&OffsetEncoding::Utf16Le, target).len()
-            > encode(&OffsetEncoding::Utf16Le, placeholder).len()
+        OffsetEncoding::Utf16Le.encode(target).len()
+            > OffsetEncoding::Utf16Le.encode(placeholder).len()
     );
 
     let mut input = b"x".to_vec();
@@ -900,7 +892,7 @@ fn test_binary_growing_prefix_only_rejected_for_encodings_in_use() {
 /// binary replacement cannot grow the file.
 #[test]
 fn test_binary_growing_prefix_rejected_for_encoding_in_use() {
-    let mut input = encode(&OffsetEncoding::Utf16Le, "/\u{e9}/lib");
+    let mut input = OffsetEncoding::Utf16Le.encode("/\u{e9}/lib");
     input.extend_from_slice(&[0, 0]);
 
     let mut out = Cursor::new(Vec::new());
@@ -919,8 +911,8 @@ fn test_binary_shifted_cross_encoding_match_does_not_swallow_later_cstrings() {
     let target = "/p";
 
     let mut input = vec![0u8, 0]; // padding in front of the wide string
-    input.extend_from_slice(&encode(&OffsetEncoding::Utf16Le, placeholder)); // 2..10
-    input.extend_from_slice(&encode(&OffsetEncoding::Utf16Le, "\u{20ac}")); // 10..12
+    input.extend_from_slice(&OffsetEncoding::Utf16Le.encode(placeholder)); // 2..10
+    input.extend_from_slice(&OffsetEncoding::Utf16Le.encode("\u{20ac}")); // 10..12
     input.extend_from_slice(&[0, 0]); // 12..14, the wide terminator
     input.extend_from_slice(b"/pfx\0"); // 14..19, an ordinary c-string
 
@@ -930,8 +922,8 @@ fn test_binary_shifted_cross_encoding_match_does_not_swallow_later_cstrings() {
     let searched = searched.into_inner();
 
     let mut expected = vec![0u8, 0];
-    expected.extend_from_slice(&encode(&OffsetEncoding::Utf16Le, target));
-    expected.extend_from_slice(&encode(&OffsetEncoding::Utf16Le, "\u{20ac}"));
+    expected.extend_from_slice(&OffsetEncoding::Utf16Le.encode(target));
+    expected.extend_from_slice(&OffsetEncoding::Utf16Le.encode("\u{20ac}"));
     expected.extend_from_slice(&[0, 0, 0, 0]); // the freed code units
     expected.extend_from_slice(&[0, 0]); // the wide terminator
     expected.extend_from_slice(b"/p\0\0\0"); // the c-string, padded
@@ -940,11 +932,11 @@ fn test_binary_shifted_cross_encoding_match_does_not_swallow_later_cstrings() {
 
     // Identical to what the metadata a producer records splices.
     let groups = [
-        OffsetGroup {
-            encoding: OffsetEncoding::Utf16Le,
-            ranges: OffsetRanges::Binary(vec![vec![2, 12]]),
-            unknown_members: vec![],
-        },
+        OffsetGroup::new(
+            OffsetEncoding::Utf16Le,
+            OffsetRanges::Binary(vec![vec![2, 12]]),
+        )
+        .unwrap(),
         utf8_group(OffsetRanges::Binary(vec![vec![14, 18]])),
     ];
     let mut spliced = Cursor::new(Vec::new());
@@ -968,7 +960,7 @@ fn test_binary_wide_string_is_patched_with_its_own_encoding() {
     let target = "/\u{20ac}";
 
     let mut input = vec![0u8, 0];
-    input.extend_from_slice(&encode(&OffsetEncoding::Utf16Le, placeholder));
+    input.extend_from_slice(&OffsetEncoding::Utf16Le.encode(placeholder));
     input.extend_from_slice(&[0, 0]);
 
     let mut searched = Cursor::new(Vec::new());
@@ -977,16 +969,16 @@ fn test_binary_wide_string_is_patched_with_its_own_encoding() {
     let searched = searched.into_inner();
 
     let mut expected = vec![0u8, 0];
-    expected.extend_from_slice(&encode(&OffsetEncoding::Utf16Le, target));
+    expected.extend_from_slice(&OffsetEncoding::Utf16Le.encode(target));
     expected.extend_from_slice(&[0, 0, 0, 0]); // the two freed code units
     expected.extend_from_slice(&[0, 0]); // the wide terminator
     assert_eq!(searched, expected);
 
-    let groups = [OffsetGroup {
-        encoding: OffsetEncoding::Utf16Le,
-        ranges: OffsetRanges::Binary(vec![vec![2, 10]]),
-        unknown_members: vec![],
-    }];
+    let groups = [OffsetGroup::new(
+        OffsetEncoding::Utf16Le,
+        OffsetRanges::Binary(vec![vec![2, 10]]),
+    )
+    .unwrap()];
     let mut spliced = Cursor::new(Vec::new());
     super::copy_and_replace_cstring_placeholder_offsets(
         &input,
@@ -1008,9 +1000,9 @@ fn test_binary_same_encoding_at_two_parities() {
     let placeholder = "/pfx";
     let target = "/p";
 
-    let mut input = encode(&OffsetEncoding::Utf16Le, placeholder); // 0..8, aligned
+    let mut input = OffsetEncoding::Utf16Le.encode(placeholder); // 0..8, aligned
     input.push(b'A'); // 8, shifts what follows to an odd offset
-    input.extend_from_slice(&encode(&OffsetEncoding::Utf16Le, placeholder)); // 9..17
+    input.extend_from_slice(&OffsetEncoding::Utf16Le.encode(placeholder)); // 9..17
     input.extend_from_slice(&[0, 0]); // 17..19
 
     let mut searched = Cursor::new(Vec::new());
@@ -1020,13 +1012,13 @@ fn test_binary_same_encoding_at_two_parities() {
     assert_eq!(searched.len(), input.len());
     // The aligned occurrence is replaced; the misaligned one keeps its placeholder rather than
     // being patched through a c-string with the wrong terminator.
-    assert_eq!(&searched[..4], encode(&OffsetEncoding::Utf16Le, target));
+    assert_eq!(&searched[..4], OffsetEncoding::Utf16Le.encode(target));
 
-    let groups = [OffsetGroup {
-        encoding: OffsetEncoding::Utf16Le,
-        ranges: OffsetRanges::Binary(vec![vec![0, 9, 17]]),
-        unknown_members: vec![],
-    }];
+    let groups = [OffsetGroup::new(
+        OffsetEncoding::Utf16Le,
+        OffsetRanges::Binary(vec![vec![0, 9, 17]]),
+    )
+    .unwrap()];
     let mut spliced = Cursor::new(Vec::new());
     let result = super::copy_and_replace_cstring_placeholder_offsets(
         &input,
@@ -1115,11 +1107,12 @@ fn test_offset_groups_encoding_without_occurrence_is_inconsistent() {
         ),
         (super::FileMode::Text, OffsetRanges::Text(vec![10])),
     ] {
-        let groups = [OffsetGroup {
-            encoding: OffsetEncoding::Utf16Le,
-            ranges,
-            unknown_members: vec![],
-        }];
+        let offsets = PrefixOffsets::new(
+            file_mode,
+            vec![OffsetGroup::new(OffsetEncoding::Utf16Le, ranges).unwrap()],
+            None,
+        )
+        .unwrap();
         let mut output = Cursor::new(Vec::new());
         let result = super::copy_and_replace_placeholders_with_offsets(
             input,
@@ -1128,8 +1121,7 @@ fn test_offset_groups_encoding_without_occurrence_is_inconsistent() {
             "/np",
             &Subdir::Linux64,
             file_mode,
-            &groups,
-            None,
+            &offsets,
         );
         assert!(
             matches!(
@@ -1142,22 +1134,16 @@ fn test_offset_groups_encoding_without_occurrence_is_inconsistent() {
     }
 }
 
-/// Structurally invalid group lists (an unrecognized encoding, duplicate
-/// encodings, or an empty list for a binary file) surface as inconsistent
-/// metadata (with nothing written) so the installer falls back to the
-/// search-based replacement.
-#[rstest]
-#[case::unknown_encoding(vec![OffsetGroup {
-    encoding: OffsetEncoding::Unknown(String::from("utf-64-xe")),
-    ranges: OffsetRanges::Binary(vec![vec![1, 9]]),
-    unknown_members: vec![],
-}])]
-#[case::duplicate_encoding(vec![
-    utf8_group(OffsetRanges::Binary(vec![vec![1, 9]])),
-    utf8_group(OffsetRanges::Binary(vec![vec![1, 9]])),
-])]
-#[case::empty_list(vec![])]
-fn test_offset_groups_invalid_is_inconsistent(#[case] groups: Vec<OffsetGroup>) {
+/// Offsets recorded for a different file mode than the one the file is installed with do not
+/// describe the file: the installer falls back to searching rather than splicing them.
+#[test]
+fn test_offsets_for_other_file_mode_are_inconsistent() {
+    let offsets = PrefixOffsets::new(
+        super::FileMode::Text,
+        vec![utf8_group(OffsetRanges::Text(vec![1]))],
+        None,
+    )
+    .unwrap();
     let mut output = Cursor::new(Vec::new());
     let result = super::copy_and_replace_placeholders_with_offsets(
         b"A/pfx/lib\0",
@@ -1166,13 +1152,17 @@ fn test_offset_groups_invalid_is_inconsistent(#[case] groups: Vec<OffsetGroup>) 
         "/np",
         &Subdir::Linux64,
         super::FileMode::Binary,
-        &groups,
-        None,
+        &offsets,
     );
     assert!(
         matches!(
             result,
-            Err(super::OffsetReplaceError::InconsistentMetadata(_))
+            Err(super::OffsetReplaceError::InconsistentMetadata(
+                super::InconsistentOffsetsError::FileModeMismatch {
+                    recorded: super::FileMode::Text,
+                    installed: super::FileMode::Binary,
+                }
+            ))
         ),
         "{result:?}"
     );
@@ -1212,11 +1202,8 @@ fn test_textual_offsets_invalid_returns_error(#[case] offsets: Vec<usize>) {
     assert!(output.into_inner().is_empty());
 }
 
-/// Malformed binary offset groups must also return an error rather than panic (empty group,
-/// out-of-range NUL position, ...).
+/// Malformed binary offset groups must also return an error rather than panic.
 #[rstest]
-// Empty group would underflow `group.len() - 1`.
-#[case(vec![vec![]])]
 // Prefix offset and NUL position beyond the end of the file.
 #[case(vec![vec![1000, 2000]])]
 fn test_binary_offsets_invalid_returns_error(#[case] groups: Vec<Vec<usize>>) {

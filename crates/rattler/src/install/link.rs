@@ -18,10 +18,9 @@ use super::apple_codesign::{AppleCodeSignBehavior, codesign};
 use super::prefix_replacement;
 use super::{ExternalSymlinkPolicy, Prefix};
 
-// The prefix replacement functions used to live here. They are re-exported so that the public
-// paths stay what they were, and documented in [`prefix_replacement`].
+// Re-exported so that the prefix replacement functions are reachable from this public module.
 pub use prefix_replacement::{
-    OffsetReplaceError, copy_and_replace_cstring_placeholder,
+    InconsistentOffsetsError, OffsetReplaceError, copy_and_replace_cstring_placeholder,
     copy_and_replace_cstring_placeholder_offsets, copy_and_replace_placeholders,
     copy_and_replace_placeholders_with_offsets, copy_and_replace_textual_placeholder,
     copy_and_replace_textual_placeholder_offsets,
@@ -184,8 +183,7 @@ pub fn link_file(
     let link_method = if let Some(PrefixPlaceholder {
         file_mode,
         placeholder,
-        experimental_offsets: offsets,
-        experimental_shebang_length: shebang_length,
+        experimental_offsets,
     }) = path_json_entry.prefix_placeholder.as_ref()
     {
         // Memory map the source file. This provides us with easy access to a continuous stream of
@@ -238,65 +236,62 @@ pub fn link_file(
             Cow::Borrowed(target_prefix)
         };
 
-        // depending on the availability of the offsets
-        match offsets {
-            Some(offsets) => {
-                // The offsets/`shebang_length` come from the (untrusted) `paths.json`. If they are
-                // inconsistent with the file contents we do not fail the install: we fall back to
-                // the search-based path with a warning. The offset function guarantees it wrote
-                // nothing before reporting an inconsistency, so the fallback reuses the same
-                // (empty) destination.
-                match copy_and_replace_placeholders_with_offsets(
-                    source.as_ref(),
-                    &mut destination_writer,
-                    placeholder,
-                    &target_prefix,
-                    &target_platform,
-                    *file_mode,
-                    offsets,
-                    *shebang_length,
-                ) {
-                    Ok(()) => {}
-                    Err(OffsetReplaceError::InconsistentMetadata(reason)) => {
-                        tracing::warn!(
-                            "prefix replacement offsets for '{}' are inconsistent ({reason}); \
-                             falling back to search-based replacement",
-                            path_json_entry.relative_path.display()
-                        );
-                        copy_and_replace_placeholders(
-                            source.as_ref(),
-                            &mut destination_writer,
-                            placeholder,
-                            &target_prefix,
-                            &target_platform,
-                            *file_mode,
-                        )
-                        .map_err(|err| {
-                            LinkFileError::IoError(String::from("replacing placeholders"), err)
-                        })?;
-                    }
-                    Err(OffsetReplaceError::Io(err)) => {
-                        return Err(LinkFileError::IoError(
-                            String::from("replacing placeholders"),
-                            err,
-                        ));
-                    }
+        // The offsets come from the (untrusted) `paths.json`. If they are invalid or inconsistent
+        // with the file contents we do not fail the install: we fall back to the search-based path
+        // with a warning. The offset function guarantees it wrote nothing before reporting an
+        // inconsistency, so the fallback reuses the same (empty) destination.
+        let offsets = match experimental_offsets {
+            Some(Ok(offsets)) => Some(offsets),
+            Some(Err(error)) => {
+                tracing::warn!(
+                    path = %path_json_entry.relative_path.display(),
+                    %error,
+                    "prefix replacement offsets are invalid; falling back to search-based replacement"
+                );
+                None
+            }
+            None => None,
+        };
+        let spliced = match offsets {
+            Some(offsets) => match copy_and_replace_placeholders_with_offsets(
+                source.as_ref(),
+                &mut destination_writer,
+                placeholder,
+                &target_prefix,
+                &target_platform,
+                *file_mode,
+                offsets,
+            ) {
+                Ok(()) => true,
+                Err(OffsetReplaceError::InconsistentMetadata(error)) => {
+                    tracing::warn!(
+                        path = %path_json_entry.relative_path.display(),
+                        %error,
+                        "prefix replacement offsets are inconsistent with the file; falling back \
+                         to search-based replacement"
+                    );
+                    false
                 }
-            }
-            None => {
-                // Replace the prefix placeholder in the file with the new placeholder
-                copy_and_replace_placeholders(
-                    source.as_ref(),
-                    &mut destination_writer,
-                    placeholder,
-                    &target_prefix,
-                    &target_platform,
-                    *file_mode,
-                )
-                .map_err(|err| {
-                    LinkFileError::IoError(String::from("replacing placeholders"), err)
-                })?;
-            }
+                Err(OffsetReplaceError::Io(err)) => {
+                    return Err(LinkFileError::IoError(
+                        String::from("replacing placeholders"),
+                        err,
+                    ));
+                }
+            },
+            None => false,
+        };
+        if !spliced {
+            // Replace the prefix placeholder in the file with the new placeholder
+            copy_and_replace_placeholders(
+                source.as_ref(),
+                &mut destination_writer,
+                placeholder,
+                &target_prefix,
+                &target_platform,
+                *file_mode,
+            )
+            .map_err(|err| LinkFileError::IoError(String::from("replacing placeholders"), err))?;
         }
 
         let (mut file, current_hash) = destination_writer.finalize();
@@ -793,7 +788,6 @@ mod test {
                 file_mode: FileMode::Text,
                 placeholder: "/old/placeholder/path".to_string(),
                 experimental_offsets: None,
-                experimental_shebang_length: None,
             }),
             sha256: None,
             size_in_bytes: None,
@@ -1099,7 +1093,6 @@ mod test {
                 file_mode: FileMode::Text,
                 placeholder: "/old/placeholder/path".to_string(),
                 experimental_offsets: None,
-                experimental_shebang_length: None,
             }),
             sha256: None,
             size_in_bytes: None,

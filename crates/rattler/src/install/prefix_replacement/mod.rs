@@ -15,7 +15,7 @@ use std::borrow::Cow;
 use std::io::Write;
 
 use rattler_conda_types::Subdir;
-use rattler_conda_types::package::{FileMode, OffsetEncoding, OffsetGroup, validate_offset_groups};
+use rattler_conda_types::package::{FileMode, InvalidOffsetsError, OffsetEncoding, PrefixOffsets};
 
 mod binary;
 #[cfg(test)]
@@ -75,32 +75,134 @@ pub fn copy_and_replace_placeholders(
 /// ([`copy_and_replace_placeholders_with_offsets`] and the specialized
 /// text/binary variants it dispatches to).
 ///
-/// The `offsets` and `shebang_length` recorded in `paths.json` come from the
-/// package producer and are not trusted. When they are inconsistent with the
-/// file contents the install must not fail: the caller falls back to the
-/// search-based replacement path. IO errors while writing the patched file
-/// are surfaced separately.
+/// The offsets recorded in `paths.json` come from the package producer and
+/// are not trusted. When they are inconsistent with the file contents the
+/// install must not fail: the caller falls back to the search-based
+/// replacement path. IO errors while writing the patched file are surfaced
+/// separately.
 ///
 /// The offset functions write nothing to the destination before returning
 /// [`OffsetReplaceError::InconsistentMetadata`], so the caller can reuse the
 /// same (still empty) destination for the fallback.
 #[derive(Debug, thiserror::Error)]
 pub enum OffsetReplaceError {
-    /// The recorded `offsets`/`shebang_length` are inconsistent with the file
-    /// contents. Callers should fall back to search-based replacement rather
-    /// than failing the install.
+    /// The recorded offsets are inconsistent with the file contents. Callers
+    /// should fall back to search-based replacement rather than failing the
+    /// install.
     #[error("inconsistent prefix replacement metadata: {0}")]
-    InconsistentMetadata(String),
+    InconsistentMetadata(#[from] InconsistentOffsetsError),
 
     /// An IO error occurred while writing the patched file.
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }
 
-impl OffsetReplaceError {
-    fn inconsistent(msg: impl Into<String>) -> Self {
-        OffsetReplaceError::InconsistentMetadata(msg.into())
-    }
+/// How recorded offsets disagree with the file they were recorded for.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum InconsistentOffsetsError {
+    /// The offsets violate the draft CEP regardless of the file contents.
+    #[error(transparent)]
+    Invalid(#[from] InvalidOffsetsError),
+
+    /// The offsets were recorded for a different file mode than the one the file is installed
+    /// with.
+    #[error("the offsets were recorded for file mode {recorded:?}, not {installed:?}")]
+    FileModeMismatch {
+        /// The file mode the offsets were recorded for.
+        recorded: FileMode,
+        /// The file mode the file is installed with.
+        installed: FileMode,
+    },
+
+    /// The placeholder is empty, so no recorded offset can point at it.
+    #[error("the placeholder is empty")]
+    EmptyPlaceholder,
+
+    /// A `shebang_length` is recorded but the file does not start with `#!`.
+    #[error("shebang_length is recorded but the file does not start with #!")]
+    UnexpectedShebangLength,
+
+    /// The file starts with `#!` but no `shebang_length` is recorded.
+    #[error("the file starts with #! but no shebang_length is recorded")]
+    MissingShebangLength,
+
+    /// The recorded `shebang_length` is not the length of the file's first line.
+    #[error("shebang_length {shebang_length} is not the length of the first line")]
+    ShebangLengthMismatch {
+        /// The recorded `shebang_length`.
+        shebang_length: usize,
+    },
+
+    /// An offset lies inside the shebang region, which the draft CEP excludes from `offsets`.
+    #[error("offset {offset} lies inside the shebang region of {shebang_length} bytes")]
+    OffsetInShebangRegion {
+        /// The recorded offset.
+        offset: usize,
+        /// The length of the shebang region.
+        shebang_length: usize,
+    },
+
+    /// An offset starts before the end of the previous occurrence or c-string, across all
+    /// encodings.
+    #[error("offset {offset} overlaps or precedes the previous occurrence")]
+    UnsortedOffset {
+        /// The recorded offset.
+        offset: usize,
+    },
+
+    /// The placeholder at an offset extends past the end of the file.
+    #[error(
+        "the placeholder at offset {offset} extends past the end of the file ({file_size} bytes)"
+    )]
+    OffsetOutOfRange {
+        /// The recorded offset.
+        offset: usize,
+        /// The size of the file.
+        file_size: usize,
+    },
+
+    /// The placeholder at an offset extends past the terminator of its c-string.
+    #[error("the placeholder at offset {offset} extends past its terminator at {terminator}")]
+    OffsetPastTerminator {
+        /// The recorded offset.
+        offset: usize,
+        /// The recorded terminator position.
+        terminator: usize,
+    },
+
+    /// An offset is not a whole number of code units before the terminator of its c-string.
+    #[error(
+        "offset {offset} is not a whole number of code units before its terminator at {terminator}"
+    )]
+    MisalignedOffset {
+        /// The recorded offset.
+        offset: usize,
+        /// The recorded terminator position.
+        terminator: usize,
+    },
+
+    /// The bytes at an offset are not the encoded placeholder.
+    #[error("the placeholder is not present at offset {offset}")]
+    PlaceholderNotFound {
+        /// The recorded offset.
+        offset: usize,
+    },
+
+    /// A terminator position lies past the end of the file.
+    #[error("terminator {terminator} lies past the end of the file ({file_size} bytes)")]
+    TerminatorOutOfRange {
+        /// The recorded terminator position.
+        terminator: usize,
+        /// The size of the file.
+        file_size: usize,
+    },
+
+    /// The bytes at a terminator position are not a zero code unit.
+    #[error("the bytes at terminator {terminator} are not a zero code unit")]
+    TerminatorNotZero {
+        /// The recorded terminator position.
+        terminator: usize,
+    },
 }
 
 /// The placeholder and target prefix encoded with one of the encodings defined by the draft CEP.
@@ -120,12 +222,11 @@ impl EncodedPrefix {
         OffsetEncoding::DEFINED
             .into_iter()
             .filter_map(|encoding| {
-                let placeholder = encoding.encode(placeholder)?;
-                let target = encoding.encode(target)?;
-                (!placeholder.is_empty()).then_some(EncodedPrefix {
+                let placeholder = encoding.encode(placeholder);
+                (!placeholder.is_empty()).then(|| EncodedPrefix {
                     encoding,
                     placeholder,
-                    target,
+                    target: encoding.encode(target),
                 })
             })
             .collect()
@@ -139,9 +240,18 @@ impl EncodedPrefix {
 
     /// The size of one code unit, which is also the size of a c-string's NUL terminator.
     fn code_unit_size(&self) -> usize {
-        self.encoding
-            .code_unit_size()
-            .expect("only encodings defined by the draft CEP are constructed")
+        self.encoding.code_unit_size()
+    }
+
+    /// The error for a target prefix that does not fit in the space of the placeholder.
+    fn growing_prefix_error(&self) -> std::io::Error {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "target prefix cannot be longer than the placeholder prefix (encoding '{}')",
+                self.encoding
+            ),
+        )
     }
 }
 
@@ -154,34 +264,24 @@ impl EncodedPrefix {
 fn reject_growing_prefix<'a>(
     prefixes: impl IntoIterator<Item = &'a EncodedPrefix>,
 ) -> Result<(), std::io::Error> {
-    for prefix in prefixes {
-        if prefix.shrinks_by().is_none() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!(
-                    "target prefix cannot be longer than the placeholder prefix (encoding '{}')",
-                    prefix.encoding.as_str()
-                ),
-            ));
-        }
+    match prefixes
+        .into_iter()
+        .find(|prefix| prefix.shrinks_by().is_none())
+    {
+        Some(prefix) => Err(prefix.growing_prefix_error()),
+        None => Ok(()),
     }
-    Ok(())
 }
 
 /// Looks up the encoded prefixes for the encoding of a recorded offset group.
-fn encoded_prefix_for<'a>(
-    prefixes: &'a [EncodedPrefix],
-    encoding: &OffsetEncoding,
-) -> Result<&'a EncodedPrefix, OffsetReplaceError> {
+fn encoded_prefix_for(
+    prefixes: &[EncodedPrefix],
+    encoding: OffsetEncoding,
+) -> Result<&EncodedPrefix, InconsistentOffsetsError> {
     prefixes
         .iter()
-        .find(|prefix| &prefix.encoding == encoding)
-        .ok_or_else(|| {
-            OffsetReplaceError::inconsistent(format!(
-                "there is no placeholder to replace under encoding '{}'",
-                encoding.as_str()
-            ))
-        })
+        .find(|prefix| prefix.encoding == encoding)
+        .ok_or(InconsistentOffsetsError::EmptyPlaceholder)
 }
 
 /// One placeholder occurrence in a text file.
@@ -202,18 +302,18 @@ struct CStringPatch<'a> {
 }
 
 /// Given the contents of a file copy it to the `destination` and in the process replace the
-/// `prefix_placeholder` text with the `target_prefix` text, using the offset groups recorded in
+/// `prefix_placeholder` text with the `target_prefix` text, using the offsets recorded in
 /// `paths.json` instead of searching the file contents.
 ///
 /// Per the [draft CEP], an installer applies exactly the groups whose encodings its own
 /// search-based replacement covers, so both paths produce the same bytes. rattler's search-based
-/// replacement covers every encoding the draft CEP defines, so every group of a valid list is
-/// spliced. Valid metadata with no ranges at all means there is nothing to splice: the file is
-/// copied through unchanged apart from the shebang handling of text files.
+/// replacement covers every encoding the draft CEP defines, so every recorded group is spliced.
+/// Offsets with no groups at all mean there is nothing to splice: the file is copied through
+/// unchanged apart from the shebang handling of text files.
 ///
-/// `shebang_length` bounds the leading shebang region for text files and is ignored for binary
-/// files. Returns [`OffsetReplaceError::InconsistentMetadata`] (having written nothing) when the
-/// metadata does not match the file, so the caller can fall back to search-based replacement.
+/// Returns [`OffsetReplaceError::InconsistentMetadata`] (having written nothing) when the offsets
+/// were recorded for a different `file_mode` or do not match the file, so the caller can fall
+/// back to search-based replacement.
 ///
 /// Nothing is searched: the only bytes inspected are the ones the metadata points at, namely the
 /// encoded placeholder at each recorded offset, the zero code unit at each recorded c-string
@@ -222,7 +322,6 @@ struct CStringPatch<'a> {
 /// at, which is what lets a consumer compute the patched size from the metadata alone.
 ///
 /// [draft CEP]: https://github.com/conda/ceps/pull/179
-#[allow(clippy::too_many_arguments)]
 pub fn copy_and_replace_placeholders_with_offsets(
     source_bytes: &[u8],
     mut destination: impl Write,
@@ -230,11 +329,15 @@ pub fn copy_and_replace_placeholders_with_offsets(
     target_prefix: &str,
     target_platform: &Subdir,
     file_mode: FileMode,
-    offsets: &[OffsetGroup],
-    shebang_length: Option<usize>,
+    offsets: &PrefixOffsets,
 ) -> Result<(), OffsetReplaceError> {
-    validate_offset_groups(offsets, file_mode, shebang_length.is_some())
-        .map_err(|err| OffsetReplaceError::inconsistent(err.to_string()))?;
+    if offsets.file_mode() != file_mode {
+        return Err(InconsistentOffsetsError::FileModeMismatch {
+            recorded: offsets.file_mode(),
+            installed: file_mode,
+        }
+        .into());
+    }
 
     match file_mode {
         FileMode::Text => copy_and_replace_textual_placeholder_offsets(
@@ -243,8 +346,8 @@ pub fn copy_and_replace_placeholders_with_offsets(
             prefix_placeholder,
             target_prefix,
             target_platform,
-            offsets,
-            shebang_length,
+            offsets.groups(),
+            offsets.shebang_length(),
         )?,
         // conda does not replace the prefix in the binary files on windows
         // DLLs are loaded quite differently anyways (there is no rpath, for example).
@@ -256,7 +359,7 @@ pub fn copy_and_replace_placeholders_with_offsets(
             destination,
             prefix_placeholder,
             target_prefix,
-            offsets,
+            offsets.groups(),
         )?,
     }
     Ok(())

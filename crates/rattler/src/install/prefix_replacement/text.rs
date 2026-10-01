@@ -6,11 +6,12 @@ use std::io::Write;
 
 use once_cell::sync::Lazy;
 use rattler_conda_types::Subdir;
-use rattler_conda_types::package::{OffsetGroup, OffsetRanges};
+use rattler_conda_types::package::{InvalidOffsetsError, OffsetGroup, OffsetRanges};
 use regex::Regex;
 
 use super::{
-    EncodedPrefix, OffsetReplaceError, TextPatch, encoded_prefix_for, write_replacement_range,
+    EncodedPrefix, InconsistentOffsetsError, OffsetReplaceError, TextPatch, encoded_prefix_for,
+    write_replacement_range,
 };
 
 static SHEBANG_REGEX: Lazy<Regex> = Lazy::new(|| {
@@ -249,36 +250,26 @@ pub fn copy_and_replace_textual_placeholder_offsets(
 fn validated_shebang_region_end(
     source_bytes: &[u8],
     shebang_length: Option<usize>,
-) -> Result<usize, OffsetReplaceError> {
+) -> Result<usize, InconsistentOffsetsError> {
     if !source_bytes.starts_with(b"#!") {
-        return if shebang_length.is_some() {
-            Err(OffsetReplaceError::inconsistent(
-                "shebang_length present but the file does not start with #!",
-            ))
-        } else {
-            Ok(0)
+        return match shebang_length {
+            Some(_) => Err(InconsistentOffsetsError::UnexpectedShebangLength),
+            None => Ok(0),
         };
     }
 
-    let len = shebang_length.ok_or_else(|| {
-        OffsetReplaceError::inconsistent("file starts with #! but shebang_length is absent")
-    })?;
-    let region = source_bytes.get(..len).ok_or_else(|| {
-        OffsetReplaceError::inconsistent(format!(
-            "shebang_length {len} is past the end of the file ({} bytes)",
-            source_bytes.len()
-        ))
-    })?;
+    let shebang_length = shebang_length.ok_or(InconsistentOffsetsError::MissingShebangLength)?;
+    let region = source_bytes
+        .get(..shebang_length)
+        .ok_or(InconsistentOffsetsError::ShebangLengthMismatch { shebang_length })?;
     let ends_the_line = match memchr::memchr(b'\n', region) {
-        Some(index) => index + 1 == len,
-        None => len == source_bytes.len(),
+        Some(index) => index + 1 == shebang_length,
+        None => shebang_length == source_bytes.len(),
     };
     if !ends_the_line {
-        return Err(OffsetReplaceError::inconsistent(format!(
-            "shebang_length {len} is not the length of the first line"
-        )));
+        return Err(InconsistentOffsetsError::ShebangLengthMismatch { shebang_length });
     }
-    Ok(len)
+    Ok(shebang_length)
 }
 
 /// Writes the first `region_end` bytes of a text file, transformed by the installer's shebang
@@ -339,14 +330,12 @@ fn write_shebang_region(
 fn text_patches_from_groups<'a>(
     groups: &[OffsetGroup],
     prefixes: &'a [EncodedPrefix],
-) -> Result<Vec<TextPatch<'a>>, OffsetReplaceError> {
+) -> Result<Vec<TextPatch<'a>>, InconsistentOffsetsError> {
     let mut patches = Vec::new();
     for group in groups {
-        let prefix = encoded_prefix_for(prefixes, &group.encoding)?;
-        let OffsetRanges::Text(offsets) = &group.ranges else {
-            return Err(OffsetReplaceError::inconsistent(
-                "ranges shape does not match file mode",
-            ));
+        let prefix = encoded_prefix_for(prefixes, group.encoding())?;
+        let OffsetRanges::Text(offsets) = group.ranges() else {
+            return Err(InvalidOffsetsError::RangesShapeMismatch(group.encoding()).into());
         };
         patches.extend(offsets.iter().map(|&offset| TextPatch { offset, prefix }));
     }
@@ -364,37 +353,29 @@ fn validate_text_patches(
     source_bytes: &[u8],
     patches: &[TextPatch<'_>],
     region_end: usize,
-) -> Result<(), OffsetReplaceError> {
+) -> Result<(), InconsistentOffsetsError> {
     let mut prev_end = region_end;
     for patch in patches {
+        let offset = patch.offset;
         let placeholder = patch.prefix.placeholder.as_slice();
-        if patch.offset < region_end {
-            return Err(OffsetReplaceError::inconsistent(format!(
-                "offset {} lies inside the shebang region (< {region_end})",
-                patch.offset
-            )));
+        if offset < region_end {
+            return Err(InconsistentOffsetsError::OffsetInShebangRegion {
+                offset,
+                shebang_length: region_end,
+            });
         }
-        if patch.offset < prev_end {
-            return Err(OffsetReplaceError::inconsistent(
-                "offsets are not sorted in strictly increasing, non-overlapping order",
-            ));
+        if offset < prev_end {
+            return Err(InconsistentOffsetsError::UnsortedOffset { offset });
         }
-        let end = patch
-            .offset
+        let end = offset
             .checked_add(placeholder.len())
             .filter(|&end| end <= source_bytes.len())
-            .ok_or_else(|| {
-                OffsetReplaceError::inconsistent(format!(
-                    "offset {} is out of range for content of length {}",
-                    patch.offset,
-                    source_bytes.len()
-                ))
+            .ok_or(InconsistentOffsetsError::OffsetOutOfRange {
+                offset,
+                file_size: source_bytes.len(),
             })?;
-        if &source_bytes[patch.offset..end] != placeholder {
-            return Err(OffsetReplaceError::inconsistent(format!(
-                "placeholder bytes are not present at recorded offset {}",
-                patch.offset
-            )));
+        if &source_bytes[offset..end] != placeholder {
+            return Err(InconsistentOffsetsError::PlaceholderNotFound { offset });
         }
         prev_end = end;
     }
