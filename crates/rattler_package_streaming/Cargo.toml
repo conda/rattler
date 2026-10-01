@@ -1,7 +1,7 @@
 [package]
 exclude = ["tests/**", "benches/**", "**/snapshots/**"]
 name = "rattler_package_streaming"
-version = "0.27.5"
+version = "0.27.8"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Extract and stream of Conda package archives"
@@ -13,7 +13,6 @@ readme.workspace = true
 
 [dependencies]
 bzip2 = { workspace = true }
-dunce = { workspace = true }
 jiff = { workspace = true }
 http = { workspace = true, optional = true }
 filetime = { workspace = true }

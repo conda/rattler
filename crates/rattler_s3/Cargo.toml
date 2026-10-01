@@ -1,6 +1,6 @@
 [package]
 name = "rattler_s3"
-version = "0.2.14"
+version = "0.3.0"
 description = "A crate to streamline interaction with S3 storage for rattler"
 categories.workspace = true
 homepage.workspace = true
@@ -15,12 +15,14 @@ default = ["rustls"]
 # This feature is provided for API compatibility with other rattler crates but
 # will use rustls under the hood.
 native-tls = ["rustls"]
-rustls = ["aws-smithy-http-client/rustls-aws-lc"]
+rustls = ["aws-smithy-http-client/rustls-aws-lc", "opendal?/reqwest-rustls-tls"]
+# Build `opendal` S3 operators that sign their requests with credentials of this
+# crate, see `S3CredentialSource::opendal_builder`.
+opendal = ["dep:opendal", "dep:reqsign-aws-v4", "dep:reqsign-core"]
 
 [dependencies]
 clap = { workspace = true, optional = true }
 thiserror = { workspace = true }
-tracing = { workspace = true }
 url = { workspace = true }
 
 aws-config = { workspace = true, features = [
@@ -34,6 +36,13 @@ aws-sdk-s3 = { workspace = true, features = ["rt-tokio", "default-https-client"]
 aws-smithy-http-client = { workspace = true }
 aws-credential-types = { workspace = true }
 
-rattler_networking = { workspace = true, default-features = false }
+rattler_networking = { workspace = true, default-features = false, features = ["s3"] }
+
+opendal = { workspace = true, optional = true, features = ["services-s3"] }
+reqsign-aws-v4 = { workspace = true, optional = true }
+reqsign-core = { workspace = true, optional = true }
 
 serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.0](https://github.com/conda/rattler/compare/rattler_index-v0.31.7...rattler_index-v0.32.0) - 2026-09-29
+
+### Added
+
+- *(sigstore)* add FulcioCiClaims from `1.3.6.1.4.1.57264.1` ([#2844](https://github.com/conda/rattler/pull/2844))
+
+### Other
+
+- *(index)* [**breaking**] build S3 operators from `S3CredentialSource` ([#2847](https://github.com/conda/rattler/pull/2847))
+- [**breaking**] rename Platform to Subdir and validate names against CEP 26 ([#2787](https://github.com/conda/rattler/pull/2787))
+
+## [0.31.7](https://github.com/conda/rattler/compare/rattler_index-v0.31.6...rattler_index-v0.31.7) - 2026-09-23
+
+### Added
+
+- add standalone Sigstore attestation verification ([#2794](https://github.com/conda/rattler/pull/2794))
+- *(rattler_index)* Write indexed_timestamp ([#2797](https://github.com/conda/rattler/pull/2797))
+- Add attestations to PackageRecord and rattler-index/upload ([#2773](https://github.com/conda/rattler/pull/2773))
+
+### Fixed
+
+- *(index)* stop advertising the legacy layout as "v0" ([#2785](https://github.com/conda/rattler/pull/2785))
+
+## [0.31.6](https://github.com/conda/rattler/compare/rattler_index-v0.31.5...rattler_index-v0.31.6) - 2026-09-17
+
+### Added
+
+- *(rattler_conda_types)* Add indexed_timestamp ([#2790](https://github.com/conda/rattler/pull/2790))
+
+### Fixed
+
+- keep v3-only extra dependencies in legacy repodata ([#2809](https://github.com/conda/rattler/pull/2809))
+
 ## [0.31.5](https://github.com/conda/rattler/compare/rattler_index-v0.31.4...rattler_index-v0.31.5) - 2026-09-04
 
 ### Other

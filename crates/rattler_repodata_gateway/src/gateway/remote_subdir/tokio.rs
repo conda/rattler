@@ -10,7 +10,7 @@ use crate::{
         GatewayError, SourceConfig, error::SubdirNotFoundError, local_subdir::LocalSubdirClient,
     },
 };
-use rattler_conda_types::{Channel, Platform};
+use rattler_conda_types::{Channel, Subdir};
 use rattler_networking::LazyClient;
 
 pub struct RemoteSubdirClient {
@@ -20,7 +20,7 @@ pub struct RemoteSubdirClient {
 impl RemoteSubdirClient {
     pub async fn new(
         channel: Channel,
-        platform: Platform,
+        platform: Subdir,
         client: LazyClient,
         cache_dir: PathBuf,
         source_config: SourceConfig,
@@ -78,7 +78,7 @@ impl RemoteSubdirClient {
     pub fn clear_cache(
         cache_dir: &Path,
         channel: &Channel,
-        platform: Platform,
+        platform: Subdir,
     ) -> Result<(), std::io::Error> {
         let subdir_url = channel.platform_url(platform);
         let cache_key = crate::utils::url_to_cache_filename(

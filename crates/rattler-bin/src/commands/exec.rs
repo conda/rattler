@@ -8,8 +8,9 @@ use rattler::{
 use rattler_cache::EXEC_ENVS_DIR;
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
-    ParseMatchSpecOptions, Platform,
+    ParseMatchSpecOptions, Subdir,
 };
+use rattler_config::{ConfigBase, NoExtension};
 use rattler_repodata_gateway::RepoData;
 use rattler_shell::shell::ShellEnum;
 use rattler_solve::{SolverImpl, SolverTask, resolvo::Solver};
@@ -25,7 +26,7 @@ use std::{
 use crate::{
     commands::{
         client::create_client_with_middleware,
-        gateway::{build_gateway, load_config},
+        gateway::{build_gateway, load_config, resolve_channels},
         progress::{wrap_in_async_progress, wrap_in_progress},
         table::{Cell, Table},
     },
@@ -35,6 +36,10 @@ use crate::{
 /// Run a command and install it in a temporary environment.
 #[derive(Debug, Parser)]
 #[clap(trailing_var_arg = true, arg_required_else_help = true)]
+#[clap(after_help = r#"Examples:
+  rattler exec ruff check .                            # the package is guessed from the command name
+  rattler exec --spec python=3.12 python --version     # pick the package(s) explicitly
+  rattler exec --with rich python -c "import rich"     # guess python and add another package"#)]
 pub struct Opt {
     /// The executable to run, followed by any arguments.
     #[clap(num_args = 1.., value_hint = ValueHint::CommandWithArguments)]
@@ -57,7 +62,7 @@ pub struct Opt {
     /// The platform to create the environment for. Defaults to the platform
     /// of the current host.
     #[clap(long, short)]
-    pub platform: Option<Platform>,
+    pub platform: Option<Subdir>,
 
     /// Always create a new environment, even if one already exists.
     #[clap(long)]
@@ -86,14 +91,8 @@ pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
         )
     })?;
 
-    // Parse channels (default: conda-forge)
-    let channels = opt
-        .channels
-        .unwrap_or_else(|| vec![String::from("conda-forge")])
-        .into_iter()
-        .map(|c| Channel::from_str(&c, &channel_config))
-        .collect::<Result<Vec<_>, _>>()
-        .into_diagnostic()?;
+    let config = load_config()?;
+    let channels = resolve_channels(opt.channels.as_deref(), &config, &channel_config)?;
 
     // Determine the specs for installation and for the environment name.
     let explicit_specs = parse_specs(&opt.specs)?;
@@ -120,6 +119,7 @@ pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
     let prefix = create_exec_prefix(CreateExecPrefixOptions {
         specs: &install_specs,
         channels: &channels,
+        config: &config,
         platform: opt.platform.map_or_else(crate::host_platform, Ok)?,
         dir_prefix,
         force_reinstall: opt.force_reinstall,
@@ -184,7 +184,8 @@ pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
 struct CreateExecPrefixOptions<'a> {
     specs: &'a [MatchSpec],
     channels: &'a [Channel],
-    platform: Platform,
+    config: &'a ConfigBase<NoExtension>,
+    platform: Subdir,
     dir_prefix: Option<String>,
     force_reinstall: bool,
     list: Option<&'a str>,
@@ -197,6 +198,7 @@ async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Res
     let CreateExecPrefixOptions {
         specs,
         channels,
+        config,
         platform,
         dir_prefix,
         force_reinstall,
@@ -225,15 +227,14 @@ async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Res
 
     let download_client = create_client_with_middleware(offline)?;
 
-    let config = load_config()?;
-    let gateway = build_gateway(download_client.clone(), &config, offline, true)?;
+    let gateway = build_gateway(download_client.clone(), config, offline, true)?;
 
     let repo_data = wrap_in_async_progress(
         "fetching repodata",
         gateway
             .query(
                 channels.to_vec(),
-                [platform, Platform::NoArch],
+                [platform, Subdir::NoArch],
                 specs.to_vec(),
             )
             .recursive(true),
@@ -323,7 +324,7 @@ fn parse_specs(raw: &[String]) -> miette::Result<Vec<MatchSpec>> {
 ///
 /// Two invocations with the same logical environment always produce the same
 /// hash, regardless of argument order.
-fn compute_env_hash(specs: &[MatchSpec], channels: &[String], platform: Platform) -> String {
+fn compute_env_hash(specs: &[MatchSpec], channels: &[String], platform: Subdir) -> String {
     let mut sorted_specs: Vec<String> =
         specs.iter().map(std::string::ToString::to_string).collect();
     sorted_specs.sort_unstable();
@@ -437,7 +438,7 @@ mod tests {
     use rattler_conda_types::{MatchSpec, ParseStrictness};
 
     use super::{compute_env_hash, exec_dir_prefix};
-    use rattler_conda_types::Platform;
+    use rattler_conda_types::Subdir;
 
     fn spec(s: &str) -> MatchSpec {
         MatchSpec::from_str(s, ParseStrictness::Lenient).unwrap()
@@ -471,8 +472,8 @@ mod tests {
     fn env_hash_is_deterministic() {
         let specs = vec![spec("python=3.12"), spec("numpy")];
         let channels = vec!["https://conda.anaconda.org/conda-forge/".to_string()];
-        let h1 = compute_env_hash(&specs, &channels, Platform::Linux64);
-        let h2 = compute_env_hash(&specs, &channels, Platform::Linux64);
+        let h1 = compute_env_hash(&specs, &channels, Subdir::Linux64);
+        let h2 = compute_env_hash(&specs, &channels, Subdir::Linux64);
         assert_eq!(h1, h2);
     }
 
@@ -482,12 +483,12 @@ mod tests {
         let h1 = compute_env_hash(
             &[spec("numpy"), spec("python=3.12")],
             &channels,
-            Platform::Linux64,
+            Subdir::Linux64,
         );
         let h2 = compute_env_hash(
             &[spec("python=3.12"), spec("numpy")],
             &channels,
-            Platform::Linux64,
+            Subdir::Linux64,
         );
         assert_eq!(h1, h2);
     }
@@ -496,8 +497,8 @@ mod tests {
     fn env_hash_differs_by_platform() {
         let specs = vec![spec("python=3.12")];
         let channels = vec!["https://conda.anaconda.org/conda-forge/".to_string()];
-        let h_linux = compute_env_hash(&specs, &channels, Platform::Linux64);
-        let h_osx = compute_env_hash(&specs, &channels, Platform::OsxArm64);
+        let h_linux = compute_env_hash(&specs, &channels, Subdir::Linux64);
+        let h_osx = compute_env_hash(&specs, &channels, Subdir::OsxArm64);
         assert_ne!(h_linux, h_osx);
     }
 }

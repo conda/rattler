@@ -32,6 +32,7 @@ impl PackageBuilder {
                     archive_type: DistArchiveType::Conda(archive_type),
                 },
                 package_record: PackageRecord {
+                    attestations_sha256: None,
                     name: name.parse().unwrap(),
                     version: Version::from_str("0.0.0").unwrap().into(),
                     build: "h123456_0".to_string(),

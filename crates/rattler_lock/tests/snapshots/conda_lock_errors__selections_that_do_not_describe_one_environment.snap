@@ -1,0 +1,59 @@
+---
+source: crates/rattler_lock/tests/conda_lock_errors.rs
+expression: all
+---
+# incompatible packages in two selected categories
+kind: IncompatibleSelection
+  × package[1]: selected categories contain incompatible packages with the same name
+    ╭─[conda-lock.yml:11:5]
+ 10 │ package:
+ 11 │   - name: numpy
+    ·     ▲
+    ·     ╰── original package selection
+ 12 │     version: '2.1.0'
+ 13 │     manager: conda
+ 14 │     platform: linux-64
+ 15 │     url: https://conda.anaconda.org/conda-forge/linux-64/numpy-2.1.0-py312_0.conda
+ 16 │     hash:
+ 17 │       sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ 18 │     category: main
+ 19 │     optional: false
+ 20 │   - name: numpy
+    ·     ▲
+    ·     ╰── selected categories contain incompatible packages with the same name
+ 21 │     version: '2.2.0'
+    ╰────
+
+# one artifact with two package identities
+kind: ConflictingArtifact
+  × package[3]: the same artifact has conflicting package metadata
+    ╭─[conda-lock.yml:29:5]
+ 28 │     optional: false
+ 29 │   - name: scipy
+    ·     ▲
+    ·     ╰── original package selection
+ 30 │     version: '1.14.0'
+ 31 │     manager: conda
+ 32 │     platform: linux-64
+ 33 │     url: https://conda.anaconda.org/conda-forge/linux-64/scipy-1.14.0-py312_0.conda
+ 34 │     hash:
+ 35 │       sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ 36 │     category: main
+ 37 │     optional: false
+ 38 │   - name: scipy-clone
+    ·     ▲
+    ·     ╰── the same artifact has conflicting package metadata
+ 39 │     version: '1.14.0'
+    ╰────
+
+# category that occurs in no package
+kind: UnknownCategory { category: "docs" }
+  × options.environments.default: category "docs" does not occur in the lock file
+
+# environment without categories
+kind: EmptySelection
+  × options.environments.default: environment names and category selections must be nonempty
+
+# no environments at all
+kind: NoEnvironments
+  × options.environments: at least one environment selection is required

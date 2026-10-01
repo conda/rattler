@@ -1,17 +1,19 @@
 //! Command line options shared by every command that resolves an environment.
 
-use std::{str::FromStr, time::Duration};
+use std::{collections::HashSet, str::FromStr, time::Duration};
 
 use clap::ValueEnum;
 use miette::IntoDiagnostic;
 use rattler_conda_types::{
-    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, ParseMatchSpecOptions,
-    Platform, RepoDataRecord, SolverResult, Version,
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
+    ParseMatchSpecOptions, RepoDataRecord, SolverResult, Subdir, Version,
 };
+use rattler_config::{ConfigBase, NoExtension};
 use rattler_solve::{IntoRepoData, SolveError, SolverImpl, SolverTask, libsolv_c, resolvo};
 use rattler_virtual_packages::{VirtualPackageOverrides, VirtualPackages};
 
-use crate::exclude_newer::ExcludeNewer;
+use crate::commands::gateway::resolve_channels;
+use crate::exclude_newer::{ExcludeNewer, NamedCutoff};
 
 /// Options that configure how an environment is solved.
 ///
@@ -36,7 +38,7 @@ pub struct SolverArgs {
 
     /// The platform to solve for. Defaults to the platform of the current host.
     #[clap(long)]
-    platform: Option<Platform>,
+    platform: Option<Subdir>,
 
     /// Virtual packages to use for solving, e.g. __glibc=2.28.
     ///
@@ -68,11 +70,38 @@ pub struct SolverArgs {
     #[clap(long, group = "deps_mode")]
     no_deps: bool,
 
-    /// Exclude packages that have been published after the specified timestamp.
-    /// Can be specified as a timestamp (e.g., "2006-12-02T02:07:43Z") or as a date (e.g., "2006-12-02").
+    /// Exclude packages newer than the specified cutoff.
+    /// Can be specified as a timestamp (e.g., "2006-12-02T02:07:43Z"), a date
+    /// (e.g., "2006-12-02"), or a duration (e.g., "3d").
     /// When using a date, packages from the entire day are included.
     #[clap(long)]
     exclude_newer: Option<ExcludeNewer>,
+
+    /// Override the cutoff for a channel, as `CHANNEL=CUTOFF`.
+    /// The cutoff accepts the same timestamp, date, and duration formats as
+    /// `--exclude-newer`.
+    /// May be specified multiple times.
+    #[clap(
+        long = "channel-cutoff",
+        value_name = "CHANNEL=CUTOFF",
+        requires = "exclude_newer"
+    )]
+    channel_cutoffs: Vec<NamedCutoff>,
+
+    /// Override the cutoff for a package, as `PACKAGE=CUTOFF`.
+    /// The cutoff accepts the same timestamp, date, and duration formats as
+    /// `--exclude-newer`.
+    /// May be specified multiple times.
+    #[clap(
+        long = "package-cutoff",
+        value_name = "PACKAGE=CUTOFF",
+        requires = "exclude_newer"
+    )]
+    package_cutoffs: Vec<NamedCutoff>,
+
+    /// Policy for selecting package timestamps when using `--exclude-newer`.
+    #[clap(long, default_value = "require-timestamp")]
+    timestamp_policy: TimestampPolicy,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -94,6 +123,31 @@ impl From<SolveStrategy> for rattler_solve::SolveStrategy {
             SolveStrategy::Highest => rattler_solve::SolveStrategy::Highest,
             SolveStrategy::Lowest => rattler_solve::SolveStrategy::LowestVersion,
             SolveStrategy::LowestDirect => rattler_solve::SolveStrategy::LowestVersionDirect,
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, Copy, ValueEnum)]
+pub enum TimestampPolicy {
+    /// Prefer the indexed timestamp, then the build timestamp, and allow
+    /// packages that have neither.
+    AllowMissing,
+
+    /// Prefer the indexed timestamp, then the build timestamp, and reject
+    /// packages that have neither.
+    #[default]
+    RequireTimestamp,
+
+    /// Use only the indexed timestamp and reject packages without one.
+    RequireIndexedTimestamp,
+}
+
+impl From<TimestampPolicy> for rattler_solve::TimestampPolicy {
+    fn from(value: TimestampPolicy) -> Self {
+        match value {
+            TimestampPolicy::AllowMissing => Self::AllowMissing,
+            TimestampPolicy::RequireTimestamp => Self::RequireTimestamp,
+            TimestampPolicy::RequireIndexedTimestamp => Self::RequireIndexedTimestamp,
         }
     }
 }
@@ -149,20 +203,18 @@ impl SolverArgs {
         Self::parse_specs(&self.constraints)
     }
 
-    /// The channels to solve from, defaulting to `conda-forge`.
-    pub fn channels(&self, channel_config: &ChannelConfig) -> miette::Result<Vec<Channel>> {
-        self.channels
-            .clone()
-            .unwrap_or_else(|| vec![String::from("conda-forge")])
-            .into_iter()
-            .map(|channel_str| Channel::from_str(channel_str, channel_config))
-            .collect::<Result<Vec<_>, _>>()
-            .into_diagnostic()
+    /// The channels to solve from, see [`resolve_channels`].
+    pub fn channels(
+        &self,
+        config: &ConfigBase<NoExtension>,
+        channel_config: &ChannelConfig,
+    ) -> miette::Result<Vec<Channel>> {
+        resolve_channels(self.channels.as_deref(), config, channel_config)
     }
 
     /// The platform to solve for, either as given on the command line or the
     /// platform of the current host.
-    pub fn platform(&self) -> miette::Result<Platform> {
+    pub fn platform(&self) -> miette::Result<Subdir> {
         self.platform.map_or_else(crate::host_platform, Ok)
     }
 
@@ -207,8 +259,48 @@ impl SolverArgs {
         self.channel_priority.unwrap_or_default().into()
     }
 
-    pub fn exclude_newer(&self) -> Option<rattler_solve::ExcludeNewer> {
-        self.exclude_newer.map(Into::into)
+    pub fn exclude_newer(
+        &self,
+        channel_config: &ChannelConfig,
+    ) -> miette::Result<Option<rattler_solve::ExcludeNewer>> {
+        let Some(cutoff) = self.exclude_newer else {
+            return Ok(None);
+        };
+
+        let now = jiff::Timestamp::now();
+        let mut exclude_newer = cutoff.into_solver(now);
+        let mut channels = HashSet::new();
+        for override_ in &self.channel_cutoffs {
+            let channel = Channel::from_str(&override_.name, channel_config).into_diagnostic()?;
+            let channel = channel.canonical_name();
+            if !channels.insert(channel.clone()) {
+                return Err(miette::miette!(
+                    "duplicate cutoff for channel '{}'",
+                    override_.name
+                ));
+            }
+            exclude_newer = override_
+                .cutoff
+                .apply_to_channel(exclude_newer, channel, now);
+        }
+
+        let mut packages = HashSet::new();
+        for override_ in &self.package_cutoffs {
+            let package = PackageName::from_str(&override_.name).into_diagnostic()?;
+            if !packages.insert(package.clone()) {
+                return Err(miette::miette!(
+                    "duplicate cutoff for package '{}'",
+                    override_.name
+                ));
+            }
+            exclude_newer = override_
+                .cutoff
+                .apply_to_package(exclude_newer, package, now);
+        }
+
+        Ok(Some(
+            exclude_newer.with_timestamp_policy(self.timestamp_policy.into()),
+        ))
     }
 
     /// Solves the task with the selected backend.

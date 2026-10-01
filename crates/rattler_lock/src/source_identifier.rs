@@ -267,6 +267,7 @@ fn compute_source_hash(data: &CondaSourceData) -> u64 {
                 // run_exports, etc. are not identifying.
                 name: _,
                 arch: _,
+                attestations_sha256: _,
                 platform: _,
                 features: _,
                 legacy_bz2_md5: _,

@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use std::io::Write;
 
 use once_cell::sync::Lazy;
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 use rattler_conda_types::package::{OffsetGroup, OffsetRanges};
 use regex::Regex;
 
@@ -35,7 +35,7 @@ pub(super) static PYTHON_REGEX: Lazy<Regex> = Lazy::new(|| {
 });
 
 /// Finds if the shebang line length is valid.
-fn is_valid_shebang_length(shebang: &str, platform: &Platform) -> bool {
+fn is_valid_shebang_length(shebang: &str, platform: &Subdir) -> bool {
     const MAX_SHEBANG_LENGTH_LINUX: usize = 127;
     const MAX_SHEBANG_LENGTH_MACOS: usize = 512;
 
@@ -77,7 +77,7 @@ fn convert_shebang_to_env(shebang: Cow<'_, str>) -> Cow<'_, str> {
 pub(super) fn replace_shebang<'a>(
     shebang: Cow<'a, str>,
     old_new: (&str, &str),
-    platform: &Platform,
+    platform: &Subdir,
 ) -> Cow<'a, str> {
     // If the new shebang would contain a space, return a `#!/usr/bin/env` shebang
     assert!(
@@ -127,7 +127,7 @@ pub fn copy_and_replace_textual_placeholder(
     mut destination: impl Write,
     prefix_placeholder: &str,
     target_prefix: &str,
-    target_platform: &Platform,
+    target_platform: &Subdir,
 ) -> Result<(), std::io::Error> {
     let prefixes = EncodedPrefix::all(prefix_placeholder, target_prefix);
 
@@ -200,7 +200,7 @@ fn find_text_patches<'a>(
 /// Every group of `groups` is applied, each under its own encoding. Its ranges are absolute byte
 /// positions in `source_bytes` and, per the draft CEP, exclude any occurrence inside the shebang
 /// region (the first `shebang_length` bytes, present exactly when the file starts with `#!`). The
-/// region is handled separately: on targets with shebang handling ([`Platform::is_unix`]) the
+/// region is handled separately: on targets with shebang handling ([`Subdir::is_unix`]) the
 /// region minus its trailing newline is rewritten by `replace_shebang` and the newline byte copied
 /// through verbatim; on other targets the region gets plain placeholder replacement.
 ///
@@ -212,7 +212,7 @@ pub fn copy_and_replace_textual_placeholder_offsets(
     mut destination: impl Write,
     prefix_placeholder: &str,
     target_prefix: &str,
-    target_platform: &Platform,
+    target_platform: &Subdir,
     groups: &[OffsetGroup],
     shebang_length: Option<usize>,
 ) -> Result<(), OffsetReplaceError> {
@@ -294,7 +294,7 @@ fn write_shebang_region(
     region_end: usize,
     prefix_placeholder: &str,
     target_prefix: &str,
-    target_platform: &Platform,
+    target_platform: &Subdir,
     prefixes: &[EncodedPrefix],
 ) -> Result<(), std::io::Error> {
     if region_end == 0 {

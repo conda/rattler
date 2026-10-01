@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.7](https://github.com/conda/rattler/compare/rattler_git-v0.3.6...rattler_git-v0.3.7) - 2026-09-29
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.3.6](https://github.com/conda/rattler/compare/rattler_git-v0.3.5...rattler_git-v0.3.6) - 2026-09-23
+
+### Fixed
+
+- *(git)* keep cache database housekeeping in the foreground ([#2824](https://github.com/conda/rattler/pull/2824))
+
+## [0.3.5](https://github.com/conda/rattler/compare/rattler_git-v0.3.4...rattler_git-v0.3.5) - 2026-09-17
+
+### Other
+
+- updated the following local packages: rattler_networking
+
 ## [0.3.4](https://github.com/conda/rattler/compare/rattler_git-v0.3.3...rattler_git-v0.3.4) - 2026-08-27
 
 ### Other

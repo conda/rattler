@@ -1,16 +1,16 @@
 from __future__ import annotations
-from enum import Enum
 
-from typing import Iterable, Optional
-from pathlib import Path
 import os
-from rattler.platform.platform import Platform, PlatformLiteral
+from collections.abc import Iterable
+from enum import Enum
+from pathlib import Path
 
+from rattler.platform.subdir import Subdir, SubdirLiteral
 from rattler.rattler import (
+    PyActivationResult,
     PyActivationVariables,
     PyActivator,
     PyShellEnum,
-    PyActivationResult,
 )
 
 
@@ -32,8 +32,8 @@ class ActivationVariables:
 
     def __init__(
         self,
-        current_prefix: Optional[os.PathLike[str]] = None,
-        current_path: Optional[Iterable[str] | Iterable[os.PathLike[str]]] | None = None,
+        current_prefix: os.PathLike[str] | None = None,
+        current_path: Iterable[str] | Iterable[os.PathLike[str]] | None = None,
         path_modification_behavior: PathModificationBehavior = PathModificationBehavior.Prepend,
     ) -> None:
         """
@@ -94,8 +94,8 @@ class Shell:
 def activate(
     prefix: Path,
     activation_variables: ActivationVariables,
-    shell: Optional[Shell] = None,
-    platform: Optional[Platform | PlatformLiteral] = None,
+    shell: Shell | None = None,
+    platform: Subdir | SubdirLiteral | None = None,
 ) -> ActivationResult:
     """
     Return an ActivationResult object that contains the new PATH environment variable
@@ -116,7 +116,7 @@ def activate(
     --------
     ```python
     >>> from rattler.shell import Shell, activate, ActivationVariables
-    >>> from rattler.platform import Platform
+    >>> from rattler.platform import Subdir
     >>> from pathlib import Path
     >>> import sys
     >>> p = Path("/path/to/conda/prefix")
@@ -127,7 +127,7 @@ def activate(
     >>>
     ```
     """
-    platform = Platform(platform) if isinstance(platform, str) else platform or Platform.current()
+    platform = Subdir(platform) if isinstance(platform, str) else platform or Subdir.current()
     shell = shell or Shell.bash
     return ActivationResult._from_py_activation_result(
         PyActivator.activate(prefix, activation_variables._activation_variables, platform._inner, shell)

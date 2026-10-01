@@ -7,13 +7,16 @@ use std::process::Command;
 const EMPTY_PACKAGE: &str = "test-data/packages/empty-0.1.0-h4616a5c_0.conda";
 const CLOBBER_PACKAGE: &str = "test-data/clobber/clobber-1-0.2.0-h4616a5c_0.tar.bz2";
 
+/// The test packages are addressed with stable relative paths from here.
+const WORKSPACE_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+
 /// Runs the `rattler` binary from the workspace root (so the test packages can
 /// be addressed with stable relative paths) and returns its stdout. Styling is
 /// disabled automatically because stdout is not a terminal.
 fn run_rattler(args: &[&str]) -> String {
     let output = Command::new(env!("CARGO_BIN_EXE_rattler"))
         .args(args)
-        .current_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+        .current_dir(WORKSPACE_ROOT)
         .output()
         .expect("failed to run the rattler binary");
     assert!(
@@ -83,4 +86,119 @@ fn test_list_json() {
         "--format",
         "json"
     ]));
+}
+
+/// The skill embeds the crate version, which is replaced so the snapshot does
+/// not change on every release.
+///
+/// The command tree depends on the enabled cargo features (`sigstore` adds
+/// `rattler verify-attestation` and the attestation flags), so the snapshot only
+/// describes a fully featured build. Configurations that turn features off (the
+/// musl CI jobs and `pixi run test` build with `--no-default-features`) skip
+/// this test instead of carrying a snapshot per feature combination.
+#[cfg(feature = "sigstore")]
+#[test]
+fn test_skill() {
+    let skill = run_rattler(&["skill"]).replace(env!("CARGO_PKG_VERSION"), "[VERSION]");
+    insta::assert_snapshot!(skill);
+}
+
+/// `lib/blob.bin` in this package is larger than the buffer of a pipe, so the
+/// cli cannot finish writing it before the reader on the other end goes away.
+const SPARSE_PACKAGE: &str = "test-data/sparse/sparse-test-1.0.0-0.conda";
+
+/// Output of the cli is commonly piped into a program that stops reading before
+/// the end (`rattler fetch-file ... | head`). The broken pipe that follows is a
+/// normal way for the pipeline to end and should not be reported as an error.
+#[test]
+fn test_fetch_file_tolerates_closed_stdout() {
+    use std::{io::Read, process::Stdio};
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_rattler"))
+        .args(["fetch-file", SPARSE_PACKAGE, "lib/blob.bin"])
+        .current_dir(WORKSPACE_ROOT)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to run the rattler binary");
+
+    // Read a bit and then close the pipe while the cli still has data to write.
+    let mut stdout = child.stdout.take().expect("stdout was piped");
+    let mut head = [0u8; 16];
+    stdout
+        .read_exact(&mut head)
+        .expect("the cli wrote less than 16 bytes");
+    drop(stdout);
+
+    let output = child
+        .wait_with_output()
+        .expect("failed to wait for the rattler binary");
+    assert!(
+        output.status.success(),
+        "a closed stdout should not fail the cli, got {}:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// Snapshots of `rattler verify-attestation` for a real signed package.
+#[cfg(feature = "sigstore")]
+mod attestation {
+    use super::run_rattler;
+
+    /// A package published to <https://prefix.dev/skill-forge> by a GitHub
+    /// Actions workflow, and the attestation sidecar it was published with. Both
+    /// were downloaded from `https://prefix.dev/skill-forge/noarch/` and are
+    /// kept verbatim so the snapshots describe a real attestation. See
+    /// `test-data/sigstore/README.md`.
+    const PACKAGE: &str = "test-data/sigstore/agent-skill-conda-forge-0.0.21-h4616a5c_0.conda";
+    const SIDECAR: &str = "test-data/sigstore/agent-skill-conda-forge-0.0.21-h4616a5c_0.conda.sigs";
+
+    /// The channel the sidecar's `targetChannel` names, which the verification
+    /// compares the channel of the package against.
+    const CHANNEL: &str = "https://prefix.dev/skill-forge";
+
+    /// Verifies the fixture the way the published package is verified, but
+    /// entirely from local files: `--offline` keeps both the sidecar retrieval
+    /// and the trusted root off the network, so the test does not depend on
+    /// prefix.dev or on the Sigstore TUF repository being reachable.
+    ///
+    /// The signing certificate is checked against the time the signature was
+    /// recorded in the transparency log rather than against the current time, so
+    /// the fixture does not expire together with the certificate.
+    fn run_verify_attestation(extra_args: &[&str]) -> String {
+        let mut args = vec![
+            "--offline",
+            "verify-attestation",
+            "--attestation",
+            SIDECAR,
+            PACKAGE,
+            "--channel",
+            CHANNEL,
+        ];
+        args.extend_from_slice(extra_args);
+        normalize_file_urls(&run_rattler(&args))
+    }
+
+    /// Replaces the absolute `file://` URL a local sidecar is reported under, so
+    /// the snapshots do not depend on where the repository was checked out.
+    fn normalize_file_urls(output: &str) -> String {
+        regex::Regex::new(r"file://\S*/test-data/")
+            .expect("the pattern is valid")
+            .replace_all(output, "file:///[ROOT]/test-data/")
+            .into_owned()
+    }
+
+    #[test]
+    fn test_verify_attestation() {
+        insta::assert_snapshot!(run_verify_attestation(&[]));
+    }
+
+    /// The JSON output carries every claim of the signing certificate and the
+    /// full transparency log metadata, including what the human output folds
+    /// together or leaves out.
+    #[test]
+    fn test_verify_attestation_json() {
+        insta::assert_snapshot!(run_verify_attestation(&["--format", "json"]));
+    }
 }

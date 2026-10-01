@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.8](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.7...rattler_package_streaming-v0.27.8) - 2026-09-29
+
+### Fixed
+
+- *(rattler_package_streaming)* compare verbatim paths in extraction containment check ([#2857](https://github.com/conda/rattler/pull/2857))
+
+## [0.27.7](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.6...rattler_package_streaming-v0.27.7) - 2026-09-23
+
+### Added
+
+- add standalone Sigstore attestation verification ([#2794](https://github.com/conda/rattler/pull/2794))
+
+## [0.27.6](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.5...rattler_package_streaming-v0.27.6) - 2026-09-17
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking
+
 ## [0.27.5](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.4...rattler_package_streaming-v0.27.5) - 2026-09-04
 
 ### Added

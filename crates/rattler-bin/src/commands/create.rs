@@ -3,7 +3,7 @@ use std::{collections::HashMap, env, path::PathBuf, time::Instant};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
 use rattler::install::{IndicatifReporter, Installer, Transaction, TransactionOperation};
-use rattler_conda_types::{ChannelConfig, PackageName, Platform, PrefixRecord, RepoDataRecord};
+use rattler_conda_types::{ChannelConfig, PackageName, PrefixRecord, RepoDataRecord, Subdir};
 use rattler_repodata_gateway::RepoData;
 use rattler_solve::SolverTask;
 
@@ -21,6 +21,11 @@ use crate::{
 /// Resolves and installs the specified packages into a target prefix,
 /// pulling from the configured channels.
 #[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler create python numpy                          # install into ./.prefix from conda-forge
+  rattler create -p ./env -c conda-forge python=3.12   # choose the prefix and the channel
+  rattler create python --dry-run --platform linux-64  # show the transaction without installing
+  rattler create python --constraint "numpy<2"         # constrain a package without requiring it"#)]
 pub struct Opt {
     /// Package specs to install
     #[clap(required = true)]
@@ -32,6 +37,10 @@ pub struct Opt {
     /// Simulate command without installation
     #[clap(long)]
     dry_run: bool,
+
+    #[cfg(feature = "sigstore")]
+    #[clap(flatten)]
+    attestations: crate::attestation_args::AttestationPolicyArgs,
 
     /// Target prefix (environment path) for package installation
     #[clap(
@@ -63,7 +72,8 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     // Determine the channels to use from the command line or select the default.
     // Like matchspecs this also requires the use of the `channel_config` so we
     // have to do this manually.
-    let channels = opt.solver.channels(&channel_config)?;
+    let channels = opt.solver.channels(&config, &channel_config)?;
+    let exclude_newer = opt.solver.exclude_newer(&channel_config)?;
 
     // Determine the packages that are currently installed in the environment.
     let installed_packages =
@@ -83,11 +93,7 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     let repo_data = wrap_in_async_progress(
         "loading repodata",
         gateway
-            .query(
-                channels,
-                [install_platform, Platform::NoArch],
-                specs.clone(),
-            )
+            .query(channels, [install_platform, Subdir::NoArch], specs.clone())
             .recursive(true),
     )
     .await
@@ -147,7 +153,7 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
         timeout: opt.solver.timeout(),
         strategy: opt.solver.strategy(),
         channel_priority: opt.solver.channel_priority(),
-        exclude_newer: opt.solver.exclude_newer(),
+        exclude_newer,
         ..SolverTask::from_iter(&repo_data)
     };
 
@@ -181,7 +187,10 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     }
 
     let install_start = Instant::now();
-    let result = Installer::new()
+    let installer = Installer::new();
+    #[cfg(feature = "sigstore")]
+    let installer = installer.with_attestation_policy(opt.attestations.policy());
+    let result = installer
         .with_download_client(download_client)
         .with_max_concurrent_requests(config.concurrency.downloads)
         .with_target_platform(install_platform)

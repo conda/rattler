@@ -8,7 +8,7 @@ use std::{
 use fs_err as fs;
 use fs_err::File;
 use plist::{Dictionary, Value};
-use rattler_conda_types::{Platform, menuinst::MacOsTracker};
+use rattler_conda_types::{Subdir, menuinst::MacOsTracker};
 use rattler_shell::{
     activation::{ActivationVariables, Activator, PathModificationBehavior},
     shell,
@@ -734,7 +734,7 @@ impl MacOSMenu {
         // Run a cached activation
         if self.command.activate.unwrap_or(false) {
             // create a bash activation script and emit it into the script
-            let platform = Platform::current().ok_or(MenuInstError::UnknownHostPlatform)?;
+            let platform = Subdir::current().ok_or(MenuInstError::UnknownHostPlatform)?;
             let activator = Activator::from_path(&self.prefix, shell::Bash::default(), platform)?;
             let activation_variables = ActivationVariables {
                 path_modification_behavior: PathModificationBehavior::Prepend,
@@ -1043,7 +1043,7 @@ mod tests {
         let placeholders = super::BaseMenuItemPlaceholders::new(
             fake_prefix.prefix(),
             fake_prefix.prefix(),
-            rattler_conda_types::Platform::current().expect("host platform"),
+            rattler_conda_types::Subdir::current().expect("host platform"),
         );
 
         let item = fake_prefix.schema.menu_items[0].clone();

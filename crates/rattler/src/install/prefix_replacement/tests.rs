@@ -1,5 +1,5 @@
 use fs_err as fs;
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 use rattler_conda_types::package::{OffsetEncoding, OffsetGroup, OffsetRanges};
 use rstest::rstest;
 use std::io::Cursor;
@@ -54,7 +54,7 @@ pub fn test_copy_and_replace_textual_placeholder(
         &mut output,
         prefix_placeholder,
         target_prefix,
-        &Platform::Linux64,
+        &Subdir::Linux64,
     )
     .unwrap();
     assert_eq!(
@@ -129,7 +129,7 @@ fn test_replace_shebang() {
     let replaced = super::text::replace_shebang(
         shebang_with_spaces,
         ("placeholder", "with space"),
-        &Platform::Linux64,
+        &Subdir::Linux64,
     );
     assert_eq!(replaced, "#!/usr/bin/env executable -o test -x");
 }
@@ -137,30 +137,30 @@ fn test_replace_shebang() {
 #[test]
 fn test_replace_long_shebang() {
     let short_shebang = "#!/path/to/executable -x 123".into();
-    let replaced = super::text::replace_shebang(short_shebang, ("", ""), &Platform::Linux64);
+    let replaced = super::text::replace_shebang(short_shebang, ("", ""), &Subdir::Linux64);
     assert_eq!(replaced, "#!/path/to/executable -x 123");
 
     let shebang = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong/executable -o test -x";
-    let replaced = super::text::replace_shebang(shebang.into(), ("", ""), &Platform::Linux64);
+    let replaced = super::text::replace_shebang(shebang.into(), ("", ""), &Subdir::Linux64);
     assert_eq!(replaced, "#!/usr/bin/env executable -o test -x");
 
-    let replaced = super::text::replace_shebang(shebang.into(), ("", ""), &Platform::Osx64);
+    let replaced = super::text::replace_shebang(shebang.into(), ("", ""), &Subdir::Osx64);
     assert_eq!(replaced, shebang);
 
     let shebang_with_escapes = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooo\\ oooooo\\ oooooo\\ oooooooooooooooooooooooooooooooooooong/exe\\ cutable -o test -x";
     let replaced =
-        super::text::replace_shebang(shebang_with_escapes.into(), ("", ""), &Platform::Linux64);
+        super::text::replace_shebang(shebang_with_escapes.into(), ("", ""), &Subdir::Linux64);
     assert_eq!(replaced, "#!/usr/bin/env exe\\ cutable -o test -x");
 
     let shebang = "#!    /this/is/looooooooooooooooooooooooooooooooooooooooooooo\\ \\ ooooooo\\ oooooo\\ oooooo\\ ooooooooooooooooo\\ ooooooooooooooooooong/exe\\ cutable -o \"te  st\" -x";
-    let replaced = super::text::replace_shebang(shebang.into(), ("", ""), &Platform::Linux64);
+    let replaced = super::text::replace_shebang(shebang.into(), ("", ""), &Subdir::Linux64);
     assert_eq!(replaced, "#!/usr/bin/env exe\\ cutable -o \"te  st\" -x");
 
     let shebang = "#!/usr/bin/env perl";
     let replaced = super::text::replace_shebang(
         shebang.into(),
         ("/placeholder", "/with space"),
-        &Platform::Linux64,
+        &Subdir::Linux64,
     );
     assert_eq!(replaced, shebang);
 
@@ -168,7 +168,7 @@ fn test_replace_long_shebang() {
     let replaced = super::text::replace_shebang(
         shebang.into(),
         ("/placeholder", "/with space"),
-        &Platform::Linux64,
+        &Subdir::Linux64,
     );
     assert_eq!(replaced, "#!/usr/bin/env perl");
 }
@@ -179,7 +179,7 @@ fn replace_python_shebang() {
     let replaced = super::text::replace_shebang(
         short_shebang,
         ("/path/to", "/new/prefix/with spaces/bin"),
-        &Platform::Linux64,
+        &Subdir::Linux64,
     );
     insta::assert_snapshot!(replaced);
 
@@ -187,7 +187,7 @@ fn replace_python_shebang() {
     let replaced = super::text::replace_shebang(
         short_shebang,
         ("/path/to", "/new/prefix/with spaces/bin"),
-        &Platform::Linux64,
+        &Subdir::Linux64,
     );
     insta::assert_snapshot!(replaced);
 }
@@ -209,7 +209,7 @@ fn test_replace_long_prefix_in_text_file() {
         &mut output,
         prefix_placeholder,
         &target_prefix,
-        &Platform::Linux64,
+        &Subdir::Linux64,
     )
     .unwrap();
 
@@ -262,7 +262,7 @@ pub fn test_copy_and_replace_textual_placeholder_with_offsets(
         &mut output,
         prefix_placeholder,
         target_prefix,
-        &Platform::Linux64,
+        &Subdir::Linux64,
         &utf8_text_groups(&offsets),
         None,
     )
@@ -310,7 +310,7 @@ fn test_textual_offsets_shebang_kept_short_prefix() {
         &mut output,
         prefix_placeholder,
         target_prefix,
-        &Platform::Linux64,
+        &Subdir::Linux64,
         &utf8_text_groups(&offsets),
         shebang_length,
     )
@@ -339,7 +339,7 @@ fn test_textual_offsets_shebang_windows_plain_region() {
         &mut output,
         prefix_placeholder,
         target_prefix,
-        &Platform::Win64,
+        &Subdir::Win64,
         &utf8_text_groups(&offsets),
         shebang_length,
     )
@@ -368,7 +368,7 @@ fn test_textual_offsets_shebang_no_trailing_newline() {
         &mut output,
         prefix_placeholder,
         target_prefix,
-        &Platform::Linux64,
+        &Subdir::Linux64,
         &utf8_text_groups(&offsets),
         shebang_length,
     )
@@ -397,7 +397,7 @@ fn test_textual_offsets_only_shebang_occurrence_empty_offsets() {
         &mut output,
         prefix_placeholder,
         target_prefix,
-        &Platform::Linux64,
+        &Subdir::Linux64,
         &utf8_text_groups(&offsets),
         shebang_length,
     )
@@ -430,7 +430,7 @@ fn test_textual_offsets_multiple_occurrences_in_shebang() {
         &mut output,
         prefix_placeholder,
         target_prefix,
-        &Platform::Linux64,
+        &Subdir::Linux64,
         &utf8_text_groups(&offsets),
         shebang_length,
     )
@@ -463,7 +463,7 @@ fn test_textual_offsets_overlong_shebang_no_occurrence() {
         &mut output,
         prefix_placeholder,
         target_prefix,
-        &Platform::Linux64,
+        &Subdir::Linux64,
         &utf8_text_groups(&offsets),
         shebang_length,
     )
@@ -499,7 +499,7 @@ fn test_textual_offsets_shebang_occurrence_in_offsets_is_inconsistent() {
         &mut output,
         prefix_placeholder,
         target_prefix,
-        &Platform::Linux64,
+        &Subdir::Linux64,
         &utf8_text_groups(&non_conformant),
         Some(shebang_length),
     );
@@ -522,7 +522,7 @@ fn test_textual_offsets_shebang_occurrence_in_offsets_is_inconsistent() {
         &mut fallback,
         prefix_placeholder,
         target_prefix,
-        &Platform::Linux64,
+        &Subdir::Linux64,
     )
     .unwrap();
     let expected = format!("#!{target_prefix}/python\nimport sys  # see {target_prefix}/lib\n");
@@ -539,7 +539,7 @@ fn test_textual_offsets_shebang_length_absent_is_inconsistent() {
         &mut output,
         "/this/is/placeholder",
         "/opt/conda",
-        &Platform::Linux64,
+        &Subdir::Linux64,
         &[],
         None,
     );
@@ -562,7 +562,7 @@ fn test_textual_offsets_shebang_length_mismatch_is_inconsistent() {
         &mut output,
         "/this/is/placeholder",
         "/opt/conda",
-        &Platform::Linux64,
+        &Subdir::Linux64,
         &[],
         Some(20), // the correct value is 30
     );
@@ -587,7 +587,7 @@ fn test_scan_path_shebang_without_newline_does_not_panic() {
         &mut output,
         "/this/is/placeholder",
         "/opt/conda",
-        &Platform::Linux64,
+        &Subdir::Linux64,
     )
     .unwrap();
     assert_eq!(
@@ -627,7 +627,7 @@ fn test_offset_groups_text_utf8_group_applied() {
         &mut output,
         "cruel",
         "fabulous",
-        &Platform::Linux64,
+        &Subdir::Linux64,
         super::FileMode::Text,
         &[utf8_group(OffsetRanges::Text(vec![7]))],
         None,
@@ -670,7 +670,7 @@ fn test_offset_groups_binary_multi_encoding() {
         &mut output,
         placeholder,
         target,
-        &Platform::Linux64,
+        &Subdir::Linux64,
         super::FileMode::Binary,
         &groups,
         None,
@@ -761,7 +761,7 @@ fn test_offsets_and_search_agree_per_encoding(#[case] encoding: OffsetEncoding) 
         &mut spliced,
         placeholder,
         target,
-        &Platform::Linux64,
+        &Subdir::Linux64,
         &groups,
         None,
     )
@@ -774,7 +774,7 @@ fn test_offsets_and_search_agree_per_encoding(#[case] encoding: OffsetEncoding) 
         &mut searched,
         placeholder,
         target,
-        &Platform::Linux64,
+        &Subdir::Linux64,
     )
     .unwrap();
     assert_eq!(spliced, searched.into_inner(), "text paths must agree");
@@ -807,7 +807,7 @@ fn test_shebang_region_replaces_every_encoding_on_non_unix() {
         &mut spliced,
         placeholder,
         target,
-        &Platform::Win64,
+        &Subdir::Win64,
         &groups,
         Some(23),
     )
@@ -825,7 +825,7 @@ fn test_shebang_region_replaces_every_encoding_on_non_unix() {
         &mut searched,
         placeholder,
         target,
-        &Platform::Win64,
+        &Subdir::Win64,
     )
     .unwrap();
     assert_eq!(searched.into_inner(), spliced, "both paths must agree");
@@ -835,9 +835,9 @@ fn test_shebang_region_replaces_every_encoding_on_non_unix() {
 /// every byte, so searching for it would insert the target prefix between all of them; both
 /// paths must copy the file verbatim instead.
 #[rstest]
-#[case(Platform::Linux64)]
-#[case(Platform::Win64)]
-fn test_empty_placeholder_copies_verbatim(#[case] platform: Platform) {
+#[case(Subdir::Linux64)]
+#[case(Subdir::Win64)]
+fn test_empty_placeholder_copies_verbatim(#[case] platform: Subdir) {
     let input = b"#!/bin/python\nbody\n";
 
     let mut spliced = Cursor::new(Vec::new());
@@ -1126,7 +1126,7 @@ fn test_offset_groups_encoding_without_occurrence_is_inconsistent() {
             &mut output,
             "/pfx",
             "/np",
-            &Platform::Linux64,
+            &Subdir::Linux64,
             file_mode,
             &groups,
             None,
@@ -1164,7 +1164,7 @@ fn test_offset_groups_invalid_is_inconsistent(#[case] groups: Vec<OffsetGroup>) 
         &mut output,
         "/pfx",
         "/np",
-        &Platform::Linux64,
+        &Subdir::Linux64,
         super::FileMode::Binary,
         &groups,
         None,
@@ -1196,7 +1196,7 @@ fn test_textual_offsets_invalid_returns_error(#[case] offsets: Vec<usize>) {
         &mut output,
         "cruel",
         "fabulous",
-        &Platform::Linux64,
+        &Subdir::Linux64,
         &utf8_text_groups(&offsets),
         None,
     );
@@ -1356,7 +1356,7 @@ fn test_replace_long_prefix_in_text_file_offsets() {
         &mut output,
         prefix_placeholder,
         &target_prefix,
-        &Platform::Linux64,
+        &Subdir::Linux64,
         &utf8_text_groups(&offsets),
         Some(shebang_length),
     )

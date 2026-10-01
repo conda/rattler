@@ -5,7 +5,7 @@
 //! of installing compromised packages.
 
 use jiff::Timestamp;
-use rattler_solve::{ExcludeNewer, SolverImpl};
+use rattler_solve::{ExcludeNewer, SolverImpl, TimestampPolicy};
 
 use crate::helpers::{PackageBuilder, SolverCase};
 
@@ -174,7 +174,7 @@ pub fn solve_min_age_package_override_no_timestamp<T: SolverImpl + Default>() {
     let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
 
     // Override pkg-a to allow the newest timestamps, but unknown timestamps
-    // still require include_unknown_timestamp=true.
+    // still require TimestampPolicy::AllowMissing.
     let config = exclude_newer_duration_config(min_age).with_package_duration_with_now(
         "pkg-a".parse().unwrap(),
         std::time::Duration::ZERO,
@@ -191,7 +191,7 @@ pub fn solve_min_age_package_override_no_timestamp<T: SolverImpl + Default>() {
 }
 
 /// Test that packages without timestamps can be included with the option.
-pub fn solve_min_age_include_unknown_timestamp<T: SolverImpl + Default>() {
+pub fn solve_min_age_allow_missing_timestamps<T: SolverImpl + Default>() {
     let repo = vec![
         PackageBuilder::new("pkg-no-ts")
             .version("1.0")
@@ -206,10 +206,13 @@ pub fn solve_min_age_include_unknown_timestamp<T: SolverImpl + Default>() {
     // 1000 days minimum age
     let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
 
-    SolverCase::new("min_age with include_unknown_timestamp")
+    SolverCase::new("min_age with AllowMissing")
         .repository(repo)
         .specs(["pkg-no-ts", "pkg-old"])
-        .exclude_newer(exclude_newer_duration_config(min_age).with_include_unknown_timestamp(true))
+        .exclude_newer(
+            exclude_newer_duration_config(min_age)
+                .with_timestamp_policy(TimestampPolicy::AllowMissing),
+        )
         // Both packages should be available:
         // - pkg-no-ts has no timestamp but we explicitly include unknown timestamps
         // - pkg-old has an old timestamp so it passes the filter

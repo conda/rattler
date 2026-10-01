@@ -14,7 +14,7 @@
 use std::borrow::Cow;
 use std::io::Write;
 
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 use rattler_conda_types::package::{FileMode, OffsetEncoding, OffsetGroup, validate_offset_groups};
 
 mod binary;
@@ -40,7 +40,7 @@ pub fn copy_and_replace_placeholders(
     mut destination: impl Write,
     prefix_placeholder: &str,
     target_prefix: &str,
-    target_platform: &Platform,
+    target_platform: &Subdir,
     file_mode: FileMode,
 ) -> Result<(), std::io::Error> {
     match file_mode {
@@ -228,7 +228,7 @@ pub fn copy_and_replace_placeholders_with_offsets(
     mut destination: impl Write,
     prefix_placeholder: &str,
     target_prefix: &str,
-    target_platform: &Platform,
+    target_platform: &Subdir,
     file_mode: FileMode,
     offsets: &[OffsetGroup],
     shebang_length: Option<usize>,

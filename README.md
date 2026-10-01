@@ -173,6 +173,7 @@ Rattler consists of several crates that provide different functionalities.
 * **rattler_virtual_packages**: a crate to detect system capabilities.
 * **rattler_index**: create local conda channels from local packages. See the
   [rattler_index README](crates/rattler_index/README.md) for channel options documentation.
+* **rattler_sigstore**: discovers, fetches and verifies Sigstore attestations of conda packages.
 * **rattler**: functionality to create complete environments from scratch using the crates above.
 * **rattler-lock**: a library to create and parse lockfiles for conda environments.
 * **rattler-networking**: common functionality for networking, like authentication, mirroring and more.

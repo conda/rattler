@@ -11,6 +11,50 @@ use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 use tokio::sync::Notify;
 use url::Url;
 
+/// An error that occurred while authenticating a `gcs://` request.
+#[derive(Debug, thiserror::Error)]
+pub enum GcsMiddlewareError {
+    /// The URL has no host, so there is no bucket to rewrite it to.
+    #[error("no bucket name in the GCS URL '{0}'")]
+    MissingBucket(Url),
+
+    /// The `https://storage.googleapis.com` URL built from the request is not a
+    /// valid URL.
+    #[error("could not build a storage URL for the GCS request: '{url}'")]
+    InvalidUrl {
+        /// The URL that was constructed.
+        url: String,
+        /// The reason it could not be parsed.
+        #[source]
+        source: url::ParseError,
+    },
+
+    /// No application default credentials could be discovered.
+    #[error("could not build GCS credentials from the application default credentials")]
+    Credentials(#[source] google_cloud_auth::build_errors::Error),
+
+    /// The credentials could not be exchanged for an access token.
+    #[error("could not obtain an access token for GCS")]
+    AccessToken(#[source] google_cloud_auth::errors::CredentialsError),
+}
+
+/// Rewrite a `gcs://bucket/path` URL into the `https://storage.googleapis.com`
+/// URL that actually serves it.
+fn storage_url(url: &Url) -> Result<Url, GcsMiddlewareError> {
+    let bucket_name = url
+        .host_str()
+        .ok_or_else(|| GcsMiddlewareError::MissingBucket(url.clone()))?;
+    let storage_url = format!(
+        "https://storage.googleapis.com/{}{}",
+        bucket_name,
+        url.path()
+    );
+    Url::parse(&storage_url).map_err(|source| GcsMiddlewareError::InvalidUrl {
+        url: storage_url,
+        source,
+    })
+}
+
 /// The auth headers and the `EntityTag` assigned by the credential library.
 ///
 /// The `EntityTag` is an opaque process-local token: the library generates one
@@ -126,24 +170,12 @@ impl Middleware for GCSMiddleware {
         next: Next<'_>,
     ) -> MiddlewareResult<Response> {
         if req.url().scheme() == "gcs" {
-            let mut url = req.url().clone();
-            let bucket_name = url.host_str().ok_or_else(|| {
-                reqwest_middleware::Error::Middleware(anyhow::anyhow!(
-                    "Host should be present in GCS URL, got: {url}"
-                ))
-            })?;
-            let new_url = format!(
-                "https://storage.googleapis.com/{}{}",
-                bucket_name,
-                url.path()
-            );
-            url = Url::parse(&new_url).map_err(|e| {
-                reqwest_middleware::Error::Middleware(anyhow::anyhow!(
-                    "Failed to parse constructed GCS URL '{new_url}': {e}"
-                ))
-            })?;
-            *req.url_mut() = url;
-            req = self.authenticate(req).await?;
+            *req.url_mut() =
+                storage_url(req.url()).map_err(reqwest_middleware::Error::middleware)?;
+            req = self
+                .authenticate(req)
+                .await
+                .map_err(reqwest_middleware::Error::middleware)?;
         }
         next.run(req, extensions).await
     }
@@ -152,7 +184,7 @@ impl Middleware for GCSMiddleware {
 impl GCSMiddleware {
     /// Add GCS authentication headers to `req`, drawing from the token cache
     /// when available and fetching a new token only when necessary.
-    async fn authenticate(&self, mut req: Request) -> MiddlewareResult<Request> {
+    async fn authenticate(&self, mut req: Request) -> Result<Request, GcsMiddlewareError> {
         let headers = self.get_or_refresh_token().await?;
         req.headers_mut().extend(headers);
         Ok(req)
@@ -160,14 +192,14 @@ impl GCSMiddleware {
 
     /// Lazily initialise the `Credentials` object (once per middleware
     /// lifetime) and return a cheap `Arc`-clone of it.
-    async fn get_credential(&self) -> MiddlewareResult<Credentials> {
+    async fn get_credential(&self) -> Result<Credentials, GcsMiddlewareError> {
         let mut guard = self.inner.credential.lock().unwrap();
         if guard.is_none() {
             let scopes = ["https://www.googleapis.com/auth/devstorage.read_only"];
             let c = AccessTokenCredentialBuilder::default()
                 .with_scopes(scopes)
                 .build()
-                .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::new(e)))?;
+                .map_err(GcsMiddlewareError::Credentials)?;
             *guard = Some(c);
         }
         // Credentials is Arc-backed; clone is a cheap refcount bump.
@@ -266,7 +298,7 @@ impl GCSMiddleware {
     /// resets the state to `Empty` itself and retries.  The `Drop` impl of
     /// [`RefreshGuard`] calls `notify_waiters()` to wake existing waiters
     /// without needing to acquire the mutex.
-    async fn get_or_refresh_token(&self) -> MiddlewareResult<http::HeaderMap> {
+    async fn get_or_refresh_token(&self) -> Result<http::HeaderMap, GcsMiddlewareError> {
         loop {
             // `poll_cache` is synchronous: the MutexGuard is acquired and
             // dropped entirely inside it, so it never appears in this async
@@ -296,7 +328,7 @@ impl GCSMiddleware {
                     return match cred
                         .headers(ext)
                         .await
-                        .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::new(e)))?
+                        .map_err(GcsMiddlewareError::AccessToken)?
                     {
                         CacheableResource::NotModified => Ok(headers),
                         CacheableResource::New { entity_tag, data } => {
@@ -322,7 +354,7 @@ impl GCSMiddleware {
                     let fetch = cred
                         .headers(http::Extensions::new())
                         .await
-                        .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::new(e)));
+                        .map_err(GcsMiddlewareError::AccessToken);
 
                     match fetch {
                         Ok(CacheableResource::New { entity_tag, data }) => {

@@ -6,13 +6,13 @@ use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::{
-    Channel, ChannelConfig, PackageName, PackageRecord, Platform, Version, package::IndexJson,
+    Channel, ChannelConfig, PackageName, PackageRecord, Subdir, Version, package::IndexJson,
 };
 use rattler_repodata_gateway::who_needs::{DependencyKind, Dependent, WhoNeedsTarget};
 use url::Url;
 
 use super::{QueryOutputFormat, print_url_lines};
-use crate::commands::gateway::{build_gateway, load_config};
+use crate::commands::gateway::{build_gateway, load_config, resolve_channels};
 
 /// Show packages that depend on the given package (reverse dependencies).
 #[derive(Debug, clap::Parser)]
@@ -33,12 +33,12 @@ pub struct Opt {
     package: String,
 
     /// Channels to search in
-    #[clap(short, long, default_value = "conda-forge")]
-    channels: Vec<String>,
-
-    /// Platform to search for. Defaults to the platform of the current host.
     #[clap(short, long)]
-    platform: Option<Platform>,
+    channels: Option<Vec<String>>,
+
+    /// Subdir to search for. Defaults to the platform of the current host.
+    #[clap(short, long)]
+    platform: Option<Subdir>,
 
     /// Maximum number of packages to display
     #[clap(long, default_value = "100")]
@@ -118,19 +118,14 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
     eprintln!("Searching for packages that depend on '{target_display}' on {platform}");
 
     // Determine the channels
-    let channels = opt
-        .channels
-        .into_iter()
-        .map(|channel_str| Channel::from_str(channel_str, &channel_config))
-        .collect::<Result<Vec<_>, _>>()
-        .into_diagnostic()?;
+    let config = load_config()?;
+    let channels = resolve_channels(opt.channels.as_deref(), &config, &channel_config)?;
 
     eprintln!(
         "Channels: {}",
         channels.iter().map(Channel::canonical_name).join(", ")
     );
 
-    let config = load_config()?;
     let gateway = build_gateway(download_client, &config, offline, true)?;
 
     // Show progress while loading repodata
@@ -141,7 +136,7 @@ pub async fn whoneeds(opt: Opt, offline: bool) -> miette::Result<()> {
 
     let start = Instant::now();
     let mut stream = gateway
-        .who_needs(channels, [platform, Platform::NoArch], target)
+        .who_needs(channels, [platform, Subdir::NoArch], target)
         .stream();
 
     // All output modes reduce every dependent to something much smaller

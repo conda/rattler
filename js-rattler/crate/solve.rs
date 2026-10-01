@@ -142,6 +142,7 @@ pub async fn simple_solve(
                 legacy_bz2_size: None,
                 purls: None,
                 run_exports: None,
+                attestations_sha256: None,
             };
 
             Ok(RepoDataRecord {
