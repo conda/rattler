@@ -8,15 +8,15 @@
 //! a partial file.
 
 use std::{
-    collections::HashMap,
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use indexmap::IndexMap;
+use rattler_boot_id::BootId;
 use rattler_conda_types::{ChannelUrl, PackageName};
 use rattler_digest::{Sha256, Sha256Hash, compute_bytes_digest};
-use rattler_virtual_packages::boot::BootId;
+use rattler_shell::environment::EnvironmentSnapshot;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::io::AsyncWriteExt;
@@ -57,8 +57,7 @@ impl CacheKey {
         }
     }
 
-    /// The file name of the entry, a hash of the key so that no part of it
-    /// has to be escaped for the file system.
+    /// The normalized detector name followed by the full hash of the key.
     pub fn file_name(&self) -> String {
         let mut material = String::new();
         material.push_str(self.origin.as_str());
@@ -72,7 +71,8 @@ impl CacheKey {
         material.push('\0');
         material.push_str(&self.digest);
         format!(
-            "{}.json",
+            "{}-{}.json",
+            self.detector.as_normalized(),
             hex::encode(compute_bytes_digest::<Sha256>(material))
         )
     }
@@ -130,17 +130,12 @@ pub struct WatchedVariable {
 }
 
 impl WatchedVariable {
-    fn observe(name: &str, env: &HashMap<String, String>) -> Self {
+    fn observe(name: &str, env: &EnvironmentSnapshot) -> Self {
         let value = env.get(name);
-        #[cfg(windows)]
-        let value = value.or_else(|| {
-            env.iter()
-                .find(|(key, _)| key.eq_ignore_ascii_case(name))
-                .map(|(_, value)| value)
-        });
         Self {
             name: name.to_string(),
-            value_digest: value.map(|value| hex::encode(compute_bytes_digest::<Sha256>(value))),
+            value_digest: value
+                .map(|value| hex::encode(compute_bytes_digest::<Sha256>(value.as_encoded_bytes()))),
         }
     }
 }
@@ -175,19 +170,16 @@ pub struct CacheClock {
     pub now: u64,
     /// The current boot session, if it can be observed on this host.
     pub boot_id: Option<BootId>,
-    /// The variables watched entries are compared against.
-    pub env: HashMap<String, String>,
 }
 
 impl CacheClock {
-    /// The real clock, boot session and process environment.
+    /// The real clock and boot session.
     pub fn current() -> Self {
         Self {
             now: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map_or(0, |elapsed| elapsed.as_secs()),
             boot_id: BootId::current(),
-            env: crate::activation::current_environment(),
         }
     }
 }
@@ -234,7 +226,12 @@ impl ResultCache {
     /// Returns the valid entry for `key`, if there is one.
     ///
     /// An unreadable or malformed entry counts as absent.
-    pub async fn read(&self, key: &CacheKey, clock: &CacheClock) -> Option<CachedResult> {
+    pub async fn read(
+        &self,
+        key: &CacheKey,
+        clock: &CacheClock,
+        environment: &EnvironmentSnapshot,
+    ) -> Option<CachedResult> {
         let path = self.path_for(key);
         let bytes = fs_err::tokio::read(&path).await.ok()?;
         let entry: CachedResult = serde_json::from_slice(&bytes).ok()?;
@@ -242,7 +239,7 @@ impl ResultCache {
             tracing::debug!(path = %path.display(), "ignoring cached result for a different key");
             return None;
         }
-        match entry.is_valid(clock).await {
+        match entry.is_valid(clock, environment).await {
             Ok(()) => Some(entry),
             Err(reason) => {
                 tracing::debug!(path = %path.display(), reason, "cached result expired");
@@ -259,6 +256,7 @@ impl ResultCache {
         key: &CacheKey,
         report: &DetectorReport,
         clock: &CacheClock,
+        environment: &EnvironmentSnapshot,
     ) -> Result<Option<CachedResult>, CacheError> {
         let Some(lifetime) = lifetime(report.cache.ttl, clock.boot_id.is_some()) else {
             return Ok(None);
@@ -284,7 +282,7 @@ impl ResultCache {
                 .cache
                 .watch_env
                 .iter()
-                .map(|name| WatchedVariable::observe(name, &clock.env))
+                .map(|name| WatchedVariable::observe(name, environment))
                 .collect(),
             virtual_packages: report.virtual_packages.clone(),
         };
@@ -325,7 +323,11 @@ impl ResultCache {
 
 impl CachedResult {
     /// Checks the entry against `clock`, returning why it is no longer valid.
-    pub async fn is_valid(&self, clock: &CacheClock) -> Result<(), &'static str> {
+    pub async fn is_valid(
+        &self,
+        clock: &CacheClock,
+        environment: &EnvironmentSnapshot,
+    ) -> Result<(), &'static str> {
         if clock.now >= self.expires_at {
             return Err("lifetime elapsed");
         }
@@ -341,7 +343,7 @@ impl CachedResult {
             }
         }
         for watched in &self.watch_env {
-            if WatchedVariable::observe(&watched.name, &clock.env) != *watched {
+            if WatchedVariable::observe(&watched.name, environment) != *watched {
                 return Err("watched variable changed");
             }
         }
@@ -365,6 +367,8 @@ fn lifetime(ttl: Option<CacheLifetime>, boot_observable: bool) -> Option<Duratio
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
     use std::{str::FromStr, sync::Arc};
 
     use rattler_conda_types::Version;
@@ -372,6 +376,22 @@ mod tests {
 
     use super::*;
     use crate::report::CacheHints;
+
+    #[cfg(unix)]
+    #[test]
+    fn watched_native_values_distinguish_bytes_empty_and_unset() {
+        let mut environment = EnvironmentSnapshot::default();
+        let unset = WatchedVariable::observe("NATIVE", &environment);
+        environment.insert("NATIVE", "");
+        let empty = WatchedVariable::observe("NATIVE", &environment);
+        assert_ne!(unset.value_digest, empty.value_digest);
+        environment.insert("NATIVE", OsString::from_vec(vec![0xff]));
+        let first = WatchedVariable::observe("NATIVE", &environment);
+        environment.insert("NATIVE", OsString::from_vec(vec![0xfe]));
+        let second = WatchedVariable::observe("NATIVE", &environment);
+        assert_ne!(first.value_digest, second.value_digest);
+        assert_ne!(first.value_digest, empty.value_digest);
+    }
 
     fn key() -> CacheKey {
         CacheKey::new(
@@ -402,8 +422,11 @@ mod tests {
         CacheClock {
             now,
             boot_id: Some(BootId::Uuid("boot-1".to_string())),
-            env: HashMap::from([("WATCHED".to_string(), "one".to_string())]),
         }
+    }
+
+    fn env() -> EnvironmentSnapshot {
+        [("WATCHED", "one")].into_iter().collect()
     }
 
     #[test]
@@ -458,23 +481,27 @@ mod tests {
                     watch_env: vec!["WATCHED".to_string()],
                 }),
                 &clock(1_000),
+                &env(),
             )
             .await
             .unwrap()
             .unwrap();
         assert_eq!(written.expires_at, 1_100);
 
-        assert_eq!(cache.read(&key, &clock(1_050)).await, Some(written.clone()));
-        assert_eq!(cache.read(&key, &clock(1_100)).await, None);
+        assert_eq!(
+            cache.read(&key, &clock(1_050), &env()).await,
+            Some(written.clone())
+        );
+        assert_eq!(cache.read(&key, &clock(1_100), &env()).await, None);
 
-        let mut changed = clock(1_050);
-        changed.env.insert("WATCHED".to_string(), "two".to_string());
-        assert_eq!(cache.read(&key, &changed).await, None);
-        changed.env.remove("WATCHED");
-        assert_eq!(cache.read(&key, &changed).await, None);
+        let mut changed = env();
+        changed.insert("WATCHED", "two");
+        assert_eq!(cache.read(&key, &clock(1_050), &changed).await, None);
+        changed.remove("WATCHED");
+        assert_eq!(cache.read(&key, &clock(1_050), &changed).await, None);
 
         cache.clear().await.unwrap();
-        assert_eq!(cache.read(&key, &clock(1_050)).await, None);
+        assert_eq!(cache.read(&key, &clock(1_050), &env()).await, None);
         cache.clear().await.unwrap();
     }
 
@@ -501,7 +528,7 @@ mod tests {
                     .unwrap()
                     .build_string = index.to_string().repeat(index + 1);
                 barrier.wait().await;
-                cache.write(&key, &report, &clock(1)).await
+                cache.write(&key, &report, &clock(1), &env()).await
             });
         }
         let mut publications = Vec::new();
@@ -513,7 +540,7 @@ mod tests {
             .map(|result| result.expect("a concurrent publication failed").unwrap())
             .collect::<Vec<_>>();
         let cached = cache
-            .read(&key, &clock(2))
+            .read(&key, &clock(2), &env())
             .await
             .expect("concurrent publications left an unreadable cache entry");
         assert!(
@@ -528,8 +555,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let cache = ResultCache::new(dir.path());
         let key = key();
-        let mut original = clock(1);
-        original.env = HashMap::from([("Path".to_string(), "original".to_string())]);
+        let original: EnvironmentSnapshot = [("Path", "original")].into_iter().collect();
         let stored = cache
             .write(
                 &key,
@@ -537,19 +563,19 @@ mod tests {
                     watch_env: vec!["PATH".to_string()],
                     ..CacheHints::default()
                 }),
+                &clock(1),
                 &original,
             )
             .await
             .unwrap()
             .unwrap();
-        let mut changed = clock(2);
-        changed.env = HashMap::from([("Path".to_string(), "changed".to_string())]);
-        assert_eq!(cache.read(&key, &changed).await, None);
+        let mut changed: EnvironmentSnapshot = [("Path", "changed")].into_iter().collect();
+        assert_eq!(cache.read(&key, &clock(2), &changed).await, None);
 
-        changed.env = HashMap::from([("pAtH".to_string(), "original".to_string())]);
-        assert_eq!(cache.read(&key, &changed).await, Some(stored));
-        changed.env.clear();
-        assert_eq!(cache.read(&key, &changed).await, None);
+        changed = [("pAtH", "original")].into_iter().collect();
+        assert_eq!(cache.read(&key, &clock(2), &changed).await, Some(stored));
+        changed.remove("PATH");
+        assert_eq!(cache.read(&key, &clock(2), &changed).await, None);
     }
 
     #[tokio::test]
@@ -564,11 +590,12 @@ mod tests {
                     ..CacheHints::default()
                 }),
                 &clock(1),
+                &env(),
             )
             .await
             .unwrap();
         assert!(stored.is_none());
-        assert!(cache.read(&key(), &clock(1)).await.is_none());
+        assert!(cache.read(&key(), &clock(1), &env()).await.is_none());
     }
 
     #[tokio::test]
@@ -583,16 +610,17 @@ mod tests {
                     ..CacheHints::default()
                 }),
                 &clock(1),
+                &env(),
             )
             .await
             .unwrap();
-        assert!(cache.read(&key(), &clock(2)).await.is_some());
+        assert!(cache.read(&key(), &clock(2), &env()).await.is_some());
         let mut rebooted = clock(2);
         rebooted.boot_id = Some(BootId::Uuid("boot-2".to_string()));
-        assert!(cache.read(&key(), &rebooted).await.is_none());
+        assert!(cache.read(&key(), &rebooted, &env()).await.is_none());
         let mut unknown = clock(2);
         unknown.boot_id = None;
-        assert!(cache.read(&key(), &unknown).await.is_none());
+        assert!(cache.read(&key(), &unknown, &env()).await.is_none());
     }
 
     #[tokio::test]
@@ -607,21 +635,21 @@ mod tests {
         };
         // Absent at write time: appearing expires the entry.
         cache
-            .write(&key(), &report(hints.clone()), &clock(1))
+            .write(&key(), &report(hints.clone()), &clock(1), &env())
             .await
             .unwrap();
-        assert!(cache.read(&key(), &clock(2)).await.is_some());
+        assert!(cache.read(&key(), &clock(2), &env()).await.is_some());
         std::fs::write(&watched, "x").unwrap();
-        assert!(cache.read(&key(), &clock(2)).await.is_none());
+        assert!(cache.read(&key(), &clock(2), &env()).await.is_none());
 
         // Present at write time: disappearing expires the entry.
         cache
-            .write(&key(), &report(hints), &clock(3))
+            .write(&key(), &report(hints), &clock(3), &env())
             .await
             .unwrap();
-        assert!(cache.read(&key(), &clock(4)).await.is_some());
+        assert!(cache.read(&key(), &clock(4), &env()).await.is_some());
         std::fs::remove_file(&watched).unwrap();
-        assert!(cache.read(&key(), &clock(4)).await.is_none());
+        assert!(cache.read(&key(), &clock(4), &env()).await.is_none());
     }
 
     #[tokio::test]
@@ -630,7 +658,7 @@ mod tests {
         let cache = ResultCache::new(dir.path());
         let key = key();
         cache
-            .write(&key, &report(CacheHints::default()), &clock(1))
+            .write(&key, &report(CacheHints::default()), &clock(1), &env())
             .await
             .unwrap();
         // Rewrite the entry on disk under the same file name with a different
@@ -640,6 +668,6 @@ mod tests {
             serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
         entry.key.digest = "ff".repeat(32);
         std::fs::write(&path, serde_json::to_vec(&entry).unwrap()).unwrap();
-        assert!(cache.read(&key, &clock(2)).await.is_none());
+        assert!(cache.read(&key, &clock(2), &env()).await.is_none());
     }
 }

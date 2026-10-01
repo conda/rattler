@@ -9,7 +9,7 @@ use rattler_solve::SolverTask;
 
 use crate::{
     commands::{
-        detectors::{DetectorContext, determine_virtual_packages},
+        detectors::{DetectorContext, detect_virtual_packages},
         gateway::{build_gateway, load_config},
         progress::{wrap_in_async_progress, wrap_in_progress},
     },
@@ -91,19 +91,22 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     let gateway = build_gateway(download_client.clone(), &config, offline, true)?;
 
     let start_load_repo_data = Instant::now();
-    let repo_data = wrap_in_async_progress(
-        "loading repodata",
-        gateway
-            .query(
-                channels.iter().cloned(),
-                [install_platform, Subdir::NoArch],
-                specs.clone(),
-            )
-            .recursive(true),
-    )
-    .await
-    .into_diagnostic()
-    .context("failed to load repodata")?;
+    let mut query = gateway
+        .query(
+            channels.iter().cloned(),
+            [install_platform, Subdir::NoArch],
+            specs.clone(),
+        )
+        .recursive(true);
+    if !opt.solver.has_explicit_virtual_packages() {
+        query = query
+            .virtual_package_detectors(install_platform)
+            .constraints(constraints.iter().cloned());
+    }
+    let mut repo_data = wrap_in_async_progress("loading repodata", query)
+        .await
+        .into_diagnostic()
+        .context("failed to load repodata")?;
 
     // Surface any non-fatal CEP-42 channel-relation problems.
     for warning in &repo_data.warnings {
@@ -118,17 +121,13 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
         start_load_repo_data.elapsed()
     );
 
-    let virtual_packages = determine_virtual_packages(
+    let virtual_packages = detect_virtual_packages(
         &opt.solver,
         DetectorContext {
             gateway: &gateway,
             config: &config,
-            channels: &channels,
             download_client: &download_client,
-            repodata: &repo_data.repodata,
-            specs: &specs,
-            constraints: &constraints,
-            target_platform: install_platform,
+            detectors: repo_data.virtual_package_detectors.take(),
         },
     )
     .await?;

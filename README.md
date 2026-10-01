@@ -166,11 +166,14 @@ You can [join our discord server via this link][chat-url].
 Rattler consists of several crates that provide different functionalities.
 
 * **rattler_conda_types**: foundational types for all datastructures used within the conda eco-system.
+* **rattler_boot_id**: identifies boot sessions for reboot-sensitive caches.
+* **rattler_environment_digest**: computes stable environment fingerprints from package artifact traits.
 * **rattler_package_streaming**: provides functionality to download, extract and create conda package archives.
 * **rattler_repodata_gateway**: downloads, reads and processes information about existing conda packages from an index.
 * **rattler_shell**: code to activate an existing environment and run programs in it.
 * **rattler_solve**: a backend agnostic library to solve the package satisfiability problem.
 * **rattler_virtual_packages**: a crate to detect system capabilities.
+* **rattler_virtual_package_detectors**: discovers and runs trusted channel detector packages in isolated environments.
 * **rattler_index**: create local conda channels from local packages. See the
   [rattler_index README](crates/rattler_index/README.md) for channel options documentation.
 * **rattler_sigstore**: discovers, fetches and verifies Sigstore attestations of conda packages.

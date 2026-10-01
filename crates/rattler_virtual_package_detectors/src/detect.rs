@@ -18,10 +18,11 @@ use futures::{StreamExt, stream::FuturesOrdered};
 use indexmap::IndexMap;
 use rattler_conda_types::{
     ChannelUrl, GenericVirtualPackage, PackageName, Subdir,
-    virtual_package_detector::override_variable,
+    virtual_package_detector::VirtualPackageName,
 };
 use rattler_digest::Sha256Hash;
 use rattler_repodata_gateway::AcceptedDetectorRegistration;
+use rattler_shell::environment::EnvironmentSnapshot;
 use thiserror::Error;
 
 use crate::{
@@ -57,6 +58,9 @@ impl WantedNames {
 pub struct DetectOptions<'a> {
     /// Resolves and creates isolated detector environments.
     pub environment_provider: &'a dyn DetectorEnvironmentProvider,
+    /// The complete inherited environment used for overrides, activation and
+    /// result-cache watched variables.
+    pub environment: &'a EnvironmentSnapshot,
     /// The directory that holds the result cache.
     pub root: &'a Path,
     /// The platform of the machine running the client.
@@ -225,26 +229,26 @@ pub async fn detect(
         let detector = registration.registration.detector.clone();
         let mut overridden = HashSet::new();
         for name in &registration.registration.virtual_packages {
-            if let Some(value) = read_override(name)? {
-                overridden.insert(name.clone());
+            if let Some(value) = read_override(name, options.environment)? {
+                overridden.insert(name.as_package_name().clone());
                 outcome.results.push(DetectorResult {
-                    name: name.clone(),
+                    name: name.as_package_name().clone(),
                     value: match value {
                         OverrideValue::Absent => DetectedValue::Absent,
                         OverrideValue::Present(version) => DetectedValue::Present(version),
                     },
                     source: DetectionSource::Override {
-                        variable: override_variable(name),
+                        variable: name.override_variable(),
                     },
                 });
             }
         }
 
-        let applicable: Vec<&PackageName> = registration
+        let applicable: Vec<&VirtualPackageName> = registration
             .registration
             .virtual_packages
             .iter()
-            .filter(|name| !overridden.contains(*name))
+            .filter(|name| !overridden.contains(name.as_package_name()))
             .collect();
         if applicable.is_empty() {
             outcome.skipped.push(SkippedRegistration {
@@ -261,13 +265,16 @@ pub async fn detect(
                 reason: SkipReason::TargetIsNotHost {
                     override_variables: applicable
                         .iter()
-                        .map(|name| override_variable(name))
+                        .map(|name| name.override_variable())
                         .collect(),
                 },
             });
             continue;
         }
-        if !applicable.iter().any(|name| options.wanted.wants(name)) {
+        if !applicable
+            .iter()
+            .any(|name| options.wanted.wants(name.as_package_name()))
+        {
             outcome.skipped.push(SkippedRegistration {
                 origin,
                 detector,
@@ -335,17 +342,7 @@ async fn run_one(
 ) -> RunOutcome {
     let origin = registration.origin().clone();
     let detector = registration.registration.detector.clone();
-    match run_detector_pipeline(
-        registration,
-        options.environment_provider,
-        options.host_platform,
-        cache,
-        &options.clock,
-        options.consent,
-        timeout,
-    )
-    .await
-    {
+    match run_detector_pipeline(registration, options, cache, timeout).await {
         Ok(Some((virtual_packages, source))) => RunOutcome::Results(
             virtual_packages
                 .into_iter()
@@ -394,16 +391,13 @@ type PipelineResult = Result<
 /// consent was denied.
 async fn run_detector_pipeline(
     registration: &AcceptedDetectorRegistration,
-    environment_provider: &dyn DetectorEnvironmentProvider,
-    host_platform: Subdir,
+    options: &DetectOptions<'_>,
     cache: &ResultCache,
-    clock: &CacheClock,
-    consent: &dyn DetectorConsent,
     timeout: Duration,
 ) -> PipelineResult {
     let origin = registration.origin().clone();
     let detector = registration.registration.detector.clone();
-    let resolved = environment_provider.resolve(registration).await?;
+    let resolved = options.environment_provider.resolve(registration).await?;
     let digest = resolved.digest;
 
     // A decision that needed nothing but the registration was taken before
@@ -415,11 +409,13 @@ async fn run_detector_pipeline(
         records: &resolved.records,
         digest: resolved.digest,
     };
-    let decided =
-        match consent.decide_before_resolving(&registration.channel, &registration.registration) {
-            Some(consent) => consent,
-            None => consent.decide(&request).await,
-        };
+    let decided = match options
+        .consent
+        .decide_before_resolving(&registration.channel, &registration.registration)
+    {
+        Some(consent) => consent,
+        None => options.consent.decide(&request).await,
+    };
     if decided == Consent::Deny {
         return Ok(None);
     }
@@ -427,7 +423,11 @@ async fn run_detector_pipeline(
     let key = CacheKey::new(
         origin.clone(),
         detector.clone(),
-        registration.registration.virtual_packages.iter().cloned(),
+        registration
+            .registration
+            .virtual_packages
+            .iter()
+            .map(|name| name.as_package_name().clone()),
         &resolved.digest,
     );
     let source = |from_cache| DetectionSource::Detector {
@@ -436,17 +436,23 @@ async fn run_detector_pipeline(
         digest,
         from_cache,
     };
-    if let Some(cached) = cache.read(&key, clock).await {
+    if let Some(cached) = cache.read(&key, &options.clock, options.environment).await {
         tracing::debug!(%origin, detector = detector.as_source(), "using cached detector result");
         return Ok(Some((cached.virtual_packages, source(true))));
     }
 
-    let environment = environment_provider.install(resolved).await?;
-    let env = activated_environment(&environment.prefix, host_platform, timeout).await?;
+    let environment = options.environment_provider.install(resolved).await?;
+    let env = activated_environment(
+        &environment.prefix,
+        options.host_platform,
+        timeout,
+        options.environment,
+    )
+    .await?;
     let run = run_detector(
         &environment.prefix,
         &detector,
-        host_platform,
+        options.host_platform,
         &env,
         RunLimits {
             timeout,
@@ -465,7 +471,10 @@ async fn run_detector_pipeline(
     })?;
     // Caching is a convenience; a report that could not be stored is still a
     // valid report.
-    if let Err(error) = cache.write(&key, &report, clock).await {
+    if let Err(error) = cache
+        .write(&key, &report, &options.clock, options.environment)
+        .await
+    {
         tracing::warn!(%origin, detector = detector.as_source(), "could not cache the detector result: {error}");
     }
     Ok(Some((report.virtual_packages, source(false))))

@@ -226,12 +226,14 @@ coalesced_map = { path = "crates/coalesced_map", version = "=0.1.4", default-fea
 file_url = { path = "crates/file_url", version = "=0.3.2", default-features = false }
 path_resolver = { path = "crates/path_resolver", version = "=0.2.14", default-features = false }
 rattler = { path = "crates/rattler", version = "=0.52.0", default-features = false }
+rattler_boot_id = { path = "crates/rattler_boot_id", version = "=0.1.0", default-features = false }
 rattler_cache = { path = "crates/rattler_cache", version = "=0.10.14", default-features = false }
 rattler_conda_lock = { path = "crates/rattler_conda_lock", version = "=0.1.2", default-features = false }
 rattler_conda_types = { path = "crates/rattler_conda_types", version = "=0.56.0", default-features = false }
 rattler_conda_version = { path = "crates/rattler_conda_version", version = "=0.1.2", default-features = false }
 rattler_config = { path = "crates/rattler_config", version = "=0.8.1", default-features = false }
 rattler_digest = { path = "crates/rattler_digest", version = "=2.0.0", default-features = false }
+rattler_environment_digest = { path = "crates/rattler_environment_digest", version = "=0.1.0", default-features = false }
 rattler_git = { path = "crates/rattler_git", version = "=0.3.8", default-features = false }
 rattler_index = { path = "crates/rattler_index", version = "=0.32.1", default-features = false }
 rattler_libsolv_c = { path = "crates/rattler_libsolv_c", version = "=1.5.0", default-features = false }

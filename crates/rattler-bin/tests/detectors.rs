@@ -87,9 +87,14 @@ impl Harness {
                 multi_progress: None,
             },
             ChannelMetadata {
-                virtual_package_detectors: Some(serde_json::json!({
-                    "cli-detect": ["__cuda", "__cli_capability"]
-                })),
+                virtual_package_detectors: Some(
+                    [(
+                        "cli-detect".to_string(),
+                        vec!["__cuda".to_string(), "__cli_capability".to_string()],
+                    )]
+                    .into_iter()
+                    .collect(),
+                ),
                 ..ChannelMetadata::default()
             },
         )
@@ -239,6 +244,28 @@ fn assert_consumer_json(output: &Output) {
         "cli-consumer"
     );
     assert_eq!(records[0].package_record.version.to_string(), "1.0.0");
+}
+
+#[tokio::test]
+async fn multichannel_members_supply_detector_registrations() {
+    let mut harness = Harness::new(Some("allow"), None).await;
+    harness.channel = format!("group={}", harness.channel);
+    let solved = harness
+        .command("solve")
+        .arg("cli-consumer")
+        .output()
+        .unwrap();
+    assert_consumer_json(&solved);
+    let installed = harness
+        .command("create")
+        .arg("cli-consumer")
+        .output()
+        .unwrap();
+    assert_success(&installed);
+    assert_eq!(
+        std::fs::read_to_string(harness.marker()).unwrap(),
+        "executed\n"
+    );
 }
 
 #[tokio::test]

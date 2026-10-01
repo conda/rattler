@@ -15,8 +15,8 @@ use rattler_repodata_gateway::{
 use rattler_virtual_package_detectors::{
     AllowAll, CacheClock, Consent, ConsentRequest, DenyAll, DetectOptions, DetectedValue,
     DetectionOutcome, DetectionSource, DetectorConsent, DetectorFailure, DetectorResult,
-    EnvironmentOptions, RattlerEnvironmentProvider, SkipReason, SkippedRegistration, WantedNames,
-    detect, limits,
+    EnvironmentOptions, EnvironmentSnapshot, RattlerEnvironmentProvider, SkipReason,
+    SkippedRegistration, WantedNames, detect, limits,
 };
 
 use crate::{
@@ -64,7 +64,7 @@ impl PyDetectorRegistration {
             .virtual_packages
             .iter()
             .cloned()
-            .map(Into::into)
+            .map(|name| name.into_package_name().into())
             .collect()
     }
 
@@ -114,7 +114,7 @@ impl PyRejectedDetectorRegistration {
             .virtual_packages
             .iter()
             .cloned()
-            .map(Into::into)
+            .map(|name| name.into_package_name().into())
             .collect()
     }
 
@@ -168,7 +168,7 @@ impl PyConsentRequest {
                 .virtual_packages
                 .iter()
                 .cloned()
-                .map(Into::into)
+                .map(|name| name.into_package_name().into())
                 .collect(),
             resolution_channels: request
                 .resolution_channels
@@ -582,6 +582,7 @@ pub fn py_detect_virtual_packages<'py>(
         }
     };
     let timeout = timeout_seconds.map_or(limits::DEFAULT_TIMEOUT, Duration::from_secs);
+    let environment = EnvironmentSnapshot::from_system();
     let client_virtual_packages = client_virtual_packages
         .into_iter()
         .map(Into::into)
@@ -602,6 +603,7 @@ pub fn py_detect_virtual_packages<'py>(
             &registrations,
             DetectOptions {
                 environment_provider: &environment_provider,
+                environment: &environment,
                 root: &root,
                 host_platform: host_platform.inner,
                 target_platform: target_platform.inner,

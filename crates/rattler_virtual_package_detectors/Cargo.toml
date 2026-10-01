@@ -17,16 +17,17 @@ futures = { workspace = true }
 hex = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }
 rattler = { workspace = true, default-features = false }
+rattler_boot_id = { workspace = true }
 rattler_cache = { workspace = true, default-features = false }
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_config = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false, features = ["serde"] }
+rattler_environment_digest = { workspace = true }
 rattler_networking = { workspace = true, default-features = false }
 rattler_prefix_guard = { workspace = true }
 rattler_repodata_gateway = { workspace = true, default-features = false, features = ["gateway"] }
 rattler_shell = { workspace = true }
 rattler_solve = { workspace = true, default-features = false, features = ["resolvo"] }
-rattler_virtual_packages = { workspace = true, default-features = false }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
@@ -34,16 +35,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["fs", "io-util", "macros", "process", "rt", "sync", "time"] }
 tracing = { workspace = true }
 url = { workspace = true }
-
-[target.'cfg(unix)'.dependencies]
-libc = { workspace = true }
-
-[target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true, features = [
-  "Win32_Foundation",
-  "Win32_System_JobObjects",
-  "Win32_System_Threading",
-] }
 
 [dev-dependencies]
 insta = { workspace = true }

@@ -5,15 +5,14 @@ use std::{
 
 use miette::{Context, IntoDiagnostic};
 use rattler::package_cache::PackageCache;
-use rattler_conda_types::{Channel, GenericVirtualPackage, MatchSpec, Subdir};
+use rattler_conda_types::{Channel, GenericVirtualPackage, VirtualPackageName};
 use rattler_config::{
     ConfigBase, NoExtension, config::virtual_package_detectors::DetectorDecision,
 };
-use rattler_repodata_gateway::{Gateway, RepoData, Source};
+use rattler_repodata_gateway::{Gateway, QueryVirtualPackageDetectors};
 use rattler_virtual_package_detectors::{
-    CacheClock, ConfiguredConsent, DenyAll, DetectOptions, EnvironmentOptions,
+    CacheClock, ConfiguredConsent, DenyAll, DetectOptions, EnvironmentOptions, EnvironmentSnapshot,
     RattlerEnvironmentProvider, SkipReason, WantedNames, detect, merge_results, read_override,
-    referenced_virtual_packages,
 };
 use reqwest_middleware::ClientWithMiddleware;
 
@@ -22,15 +21,11 @@ use crate::solver_args::SolverArgs;
 pub(super) struct DetectorContext<'a> {
     pub gateway: &'a Gateway,
     pub config: &'a ConfigBase<NoExtension>,
-    pub channels: &'a [Source],
     pub download_client: &'a ClientWithMiddleware,
-    pub repodata: &'a [RepoData],
-    pub specs: &'a [MatchSpec],
-    pub constraints: &'a [MatchSpec],
-    pub target_platform: Subdir,
+    pub detectors: Option<QueryVirtualPackageDetectors>,
 }
 
-pub(super) async fn determine_virtual_packages(
+pub(super) async fn detect_virtual_packages(
     solver: &SolverArgs,
     context: DetectorContext<'_>,
 ) -> miette::Result<Vec<GenericVirtualPackage>> {
@@ -40,56 +35,25 @@ pub(super) async fn determine_virtual_packages(
         return Ok(virtual_packages);
     }
 
-    let mut wanted = referenced_virtual_packages(
-        context
-            .repodata
-            .iter()
-            .flat_map(|data| data.iter())
-            .map(|record| &record.package_record),
-    );
-    for spec in context.specs.iter().chain(context.constraints) {
-        if let Some(name) = spec.name.as_exact()
-            && name.as_normalized().starts_with("__")
-        {
-            wanted.insert(name.clone());
-        }
-    }
-    if wanted.is_empty() {
+    let Some(discovery) = context.detectors else {
         return Ok(virtual_packages);
-    }
-
-    let channels = context
-        .channels
-        .iter()
-        .flat_map(|source| match source {
-            Source::Multi(group) => group.sources(),
-            source => std::slice::from_ref(source),
-        })
-        .filter_map(|source| match source {
-            Source::Channel(channel) => Some(channel.clone()),
-            _ => None,
-        });
-
-    let discovery = context
-        .gateway
-        .virtual_package_detectors(channels, context.target_platform)
-        .await
-        .into_diagnostic()
-        .context("failed to discover virtual package detectors")?;
-    for warning in &discovery.warnings {
-        eprintln!("warning: {warning}");
-    }
-    if discovery.registrations.is_empty() {
+    };
+    if discovery.wanted_names.is_empty() || discovery.registrations.is_empty() {
         return Ok(virtual_packages);
     }
 
     let host_platform = crate::host_platform()?;
+    let environment = EnvironmentSnapshot::from_system();
     let mut detector_config = context.config.virtual_package_detectors.clone();
-    if context.target_platform == host_platform {
+    if discovery.target_platform == host_platform {
         for registration in &discovery.registrations {
             let mut needs_run = false;
             for name in &registration.registration.virtual_packages {
-                if wanted.contains(name) && read_override(name).into_diagnostic()?.is_none() {
+                if discovery.wanted_names.contains(name.as_package_name())
+                    && read_override(name, &environment)
+                        .into_diagnostic()?
+                        .is_none()
+                {
                     needs_run = true;
                 }
             }
@@ -117,7 +81,7 @@ pub(super) async fn determine_virtual_packages(
         download_client: context.download_client.clone().into(),
         root: &environments,
         host_platform,
-        virtual_packages: if context.target_platform == host_platform {
+        virtual_packages: if discovery.target_platform == host_platform {
             virtual_packages.clone()
         } else {
             // The engine never resolves a detector for a foreign target.
@@ -128,12 +92,13 @@ pub(super) async fn determine_virtual_packages(
         &discovery.registrations,
         DetectOptions {
             environment_provider: &provider,
+            environment: &environment,
             root: &root,
             host_platform,
-            target_platform: context.target_platform,
+            target_platform: discovery.target_platform,
             timeout,
             consent: &consent,
-            wanted: WantedNames::Only(wanted),
+            wanted: WantedNames::Only(discovery.wanted_names),
             concurrency: context.config.concurrency.solves,
             clock: CacheClock::current(),
         },
@@ -158,7 +123,7 @@ pub(super) async fn determine_virtual_packages(
             eprintln!(
                 "warning: not running host detector '{}' for foreign target {}; use {} to override its capabilities",
                 skipped.detector.as_normalized(),
-                context.target_platform,
+                discovery.target_platform,
                 override_variables.join(", "),
             );
         }
@@ -168,7 +133,13 @@ pub(super) async fn determine_virtual_packages(
     let registered: HashSet<_> = discovery
         .registrations
         .iter()
-        .flat_map(|registration| &registration.registration.virtual_packages)
+        .flat_map(|registration| {
+            registration
+                .registration
+                .virtual_packages
+                .iter()
+                .map(VirtualPackageName::as_package_name)
+        })
         .collect();
     virtual_packages.retain(|package| !registered.contains(&package.name));
     Ok(merge_results(virtual_packages, &outcome.results))

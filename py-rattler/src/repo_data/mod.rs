@@ -162,8 +162,8 @@ impl PyChannelInfo {
         self.inner.channel_relations.clone().map(Into::into)
     }
 
-    /// The raw `info.virtual_package_detectors` value, unvalidated, or `None`
-    /// when the field is absent.
+    /// Shape-validated `info.virtual_package_detectors` metadata, or `None`
+    /// when absent. Registration semantics are validated during discovery.
     #[getter]
     pub fn virtual_package_detectors<'py>(
         &self,
