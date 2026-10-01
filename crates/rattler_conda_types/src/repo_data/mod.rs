@@ -114,6 +114,11 @@ pub struct ChannelInfo {
 /// uniqueness; insertion order is preserved.
 pub type RepodataRevisions = IndexMap<RepodataRevision, RepodataRevisionMetadata>;
 
+/// The maximum length in bytes of a [`RepodataRevisionMetadata::message`]
+/// written by a producer, as required by CEP 48. Readers accept longer
+/// messages.
+pub const MAX_REPODATA_REVISION_MESSAGE_BYTES: usize = 8192;
+
 /// Metadata for a single [`RepodataRevisions`] entry; the revision itself is
 /// the map key.
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Default)]

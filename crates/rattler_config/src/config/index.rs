@@ -37,7 +37,7 @@ use std::{collections::HashMap, str::FromStr};
 use rattler_conda_types::{
     ChannelNotice, ChannelRelations, RepodataRevision, RepodataRevisionSelection,
 };
-use serde::{Deserialize, Deserializer, Serialize, de::Error as DeError};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
 
 use crate::config::{Config, MergeError, ValidationError};
 
@@ -87,10 +87,12 @@ pub struct IndexChannelConfig {
 
     /// Additional repodata revisions to advertise in generated repodata.
     /// The legacy layout is implicit; currently only v3 can be selected.
+    /// Entries are either `"v3"` or `{ revision = "v3", message = "..." }`.
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
-        deserialize_with = "deserialize_optional_repodata_revisions"
+        deserialize_with = "deserialize_optional_repodata_revisions",
+        serialize_with = "serialize_optional_repodata_revisions"
     )]
     pub repodata_revisions: Option<Vec<RepodataRevisionSelection>>,
 
@@ -255,27 +257,75 @@ fn validate_channel_relations(
     Ok(())
 }
 
+/// A `repodata-revisions` entry: a bare revision (`"v3"`) or a table with an
+/// optional message (`{ revision = "v3", message = "..." }`).
+#[derive(Deserialize)]
+#[serde(untagged, deny_unknown_fields)]
+enum ConfiguredRepodataRevision {
+    Revision(String),
+    WithMessage {
+        revision: String,
+        #[serde(default)]
+        message: Option<String>,
+    },
+}
+
+/// Writes every entry in table form, which [`ConfiguredRepodataRevision`]
+/// reads back.
+fn serialize_optional_repodata_revisions<S>(
+    revisions: &Option<Vec<RepodataRevisionSelection>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    #[derive(Serialize)]
+    struct Entry<'a> {
+        revision: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        message: Option<&'a str>,
+    }
+
+    revisions
+        .as_ref()
+        .map(|revisions| {
+            revisions
+                .iter()
+                .map(|selection| Entry {
+                    revision: selection.revision.to_string(),
+                    message: selection.message.as_deref(),
+                })
+                .collect::<Vec<_>>()
+        })
+        .serialize(serializer)
+}
+
 fn deserialize_optional_repodata_revisions<'de, D>(
     deserializer: D,
 ) -> Result<Option<Vec<RepodataRevisionSelection>>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let revisions: Option<Vec<String>> = Option::deserialize(deserializer)?;
+    let revisions: Option<Vec<ConfiguredRepodataRevision>> = Option::deserialize(deserializer)?;
     revisions
-        .map(|revs| {
-            revs.into_iter()
-                .map(|s| {
-                    let revision = RepodataRevision::from_str(&s).map_err(D::Error::custom)?;
+        .map(|revisions| {
+            revisions
+                .into_iter()
+                .map(|configured| {
+                    let (revision, message) = match configured {
+                        ConfiguredRepodataRevision::Revision(revision) => (revision, None),
+                        ConfiguredRepodataRevision::WithMessage { revision, message } => {
+                            (revision, message)
+                        }
+                    };
+                    let revision =
+                        RepodataRevision::from_str(&revision).map_err(D::Error::custom)?;
                     if revision != RepodataRevision::V3 {
                         return Err(D::Error::custom(
                             "only v3 can be configured; the legacy layout is implicit",
                         ));
                     }
-                    Ok(RepodataRevisionSelection {
-                        revision,
-                        message: None,
-                    })
+                    Ok(RepodataRevisionSelection { revision, message })
                 })
                 .collect::<Result<Vec<_>, _>>()
         })
@@ -435,6 +485,34 @@ base-url = "../packages/"
     }
 
     #[test]
+    fn parses_repodata_revision_message() {
+        let cfg = parse(
+            r#"
+repodata-revisions = [{ revision = "v3", message = "v3 packages" }]
+"#,
+        );
+        assert_eq!(
+            cfg.default.repodata_revisions,
+            Some(vec![RepodataRevisionSelection {
+                revision: RepodataRevision::V3,
+                message: Some("v3 packages".to_string()),
+            }])
+        );
+    }
+
+    #[test]
+    fn repodata_revision_messages_roundtrip_through_toml() {
+        let config = parse(
+            r#"
+repodata-revisions = ["v3", { revision = "v3", message = "v3 packages" }]
+"#,
+        );
+
+        let serialized = toml::to_string(&config).unwrap();
+        assert_eq!(toml::from_str::<IndexConfig>(&serialized).unwrap(), config);
+    }
+
+    #[test]
     fn rejects_legacy_repodata_revision_selection() {
         let err = toml::from_str::<IndexConfig>("repodata-revisions = [\"legacy\"]\n").unwrap_err();
         assert!(err.to_string().contains("the legacy layout is implicit"));
@@ -442,10 +520,16 @@ base-url = "../packages/"
 
     #[test]
     fn rejects_numeric_repodata_revisions() {
-        let err = toml::from_str::<IndexConfig>("repodata-revisions = [3]\n").unwrap_err();
+        assert!(toml::from_str::<IndexConfig>("repodata-revisions = [3]\n").is_err());
+    }
+
+    #[test]
+    fn rejects_obsolete_repodata_revision_metadata() {
         assert!(
-            err.to_string().contains("invalid type"),
-            "unexpected error: {err}"
+            toml::from_str::<IndexConfig>(
+                "repodata-revisions = [{ revision = \"v3\", n-packages = 1 }]\n",
+            )
+            .is_err()
         );
     }
 
