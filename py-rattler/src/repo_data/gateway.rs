@@ -24,7 +24,7 @@ use crate::package_name::PyPackageName;
 use crate::record::PyRecord;
 use crate::repo_data::PyChannelRelations;
 use crate::repo_data::source::PyRepoDataSource;
-use crate::repo_data::sparse::PySparseRepoData;
+use crate::repo_data::sparse::{PyPackageFormatSelection, PySparseRepoData};
 use crate::subdir::PySubdir;
 use crate::{PyChannel, Wrap};
 
@@ -340,6 +340,7 @@ impl PyGateway {
         channel_relations=None,
         channel_relations_max_depth=None,
         channel_notices=false,
+        package_format_selection=None,
     ))]
     #[allow(clippy::too_many_arguments)]
     pub fn query<'a>(
@@ -352,6 +353,7 @@ impl PyGateway {
         channel_relations: Option<Wrap<ChannelRelationsMode>>,
         channel_relations_max_depth: Option<usize>,
         channel_notices: bool,
+        package_format_selection: Option<PyPackageFormatSelection>,
     ) -> PyResult<Bound<'a, PyAny>> {
         // Convert Python sources to Rust Source enum
         let rust_sources: Vec<Source> = sources
@@ -366,6 +368,10 @@ impl PyGateway {
                 .query(rust_sources, platforms.into_iter().map(|p| p.inner), specs)
                 .recursive(recursive)
                 .channel_notices(channel_notices);
+
+            if let Some(package_format_selection) = package_format_selection {
+                query = query.package_format_selection(package_format_selection.into());
+            }
 
             if let Some(mode) = channel_relations {
                 query = query.channel_relations(mode.0);

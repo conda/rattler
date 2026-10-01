@@ -17,6 +17,7 @@ from rattler.rattler import PyChannelNotice, PyGateway, PyMatchSpec, PySourceCon
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.removed_package import RemovedPackage
 from rattler.repo_data.repo_data import ChannelRelations
+from rattler.repo_data.sparse import PackageFormatSelection
 from rattler.repo_data.who_needs import Dependent, _target_to_py
 
 if TYPE_CHECKING:
@@ -300,6 +301,7 @@ class Gateway:
         channel_relations: ChannelRelationsMode | None = None,
         channel_relations_max_depth: int | None = None,
         channel_notices: bool = False,
+        package_format_selection: PackageFormatSelection | None = None,
     ) -> GatewayQueryResult:
         """Queries the gateway for repodata from channels and custom sources.
 
@@ -335,6 +337,10 @@ class Gateway:
                                          default (10). ``0`` behaves like
                                          ``channel_relations="disabled"``.
             channel_notices: Whether to fetch CEP-6 notices for this query.
+            package_format_selection: Which archive formats of a package are returned when
+                                      the same build is available in more than one format.
+                                      Applies to every source. ``None`` uses the gateway
+                                      default (``PackageFormatSelection.PREFER_CONDA``).
 
         Returns:
             A list of lists of `RepoDataRecord`s. The outer list contains one entry per
@@ -373,6 +379,7 @@ class Gateway:
             channel_notices=channel_notices,
             channel_relations=channel_relations,
             channel_relations_max_depth=channel_relations_max_depth,
+            package_format_selection=package_format_selection.value if package_format_selection is not None else None,
         )
 
         # Convert the records, removed packages, and notices into Python objects.

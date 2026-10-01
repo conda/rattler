@@ -43,6 +43,7 @@ async def solve(
     channel_relations_max_depth: int | None = None,
     add_pip_as_python_dependency: bool = False,
     timestamp_policy: TimestampPolicy = "require-timestamp",
+    package_format_selection: PackageFormatSelection | None = None,
 ) -> list[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -104,6 +105,9 @@ async def solve(
             ``channel_relations``. ``0`` behaves like ``channel_relations="disabled"``.
         add_pip_as_python_dependency: Add `pip` as a dependency of Python 2 and 3
             package records before solving.
+        package_format_selection: Which archive formats of a package are considered when
+            the same build is available in more than one format. Applies to every source.
+            `None` uses the gateway default (`PackageFormatSelection.PREFER_CONDA`).
 
     Returns:
         Resolved list of `RepoDataRecord`s.
@@ -154,6 +158,7 @@ async def solve(
             channel_relations=channel_relations,
             channel_relations_max_depth=channel_relations_max_depth,
             add_pip_as_python_dependency=add_pip_as_python_dependency,
+            package_format_selection=package_format_selection.value if package_format_selection is not None else None,
         )
     ]
 

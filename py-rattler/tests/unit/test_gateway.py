@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from rattler import Channel, Config, Gateway, SourceConfig, SparseRepoData
+from rattler import Channel, Config, Gateway, PackageFormatSelection, SourceConfig, SparseRepoData
 
 
 @pytest.mark.asyncio
@@ -105,6 +105,65 @@ async def test_channel_notices(tmp_path: Path) -> None:
     names = await gateway.names([channel], ["noarch"], channel_notices=True)
     assert names.names is names
     assert names.notices == notices
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("package_format_selection", "expected"),
+    [
+        (None, ["foo-1-0.conda", "foo-2-0.conda", "foo-3-0.tar.bz2", "foo-4-0.tar.bz2", "foo-6-0.conda"]),
+        (PackageFormatSelection.ONLY_CONDA, ["foo-1-0.conda", "foo-2-0.conda", "foo-6-0.conda"]),
+        (
+            PackageFormatSelection.ONLY_TAR_BZ2,
+            ["foo-1-0.tar.bz2", "foo-2-0.tar.bz2", "foo-3-0.tar.bz2", "foo-4-0.tar.bz2"],
+        ),
+        (
+            PackageFormatSelection.PREFER_CONDA,
+            ["foo-1-0.conda", "foo-2-0.conda", "foo-3-0.tar.bz2", "foo-4-0.tar.bz2", "foo-6-0.conda"],
+        ),
+        (
+            PackageFormatSelection.PREFER_CONDA_WITH_WHL,
+            ["foo-1-0.conda", "foo-2-0.conda", "foo-3-0.whl", "foo-4-0.tar.bz2", "foo-5-0.whl", "foo-6-0.conda"],
+        ),
+        (
+            PackageFormatSelection.BOTH,
+            [
+                "foo-1-0.conda",
+                "foo-1-0.tar.bz2",
+                "foo-2-0.conda",
+                "foo-2-0.tar.bz2",
+                "foo-3-0.tar.bz2",
+                "foo-4-0.tar.bz2",
+                "foo-6-0.conda",
+            ],
+        ),
+        (
+            PackageFormatSelection.ALL,
+            [
+                "foo-1-0.conda",
+                "foo-1-0.tar.bz2",
+                "foo-1-0.whl",
+                "foo-2-0.conda",
+                "foo-2-0.tar.bz2",
+                "foo-3-0.tar.bz2",
+                "foo-3-0.whl",
+                "foo-4-0.tar.bz2",
+                "foo-5-0.whl",
+                "foo-6-0.conda",
+            ],
+        ),
+    ],
+)
+async def test_query_package_format_selection(
+    test_data_dir: str, package_format_selection: PackageFormatSelection | None, expected: list[str]
+) -> None:
+    channel = Channel(str(Path(test_data_dir) / "channels" / "format-selection"))
+
+    result = await Gateway().query(
+        [channel], ["noarch"], ["foo <7"], recursive=False, package_format_selection=package_format_selection
+    )
+
+    assert sorted(record.file_name for record in result[0]) == expected
 
 
 def test_init_per_channel_config_key() -> None:
