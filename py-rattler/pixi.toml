@@ -53,6 +53,9 @@ typer = "*"
 rust = "~=1.95.0"
 rust-src = "~=1.95.0"
 
+[feature.py314t.dependencies]
+python_abi = { version = "*", build = "*_cp314t" }
+
 [feature.test.tasks]
 test = "pytest --doctest-modules --ignore=rattler/pty/pty_process.py --ignore=rattler/pty/pty_session.py"
 fmt-python = "ruff format rattler examples tests"
@@ -108,5 +111,6 @@ repl = "ipython"
 
 [environments]
 test = { features = ["test"], solve-group = "default" }
+py314t = { features = ["py314t", "test"] }
 docs = ["docs"]
 repl = ["repl"]
