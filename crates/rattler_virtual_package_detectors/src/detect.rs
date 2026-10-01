@@ -298,27 +298,14 @@ pub async fn detect(
         .into_iter()
         .map(|(registration, overridden)| {
             let semaphore = semaphore.clone();
-            let environment_provider = options.environment_provider;
-            let host_platform = options.host_platform;
-            let cache = cache.clone();
-            let clock = options.clock.clone();
-            let consent = options.consent;
+            let options = &options;
+            let cache = &cache;
             async move {
                 let _permit = semaphore
                     .acquire()
                     .await
                     .expect("semaphore is never closed");
-                run_one(
-                    registration,
-                    &overridden,
-                    environment_provider,
-                    host_platform,
-                    &cache,
-                    &clock,
-                    consent,
-                    timeout,
-                )
-                .await
+                run_one(registration, &overridden, options, cache, timeout).await
             }
         })
         .collect();
@@ -342,22 +329,19 @@ enum RunOutcome {
 async fn run_one(
     registration: &AcceptedDetectorRegistration,
     overridden: &HashSet<PackageName>,
-    environment_provider: &dyn DetectorEnvironmentProvider,
-    host_platform: Subdir,
+    options: &DetectOptions<'_>,
     cache: &ResultCache,
-    clock: &CacheClock,
-    consent: &dyn DetectorConsent,
     timeout: Duration,
 ) -> RunOutcome {
     let origin = registration.origin().clone();
     let detector = registration.registration.detector.clone();
     match run_detector_pipeline(
         registration,
-        environment_provider,
-        host_platform,
+        options.environment_provider,
+        options.host_platform,
         cache,
-        clock,
-        consent,
+        &options.clock,
+        options.consent,
         timeout,
     )
     .await
