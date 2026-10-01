@@ -6,7 +6,7 @@ use std::{
 
 use rattler_conda_types::{
     ChannelNotice, ChannelNoticeLevel, ChannelRelations, Shard, ShardedRepodata, Subdir,
-    compression_level::CompressionLevel,
+    compression_level::CompressionLevel, virtual_package_detector::DetectorRegistrationMetadata,
 };
 use rattler_index::{
     ChannelMetadata, IndexFsConfig, PackageRevisionAssignment, RepodataRevision,
@@ -1108,9 +1108,13 @@ async fn test_index_writes_channel_metadata() {
             base: Some("../conda-forge".to_string()),
             overrides: Some("../fallback".to_string()),
         }),
-        virtual_package_detectors: Some(serde_json::json!({
-            "mpi-detect": ["__conda_forge_openmpi", "__conda_forge_mpich"]
-        })),
+        virtual_package_detectors: Some(DetectorRegistrationMetadata::from([(
+            "mpi-detect".to_string(),
+            vec![
+                "__conda_forge_openmpi".to_string(),
+                "__conda_forge_mpich".to_string(),
+            ],
+        )])),
         notices: Some(vec![ChannelNotice {
             id: "security-1".to_string(),
             message: "Please update demo".to_string(),
@@ -1188,10 +1192,8 @@ async fn test_index_writes_channel_metadata() {
         Some("../fallback")
     );
     assert_eq!(
-        shard_index.info.virtual_package_detectors,
-        Some(serde_json::json!({
-            "mpi-detect": ["__conda_forge_openmpi", "__conda_forge_mpich"]
-        }))
+        shard_index.info.virtual_package_detectors.as_ref().unwrap()["mpi-detect"],
+        ["__conda_forge_openmpi", "__conda_forge_mpich"]
     );
     assert_eq!(
         shard_index.info.repodata_revisions[&RepodataRevision::V3].n_packages,

@@ -15,8 +15,9 @@ use std::{
 use bytes::Bytes;
 use itertools::Itertools;
 use rattler_conda_types::{
-    Channel, ChannelInfo, ChannelRelations, MatchSpec, Matches, PackageName, PackageRecord,
-    RepoDataRecord, RepodataRevisions, UrlOrPath, WhlPackageRecord, compute_package_url,
+    Channel, ChannelInfo, ChannelRelations, DetectorRegistrationMetadata, MatchSpec, Matches,
+    PackageName, PackageRecord, RepoDataRecord, RepodataRevisions, UrlOrPath, WhlPackageRecord,
+    compute_package_url,
     package::{
         ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
         WheelArchiveType,
@@ -603,12 +604,12 @@ impl SparseRepoData {
             .as_ref()
     }
 
-    /// The raw `info.virtual_package_detectors` value, if the field is present.
+    /// Detector registration metadata, if the field is present.
     ///
-    /// The value is not validated; use
+    /// Its JSON shape is checked when reading repodata. Use
     /// [`SubdirDetectorRegistrations::parse`](rattler_conda_types::virtual_package_detector::SubdirDetectorRegistrations::parse)
-    /// for that.
-    pub fn virtual_package_detectors(&self) -> Option<&serde_json::Value> {
+    /// to validate names and registration semantics.
+    pub fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
         self.inner
             .borrow_repo_data()
             .info

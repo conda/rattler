@@ -25,7 +25,13 @@ sysinfo = { workspace = true, optional = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "rt", "process"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "rt", "process", "io-util", "time", "macros"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Globalization", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
 
 [dev-dependencies]
 insta = { workspace = true, features = ["yaml"] }

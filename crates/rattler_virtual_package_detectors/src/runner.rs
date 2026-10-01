@@ -8,20 +8,20 @@
 //! fails. Standard error captured until then is kept for diagnostics.
 
 use std::{
-    collections::HashMap,
     path::{Path, PathBuf},
     process::ExitStatus,
     time::Duration,
 };
 
 use rattler_conda_types::{PackageName, Subdir};
-use rattler_shell::activation::prefix_path_entries;
-use thiserror::Error;
-
-use crate::{
-    limits::{DEFAULT_TIMEOUT, OUTPUT_LIMIT},
+use rattler_shell::{
+    activation::prefix_path_entries,
+    environment::EnvironmentSnapshot,
     process::{ProcessError, ProcessLimits, run_bounded},
 };
+use thiserror::Error;
+
+use crate::limits::{DEFAULT_TIMEOUT, OUTPUT_LIMIT};
 
 /// The bounds of one run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -184,12 +184,12 @@ pub async fn run_detector(
     prefix: &Path,
     detector: &PackageName,
     platform: Subdir,
-    env: &HashMap<String, String>,
+    env: &EnvironmentSnapshot,
     limits: RunLimits,
 ) -> Result<DetectorRun, RunError> {
     let executable = find_executable(prefix, detector, platform)?;
     let mut command = tokio::process::Command::new(&executable);
-    command.env_clear().envs(env);
+    command.env_clear().envs(env.iter());
 
     let lossy = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
     let output = run_bounded(
@@ -264,15 +264,8 @@ mod tests {
         PackageName::try_from(name).unwrap()
     }
 
-    fn env() -> HashMap<String, String> {
-        std::env::vars_os()
-            .map(|(key, value)| {
-                (
-                    key.to_string_lossy().into_owned(),
-                    value.to_string_lossy().into_owned(),
-                )
-            })
-            .collect()
+    fn env() -> EnvironmentSnapshot {
+        EnvironmentSnapshot::from_system()
     }
 
     #[tokio::test]

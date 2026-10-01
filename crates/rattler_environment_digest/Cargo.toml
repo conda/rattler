@@ -1,0 +1,19 @@
+[package]
+name = "rattler_environment_digest"
+version = "0.1.0"
+edition.workspace = true
+authors = ["Julian Hofer <julian@prefix.dev>"]
+description = "Stable fingerprints of resolved Conda environments"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+
+[dependencies]
+hex = { workspace = true }
+rattler_conda_types = { workspace = true, default-features = false }
+rattler_digest = { workspace = true, default-features = false }
+
+[dev-dependencies]
+url = { workspace = true }

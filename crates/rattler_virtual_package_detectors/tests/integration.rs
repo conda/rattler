@@ -1,4 +1,4 @@
-//! Adversarial end-to-end tests that try to break `detect` and the gateway's
+//! Integration tests covering `detect` and the gateway's
 //! registration query.
 //!
 //! Every test builds its own channels in a temporary directory from generated
@@ -21,6 +21,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use rattler_boot_id::BootId;
 use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{
     Channel, ChannelRelations, PackageName, Subdir,
@@ -36,6 +37,7 @@ use rattler_package_streaming::write::write_tar_bz2_package;
 use rattler_repodata_gateway::{
     AcceptedDetectorRegistration, Gateway, RegistrationConflictKind, VirtualPackageDetectorsOutput,
 };
+use rattler_virtual_package_detectors::EnvironmentSnapshot;
 use rattler_virtual_package_detectors::{
     ActivationError, AllowAll, CacheClock, DetectError, DetectOptions, DetectedValue,
     DetectionOutcome, DetectionSource, DetectorConsent, DetectorEnvironment,
@@ -43,7 +45,6 @@ use rattler_virtual_package_detectors::{
     ResolvedDetector, RunError, SkipReason, WantedNames, detect,
     limits::{MAX_CACHE_LIFETIME, OUTPUT_LIMIT, REBOOT_FALLBACK_LIFETIME},
 };
-use rattler_virtual_packages::boot::BootId;
 use url::Url;
 
 // ---------------------------------------------------------------------------
@@ -274,7 +275,8 @@ async fn index_subdir(
             multi_progress: None,
         },
         ChannelMetadata {
-            virtual_package_detectors: detectors,
+            virtual_package_detectors: detectors
+                .map(|value| serde_json::from_value(value).unwrap()),
             channel_relations: relations,
             ..ChannelMetadata::default()
         },
@@ -325,6 +327,7 @@ struct Harness {
     gateway: Gateway,
     package_cache: PackageCache,
     host: Subdir,
+    environment: EnvironmentSnapshot,
 }
 
 impl Harness {
@@ -339,6 +342,7 @@ impl Harness {
             gateway,
             package_cache,
             host: Subdir::current().unwrap(),
+            environment: EnvironmentSnapshot::from_system(),
         }
     }
 
@@ -361,7 +365,7 @@ impl Harness {
 
     async fn query(&self, channels: &[Channel]) -> VirtualPackageDetectorsOutput {
         self.gateway
-            .virtual_package_detectors(channels.iter().cloned(), self.host)
+            .virtual_package_detectors(channels.iter().cloned(), [self.host, Subdir::NoArch])
             .await
             .unwrap()
     }
@@ -373,6 +377,7 @@ impl Harness {
     fn options<'a>(&'a self, consent: &'a dyn DetectorConsent) -> DetectOptions<'a> {
         DetectOptions {
             environment_provider: self,
+            environment: &self.environment,
             root: &self.root,
             host_platform: self.host,
             target_platform: self.host,
@@ -496,17 +501,6 @@ fn digest_of(outcome: &DetectionOutcome, name: &str) -> String {
     }
 }
 
-fn set_var(name: &str, value: &str) {
-    // SAFETY: nextest runs every test in its own process, and the tests only
-    // touch the environment from the test thread before spawning work.
-    unsafe { std::env::set_var(name, value) };
-}
-
-fn remove_var(name: &str) {
-    // SAFETY: as above.
-    unsafe { std::env::remove_var(name) };
-}
-
 fn count_lines(path: &Path) -> usize {
     std::fs::read_to_string(path).map_or(0, |contents| contents.lines().count())
 }
@@ -520,9 +514,11 @@ fn count_lines(path: &Path) -> usize {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn concurrent_detections_install_the_environment_once() {
     const TASKS: usize = 8;
-    let harness = Harness::new();
+    let mut harness = Harness::new();
     let log = harness.dir.join("invocations.log");
-    set_var("DETECTOR_TEST_LOG", log.to_str().unwrap());
+    harness
+        .environment
+        .insert("DETECTOR_TEST_LOG", log.to_str().unwrap());
     let channel = harness
         .channel(
             "channel",
@@ -708,7 +704,7 @@ async fn a_rebuilt_package_with_the_same_file_name_is_reinstalled() {
 #[tokio::test]
 async fn changing_the_registered_names_misses_the_cache() {
     let mut harness = Harness::new();
-    set_var(
+    harness.environment.insert(
         "DETECTOR_TEST_REPORT",
         r#"{"version": 1, "virtual_packages": {"__test_n1": null}}"#,
     );
@@ -731,7 +727,7 @@ async fn changing_the_registered_names_misses_the_cache() {
         "__test_n1"
     ));
 
-    set_var(
+    harness.environment.insert(
         "DETECTOR_TEST_REPORT",
         r#"{"version": 1, "virtual_packages": {"__test_n1": null, "__test_n2": {"version": "2"}}}"#,
     );
@@ -770,9 +766,11 @@ async fn changing_the_registered_names_misses_the_cache() {
 
 #[tokio::test]
 async fn ttl_zero_reruns_the_detector_every_time_and_stores_nothing() {
-    let harness = Harness::new();
+    let mut harness = Harness::new();
     let log = harness.dir.join("invocations.log");
-    set_var("DETECTOR_TEST_LOG", log.to_str().unwrap());
+    harness
+        .environment
+        .insert("DETECTOR_TEST_LOG", log.to_str().unwrap());
     let channel = harness
         .channel(
             "channel",
@@ -804,8 +802,8 @@ async fn ttl_zero_reruns_the_detector_every_time_and_stores_nothing() {
 
 #[tokio::test]
 async fn a_watched_variable_change_expires_the_cache() {
-    let harness = Harness::new();
-    set_var("DETECTOR_TEST_WATCH", "one");
+    let mut harness = Harness::new();
+    harness.environment.insert("DETECTOR_TEST_WATCH", "one");
     let channel = harness
         .channel(
             "channel",
@@ -831,7 +829,7 @@ async fn a_watched_variable_change_expires_the_cache() {
         "__test_watch"
     ));
 
-    set_var("DETECTOR_TEST_WATCH", "two");
+    harness.environment.insert("DETECTOR_TEST_WATCH", "two");
     let changed = harness.detect(&registrations).await;
     assert!(!from_cache(&changed, "__test_watch"));
     assert_eq!(values(&changed)["__test_watch"], Some("two".to_string()));
@@ -840,7 +838,7 @@ async fn a_watched_variable_change_expires_the_cache() {
         "__test_watch"
     ));
 
-    remove_var("DETECTOR_TEST_WATCH");
+    harness.environment.remove("DETECTOR_TEST_WATCH");
     let unset = harness.detect(&registrations).await;
     assert!(!from_cache(&unset, "__test_watch"));
     assert_eq!(values(&unset)["__test_watch"], Some("unset".to_string()));
@@ -859,9 +857,11 @@ async fn cached(harness: &Harness, registrations: &[AcceptedDetectorRegistration
 
 #[tokio::test]
 async fn a_watched_path_change_expires_the_cache() {
-    let harness = Harness::new();
+    let mut harness = Harness::new();
     let watched = harness.dir.join("watched-file");
-    set_var("DETECTOR_TEST_WATCH_PATH", watched.to_str().unwrap());
+    harness
+        .environment
+        .insert("DETECTOR_TEST_WATCH_PATH", watched.to_str().unwrap());
     let channel = harness
         .channel(
             "channel",
@@ -1344,10 +1344,12 @@ async fn report_edge_cases() {
 
 #[tokio::test]
 async fn link_scripts_are_installed_but_never_run() {
-    let harness = Harness::new();
+    let mut harness = Harness::new();
     let markers = harness.dir.join("markers");
     std::fs::create_dir_all(&markers).unwrap();
-    set_var("DETECTOR_TEST_MARKER_DIR", markers.to_str().unwrap());
+    harness
+        .environment
+        .insert("DETECTOR_TEST_MARKER_DIR", markers.to_str().unwrap());
     let script = |kind: &str| {
         format!(
             "#!/bin/sh\ntouch \"$DETECTOR_TEST_MARKER_DIR/{kind}\"\ntouch \"${{PREFIX:-.}}/{kind}\"\n"
@@ -1558,8 +1560,10 @@ async fn malformed_and_invalid_reports_retain_detector_stderr() {
 
 #[tokio::test]
 async fn overrides_survive_a_failed_detector() {
-    let harness = Harness::new();
-    set_var("CONDA_OVERRIDE_TEST_TNF_A", "4.2=hbuild");
+    let mut harness = Harness::new();
+    harness
+        .environment
+        .insert("CONDA_OVERRIDE_TEST_TNF_A", "4.2=hbuild");
     let channel = harness
         .channel(
             "channel",
@@ -1595,8 +1599,10 @@ async fn overrides_survive_a_failed_detector() {
 
 #[tokio::test]
 async fn override_precedence_holds_even_when_the_detector_disagrees() {
-    let harness = Harness::new();
-    set_var("CONDA_OVERRIDE_TEST_PREC_A", "9.9");
+    let mut harness = Harness::new();
+    harness
+        .environment
+        .insert("CONDA_OVERRIDE_TEST_PREC_A", "9.9");
     let channel = harness
         .channel(
             "channel",
@@ -1640,7 +1646,7 @@ async fn override_precedence_holds_even_when_the_detector_disagrees() {
 
 #[tokio::test]
 async fn an_override_variable_collision_across_channels_rejects_the_second_registration() {
-    let harness = Harness::new();
+    let mut harness = Harness::new();
     let a = harness
         .channel(
             "a",
@@ -1699,7 +1705,9 @@ async fn an_override_variable_collision_across_channels_rejects_the_second_regis
     );
 
     // The shared variable overrides the accepted name.
-    set_var("CONDA_OVERRIDE_TEST_COL_LIDE", "7");
+    harness
+        .environment
+        .insert("CONDA_OVERRIDE_TEST_COL_LIDE", "7");
     let outcome = harness.detect(&output.registrations).await;
     assert_eq!(
         values(&outcome),
@@ -1893,7 +1901,7 @@ async fn registrations_in_the_platform_subdir_only_apply_to_that_platform() {
     };
     let foreign = harness
         .gateway
-        .virtual_package_detectors([channel], other)
+        .virtual_package_detectors([channel], [other, Subdir::NoArch])
         .await
         .unwrap();
     assert!(foreign.registrations.is_empty());
@@ -2090,7 +2098,7 @@ async fn cross_process_worker() {
     let channel = Channel::try_from_directory(&job.channel).unwrap();
     let host = Subdir::current().unwrap();
     let registrations = gateway
-        .virtual_package_detectors([channel], host)
+        .virtual_package_detectors([channel], [host, Subdir::NoArch])
         .await
         .unwrap()
         .registrations;
@@ -2107,6 +2115,7 @@ async fn cross_process_worker() {
         &registrations,
         DetectOptions {
             environment_provider: &environment_provider,
+            environment: &EnvironmentSnapshot::from_system(),
             root: &job.root,
             host_platform: host,
             target_platform: host,
@@ -2132,9 +2141,11 @@ async fn cross_process_worker() {
 #[tokio::test]
 async fn concurrent_processes_install_the_environment_once() {
     const PROCESSES: usize = 6;
-    let harness = Harness::new();
+    let mut harness = Harness::new();
     let log = harness.dir.join("invocations.log");
-    set_var("DETECTOR_TEST_LOG", log.to_str().unwrap());
+    harness
+        .environment
+        .insert("DETECTOR_TEST_LOG", log.to_str().unwrap());
     harness
         .channel(
             "channel",
@@ -2182,6 +2193,8 @@ async fn concurrent_processes_install_the_environment_once() {
                     "cross_process_worker",
                     "--nocapture",
                 ])
+                .env_clear()
+                .envs(harness.environment.iter())
                 .env(CROSS_PROCESS_JOB, &job)
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
@@ -2418,8 +2431,8 @@ async fn an_overrides_relation_gives_the_declaring_channel_priority() {
 
 #[tokio::test]
 async fn overrides_apply_even_when_the_target_is_not_the_host() {
-    let harness = Harness::new();
-    set_var("CONDA_OVERRIDE_TEST_FT_A", "3");
+    let mut harness = Harness::new();
+    harness.environment.insert("CONDA_OVERRIDE_TEST_FT_A", "3");
     let channel = harness
         .channel(
             "channel",

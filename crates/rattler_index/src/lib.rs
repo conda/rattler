@@ -40,6 +40,7 @@ use rattler_conda_types::{
         CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
         RunExportsJson, ValidatedMatchSpecs, WheelArchiveType,
     },
+    virtual_package_detector::DetectorRegistrationMetadata,
 };
 pub use rattler_conda_types::{
     RepodataRevision, RepodataRevisionMetadata, RepodataRevisionSelection, RepodataRevisions,
@@ -74,7 +75,7 @@ pub struct ChannelMetadata {
     /// The `info.channel_relations` value written to `repodata.json`.
     pub channel_relations: Option<ChannelRelations>,
     /// The `info.virtual_package_detectors` value written to `repodata.json`.
-    pub virtual_package_detectors: Option<serde_json::Value>,
+    pub virtual_package_detectors: Option<DetectorRegistrationMetadata>,
     /// CEP-6 notices to write to the channel root.
     ///
     /// `None` leaves an existing `notices.json` untouched, while `Some` writes
@@ -95,10 +96,7 @@ impl ChannelMetadata {
                 .virtual_package_detectors
                 .as_ref()
                 .filter(|detectors| !detectors.is_empty())
-                .map(|detectors| {
-                    serde_json::to_value(detectors)
-                        .expect("a map of strings to string arrays is valid JSON")
-                }),
+                .cloned(),
             notices: config.notices.clone(),
         }
     }
