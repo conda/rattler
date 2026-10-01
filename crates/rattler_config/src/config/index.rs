@@ -37,10 +37,11 @@
 //! ```
 use std::{collections::HashMap, str::FromStr};
 
-use indexmap::IndexMap;
 use rattler_conda_types::{
     ChannelNotice, ChannelRelations, RepodataRevision, RepodataRevisionSelection,
-    virtual_package_detector::{ChannelDetectorRegistrations, SubdirDetectorRegistrations},
+    virtual_package_detector::{
+        ChannelDetectorRegistrations, DetectorRegistrationMetadata, SubdirDetectorRegistrations,
+    },
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
 
@@ -123,7 +124,7 @@ pub struct IndexChannelConfig {
     /// `info.virtual_package_detectors` value written to generated repodata:
     /// detector package names mapped to the virtual packages they report.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub virtual_package_detectors: Option<IndexMap<String, Vec<String>>>,
+    pub virtual_package_detectors: Option<DetectorRegistrationMetadata>,
 }
 
 impl IndexChannelConfig {
@@ -326,9 +327,7 @@ fn validate_virtual_package_detectors(
         return Ok(());
     };
     let key = format!("index-config.{label}.virtual-package-detectors");
-    let raw = serde_json::to_value(detectors)
-        .map_err(|err| ValidationError::InvalidValue(key.clone(), err.to_string()))?;
-    let subdir = SubdirDetectorRegistrations::parse(Some(&raw))
+    let subdir = SubdirDetectorRegistrations::parse(Some(detectors))
         .map_err(|err| ValidationError::InvalidValue(key.clone(), err.to_string()))?;
     let combined = ChannelDetectorRegistrations::combine([&subdir])
         .map_err(|err| ValidationError::InvalidValue(key.clone(), err.to_string()))?;
@@ -628,6 +627,56 @@ b-detect = ["__x"]
         );
         let err = duplicate.validate().unwrap_err().to_string();
         assert!(err.contains("registered more than once"), "{err}");
+    }
+
+    #[test]
+    fn detector_metadata_rejects_wrong_shapes_before_validation() {
+        for raw in [
+            r#"virtual-package-detectors = ["mpi-detect"]"#,
+            r#"virtual-package-detectors = { mpi-detect = "__cuda" }"#,
+            r#"virtual-package-detectors = { mpi-detect = ["__cuda", 5] }"#,
+            r#"virtual-package-detectors = { mpi-detect = { __cuda = true } }"#,
+        ] {
+            assert!(toml::from_str::<IndexConfig>(raw).is_err(), "{raw}");
+        }
+    }
+
+    #[test]
+    fn detector_metadata_validates_raw_detector_keys_and_limits() {
+        for (raw, expected) in [
+            (
+                r#"virtual-package-detectors = { "mpi detect" = ["__cuda"] }"#,
+                "not a valid package name",
+            ),
+            (
+                r#"virtual-package-detectors = { __mpi = ["__cuda"] }"#,
+                "detectors must be installable packages",
+            ),
+            (
+                r#"virtual-package-detectors = { mpi-detect = [] }"#,
+                "expected between 1 and 16",
+            ),
+            (
+                r#"virtual-package-detectors = { mpi-detect = ["__mpi-abi", "__mpi_abi"] }"#,
+                "map to the same override variable",
+            ),
+        ] {
+            let error = parse(raw).validate().unwrap_err().to_string();
+            assert!(error.contains(expected), "{error}");
+        }
+        for raw in ["", "virtual-package-detectors = {}"] {
+            let config = parse(raw);
+            config.validate().unwrap();
+            let parsed = SubdirDetectorRegistrations::parse(
+                config.default.virtual_package_detectors.as_ref(),
+            )
+            .unwrap();
+            assert!(
+                ChannelDetectorRegistrations::combine([&parsed])
+                    .unwrap()
+                    .is_empty()
+            );
+        }
     }
 
     #[test]

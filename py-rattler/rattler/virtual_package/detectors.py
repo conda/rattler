@@ -1,9 +1,11 @@
 """Channel-registered virtual package detectors.
 
 A detector is a conda package with an executable that reports virtual packages
-as JSON. Channels register detectors in their repodata; `Gateway.virtual_package_detectors`
-collects those registrations, and `detect_virtual_packages` installs and runs
-the detectors and returns what they reported.
+as JSON. Opt into registration discovery with `Gateway.query(detector_target=...)`
+to collect registrations and candidate demand with repodata. Pass the accepted
+registrations and the query's wanted names to `detect_virtual_packages` to
+install and run the needed detectors. `Gateway.virtual_package_detectors`
+also supports standalone registration discovery.
 """
 
 from __future__ import annotations

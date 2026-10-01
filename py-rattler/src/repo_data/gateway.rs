@@ -389,6 +389,8 @@ impl PyGateway {
         channel_relations=None,
         channel_relations_max_depth=None,
         channel_notices=false,
+        detector_target=None,
+        constraints=Vec::new(),
     ))]
     #[allow(clippy::too_many_arguments)]
     pub fn query<'a>(
@@ -401,6 +403,8 @@ impl PyGateway {
         channel_relations: Option<Wrap<ChannelRelationsMode>>,
         channel_relations_max_depth: Option<usize>,
         channel_notices: bool,
+        detector_target: Option<PySubdir>,
+        constraints: Vec<PyMatchSpec>,
     ) -> PyResult<Bound<'a, PyAny>> {
         // Convert Python sources to Rust Source enum
         let rust_sources: Vec<Source> = sources
@@ -415,6 +419,11 @@ impl PyGateway {
                 .query(rust_sources, platforms.into_iter().map(|p| p.inner), specs)
                 .recursive(recursive)
                 .channel_notices(channel_notices);
+            if let Some(target) = detector_target {
+                query = query
+                    .virtual_package_detectors(target.inner)
+                    .constraints(constraints.into_iter().map(Into::into));
+            }
 
             if let Some(mode) = channel_relations {
                 query = query.channel_relations(mode.0);
@@ -456,7 +465,27 @@ impl PyGateway {
                 .into_iter()
                 .map(PyChannelNotice::from)
                 .collect::<Vec<_>>();
-            Ok((records, removed, notices))
+            let detectors = output.virtual_package_detectors.map(|detectors| {
+                (
+                    PySubdir::from(detectors.target_platform),
+                    detectors
+                        .wanted_names
+                        .into_iter()
+                        .map(PyPackageName::from)
+                        .collect::<Vec<_>>(),
+                    detectors
+                        .registrations
+                        .into_iter()
+                        .map(PyDetectorRegistration::from)
+                        .collect::<Vec<_>>(),
+                    detectors
+                        .rejected
+                        .into_iter()
+                        .map(PyRejectedDetectorRegistration::from)
+                        .collect::<Vec<_>>(),
+                )
+            });
+            Ok((records, removed, notices, detectors))
         })
     }
 
@@ -497,11 +526,10 @@ impl PyGateway {
     }
 
     /// Collects the virtual package detectors registered by `channels` and
-    /// the channels they relate to for `subdir`, accepted or rejected in
-    /// CEP 42 channel order.
+    /// their related channels for the supplied subdirs, in CEP 42 channel order.
     #[pyo3(signature = (
         channels,
-        subdir,
+        subdirs,
         channel_relations=None,
         channel_relations_max_depth=None,
     ))]
@@ -509,7 +537,7 @@ impl PyGateway {
         &self,
         py: Python<'a>,
         channels: Vec<PyChannel>,
-        subdir: PySubdir,
+        subdirs: Vec<PySubdir>,
         channel_relations: Option<Wrap<ChannelRelationsMode>>,
         channel_relations_max_depth: Option<usize>,
     ) -> PyResult<Bound<'a, PyAny>> {
@@ -518,7 +546,10 @@ impl PyGateway {
             channels.into_iter().map(|channel| channel.inner).collect();
         let show_progress = self.show_progress;
         future_into_py(py, async move {
-            let mut query = gateway.virtual_package_detectors(channels, subdir.inner);
+            let mut query = gateway.virtual_package_detectors(
+                channels,
+                subdirs.into_iter().map(|subdir| subdir.inner),
+            );
             if let Some(mode) = channel_relations {
                 query = query.channel_relations(mode.0);
             }

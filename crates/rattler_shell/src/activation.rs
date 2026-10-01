@@ -5,6 +5,8 @@
 
 #[cfg(target_family = "unix")]
 use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use std::{
     collections::HashMap,
     ffi::OsStr,
@@ -21,7 +23,11 @@ use rattler_conda_types::Subdir;
 #[cfg(target_family = "unix")]
 use rattler_pty::unix::PtySession;
 
-use crate::shell::{Shell, ShellError, ShellScript};
+use crate::{
+    environment::EnvironmentSnapshot,
+    process::{ProcessError, ProcessLimits, run_bounded},
+    shell::{Shell, ShellError, ShellScript},
+};
 
 const ENV_START_SEPARATOR: &str = "____RATTLER_ENV_START____";
 
@@ -192,6 +198,28 @@ pub enum ActivationError {
         /// The error code of running the script
         status: ExitStatus,
     },
+}
+
+/// Failure while executing activation within explicit process bounds.
+#[derive(Debug, thiserror::Error)]
+pub enum BoundedActivationError {
+    /// The activation script could not be assembled or written.
+    #[error(transparent)]
+    Script(#[from] ActivationError),
+    /// The activation process could not finish within the bounds.
+    #[error(transparent)]
+    Process(#[from] ProcessError),
+    /// The activation shell exited unsuccessfully.
+    #[error("activation exited with {status}")]
+    Failed {
+        /// The exit status.
+        status: ExitStatus,
+        /// Standard error captured from the shell.
+        stderr: Vec<u8>,
+    },
+    /// The shell did not produce both environment listings.
+    #[error("activation produced no environment listing")]
+    NoEnvironment,
 }
 
 /// Collect all environment variables that are set in a conda environment.
@@ -611,6 +639,117 @@ impl<T: Shell + Clone> Activator<T> {
         })
     }
 
+    fn activation_detection_script(
+        &self,
+        variables: ActivationVariables,
+        separator: &str,
+    ) -> Result<ShellScript<T>, ActivationError> {
+        let activation_script = self.activation(variables)?.script;
+        let mut script = ShellScript::new(self.shell_type.clone(), self.platform);
+        script
+            .print_env()?
+            .echo(separator)?
+            .append_script(&activation_script)
+            .echo(separator)?
+            .print_env()?;
+        Ok(script)
+    }
+
+    /// Executes activation with a complete, explicit inherited environment.
+    ///
+    /// Returns the complete reconciled environment, including removals.
+    /// Native-string values survive unchanged on Unix. Timeout, output budget
+    /// exhaustion and cancellation terminate the shell's process tree.
+    pub async fn run_activation_bounded(
+        &self,
+        mut variables: ActivationVariables,
+        environment: &EnvironmentSnapshot,
+        limits: ProcessLimits,
+    ) -> Result<EnvironmentSnapshot, BoundedActivationError> {
+        variables.current_env = environment.unicode_variables();
+        let script_dir = tempfile::TempDir::new().map_err(ActivationError::from)?;
+        let separator = format!(
+            "{ENV_START_SEPARATOR}{}",
+            script_dir
+                .path()
+                .file_name()
+                .expect("temporary directory has a name")
+                .to_string_lossy()
+        );
+        let script = self.activation_detection_script(variables, &separator)?;
+        let script_path = script_dir
+            .path()
+            .join(format!("activation.{}", self.shell_type.extension()));
+        fs::write(
+            &script_path,
+            script.contents().map_err(ActivationError::from)?,
+        )
+        .map_err(ActivationError::from)?;
+        let mut command =
+            tokio::process::Command::from(self.shell_type.create_run_script_command(&script_path));
+        command.env_clear().envs(environment.iter());
+        let output = run_bounded(&mut command, limits).await?;
+        if !output.status.success() {
+            return Err(BoundedActivationError::Failed {
+                status: output.status,
+                stderr: output.stderr,
+            });
+        }
+        let separator = separator.as_bytes();
+        let first = output
+            .stdout
+            .windows(separator.len())
+            .position(|bytes| bytes == separator)
+            .ok_or(BoundedActivationError::NoEnvironment)?;
+        let rest = &output.stdout[first + separator.len()..];
+        let last = rest
+            .windows(separator.len())
+            .rposition(|bytes| bytes == separator)
+            .ok_or(BoundedActivationError::NoEnvironment)?;
+        let before = self.parse_environment_bytes(&output.stdout[..first]);
+        let after = self.parse_environment_bytes(&rest[last + separator.len()..]);
+        let mut reconciled = environment.clone();
+        for (key, _) in before.iter() {
+            if after.get(key).is_none() {
+                reconciled.remove(key);
+            }
+        }
+        for (key, value) in after.iter() {
+            if before.get(key) != Some(value) {
+                reconciled.insert(key, value);
+            }
+        }
+        Ok(reconciled)
+    }
+
+    fn parse_environment_bytes(&self, bytes: &[u8]) -> EnvironmentSnapshot {
+        #[cfg(unix)]
+        if bytes.contains(&0) {
+            return bytes
+                .split(|byte| *byte == 0)
+                .filter_map(|record| {
+                    let equals = record.iter().position(|byte| *byte == b'=')?;
+                    let key = record[..equals]
+                        .strip_prefix(b"\n")
+                        .unwrap_or(&record[..equals]);
+                    if key.is_empty() {
+                        return None;
+                    }
+                    Some((
+                        OsStr::from_bytes(key),
+                        OsStr::from_bytes(&record[equals + 1..]),
+                    ))
+                })
+                .collect();
+        }
+        let text = String::from_utf8_lossy(bytes);
+        self.shell_type
+            .parse_env(&text)
+            .into_iter()
+            .filter(|(key, _)| !key.is_empty())
+            .collect()
+    }
+
     /// Runs the activation script and returns the environment variables changed
     /// in the environment after running the script.
     ///
@@ -621,19 +760,8 @@ impl<T: Shell + Clone> Activator<T> {
         variables: ActivationVariables,
         environment: Option<HashMap<&OsStr, &OsStr>>,
     ) -> Result<HashMap<String, String>, ActivationError> {
-        let activation_script = self.activation(variables)?.script;
-
-        // Create a script that starts by emitting all environment variables, then runs
-        // the activation script followed by again emitting all environment
-        // variables. Any changes should then become visible.
-        let mut activation_detection_script =
-            ShellScript::new(self.shell_type.clone(), self.platform);
-        activation_detection_script
-            .print_env()?
-            .echo(ENV_START_SEPARATOR)?
-            .append_script(&activation_script)
-            .echo(ENV_START_SEPARATOR)?
-            .print_env()?;
+        let activation_detection_script =
+            self.activation_detection_script(variables, ENV_START_SEPARATOR)?;
 
         // Create a temporary file that we can execute with our shell.
         let activation_script_dir = tempfile::TempDir::new()?;

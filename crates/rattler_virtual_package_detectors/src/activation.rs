@@ -11,17 +11,16 @@ use std::{collections::HashMap, path::Path, time::Duration};
 
 use rattler_conda_types::Subdir;
 use rattler_shell::{
-    activation::{ActivationVariables, Activator, PathModificationBehavior},
-    shell::{Shell, ShellEnum, ShellScript},
+    activation::{
+        ActivationVariables, Activator, BoundedActivationError, PathModificationBehavior,
+    },
+    environment::EnvironmentSnapshot,
+    process::{ProcessError, ProcessLimits},
+    shell::ShellEnum,
 };
 use thiserror::Error;
 
-use crate::{
-    limits::OUTPUT_LIMIT,
-    process::{ProcessError, ProcessLimits, run_bounded},
-};
-
-const ENV_SEPARATOR: &str = "____RATTLER_DETECTOR_ENV____";
+use crate::limits::OUTPUT_LIMIT;
 
 /// Why activation failed.
 #[derive(Debug, Error)]
@@ -29,14 +28,6 @@ pub enum ActivationError {
     /// The activation script could not be assembled.
     #[error("failed to build the activation script")]
     Script(#[source] rattler_shell::activation::ActivationError),
-
-    /// The environment dumps could not be added to the activation script.
-    #[error("failed to assemble the activation script")]
-    Assemble(#[from] std::fmt::Error),
-
-    /// The activation script could not be rendered.
-    #[error("failed to render the activation script")]
-    Render(#[source] rattler_shell::shell::ShellError),
 
     /// The activation script could not be written.
     #[error("failed to write the activation script")]
@@ -88,38 +79,21 @@ impl ActivationError {
             Self::Process(error) => error
                 .stderr()
                 .map(|bytes| String::from_utf8_lossy(bytes).into_owned()),
-            Self::Script(_)
-            | Self::Assemble(_)
-            | Self::Render(_)
-            | Self::Io(_)
-            | Self::NoEnvironment => None,
+            Self::Script(_) | Self::Io(_) | Self::NoEnvironment => None,
         }
     }
 }
 
-/// This process's environment, with values that are not valid Unicode decoded
-/// lossily rather than aborting the process.
-pub fn current_environment() -> HashMap<String, String> {
-    std::env::vars_os()
-        .map(|(key, value)| {
-            (
-                key.to_string_lossy().into_owned(),
-                value.to_string_lossy().into_owned(),
-            )
-        })
-        .collect()
-}
-
 /// Computes the environment of `prefix` after activation on `platform`,
-/// starting from this process's environment.
+/// starting from an explicit native-string environment snapshot.
 ///
 /// The result is the complete environment to start the detector with.
 pub async fn activated_environment(
     prefix: &Path,
     platform: Subdir,
     timeout: Duration,
-) -> Result<HashMap<String, String>, ActivationError> {
-    let current_env = current_environment();
+    inherited: &EnvironmentSnapshot,
+) -> Result<EnvironmentSnapshot, ActivationError> {
     let shell = ShellEnum::default();
     let activator = {
         let prefix = prefix.to_path_buf();
@@ -129,106 +103,52 @@ pub async fn activated_environment(
             .map_err(|error| ActivationError::Io(std::io::Error::other(error)))?
             .map_err(ActivationError::Script)?
     };
-    let activation = activator
-        .activation(ActivationVariables {
-            conda_prefix: None,
-            // Leaving the inherited entries out makes the script prepend the
-            // prefix directories to `$PATH` as it is, instead of spelling the
-            // inherited entries out a second time.
-            path: None,
-            path_modification_behavior: PathModificationBehavior::Prepend,
-            current_env: current_env.clone(),
-        })
-        .map_err(ActivationError::Script)?;
-
-    // Print the environment before and after the activation script so the
-    // difference is exactly what activation changed.
-    let mut script = ShellScript::new(shell.clone(), platform);
-    script
-        .print_env()
-        .and_then(|script| script.echo(ENV_SEPARATOR))
-        .map(|script| script.append_script(&activation.script))
-        .and_then(|script| script.echo(ENV_SEPARATOR))
-        .and_then(|script| script.print_env())?;
-    let contents = script.contents().map_err(ActivationError::Render)?;
-
-    let script_dir = tempfile::TempDir::new()?;
-    let script_path = script_dir
-        .path()
-        .join(format!("activation.{}", shell.extension()));
-    fs_err::tokio::write(&script_path, contents).await?;
-
-    let mut command = tokio::process::Command::from(shell.create_run_script_command(&script_path));
-    command.env_clear().envs(&current_env);
-    let lossy = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
-    let output = run_bounded(
-        &mut command,
-        ProcessLimits {
-            timeout,
-            output_limit: OUTPUT_LIMIT,
-        },
-    )
-    .await
-    .map_err(|error| match error {
-        ProcessError::TimedOut { timeout, stderr } => ActivationError::TimedOut {
-            timeout,
-            stderr: lossy(&stderr),
-        },
-        ProcessError::OutputLimitExceeded { limit, stderr } => {
-            ActivationError::OutputLimitExceeded {
-                limit,
-                stderr: lossy(&stderr),
+    activator
+        .run_activation_bounded(
+            ActivationVariables {
+                conda_prefix: None,
+                path: None,
+                path_modification_behavior: PathModificationBehavior::Prepend,
+                current_env: HashMap::default(),
+            },
+            inherited,
+            ProcessLimits {
+                timeout,
+                output_limit: OUTPUT_LIMIT,
+            },
+        )
+        .await
+        .map_err(|error| {
+            let lossy = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
+            match error {
+                BoundedActivationError::Script(error) => ActivationError::Script(error),
+                BoundedActivationError::Process(ProcessError::TimedOut { timeout, stderr }) => {
+                    ActivationError::TimedOut {
+                        timeout,
+                        stderr: lossy(&stderr),
+                    }
+                }
+                BoundedActivationError::Process(ProcessError::OutputLimitExceeded {
+                    limit,
+                    stderr,
+                }) => ActivationError::OutputLimitExceeded {
+                    limit,
+                    stderr: lossy(&stderr),
+                },
+                BoundedActivationError::Process(error) => ActivationError::Process(error),
+                BoundedActivationError::Failed { status, stderr } => ActivationError::Failed {
+                    status,
+                    stderr: lossy(&stderr),
+                },
+                BoundedActivationError::NoEnvironment => ActivationError::NoEnvironment,
             }
-        }
-        other => ActivationError::Process(other),
-    })?;
-    if !output.status.success() {
-        return Err(ActivationError::Failed {
-            status: output.status,
-            stderr: lossy(&output.stderr),
-        });
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let Some((before, rest)) = stdout.split_once(ENV_SEPARATOR) else {
-        return Err(ActivationError::NoEnvironment);
-    };
-    let Some((_, after)) = rest.rsplit_once(ENV_SEPARATOR) else {
-        return Err(ActivationError::NoEnvironment);
-    };
-    let before = shell.parse_env(before);
-    let after = shell.parse_env(after);
-
-    let mut env = current_env;
-    for key in before.keys() {
-        if !after.contains_key(key) {
-            remove_variable(&mut env, key);
-        }
-    }
-    for (key, value) in after {
-        if key.is_empty() || before.get(key) == Some(&value) {
-            continue;
-        }
-        remove_variable(&mut env, key);
-        env.insert(key.to_string(), value.to_string());
-    }
-    Ok(env)
-}
-
-/// Removes `key` from `env`. On Windows variable names are case-insensitive,
-/// so every spelling goes, and the value activation set is the only one the
-/// detector sees.
-fn remove_variable(env: &mut HashMap<String, String>, key: &str) {
-    if cfg!(windows) {
-        env.retain(|existing, _| !existing.eq_ignore_ascii_case(key));
-    } else {
-        env.remove(key);
-    }
+        })
 }
 
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
     #[tokio::test]
     async fn activation_prepends_the_prefix_and_applies_scripts() {
@@ -242,23 +162,70 @@ mod tests {
         )
         .unwrap();
 
-        // SAFETY: nextest runs every test in its own process.
-        unsafe { std::env::set_var("DETECTOR_TEST_REMOVED", "present") };
-        let env =
-            activated_environment(prefix, Subdir::current().unwrap(), Duration::from_secs(30))
-                .await
-                .unwrap();
+        let mut inherited = EnvironmentSnapshot::from_system();
+        inherited.insert("DETECTOR_TEST_REMOVED", "present");
+        let env = activated_environment(
+            prefix,
+            Subdir::current().unwrap(),
+            Duration::from_secs(30),
+            &inherited,
+        )
+        .await
+        .unwrap();
         assert_eq!(
-            env.get("DETECTOR_TEST_ACTIVATED").map(String::as_str),
+            env.get("DETECTOR_TEST_ACTIVATED")
+                .and_then(|value| value.to_str()),
             Some("1")
         );
-        assert!(!env.contains_key("DETECTOR_TEST_REMOVED"));
+        assert!(env.get("DETECTOR_TEST_REMOVED").is_none());
 
         let path = env.get("PATH").unwrap();
         let entries: Vec<_> = std::env::split_paths(path).collect();
         assert_eq!(entries[0], prefix.join("bin"));
-        let inherited: Vec<_> = std::env::split_paths(&std::env::var_os("PATH").unwrap()).collect();
+        let inherited: Vec<_> = std::env::split_paths(inherited.get("PATH").unwrap()).collect();
         assert_eq!(&entries[1..], inherited.as_slice());
+    }
+
+    #[tokio::test]
+    async fn activation_preserves_native_values_and_removes_unset_variables() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("etc/conda/activate.d")).unwrap();
+        std::fs::write(
+            dir.path().join("etc/conda/activate.d/native.sh"),
+            "export COPIED=\"$NATIVE\"\nexport CHANGED=\"${NATIVE}suffix\"\nunset REMOVED\nexport EMPTY=\nexport COLLISION=____RATTLER_ENV_START____after\n",
+        ).unwrap();
+        let native = OsString::from_vec(b"native-\xff".to_vec());
+        let inherited: EnvironmentSnapshot = [
+            ("PATH", OsString::from("/usr/bin:/bin")),
+            ("NATIVE", native.clone()),
+            ("REMOVED", native.clone()),
+            (
+                "COLLISION",
+                OsString::from("____RATTLER_ENV_START____before"),
+            ),
+        ]
+        .into_iter()
+        .collect();
+        let result = activated_environment(
+            dir.path(),
+            Subdir::current().unwrap(),
+            Duration::from_secs(30),
+            &inherited,
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.get("NATIVE"), Some(native.as_os_str()));
+        assert_eq!(result.get("COPIED"), Some(native.as_os_str()));
+        let mut changed = native.clone();
+        changed.push("suffix");
+        assert_eq!(result.get("CHANGED"), Some(changed.as_os_str()));
+        assert!(result.get("REMOVED").is_none());
+        assert_eq!(result.get("EMPTY"), Some(std::ffi::OsStr::new("")));
+        assert_eq!(
+            result.get("COLLISION"),
+            Some(std::ffi::OsStr::new("____RATTLER_ENV_START____after"))
+        );
+        assert_eq!(inherited.get("REMOVED"), Some(native.as_os_str()));
     }
 
     #[tokio::test]
@@ -271,10 +238,14 @@ mod tests {
             "echo activation broke >&2\nexit 7\n",
         )
         .unwrap();
-        let err =
-            activated_environment(prefix, Subdir::current().unwrap(), Duration::from_secs(30))
-                .await
-                .unwrap_err();
+        let err = activated_environment(
+            prefix,
+            Subdir::current().unwrap(),
+            Duration::from_secs(30),
+            &EnvironmentSnapshot::from_system(),
+        )
+        .await
+        .unwrap_err();
         assert!(err.stderr().unwrap().contains("activation broke"), "{err}");
     }
 }

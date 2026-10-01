@@ -103,7 +103,7 @@ def _write_channel(root: Path, registrations: dict[str, list[str]]) -> Channel:
     return Channel(str(root))
 
 
-def test_channel_info_exposes_raw_registrations(tmp_path: Path) -> None:
+def test_channel_info_exposes_registrations(tmp_path: Path) -> None:
     _write_channel(tmp_path, {"good-detect": ["__test_good", "__test_absent"]})
     repodata = RepoData.from_path(tmp_path / "noarch" / "repodata.json")
     assert repodata.info is not None
@@ -116,7 +116,9 @@ async def test_gateway_collects_registrations(tmp_path: Path) -> None:
         tmp_path,
         {"good-detect": ["__test_good", "__test_absent"], "other-detect": ["__test_other"]},
     )
-    registrations = await Gateway(cache_dir=tmp_path / "cache").virtual_package_detectors([channel], Subdir.current())
+    registrations = await Gateway(cache_dir=tmp_path / "cache").virtual_package_detectors(
+        [channel], [Subdir.current(), "noarch"]
+    )
     assert registrations.rejected == []
     assert [r.detector.normalized for r in registrations.accepted] == ["good-detect", "other-detect"]
     good = registrations.accepted[0]
@@ -130,7 +132,7 @@ async def test_conflicting_registrations_are_rejected_in_channel_order(tmp_path:
     first = _write_channel(tmp_path / "first", {"a-detect": ["__test_x"]})
     second = _write_channel(tmp_path / "second", {"b-detect": ["__test_x", "__test_y"]})
     registrations = await Gateway(cache_dir=tmp_path / "cache").virtual_package_detectors(
-        [first, second], Subdir.current()
+        [first, second], [Subdir.current(), "noarch"]
     )
     assert [r.detector.normalized for r in registrations.accepted] == ["a-detect"]
     (rejected,) = registrations.rejected
@@ -142,11 +144,52 @@ async def test_conflicting_registrations_are_rejected_in_channel_order(tmp_path:
 
 
 @pytest.mark.asyncio
+async def test_gateway_query_returns_candidate_demand_and_all_registrations(tmp_path: Path) -> None:
+    channel = _write_channel(
+        tmp_path / "channel",
+        {"good-detect": ["__test_good", "__test_absent"], "other-detect": ["__test_other"]},
+    )
+    path = tmp_path / "channel" / "noarch" / "repodata.json"
+    repodata = json.loads(path.read_text())
+    repodata["packages"]["consumer-1-0.tar.bz2"] = {
+        "name": "consumer",
+        "version": "1",
+        "build": "0",
+        "build_number": 0,
+        "subdir": "noarch",
+        "depends": ["conda-forge::__test_good >=1"],
+        "constrains": ["__test_absent >=0"],
+    }
+    path.write_text(json.dumps(repodata))
+    result = await Gateway(cache_dir=tmp_path / "cache").query(
+        [channel],
+        ["noarch"],
+        ["consumer"],
+        detector_target=Subdir.current(),
+        constraints=["__extra >=1", "not-installed >=1"],
+    )
+    assert [[record.name.normalized for record in bucket] for bucket in result] == [["consumer"]]
+    assert result.detector_target == Subdir.current()
+    assert [name.normalized for name in result.wanted_virtual_packages] == ["__extra", "__test_absent", "__test_good"]
+    assert result.virtual_package_detectors is not None
+    assert [r.detector.normalized for r in result.virtual_package_detectors.accepted] == ["good-detect", "other-detect"]
+    assert result.virtual_package_detectors.rejected == []
+
+
+@pytest.mark.asyncio
 @pytest.mark.skipif(sys.platform == "win32", reason="the batch executable prints the report as-is only on Unix")
 async def test_detects_with_a_consent_callback(tmp_path: Path) -> None:
     channel = _write_channel(tmp_path / "channel", {"good-detect": ["__test_good", "__test_absent"]})
     gateway = Gateway(cache_dir=tmp_path / "cache")
-    registrations = await gateway.virtual_package_detectors([channel], Subdir.current())
+    query = await gateway.query(
+        [channel],
+        ["noarch"],
+        ["__test_good"],
+        detector_target=Subdir.current(),
+        constraints=["__test_absent >=0"],
+    )
+    registrations = query.virtual_package_detectors
+    assert registrations is not None
     asked: list[ConsentRequest] = []
 
     def consent(request: ConsentRequest) -> bool:
@@ -161,6 +204,7 @@ async def test_detects_with_a_consent_callback(tmp_path: Path) -> None:
         [],
         consent,
         cache_dir=tmp_path / "cache",
+        wanted=query.wanted_virtual_packages,
     )
     assert outcome.failures == [] and outcome.skipped == []
     assert len(asked) == 1

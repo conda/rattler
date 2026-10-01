@@ -1238,6 +1238,7 @@ fn parse_nvidia_smi_compute_capabilities(output: &str) -> Option<CudaArchInfo> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use rattler_boot_id::BootId;
 
     /// Times loading the NVML library only, as the first NVML use in this process.
     ///
@@ -1490,7 +1491,7 @@ mod test {
         now: u64,
     ) -> cache::CacheEnv {
         cache::CacheEnv {
-            boot_id: Some(crate::boot::BootId::Uuid(boot.to_owned())),
+            boot_id: Some(BootId::Uuid(boot.to_owned())),
             driver_fingerprint: driver.map(|version| cache::DriverFingerprint::Module {
                 version: version.to_owned(),
             }),

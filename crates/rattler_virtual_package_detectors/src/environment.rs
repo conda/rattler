@@ -5,8 +5,8 @@
 //! detector by name, qualified with its registering channel, against the
 //! registration's resolution channels for the host platform. The
 //! only virtual packages available to that solve are the client's own. The
-//! resolved records are fingerprinted with the [environment
-//! digest](crate::digest), and the environment lives in a directory named
+//! resolved records are fingerprinted with the
+//! [`environment_digest`], and the environment lives in a directory named
 //! after that digest, so an environment is reused exactly when the resolved
 //! records are unchanged and reinstalled otherwise.
 //!
@@ -33,7 +33,7 @@ use rattler_repodata_gateway::{
 use rattler_solve::{SolveError, SolverImpl, SolverTask};
 use thiserror::Error;
 
-use crate::digest::environment_digest;
+use rattler_environment_digest::environment_digest;
 
 /// What resolving and installing a detector needs from the client.
 #[derive(Clone)]
