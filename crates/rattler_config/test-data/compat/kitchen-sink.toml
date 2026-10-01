@@ -49,6 +49,6 @@ base-url = "../packages/"
 [virtual-package-detectors]
 timeout-seconds = 60
 
-[virtual-package-detectors.consent."https://conda.anaconda.org/conda-forge"]
-mpi-detect = "allow"
-cuda-detect = "deny"
+[virtual-package-detectors.consent]
+"https://conda.anaconda.org/conda-forge" = "allow"
+"https://prefix.dev/internal" = "deny"

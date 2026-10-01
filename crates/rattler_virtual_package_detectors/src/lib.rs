@@ -9,7 +9,8 @@
 //! that pipeline:
 //!
 //! - [`digest`] fingerprints a resolved detector environment.
-//! - [`environment`] resolves a detector and installs it, keyed by that digest.
+//! - [`environment`] lets clients provide detector environments, with a standalone
+//!   solver and installer implementation keyed by the environment digest.
 //! - [`activation`] computes the environment variables of the activated prefix.
 //! - [`process`] runs a child process within a time and an output bound.
 //! - [`runner`] finds and runs the executable within the protocol's limits.
@@ -22,6 +23,14 @@
 //!
 //! Registrations come from
 //! [`Gateway::virtual_package_detectors`](rattler_repodata_gateway::Gateway::virtual_package_detectors).
+//!
+//! Pass a [`DetectorEnvironmentProvider`] in [`DetectOptions`] to create
+//! detector environments through the client's own environment flow. The
+//! standalone [`RattlerEnvironmentProvider`] takes [`EnvironmentOptions`],
+//! including the environment root, host platform and builtin virtual packages.
+//! Registrations denied before resolution require no environment work. Otherwise
+//! resolution precedes post-solve consent and cache lookup; installation happens
+//! only after consent and on a result cache miss.
 //!
 //! Failed report validation preserves captured diagnostics. Concurrent result
 //! publications are atomic, and watched environment variable names follow the
@@ -52,8 +61,8 @@ pub use detect::{
 };
 pub use digest::environment_digest;
 pub use environment::{
-    DetectorEnvironment, EnvironmentError, EnvironmentOptions, ResolvedDetector,
-    ensure_environment, resolve_detector,
+    DetectorEnvironment, DetectorEnvironmentProvider, EnvironmentError, EnvironmentOptions,
+    RattlerEnvironmentProvider, ResolvedDetector, ensure_environment, resolve_detector,
 };
 pub use overrides::{OverrideError, OverrideValue, read_override};
 pub use report::{
