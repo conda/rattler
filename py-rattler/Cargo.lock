@@ -4045,6 +4045,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_boot_id"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "rattler_cache"
 version = "0.10.14"
 dependencies = [
@@ -4458,6 +4467,7 @@ dependencies = [
  "fs-err",
  "indexmap 2.14.0",
  "itertools 0.15.0",
+ "libc",
  "rattler_conda_types",
  "rattler_pty",
  "serde_json",
@@ -4466,6 +4476,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tracing",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4513,11 +4524,11 @@ name = "rattler_virtual_packages"
 version = "8.0.1"
 dependencies = [
  "archspec",
- "libc",
  "libloading",
  "nom",
  "once_cell",
  "plist",
+ "rattler_boot_id",
  "rattler_conda_types",
  "regex",
  "serde",

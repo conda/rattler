@@ -39,7 +39,9 @@ use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use error::GatewayError;
 #[cfg(feature = "indicatif")]
 pub use indicatif::{IndicatifReporter, IndicatifReporterBuilder};
-pub use query::{NamesQuery, NamesQueryOutput, RepoDataQuery, RepoDataQueryOutput};
+pub use query::{
+    NamesQuery, NamesQueryOutput, QueryVirtualPackageDetectors, RepoDataQuery, RepoDataQueryOutput,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, ChannelRelations, MatchSpec, RepoDataRecord, Subdir};
@@ -210,25 +212,28 @@ impl Gateway {
     }
 
     /// Collects the virtual package detectors that `channels` and the
-    /// channels they relate to register for `subdir`.
+    /// channels they relate to register for the supplied `subdirs`.
     ///
-    /// Registrations of `subdir` and `noarch` are combined per channel and
-    /// then accepted or rejected in CEP 42 channel order, so every accepted
-    /// virtual package name has exactly one detector. See
-    /// [`VirtualPackageDetectorsQuery`] for the options and the output.
-    pub fn virtual_package_detectors<AsChannel, ChannelIter>(
+    /// Registrations of these subdirs are combined per channel and accepted
+    /// or rejected in CEP 42 channel order. Duplicate subdirs are ignored,
+    /// and no subdirs are added implicitly. To include platform-independent
+    /// registrations, pass `Subdir::NoArch` explicitly alongside the target.
+    /// See [`VirtualPackageDetectorsQuery`] for the options and output.
+    pub fn virtual_package_detectors<AsChannel, ChannelIter, SubdirIter>(
         &self,
         channels: ChannelIter,
-        subdir: Subdir,
+        subdirs: SubdirIter,
     ) -> VirtualPackageDetectorsQuery
     where
         AsChannel: Into<Channel>,
         ChannelIter: IntoIterator<Item = AsChannel>,
+        SubdirIter: IntoIterator<Item = Subdir>,
     {
         VirtualPackageDetectorsQuery::new(
             self.inner.clone(),
             channels.into_iter().map(Into::into).collect(),
-            subdir,
+            subdirs.into_iter().collect(),
+            None,
         )
     }
 
@@ -4764,6 +4769,147 @@ mod test {
             )),
             "expected UserOrderConflict warning; got {:?}",
             output.warnings,
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn package_fetches_run_while_channel_discovery_is_pending() {
+        use axum::{Router, routing::get};
+        use std::time::Duration;
+        use tokio::{net::TcpListener, sync::Notify, time::timeout};
+
+        struct UnblockingSource(Arc<Notify>);
+
+        #[async_trait::async_trait]
+        impl super::RepoDataSource for UnblockingSource {
+            async fn fetch_package_records(
+                &self,
+                _platform: Subdir,
+                _name: &PackageName,
+            ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
+                self.0.notify_one();
+                Ok(vec![Arc::new(make_test_record(
+                    "shared", "9.0.0", "linux-64",
+                ))])
+            }
+
+            fn package_names(&self, _platform: Subdir) -> Vec<String> {
+                vec!["shared".to_string()]
+            }
+        }
+
+        // Discovery cannot finish until an independent package fetch runs.
+        let package_fetched = Arc::new(Notify::new());
+        let wait_for_package = package_fetched.clone();
+        let app = Router::new().route(
+            "/linux-64/repodata.json",
+            get(move || {
+                let wait_for_package = wait_for_package.clone();
+                async move {
+                    wait_for_package.notified().await;
+                    r#"{"info":{"subdir":"linux-64"},"packages":{},"packages.conda":{}}"#
+                }
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let channel = Channel::from_url(Url::parse(&format!("http://{address}/")).unwrap());
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(UnblockingSource(package_fetched));
+        let gateway = Gateway::new();
+        let result = timeout(
+            Duration::from_secs(5),
+            gateway
+                .query(
+                    [
+                        super::Source::Channel(channel),
+                        super::Source::Custom(source),
+                    ],
+                    [Subdir::Linux64],
+                    [PackageName::try_from("shared").unwrap()],
+                )
+                .execute(),
+        )
+        .await;
+        server.abort();
+        let output = result
+            .expect("discovery blocked independent package fetching")
+            .unwrap();
+        assert!(output[0].is_empty());
+        assert_eq!(
+            output[1]
+                .iter()
+                .map(|record| record.package_record.version.as_str())
+                .collect::<Vec<_>>(),
+            ["9.0.0"],
+        );
+    }
+
+    #[tokio::test]
+    async fn custom_source_records_contribute_detector_demand_without_registration_origins() {
+        let dir = tempfile::tempdir().unwrap();
+        for platform in [Subdir::Linux64, Subdir::NoArch] {
+            let subdir = dir.path().join(platform.as_str());
+            std::fs::create_dir_all(&subdir).unwrap();
+            let registrations = if platform == Subdir::NoArch {
+                serde_json::json!({"custom-detect": ["__custom"], "extra-detect": ["__extra"]})
+            } else {
+                serde_json::json!({})
+            };
+            std::fs::write(subdir.join("repodata.json"), serde_json::to_vec(&serde_json::json!({
+                "info": {"subdir": platform.as_str(), "virtual_package_detectors": registrations},
+                "packages": {}, "packages.conda": {},
+            })).unwrap()).unwrap();
+        }
+        let channel = Channel::from_url(Url::from_directory_path(dir.path()).unwrap());
+        let mut source = MockRepoDataSource::new();
+        let mut record = make_test_record("consumer", "1", "linux-64");
+        record.package_record.depends = vec!["__custom >=1".to_string()];
+        source.add_record(Subdir::Linux64, record);
+        let output = Gateway::new()
+            .query(
+                [
+                    super::Source::Custom(Arc::new(source)),
+                    super::Source::Channel(channel.clone()),
+                ],
+                [Subdir::Linux64],
+                [PackageName::new_unchecked("consumer")],
+            )
+            .virtual_package_detectors(Subdir::Linux64)
+            .constraints([MatchSpec::from_str("__extra >=1", Lenient).unwrap()])
+            .await
+            .unwrap();
+        assert_eq!(
+            output.repodata[0]
+                .iter()
+                .map(|r| r.package_record.name.as_normalized())
+                .collect::<Vec<_>>(),
+            ["consumer"]
+        );
+        assert!(output.repodata[1].is_empty());
+        let detectors = output.virtual_package_detectors.unwrap();
+        assert_eq!(
+            detectors
+                .wanted_names
+                .iter()
+                .map(PackageName::as_normalized)
+                .collect::<Vec<_>>(),
+            ["__custom", "__extra"]
+        );
+        assert!(
+            detectors
+                .registrations
+                .iter()
+                .all(|r| r.origin() == &channel.base_url)
+        );
+        assert_eq!(
+            detectors
+                .registrations
+                .iter()
+                .map(|r| r.registration.detector.as_normalized())
+                .collect::<Vec<_>>(),
+            ["custom-detect", "extra-detect"]
         );
     }
 }

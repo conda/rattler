@@ -24,7 +24,8 @@ use fs_err::tokio as tokio_fs;
 use futures::future::OptionFuture;
 use http::{HeaderValue, header::CACHE_CONTROL};
 use rattler_conda_types::{
-    Channel, ChannelRelations, PackageName, RepodataRevisions, ShardedRepodata,
+    Channel, ChannelRelations, DetectorRegistrationMetadata, PackageName, RepodataRevisions,
+    ShardedRepodata,
 };
 use rattler_networking::LazyClient;
 use simple_spawn_blocking::tokio::run_blocking_task;
@@ -322,7 +323,7 @@ impl SubdirClient for ShardedSubdir {
         self.sharded_repodata.info.channel_relations.as_ref()
     }
 
-    fn virtual_package_detectors(&self) -> Option<&serde_json::Value> {
+    fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
         self.sharded_repodata
             .info
             .virtual_package_detectors

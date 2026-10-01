@@ -5,6 +5,8 @@
 //! it with [`BootId::current`] when reading.
 
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "windows")]
+use windows_sys::Win32::System::Registry::{HKEY_LOCAL_MACHINE, RRF_RT_REG_DWORD, RegGetValueW};
 
 /// Identifies a single boot session of the machine.
 ///
@@ -88,10 +90,6 @@ fn boot_times_within_tolerance(a: u64, b: u64) -> bool {
 /// Reads the prefetcher boot counter from the registry, incremented once per boot.
 #[cfg(target_os = "windows")]
 fn windows_boot_count() -> Option<u32> {
-    use windows_sys::Win32::System::Registry::{
-        HKEY_LOCAL_MACHINE, RRF_RT_REG_DWORD, RegGetValueW,
-    };
-
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
     }

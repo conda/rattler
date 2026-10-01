@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use ahash::HashMap;
-use rattler_conda_types::{ChannelRelations, PackageName, RepoDataRecord, RepodataRevisions};
+use rattler_conda_types::{
+    ChannelRelations, DetectorRegistrationMetadata, PackageName, RepoDataRecord, RepodataRevisions,
+};
 
 use super::GatewayError;
 use crate::Reporter;
@@ -119,9 +121,9 @@ impl SubdirState {
         }
     }
 
-    /// The raw `info.virtual_package_detectors` value of this subdir's
-    /// repodata, or `None` if absent or the subdir was not found.
-    pub fn virtual_package_detectors(&self) -> Option<&serde_json::Value> {
+    /// Detector registration metadata, or `None` if absent or not found.
+    /// Names and registration semantics are validated during discovery.
+    pub fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
         match self {
             SubdirState::Found(subdir) => subdir.virtual_package_detectors(),
             SubdirState::NotFound => None,
@@ -213,9 +215,8 @@ impl SubdirData {
         self.client.channel_relations()
     }
 
-    /// The raw `info.virtual_package_detectors` value of this subdir's
-    /// repodata, if any.
-    pub fn virtual_package_detectors(&self) -> Option<&serde_json::Value> {
+    /// Detector registration metadata, if any, before semantic validation.
+    pub fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
         self.client.virtual_package_detectors()
     }
 }
@@ -248,9 +249,9 @@ pub trait SubdirClient: Send + Sync {
         None
     }
 
-    /// The raw `info.virtual_package_detectors` value of the subdir's
-    /// repodata, if any. Sources without repodata metadata keep the default.
-    fn virtual_package_detectors(&self) -> Option<&serde_json::Value> {
+    /// Detector registration metadata, before semantic validation.
+    /// Sources without repodata metadata keep the default.
+    fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
         None
     }
 }

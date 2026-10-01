@@ -2,8 +2,8 @@
 //! repodata, following the channel registration CEP.
 //!
 //! The query expands the given channels through their CEP 42 relations, reads
-//! the `info.virtual_package_detectors` dictionaries of the target platform's
-//! subdir and `noarch`, combines them per channel, and walks the channels in
+//! the `info.virtual_package_detectors` dictionaries of the explicitly supplied
+//! subdirs, combines them per channel, and walks the channels in
 //! resolved order: a registration is accepted unless one of its names, or one
 //! of their override variables, already belongs to an accepted registration.
 //! Every accepted registration also carries the channels its detector package
@@ -12,11 +12,12 @@
 
 use std::{collections::HashMap, future::IntoFuture, sync::Arc};
 
+use itertools::Itertools;
 use rattler_conda_types::{
     Channel, ChannelUrl, PackageName, Subdir,
     virtual_package_detector::{
         ChannelDetectorRegistrations, DetectorRegistration, InvalidVirtualPackageNameError,
-        RegistrationError, SubdirDetectorRegistrations, override_variable,
+        RegistrationError, SubdirDetectorRegistrations,
     },
 };
 
@@ -167,7 +168,7 @@ pub struct VirtualPackageDetectorsOutput {
 pub struct VirtualPackageDetectorsQuery {
     gateway: Arc<GatewayInner>,
     channels: Vec<Channel>,
-    platform: Subdir,
+    platforms: Vec<Subdir>,
     reporter: Option<Arc<dyn Reporter>>,
     channel_relations_mode: ChannelRelationsMode,
     channel_relations_max_depth: usize,
@@ -177,13 +178,14 @@ impl VirtualPackageDetectorsQuery {
     pub(super) fn new(
         gateway: Arc<GatewayInner>,
         channels: Vec<Channel>,
-        platform: Subdir,
+        platforms: Vec<Subdir>,
+        reporter: Option<Arc<dyn Reporter>>,
     ) -> Self {
         Self {
             gateway,
             channels,
-            platform,
-            reporter: None,
+            platforms: platforms.into_iter().unique().collect(),
+            reporter,
             channel_relations_mode: ChannelRelationsMode::default(),
             channel_relations_max_depth: DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
         }
@@ -220,7 +222,7 @@ impl VirtualPackageDetectorsQuery {
 
     /// Executes the query.
     pub async fn execute(self) -> Result<VirtualPackageDetectorsOutput, GatewayError> {
-        let platforms = vec![self.platform, Subdir::NoArch];
+        let platforms = &self.platforms;
         let expansion = expand_channels(
             &self.gateway,
             self.channels.clone(),
@@ -231,17 +233,24 @@ impl VirtualPackageDetectorsQuery {
             None,
         )
         .await?;
+        self.collect_from_expansion(&expansion).await
+    }
 
+    pub(super) async fn collect_from_expansion(
+        &self,
+        expansion: &ChannelExpansion,
+    ) -> Result<VirtualPackageDetectorsOutput, GatewayError> {
         let mut output = VirtualPackageDetectorsOutput::default();
         for warning in &expansion.warnings {
             output.warnings.push(GatewayWarning::from(warning.clone()));
         }
 
+        let platforms = &self.platforms;
         let mut reserved = ReservedNames::default();
         let mut resolutions: HashMap<ChannelUrl, Vec<Channel>> = HashMap::new();
         for channel in expansion.ordered_channels() {
             let url = &channel.base_url;
-            let combined = match combine_subdirs(&expansion, url, &platforms) {
+            let combined = match combine_subdirs(expansion, url, platforms) {
                 Ok(combined) => combined,
                 Err(error) => {
                     self.warn(
@@ -289,7 +298,7 @@ impl VirtualPackageDetectorsQuery {
                     channels.clone()
                 } else {
                     let channels = self
-                        .resolution_channels(channel, &platforms, &expansion, &mut output)
+                        .resolution_channels(channel, platforms, expansion, &mut output)
                         .await?;
                     resolutions.insert(url.clone(), channels.clone());
                     channels
@@ -406,7 +415,7 @@ impl ReservedNames {
                 if let Some(reservation) = self.names.get(name.as_normalized()) {
                     (RegistrationConflictKind::Name, reservation)
                 } else {
-                    let variable = override_variable(name);
+                    let variable = name.override_variable();
                     let reservation = self.variables.get(&variable)?;
                     (
                         RegistrationConflictKind::OverrideVariable(variable),
@@ -414,7 +423,7 @@ impl ReservedNames {
                     )
                 };
             Some(RegistrationConflict {
-                name: name.clone(),
+                name: name.as_package_name().clone(),
                 kind,
                 accepted_channel: reservation.channel.clone(),
                 accepted_detector: reservation.detector.clone(),
@@ -428,11 +437,11 @@ impl ReservedNames {
             let reservation = Reservation {
                 channel: channel.clone(),
                 detector: registration.detector.clone(),
-                name: name.clone(),
+                name: name.as_package_name().clone(),
             };
             self.names
                 .insert(name.as_normalized().to_string(), reservation.clone());
-            self.variables.insert(override_variable(name), reservation);
+            self.variables.insert(name.override_variable(), reservation);
         }
     }
 }
@@ -448,9 +457,9 @@ impl IntoFuture for VirtualPackageDetectorsQuery {
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
-    use std::path::Path;
+    use std::{collections::BTreeSet, path::Path};
 
-    use rattler_conda_types::{Channel, ChannelUrl, Subdir};
+    use rattler_conda_types::{Channel, ChannelUrl, Subdir, VirtualPackageName};
 
     use super::*;
     use crate::{Gateway, utils::simple_channel_server::SimpleChannelServer};
@@ -490,6 +499,24 @@ mod tests {
         std::fs::write(dir.join("repodata.json"), json).unwrap();
     }
 
+    fn add_candidate(
+        root: &Path,
+        subdir: Subdir,
+        name: &str,
+        version: &str,
+        depends: &[&str],
+        constrains: &[&str],
+    ) {
+        let path = root.join(subdir.as_str()).join("repodata.json");
+        let mut repodata: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        repodata["packages"][format!("{name}-{version}-0.tar.bz2")] = serde_json::json!({
+            "name": name, "version": version, "build": "0", "build_number": 0,
+            "subdir": subdir.as_str(), "depends": depends, "constrains": constrains,
+        });
+        std::fs::write(path, serde_json::to_vec(&repodata).unwrap()).unwrap();
+    }
+
     fn channel(server: &SimpleChannelServer, name: &str) -> Channel {
         Channel::from_url(server.url().join(&format!("{name}/")).unwrap())
     }
@@ -503,7 +530,7 @@ mod tests {
             .registration
             .virtual_packages
             .iter()
-            .map(PackageName::as_normalized)
+            .map(VirtualPackageName::as_normalized)
             .collect()
     }
 
@@ -546,7 +573,10 @@ mod tests {
 
         let server = SimpleChannelServer::new(dir.path()).await;
         let output = Gateway::new()
-            .virtual_package_detectors([channel(&server, "bioconda")], Subdir::Linux64)
+            .virtual_package_detectors(
+                [channel(&server, "bioconda")],
+                [Subdir::Linux64, Subdir::NoArch],
+            )
             .await
             .unwrap();
 
@@ -613,7 +643,10 @@ mod tests {
 
         let server = SimpleChannelServer::new(dir.path()).await;
         let output = Gateway::new()
-            .virtual_package_detectors([channel(&server, "bioconda")], Subdir::Linux64)
+            .virtual_package_detectors(
+                [channel(&server, "bioconda")],
+                [Subdir::Linux64, Subdir::NoArch],
+            )
             .await
             .unwrap();
 
@@ -675,7 +708,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let broken = dir.path().join("broken");
         let fine = dir.path().join("fine");
-        write_subdir(&broken, Subdir::Linux64, Some("null"), None, None);
+        write_subdir(
+            &broken,
+            Subdir::Linux64,
+            Some(r#"{"-invalid": ["__a"]}"#),
+            None,
+            None,
+        );
         write_subdir(
             &fine,
             Subdir::Linux64,
@@ -695,26 +734,108 @@ mod tests {
         let output = Gateway::new()
             .virtual_package_detectors(
                 [channel(&server, "broken"), channel(&server, "fine")],
-                Subdir::Linux64,
+                [Subdir::Linux64, Subdir::NoArch],
             )
             .await
             .unwrap();
 
         assert_eq!(output.registrations.len(), 1);
         assert_eq!(names(&output.registrations[0]), ["__a"]);
-        let warnings: Vec<_> = output.warnings.iter().map(ToString::to_string).collect();
-        insta::assert_debug_snapshot!(
-            warnings
-                .iter()
-                .map(|w| w.replace(server.url().as_str(), "<server>/"))
-                .collect::<Vec<_>>(),
-            @r#"
-        [
-            "ignoring the virtual package detectors registered by <server>/broken/: `virtual_package_detectors` must be a dictionary, found null",
-            "ignoring virtual package name \"not-a-virtual-package\" registered by detector 'a-detect' of <server>/fine/: 'not-a-virtual-package' does not start with two underscores",
-        ]
-        "#
+        assert!(output.warnings.iter().any(|warning| matches!(
+            warning,
+            GatewayWarning::VirtualPackageDetectors(
+                VirtualPackageDetectorWarning::InvalidRegistrations { channel: origin, .. }
+            ) if origin == &url(&server, "broken")
+        )));
+        assert!(output.warnings.iter().any(|warning| matches!(
+            warning,
+            GatewayWarning::VirtualPackageDetectors(
+                VirtualPackageDetectorWarning::DroppedName { name, .. }
+            ) if name == "not-a-virtual-package"
+        )));
+    }
+
+    #[tokio::test]
+    async fn supplied_subdirs_control_registration_discovery() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("channel");
+        write_subdir(
+            &root,
+            Subdir::Linux64,
+            Some(r#"{"platform-detector": ["__platform"]}"#),
+            None,
+            None,
         );
+        write_subdir(
+            &root,
+            Subdir::NoArch,
+            Some(r#"{"noarch-detector": ["__portable"]}"#),
+            None,
+            None,
+        );
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let gateway = Gateway::new();
+
+        let platform_only = gateway
+            .virtual_package_detectors([channel(&server, "channel")], [Subdir::Linux64])
+            .await
+            .unwrap();
+        assert_eq!(platform_only.registrations.len(), 1);
+        assert_eq!(names(&platform_only.registrations[0]), ["__platform"]);
+
+        let noarch_only = gateway
+            .virtual_package_detectors(
+                [channel(&server, "channel")],
+                [Subdir::NoArch, Subdir::NoArch],
+            )
+            .await
+            .unwrap();
+        assert_eq!(noarch_only.registrations.len(), 1);
+        assert_eq!(names(&noarch_only.registrations[0]), ["__portable"]);
+        assert!(noarch_only.rejected.is_empty());
+
+        let combined = gateway
+            .virtual_package_detectors(
+                [channel(&server, "channel")],
+                [Subdir::Linux64, Subdir::NoArch],
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            combined
+                .registrations
+                .iter()
+                .flat_map(names)
+                .collect::<Vec<_>>(),
+            ["__platform", "__portable"],
+        );
+    }
+
+    #[tokio::test]
+    async fn malformed_registration_metadata_is_a_repodata_error() {
+        for metadata in [
+            "null",
+            "[]",
+            r#"{"detector": "__name"}"#,
+            r#"{"detector": [42]}"#,
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            write_subdir(
+                &dir.path().join("channel"),
+                Subdir::Linux64,
+                Some(metadata),
+                None,
+                None,
+            );
+            let server = SimpleChannelServer::new(dir.path()).await;
+            assert!(
+                Gateway::new()
+                    .virtual_package_detectors([channel(&server, "channel")], [Subdir::Linux64])
+                    .await
+                    .is_err(),
+                "malformed registration metadata was accepted: {metadata}",
+            );
+        }
     }
 
     #[tokio::test]
@@ -738,7 +859,10 @@ mod tests {
 
         let server = SimpleChannelServer::new(dir.path()).await;
         let output = Gateway::new()
-            .virtual_package_detectors([channel(&server, "channel")], Subdir::Linux64)
+            .virtual_package_detectors(
+                [channel(&server, "channel")],
+                [Subdir::Linux64, Subdir::NoArch],
+            )
             .await
             .unwrap();
         assert!(output.registrations.is_empty());
@@ -783,7 +907,7 @@ mod tests {
             let output = Gateway::new()
                 .virtual_package_detectors(
                     [channel(&server, "broken"), channel(&server, "fine")],
-                    Subdir::Linux64,
+                    [Subdir::Linux64, Subdir::NoArch],
                 )
                 .await
                 .unwrap();
@@ -836,7 +960,7 @@ mod tests {
         let server = SimpleChannelServer::new(dir.path()).await;
         let channels = [channel(&server, "root"), channel(&server, "independent")];
         let output = Gateway::new()
-            .virtual_package_detectors(channels.clone(), Subdir::Linux64)
+            .virtual_package_detectors(channels.clone(), [Subdir::Linux64, Subdir::NoArch])
             .channel_relations(ChannelRelationsMode::Warn)
             .await
             .unwrap();
@@ -860,14 +984,17 @@ mod tests {
         );
         assert!(
             Gateway::new()
-                .virtual_package_detectors(channels, Subdir::Linux64)
+                .virtual_package_detectors(channels, [Subdir::Linux64, Subdir::NoArch])
                 .channel_relations(ChannelRelationsMode::Strict)
                 .await
                 .is_err()
         );
         assert!(
             Gateway::new()
-                .virtual_package_detectors([channel(&server, "discovered")], Subdir::Linux64)
+                .virtual_package_detectors(
+                    [channel(&server, "discovered")],
+                    [Subdir::Linux64, Subdir::NoArch]
+                )
                 .channel_relations(ChannelRelationsMode::Warn)
                 .await
                 .is_err()
@@ -890,7 +1017,7 @@ mod tests {
 
         let server = SimpleChannelServer::new(dir.path()).await;
         let output = Gateway::new()
-            .virtual_package_detectors([channel(&server, "a")], Subdir::Linux64)
+            .virtual_package_detectors([channel(&server, "a")], [Subdir::Linux64, Subdir::NoArch])
             .await
             .unwrap();
 
@@ -926,7 +1053,10 @@ mod tests {
 
         let server = SimpleChannelServer::new(dir.path()).await;
         let output = Gateway::new()
-            .virtual_package_detectors([channel(&server, "bioconda")], Subdir::Linux64)
+            .virtual_package_detectors(
+                [channel(&server, "bioconda")],
+                [Subdir::Linux64, Subdir::NoArch],
+            )
             .channel_relations(ChannelRelationsMode::Disabled)
             .await
             .unwrap();
@@ -946,11 +1076,374 @@ mod tests {
 
         let server = SimpleChannelServer::new(dir.path()).await;
         let output = Gateway::new()
-            .virtual_package_detectors([channel(&server, "channel")], Subdir::Linux64)
+            .virtual_package_detectors(
+                [channel(&server, "channel")],
+                [Subdir::Linux64, Subdir::NoArch],
+            )
             .await
             .unwrap();
         assert!(output.registrations.is_empty());
         assert!(output.rejected.is_empty());
         assert!(output.warnings.is_empty());
+    }
+
+    #[tokio::test]
+    async fn query_detector_demand_uses_candidates_patches_and_explicit_constraints() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("channel");
+        write_subdir(&root, Subdir::Linux64, None, None, None);
+        write_subdir(&root, Subdir::NoArch, Some("null"), None, None);
+        add_candidate(
+            &root,
+            Subdir::Linux64,
+            "consumer",
+            "1",
+            &["__obsolete >=1"],
+            &[],
+        );
+        add_candidate(
+            &root,
+            Subdir::Linux64,
+            "consumer",
+            "2",
+            &[],
+            &["__cuda >=12"],
+        );
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let disabled = Gateway::new()
+            .query(
+                [channel(&server, "channel")],
+                [Subdir::Linux64],
+                [PackageName::new_unchecked("consumer")],
+            )
+            .await
+            .unwrap();
+        assert!(disabled.virtual_package_detectors.is_none());
+        assert_eq!(disabled.repodata[0].len(), 2);
+
+        write_subdir(
+            &root,
+            Subdir::NoArch,
+            Some(
+                r#"{"mpi-detect":["__mpi"],"cuda-detect":["__cuda"],"extra-detect":["__extra"],"root-detect":["__root"],"idle-detect":["__idle"]}"#,
+            ),
+            None,
+            None,
+        );
+        add_candidate(
+            &root,
+            Subdir::NoArch,
+            "not-installed",
+            "1",
+            &["__unqueried"],
+            &[],
+        );
+        write_subdir(
+            &root,
+            Subdir::Osx64,
+            Some(r#"{"foreign-detect":["__foreign"]}"#),
+            None,
+            None,
+        );
+        let output = Gateway::new()
+            .query(
+                [channel(&server, "channel")],
+                [Subdir::Linux64],
+                [
+                    rattler_conda_types::MatchSpec::from_str(
+                        "consumer",
+                        rattler_conda_types::ParseStrictness::Lenient,
+                    )
+                    .unwrap(),
+                    rattler_conda_types::MatchSpec::from_str(
+                        "__root",
+                        rattler_conda_types::ParseStrictness::Lenient,
+                    )
+                    .unwrap(),
+                ],
+            )
+            .constraints([
+                rattler_conda_types::MatchSpec::from_str(
+                    "__extra >=1",
+                    rattler_conda_types::ParseStrictness::Lenient,
+                )
+                .unwrap(),
+                rattler_conda_types::MatchSpec::from_str(
+                    "not-installed >=1",
+                    rattler_conda_types::ParseStrictness::Lenient,
+                )
+                .unwrap(),
+            ])
+            .virtual_package_detectors(Subdir::Linux64)
+            .with_record_patch(|record| {
+                if record.package_record.version.to_string() == "1" {
+                    let mut record = record.clone();
+                    record.package_record.depends = vec!["conda-forge::__mpi >=4".to_string()];
+                    Some(record)
+                } else {
+                    None
+                }
+            })
+            .await
+            .unwrap();
+        assert_eq!(output.repodata.len(), 1);
+        assert_eq!(output.repodata[0].len(), 2);
+        let detectors = output.virtual_package_detectors.unwrap();
+        assert_eq!(detectors.target_platform, Subdir::Linux64);
+        assert_eq!(
+            detectors
+                .wanted_names
+                .iter()
+                .map(PackageName::as_normalized)
+                .collect::<Vec<_>>(),
+            ["__cuda", "__extra", "__mpi", "__root"]
+        );
+        assert_eq!(
+            detectors
+                .registrations
+                .iter()
+                .map(|r| r.registration.detector.as_normalized())
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([
+                "mpi-detect",
+                "cuda-detect",
+                "extra-detect",
+                "root-detect",
+                "idle-detect"
+            ])
+        );
+        assert!(detectors.rejected.is_empty());
+        assert!(output.warnings.is_empty(), "{:?}", output.warnings);
+    }
+
+    #[tokio::test]
+    async fn query_detector_constraints_work_without_record_specs_or_platforms() {
+        let dir = tempfile::tempdir().unwrap();
+        write_subdir(
+            &dir.path().join("channel"),
+            Subdir::NoArch,
+            Some(r#"{"x-detect":["__x"]}"#),
+            None,
+            None,
+        );
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let output = Gateway::new()
+            .query([channel(&server, "channel")], [], Vec::<PackageName>::new())
+            .virtual_package_detectors(Subdir::Linux64)
+            .constraints([rattler_conda_types::MatchSpec::from_str(
+                "__x >=1",
+                rattler_conda_types::ParseStrictness::Lenient,
+            )
+            .unwrap()])
+            .await
+            .unwrap();
+        assert!(output.repodata.is_empty());
+        let detectors = output.virtual_package_detectors.unwrap();
+        assert_eq!(
+            detectors
+                .wanted_names
+                .iter()
+                .map(PackageName::as_normalized)
+                .collect::<Vec<_>>(),
+            ["__x"],
+        );
+        assert_eq!(
+            detectors
+                .registrations
+                .iter()
+                .map(|r| r.registration.detector.as_normalized())
+                .collect::<Vec<_>>(),
+            ["x-detect"],
+        );
+        assert!(output.warnings.is_empty());
+    }
+
+    #[tokio::test]
+    async fn query_detector_discovery_reuses_separate_offline_sparse_snapshots() {
+        let dir = tempfile::tempdir().unwrap();
+        let snapshots = dir.path().join("snapshots");
+        write_subdir(&snapshots, Subdir::Linux64, None, None, None);
+        write_subdir(
+            &snapshots,
+            Subdir::NoArch,
+            Some(r#"{"x-detect":["__x"]}"#),
+            None,
+            None,
+        );
+        let origin = Channel::from_url(
+            url::Url::from_directory_path(dir.path().join("unavailable")).unwrap(),
+        );
+        let sources = [Subdir::Linux64, Subdir::NoArch].map(|platform| {
+            crate::Source::SparseRepoData(vec![Arc::new(
+                crate::sparse::SparseRepoData::from_file(
+                    origin.clone(),
+                    platform.as_str(),
+                    snapshots.join(platform.as_str()).join("repodata.json"),
+                    None,
+                )
+                .unwrap(),
+            )])
+        });
+        let output = Gateway::new()
+            .query(
+                sources,
+                [Subdir::Linux64, Subdir::NoArch],
+                [PackageName::new_unchecked("__x")],
+            )
+            .virtual_package_detectors(Subdir::Linux64)
+            .await
+            .unwrap();
+        let detectors = output.virtual_package_detectors.unwrap();
+        assert_eq!(
+            detectors
+                .registrations
+                .iter()
+                .map(|r| r.registration.detector.as_normalized())
+                .collect::<Vec<_>>(),
+            ["x-detect"],
+        );
+        assert_eq!(detectors.registrations[0].origin(), &origin.base_url);
+        assert!(output.warnings.is_empty());
+    }
+
+    #[tokio::test]
+    async fn query_detector_metadata_only_preserves_multichannel_override_placement() {
+        let dir = tempfile::tempdir().unwrap();
+        for (name, registration, overrides) in [
+            ("first", None, Some("../low")),
+            ("second", Some(r#"{"second-detect":["__x"]}"#), None),
+            ("low", Some(r#"{"low-detect":["__x"]}"#), None),
+        ] {
+            write_subdir(
+                &dir.path().join(name),
+                Subdir::NoArch,
+                registration,
+                None,
+                overrides,
+            );
+        }
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let group = crate::MultiSource::new(
+            "group",
+            vec![
+                channel(&server, "first").into(),
+                channel(&server, "second").into(),
+            ],
+        )
+        .unwrap();
+        let output = Gateway::new()
+            .query([crate::Source::from(group)], [], Vec::<PackageName>::new())
+            .virtual_package_detectors(Subdir::Linux64)
+            .constraints([rattler_conda_types::MatchSpec::from_str(
+                "__x",
+                rattler_conda_types::ParseStrictness::Lenient,
+            )
+            .unwrap()])
+            .await
+            .unwrap();
+        let detectors = output.virtual_package_detectors.unwrap();
+        assert_eq!(
+            detectors
+                .registrations
+                .iter()
+                .map(|r| r.registration.detector.as_normalized())
+                .collect::<Vec<_>>(),
+            ["second-detect"],
+        );
+        assert_eq!(
+            detectors
+                .rejected
+                .iter()
+                .map(|r| r.registration.detector.as_normalized())
+                .collect::<Vec<_>>(),
+            ["low-detect"],
+        );
+        assert_eq!(
+            detectors.rejected[0].conflict.accepted_channel,
+            url(&server, "second")
+        );
+    }
+
+    #[tokio::test]
+    async fn query_detector_conflicts_preserve_multichannel_ownership_before_demand_filtering() {
+        let dir = tempfile::tempdir().unwrap();
+        for (name, registration, base, overrides) in [
+            (
+                "first",
+                r#"{"first-detect":["__x"]}"#,
+                Some("../base"),
+                Some("../low"),
+            ),
+            (
+                "second",
+                r#"{"second-detect":["__x","__wanted"]}"#,
+                None,
+                None,
+            ),
+            ("base", r#"{"base-detect":["__x"]}"#, None, None),
+            ("low", r#"{"low-detect":["__x"]}"#, None, None),
+            ("third", r#"{"third-detect":["__third"]}"#, None, None),
+        ] {
+            write_subdir(
+                &dir.path().join(name),
+                Subdir::Linux64,
+                Some(registration),
+                base,
+                overrides,
+            );
+            write_subdir(&dir.path().join(name), Subdir::NoArch, None, None, None);
+        }
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let group = crate::MultiSource::new(
+            "group",
+            vec![
+                channel(&server, "first").into(),
+                channel(&server, "second").into(),
+            ],
+        )
+        .unwrap();
+        let output = Gateway::new()
+            .query(
+                [
+                    crate::Source::Multi(group),
+                    channel(&server, "third").into(),
+                ],
+                [Subdir::Linux64, Subdir::NoArch],
+                [PackageName::new_unchecked("__wanted")],
+            )
+            .virtual_package_detectors(Subdir::Linux64)
+            .await
+            .unwrap();
+        let detectors = output.virtual_package_detectors.unwrap();
+        assert_eq!(
+            detectors
+                .wanted_names
+                .iter()
+                .map(PackageName::as_normalized)
+                .collect::<Vec<_>>(),
+            ["__wanted"]
+        );
+        assert_eq!(
+            detectors
+                .registrations
+                .iter()
+                .map(|r| r.registration.detector.as_normalized())
+                .collect::<Vec<_>>(),
+            ["base-detect", "third-detect"]
+        );
+        assert_eq!(
+            detectors
+                .rejected
+                .iter()
+                .map(|r| r.registration.detector.as_normalized())
+                .collect::<Vec<_>>(),
+            ["first-detect", "second-detect", "low-detect"]
+        );
+        assert!(
+            detectors
+                .rejected
+                .iter()
+                .all(|r| r.conflict.accepted_detector.as_normalized() == "base-detect")
+        );
     }
 }
