@@ -1,0 +1,26 @@
+[package]
+name = "rattler_boot_id"
+version = "0.1.0"
+edition.workspace = true
+authors = ["Julian Hofer <julian@prefix.dev>"]
+description = "Identify the current machine boot session"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+
+[target.'cfg(target_os="macos")'.dependencies]
+libc = { workspace = true }
+
+[target.'cfg(target_os="windows")'.dependencies]
+windows-sys = { workspace = true, features = [
+    "Win32_System_SystemInformation",
+    "Win32_System_Registry",
+] }
+
+[dev-dependencies]
+serde_json = { workspace = true }

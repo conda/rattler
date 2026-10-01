@@ -5046,6 +5046,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_boot_id"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "rattler_cache"
 version = "0.10.13"
 dependencies = [
@@ -5724,11 +5734,11 @@ name = "rattler_virtual_packages"
 version = "8.0.0"
 dependencies = [
  "archspec",
- "libc",
  "libloading 0.9.0",
  "nom 8.0.0",
  "once_cell",
  "plist",
+ "rattler_boot_id",
  "rattler_conda_types",
  "regex",
  "serde",
