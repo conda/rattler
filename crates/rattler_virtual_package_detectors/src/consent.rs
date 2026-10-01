@@ -4,7 +4,10 @@
 //! CEP treats configuring a channel as consent, and lets a client require more.
 //! [`DetectorConsent`] is where a client plugs that in: it is asked once per
 //! detector that would otherwise run, after the detector environment has been
-//! resolved, so it can show what would be installed.
+//! resolved, so it can show what would be installed. Requests for different
+//! detectors may arrive concurrently, including detectors from the same channel.
+//! Policies that ask for channel-wide trust must deduplicate and retain their
+//! answer by the registering channel's canonical base URL.
 
 use async_trait::async_trait;
 use rattler_conda_types::{
@@ -126,7 +129,8 @@ impl DetectorConsent for DenyAll {
 }
 
 /// Decides from the stored decisions in the `virtual-package-detectors`
-/// configuration and defers to `fallback` for detectors without one.
+/// configuration and defers to `fallback` for channels without one. A channel's
+/// decision covers all detectors it registers and their resolved dependencies.
 pub struct ConfiguredConsent<F> {
     config: VirtualPackageDetectorsConfig,
     fallback: F,
@@ -138,14 +142,10 @@ impl<F: DetectorConsent> ConfiguredConsent<F> {
         Self { config, fallback }
     }
 
-    /// The stored decision for a detector, if any.
-    pub fn stored(
-        &self,
-        channel: &Channel,
-        registration: &DetectorRegistration,
-    ) -> Option<Consent> {
+    /// The stored decision for a registering channel, if any.
+    pub fn stored(&self, channel: &Channel) -> Option<Consent> {
         self.config
-            .consent(&channel.base_url, &registration.detector)
+            .consent(&channel.base_url)
             .map(|stored| match stored {
                 DetectorDecision::Allow => Consent::Allow,
                 DetectorDecision::Deny => Consent::Deny,
@@ -156,7 +156,7 @@ impl<F: DetectorConsent> ConfiguredConsent<F> {
 #[async_trait]
 impl<F: DetectorConsent> DetectorConsent for ConfiguredConsent<F> {
     async fn decide(&self, request: &ConsentRequest<'_>) -> Consent {
-        match self.stored(request.channel, request.registration) {
+        match self.stored(request.channel) {
             Some(consent) => consent,
             None => self.fallback.decide(request).await,
         }
@@ -167,17 +167,17 @@ impl<F: DetectorConsent> DetectorConsent for ConfiguredConsent<F> {
         channel: &Channel,
         registration: &DetectorRegistration,
     ) -> Option<Consent> {
-        self.stored(channel, registration)
+        self.stored(channel)
             .or_else(|| self.fallback.decide_before_resolving(channel, registration))
     }
 
     fn can_allow(&self) -> bool {
         self.fallback.can_allow()
-            || self.config.consent.values().any(|detectors| {
-                detectors
-                    .values()
-                    .any(|decision| *decision == DetectorDecision::Allow)
-            })
+            || self
+                .config
+                .consent
+                .values()
+                .any(|decision| *decision == DetectorDecision::Allow)
     }
 }
 
@@ -188,6 +188,17 @@ mod tests {
     use url::Url;
 
     use super::*;
+
+    fn channel(url: &str) -> Channel {
+        Channel::from_url(Url::parse(url).unwrap())
+    }
+
+    fn registration(detector: &str, virtual_package: &str) -> DetectorRegistration {
+        DetectorRegistration {
+            detector: PackageName::try_from(detector).unwrap(),
+            virtual_packages: IndexSet::from([PackageName::try_from(virtual_package).unwrap()]),
+        }
+    }
 
     fn request<'a>(
         channel: &'a Channel,
@@ -203,41 +214,71 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn configured_consent_prefers_stored_decisions() {
-        let channel =
-            Channel::from_url(Url::parse("https://conda.anaconda.org/conda-forge").unwrap());
-        let allowed = DetectorRegistration {
-            detector: PackageName::try_from("mpi-detect").unwrap(),
-            virtual_packages: IndexSet::from([PackageName::try_from("__a").unwrap()]),
-        };
-        let unknown = DetectorRegistration {
-            detector: PackageName::try_from("other-detect").unwrap(),
-            virtual_packages: IndexSet::from([PackageName::try_from("__b").unwrap()]),
-        };
+    async fn channel_allow_applies_to_current_and_future_detectors() {
+        let forge = channel("https://conda.anaconda.org/conda-forge");
+        let other = channel("https://prefix.dev/internal");
+        let existing = registration("mpi-detect", "__mpi");
         let mut config = VirtualPackageDetectorsConfig::default();
-        config.set_consent(
-            channel.base_url.clone(),
-            allowed.detector.clone(),
-            DetectorDecision::Allow,
-        );
-
+        config.set_consent(forge.base_url.clone(), DetectorDecision::Allow);
         let policy = ConfiguredConsent::new(config, DenyAll);
-        assert_eq!(
-            policy.decide(&request(&channel, &allowed)).await,
-            Consent::Allow
-        );
-        assert_eq!(
-            policy.decide(&request(&channel, &unknown)).await,
-            Consent::Deny
-        );
-        assert_eq!(policy.stored(&channel, &unknown), None);
-        assert_eq!(
-            policy.decide_before_resolving(&channel, &allowed),
-            Some(Consent::Allow)
-        );
-        assert_eq!(
-            policy.decide_before_resolving(&channel, &unknown),
-            Some(Consent::Deny)
-        );
+        let newly_registered = registration("cuda-detect", "__cuda");
+
+        for detector in [&existing, &newly_registered] {
+            assert_eq!(
+                policy.decide(&request(&forge, detector)).await,
+                Consent::Allow
+            );
+            assert_eq!(
+                policy.decide_before_resolving(&forge, detector),
+                Some(Consent::Allow)
+            );
+            assert_eq!(
+                policy.decide(&request(&other, detector)).await,
+                Consent::Deny
+            );
+        }
+        assert_eq!(policy.stored(&other), None);
+        assert!(policy.can_allow());
+    }
+
+    #[tokio::test]
+    async fn channel_deny_overrides_fallback_before_resolving() {
+        let forge = channel("https://conda.anaconda.org/conda-forge");
+        let other = channel("https://prefix.dev/internal");
+        let mut config = VirtualPackageDetectorsConfig::default();
+        config.set_consent(forge.base_url.clone(), DetectorDecision::Deny);
+        let policy = ConfiguredConsent::new(config, AllowAll);
+
+        for detector in [
+            registration("mpi-detect", "__mpi"),
+            registration("cuda-detect", "__cuda"),
+        ] {
+            assert_eq!(
+                policy.decide_before_resolving(&forge, &detector),
+                Some(Consent::Deny)
+            );
+            assert_eq!(
+                policy.decide(&request(&forge, &detector)).await,
+                Consent::Deny
+            );
+            assert_eq!(
+                policy.decide(&request(&other, &detector)).await,
+                Consent::Allow
+            );
+        }
+        assert!(policy.can_allow());
+    }
+
+    #[test]
+    fn can_allow_requires_a_stored_allow_or_a_permissive_fallback() {
+        let forge = channel("https://conda.anaconda.org/conda-forge");
+        let other = channel("https://prefix.dev/internal");
+        let mut config = VirtualPackageDetectorsConfig::default();
+        assert!(!ConfiguredConsent::new(config.clone(), DenyAll).can_allow());
+        config.set_consent(forge.base_url.clone(), DetectorDecision::Deny);
+        assert!(!ConfiguredConsent::new(config.clone(), DenyAll).can_allow());
+        assert!(ConfiguredConsent::new(config.clone(), AllowAll).can_allow());
+        config.set_consent(other.base_url, DetectorDecision::Allow);
+        assert!(ConfiguredConsent::new(config, DenyAll).can_allow());
     }
 }

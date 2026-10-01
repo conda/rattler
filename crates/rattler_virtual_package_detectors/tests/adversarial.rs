@@ -20,6 +20,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use async_trait::async_trait;
 use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{
     Channel, ChannelRelations, PackageName, Subdir,
@@ -37,8 +38,9 @@ use rattler_repodata_gateway::{
 };
 use rattler_virtual_package_detectors::{
     ActivationError, AllowAll, CacheClock, DetectError, DetectOptions, DetectedValue,
-    DetectionOutcome, DetectionSource, DetectorConsent, EnvironmentError, RunError, SkipReason,
-    WantedNames, detect,
+    DetectionOutcome, DetectionSource, DetectorConsent, DetectorEnvironment,
+    DetectorEnvironmentProvider, EnvironmentError, EnvironmentOptions, RattlerEnvironmentProvider,
+    ResolvedDetector, RunError, SkipReason, WantedNames, detect,
     limits::{MAX_CACHE_LIFETIME, OUTPUT_LIMIT, REBOOT_FALLBACK_LIFETIME},
 };
 use rattler_virtual_packages::boot::BootId;
@@ -370,13 +372,10 @@ impl Harness {
 
     fn options<'a>(&'a self, consent: &'a dyn DetectorConsent) -> DetectOptions<'a> {
         DetectOptions {
-            gateway: &self.gateway,
-            package_cache: &self.package_cache,
-            download_client: LazyClient::default(),
+            environment_provider: self,
             root: &self.root,
             host_platform: self.host,
             target_platform: self.host,
-            client_virtual_packages: Vec::new(),
             timeout: Duration::from_secs(60),
             consent,
             wanted: WantedNames::All,
@@ -407,6 +406,43 @@ impl Harness {
                 .collect(),
             Err(_) => Vec::new(),
         }
+    }
+}
+
+#[async_trait]
+impl DetectorEnvironmentProvider for Harness {
+    async fn resolve(
+        &self,
+        registration: &AcceptedDetectorRegistration,
+    ) -> Result<ResolvedDetector, EnvironmentError> {
+        let root = self.root.join("envs");
+        RattlerEnvironmentProvider::new(EnvironmentOptions {
+            gateway: &self.gateway,
+            package_cache: &self.package_cache,
+            download_client: LazyClient::default(),
+            root: &root,
+            host_platform: self.host,
+            virtual_packages: Vec::new(),
+        })
+        .resolve(registration)
+        .await
+    }
+
+    async fn install(
+        &self,
+        resolved: ResolvedDetector,
+    ) -> Result<DetectorEnvironment, EnvironmentError> {
+        let root = self.root.join("envs");
+        RattlerEnvironmentProvider::new(EnvironmentOptions {
+            gateway: &self.gateway,
+            package_cache: &self.package_cache,
+            download_client: LazyClient::default(),
+            root: &root,
+            host_platform: self.host,
+            virtual_packages: Vec::new(),
+        })
+        .install(resolved)
+        .await
     }
 }
 
@@ -2058,16 +2094,22 @@ async fn cross_process_worker() {
         .await
         .unwrap()
         .registrations;
+    let environment_root = job.root.join("envs");
+    let environment_provider = RattlerEnvironmentProvider::new(EnvironmentOptions {
+        gateway: &gateway,
+        package_cache: &package_cache,
+        download_client: LazyClient::default(),
+        root: &environment_root,
+        host_platform: host,
+        virtual_packages: Vec::new(),
+    });
     let outcome = detect(
         &registrations,
         DetectOptions {
-            gateway: &gateway,
-            package_cache: &package_cache,
-            download_client: LazyClient::default(),
+            environment_provider: &environment_provider,
             root: &job.root,
             host_platform: host,
             target_platform: host,
-            client_virtual_packages: Vec::new(),
             timeout: Duration::from_secs(60),
             consent: &AllowAll,
             wanted: WantedNames::All,
