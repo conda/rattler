@@ -517,8 +517,10 @@ impl OffsetRanges {
 /// without groups only occurs for a text file whose occurrences all lie inside its shebang
 /// region, and [`Self::shebang_length`] is only recorded for text files. Whether the offsets
 /// match the file contents (ordering, bounds, the placeholder bytes being present) can only be
-/// checked against those contents, which the prefix replacement in `rattler` does. Offsets are
-/// trusted to list every occurrence: an occurrence they leave out keeps the placeholder.
+/// checked against those contents, which the prefix replacement in `rattler` does. That check
+/// only reads the bytes the offsets point at, so the offsets are trusted to list every occurrence
+/// and the first terminator after each binary occurrence: an occurrence they leave out keeps the
+/// placeholder, and a terminator recorded past the real one moves the bytes in between.
 ///
 /// [draft CEP]: https://github.com/conda/ceps/pull/179
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
