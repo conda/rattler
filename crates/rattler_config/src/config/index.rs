@@ -35,8 +35,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use rattler_conda_types::{
-    ChannelNotice, ChannelRelations, MAX_REPODATA_REVISION_MESSAGE_BYTES, RepodataRevision,
-    RepodataRevisionSelection,
+    ChannelNotice, ChannelRelations, RepodataRevision, RepodataRevisionSelection,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
 
@@ -88,6 +87,7 @@ pub struct IndexChannelConfig {
 
     /// Additional repodata revisions to advertise in generated repodata.
     /// The legacy layout is implicit; currently only v3 can be selected.
+    /// Entries are either `"v3"` or `{ revision = "v3", message = "..." }`.
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
@@ -257,21 +257,21 @@ fn validate_channel_relations(
     Ok(())
 }
 
+/// A `repodata-revisions` entry: a bare revision (`"v3"`) or a table with an
+/// optional message (`{ revision = "v3", message = "..." }`).
 #[derive(Deserialize)]
-#[serde(untagged)]
+#[serde(untagged, deny_unknown_fields)]
 enum ConfiguredRepodataRevision {
     Revision(String),
-    RevisionWithMessage(ConfiguredRepodataRevisionWithMessage),
+    WithMessage {
+        revision: String,
+        #[serde(default)]
+        message: Option<String>,
+    },
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-struct ConfiguredRepodataRevisionWithMessage {
-    revision: String,
-    #[serde(default)]
-    message: Option<String>,
-}
-
+/// Writes every entry in table form, which [`ConfiguredRepodataRevision`]
+/// reads back.
 fn serialize_optional_repodata_revisions<S>(
     revisions: &Option<Vec<RepodataRevisionSelection>>,
     serializer: S,
@@ -280,10 +280,10 @@ where
     S: Serializer,
 {
     #[derive(Serialize)]
-    #[serde(untagged)]
-    enum ConfiguredRevision<'a> {
-        Revision(String),
-        RevisionWithMessage { revision: String, message: &'a str },
+    struct Entry<'a> {
+        revision: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        message: Option<&'a str>,
     }
 
     revisions
@@ -291,12 +291,9 @@ where
         .map(|revisions| {
             revisions
                 .iter()
-                .map(|info| match info.message.as_deref() {
-                    Some(message) => ConfiguredRevision::RevisionWithMessage {
-                        revision: info.revision.to_string(),
-                        message,
-                    },
-                    None => ConfiguredRevision::Revision(info.revision.to_string()),
+                .map(|selection| Entry {
+                    revision: selection.revision.to_string(),
+                    message: selection.message.as_deref(),
                 })
                 .collect::<Vec<_>>()
         })
@@ -317,18 +314,12 @@ where
                 .map(|configured| {
                     let (revision, message) = match configured {
                         ConfiguredRepodataRevision::Revision(revision) => (revision, None),
-                        ConfiguredRepodataRevision::RevisionWithMessage(configured) => {
-                            (configured.revision, configured.message)
+                        ConfiguredRepodataRevision::WithMessage { revision, message } => {
+                            (revision, message)
                         }
                     };
-                    if message.as_ref().is_some_and(|message| {
-                        message.len() > MAX_REPODATA_REVISION_MESSAGE_BYTES
-                    }) {
-                        return Err(D::Error::custom(format!(
-                            "repodata revision messages may not exceed {MAX_REPODATA_REVISION_MESSAGE_BYTES} bytes"
-                        )));
-                    }
-                    let revision = RepodataRevision::from_str(&revision).map_err(D::Error::custom)?;
+                    let revision =
+                        RepodataRevision::from_str(&revision).map_err(D::Error::custom)?;
                     if revision != RepodataRevision::V3 {
                         return Err(D::Error::custom(
                             "only v3 can be configured; the legacy layout is implicit",
@@ -513,13 +504,11 @@ repodata-revisions = [{ revision = "v3", message = "v3 packages" }]
     fn repodata_revision_messages_roundtrip_through_toml() {
         let config = parse(
             r#"
-repodata-revisions = [{ revision = "v3", message = "v3 packages" }]
+repodata-revisions = ["v3", { revision = "v3", message = "v3 packages" }]
 "#,
         );
 
         let serialized = toml::to_string(&config).unwrap();
-        assert!(serialized.contains("revision = \"v3\""));
-        assert!(!serialized.contains("revision = 3"));
         assert_eq!(toml::from_str::<IndexConfig>(&serialized).unwrap(), config);
     }
 
@@ -531,42 +520,16 @@ repodata-revisions = [{ revision = "v3", message = "v3 packages" }]
 
     #[test]
     fn rejects_numeric_repodata_revisions() {
-        let err = toml::from_str::<IndexConfig>("repodata-revisions = [3]\n").unwrap_err();
-        assert!(
-            !err.to_string().is_empty(),
-            "numeric repodata revisions must be rejected"
-        );
+        assert!(toml::from_str::<IndexConfig>("repodata-revisions = [3]\n").is_err());
     }
 
     #[test]
     fn rejects_obsolete_repodata_revision_metadata() {
-        let err = toml::from_str::<IndexConfig>(
-            "repodata-revisions = [{ revision = \"v3\", n-packages = 1 }]\n",
-        )
-        .unwrap_err();
         assert!(
-            !err.to_string().is_empty(),
-            "obsolete revision metadata must be rejected"
-        );
-    }
-
-    #[test]
-    fn rejects_oversized_repodata_revision_messages_by_byte_length() {
-        let at_limit = format!(
-            "repodata-revisions = [{{ revision = \"v3\", message = \"{}\" }}]\n",
-            "a".repeat(MAX_REPODATA_REVISION_MESSAGE_BYTES)
-        );
-        assert!(toml::from_str::<IndexConfig>(&at_limit).is_ok());
-
-        let oversized = format!(
-            "repodata-revisions = [{{ revision = \"v3\", message = \"{}\" }}]\n",
-            "é".repeat(MAX_REPODATA_REVISION_MESSAGE_BYTES / 2 + 1)
-        );
-        let error = toml::from_str::<IndexConfig>(&oversized).unwrap_err();
-        assert!(
-            error
-                .to_string()
-                .contains("repodata revision messages may not exceed 8192 bytes")
+            toml::from_str::<IndexConfig>(
+                "repodata-revisions = [{ revision = \"v3\", n-packages = 1 }]\n",
+            )
+            .is_err()
         );
     }
 

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
 use crate::{
-    PackageRecord, PackageUrl, RepoData, Shard, V3Extensions,
+    Flag, PackageRecord, PackageUrl, RepoData, Shard, V3Extensions,
     package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
 };
 
@@ -75,6 +75,9 @@ pub struct PackageRecordPatch {
 
     /// Optional dependency groups keyed by extra name.
     pub extra_depends: Option<BTreeMap<String, Vec<String>>>,
+
+    /// Package variant flags.
+    pub flags: Option<Vec<Flag>>,
 
     /// Track features are nowadays only used to downweight packages (ie. give
     /// them less priority). To that effect, the number of track features is
@@ -231,6 +234,12 @@ impl PackageRecord {
         if let Some(constrains) = &patch.constrains {
             self.constrains = constrains.clone();
         }
+        if let Some(extra_depends) = &patch.extra_depends {
+            self.extra_depends = extra_depends.clone();
+        }
+        if let Some(flags) = &patch.flags {
+            self.flags = flags.clone();
+        }
         if let Some(track_features) = &patch.track_features {
             self.track_features = track_features.clone().unwrap_or_default();
         }
@@ -245,13 +254,6 @@ impl PackageRecord {
         }
         if let Some(package_urls) = &patch.purls {
             self.purls = package_urls.clone();
-        }
-    }
-
-    fn apply_v3_patch(&mut self, patch: &PackageRecordPatch) {
-        self.apply_patch(patch);
-        if let Some(extra_depends) = &patch.extra_depends {
-            self.extra_depends = extra_depends.clone();
         }
     }
 }
@@ -285,17 +287,17 @@ pub fn apply_patches_impl(
     // Apply patches to v3 packages
     for (identifier, patch) in instructions.v3.tar_bz2.iter() {
         if let Some(record) = v3.tar_bz2.get_mut(identifier) {
-            record.apply_v3_patch(patch);
+            record.apply_patch(patch);
         }
     }
     for (identifier, patch) in instructions.v3.conda.iter() {
         if let Some(record) = v3.conda.get_mut(identifier) {
-            record.apply_v3_patch(patch);
+            record.apply_patch(patch);
         }
     }
     for (identifier, patch) in instructions.v3.whl.iter() {
         if let Some(record) = v3.whl.get_mut(identifier) {
-            record.package_record.apply_v3_patch(patch);
+            record.package_record.apply_patch(patch);
         }
     }
     for (extension, patch) in instructions.v3.extensions.iter() {

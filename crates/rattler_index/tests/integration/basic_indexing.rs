@@ -638,17 +638,20 @@ async fn test_reindex_derives_authoritative_v3_stats_and_drops_legacy_revision()
         repodata["packages"]["legacy-stats-1.0-0.tar.bz2"]["extra_depends"]["all"],
         serde_json::json!(["max[extras=[benchmark, serve]]"])
     );
-    assert!(repodata["v3"]["tar.bz2"]["v3-stats-1.0-0"].is_object());
+    let indexed_timestamp = &repodata["v3"]["tar.bz2"]["v3-stats-1.0-0"]["indexed_timestamp"];
+    assert!(indexed_timestamp.is_u64());
     assert_eq!(
         repodata["info"]["repodata_revisions"],
         // The legacy layout is not advertised: CEP 48 keys start at `v3`, so the
-        // seeded `v0` entry is dropped rather than refreshed.
+        // seeded `v0` entry is dropped rather than refreshed. CEP 48 derives
+        // `oldest` and `newest` from `indexed_timestamp`, not the build
+        // `timestamp`.
         serde_json::json!({
             "v3": {
                 "message": "configured v3 message",
                 "n_packages": 1,
-                "oldest": 1720000000000i64,
-                "newest": 1720000000000i64
+                "oldest": indexed_timestamp,
+                "newest": indexed_timestamp
             }
         })
     );
@@ -885,12 +888,10 @@ async fn test_legacy_patch_preflight_rejects_invalid_subdir_before_any_subdir_wr
     assert_invalid_multi_subdir_patch_is_preflighted(
         serde_json::json!({
             "packages": {
-                "demo-1.0-0.tar.bz2": {
-                    "extra_depends": { "test": ["pytest >=8"] }
-                }
+                "demo-1.0-0.tar.bz2": { "flags": ["cuda"] }
             }
         }),
-        "legacy repodata patches cannot set extra_depends",
+        "legacy repodata cannot represent package flags",
     )
     .await;
 }
@@ -905,7 +906,22 @@ async fn test_v3_patch_preflight_rejects_invalid_subdir_before_any_subdir_write(
                 }
             }
         }),
-        "failed to parse depends MatchSpec",
+        "failed to parse v3 repodata MatchSpec in depends",
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_v3_patch_preflight_rejects_invalid_flag() {
+    assert_invalid_multi_subdir_patch_is_preflighted(
+        serde_json::json!({
+            "v3": {
+                "conda": {
+                    "demo-1.0-0": { "flags": ["Not A Flag"] }
+                }
+            }
+        }),
+        "'Not A Flag' is not a valid flag",
     )
     .await;
 }
