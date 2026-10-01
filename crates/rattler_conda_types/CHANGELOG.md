@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Reject invalid detector package names before accepting a channel's registrations.
+
 ## [0.55.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.54.0...rattler_conda_types-v0.55.0) - 2026-09-29
 
 ### Added
