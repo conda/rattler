@@ -3,19 +3,18 @@
 //!
 //! A registration names a detector package and the virtual packages it
 //! reports. Channels publish one dictionary per subdir; clients combine the
-//! dictionaries of the subdirs they load into one set per channel. The value
-//! is parsed as opaque JSON first, so a malformed registration never prevents
-//! parsing the surrounding repodata. Validation happens in two steps:
+//! dictionaries of the subdirs they load into one set per channel. Serde checks
+//! the dictionary shape when parsing repodata. Validation happens in two steps:
 //!
-//! 1. [`SubdirDetectorRegistrations::parse`] checks the shape of one subdir's
-//!    dictionary.
+//! 1. [`SubdirDetectorRegistrations::parse`] validates one subdir's detector
+//!    keys while preserving raw virtual package names.
 //! 2. [`ChannelDetectorRegistrations::combine`] merges the parsed subdirs and
 //!    applies the limits that hold across the combined set.
 //!
 //! Any [`RegistrationError`] discards the channel's entire combined set; the
 //! caller reports it and continues without the channel's detectors.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::{self, Display, Formatter};
 use std::time::Duration;
 
@@ -25,16 +24,18 @@ use thiserror::Error;
 
 use crate::{InvalidPackageNameError, PackageName};
 
-/// Deserializes an `info.virtual_package_detectors` field that is present,
-/// keeping a `null` value as `Some(Value::Null)`.
+/// Raw detector keys and virtual package names from repodata metadata.
 ///
-/// Serde's default handling of `Option` maps `null` to `None`, which would make
-/// `null` indistinguishable from an absent field. The CEP treats an absent field
-/// as "no registrations" and `null` as a registration error, so the distinction
-/// has to survive parsing. Combine with `#[serde(default)]` for the absent case.
+/// Strings remain unvalidated so semantic registration errors can discard a
+/// channel's detectors without rejecting structurally valid repodata.
+pub type DetectorRegistrationMetadata = IndexMap<String, Vec<String>>;
+
+/// Deserializes a present registration field, rejecting `null`.
+///
+/// Combine with `#[serde(default)]` so absent fields remain `None`.
 pub(crate) fn deserialize_present<'de, D>(
     deserializer: D,
-) -> Result<Option<serde_json::Value>, D::Error>
+) -> Result<Option<DetectorRegistrationMetadata>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -79,67 +80,99 @@ pub enum InvalidVirtualPackageNameError {
     InvalidPattern(String),
 }
 
-/// Validates `name` as a virtual package name a detector may report and
-/// returns it as a [`PackageName`].
+/// A validated virtual package name reported by a detector.
 ///
 /// Valid names start with two underscores, contain at most
 /// [`MAX_VIRTUAL_PACKAGE_NAME_LENGTH`] characters, and match
 /// `^__[a-z0-9][._-]?([a-z0-9]+(\.|-|_|$))*$`.
-pub fn parse_virtual_package_name(
-    name: &str,
-) -> Result<PackageName, InvalidVirtualPackageNameError> {
-    if !name.starts_with("__") {
-        return Err(InvalidVirtualPackageNameError::MissingPrefix(
-            name.to_string(),
-        ));
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct VirtualPackageName(PackageName);
+
+impl VirtualPackageName {
+    /// Borrows the underlying package name.
+    pub fn as_package_name(&self) -> &PackageName {
+        &self.0
     }
-    if name.chars().count() > MAX_VIRTUAL_PACKAGE_NAME_LENGTH {
-        return Err(InvalidVirtualPackageNameError::TooLong(name.to_string()));
+
+    /// Consumes the validated name and returns its package name.
+    pub fn into_package_name(self) -> PackageName {
+        self.0
     }
-    if !regex!(r"^__[a-z0-9][._-]?([a-z0-9]+(\.|-|_|$))*$").is_match(name) {
-        return Err(InvalidVirtualPackageNameError::InvalidPattern(
-            name.to_string(),
-        ));
+
+    /// Returns the normalized name.
+    pub fn as_normalized(&self) -> &str {
+        self.0.as_normalized()
     }
-    // The pattern only admits characters that are valid in a package name and
-    // are already lowercase, so this cannot fail and the normalized form equals
-    // the source form.
-    Ok(PackageName::new_unchecked(name))
+
+    /// Returns the name as supplied to the constructor.
+    pub fn as_source(&self) -> &str {
+        self.0.as_source()
+    }
+
+    /// Returns the `CONDA_OVERRIDE_*` variable for this virtual package.
+    ///
+    /// The name without its leading underscores is uppercased, with `-` and `.`
+    /// replaced by `_`. Distinct names can map to the same variable; combined
+    /// registrations reject such a [`RegistrationError::OverrideVariableCollision`].
+    pub fn override_variable(&self) -> String {
+        let stripped = &self.as_normalized()[2..];
+        let mut variable = String::with_capacity(OVERRIDE_VARIABLE_PREFIX.len() + stripped.len());
+        variable.push_str(OVERRIDE_VARIABLE_PREFIX);
+        for byte in stripped.bytes() {
+            variable.push(match byte {
+                b'-' | b'.' => '_',
+                byte => byte.to_ascii_uppercase() as char,
+            });
+        }
+        variable
+    }
+
+    fn validate(name: &str) -> Result<(), InvalidVirtualPackageNameError> {
+        if !name.starts_with("__") {
+            return Err(InvalidVirtualPackageNameError::MissingPrefix(
+                name.to_string(),
+            ));
+        }
+        if name.chars().count() > MAX_VIRTUAL_PACKAGE_NAME_LENGTH {
+            return Err(InvalidVirtualPackageNameError::TooLong(name.to_string()));
+        }
+        if !regex!(r"^__[a-z0-9][._-]?([a-z0-9]+(\.|-|_|$))*$").is_match(name) {
+            return Err(InvalidVirtualPackageNameError::InvalidPattern(
+                name.to_string(),
+            ));
+        }
+        Ok(())
+    }
 }
 
-/// Returns the name of the `CONDA_OVERRIDE_*` environment variable for a
-/// virtual package name.
-///
-/// The variable is [`OVERRIDE_VARIABLE_PREFIX`] followed by the name without
-/// its two leading underscores, uppercased, with `-` and `.` replaced by `_`.
-/// Distinct names can map to the same variable; a combined registration set
-/// containing such a pair is a [`RegistrationError::OverrideVariableCollision`].
-pub fn override_variable(name: &PackageName) -> String {
-    let stripped = name
-        .as_normalized()
-        .strip_prefix("__")
-        .unwrap_or(name.as_normalized());
-    let mut variable = String::with_capacity(OVERRIDE_VARIABLE_PREFIX.len() + stripped.len());
-    variable.push_str(OVERRIDE_VARIABLE_PREFIX);
-    for c in stripped.chars() {
-        match c {
-            '-' | '.' => variable.push('_'),
-            c => variable.extend(c.to_uppercase()),
-        }
+impl TryFrom<&str> for VirtualPackageName {
+    type Error = InvalidVirtualPackageNameError;
+
+    fn try_from(name: &str) -> Result<Self, Self::Error> {
+        Self::validate(name)?;
+        // Protocol-valid names are valid package names and already lowercase.
+        Ok(Self(PackageName::new_unchecked(name)))
     }
-    variable
+}
+
+impl TryFrom<String> for VirtualPackageName {
+    type Error = InvalidVirtualPackageNameError;
+
+    fn try_from(name: String) -> Result<Self, Self::Error> {
+        Self::validate(&name)?;
+        Ok(Self(PackageName::new_unchecked(name)))
+    }
+}
+
+impl Display for VirtualPackageName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_source())
+    }
 }
 
 /// Why a channel's registrations are ignored as a whole.
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum RegistrationError {
-    /// The `virtual_package_detectors` value is not a dictionary.
-    #[error("`virtual_package_detectors` must be a dictionary, found {found}")]
-    NotADictionary {
-        /// A short description of the JSON type that was found.
-        found: JsonKind,
-    },
-
     /// A detector key is not a valid package name.
     #[error("detector key {key:?} is not a valid package name: {source}")]
     InvalidDetectorName {
@@ -165,15 +198,6 @@ pub enum RegistrationError {
     InvalidInstallableDetectorName {
         /// The offending key.
         key: String,
-    },
-
-    /// The value of a detector is not an array of strings.
-    #[error("the registration of detector '{detector}' must be an array of strings, found {found}")]
-    InvalidRegistration {
-        /// The detector whose value is malformed.
-        detector: String,
-        /// A short description of the JSON type that was found.
-        found: JsonKind,
     },
 
     /// A detector registers no virtual packages or more than the limit,
@@ -233,52 +257,8 @@ pub enum RegistrationError {
     },
 }
 
-/// A short description of a JSON value's type, for error messages.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum JsonKind {
-    /// `null`
-    Null,
-    /// `true` or `false`
-    Bool,
-    /// A number
-    Number,
-    /// A string
-    String,
-    /// An array
-    Array,
-    /// An object
-    Object,
-}
-
-impl JsonKind {
-    fn of(value: &serde_json::Value) -> Self {
-        match value {
-            serde_json::Value::Null => Self::Null,
-            serde_json::Value::Bool(_) => Self::Bool,
-            serde_json::Value::Number(_) => Self::Number,
-            serde_json::Value::String(_) => Self::String,
-            serde_json::Value::Array(_) => Self::Array,
-            serde_json::Value::Object(_) => Self::Object,
-        }
-    }
-}
-
-impl Display for JsonKind {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let name = match self {
-            Self::Null => "null",
-            Self::Bool => "a boolean",
-            Self::Number => "a number",
-            Self::String => "a string",
-            Self::Array => "an array",
-            Self::Object => "an object",
-        };
-        f.write_str(name)
-    }
-}
-
-/// The registrations of one subdir, validated for shape but with the virtual
-/// package names still unvalidated.
+/// The registrations of one subdir, with validated detector keys but raw
+/// virtual package names.
 ///
 /// Names stay raw here because the combined limits count entries before
 /// invalid names are dropped.
@@ -288,18 +268,13 @@ pub struct SubdirDetectorRegistrations {
 }
 
 impl SubdirDetectorRegistrations {
-    /// Parses the raw `info.virtual_package_detectors` value of one subdir.
+    /// Validates the detector keys in one subdir's typed metadata.
     ///
-    /// `None` and an empty dictionary register nothing. `null` and any other
-    /// non-dictionary value are errors.
-    pub fn parse(value: Option<&serde_json::Value>) -> Result<Self, RegistrationError> {
-        let Some(value) = value else {
+    /// `None` and an empty dictionary register nothing. Virtual package names
+    /// remain raw until channel-wide limits have been checked.
+    pub fn parse(value: Option<&DetectorRegistrationMetadata>) -> Result<Self, RegistrationError> {
+        let Some(entries) = value else {
             return Ok(Self::default());
-        };
-        let serde_json::Value::Object(entries) = value else {
-            return Err(RegistrationError::NotADictionary {
-                found: JsonKind::of(value),
-            });
         };
 
         let mut detectors = IndexMap::with_capacity(entries.len());
@@ -318,23 +293,7 @@ impl SubdirDetectorRegistrations {
             {
                 return Err(RegistrationError::InvalidInstallableDetectorName { key: key.clone() });
             }
-            let serde_json::Value::Array(names) = registration else {
-                return Err(RegistrationError::InvalidRegistration {
-                    detector: key.clone(),
-                    found: JsonKind::of(registration),
-                });
-            };
-            let names = names
-                .iter()
-                .map(|name| match name {
-                    serde_json::Value::String(name) => Ok(name.clone()),
-                    other => Err(RegistrationError::InvalidRegistration {
-                        detector: key.clone(),
-                        found: JsonKind::of(other),
-                    }),
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            if detectors.insert(detector, names).is_some() {
+            if detectors.insert(detector, registration.clone()).is_some() {
                 return Err(RegistrationError::DuplicateDetector {
                     detector: key.clone(),
                 });
@@ -369,21 +328,23 @@ pub struct DetectorRegistration {
     pub detector: PackageName,
     /// The virtual packages the detector reports, in registration order. Never
     /// empty.
-    pub virtual_packages: IndexSet<PackageName>,
+    pub virtual_packages: IndexSet<VirtualPackageName>,
 }
 
 impl DetectorRegistration {
     /// The override variables of the registered virtual packages, in the same
     /// order.
     pub fn override_variables(&self) -> impl Iterator<Item = String> + '_ {
-        self.virtual_packages.iter().map(override_variable)
+        self.virtual_packages
+            .iter()
+            .map(VirtualPackageName::override_variable)
     }
 }
 
 /// Whether two arrays register the same virtual packages, whatever their
 /// order.
 fn same_names(a: &[String], b: &[String]) -> bool {
-    a.len() == b.len() && a.iter().collect::<BTreeSet<_>>() == b.iter().collect::<BTreeSet<_>>()
+    a.len() == b.len() && a.iter().collect::<HashSet<_>>() == b.iter().collect::<HashSet<_>>()
 }
 
 /// The registrations of one channel after combining the subdirs the client
@@ -438,8 +399,9 @@ impl ChannelDetectorRegistrations {
         for (detector, names) in raw {
             let mut virtual_packages = IndexSet::with_capacity(names.len());
             for name in names {
-                match parse_virtual_package_name(&name) {
-                    Ok(name) => {
+                match VirtualPackageName::validate(&name) {
+                    Ok(()) => {
+                        let name = VirtualPackageName(PackageName::new_unchecked(name));
                         let owners = owners.entry(name.as_normalized().to_string()).or_default();
                         owners.insert(detector.as_source().to_string());
                         if !virtual_packages.insert(name.clone()) || owners.len() > 1 {
@@ -449,7 +411,7 @@ impl ChannelDetectorRegistrations {
                             });
                         }
                         by_variable
-                            .entry(override_variable(&name))
+                            .entry(name.override_variable())
                             .or_default()
                             .insert(name.as_normalized().to_string());
                     }
@@ -507,7 +469,7 @@ mod tests {
     use super::*;
 
     fn parse(json: &str) -> Result<SubdirDetectorRegistrations, RegistrationError> {
-        let value: serde_json::Value = serde_json::from_str(json).unwrap();
+        let value: DetectorRegistrationMetadata = serde_json::from_str(json).unwrap();
         SubdirDetectorRegistrations::parse(Some(&value))
     }
 
@@ -530,7 +492,7 @@ mod tests {
             "__bad",
             &"a".repeat(65),
         ] {
-            let value = serde_json::json!({key: ["__capability"]});
+            let value = IndexMap::from([(key.to_string(), vec!["__capability".to_string()])]);
             assert!(
                 SubdirDetectorRegistrations::parse(Some(&value)).is_err(),
                 "invalid detector key {key:?} was accepted"
@@ -543,7 +505,7 @@ mod tests {
             "detector-",
             &"a".repeat(64),
         ] {
-            let value = serde_json::json!({key: ["__capability"]});
+            let value = IndexMap::from([(key.to_string(), vec!["__capability".to_string()])]);
             let parsed = SubdirDetectorRegistrations::parse(Some(&value)).unwrap();
             let combined = ChannelDetectorRegistrations::combine([&parsed]).unwrap();
             assert_eq!(combined.registrations()[0].detector.as_source(), key);
@@ -562,7 +524,7 @@ mod tests {
             // The pattern admits a trailing separator.
             "__conda_forge_",
         ] {
-            let parsed = parse_virtual_package_name(name).unwrap();
+            let parsed = VirtualPackageName::try_from(name).unwrap();
             assert_eq!(parsed.as_source(), name);
             assert_eq!(parsed.as_normalized(), name);
         }
@@ -570,56 +532,50 @@ mod tests {
 
     #[test]
     fn invalid_virtual_package_names() {
-        insta::assert_debug_snapshot!(
-            [
-                "openmpi",
-                "_cuda",
-                "__mpi/openmpi",
-                "__CUDA",
-                "__conda__forge",
-                "__-cuda",
-                "__cuda..arch",
-                "__",
-                &format!("__{}", "a".repeat(63)),
-            ]
-            .map(|name| parse_virtual_package_name(name).unwrap_err()),
-            @r#"
-        [
-            MissingPrefix(
-                "openmpi",
-            ),
-            MissingPrefix(
-                "_cuda",
-            ),
-            InvalidPattern(
-                "__mpi/openmpi",
-            ),
-            InvalidPattern(
-                "__CUDA",
-            ),
-            InvalidPattern(
-                "__conda__forge",
-            ),
-            InvalidPattern(
-                "__-cuda",
-            ),
-            InvalidPattern(
-                "__cuda..arch",
-            ),
-            InvalidPattern(
-                "__",
-            ),
-            TooLong(
-                "__aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            ),
-        ]
-        "#
+        for name in ["openmpi", "_cuda"] {
+            assert_eq!(
+                VirtualPackageName::try_from(name),
+                Err(InvalidVirtualPackageNameError::MissingPrefix(
+                    name.to_string()
+                ))
+            );
+        }
+        for name in [
+            "__mpi/openmpi",
+            "__CUDA",
+            "__conda__forge",
+            "__-cuda",
+            "__cuda..arch",
+            "__",
+        ] {
+            assert_eq!(
+                VirtualPackageName::try_from(name),
+                Err(InvalidVirtualPackageNameError::InvalidPattern(
+                    name.to_string()
+                ))
+            );
+        }
+        let maximum = format!("__{}", "a".repeat(62));
+        assert_eq!(
+            VirtualPackageName::try_from(maximum.as_str())
+                .unwrap()
+                .as_normalized(),
+            maximum
+        );
+        let too_long = format!("__{}", "a".repeat(63));
+        assert_eq!(
+            VirtualPackageName::try_from(too_long.clone()),
+            Err(InvalidVirtualPackageNameError::TooLong(too_long))
         );
     }
 
     #[test]
     fn override_variables() {
-        let variable = |name: &str| override_variable(&parse_virtual_package_name(name).unwrap());
+        let variable = |name: &str| {
+            VirtualPackageName::try_from(name)
+                .unwrap()
+                .override_variable()
+        };
         assert_eq!(variable("__cuda"), "CONDA_OVERRIDE_CUDA");
         assert_eq!(
             variable("__conda_forge_mpi"),
@@ -640,45 +596,19 @@ mod tests {
     }
 
     #[test]
-    fn parse_shape_errors() {
-        insta::assert_debug_snapshot!(
-            [
-                "null",
-                r#"["mpi-detect"]"#,
-                r#"{"mpi-detect": {"__cuda": true}}"#,
-                r#"{"mpi-detect": ["__cuda", 5]}"#,
-                r#"{"__mpi-detect": ["__cuda"]}"#,
-                r#"{"mpi detect": ["__cuda"]}"#,
-            ]
-            .map(|json| parse(json).unwrap_err()),
-            @r#"
-        [
-            NotADictionary {
-                found: Null,
-            },
-            NotADictionary {
-                found: Array,
-            },
-            InvalidRegistration {
-                detector: "mpi-detect",
-                found: Object,
-            },
-            InvalidRegistration {
-                detector: "mpi-detect",
-                found: Number,
-            },
-            VirtualDetectorName {
-                key: "__mpi-detect",
-            },
-            InvalidDetectorName {
-                key: "mpi detect",
-                source: InvalidCharacters(
-                    "mpi detect",
-                ),
-            },
-        ]
-        "#
-        );
+    fn detector_keys_are_semantic_errors() {
+        assert!(matches!(
+            parse(r#"{"__mpi-detect": ["__cuda"]}"#),
+            Err(RegistrationError::VirtualDetectorName { key }) if key == "__mpi-detect"
+        ));
+        assert!(matches!(
+            parse(r#"{"mpi detect": ["__cuda"]}"#),
+            Err(RegistrationError::InvalidDetectorName { key, .. }) if key == "mpi detect"
+        ));
+        assert!(matches!(
+            parse(r#"{"mpi-detect": ["__cuda"], "MPI-DETECT": ["__cuda"]}"#),
+            Err(RegistrationError::DuplicateDetector { .. })
+        ));
     }
 
     #[test]
@@ -689,6 +619,14 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(combined.registrations().len(), 1);
+        assert_eq!(
+            combined.registrations()[0]
+                .virtual_packages
+                .iter()
+                .map(VirtualPackageName::as_normalized)
+                .collect::<Vec<_>>(),
+            ["__a", "__b"]
+        );
     }
 
     #[test]
@@ -708,7 +646,7 @@ mod tests {
                     registration
                         .virtual_packages
                         .iter()
-                        .map(PackageName::as_normalized)
+                        .map(VirtualPackageName::as_normalized)
                         .collect::<Vec<_>>(),
                 )
             })
@@ -736,30 +674,40 @@ mod tests {
             combined.registrations()[0].detector.as_source(),
             "mpi-detect"
         );
-        insta::assert_debug_snapshot!(combined.dropped_names(), @r#"
-        [
-            DroppedVirtualPackageName {
-                detector: PackageName {
-                    normalized: None,
-                    source: "mpi-detect",
-                },
-                name: "openmpi",
-                reason: MissingPrefix(
+        assert_eq!(
+            combined.registrations()[0]
+                .virtual_packages
+                .iter()
+                .map(VirtualPackageName::as_normalized)
+                .collect::<Vec<_>>(),
+            ["__conda_forge_openmpi"]
+        );
+        let dropped = combined
+            .dropped_names()
+            .iter()
+            .map(|entry| {
+                (
+                    entry.detector.as_source(),
+                    entry.name.as_str(),
+                    &entry.reason,
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            dropped,
+            [
+                (
+                    "mpi-detect",
                     "openmpi",
+                    &InvalidVirtualPackageNameError::MissingPrefix("openmpi".to_string())
                 ),
-            },
-            DroppedVirtualPackageName {
-                detector: PackageName {
-                    normalized: None,
-                    source: "broken-detect",
-                },
-                name: "Nope",
-                reason: MissingPrefix(
+                (
+                    "broken-detect",
                     "Nope",
+                    &InvalidVirtualPackageNameError::MissingPrefix("Nope".to_string())
                 ),
-            },
-        ]
-        "#);
+            ]
+        );
     }
 
     #[test]
@@ -772,56 +720,47 @@ mod tests {
             .map(|i| format!("\"detect{i}\": [\"__vp{i}\"]"))
             .collect::<Vec<_>>()
             .join(", ");
-        insta::assert_debug_snapshot!(
-            [
-                combine(&[r#"{"mpi-detect": []}"#]),
-                combine(&[&format!(r#"{{"mpi-detect": [{seventeen}]}}"#)]),
-                combine(&[&format!("{{{sixty_five}}}")]),
-                combine(&[
-                    r#"{"mpi-detect": ["__a"]}"#,
-                    r#"{"mpi-detect": ["__b"]}"#,
-                ]),
-                combine(&[r#"{"mpi-detect": ["__a", "__a"]}"#]),
-                combine(&[r#"{"mpi-detect": ["__a"], "other-detect": ["__a"]}"#]),
-                combine(&[r#"{"mpi-detect": ["__conda-forge_mpi", "__conda_forge_mpi"]}"#]),
-                combine(&[r#"{"mpi-detect": ["__conda-forge_mpi"], "b-detect": ["__conda.forge.mpi"]}"#]),
-            ]
-            .map(Result::unwrap_err),
-            @r#"
-        [
-            VirtualPackageCountOutOfRange {
-                detector: "mpi-detect",
-                count: 0,
-            },
-            VirtualPackageCountOutOfRange {
-                detector: "mpi-detect",
-                count: 17,
-            },
-            TooManyDetectors {
-                count: 65,
-            },
-            InconsistentAcrossSubdirs {
-                detector: "mpi-detect",
-            },
-            DuplicateVirtualPackage {
-                name: "__a",
-                detectors: "mpi-detect",
-            },
-            DuplicateVirtualPackage {
-                name: "__a",
-                detectors: "mpi-detect, other-detect",
-            },
-            OverrideVariableCollision {
-                variable: "CONDA_OVERRIDE_CONDA_FORGE_MPI",
-                names: "__conda-forge_mpi, __conda_forge_mpi",
-            },
-            OverrideVariableCollision {
-                variable: "CONDA_OVERRIDE_CONDA_FORGE_MPI",
-                names: "__conda-forge_mpi, __conda.forge.mpi",
-            },
-        ]
-        "#
-        );
+        assert!(matches!(
+            combine(&[r#"{"mpi-detect": []}"#]),
+            Err(RegistrationError::VirtualPackageCountOutOfRange { count: 0, .. })
+        ));
+        assert!(matches!(
+            combine(&[&format!(r#"{{"mpi-detect": [{seventeen}]}}"#)]),
+            Err(RegistrationError::VirtualPackageCountOutOfRange { count: 17, .. })
+        ));
+        assert!(matches!(
+            combine(&[&format!("{{{sixty_five}}}")]),
+            Err(RegistrationError::TooManyDetectors { count: 65 })
+        ));
+        assert!(matches!(
+            combine(&[r#"{"mpi-detect": ["__a"]}"#, r#"{"mpi-detect": ["__b"]}"#]),
+            Err(RegistrationError::InconsistentAcrossSubdirs { .. })
+        ));
+        assert!(matches!(
+            combine(&[r#"{"mpi-detect": ["__a", "__a"]}"#]),
+            Err(RegistrationError::DuplicateVirtualPackage { name, .. }) if name == "__a"
+        ));
+        assert!(matches!(
+            combine(&[r#"{"mpi-detect": ["__a"], "other-detect": ["__a"]}"#]),
+            Err(RegistrationError::DuplicateVirtualPackage { name, detectors })
+                if name == "__a" && detectors == "mpi-detect, other-detect"
+        ));
+        for (metadata, expected_names) in [
+            (
+                r#"{"mpi-detect": ["__conda_forge_mpi", "__conda-forge_mpi"]}"#,
+                "__conda-forge_mpi, __conda_forge_mpi",
+            ),
+            (
+                r#"{"mpi-detect": ["__conda-forge_mpi"], "b-detect": ["__conda.forge.mpi"]}"#,
+                "__conda-forge_mpi, __conda.forge.mpi",
+            ),
+        ] {
+            assert!(matches!(
+                combine(&[metadata]),
+                Err(RegistrationError::OverrideVariableCollision { variable, names })
+                    if variable == "CONDA_OVERRIDE_CONDA_FORGE_MPI" && names == expected_names
+            ));
+        }
     }
 
     #[test]
