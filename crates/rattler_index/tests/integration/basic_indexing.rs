@@ -1404,3 +1404,33 @@ async fn test_sharded_repodata_is_deterministic() {
          reindexing an unchanged channel (expected 1)"
     );
 }
+
+/// Validates that the hashes and size in a package record cover the whole
+/// archive, for both package formats. The archive is streamed while it is
+/// parsed, so the parts the parser does not need must still be hashed.
+#[test]
+fn test_package_record_hashes_cover_whole_archive() {
+    for package in [
+        "clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2",
+        "clobber/clobber-fd-1-0.1.0-h4616a5c_0.conda",
+    ] {
+        let path = test_data_dir().join(package);
+        let record = rattler_index::package_record_from_archive(&path).unwrap();
+
+        assert_eq!(
+            record.sha256,
+            Some(rattler_digest::compute_file_digest::<rattler_digest::Sha256>(&path).unwrap()),
+            "{package}"
+        );
+        assert_eq!(
+            record.md5,
+            Some(rattler_digest::compute_file_digest::<rattler_digest::Md5>(&path).unwrap()),
+            "{package}"
+        );
+        assert_eq!(
+            record.size,
+            Some(fs::metadata(&path).unwrap().len()),
+            "{package}"
+        );
+    }
+}
