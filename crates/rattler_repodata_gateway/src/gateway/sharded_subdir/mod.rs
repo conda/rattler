@@ -194,10 +194,11 @@ mod tests {
     use crate::fetch::CacheAction;
     use crate::gateway::error::GatewayError;
     use crate::gateway::subdir::SubdirClient;
+    use crate::utils::url_to_cache_filename;
     use axum::{
         Router,
         body::Body,
-        http::{Response, StatusCode},
+        http::{HeaderMap, Response, StatusCode},
         routing::get,
     };
     use itertools::Itertools;
@@ -208,7 +209,7 @@ mod tests {
     use rattler_digest::{Sha256, parse_digest_from_hex};
     use std::future::IntoFuture;
     use std::net::SocketAddr;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use std::str::FromStr;
     use std::sync::{
         Arc,
@@ -217,18 +218,36 @@ mod tests {
     use tokio::sync::oneshot;
     use url::Url;
 
-    use super::{ShardCachePolicy, ShardedSubdir};
+    use super::{REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX, ShardCachePolicy, ShardedSubdir};
 
     /// A mock server that serves a sharded repodata index but returns
-    /// configurable responses for shard requests.
+    /// configurable responses for shard requests. A revalidation of the index
+    /// (`If-None-Match`) is answered with a `304` that keeps it fresh for an
+    /// hour.
     struct MockShardedServer {
         local_addr: SocketAddr,
+        index_requests: Arc<AtomicUsize>,
         shard_requests: Arc<AtomicUsize>,
         _shutdown_sender: oneshot::Sender<()>,
     }
 
     impl MockShardedServer {
+        /// Serves an index that stays fresh for an hour, so `UseCacheOnly`
+        /// accepts the cached copy in the cold-shard tests.
         async fn new(shard_response: MockShardResponse) -> Self {
+            Self::start(shard_response, "max-age=3600").await
+        }
+
+        /// Serves an index that is stale as soon as it is cached, so the next
+        /// load revalidates it.
+        async fn with_stale_index(shard_response: MockShardResponse) -> Self {
+            Self::start(shard_response, "max-age=0").await
+        }
+
+        async fn start(
+            shard_response: MockShardResponse,
+            index_cache_control: &'static str,
+        ) -> Self {
             // Create a minimal sharded index with one package
             let mut shards = ahash::HashMap::default();
             // Use a known hash for the "test-package" shard (SHA256 of empty string)
@@ -254,19 +273,33 @@ mod tests {
             let index_bytes = rmp_serde::to_vec_named(&sharded_index).unwrap();
             let compressed_index = zstd::encode_all(index_bytes.as_slice(), 3).unwrap();
 
+            let index_requests = Arc::new(AtomicUsize::new(0));
             let shard_requests = Arc::new(AtomicUsize::new(0));
             let app = Router::new()
                 .route(
                     "/linux-64/repodata_shards.msgpack.zst",
-                    get(move || async move {
-                        Response::builder()
-                            .status(StatusCode::OK)
-                            .header("Content-Type", "application/octet-stream")
-                            // Keep the cached copy fresh, so `UseCacheOnly`
-                            // accepts it in the cold-shard tests.
-                            .header("Cache-Control", "max-age=3600")
-                            .body(Body::from(compressed_index.clone()))
-                            .unwrap()
+                    get({
+                        let index_requests = Arc::clone(&index_requests);
+                        move |headers: HeaderMap| {
+                            index_requests.fetch_add(1, Ordering::SeqCst);
+                            let response = if headers.contains_key("if-none-match") {
+                                Response::builder()
+                                    .status(StatusCode::NOT_MODIFIED)
+                                    .header("Cache-Control", "max-age=3600")
+                                    .header("ETag", "\"test-index\"")
+                                    .body(Body::empty())
+                                    .unwrap()
+                            } else {
+                                Response::builder()
+                                    .status(StatusCode::OK)
+                                    .header("Content-Type", "application/octet-stream")
+                                    .header("Cache-Control", index_cache_control)
+                                    .header("ETag", "\"test-index\"")
+                                    .body(Body::from(compressed_index.clone()))
+                                    .unwrap()
+                            };
+                            std::future::ready(response)
+                        }
                     }),
                 )
                 .route(
@@ -307,6 +340,7 @@ mod tests {
 
             Self {
                 local_addr,
+                index_requests,
                 shard_requests,
                 _shutdown_sender: tx,
             }
@@ -318,6 +352,28 @@ mod tests {
 
         fn channel(&self) -> Channel {
             Channel::from_url(self.url())
+        }
+
+        /// How many index requests the server has answered so far, including
+        /// revalidations.
+        fn index_request_count(&self) -> usize {
+            self.index_requests.load(Ordering::SeqCst)
+        }
+
+        /// Where the index served by this server is cached inside
+        /// `cache_dir`.
+        fn index_cache_path(&self, cache_dir: &Path) -> PathBuf {
+            let index_url = self
+                .url()
+                .join("linux-64/")
+                .unwrap()
+                .join(REPODATA_SHARDS_FILENAME)
+                .unwrap();
+            cache_dir.join(format!(
+                "{}{}",
+                url_to_cache_filename(&index_url),
+                SHARDS_CACHE_SUFFIX
+            ))
         }
 
         /// How many shard downloads the server has answered so far. The index
@@ -526,6 +582,66 @@ mod tests {
         )
         .await
         .expect("the index comes from the cache")
+    }
+
+    /// Loads the index the way a new process would: the cache may be used,
+    /// and revalidated against the server once it is stale.
+    async fn load_index(
+        server: &MockShardedServer,
+        cache_dir: &Path,
+    ) -> Result<ShardedSubdir, GatewayError> {
+        ShardedSubdir::new(
+            server.channel(),
+            "linux-64".to_string(),
+            rattler_networking::LazyClient::default(),
+            cache_dir.to_path_buf(),
+            ShardCachePolicy {
+                action: CacheAction::CacheOrFetch,
+                missing_shards_are_empty: false,
+            },
+            None,
+            None,
+            None,
+        )
+        .await
+    }
+
+    /// A `304` refreshes the policy of the cached index, so the next load
+    /// uses the cache without asking the server again.
+    #[tokio::test]
+    async fn not_modified_index_refreshes_its_cache_policy() {
+        let server = MockShardedServer::with_stale_index(MockShardResponse::Empty).await;
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        for _ in 0..3 {
+            load_index(&server, cache_dir.path()).await.unwrap();
+        }
+
+        // A 200 that is stale on arrival, a 304 that refreshes it, then a
+        // cache hit.
+        assert_eq!(server.index_request_count(), 2);
+    }
+
+    /// When the server confirms the index is unchanged but the cached body
+    /// can no longer be parsed, the index is downloaded again.
+    #[tokio::test]
+    async fn not_modified_index_with_corrupt_cache_is_downloaded_again() {
+        let server = MockShardedServer::with_stale_index(MockShardResponse::Empty).await;
+        let cache_dir = tempfile::tempdir().unwrap();
+        load_index(&server, cache_dir.path()).await.unwrap();
+
+        // Cut off the end of the cached index body; the header stays intact.
+        let cache_file = std::fs::OpenOptions::new()
+            .write(true)
+            .open(server.index_cache_path(cache_dir.path()))
+            .unwrap();
+        let cache_len = cache_file.metadata().unwrap().len();
+        cache_file.set_len(cache_len - 1).unwrap();
+
+        load_index(&server, cache_dir.path()).await.unwrap();
+
+        // The initial 200, a 304 for the corrupt cache, then a fresh 200.
+        assert_eq!(server.index_request_count(), 3);
     }
 
     /// The cache-only modes a cold shard behaves the same under.
