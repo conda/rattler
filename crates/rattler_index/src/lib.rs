@@ -73,6 +73,8 @@ pub struct ChannelMetadata {
     pub base_url: Option<String>,
     /// The `info.channel_relations` value written to `repodata.json`.
     pub channel_relations: Option<ChannelRelations>,
+    /// The `info.virtual_package_detectors` value written to `repodata.json`.
+    pub virtual_package_detectors: Option<serde_json::Value>,
     /// CEP-6 notices to write to the channel root.
     ///
     /// `None` leaves an existing `notices.json` untouched, while `Some` writes
@@ -89,6 +91,14 @@ impl ChannelMetadata {
                 .channel_relations
                 .clone()
                 .filter(|relations| !relations.is_empty()),
+            virtual_package_detectors: config
+                .virtual_package_detectors
+                .as_ref()
+                .filter(|detectors| !detectors.is_empty())
+                .map(|detectors| {
+                    serde_json::to_value(detectors)
+                        .expect("a map of strings to string arrays is valid JSON")
+                }),
             notices: config.notices.clone(),
         }
     }
@@ -1008,7 +1018,7 @@ async fn index_subdir_inner(
                 &v3,
             ),
             channel_relations: channel_metadata.channel_relations,
-            virtual_package_detectors: None,
+            virtual_package_detectors: channel_metadata.virtual_package_detectors,
         }),
         packages,
         conda_packages,
@@ -1587,6 +1597,10 @@ pub async fn write_repodata(
             .info
             .as_ref()
             .and_then(|info| info.channel_relations.clone());
+        let sharded_virtual_package_detectors = repodata
+            .info
+            .as_ref()
+            .and_then(|info| info.virtual_package_detectors.clone());
         for (k, package_record) in repodata.conda_packages {
             let package_name = package_record.name.as_normalized();
             let shard = shards_by_package_names
@@ -1649,7 +1663,7 @@ pub async fn write_repodata(
                 created_at: Some(jiff::Timestamp::now()),
                 repodata_revisions: sharded_repodata_revisions,
                 channel_relations: sharded_channel_relations,
-                virtual_package_detectors: None,
+                virtual_package_detectors: sharded_virtual_package_detectors,
             },
             shards: shards
                 .iter()
@@ -2120,7 +2134,7 @@ pub async fn ensure_channel_initialized_with_channel_metadata(
             base_url: channel_metadata.base_url,
             repodata_revisions: RepodataRevisions::new(),
             channel_relations: channel_metadata.channel_relations,
-            virtual_package_detectors: None,
+            virtual_package_detectors: channel_metadata.virtual_package_detectors,
         }),
         packages: IndexMap::default(),
         conda_packages: IndexMap::default(),
