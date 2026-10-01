@@ -823,17 +823,26 @@ fn test_shebang_region_replaces_every_encoding_on_non_unix() {
     assert_eq!(searched.into_inner(), spliced, "both paths must agree");
 }
 
-/// In UTF-16-LE text every ASCII character is preceded by a zero byte, so the UTF-16-BE needle
-/// matches one byte before each little-endian occurrence. The aligned little-endian match must
-/// win, otherwise a target prefix outside Latin-1 is written with the wrong byte order.
-#[test]
-fn test_text_search_prefers_aligned_wide_occurrence() {
+/// In wide-encoded text every ASCII character is padded with zero bytes, so the needle of the
+/// opposite byte order matches a few bytes away from each real occurrence (one byte before a
+/// UTF-16-LE occurrence, one byte after a UTF-16-BE one, three bytes away for UTF-32). The
+/// code-unit aligned match must win, otherwise the target prefix is written with the wrong byte
+/// order. The targets leave Latin-1 and the Basic Multilingual Plane, so a byte-order mistake or
+/// a missing UTF-16 surrogate pair changes the output.
+#[rstest]
+fn test_text_search_prefers_aligned_wide_occurrence(
+    #[values(
+        OffsetEncoding::Utf16Le,
+        OffsetEncoding::Utf16Be,
+        OffsetEncoding::Utf32Le,
+        OffsetEncoding::Utf32Be
+    )]
+    encoding: OffsetEncoding,
+    #[values("/\u{100}", "/\u{1f600}")] target: &str,
+) {
     let placeholder = "/pfx";
-    let target = "/\u{100}";
-    let mut input = vec![0xff, 0xfe];
-    input.extend_from_slice(&OffsetEncoding::Utf16Le.encode("x=/pfx/lib\n"));
-    let mut expected = vec![0xff, 0xfe];
-    expected.extend_from_slice(&OffsetEncoding::Utf16Le.encode("x=/\u{100}/lib\n"));
+    let input = encoding.encode("x=/pfx/lib\n");
+    let expected = encoding.encode(&format!("x={target}/lib\n"));
 
     let mut searched = Cursor::new(Vec::new());
     super::copy_and_replace_textual_placeholder(
@@ -853,7 +862,11 @@ fn test_text_search_prefers_aligned_wide_occurrence() {
         placeholder,
         target,
         &Subdir::Linux64,
-        &[OffsetGroup::new(OffsetEncoding::Utf16Le, OffsetRanges::Text(vec![6])).unwrap()],
+        &[OffsetGroup::new(
+            encoding,
+            OffsetRanges::Text(vec![2 * encoding.code_unit_size()]),
+        )
+        .unwrap()],
         None,
     )
     .unwrap();
