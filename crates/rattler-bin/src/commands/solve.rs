@@ -14,6 +14,7 @@ use url::Url;
 use crate::{
     commands::{
         QueryOutputFormat,
+        detectors::{DetectorContext, determine_virtual_packages},
         gateway::{build_gateway, load_config},
         print_url_lines,
         progress::{wrap_in_async_progress, wrap_in_progress},
@@ -87,7 +88,11 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
     let repo_data = wrap_in_async_progress(
         "loading repodata",
         gateway
-            .query(channels, [platform, Subdir::NoArch], specs.clone())
+            .query(
+                channels.iter().cloned(),
+                [platform, Subdir::NoArch],
+                specs.clone(),
+            )
             .recursive(true),
     )
     .await
@@ -106,9 +111,20 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
         format_elapsed(start_load_repo_data.elapsed())
     );
 
-    let virtual_packages = wrap_in_progress("determining virtual packages", || {
-        opt.solver.virtual_packages()
-    })?;
+    let virtual_packages = determine_virtual_packages(
+        &opt.solver,
+        DetectorContext {
+            gateway: &gateway,
+            config: &config,
+            channels: &channels,
+            download_client: &download_client,
+            repodata: &repo_data.repodata,
+            specs: &specs,
+            constraints: &constraints,
+            target_platform: platform,
+        },
+    )
+    .await?;
 
     eprintln!(
         "Virtual packages:\n{}\n",
