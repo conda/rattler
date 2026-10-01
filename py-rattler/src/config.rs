@@ -124,7 +124,7 @@ impl PyConfig {
     }
 
     /// The `virtual-package-detectors` section: the detector timeout and the
-    /// consent decisions keyed by registration origin, then detector name.
+    /// consent decisions keyed by the registering channel's canonical base URL.
     #[getter]
     fn virtual_package_detectors<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         to_py(py, &self.inner.virtual_package_detectors)

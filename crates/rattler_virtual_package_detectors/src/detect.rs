@@ -16,21 +16,19 @@ use std::{
 
 use futures::{StreamExt, stream::FuturesOrdered};
 use indexmap::IndexMap;
-use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{
     ChannelUrl, GenericVirtualPackage, PackageName, Subdir,
     virtual_package_detector::override_variable,
 };
 use rattler_digest::Sha256Hash;
-use rattler_networking::LazyClient;
-use rattler_repodata_gateway::{AcceptedDetectorRegistration, Gateway};
+use rattler_repodata_gateway::AcceptedDetectorRegistration;
 use thiserror::Error;
 
 use crate::{
     activation::{ActivationError, activated_environment},
     cache::{CacheClock, CacheError, CacheKey, ResultCache},
     consent::{Consent, ConsentRequest, DetectorConsent},
-    environment::{EnvironmentError, EnvironmentOptions, ensure_environment, resolve_detector},
+    environment::{DetectorEnvironmentProvider, EnvironmentError},
     limits::clamp_timeout,
     overrides::{OverrideError, OverrideValue, read_override},
     report::{DetectedVersion, ReportError, parse_report},
@@ -57,24 +55,15 @@ impl WantedNames {
 
 /// What a detection needs from the client.
 pub struct DetectOptions<'a> {
-    /// The gateway to load repodata with.
-    pub gateway: &'a Gateway,
-    /// The package cache to install detectors from.
-    pub package_cache: &'a PackageCache,
-    /// The client to download packages with.
-    pub download_client: LazyClient,
-    /// The directory that holds the detector environments and the result
-    /// cache.
+    /// Resolves and creates isolated detector environments.
+    pub environment_provider: &'a dyn DetectorEnvironmentProvider,
+    /// The directory that holds the result cache.
     pub root: &'a Path,
     /// The platform of the machine running the client.
     pub host_platform: Subdir,
     /// The platform being solved for. Detectors only run when it equals
     /// `host_platform`.
     pub target_platform: Subdir,
-    /// The client's own virtual packages for the host, with overrides
-    /// applied. They resolve the detector environments and never include
-    /// detector results.
-    pub client_virtual_packages: Vec<GenericVirtualPackage>,
     /// How long a detector may run, and separately how long its activation
     /// may take. Clamped to the protocol's maximum.
     pub timeout: Duration,
@@ -302,14 +291,6 @@ pub async fn detect(
     }
 
     let timeout = clamp_timeout(options.timeout);
-    let environment_options = EnvironmentOptions {
-        gateway: options.gateway,
-        package_cache: options.package_cache,
-        download_client: options.download_client.clone(),
-        root: &options.root.join("envs"),
-        host_platform: options.host_platform,
-        virtual_packages: options.client_virtual_packages.clone(),
-    };
     let cache = ResultCache::new(options.root.join("results"));
     let semaphore = Arc::new(tokio::sync::Semaphore::new(options.concurrency.max(1)));
 
@@ -317,25 +298,14 @@ pub async fn detect(
         .into_iter()
         .map(|(registration, overridden)| {
             let semaphore = semaphore.clone();
-            let environment_options = environment_options.clone();
-            let cache = cache.clone();
-            let clock = options.clock.clone();
-            let consent = options.consent;
+            let options = &options;
+            let cache = &cache;
             async move {
                 let _permit = semaphore
                     .acquire()
                     .await
                     .expect("semaphore is never closed");
-                run_one(
-                    registration,
-                    &overridden,
-                    &environment_options,
-                    &cache,
-                    &clock,
-                    consent,
-                    timeout,
-                )
-                .await
+                run_one(registration, &overridden, options, cache, timeout).await
             }
         })
         .collect();
@@ -359,20 +329,19 @@ enum RunOutcome {
 async fn run_one(
     registration: &AcceptedDetectorRegistration,
     overridden: &HashSet<PackageName>,
-    environment_options: &EnvironmentOptions<'_>,
+    options: &DetectOptions<'_>,
     cache: &ResultCache,
-    clock: &CacheClock,
-    consent: &dyn DetectorConsent,
     timeout: Duration,
 ) -> RunOutcome {
     let origin = registration.origin().clone();
     let detector = registration.registration.detector.clone();
     match run_detector_pipeline(
         registration,
-        environment_options,
+        options.environment_provider,
+        options.host_platform,
         cache,
-        clock,
-        consent,
+        &options.clock,
+        options.consent,
         timeout,
     )
     .await
@@ -425,7 +394,8 @@ type PipelineResult = Result<
 /// consent was denied.
 async fn run_detector_pipeline(
     registration: &AcceptedDetectorRegistration,
-    environment_options: &EnvironmentOptions<'_>,
+    environment_provider: &dyn DetectorEnvironmentProvider,
+    host_platform: Subdir,
     cache: &ResultCache,
     clock: &CacheClock,
     consent: &dyn DetectorConsent,
@@ -433,7 +403,8 @@ async fn run_detector_pipeline(
 ) -> PipelineResult {
     let origin = registration.origin().clone();
     let detector = registration.registration.detector.clone();
-    let resolved = resolve_detector(registration, environment_options).await?;
+    let resolved = environment_provider.resolve(registration).await?;
+    let digest = resolved.digest;
 
     // A decision that needed nothing but the registration was taken before
     // resolving; only the policies that want to see the packages get here.
@@ -462,7 +433,7 @@ async fn run_detector_pipeline(
     let source = |from_cache| DetectionSource::Detector {
         origin: origin.clone(),
         detector: detector.clone(),
-        digest: resolved.digest,
+        digest,
         from_cache,
     };
     if let Some(cached) = cache.read(&key, clock).await {
@@ -470,17 +441,12 @@ async fn run_detector_pipeline(
         return Ok(Some((cached.virtual_packages, source(true))));
     }
 
-    let environment = ensure_environment(resolved.clone(), environment_options).await?;
-    let env = activated_environment(
-        &environment.prefix,
-        environment_options.host_platform,
-        timeout,
-    )
-    .await?;
+    let environment = environment_provider.install(resolved).await?;
+    let env = activated_environment(&environment.prefix, host_platform, timeout).await?;
     let run = run_detector(
         &environment.prefix,
         &detector,
-        environment_options.host_platform,
+        host_platform,
         &env,
         RunLimits {
             timeout,
