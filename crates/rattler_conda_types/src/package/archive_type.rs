@@ -78,17 +78,18 @@ impl DistArchiveType {
     /// preferred over another if there are two archive types that represent the
     /// same package.
     ///
-    /// The order returned by this function is that `.conda` packages are
-    /// preferred over all others and that `.tar.bz2` packages are preferred
-    /// over `.whl` packages.
-    pub fn cmp_preference(self, other: DistArchiveType) -> std::cmp::Ordering {
-        match (self, other) {
-            (a, b) if a == b => Ordering::Equal,
-            (DistArchiveType::Conda(CondaArchiveType::Conda), _) => Ordering::Greater,
-            (_, DistArchiveType::Conda(CondaArchiveType::Conda)) => Ordering::Less,
-            (DistArchiveType::Conda(CondaArchiveType::TarBz2), _) => Ordering::Greater,
-            (_, DistArchiveType::Conda(CondaArchiveType::TarBz2)) => Ordering::Less,
-            (DistArchiveType::Wheel(WheelArchiveType::Whl), _) => Ordering::Greater,
+    /// `.conda` packages are preferred over all others and `.whl` packages are
+    /// preferred over `.tar.bz2` packages: `.conda` > `.whl` > `.tar.bz2`.
+    pub fn cmp_preference(self, other: DistArchiveType) -> Ordering {
+        self.preference_rank().cmp(&other.preference_rank())
+    }
+
+    /// The rank used by [`Self::cmp_preference`]; a higher rank is preferred.
+    fn preference_rank(self) -> u8 {
+        match self {
+            DistArchiveType::Conda(CondaArchiveType::Conda) => 2,
+            DistArchiveType::Wheel(WheelArchiveType::Whl) => 1,
+            DistArchiveType::Conda(CondaArchiveType::TarBz2) => 0,
         }
     }
 
@@ -202,6 +203,26 @@ mod test {
             DistArchiveType::try_from("my-package.whl").unwrap()
         );
         assert_eq!(None, DistArchiveType::try_from("my-package.zip"));
+    }
+
+    /// Of the archives of one build, `.conda` is preferred over `.whl`, which
+    /// is preferred over `.tar.bz2`.
+    #[test]
+    fn test_cmp_preference() {
+        let mut archive_types = vec![
+            DistArchiveType::Conda(CondaArchiveType::TarBz2),
+            DistArchiveType::Conda(CondaArchiveType::Conda),
+            DistArchiveType::Wheel(WheelArchiveType::Whl),
+        ];
+        archive_types.sort_by(|a, b| b.cmp_preference(*a));
+        assert_eq!(
+            archive_types,
+            [
+                DistArchiveType::Conda(CondaArchiveType::Conda),
+                DistArchiveType::Wheel(WheelArchiveType::Whl),
+                DistArchiveType::Conda(CondaArchiveType::TarBz2),
+            ]
+        );
     }
 
     #[test]
