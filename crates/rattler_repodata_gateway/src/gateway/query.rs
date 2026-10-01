@@ -1,16 +1,22 @@
-use std::{collections::HashSet, future::IntoFuture, sync::Arc};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    future::IntoFuture,
+    sync::Arc,
+};
 
 use futures::{StreamExt, select_biased, stream::FuturesUnordered};
 use rattler_conda_types::{
     Channel, ChannelUrl, MatchSpec, Matches, PackageName, PackageNameMatcher, RepoDataRecord,
-    Subdir,
+    Subdir, referenced_virtual_packages,
 };
 use url::Url;
 
 use super::{
-    BarrierCell, ChannelNoticeResult, GatewayError, GatewayInner, GatewayWarning, RepoData,
+    AcceptedDetectorRegistration, BarrierCell, ChannelNoticeResult, GatewayError, GatewayInner,
+    GatewayWarning, RejectedDetectorRegistration, RepoData, VirtualPackageDetectorsQuery,
     boxed::{BoxFuture, box_future},
-    channel_expander::{ChannelExpander, ChannelRelationsMode, ChannelRelationsWarning},
+    channel_expander::{ChannelRelationsMode, ChannelRelationsWarning},
+    channel_expansion::{ChannelDiscovery, ScheduledSubdir},
     channel_relations::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
     local_subdir::LocalSubdirClient,
     source::{CustomSourceClient, ExpandedSource, Source, SourcePosition},
@@ -38,6 +44,21 @@ pub struct RepoDataQueryOutput {
     /// Non-fatal warnings encountered during the query. Also streamed
     /// to [`Reporter::on_gateway_warning`] as they are recorded.
     pub warnings: Vec<GatewayWarning>,
+    /// Registration ownership and candidate-wide demand, when discovery was enabled.
+    pub virtual_package_detectors: Option<QueryVirtualPackageDetectors>,
+}
+
+/// Detector metadata for one solve target, without resolving or running detectors.
+#[derive(Debug)]
+pub struct QueryVirtualPackageDetectors {
+    /// The solve target whose registrations were combined with `noarch`.
+    pub target_platform: Subdir,
+    /// Names referenced by candidate records, input specs, or explicit constraints.
+    pub wanted_names: BTreeSet<PackageName>,
+    /// All accepted registrations, including registrations outside the wanted set.
+    pub registrations: Vec<AcceptedDetectorRegistration>,
+    /// Registrations rejected because higher-priority registrations reserved their names.
+    pub rejected: Vec<RejectedDetectorRegistration>,
 }
 
 impl std::ops::Deref for RepoDataQueryOutput {
@@ -151,6 +172,9 @@ pub struct RepoDataQuery {
 
     /// Maximum recursion depth when following CEP-42 `channel_relations`.
     channel_relations_max_depth: usize,
+
+    detector_target: Option<Subdir>,
+    detector_constraints: Vec<MatchSpec>,
 }
 
 /// Tracks whether specs came from user input or transitive dependencies.
@@ -244,6 +268,33 @@ struct BucketOrder {
     original_index: usize,
 }
 
+fn channel_placement(
+    url: &ChannelUrl,
+    positions: &HashMap<ChannelUrl, SourcePosition>,
+    priorities: &HashMap<&ChannelUrl, usize>,
+    anchors: &HashMap<ChannelUrl, ChannelUrl>,
+) -> (usize, Placement, usize) {
+    if let Some(position) = positions.get(url) {
+        return (position.source, Placement::Source, position.member);
+    }
+    let priority = priorities.get(url).copied().unwrap_or(usize::MAX);
+    let introduced_by = anchors
+        .get(url)
+        .and_then(|introducing| Some((introducing, positions.get(introducing)?)));
+    match introduced_by {
+        Some((introducing, position)) => {
+            let introducing_priority = priorities.get(introducing).copied().unwrap_or(usize::MAX);
+            let placement = if priority < introducing_priority {
+                Placement::BeforeSource
+            } else {
+                Placement::AfterSource
+            };
+            (position.source, placement, priority)
+        }
+        None => (usize::MAX, Placement::AfterSource, priority),
+    }
+}
+
 /// Where a fetched batch of records should land.
 #[derive(Clone, Copy, Debug)]
 enum AccumulateTarget {
@@ -274,6 +325,8 @@ impl RepoDataQuery {
             channel_notices: false,
             channel_relations_mode: ChannelRelationsMode::default(),
             channel_relations_max_depth: DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
+            detector_target: None,
+            detector_constraints: Vec::new(),
         }
     }
 
@@ -303,6 +356,30 @@ impl RepoDataQuery {
     pub fn channel_notices(self, enabled: bool) -> Self {
         Self {
             channel_notices: enabled,
+            ..self
+        }
+    }
+
+    /// Includes detector registrations and demand for `target` plus `noarch`.
+    ///
+    /// Missing registration metadata is fetched without adding package records
+    /// from unrequested subdirs. Discovery never resolves, installs, or runs a detector.
+    #[must_use]
+    pub fn virtual_package_detectors(self, target: Subdir) -> Self {
+        Self {
+            detector_target: Some(target),
+            ..self
+        }
+    }
+
+    /// Adds explicit solver constraints to detector demand.
+    ///
+    /// These constraints do not fetch packages or filter records. They are only
+    /// used when [`Self::virtual_package_detectors`] enables discovery.
+    #[must_use]
+    pub fn constraints(self, constraints: impl IntoIterator<Item = MatchSpec>) -> Self {
+        Self {
+            detector_constraints: constraints.into_iter().collect(),
             ..self
         }
     }
@@ -352,12 +429,30 @@ impl RepoDataQuery {
     /// along with any non-fatal CEP-42 warnings.
     pub async fn execute(self) -> Result<RepoDataQueryOutput, GatewayError> {
         // Short circuit if there are no specs
-        if self.specs.is_empty() {
+        if self.specs.is_empty() && self.detector_target.is_none() {
             return Ok(RepoDataQueryOutput::default());
         }
 
         let executor = QueryExecutor::new(self)?;
         executor.run().await
+    }
+}
+
+struct DetectorQueryOptions {
+    target_platform: Subdir,
+    wanted_names: BTreeSet<PackageName>,
+    channel_relations_mode: ChannelRelationsMode,
+    channel_relations_max_depth: usize,
+    channel_positions: HashMap<ChannelUrl, SourcePosition>,
+}
+
+impl DetectorQueryOptions {
+    fn remember_channel(&mut self, url: &ChannelUrl, position: SourcePosition) {
+        if let Some(existing) = self.channel_positions.get_mut(url) {
+            *existing = position;
+        } else {
+            self.channel_positions.insert(url.clone(), position);
+        }
     }
 }
 
@@ -369,6 +464,8 @@ struct QueryExecutor {
     recursive: bool,
     record_patch: Option<Arc<RecordPatch>>,
     reporter: Option<Arc<dyn Reporter>>,
+    platforms: Vec<Subdir>,
+    detectors: Option<DetectorQueryOptions>,
 
     // Specs categorized at construction
     direct_url_specs: Vec<DirectUrlSpec>,
@@ -403,8 +500,8 @@ struct QueryExecutor {
     // Record fetching
     pending_records: FuturesUnordered<BoxFuture<PendingRecordsResult>>,
 
-    /// CEP-42 expansion state.
-    expander: ChannelExpander,
+    /// Shared incremental channel discovery and subdir fetch scheduling.
+    discovery: ChannelDiscovery<'static>,
 
     /// CEP-6 notice collection state.
     notices: NoticeCollector,
@@ -479,7 +576,31 @@ impl QueryExecutor {
             channel_notices,
             channel_relations_mode,
             channel_relations_max_depth,
+            detector_target,
+            detector_constraints,
         } = query;
+
+        let mut detectors = detector_target.map(|target_platform| DetectorQueryOptions {
+            target_platform,
+            wanted_names: specs
+                .iter()
+                .chain(&detector_constraints)
+                .filter_map(|spec| spec.name.as_exact())
+                .filter(|name| name.as_normalized().starts_with("__"))
+                .cloned()
+                .collect(),
+            channel_relations_mode,
+            channel_relations_max_depth,
+            channel_positions: HashMap::new(),
+        });
+        let mut discovery_platforms = platforms.clone();
+        if let Some(target) = detector_target {
+            for platform in [target, Subdir::NoArch] {
+                if !discovery_platforms.contains(&platform) {
+                    discovery_platforms.push(platform);
+                }
+            }
+        }
 
         let mut seen = hashbrown::HashMap::with_hasher(ahash::RandomState::new());
         let mut pending_package_specs: ahash::HashMap<PackageName, PendingRequest> =
@@ -537,12 +658,22 @@ impl QueryExecutor {
 
         let direct_url_result = (!direct_url_specs.is_empty()).then(RepoData::default);
 
-        let mut expander = ChannelExpander::new(
+        let mut discovery = ChannelDiscovery::new(
+            gateway.clone(),
+            discovery_platforms,
             channel_relations_mode,
             channel_relations_max_depth,
-            platforms.clone(),
             reporter.clone(),
+            None,
+            false,
         );
+        if let Some(target) = detector_target {
+            for platform in [target, Subdir::NoArch] {
+                if !platforms.contains(&platform) {
+                    discovery.allow_missing_platform(platform);
+                }
+            }
+        }
 
         // Iterate per caller-source position then per platform, so each
         // handle remembers where in the caller's `sources` list it came
@@ -555,45 +686,91 @@ impl QueryExecutor {
         let pending_subdirs = FuturesUnordered::new();
         let mut notices = NoticeCollector::new(channel_notices);
 
+        if let Some(options) = detectors.as_mut() {
+            for (position, source) in &sources_with_position {
+                match source {
+                    ExpandedSource::Channel(channel, _) => {
+                        options.remember_channel(&channel.base_url, *position);
+                    }
+                    ExpandedSource::SparseRepoData(sparse_list, _) => {
+                        for sparse in sparse_list {
+                            let url = &sparse.channel.base_url;
+                            options.remember_channel(url, *position);
+                            for index in 0..discovery.expander.platforms().len() {
+                                let platform = discovery.expander.platforms()[index];
+                                if platform.as_str() == sparse.subdir() {
+                                    discovery.seed_subdir(
+                                        url.clone(),
+                                        platform,
+                                        Arc::new(SubdirState::Found(SubdirData::from_client(
+                                            LocalSubdirClient::new(sparse.clone()),
+                                        ))),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    ExpandedSource::Custom(_, _) => {}
+                }
+            }
+        }
         for (position, source) in sources_with_position {
+            if detectors.is_some()
+                && let ExpandedSource::SparseRepoData(sparse_list, _) = &source
+            {
+                for sparse in sparse_list {
+                    let (url, channel) = discovery.register_user_channel(sparse.channel.clone());
+                    for index in 0..discovery.expander.platforms().len() {
+                        let platform = discovery.expander.platforms()[index];
+                        discovery.schedule_user_subdir(url.clone(), channel.clone(), platform);
+                    }
+                }
+            }
+            if let ExpandedSource::Channel(channel, multi_channel) = source {
+                let (url, channel) = discovery.register_user_channel(channel);
+                notices.queue(&gateway, &url, channel.clone(), reporter.clone());
+                for index in 0..discovery.expander.platforms().len() {
+                    let platform = discovery.expander.platforms()[index];
+                    let scheduled =
+                        discovery.schedule_user_subdir(url.clone(), channel.clone(), platform);
+                    if !platforms.contains(&platform) {
+                        continue;
+                    }
+                    subdir_handles.push(SubdirHandle {
+                        barrier: scheduled.barrier,
+                        kind: SubdirKind::Channel {
+                            url: scheduled.url,
+                            platform,
+                        },
+                        data: RepoData {
+                            multi_channel: multi_channel.clone(),
+                            ..RepoData::default()
+                        },
+                        position: Some(position),
+                    });
+                }
+                continue;
+            }
             for &platform in &platforms {
                 let source_clone = source.clone();
-                let barrier = Arc::new(BarrierCell::new());
 
-                let (kind, multi_channel, pending) = match source_clone {
-                    ExpandedSource::Channel(channel, multi_channel) => {
-                        let (url, channel) = expander.register_user_channel(channel);
-                        notices.queue(&gateway, &url, channel.clone(), reporter.clone());
-                        let kind = SubdirKind::Channel {
-                            url: url.clone(),
-                            platform,
-                        };
-                        let fut = build_channel_subdir_future(
-                            gateway.clone(),
-                            channel,
-                            platform,
-                            url,
-                            reporter.clone(),
-                            barrier.clone(),
-                            FetchErrorPolicy::Propagate,
-                        );
-                        (kind, multi_channel, fut)
+                let (kind, multi_channel, pending, barrier) = match source_clone {
+                    ExpandedSource::Channel(_, _) => {
+                        unreachable!("channel sources are scheduled above")
                     }
                     ExpandedSource::Custom(custom_source, multi_channel) => {
+                        let barrier = Arc::new(BarrierCell::new());
                         let client = CustomSourceClient::new(custom_source, platform);
                         let subdir = Arc::new(SubdirState::Found(SubdirData::from_client(client)));
                         let b = barrier.clone();
                         let fut = box_future(async move {
                             b.set(subdir.clone()).expect("subdir was set twice");
-                            Ok(PendingSubdirOk {
-                                subdir,
-                                kind_url_and_platform: None,
-                                warning: None,
-                            })
+                            Ok(PendingSubdirOk { subdir })
                         });
-                        (SubdirKind::Custom, multi_channel, fut)
+                        (SubdirKind::Custom, multi_channel, fut, barrier)
                     }
                     ExpandedSource::SparseRepoData(sparse_list, multi_channel) => {
+                        let barrier = Arc::new(BarrierCell::new());
                         // Each entry represents a different subdir, so find the one
                         // matching the requested platform; if none matches, treat it
                         // as having no records, same as a channel that doesn't
@@ -619,13 +796,9 @@ impl QueryExecutor {
                         let b = barrier.clone();
                         let fut = box_future(async move {
                             b.set(subdir.clone()).expect("subdir was set twice");
-                            Ok(PendingSubdirOk {
-                                subdir,
-                                kind_url_and_platform: None,
-                                warning: None,
-                            })
+                            Ok(PendingSubdirOk { subdir })
                         });
-                        (kind, multi_channel, fut)
+                        (kind, multi_channel, fut, barrier)
                     }
                 };
 
@@ -647,6 +820,8 @@ impl QueryExecutor {
             recursive,
             record_patch,
             reporter,
+            platforms,
+            detectors,
             direct_url_specs,
             direct_url_result,
             pending_pattern_specs,
@@ -659,7 +834,7 @@ impl QueryExecutor {
             subdir_handles,
             pending_subdirs,
             pending_records: FuturesUnordered::new(),
-            expander,
+            discovery,
             notices,
         })
     }
@@ -1021,18 +1196,26 @@ impl QueryExecutor {
             self.spawn_package_fetches();
 
             select_biased! {
-                // Handle any error that was emitted by the pending subdirs
+                // Custom and local sources remain independent of channel discovery.
                 subdir_result = self.pending_subdirs.select_next_some() => {
                     let ok = subdir_result?;
-                    let PendingSubdirOk { subdir, kind_url_and_platform, warning } = ok;
-                    if let Some(w) = warning {
-                        self.expander.push_warning(w);
+                    self.expand_pattern_specs_for_subdir(ok.subdir.as_ref());
+                    if self.pending_subdirs.is_empty() && self.discovery.pending.is_empty() {
+                        self.pending_pattern_specs.clear();
+                        self.pattern_names_seen.clear();
                     }
-                    self.expand_pattern_specs_for_subdir(subdir.as_ref());
-                    if let Some((url, platform)) = kind_url_and_platform {
-                        self.expand_relations_for_subdir(&url, platform, subdir.as_ref())?;
+                }
+
+                // Drive channel discovery concurrently with package fetches.
+                result = self.discovery.pending.select_next_some() => {
+                    let fetched = result?;
+                    if self.platforms.contains(&fetched.platform) {
+                        self.expand_pattern_specs_for_subdir(fetched.subdir.as_ref());
                     }
-                    if self.pending_subdirs.is_empty() {
+                    for scheduled in self.discovery.observe(fetched)? {
+                        self.schedule_transitive_subdir(scheduled);
+                    }
+                    if self.pending_subdirs.is_empty() && self.discovery.pending.is_empty() {
                         self.pending_pattern_specs.clear();
                         self.pattern_names_seen.clear();
                     }
@@ -1072,54 +1255,24 @@ impl QueryExecutor {
             }
         }
 
-        self.finalize_channel_relations()
-    }
-
-    /// Hand a freshly resolved subdir to the expander; schedule fetches
-    /// for any newly discovered (channel, platform) pairs. In `Strict`
-    /// mode propagates an incremental cycle/parse error so the
-    /// executor aborts the remaining in-flight fetches.
-    fn expand_relations_for_subdir(
-        &mut self,
-        channel_url: &ChannelUrl,
-        platform: Subdir,
-        subdir: &SubdirState,
-    ) -> Result<(), GatewayError> {
-        let new_pairs = self.expander.observe(channel_url, platform, subdir)?;
-        for (url, channel, plat) in new_pairs {
-            self.schedule_transitive_subdir(url, channel, plat);
-        }
-        Ok(())
+        self.finalize_channel_relations().await
     }
 
     /// Allocate a result slot for a transitively discovered (channel,
     /// platform) pair, spawn its subdir fetch, and kick off package
     /// fetches for every spec already queued.
-    fn schedule_transitive_subdir(
-        &mut self,
-        url: ChannelUrl,
-        channel: Arc<Channel>,
-        platform: Subdir,
-    ) {
-        self.notices
-            .queue(&self.gateway, &url, channel.clone(), self.reporter.clone());
-        let barrier = Arc::new(BarrierCell::new());
-
-        let policy = if self.expander.strict() {
-            FetchErrorPolicy::WrapAsChannelRelationsError
-        } else {
-            FetchErrorPolicy::SwallowAsWarning
-        };
-        let fut = build_channel_subdir_future(
-            self.gateway.clone(),
+    fn schedule_transitive_subdir(&mut self, scheduled: ScheduledSubdir) {
+        let ScheduledSubdir {
+            url,
             channel,
             platform,
-            url.clone(),
-            self.reporter.clone(),
-            barrier.clone(),
-            policy,
-        );
-        self.pending_subdirs.push(fut);
+            barrier,
+        } = scheduled;
+        if !self.platforms.contains(&platform) {
+            return;
+        }
+        self.notices
+            .queue(&self.gateway, &url, channel, self.reporter.clone());
 
         let handle_idx = self.subdir_handles.len();
         self.subdir_handles.push(SubdirHandle {
@@ -1139,12 +1292,13 @@ impl QueryExecutor {
     /// them and are placed before or after that whole caller source,
     /// depending on whether they outrank the introducing channel.
     /// Within a placement, CEP-42 priority orders the discovered channels.
-    fn finalize_channel_relations(mut self) -> Result<RepoDataQueryOutput, GatewayError> {
+    async fn finalize_channel_relations(mut self) -> Result<RepoDataQueryOutput, GatewayError> {
         let direct = self.direct_url_result;
         let mut handles = self.subdir_handles;
+        let mut channel_order = None;
 
-        if self.expander.enabled() && self.expander.has_observed_relations() {
-            let resolution = self.expander.finalize()?;
+        if self.discovery.expander.enabled() && self.discovery.expander.has_observed_relations() {
+            let mut resolution = self.discovery.expander.finalize()?;
 
             let priority_of: std::collections::HashMap<&ChannelUrl, usize> = resolution
                 .order
@@ -1153,6 +1307,7 @@ impl QueryExecutor {
                 .map(|(i, u)| (u, i))
                 .collect();
             let platform_idx_of: std::collections::HashMap<Subdir, usize> = self
+                .discovery
                 .expander
                 .platforms()
                 .iter()
@@ -1162,8 +1317,11 @@ impl QueryExecutor {
                 .collect();
 
             // Caller-source position per user channel URL.
-            let user_channel_position: std::collections::HashMap<ChannelUrl, SourcePosition> =
-                handles
+            let record_channel_position;
+            let user_channel_position = if let Some(options) = &self.detectors {
+                &options.channel_positions
+            } else {
+                record_channel_position = handles
                     .iter()
                     .filter_map(|h| match (&h.kind, h.position) {
                         (SubdirKind::Channel { url, .. }, Some(position)) => {
@@ -1171,7 +1329,9 @@ impl QueryExecutor {
                         }
                         _ => None,
                     })
-                    .collect();
+                    .collect::<HashMap<_, _>>();
+                &record_channel_position
+            };
 
             // Anchors derive from the final edge set, independent of
             // fetch completion order.
@@ -1182,7 +1342,7 @@ impl QueryExecutor {
             users_by_position.sort();
             let user_priority: Vec<ChannelUrl> =
                 users_by_position.into_iter().map(|(_, url)| url).collect();
-            let anchor_of = self.expander.anchors(&user_priority);
+            let anchor_of = self.discovery.expander.anchors(&user_priority);
 
             let mut tagged: Vec<(BucketOrder, SubdirHandle)> = handles
                 .into_iter()
@@ -1197,24 +1357,14 @@ impl QueryExecutor {
                             (position.source, Placement::Source, position.member, p)
                         }
                         (SubdirKind::Channel { url, platform }, None) => {
-                            let r = priority_of.get(url).copied().unwrap_or(usize::MAX);
                             let p = platform_idx_of.get(platform).copied().unwrap_or(usize::MAX);
-                            let introduced_by = anchor_of.get(url).and_then(|introducing| {
-                                Some((introducing, user_channel_position.get(introducing)?))
-                            });
-                            match introduced_by {
-                                Some((introducing, position)) => {
-                                    let introducing_rank =
-                                        priority_of.get(introducing).copied().unwrap_or(usize::MAX);
-                                    let placement = if r < introducing_rank {
-                                        Placement::BeforeSource
-                                    } else {
-                                        Placement::AfterSource
-                                    };
-                                    (position.source, placement, r, p)
-                                }
-                                None => (usize::MAX, Placement::AfterSource, r, p),
-                            }
+                            let (anchor, placement, priority) = channel_placement(
+                                url,
+                                user_channel_position,
+                                &priority_of,
+                                &anchor_of,
+                            );
+                            (anchor, placement, priority, p)
                         }
                         (SubdirKind::Custom, None) => {
                             unreachable!("custom sources are always caller-supplied")
@@ -1232,23 +1382,74 @@ impl QueryExecutor {
                 .collect();
             tagged.sort_by_key(|(order, _)| *order);
             handles = tagged.into_iter().map(|(_, h)| h).collect();
+            if self.detectors.is_some() {
+                let detector_order: HashMap<_, _> = resolution
+                    .order
+                    .iter()
+                    .filter_map(|url| {
+                        let stable_url = user_channel_position
+                            .get_key_value(url)
+                            .map(|(url, _)| url)
+                            .or_else(|| anchor_of.get_key_value(url).map(|(url, _)| url))?;
+                        Some((
+                            stable_url,
+                            channel_placement(url, user_channel_position, &priority_of, &anchor_of),
+                        ))
+                    })
+                    .collect();
+                resolution.order.sort_by_key(|url| {
+                    detector_order.get(url).copied().unwrap_or((
+                        usize::MAX,
+                        Placement::AfterSource,
+                        usize::MAX,
+                    ))
+                });
+            }
+            channel_order = Some(resolution.order);
         }
 
+        let mut expansion = self.discovery.finish(channel_order)?;
         let mut repodata: Vec<RepoData> =
             Vec::with_capacity(handles.len() + usize::from(direct.is_some()));
         if let Some(d) = direct {
             repodata.push(d);
         }
         repodata.extend(handles.into_iter().map(|h| h.data));
+        let mut warnings: Vec<_> = std::mem::take(&mut expansion.warnings)
+            .into_iter()
+            .map(GatewayWarning::from)
+            .collect();
+        let virtual_package_detectors = if let Some(mut options) = self.detectors {
+            options.wanted_names.extend(referenced_virtual_packages(
+                repodata
+                    .iter()
+                    .flat_map(|data| data.iter())
+                    .map(|record| &record.package_record),
+            ));
+            let query = VirtualPackageDetectorsQuery::new(
+                self.gateway,
+                Vec::new(),
+                vec![options.target_platform, Subdir::NoArch],
+                self.reporter,
+            )
+            .channel_relations(options.channel_relations_mode)
+            .channel_relations_max_depth(options.channel_relations_max_depth);
+            let discovery = query.collect_from_expansion(&expansion).await?;
+            warnings.extend(discovery.warnings);
+            Some(QueryVirtualPackageDetectors {
+                target_platform: options.target_platform,
+                wanted_names: options.wanted_names,
+                registrations: discovery.registrations,
+                rejected: discovery.rejected,
+            })
+        } else {
+            None
+        };
         Ok(RepoDataQueryOutput {
             repodata,
             notices: self.notices.collected,
-            warnings: self
-                .expander
-                .take_warnings()
-                .into_iter()
-                .map(GatewayWarning::from)
-                .collect(),
+            warnings,
+            virtual_package_detectors,
         })
     }
 }
@@ -1265,53 +1466,6 @@ pub(super) enum FetchErrorPolicy {
     /// Wrap in [`GatewayError::ChannelRelationsError`] (Strict mode for
     /// transitively discovered channels).
     WrapAsChannelRelationsError,
-}
-
-/// Build a future that fetches a channel subdir, sets the barrier, and
-/// applies `policy` to any fetch error. Used by `RepoDataQuery`'s
-/// executor; `NamesQuery` uses the simpler [`spawn_names_fetch`]
-/// wrapper around the same [`fetch_subdir_with_policy`] core.
-fn build_channel_subdir_future(
-    gateway: Arc<GatewayInner>,
-    channel: Arc<Channel>,
-    platform: Subdir,
-    url: ChannelUrl,
-    reporter: Option<Arc<dyn Reporter>>,
-    barrier: Arc<BarrierCell<Arc<SubdirState>>>,
-    policy: FetchErrorPolicy,
-) -> BoxFuture<PendingSubdirResult> {
-    box_future(async move {
-        let (subdir, warning) =
-            fetch_subdir_with_policy(&gateway, &channel, platform, &url, reporter, policy).await?;
-        barrier.set(subdir.clone()).expect("subdir was set twice");
-        Ok(PendingSubdirOk {
-            subdir,
-            kind_url_and_platform: Some((url, platform)),
-            warning,
-        })
-    })
-}
-
-/// Fetch a channel subdir and apply `policy` to any error. Shared core
-/// for the channel-fetch futures spawned by both `RepoDataQuery` and
-/// `NamesQuery`. Returns the resolved subdir plus an optional
-/// [`ChannelRelationsWarning`] when the policy swallowed a fetch
-/// failure.
-async fn fetch_subdir_with_policy(
-    gateway: &GatewayInner,
-    channel: &Channel,
-    platform: Subdir,
-    url: &ChannelUrl,
-    reporter: Option<Arc<dyn Reporter>>,
-    policy: FetchErrorPolicy,
-) -> Result<(Arc<SubdirState>, Option<ChannelRelationsWarning>), GatewayError> {
-    match gateway
-        .get_or_create_subdir(channel, platform, reporter, true)
-        .await
-    {
-        Ok(subdir) => Ok((subdir, None)),
-        Err(err) => apply_fetch_error_policy(err, url, platform, policy),
-    }
 }
 
 /// Translate a subdir fetch error into the policy-prescribed outcome.
@@ -1350,15 +1504,9 @@ pub(super) fn apply_fetch_error_policy(
     }
 }
 
-/// Outcome of a pending subdir fetch. `kind_url_and_platform` is
-/// `Some` for channel sources (used to register CEP-42 relations) and
-/// `None` for custom sources. `warning` carries a fetch-failure
-/// warning when the [`FetchErrorPolicy::SwallowAsWarning`] policy was
-/// applied.
+/// Outcome of a custom or local subdir fetch.
 struct PendingSubdirOk {
     subdir: Arc<SubdirState>,
-    kind_url_and_platform: Option<(ChannelUrl, Subdir)>,
-    warning: Option<ChannelRelationsWarning>,
 }
 
 /// Push a future onto `pending_records` that awaits the subdir's
@@ -1490,63 +1638,36 @@ impl NamesQuery {
     /// Execute the query and return the package names along with any
     /// non-fatal CEP-42 warnings.
     pub async fn execute(self) -> Result<NamesQueryOutput, GatewayError> {
-        let mut expander = ChannelExpander::new(
+        let mut discovery = ChannelDiscovery::new(
+            self.gateway.clone(),
+            self.platforms.clone(),
             self.channel_relations_mode,
             self.channel_relations_max_depth,
-            self.platforms.clone(),
             self.reporter.clone(),
+            None,
+            false,
         );
         let mut notices = NoticeCollector::new(self.channel_notices);
 
-        let mut pending: FuturesUnordered<BoxFuture<NamesFetchResult>> = FuturesUnordered::new();
         for channel in self.channels {
-            let (url, channel_arc) = expander.register_user_channel(channel);
-            notices.queue(
-                &self.gateway,
-                &url,
-                channel_arc.clone(),
-                self.reporter.clone(),
-            );
+            let (url, channel) = discovery.register_user_channel(channel);
+            notices.queue(&self.gateway, &url, channel.clone(), self.reporter.clone());
             for &platform in &self.platforms {
-                pending.push(spawn_names_fetch(
-                    self.gateway.clone(),
-                    channel_arc.clone(),
-                    platform,
-                    url.clone(),
-                    self.reporter.clone(),
-                    FetchErrorPolicy::Propagate,
-                ));
+                discovery.schedule_user_subdir(url.clone(), channel.clone(), platform);
             }
         }
 
         let mut names: std::collections::HashSet<String> = std::collections::HashSet::default();
-        let strict = expander.strict();
-        let policy = if strict {
-            FetchErrorPolicy::WrapAsChannelRelationsError
-        } else {
-            FetchErrorPolicy::SwallowAsWarning
-        };
 
         loop {
             select_biased! {
-                result = pending.select_next_some() => {
-                    let (url, platform, subdir, warning) = result?;
-                    if let Some(w) = warning {
-                        expander.push_warning(w);
-                    }
-                    if let Some(subdir_names) = subdir.package_names() {
+                result = discovery.pending.select_next_some() => {
+                    let fetched = result?;
+                    if let Some(subdir_names) = fetched.subdir.package_names() {
                         names.extend(subdir_names);
                     }
-                    for (new_url, new_channel, new_plat) in expander.observe(&url, platform, &subdir)? {
-                        notices.queue(&self.gateway, &new_url, new_channel.clone(), self.reporter.clone());
-                        pending.push(spawn_names_fetch(
-                            self.gateway.clone(),
-                            new_channel,
-                            new_plat,
-                            new_url,
-                            self.reporter.clone(),
-                            policy,
-                        ));
+                    for scheduled in discovery.observe(fetched)? {
+                        notices.queue(&self.gateway, &scheduled.url, scheduled.channel, self.reporter.clone());
                     }
                 }
 
@@ -1560,10 +1681,9 @@ impl NamesQuery {
             }
         }
 
-        if expander.enabled() && expander.has_observed_relations() {
-            // Names are an unordered set; finalize only for its
-            // depth/cycle diagnostics and strict-mode errors.
-            expander.finalize()?;
+        if discovery.expander.enabled() && discovery.expander.has_observed_relations() {
+            // Names are unordered; finalize for depth/cycle diagnostics.
+            discovery.expander.finalize()?;
         }
 
         let names = names
@@ -1573,40 +1693,14 @@ impl NamesQuery {
         Ok(NamesQueryOutput {
             names,
             notices: notices.collected,
-            warnings: expander
+            warnings: discovery
+                .expander
                 .take_warnings()
                 .into_iter()
                 .map(GatewayWarning::from)
                 .collect(),
         })
     }
-}
-
-type NamesFetchResult = Result<
-    (
-        ChannelUrl,
-        Subdir,
-        Arc<SubdirState>,
-        Option<ChannelRelationsWarning>,
-    ),
-    GatewayError,
->;
-
-/// Build a future that fetches a channel subdir for `NamesQuery` and
-/// applies `policy` to any fetch error.
-fn spawn_names_fetch(
-    gateway: Arc<GatewayInner>,
-    channel: Arc<Channel>,
-    platform: Subdir,
-    url: ChannelUrl,
-    reporter: Option<Arc<dyn Reporter>>,
-    policy: FetchErrorPolicy,
-) -> BoxFuture<NamesFetchResult> {
-    box_future(async move {
-        let (subdir, warning) =
-            fetch_subdir_with_policy(&gateway, &channel, platform, &url, reporter, policy).await?;
-        Ok((url, platform, subdir, warning))
-    })
 }
 
 impl IntoFuture for NamesQuery {
