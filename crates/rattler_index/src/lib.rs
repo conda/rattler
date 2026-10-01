@@ -49,18 +49,22 @@ pub use rattler_config::config::index::{
     IndexChannelConfig, IndexConfig, PackageRevisionAssignment,
 };
 use rattler_digest::Sha256Hash;
-use rattler_package_streaming::{read, seek::stream_conda_content};
+use rattler_package_streaming::{
+    read,
+    seek::{self, stream_conda_content},
+};
 #[cfg(feature = "s3")]
 use rattler_s3::S3CredentialSource;
 use retry_policies::{Jitter, RetryDecision, RetryPolicy, policies::ExponentialBackoff};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use tempfile::SpooledTempFile;
 use tokio::sync::Semaphore;
 use tokio_util::io::{StreamReader, SyncIoBridge};
 use tracing::Instrument;
 #[cfg(feature = "s3")]
 use url::Url;
-use zip::read::read_zipfile_from_stream;
+use zip::{read::read_zipfile_from_stream, result::ZipError};
 
 /// Metadata published while indexing a channel.
 ///
@@ -314,7 +318,7 @@ pub fn package_record_from_tar_bz2_reader(reader: impl BufRead) -> std::io::Resu
 /// and extract the package record from it.
 pub fn package_record_from_conda(file: &Path) -> std::io::Result<PackageRecord> {
     let reader = fs::File::open(file)?;
-    package_record_from_conda_reader(BufReader::new(reader))
+    indexed_package_record_from_seekable_conda(BufReader::new(reader)).map(|indexed| indexed.record)
 }
 
 /// Extract the package record from a conda package archive.
@@ -336,9 +340,11 @@ pub fn package_record_from_archive(file: &Path) -> std::io::Result<PackageRecord
 /// Extract the package record from a `.conda` package file content.
 /// This function will look for the `info/index.json` file in the conda package
 /// and extract the package record from it.
+///
+/// The reader cannot be read twice, so the package is first copied to a
+/// temporary file. This also handles packages that use zip data descriptors.
 pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result<PackageRecord> {
-    indexed_package_record_from_reader(reader, CondaArchiveType::Conda)
-        .map(|indexed| indexed.record)
+    indexed_package_record_from_spooled_conda(reader).map(|indexed| indexed.record)
 }
 
 /// Read a package archive in a single pass and build its indexed record.
@@ -350,12 +356,7 @@ fn indexed_package_record_from_reader(
     reader: impl Read,
     archive_type: CondaArchiveType,
 ) -> std::io::Result<IndexedPackageRecord> {
-    let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
-    let md5_reader = rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
-    let mut reader = CountingReader {
-        inner: md5_reader,
-        count: 0,
-    };
+    let mut reader = DigestReader::new(reader);
 
     let (index_json, run_exports) = match archive_type {
         CondaArchiveType::TarBz2 => (read_index_json_from_tar_bz2(&mut reader)?, None),
@@ -365,13 +366,62 @@ fn indexed_package_record_from_reader(
     // The hashes cover the whole archive, so read whatever the parser did not.
     std::io::copy(&mut reader, &mut std::io::sink())?;
 
-    let size = reader.count;
-    let (sha256_reader, md5) = reader.inner.finalize();
-    let (_, sha256) = sha256_reader.finalize();
-    let mut indexed =
-        indexed_package_record_from_index_json(index_json, PackageDigest { sha256, md5, size })?;
+    let mut indexed = indexed_package_record_from_index_json(index_json, reader.finalize())?;
     indexed.record.run_exports = run_exports;
     Ok(indexed)
+}
+
+/// Build the indexed record of a `.conda` package from a seekable reader.
+///
+/// Unlike [`indexed_package_record_from_reader`] this finds the info section
+/// through the zip index at the end of the archive, so it also works for
+/// packages that use zip data descriptors. The archive is read twice: once to
+/// hash it and once to read the info section.
+fn indexed_package_record_from_seekable_conda(
+    mut reader: impl Read + Seek,
+) -> std::io::Result<IndexedPackageRecord> {
+    reader.rewind()?;
+    let mut digest_reader = DigestReader::new(&mut reader);
+    std::io::copy(&mut digest_reader, &mut std::io::sink())?;
+    let digest = digest_reader.finalize();
+
+    reader.rewind()?;
+    let mut archive = seek::stream_conda_info(&mut reader).map_err(std::io::Error::other)?;
+    let (index_json, run_exports) = read_info_from_tar(&mut archive)?;
+
+    let mut indexed = indexed_package_record_from_index_json(index_json, digest)?;
+    indexed.record.run_exports = run_exports;
+    Ok(indexed)
+}
+
+/// Copy a `.conda` package into a temporary file and build its indexed record
+/// from there.
+///
+/// The temporary file only stays in memory while it is small, so memory use
+/// stays bounded for large packages.
+fn indexed_package_record_from_spooled_conda(
+    mut reader: impl Read,
+) -> std::io::Result<IndexedPackageRecord> {
+    let mut file = SpooledTempFile::new(SPOOLED_PACKAGE_MEMORY_LIMIT);
+    std::io::copy(&mut reader, &mut file)?;
+    indexed_package_record_from_seekable_conda(file)
+}
+
+/// How much of a package is kept in memory before it is spooled to disk.
+const SPOOLED_PACKAGE_MEMORY_LIMIT: usize = 5 * 1024 * 1024;
+
+/// The message the zip crate uses for an entry whose size is only written after
+/// its data (a "data descriptor"). Such an entry cannot be read as a stream.
+/// See <https://github.com/conda/rattler/issues/794>.
+const DATA_DESCRIPTOR_ERROR_MESSAGE: &str = "The file length is not available in the local header";
+
+/// Returns true if streaming a `.conda` package failed because it uses zip
+/// data descriptors.
+fn is_data_descriptor_error(err: &std::io::Error) -> bool {
+    matches!(
+        err.get_ref().and_then(|inner| inner.downcast_ref::<ZipError>()),
+        Some(ZipError::UnsupportedArchive(message)) if *message == DATA_DESCRIPTOR_ERROR_MESSAGE
+    )
 }
 
 /// Read `info/index.json` from a streamed `.tar.bz2` package.
@@ -425,28 +475,56 @@ fn read_info_from_tar(
     Ok((index_json, run_exports_json))
 }
 
-/// Counts the bytes read through it.
-struct CountingReader<R> {
-    inner: R,
-    count: u64,
+/// Computes the hashes and size of everything read through it.
+struct DigestReader<R: Read> {
+    inner: rattler_digest::HashingReader<
+        rattler_digest::HashingReader<R, rattler_digest::Sha256>,
+        rattler_digest::Md5,
+    >,
+    size: u64,
 }
 
-impl<R: Read> Read for CountingReader<R> {
+impl<R: Read> DigestReader<R> {
+    fn new(reader: R) -> Self {
+        Self {
+            inner: rattler_digest::HashingReader::new(rattler_digest::HashingReader::new(reader)),
+            size: 0,
+        }
+    }
+
+    fn finalize(self) -> PackageDigest {
+        let (sha256_reader, md5) = self.inner.finalize();
+        let (_, sha256) = sha256_reader.finalize();
+        PackageDigest {
+            sha256,
+            md5,
+            size: self.size,
+        }
+    }
+}
+
+impl<R: Read> Read for DigestReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let read = self.inner.read(buf)?;
-        self.count += read as u64;
+        self.size += read as u64;
         Ok(read)
     }
 }
 
-/// Parse a streamed package file based on its filename extension.
+/// Stream a package from storage and build its indexed record.
 ///
 /// Parsing is blocking, so it runs on a blocking thread that pulls bytes from
-/// the stream as it needs them.
-async fn parse_package_stream(
-    stream: cache::PackageStream,
+/// the stream as it needs them. A `.conda` package that uses zip data
+/// descriptors cannot be parsed as a stream; it is read again and spooled to a
+/// temporary file instead.
+///
+/// Returns the record together with the metadata of the version that was read.
+async fn read_package_record(
+    op: &Operator,
+    path: &str,
     filename: &str,
-) -> std::io::Result<IndexedPackageRecord> {
+    metadata: RepodataFileMetadata,
+) -> std::io::Result<(IndexedPackageRecord, RepodataFileMetadata)> {
     let archive_type = match DistArchiveType::try_from(filename).unwrap() {
         DistArchiveType::Conda(archive_type) => archive_type,
         DistArchiveType::Wheel(WheelArchiveType::Whl) => {
@@ -456,12 +534,37 @@ async fn parse_package_stream(
         }
     };
 
-    let reader = BufReader::new(SyncIoBridge::new(StreamReader::new(stream)));
-    match tokio::task::spawn_blocking(move || {
-        indexed_package_record_from_reader(reader, archive_type)
-    })
-    .await
-    {
+    let (stream, metadata) = cache::open_package_with_retry(op, path, metadata)
+        .await
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
+    let reader = blocking_reader(stream);
+    match run_blocking(move || indexed_package_record_from_reader(reader, archive_type)).await {
+        Err(err) if is_data_descriptor_error(&err) => {
+            tracing::warn!(
+                "{path} uses zip data descriptors and cannot be streamed, spooling it to a temporary file instead"
+            );
+            let (stream, metadata) = cache::open_package_with_retry(op, path, metadata)
+                .await
+                .map_err(|e| std::io::Error::other(e.to_string()))?;
+            let reader = blocking_reader(stream);
+            let record =
+                run_blocking(move || indexed_package_record_from_spooled_conda(reader)).await?;
+            Ok((record, metadata))
+        }
+        result => Ok((result?, metadata)),
+    }
+}
+
+/// Turns a package stream into a reader for use on a blocking thread.
+fn blocking_reader(stream: cache::PackageStream) -> impl Read + Send + 'static {
+    BufReader::new(SyncIoBridge::new(StreamReader::new(stream)))
+}
+
+/// Runs `f` on a blocking thread, re-raising it if it panics.
+async fn run_blocking<T: Send + 'static>(
+    f: impl FnOnce() -> std::io::Result<T> + Send + 'static,
+) -> std::io::Result<T> {
+    match tokio::task::spawn_blocking(f).await {
         Ok(result) => result,
         Err(err) => match err.try_into_panic() {
             Ok(panic) => std::panic::resume_unwind(panic),
@@ -508,9 +611,10 @@ async fn read_and_parse_package(
             last_modified,
         }) => {
             // Cache miss - read file with retry logic
-            let (stream, final_metadata) = cache::open_package_with_retry(
+            let (record, final_metadata) = read_package_record(
                 op,
                 &file_path,
+                filename,
                 RepodataFileMetadata {
                     etag,
                     last_modified,
@@ -518,11 +622,7 @@ async fn read_and_parse_package(
                     precondition_checks: PreconditionChecks::Enabled, // Always enabled for cache reads
                 },
             )
-            .await
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
-
-            // Parse package
-            let record = parse_package_stream(stream, filename).await?;
+            .await?;
 
             // Store in cache using filename as key
             cache
@@ -539,14 +639,15 @@ async fn read_and_parse_package(
         Err(e) => {
             tracing::warn!("Cache stat failed for {file_path}: {e}, proceeding without cache");
             // Fall back to direct read without cache
-            let stream = op
-                .reader(&file_path)
+            let metadata = RepodataFileMetadata {
+                etag: None,
+                last_modified: None,
+                file_existed: true,
+                precondition_checks: PreconditionChecks::Disabled,
+            };
+            read_package_record(op, &file_path, filename, metadata)
                 .await
-                .map_err(|e| std::io::Error::other(e.to_string()))?
-                .into_bytes_stream(..)
-                .await
-                .map_err(|e| std::io::Error::other(e.to_string()))?;
-            parse_package_stream(stream.boxed(), filename).await
+                .map(|(record, _)| record)
         }
     }
 }
