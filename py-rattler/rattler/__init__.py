@@ -54,6 +54,7 @@ from rattler.repo_data import (
     RepoDataSource,
     SourceConfig,
     SparseRepoData,
+    UnsupportedRepodataRevision,
     WhlPackageRecord,
 )
 from rattler.sigstore import (
@@ -141,6 +142,7 @@ __all__ = [
     "Subdir",
     "TlsRootCerts",
     "TrustedRoot",
+    "UnsupportedRepodataRevision",
     "VerificationMode",
     "VerificationOutcome",
     "VerificationPolicy",

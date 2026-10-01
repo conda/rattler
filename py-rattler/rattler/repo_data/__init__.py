@@ -4,6 +4,7 @@ from rattler.repo_data.gateway import (
     GatewayNamesResult,
     GatewayQueryResult,
     SourceConfig,
+    UnsupportedRepodataRevision,
 )
 from rattler.repo_data.package_record import PackageRecord
 from rattler.repo_data.patch_instructions import PatchInstructions
@@ -34,5 +35,6 @@ __all__ = [
     "RepodataRevisionMetadata",
     "SourceConfig",
     "SparseRepoData",
+    "UnsupportedRepodataRevision",
     "WhlPackageRecord",
 ]
