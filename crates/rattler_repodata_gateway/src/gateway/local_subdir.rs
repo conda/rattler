@@ -126,4 +126,8 @@ impl SubdirClient for LocalSubdirClient {
     fn channel_relations(&self) -> Option<&ChannelRelations> {
         self.sparse.channel_relations()
     }
+
+    fn virtual_package_detectors(&self) -> Option<&serde_json::Value> {
+        self.sparse.virtual_package_detectors()
+    }
 }

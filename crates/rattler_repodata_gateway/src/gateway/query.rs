@@ -1200,7 +1200,7 @@ impl QueryExecutor {
 /// How a channel subdir fetch should handle errors from
 /// `get_or_create_subdir`.
 #[derive(Clone, Copy)]
-enum FetchErrorPolicy {
+pub(super) enum FetchErrorPolicy {
     /// Surface the error to the caller (user-supplied channels).
     Propagate,
     /// Emit a [`ChannelRelationsWarning::DiscoveryFetchFailed`] and
@@ -1263,7 +1263,7 @@ async fn fetch_subdir_with_policy(
 /// `SwallowAsWarning` so callers can proceed as if the subdir were
 /// absent; returns `Err` for `Propagate` or
 /// `WrapAsChannelRelationsError`.
-fn apply_fetch_error_policy(
+pub(super) fn apply_fetch_error_policy(
     err: GatewayError,
     url: &ChannelUrl,
     platform: Subdir,
