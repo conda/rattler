@@ -1,6 +1,8 @@
 use crate::gateway::subdir::{PackageRecords, SubdirClient};
 use crate::{GatewayError, Reporter};
-use rattler_conda_types::{ChannelRelations, PackageName, RepodataRevisions};
+use rattler_conda_types::{
+    ChannelRelations, DetectorRegistrationMetadata, PackageName, RepodataRevisions,
+};
 
 cfg_if::cfg_if! {
     if #[cfg(target_arch = "wasm32")] {
@@ -35,7 +37,7 @@ impl SubdirClient for RemoteSubdirClient {
         self.sparse.channel_relations()
     }
 
-    fn virtual_package_detectors(&self) -> Option<&serde_json::Value> {
+    fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
         self.sparse.virtual_package_detectors()
     }
 }
