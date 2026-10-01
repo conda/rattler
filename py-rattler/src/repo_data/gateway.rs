@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::pybacked::PyBackedStr;
@@ -11,8 +11,8 @@ use pyo3::{
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::{CacheAction, FetchRepoDataOptions, Variant};
 use rattler_repodata_gateway::{
-    CacheClearMode, ChannelConfig, ChannelNoticeResult, ChannelRelationsMode, DownloadReporter,
-    Gateway, GatewayWarning, RemovedPackage, Reporter, Source, SourceConfig, SubdirSelection,
+    CacheClearMode, ChannelConfig, ChannelNoticeResult, ChannelRelationsMode, Gateway,
+    GatewayWarning, RemovedPackage, Source, SourceConfig, SubdirSelection,
     UnsupportedRepodataRevision,
 };
 use url::Url;
@@ -23,9 +23,11 @@ use crate::match_spec::PyMatchSpec;
 use crate::networking::client::PyClientWithMiddleware;
 use crate::package_name::PyPackageName;
 use crate::record::PyRecord;
-use crate::repo_data::PyChannelRelations;
 use crate::repo_data::source::PyRepoDataSource;
 use crate::repo_data::sparse::PySparseRepoData;
+use crate::repo_data::{
+    PyChannelRelations, PyRepodataRevisionMetadata, repodata_revision_metadata_to_python,
+};
 use crate::subdir::PySubdir;
 use crate::{PyChannel, Wrap};
 
@@ -96,7 +98,8 @@ impl From<RemovedPackage> for PyRemovedPackage {
     }
 }
 
-/// An unsupported repodata revision reported while querying a channel.
+/// A repodata revision advertised by a queried channel subdir that this
+/// client does not support, see [`UnsupportedRepodataRevision`].
 #[pyclass(get_all, skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyUnsupportedRepodataRevision {
@@ -104,7 +107,7 @@ pub struct PyUnsupportedRepodataRevision {
     subdir: String,
     supported_revision: String,
     advertised_revision: String,
-    message: Option<String>,
+    metadata: PyRepodataRevisionMetadata,
 }
 
 impl From<UnsupportedRepodataRevision> for PyUnsupportedRepodataRevision {
@@ -114,52 +117,11 @@ impl From<UnsupportedRepodataRevision> for PyUnsupportedRepodataRevision {
             subdir: value.subdir,
             supported_revision: value.supported_revision.to_string(),
             advertised_revision: value.revision.to_string(),
-            message: value.metadata.message,
+            metadata: repodata_revision_metadata_to_python(&value.metadata),
         }
     }
 }
 
-/// Collect unsupported repodata revision reports emitted by a gateway query.
-///
-/// When requested, this also keeps the progress reporter in place so exposing
-/// query metadata does not change `Gateway(show_progress=True)` behavior.
-#[derive(Clone)]
-struct UnsupportedRepodataRevisionCollector {
-    reports: Arc<Mutex<Vec<UnsupportedRepodataRevision>>>,
-    progress: Option<rattler_repodata_gateway::IndicatifReporter>,
-}
-
-impl UnsupportedRepodataRevisionCollector {
-    fn new(show_progress: bool) -> Self {
-        Self {
-            reports: Arc::new(Mutex::new(Vec::new())),
-            progress: show_progress
-                .then(|| rattler_repodata_gateway::IndicatifReporter::builder().finish()),
-        }
-    }
-
-    fn into_reports(self) -> Vec<PyUnsupportedRepodataRevision> {
-        std::mem::take(&mut *self.reports.lock().expect("revision collector poisoned"))
-            .into_iter()
-            .map(PyUnsupportedRepodataRevision::from)
-            .collect()
-    }
-}
-
-impl Reporter for UnsupportedRepodataRevisionCollector {
-    fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
-        self.progress
-            .as_ref()
-            .and_then(|reporter| reporter.download_reporter())
-    }
-
-    fn on_unsupported_repodata_revision(&self, report: &UnsupportedRepodataRevision) {
-        self.reports
-            .lock()
-            .expect("revision collector poisoned")
-            .push(report.clone());
-    }
-}
 impl From<PyGateway> for Gateway {
     fn from(value: PyGateway) -> Self {
         value.inner
@@ -425,19 +387,23 @@ impl PyGateway {
             .collect::<PyResult<_>>()?;
 
         let gateway = self.inner.clone();
-        let reporter = UnsupportedRepodataRevisionCollector::new(self.show_progress);
+        let show_progress = self.show_progress;
         future_into_py(py, async move {
             let mut query = gateway
                 .query(rust_sources, platforms.into_iter().map(|p| p.inner), specs)
                 .recursive(recursive)
-                .channel_notices(channel_notices)
-                .with_reporter(reporter.clone());
+                .channel_notices(channel_notices);
 
             if let Some(mode) = channel_relations {
                 query = query.channel_relations(mode.0);
             }
             if let Some(depth) = channel_relations_max_depth {
                 query = query.channel_relations_max_depth(depth);
+            }
+
+            if show_progress {
+                query = query
+                    .with_reporter(rattler_repodata_gateway::IndicatifReporter::builder().finish());
             }
 
             let output = query.execute().await.map_err(PyRattlerError::from)?;
@@ -468,7 +434,12 @@ impl PyGateway {
                 .into_iter()
                 .map(PyChannelNotice::from)
                 .collect::<Vec<_>>();
-            Ok((records, removed, notices, reporter.into_reports()))
+            let unsupported_repodata_revisions = output
+                .unsupported_repodata_revisions
+                .into_iter()
+                .map(PyUnsupportedRepodataRevision::from)
+                .collect::<Vec<_>>();
+            Ok((records, removed, notices, unsupported_repodata_revisions))
         })
     }
 
@@ -548,18 +519,18 @@ impl PyGateway {
             platforms.into_iter().map(|p| p.inner).collect();
 
         let gateway = self.inner.clone();
-        let reporter = UnsupportedRepodataRevisionCollector::new(self.show_progress);
+        let show_progress = self.show_progress;
         future_into_py(py, async move {
             // Collect names from channels via the gateway
             let mut all_names: std::collections::HashSet<rattler_conda_types::PackageName> =
                 std::collections::HashSet::new();
 
             let mut notices = Vec::new();
+            let mut unsupported_repodata_revisions = Vec::new();
             if !channels.is_empty() {
                 let mut query = gateway
                     .names(channels, platforms_vec.iter().copied())
-                    .channel_notices(channel_notices)
-                    .with_reporter(reporter.clone());
+                    .channel_notices(channel_notices);
 
                 if let Some(mode) = channel_relations {
                     query = query.channel_relations(mode.0);
@@ -568,10 +539,22 @@ impl PyGateway {
                     query = query.channel_relations_max_depth(depth);
                 }
 
+                if show_progress {
+                    query = query.with_reporter(
+                        rattler_repodata_gateway::IndicatifReporter::builder().finish(),
+                    );
+                }
+
                 let output = query.execute().await.map_err(PyRattlerError::from)?;
                 emit_gateway_warnings(output.warnings)?;
                 all_names.extend(output.names);
                 notices.extend(output.notices.into_iter().map(PyChannelNotice::from));
+                unsupported_repodata_revisions.extend(
+                    output
+                        .unsupported_repodata_revisions
+                        .into_iter()
+                        .map(PyUnsupportedRepodataRevision::from),
+                );
             }
 
             // Collect names from custom sources directly
@@ -593,7 +576,7 @@ impl PyGateway {
                     .map(PyPackageName::from)
                     .collect::<Vec<_>>(),
                 notices,
-                reporter.into_reports(),
+                unsupported_repodata_revisions,
             ))
         })
     }

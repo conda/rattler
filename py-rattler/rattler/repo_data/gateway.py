@@ -23,6 +23,7 @@ from rattler.rattler import (
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.removed_package import RemovedPackage
 from rattler.repo_data.repo_data import ChannelRelations
+from rattler.repo_data.revisions import RepodataRevisionMetadata, _repodata_revision_metadata_from_py
 from rattler.repo_data.who_needs import Dependent, _target_to_py
 
 if TYPE_CHECKING:
@@ -166,13 +167,29 @@ class ChannelNotice:
 
 @dataclass(frozen=True)
 class UnsupportedRepodataRevision:
-    """An unsupported repodata revision advertised by a queried channel."""
+    """A repodata revision advertised by a queried channel subdir that this rattler
+    version cannot read, see [CEP-48].
+
+    Records published only in this revision are missing from query results.
+
+    [CEP-48]: https://github.com/conda/ceps/blob/main/cep-0048.md
+    """
 
     channel: str
+    """The redacted base URL of the channel."""
+
     subdir: str
+    """The subdirectory that advertises the revision, for example ``noarch``."""
+
     supported_revision: str
+    """The newest revision this rattler version reads, for example ``v3``."""
+
     advertised_revision: str
-    message: str | None
+    """The unsupported revision, for example ``v4``."""
+
+    metadata: RepodataRevisionMetadata
+    """The metadata the channel publishes for the revision, such as the number of
+    packages it contains and the publisher's ``message``."""
 
     @classmethod
     def _from_py(cls, report: PyUnsupportedRepodataRevision) -> UnsupportedRepodataRevision:
@@ -181,7 +198,7 @@ class UnsupportedRepodataRevision:
             subdir=report.subdir,
             supported_revision=report.supported_revision,
             advertised_revision=report.advertised_revision,
-            message=report.message,
+            metadata=_repodata_revision_metadata_from_py(report.metadata),
         )
 
 
@@ -208,9 +225,11 @@ class GatewayQueryResult(list[list[RepoDataRecord]]):
         match specs of the query do not filter this list. Removed packages never
         appear in ``repodata``.
         """
-        self.unsupported_repodata_revisions = (
+        self.unsupported_repodata_revisions: list[UnsupportedRepodataRevision] = (
             unsupported_repodata_revisions if unsupported_repodata_revisions is not None else []
         )
+        """Repodata revisions advertised by the queried channels that this rattler
+        version cannot read."""
 
 
 class GatewayNamesResult(list[PackageName]):
@@ -229,6 +248,8 @@ class GatewayNamesResult(list[PackageName]):
         self.names = self
         self.notices = notices
         self.unsupported_repodata_revisions = unsupported_repodata_revisions
+        """Repodata revisions advertised by the queried channels that this rattler
+        version cannot read."""
 
 
 class Gateway:
@@ -381,12 +402,15 @@ class Gateway:
             inserted next to the channel that referenced them, with a declared ``base``
             placed before it. Pass ``channel_relations="disabled"`` (or
             ``channel_relations_max_depth=0``) to guarantee a strict one-to-one,
-            positional correspondence with `sources`. Unsupported repodata layouts are
-            available on the result's ``unsupported_repodata_revisions`` attribute.
+            positional correspondence with `sources`.
 
             The result also carries ``removed``: for every entry in the list, the
             packages the source lists as removed for the fetched package names.
             Use it to detect that a previously locked package was yanked.
+
+            ``unsupported_repodata_revisions`` lists the CEP-48 repodata revisions
+            the queried channels advertise that this rattler version cannot read.
+            Records published only in those revisions are missing from the result.
 
         Examples
         --------
@@ -487,8 +511,8 @@ class Gateway:
 
         Returns:
             A list of package names that are present in the given subdirectories.
-            Unsupported repodata layouts are available on the result's
-            ``unsupported_repodata_revisions`` attribute.
+            ``unsupported_repodata_revisions`` lists the CEP-48 repodata revisions
+            the queried channels advertise that this rattler version cannot read.
 
         Examples
         --------

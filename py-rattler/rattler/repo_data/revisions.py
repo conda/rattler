@@ -23,20 +23,23 @@ class RepodataRevisionMetadata(TypedDict, total=False):
 _PyRepodataRevisionMetadata = tuple[str | None, int | None, int | None, int | None]
 
 
+def _repodata_revision_metadata_from_py(metadata: _PyRepodataRevisionMetadata) -> RepodataRevisionMetadata:
+    """Convert the FFI metadata of one revision to Python's timestamp representation."""
+    message, n_packages, oldest, newest = metadata
+    result: RepodataRevisionMetadata = {}
+    if message is not None:
+        result["message"] = message
+    if n_packages is not None:
+        result["n_packages"] = n_packages
+    if oldest is not None:
+        result["oldest"] = datetime.datetime.fromtimestamp(oldest / 1000.0, tz=datetime.timezone.utc)
+    if newest is not None:
+        result["newest"] = datetime.datetime.fromtimestamp(newest / 1000.0, tz=datetime.timezone.utc)
+    return result
+
+
 def _repodata_revisions_from_py(
     revisions: Mapping[str, _PyRepodataRevisionMetadata],
 ) -> dict[str, RepodataRevisionMetadata]:
     """Convert FFI revision metadata to Python's timestamp representation."""
-    result: dict[str, RepodataRevisionMetadata] = {}
-    for revision, (message, n_packages, oldest, newest) in revisions.items():
-        metadata: RepodataRevisionMetadata = {}
-        if message is not None:
-            metadata["message"] = message
-        if n_packages is not None:
-            metadata["n_packages"] = n_packages
-        if oldest is not None:
-            metadata["oldest"] = datetime.datetime.fromtimestamp(oldest / 1000.0, tz=datetime.timezone.utc)
-        if newest is not None:
-            metadata["newest"] = datetime.datetime.fromtimestamp(newest / 1000.0, tz=datetime.timezone.utc)
-        result[revision] = metadata
-    return result
+    return {revision: _repodata_revision_metadata_from_py(metadata) for revision, metadata in revisions.items()}

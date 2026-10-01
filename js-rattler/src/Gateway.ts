@@ -50,13 +50,41 @@ export type GatewayQueryOptions = {
     channelNotices?: boolean;
 };
 
-/** A repodata revision advertised by a channel that this rattler version cannot read. */
+/**
+ * The metadata a channel publishes for a repodata revision, see CEP-48.
+ * Fields the channel does not publish are absent.
+ *
+ * @public
+ */
+export type RepodataRevisionMetadata = {
+    /** A free-form message from the channel operator. */
+    message?: string;
+    /** The number of packages published in the revision. */
+    nPackages?: number;
+    /** The indexing time of the oldest package in the revision, in milliseconds since the Unix epoch. */
+    oldest?: number;
+    /** The indexing time of the newest package in the revision, in milliseconds since the Unix epoch. */
+    newest?: number;
+};
+
+/**
+ * A repodata revision advertised by a queried channel subdir that this
+ * rattler version cannot read, see CEP-48. Records published only in this
+ * revision are missing from query results.
+ *
+ * @public
+ */
 export type UnsupportedRepodataRevision = {
+    /** The redacted base URL of the channel. */
     channel: string;
+    /** The subdirectory that advertises the revision, for example `noarch`. */
     subdir: string;
+    /** The newest revision this rattler version reads, for example `v3`. */
     supportedRevision: string;
+    /** The unsupported revision, for example `v4`. */
     advertisedRevision: string;
-    message: string | null;
+    /** The metadata the channel publishes for the revision. */
+    metadata: RepodataRevisionMetadata;
 };
 
 export type GatewayNamesResult = NormalizedPackageName[] & {
@@ -64,7 +92,7 @@ export type GatewayNamesResult = NormalizedPackageName[] & {
     names: NormalizedPackageName[];
     /** CEP-6 notices published by queried and CEP-42-discovered channels. */
     notices: ChannelNotice[];
-    /** Unsupported repodata revisions advertised by queried channels. */
+    /** Repodata revisions advertised by queried channels that this rattler version cannot read. */
     unsupportedRepodataRevisions: UnsupportedRepodataRevision[];
 };
 
@@ -146,6 +174,8 @@ export type RepoDataRecordJson = PackageRecordJson & {
 export type GatewayQueryResult = RepoDataRecordJson[] & {
     /** Non-fatal warnings encountered during the query. */
     warnings: string[];
+    /** Repodata revisions advertised by queried channels that this rattler version cannot read. */
+    unsupportedRepodataRevisions: UnsupportedRepodataRevision[];
 };
 
 /**
@@ -251,9 +281,14 @@ export class Gateway {
             platforms,
             specs,
             options?.recursive ?? false,
-        )) as { records: RepoDataRecordJson[]; warnings: string[] };
+        )) as {
+            records: RepoDataRecordJson[];
+            warnings: string[];
+            unsupportedRepodataRevisions: UnsupportedRepodataRevision[];
+        };
         const result = output.records as GatewayQueryResult;
         result.warnings = output.warnings;
+        result.unsupportedRepodataRevisions = output.unsupportedRepodataRevisions;
         return result;
     }
 }

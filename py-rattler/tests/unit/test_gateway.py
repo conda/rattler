@@ -1,3 +1,4 @@
+import datetime
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -5,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from rattler import Channel, Config, Gateway, SourceConfig, SparseRepoData
+from rattler import Channel, Config, Gateway, SourceConfig, SparseRepoData, UnsupportedRepodataRevision
 
 
 @pytest.mark.asyncio
@@ -133,74 +134,58 @@ async def test_channel_notices(tmp_path: Path) -> None:
     result = await gateway.query([channel], ["noarch"], ["demo"], channel_notices=True)
     assert result.repodata is result
     assert result.notices == notices
-    assert result.unsupported_repodata_revisions == []
 
     names = await gateway.names([channel], ["noarch"], channel_notices=True)
     assert names.names is names
     assert names.notices == notices
-    assert names.unsupported_repodata_revisions == []
 
 
 @pytest.mark.asyncio
-async def test_unsupported_repodata_revisions_are_query_metadata(tmp_path: Path) -> None:
+async def test_unsupported_repodata_revisions(tmp_path: Path) -> None:
+    supported_path = tmp_path / "supported"
+    _write_repodata(supported_path, "noarch", {"v3": {}})
+    newer_path = tmp_path / "newer"
+    _write_repodata(newer_path, "linux-64", {"v3": {}, "v5": {}})
+    _write_repodata(
+        newer_path,
+        "noarch",
+        {"v4": {"message": "update rattler", "n_packages": 2, "oldest": 1768249989851, "newest": 1773851561010}},
+    )
+    supported = Channel(str(supported_path))
+    newer = Channel(str(newer_path))
+    linux_report = UnsupportedRepodataRevision(
+        channel=newer.base_url,
+        subdir="linux-64",
+        supported_revision="v3",
+        advertised_revision="v5",
+        metadata={},
+    )
+    noarch_report = UnsupportedRepodataRevision(
+        channel=newer.base_url,
+        subdir="noarch",
+        supported_revision="v3",
+        advertised_revision="v4",
+        metadata={
+            "message": "update rattler",
+            "n_packages": 2,
+            "oldest": datetime.datetime(2026, 1, 12, 20, 33, 9, 851000, tzinfo=datetime.timezone.utc),
+            "newest": datetime.datetime(2026, 3, 18, 16, 32, 41, 10000, tzinfo=datetime.timezone.utc),
+        },
+    )
     gateway = Gateway()
 
-    supported_channel_path = tmp_path / "supported"
-    _write_repodata(supported_channel_path, "noarch", {"v3": {}})
-    supported_channel = Channel(str(supported_channel_path))
-    supported = await gateway.query([supported_channel], ["noarch"], ["demo"])
+    # Records of the supported layouts are still returned next to the reports.
+    result = await gateway.query([supported, newer], ["linux-64", "noarch"], ["demo"])
+    assert [len(records) for records in result] == [0, 1, 1, 1]
+    assert sorted(result.unsupported_repodata_revisions, key=lambda report: report.subdir) == [
+        linux_report,
+        noarch_report,
+    ]
 
-    assert supported.repodata is supported
-    assert [[record.name for record in subdir] for subdir in supported] == [["demo"]]
-    assert supported.unsupported_repodata_revisions == []
-
-    unsupported_channel_path = tmp_path / "unsupported"
-    _write_repodata(unsupported_channel_path, "noarch", {"v1": {}})
-    unsupported_channel = Channel(str(unsupported_channel_path))
-    unsupported = await gateway.query([unsupported_channel], ["noarch"], ["demo"])
-
-    assert [[record.name for record in subdir] for subdir in unsupported] == [["demo"]]
-    assert len(unsupported.unsupported_repodata_revisions) == 1
-    report = unsupported.unsupported_repodata_revisions[0]
-    assert report.channel == unsupported_channel.base_url
-    assert report.subdir == "noarch"
-    assert report.supported_revision == "v3"
-    assert report.advertised_revision == "v1"
-    assert report.message is None
-
-    names = await gateway.names([unsupported_channel], ["noarch"])
+    # Subdirs loaded by an earlier query report their revisions again.
+    names = await gateway.names([newer], ["noarch"])
     assert [name.source for name in names] == ["demo"]
-    assert names.unsupported_repodata_revisions == [report]
-
-    first_channel_path = tmp_path / "first"
-    _write_repodata(first_channel_path, "linux-64", {"v1": {"message": "legacy layout"}})
-    _write_repodata(first_channel_path, "noarch", {"v2": {}})
-    second_channel_path = tmp_path / "second"
-    _write_repodata(second_channel_path, "linux-64", {"v3": {}})
-    _write_repodata(second_channel_path, "noarch", {"v4": {"message": "new layout"}})
-    first_channel = Channel(str(first_channel_path))
-    second_channel = Channel(str(second_channel_path))
-
-    multiple = await gateway.query(
-        [first_channel, second_channel],
-        ["linux-64", "noarch"],
-        ["demo"],
-    )
-
-    assert sum(len(subdir) for subdir in multiple) == 4
-    reports = {
-        (report.channel, report.subdir): (
-            report.supported_revision,
-            report.advertised_revision,
-            report.message,
-        )
-        for report in multiple.unsupported_repodata_revisions
-    }
-    assert reports == {
-        (first_channel.base_url, "linux-64"): ("v3", "v1", "legacy layout"),
-        (first_channel.base_url, "noarch"): ("v3", "v2", None),
-        (second_channel.base_url, "noarch"): ("v3", "v4", "new layout"),
-    }
+    assert names.unsupported_repodata_revisions == [noarch_report]
 
 
 def test_init_per_channel_config_key() -> None:

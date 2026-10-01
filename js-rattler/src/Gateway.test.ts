@@ -62,54 +62,6 @@ describe("Gateway", () => {
     });
     describe("names", () => {
         const gateway = new Gateway();
-
-        it("returns unsupported repodata revisions alongside names", async () => {
-            const gateway = new Gateway();
-            const native = gateway.native as unknown as {
-                names: () => Promise<unknown>;
-            };
-            native.names = async () => ({
-                names: ["demo"],
-                notices: [],
-                unsupportedRepodataRevisions: [
-                    {
-                        channel: "https://example.com/first/",
-                        subdir: "linux-64",
-                        supportedRevision: "v3",
-                        advertisedRevision: "v1",
-                        message: null,
-                    },
-                    {
-                        channel: "https://example.com/second/",
-                        subdir: "noarch",
-                        supportedRevision: "v3",
-                        advertisedRevision: "v4",
-                        message: "new layout",
-                    },
-                ],
-            });
-
-            const result = await gateway.names([], []);
-            expect(Array.from(result)).toEqual(["demo"]);
-            expect(result.names).toBe(result);
-            expect(result.unsupportedRepodataRevisions).toEqual([
-                {
-                    channel: "https://example.com/first/",
-                    subdir: "linux-64",
-                    supportedRevision: "v3",
-                    advertisedRevision: "v1",
-                    message: null,
-                },
-                {
-                    channel: "https://example.com/second/",
-                    subdir: "noarch",
-                    supportedRevision: "v3",
-                    advertisedRevision: "v4",
-                    message: "new layout",
-                },
-            ]);
-        });
-
         it("can query prefix.dev", () => {
             return gateway
                 .names(
@@ -118,7 +70,6 @@ describe("Gateway", () => {
                 )
                 .then((names) => {
                     expect(names.length).toBeGreaterThanOrEqual(177);
-                    expect(names.unsupportedRepodataRevisions).toEqual([]);
                 });
         });
     });
@@ -233,6 +184,61 @@ describe("Gateway", () => {
 
             expect(records).toHaveLength(0);
             expect(records.warnings.length).toBeGreaterThanOrEqual(1);
+        });
+
+        it("reports unsupported repodata revisions", async () => {
+            const newerRepodata = JSON.stringify({
+                info: {
+                    subdir: "noarch",
+                    repodata_revisions: {
+                        v3: {},
+                        v4: {
+                            message: "update rattler",
+                            n_packages: 2,
+                            newest: 1773851561010,
+                        },
+                    },
+                },
+                packages: {},
+                "packages.conda": JSON.parse(repodata)["packages.conda"],
+            });
+            const gateway = new Gateway({
+                channelConfig: plainOnly,
+                fetch: () =>
+                    Promise.resolve(new Response(newerRepodata, { status: 200 })),
+            });
+            const expected = [
+                {
+                    channel: "https://example.com/test-channel/",
+                    subdir: "noarch",
+                    supportedRevision: "v3",
+                    advertisedRevision: "v4",
+                    metadata: {
+                        message: "update rattler",
+                        nPackages: 2,
+                        newest: 1773851561010,
+                    },
+                },
+            ];
+
+            // Records of the supported layouts are still returned.
+            const records = await gateway.query(
+                ["https://example.com/test-channel"],
+                ["noarch"],
+                ["foo"],
+            );
+            expect(records.map((record) => record.fn)).toEqual([
+                "foo-1.0-h123_0.conda",
+            ]);
+            expect(records.unsupportedRepodataRevisions).toEqual(expected);
+
+            // The subdir loaded by the query reports its revisions again.
+            const names = await gateway.names(
+                ["https://example.com/test-channel"],
+                ["noarch"],
+            );
+            expect(Array.from(names)).toEqual(["foo"]);
+            expect(names.unsupportedRepodataRevisions).toEqual(expected);
         });
 
         it("routes each gateway to its own fetch", async () => {

@@ -1,17 +1,12 @@
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    str::FromStr,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
 use rattler_conda_types::{
     Channel, ChannelNoticeLevel, MatchSpec, ParseMatchSpecOptions, RepoDataRecord,
     RepodataRevision, Subdir,
 };
 use rattler_repodata_gateway::{
-    ChannelConfig, DownloadReporter, Gateway, GatewayWarning, Reporter, SourceConfig,
-    UnsupportedRepodataRevision, fetch::CacheAction,
+    ChannelConfig, Gateway, GatewayWarning, SourceConfig, UnsupportedRepodataRevision,
+    fetch::CacheAction,
 };
 use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
@@ -74,53 +69,52 @@ impl From<rattler_repodata_gateway::ChannelNoticeResult> for Notice {
     }
 }
 
-/// A non-fatal repodata layout revision advertised by a queried channel.
+/// A repodata revision advertised by a queried channel subdir that this
+/// client does not support, see [`UnsupportedRepodataRevision`].
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct UnsupportedRepodataRevisionReport {
+struct UnsupportedRevision {
     channel: String,
     subdir: String,
     supported_revision: String,
     advertised_revision: String,
-    message: Option<String>,
+    metadata: RevisionMetadata,
 }
 
-impl From<UnsupportedRepodataRevision> for UnsupportedRepodataRevisionReport {
+/// The metadata a channel publishes for a repodata revision. Absent fields
+/// are omitted, timestamps are milliseconds since the Unix epoch.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RevisionMetadata {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    n_packages: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    oldest: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    newest: Option<i64>,
+}
+
+impl From<UnsupportedRepodataRevision> for UnsupportedRevision {
     fn from(value: UnsupportedRepodataRevision) -> Self {
+        let metadata = value.metadata;
         Self {
             channel: value.channel,
             subdir: value.subdir,
             supported_revision: value.supported_revision.to_string(),
             advertised_revision: value.revision.to_string(),
-            message: value.metadata.message,
+            metadata: RevisionMetadata {
+                message: metadata.message,
+                n_packages: metadata.n_packages,
+                oldest: metadata
+                    .oldest
+                    .map(|timestamp| timestamp.timestamp_millis()),
+                newest: metadata
+                    .newest
+                    .map(|timestamp| timestamp.timestamp_millis()),
+            },
         }
-    }
-}
-
-/// Collect reports emitted by the Rust gateway so they can be returned as
-/// query metadata instead of being lost at the wasm boundary.
-#[derive(Clone, Default)]
-struct UnsupportedRepodataRevisionCollector(Arc<Mutex<Vec<UnsupportedRepodataRevision>>>);
-
-impl UnsupportedRepodataRevisionCollector {
-    fn into_reports(self) -> Vec<UnsupportedRepodataRevisionReport> {
-        std::mem::take(&mut *self.0.lock().expect("revision collector poisoned"))
-            .into_iter()
-            .map(UnsupportedRepodataRevisionReport::from)
-            .collect()
-    }
-}
-
-impl Reporter for UnsupportedRepodataRevisionCollector {
-    fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
-        None
-    }
-
-    fn on_unsupported_repodata_revision(&self, report: &UnsupportedRepodataRevision) {
-        self.0
-            .lock()
-            .expect("revision collector poisoned")
-            .push(report.clone());
     }
 }
 
@@ -307,12 +301,10 @@ impl JsGateway {
             .map(|p| Subdir::from_str(&p))
             .collect::<Result<Vec<_>, _>>()?;
 
-        let reporter = UnsupportedRepodataRevisionCollector::default();
         let output = self
             .inner
             .names(channels, platforms)
             .channel_notices(channel_notices)
-            .with_reporter(reporter.clone())
             .execute()
             .await?;
         self.emit_warnings(output.warnings);
@@ -322,7 +314,7 @@ impl JsGateway {
         struct NamesOutput {
             names: Vec<String>,
             notices: Vec<Notice>,
-            unsupported_repodata_revisions: Vec<UnsupportedRepodataRevisionReport>,
+            unsupported_repodata_revisions: Vec<UnsupportedRevision>,
         }
 
         Ok(serde_wasm_bindgen::to_value(&NamesOutput {
@@ -332,7 +324,11 @@ impl JsGateway {
                 .map(|name| name.as_source().to_string())
                 .collect(),
             notices: output.notices.into_iter().map(Notice::from).collect(),
-            unsupported_repodata_revisions: reporter.into_reports(),
+            unsupported_repodata_revisions: output
+                .unsupported_repodata_revisions
+                .into_iter()
+                .map(UnsupportedRevision::from)
+                .collect(),
         })?)
     }
 
@@ -340,7 +336,8 @@ impl JsGateway {
     /// given match specs. Returns the matching records as plain objects in
     /// the same shape as they appear in `repodata.json`, extended with the
     /// `fn`, `url` and `channel` fields, together with any non-fatal
-    /// warnings encountered during the query.
+    /// warnings and unsupported repodata revisions encountered during the
+    /// query.
     pub async fn query(
         &self,
         channels: Vec<String>,
@@ -387,9 +384,11 @@ impl JsGateway {
         self.emit_warnings(output.warnings);
 
         #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
         struct QueryOutput<'a> {
             records: Vec<&'a RepoDataRecord>,
             warnings: Vec<String>,
+            unsupported_repodata_revisions: Vec<UnsupportedRevision>,
         }
 
         let records = output
@@ -397,61 +396,17 @@ impl JsGateway {
             .iter()
             .flat_map(|repodata| repodata.iter())
             .collect::<Vec<_>>();
+        let unsupported_repodata_revisions = output
+            .unsupported_repodata_revisions
+            .into_iter()
+            .map(UnsupportedRevision::from)
+            .collect();
         let serializer = serde_wasm_bindgen::Serializer::json_compatible();
-        Ok(QueryOutput { records, warnings }.serialize(&serializer)?)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use rattler_conda_types::{RepodataRevision, RepodataRevisionMetadata};
-
-    use super::{Reporter, UnsupportedRepodataRevision, UnsupportedRepodataRevisionCollector};
-
-    fn report(
-        channel: &str,
-        subdir: &str,
-        revision: RepodataRevision,
-        message: Option<&str>,
-    ) -> UnsupportedRepodataRevision {
-        UnsupportedRepodataRevision {
-            channel: channel.to_string(),
-            subdir: subdir.to_string(),
-            supported_revision: RepodataRevision::V3,
-            revision,
-            metadata: RepodataRevisionMetadata {
-                message: message.map(str::to_string),
-                ..Default::default()
-            },
+        Ok(QueryOutput {
+            records,
+            warnings,
+            unsupported_repodata_revisions,
         }
-    }
-
-    #[test]
-    fn collects_revision_reports_without_losing_their_metadata() {
-        let collector = UnsupportedRepodataRevisionCollector::default();
-        collector.on_unsupported_repodata_revision(&report(
-            "https://example.com/first/",
-            "linux-64",
-            RepodataRevision::Unknown(1),
-            None,
-        ));
-        collector.on_unsupported_repodata_revision(&report(
-            "https://example.com/second/",
-            "noarch",
-            RepodataRevision::from(4),
-            Some("new layout"),
-        ));
-
-        let reports = collector.into_reports();
-        assert_eq!(reports.len(), 2);
-        assert_eq!(reports[0].channel, "https://example.com/first/");
-        assert_eq!(reports[0].subdir, "linux-64");
-        assert_eq!(reports[0].supported_revision, "v3");
-        assert_eq!(reports[0].advertised_revision, "v1");
-        assert_eq!(reports[0].message, None);
-        assert_eq!(reports[1].channel, "https://example.com/second/");
-        assert_eq!(reports[1].subdir, "noarch");
-        assert_eq!(reports[1].advertised_revision, "v4");
-        assert_eq!(reports[1].message.as_deref(), Some("new layout"));
+        .serialize(&serializer)?)
     }
 }
