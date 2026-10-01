@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Cache and refresh resource access tokens isolated by issuer, client ID and audience, without replacing channel credentials.
+
+### Fixed
+
+- Serialize credential-file updates across backend clones and check buffered writes before replacement, so concurrent audience grants are retained.
+
 ## [0.31.0](https://github.com/conda/rattler/compare/rattler_networking-v0.30.10...rattler_networking-v0.31.0) - 2026-09-29
 
 ### Added

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Acquire audience-specific resource access tokens through the existing PKCE/device OAuth flows with `ensure_oauth_resource`.
+
 ## [0.51.0](https://github.com/conda/rattler/compare/rattler-v0.50.0...rattler-v0.51.0) - 2026-09-29
 
 ### Fixed

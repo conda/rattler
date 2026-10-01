@@ -177,6 +177,58 @@ impl AuthenticationStorage {
         })
     }
 
+    // Resource flows must not mistake an unreadable credential for a missing one.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn read_resource(
+        &self,
+        key: &str,
+    ) -> Result<Option<Authentication>, AuthenticationStorageError> {
+        for backend in &self.backends {
+            if let Some(auth) = backend.get(key)? {
+                return Ok(Some(auth));
+            }
+        }
+        Ok(None)
+    }
+
+    // Preserve the existing backend's priority. Writing to a lower-priority
+    // backend would leave an old rotating refresh token shadowing the new one.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn write_resource(
+        &self,
+        key: &str,
+        auth: &Authentication,
+    ) -> Result<(), AuthenticationStorageError> {
+        for backend in &self.backends {
+            if backend.get(key)?.is_some() {
+                backend.store(key, auth)?;
+                self.cache
+                    .lock()
+                    .unwrap()
+                    .insert(key.to_owned(), Some(auth.clone()));
+                return Ok(());
+            }
+        }
+        for backend in &self.backends {
+            if backend.store(key, auth).is_ok() {
+                self.cache
+                    .lock()
+                    .unwrap()
+                    .insert(key.to_owned(), Some(auth.clone()));
+                return Ok(());
+            }
+        }
+        Err(AuthenticationStorageError::StoreFailed {
+            host: key.to_owned(),
+            backends: self
+                .backends
+                .iter()
+                .map(|backend| backend.name())
+                .collect::<Vec<_>>()
+                .join(", "),
+        })
+    }
+
     /// Retrieve the authentication information for the given host
     pub fn get(&self, host: &str) -> Result<Option<Authentication>, AuthenticationStorageError> {
         {
