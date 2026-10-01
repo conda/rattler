@@ -22,6 +22,7 @@ from rattler.repo_data.who_needs import Dependent, _target_to_py
 if TYPE_CHECKING:
     from rattler.repo_data.package_record import PackageRecord
     from rattler.repo_data.source import RepoDataSource
+    from rattler.virtual_package.detectors import DetectorRegistrations
     from rattler.virtual_package.generic import GenericVirtualPackage
 
 
@@ -513,6 +514,41 @@ class Gateway:
         if py_relations is None:
             return None
         return ChannelRelations._from_inner(py_relations)
+
+    async def virtual_package_detectors(
+        self,
+        channels: Iterable[Channel | str],
+        subdir: Subdir | SubdirLiteral,
+        channel_relations: ChannelRelationsMode | None = None,
+        channel_relations_max_depth: int | None = None,
+    ) -> DetectorRegistrations:
+        """Collects the virtual package detectors that ``channels`` and the
+        channels they relate to register for ``subdir``.
+
+        Registrations of ``subdir`` and ``noarch`` are combined per channel and
+        then accepted or rejected in CEP-42 channel order, so every accepted
+        virtual package name has exactly one detector. Non-fatal problems such
+        as invalid registrations are emitted as warnings.
+
+        Arguments:
+            channels: The channels to read registrations from.
+            subdir: The subdir to combine with ``noarch``.
+            channel_relations: How to treat CEP-42 ``channel_relations`` metadata.
+            channel_relations_max_depth: Maximum recursion depth when following
+                                         ``channel_relations``.
+        """
+        from rattler.virtual_package.detectors import DetectorRegistrations
+
+        py_channels = [
+            channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for channel in channels
+        ]
+        accepted, rejected = await self._gateway.virtual_package_detectors(
+            py_channels,
+            subdir._inner if isinstance(subdir, Subdir) else Subdir(subdir)._inner,
+            channel_relations,
+            channel_relations_max_depth,
+        )
+        return DetectorRegistrations._from_py(accepted, rejected)
 
     def clear_repodata_cache(
         self,
