@@ -203,6 +203,61 @@ fn logical_constraint_parser(
             };
         }
 
+        // A wildcard can be followed by a local version segment, e.g.
+        // `3.4.*+aws`. The version grammar has no notion of a `*` occurring
+        // before the end of the string, so parsing `version_str` as a single
+        // version below only consumes the release part and leaves a
+        // remainder like `.*+aws`, which the generic fallback further down
+        // rejects as an unsupported regular expression (see #994). Handle
+        // this shape explicitly: split off the release part before the
+        // wildcard and the local part after it, re-join them into the
+        // version that is actually compared against (`3.4+aws`), and route
+        // the operator through the same rules used for a bare wildcard.
+        if let Some(local_idx) = version_str.find('+') {
+            let (release_part, local_part) = version_str.split_at(local_idx);
+            // `*+local` has no release to start with, and a local part that is
+            // not a version, e.g. `3.4.*+`, is left to the generic handling.
+            let base_release = release_part
+                .strip_suffix(".*")
+                .or_else(|| release_part.strip_suffix('*'));
+            let base_version = base_release.and_then(|base_release| {
+                let base_version_str = format!("{base_release}{local_part}");
+                match version_parser(&base_version_str) {
+                    Ok(("", version)) => Some(version),
+                    _ => None,
+                }
+            });
+            if let Some(base_version) = base_version {
+                let resolved_op = match (op, strictness) {
+                    (Some(VersionOperators::Exact(EqualityOperator::NotEquals)), _) => {
+                        VersionOperators::StrictRange(StrictRangeOperator::NotStartsWith)
+                    }
+                    (
+                        Some(VersionOperators::Range(
+                            RangeOperator::GreaterEquals | RangeOperator::Greater,
+                        )),
+                        Lenient,
+                    ) => VersionOperators::Range(RangeOperator::GreaterEquals),
+                    (Some(op), Lenient) => op,
+                    (Some(op), Strict) => {
+                        return Err(nom::Err::Failure(
+                            ParseConstraintError::GlobVersionIncompatibleWithOperator(op),
+                        ));
+                    }
+                    (None, _) => VersionOperators::StrictRange(StrictRangeOperator::StartsWith),
+                };
+                return match resolved_op {
+                    VersionOperators::Range(r) => {
+                        Ok((rest, Constraint::Comparison(r, base_version)))
+                    }
+                    VersionOperators::Exact(e) => Ok((rest, Constraint::Exact(e, base_version))),
+                    VersionOperators::StrictRange(s) => {
+                        Ok((rest, Constraint::StrictComparison(s, base_version)))
+                    }
+                };
+            }
+        }
+
         // Parse the string as a version
         let (version_rest, version) = version_parser(version_str).map_err(|e| {
             e.map(|e| {
