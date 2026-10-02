@@ -1,0 +1,157 @@
+{
+  "info": {
+    "subdir": "noarch"
+  },
+  "packages": {
+    "foo-8-0.tar.bz2": {
+      "name": "foo",
+      "version": "8",
+      "build": "0",
+      "build_number": 0,
+      "subdir": "noarch"
+    },
+    "foo-1-0.tar.bz2": {
+      "name": "foo",
+      "version": "1",
+      "build": "0",
+      "build_number": 0,
+      "subdir": "noarch"
+    },
+    "foo-3-0.tar.bz2": {
+      "name": "foo",
+      "version": "3",
+      "build": "0",
+      "build_number": 0,
+      "subdir": "noarch"
+    },
+    "foo-2-0.tar.bz2": {
+      "name": "foo",
+      "version": "2",
+      "build": "0",
+      "build_number": 0,
+      "subdir": "noarch",
+      "depends": ["bar"]
+    },
+    "foo-4-0.tar.bz2": {
+      "name": "foo",
+      "version": "4",
+      "build": "0",
+      "build_number": 0,
+      "subdir": "noarch"
+    },
+    "foo-7-0.tar.bz2": {
+      "name": "foo",
+      "version": "7",
+      "build": "0",
+      "build_number": 0,
+      "subdir": "noarch"
+    }
+  },
+  "packages.conda": {
+    "foo-9-0.conda": {
+      "name": "foo",
+      "version": "9",
+      "build": "0",
+      "build_number": 0,
+      "subdir": "noarch",
+      "license": "legacy"
+    },
+    "foo-6-0.conda": {
+      "name": "foo",
+      "version": "6",
+      "build": "0",
+      "build_number": 0,
+      "subdir": "noarch"
+    },
+    "foo-2-0.conda": {
+      "name": "foo",
+      "version": "2",
+      "build": "0",
+      "build_number": 0,
+      "subdir": "noarch"
+    },
+    "foo-1-0.conda": {
+      "name": "foo",
+      "version": "1",
+      "build": "0",
+      "build_number": 0,
+      "subdir": "noarch"
+    },
+    "foo-7-0.conda": {
+      "name": "foo",
+      "version": "7",
+      "build": "0",
+      "build_number": 0,
+      "subdir": "noarch"
+    },
+    "bar-1-0.conda": {
+      "name": "bar",
+      "version": "1",
+      "build": "0",
+      "build_number": 0,
+      "subdir": "noarch"
+    }
+  },
+  "v3": {
+    "conda": {
+      "foo-10-0.whl": {
+        "name": "foo",
+        "version": "10",
+        "build": "0.whl",
+        "build_number": 0,
+        "subdir": "noarch"
+      },
+      "foo-9-0": {
+        "name": "foo",
+        "version": "9",
+        "build": "0",
+        "build_number": 0,
+        "subdir": "noarch",
+        "license": "v3"
+      }
+    },
+    "whl": {
+      "foo-8-0": {
+        "name": "foo",
+        "version": "8",
+        "build": "0",
+        "build_number": 0,
+        "subdir": "noarch",
+        "url": "https://example.com/foo-8-py3-none-any.whl"
+      },
+      "foo-5-0": {
+        "name": "foo",
+        "version": "5",
+        "build": "0",
+        "build_number": 0,
+        "subdir": "noarch",
+        "url": "https://example.com/foo-5-py3-none-any.whl"
+      },
+      "foo-3-0": {
+        "name": "foo",
+        "version": "3",
+        "build": "0",
+        "build_number": 0,
+        "subdir": "noarch",
+        "url": "https://example.com/foo-3-py3-none-any.whl"
+      },
+      "foo-1-0": {
+        "name": "foo",
+        "version": "1",
+        "build": "0",
+        "build_number": 0,
+        "subdir": "noarch",
+        "url": "https://example.com/foo-1-py3-none-any.whl"
+      },
+      "wheelonly-1-0": {
+        "name": "wheelonly",
+        "version": "1",
+        "build": "0",
+        "build_number": 0,
+        "subdir": "noarch",
+        "url": "https://example.com/wheelonly-1-py3-none-any.whl"
+      }
+    }
+  },
+  "removed": ["foo-7-0.conda", "foo-8-0.whl", "foo-10-0.conda"]
+}
