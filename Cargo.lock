@@ -5278,10 +5278,12 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
+ "tokio-util",
  "tools",
  "tracing",
  "tracing-subscriber",
  "url",
+ "zip",
  "zstd 0.13.3",
 ]
 
