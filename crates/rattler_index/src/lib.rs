@@ -1017,6 +1017,7 @@ async fn index_subdir_inner(
                 &v3,
             ),
             channel_relations: channel_metadata.channel_relations,
+            virtual_package_detectors: None,
         }),
         packages,
         conda_packages,
@@ -1734,6 +1735,7 @@ pub async fn write_repodata(
                 created_at: Some(jiff::Timestamp::now()),
                 repodata_revisions: sharded_repodata_revisions,
                 channel_relations: sharded_channel_relations,
+                virtual_package_detectors: None,
             },
             shards: shards
                 .iter()
@@ -2210,6 +2212,7 @@ pub async fn ensure_channel_initialized_with_channel_metadata(
             base_url: channel_metadata.base_url,
             repodata_revisions: RepodataRevisions::new(),
             channel_relations: channel_metadata.channel_relations,
+            virtual_package_detectors: None,
         }),
         packages: IndexMap::default(),
         conda_packages: IndexMap::default(),
