@@ -17,7 +17,7 @@ from rattler.rattler import PyChannelNotice, PyGateway, PyMatchSpec, PySourceCon
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.removed_package import RemovedPackage
 from rattler.repo_data.repo_data import ChannelRelations
-from rattler.repo_data.sparse import PackageFormatSelection
+from rattler.repo_data.sparse import PackageFormatSelection, SparseRepoData
 from rattler.repo_data.who_needs import Dependent, _target_to_py
 
 if TYPE_CHECKING:
@@ -434,7 +434,7 @@ class Gateway:
 
     async def names(
         self,
-        sources: Iterable[Channel | str | RepoDataSource],
+        sources: Iterable[Channel | str | RepoDataSource | SparseRepoData],
         platforms: Iterable[Subdir | SubdirLiteral],
         channel_relations: ChannelRelationsMode | None = None,
         channel_relations_max_depth: int | None = None,
@@ -444,8 +444,8 @@ class Gateway:
         """Queries all the names of packages in channels or custom sources.
 
         Arguments:
-            sources: The sources to query. Can be channels (by name, URL, or Channel object)
-                     or custom RepoDataSource implementations.
+            sources: The sources to query. Can be channels (by name, URL, or Channel object),
+                     SparseRepoData objects, or custom RepoDataSource implementations.
             platforms: The platforms to query.
             channel_relations: How to treat CEP-42 ``channel_relations`` metadata. ``None``
                                uses the gateway default (``"warn"``).
@@ -456,9 +456,9 @@ class Gateway:
             package_format_selection: Only list packages that have records in this
                                       selection. ``None`` uses the gateway default
                                       (``PackageFormatSelection.PREFER_CONDA``). Exact for
-                                      ``repodata.json`` channels; sharded channels and
-                                      custom sources only index names, so they list
-                                      every package.
+                                      ``repodata.json`` channels and ``SparseRepoData``;
+                                      sharded channels and custom sources only index names,
+                                      so they list every package.
 
         Returns:
             A list of package names that are present in the given subdirectories.
@@ -593,7 +593,6 @@ def _convert_sources(sources: Iterable[Any]) -> list[Any]:
         TypeError: If a source doesn't implement the required interface.
     """
     from rattler.repo_data.source import RepoDataSource
-    from rattler.repo_data.sparse import SparseRepoData
 
     converted = []
     for source in sources:

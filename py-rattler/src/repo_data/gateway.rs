@@ -10,6 +10,7 @@ use pyo3::{
 };
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::{CacheAction, FetchRepoDataOptions, Variant};
+use rattler_repodata_gateway::sparse::PackageFormatSelection;
 use rattler_repodata_gateway::{
     CacheClearMode, ChannelConfig, ChannelNoticeResult, ChannelRelationsMode, Gateway,
     GatewayWarning, RemovedPackage, Source, SourceConfig, SubdirSelection,
@@ -494,6 +495,8 @@ impl PyGateway {
 
         let platforms_vec: Vec<rattler_conda_types::Subdir> =
             platforms.into_iter().map(|p| p.inner).collect();
+        let package_format_selection: PackageFormatSelection =
+            package_format_selection.map(Into::into).unwrap_or_default();
 
         let gateway = self.inner.clone();
         let show_progress = self.show_progress;
@@ -506,16 +509,14 @@ impl PyGateway {
             if !channels.is_empty() {
                 let mut query = gateway
                     .names(channels, platforms_vec.iter().copied())
-                    .channel_notices(channel_notices);
+                    .channel_notices(channel_notices)
+                    .package_format_selection(package_format_selection);
 
                 if let Some(mode) = channel_relations {
                     query = query.channel_relations(mode.0);
                 }
                 if let Some(depth) = channel_relations_max_depth {
                     query = query.channel_relations_max_depth(depth);
-                }
-                if let Some(package_format_selection) = package_format_selection {
-                    query = query.package_format_selection(package_format_selection.into());
                 }
 
                 if show_progress {
@@ -538,6 +539,22 @@ impl PyGateway {
                         if let Ok(name) = name_str.parse() {
                             all_names.insert(name);
                         }
+                    }
+                }
+            }
+
+            // Collect names from sparse repodata sources directly; each one
+            // holds a single subdir.
+            for sparse in &sparse_sources {
+                if !platforms_vec
+                    .iter()
+                    .any(|platform| platform.as_str() == sparse.subdir())
+                {
+                    continue;
+                }
+                for name_str in sparse.package_names(package_format_selection) {
+                    if let Ok(name) = name_str.parse() {
+                        all_names.insert(name);
                     }
                 }
             }

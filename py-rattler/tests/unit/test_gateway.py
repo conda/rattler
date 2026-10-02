@@ -166,6 +166,28 @@ async def test_query_package_format_selection(
     assert sorted(record.file_name for record in result[0]) == expected
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("package_format_selection", "expected"),
+    [
+        (None, ["bar", "foo"]),
+        (PackageFormatSelection.ONLY_TAR_BZ2, ["foo"]),
+        (PackageFormatSelection.ALL, ["bar", "foo", "wheelonly"]),
+    ],
+)
+async def test_names_of_sparse_repodata(
+    test_data_dir: str, package_format_selection: PackageFormatSelection | None, expected: list[str]
+) -> None:
+    channel_dir = Path(test_data_dir) / "channels" / "format-selection"
+    sparse = SparseRepoData(Channel(str(channel_dir)), "noarch", channel_dir / "noarch" / "repodata.json")
+
+    names = await Gateway().names([sparse], ["noarch"], package_format_selection=package_format_selection)
+    assert sorted(name.normalized for name in names) == expected
+
+    # A sparse repodata source only contributes to the platform of its subdir.
+    assert await Gateway().names([sparse], ["linux-64"]) == []
+
+
 def test_init_per_channel_config_key() -> None:
     test_source_config = SourceConfig()
 
