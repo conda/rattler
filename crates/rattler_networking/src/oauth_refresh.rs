@@ -359,7 +359,7 @@ pub(crate) async fn maybe_refresh_oauth(
     auth_outcome(refreshed)
 }
 
-// Bound both success and error bodies; never put provider response text in errors.
+// Bound success and error bodies; report read/size failures without response text.
 async fn read_refresh_body(response: reqwest::Response) -> Result<Vec<u8>, OAuthRefreshFailure> {
     const MAX_BODY: usize = 64 * 1024;
     let invalid = || OAuthRefreshFailure::InvalidResponse {

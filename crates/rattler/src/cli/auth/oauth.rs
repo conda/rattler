@@ -204,10 +204,7 @@ struct CallbackResult {
     stream: std::net::TcpStream,
 }
 
-/// Perform an OAuth/OIDC login and return the resulting
-/// `Authentication::OAuth`. Login does not read or write credential storage.
-/// Callers decide when interactive login is permitted; existing request middleware
-/// handles refresh without starting login.
+/// Perform an OAuth/OIDC login and return `Authentication::OAuth` without storing it.
 ///
 /// ```no_run
 /// use rattler::cli::auth::oauth::{OAuthConfig, perform_oauth_login};
@@ -230,22 +227,28 @@ struct CallbackResult {
 /// ```
 pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, OAuthError> {
     let has_audience = config.audience.is_some();
-    if config.audience.as_ref().is_some_and(|value| {
-        value.is_empty()
-            || value.len() > 2048
-            || value.chars().any(|c| c.is_whitespace() || c.is_control())
-    }) {
-        return Err(OAuthError::Authorization("Invalid OAuth audience".into()));
-    }
+    validate_audience(config.audience.as_deref())?;
     let result = perform_oauth_login_inner(config).await;
     if has_audience {
-        // Provider error bodies may contain credentials; don't expose them.
+        // IMPORTANT: do not format _error here. OAuth error Display includes the
+        // provider's error_description, whose contents we cannot control.
         result.map_err(|_error| {
             OAuthError::Authorization("Audience authorization did not complete".into())
         })
     } else {
         result
     }
+}
+
+fn validate_audience(audience: Option<&str>) -> Result<(), OAuthError> {
+    if audience.is_some_and(|value| {
+        value.is_empty()
+            || value.len() > 2048
+            || value.chars().any(|c| c.is_whitespace() || c.is_control())
+    }) {
+        return Err(OAuthError::Authorization("Invalid OAuth audience".into()));
+    }
+    Ok(())
 }
 
 async fn perform_oauth_login_inner(mut config: OAuthConfig) -> Result<Authentication, OAuthError> {
@@ -272,7 +275,8 @@ async fn perform_oauth_login_inner(mut config: OAuthConfig) -> Result<Authentica
         callback_page_renderer(CallbackPageTemplate::default(), &config.issuer_url)
     });
     let audience = config.audience.as_deref();
-    // Resource errors must not display arbitrary provider response bodies.
+    // Audience login uses a fixed failure message in the browser too: `detail`
+    // can include a provider error_description or a token-exchange error.
     let callback_page = |success, detail: &str| {
         renderer(
             success,
