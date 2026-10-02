@@ -1,0 +1,5 @@
+---
+source: crates/rattler-bin/tests/cli.rs
+expression: urls
+---
+file:///[ROOT]/test-data/channels/multichannel-b/noarch/pkg-2.0-0.tar.bz2
