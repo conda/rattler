@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Acquire audience-specific resource access tokens through the existing PKCE/device OAuth flows with `ensure_oauth_audience`.
+- Request an optional `audience` through the existing `OAuthConfig` / `perform_oauth_login` API, leaving storage and interaction policy to callers. Rust struct literals must now supply `audience: None` for existing channel logins.
 
 ## [0.51.0](https://github.com/conda/rattler/compare/rattler-v0.50.0...rattler-v0.51.0) - 2026-09-29
 

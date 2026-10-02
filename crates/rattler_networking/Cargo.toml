@@ -56,7 +56,7 @@ http-auth = { workspace = true }
 itertools = { workspace = true }
 keyring-core = { workspace = true, optional = true }
 netrc-rs = { workspace = true, optional = true }
-reqwest = { workspace = true, features = ["json", "form"] }
+reqwest = { workspace = true, features = ["json", "form", "stream"] }
 reqwest-middleware = { workspace = true, features = ["json"] }
 retry-policies = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

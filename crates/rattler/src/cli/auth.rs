@@ -430,6 +430,7 @@ async fn login_with_offline(
             };
 
             let config = oauth::OAuthConfig {
+                audience: None,
                 issuer_url,
                 client_id,
                 client_secret: args.oauth_client_secret,
@@ -1015,6 +1016,7 @@ fn print_authentication_status(
             token_endpoint,
             revocation_endpoint,
             client_id,
+            ..
         } => {
             let metadata = token_metadata(access_token);
             // OAuth's `expires_at` always refers to the short-lived ACCESS
@@ -1636,6 +1638,7 @@ mod tests {
             .store(
                 "prefix.dev",
                 &Authentication::OAuth {
+                    audience: None,
                     access_token: "a".into(),
                     refresh_token: None,
                     expires_at: None,
@@ -1762,6 +1765,7 @@ mod tests {
         storage.add_backend(backend_b.clone());
 
         let oauth = Authentication::OAuth {
+            audience: None,
             access_token: "tok".into(),
             refresh_token: None,
             expires_at: None,

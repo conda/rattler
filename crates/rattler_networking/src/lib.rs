@@ -27,8 +27,6 @@ pub mod authentication_middleware;
 pub mod authentication_storage;
 pub mod challenge_middleware;
 pub(crate) mod oauth_refresh;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod oauth_resource;
 
 mod lazy_client;
 pub mod mirror_middleware;

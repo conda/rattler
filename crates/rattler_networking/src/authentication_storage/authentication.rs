@@ -30,6 +30,10 @@ pub enum Authentication {
     },
     /// OAuth/OIDC credentials with automatic token refresh support
     OAuth {
+        /// Optional audience requested at login, retained for refresh.
+        /// Absent in existing channel credentials.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        audience: Option<String>,
         /// The OAuth access token
         access_token: String,
         /// The OAuth refresh token (if available)

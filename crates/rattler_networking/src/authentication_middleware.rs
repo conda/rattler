@@ -19,6 +19,8 @@ use crate::{
 #[derive(Clone)]
 pub struct AuthenticationMiddleware {
     auth_storage: AuthenticationStorage,
+    // Explicit audience selection never falls back to host/wildcard credentials.
+    oauth_audience: Option<(url::Origin, String)>,
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
@@ -36,7 +38,20 @@ impl Middleware for AuthenticationMiddleware {
         }
 
         let url = req.url().clone();
-        match self.auth_storage.get_by_url_with_host(url) {
+        let selected = if let Some((origin, key)) = &self.oauth_audience {
+            if &url.origin() != origin {
+                return next.run(req, extensions).await;
+            }
+            self.auth_storage
+                .get(key)
+                .map(|auth| (url, auth.map(|auth| (key.clone(), auth))))
+                .map_err(|_error| ())
+        } else {
+            self.auth_storage
+                .get_by_url_with_host(url)
+                .map_err(|_error| ())
+        };
+        match selected {
             Err(_) => {
                 // Forward error to caller (invalid URL)
                 next.run(req, extensions).await
@@ -45,6 +60,16 @@ impl Middleware for AuthenticationMiddleware {
                 // If this is an OAuth token, attempt refresh if expired
                 let auth = match auth_with_key {
                     Some((matched_key, auth)) => {
+                        let has_audience = matches!(
+                            &auth,
+                            Authentication::OAuth {
+                                audience: Some(_),
+                                ..
+                            }
+                        );
+                        if has_audience != self.oauth_audience.is_some() {
+                            return next.run(req, extensions).await;
+                        }
                         let refresh_result = oauth_refresh::maybe_refresh_oauth(
                             &self.auth_storage,
                             auth,
@@ -77,7 +102,10 @@ impl AuthenticationMiddleware {
     /// Create a new authentication middleware with the given authentication
     /// storage
     pub fn from_auth_storage(auth_storage: AuthenticationStorage) -> Self {
-        Self { auth_storage }
+        Self {
+            auth_storage,
+            oauth_audience: None,
+        }
     }
 
     /// Create a new authentication middleware with the default authentication
@@ -85,7 +113,28 @@ impl AuthenticationMiddleware {
     pub fn from_env_and_defaults() -> Result<Self, AuthenticationStorageError> {
         Ok(Self {
             auth_storage: AuthenticationStorage::from_env_and_defaults()?,
+            oauth_audience: None,
         })
+    }
+
+    /// Select an exact audience grant, and send it only to `trusted_origin`.
+    /// The origin is chosen by the caller, never inferred from the audience or
+    /// a server challenge. No channel/wildcard fallback or interactive login.
+    /// Use on a dedicated API client, not stacked with channel authentication.
+    /// Disable redirects on the underlying client for credential-bearing requests.
+    /// Audience refresh is supported on native targets only.
+    pub fn with_oauth_audience(
+        mut self,
+        issuer: &str,
+        client_id: &str,
+        audience: &str,
+        trusted_origin: url::Origin,
+    ) -> Self {
+        self.oauth_audience = Some((
+            trusted_origin,
+            AuthenticationStorage::oauth_audience_key(issuer, client_id, audience),
+        ));
+        self
     }
 
     /// Authenticate the given URL with the given authentication information
@@ -178,6 +227,10 @@ pub fn default_auth_store_fallback_directory() -> &'static Path {
         }
     })
 }
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "authentication_middleware/audience_tests.rs"]
+mod audience_tests;
 
 #[cfg(test)]
 mod tests {
@@ -507,6 +560,7 @@ mod tests {
             .store(
                 host,
                 &Authentication::OAuth {
+                    audience: None,
                     access_token: "expired-access-token".to_string(),
                     refresh_token: Some("refresh-token".to_string()),
                     expires_at: Some(0),
@@ -579,6 +633,7 @@ mod tests {
             .store(
                 host,
                 &Authentication::OAuth {
+                    audience: None,
                     access_token: "expired-access-token".to_string(),
                     refresh_token: Some("refresh-token".to_string()),
                     expires_at: Some(0),

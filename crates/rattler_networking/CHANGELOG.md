@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Cache and refresh resource access tokens isolated by issuer, client ID and audience, without replacing channel credentials.
+- Add optional audience metadata to `Authentication::OAuth` and preserve it during existing OAuth refresh. Existing JSON credentials remain readable; Rust literals must supply `audience: None`.
+- Add `AuthenticationStorage::oauth_audience_key` and `AuthenticationMiddleware::with_oauth_audience` for exact issuer/client/audience selection bound to a caller-trusted origin, without channel fallback.
 
 ### Fixed
 

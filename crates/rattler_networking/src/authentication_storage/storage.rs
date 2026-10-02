@@ -1,6 +1,10 @@
 //! Storage and access of authentication information
 
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use reqwest::IntoUrl;
+use sha2::{Digest, Sha256};
+
+const OAUTH_AUDIENCE_PREFIX: &str = "oauth-resource-v1:";
 use std::{
     collections::{BTreeMap, HashMap},
     sync::{Arc, Mutex},
@@ -135,12 +139,29 @@ impl AuthenticationStorage {
             .clone()
     }
 
-    /// Store the given authentication information for the given host
+    /// A stable, non-host key for an exact issuer/client/audience tuple.
+    /// Use with [`Self::store`] and [`Self::get`], separately from channel keys.
+    /// Audience keys use strict backend reads/writes: failures must not silently
+    /// replace a rotating grant in a lower-priority backend. Clones share file
+    /// coordination; independent instances/processes are not coordinated.
+    pub fn oauth_audience_key(issuer: &str, client_id: &str, audience: &str) -> String {
+        let tuple =
+            serde_json::to_vec(&[issuer, client_id, audience]).expect("string tuple serializes");
+        format!(
+            "{OAUTH_AUDIENCE_PREFIX}{}",
+            URL_SAFE_NO_PAD.encode(Sha256::digest(tuple))
+        )
+    }
+
+    /// Store the given authentication information for the given host or audience key
     pub fn store(
         &self,
         host: &str,
         authentication: &Authentication,
     ) -> Result<(), AuthenticationStorageError> {
+        if host.starts_with(OAUTH_AUDIENCE_PREFIX) {
+            return self.write_resource(host, authentication);
+        }
         {
             let mut cache = self.cache.lock().unwrap();
             cache.insert(host.to_string(), Some(authentication.clone()));
@@ -178,8 +199,7 @@ impl AuthenticationStorage {
     }
 
     // Resource flows must not mistake an unreadable credential for a missing one.
-    #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn read_resource(
+    fn read_resource(
         &self,
         key: &str,
     ) -> Result<Option<Authentication>, AuthenticationStorageError> {
@@ -193,28 +213,18 @@ impl AuthenticationStorage {
 
     // Preserve the existing backend's priority. Writing to a lower-priority
     // backend would leave an old rotating refresh token shadowing the new one.
-    #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn write_resource(
+    fn write_resource(
         &self,
         key: &str,
         auth: &Authentication,
     ) -> Result<(), AuthenticationStorageError> {
         for backend in &self.backends {
             if backend.get(key)?.is_some() {
-                backend.store(key, auth)?;
-                self.cache
-                    .lock()
-                    .unwrap()
-                    .insert(key.to_owned(), Some(auth.clone()));
-                return Ok(());
+                return backend.store(key, auth);
             }
         }
         for backend in &self.backends {
             if backend.store(key, auth).is_ok() {
-                self.cache
-                    .lock()
-                    .unwrap()
-                    .insert(key.to_owned(), Some(auth.clone()));
                 return Ok(());
             }
         }
@@ -231,6 +241,9 @@ impl AuthenticationStorage {
 
     /// Retrieve the authentication information for the given host
     pub fn get(&self, host: &str) -> Result<Option<Authentication>, AuthenticationStorageError> {
+        if host.starts_with(OAUTH_AUDIENCE_PREFIX) {
+            return self.read_resource(host);
+        }
         {
             let cache = self.cache.lock().unwrap();
             if let Some(auth) = cache.get(host) {
