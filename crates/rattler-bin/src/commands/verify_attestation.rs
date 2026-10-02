@@ -18,8 +18,103 @@ use serde::Serialize;
 use tokio::io::AsyncWriteExt;
 use url::Url;
 
-use super::{client::create_client_with_middleware, package_source::PackageSource};
+use super::{
+    client::create_client_with_middleware,
+    hyperlink::{self, Stream},
+    package_source::PackageSource,
+};
 use crate::publisher_args::PublisherArgs;
+
+/// A GitHub workflow's file page, pinned to its build-config revision.
+fn workflow_url(uri: &str, claims: &ClaimsReport) -> Option<Url> {
+    let (base, reference) = uri.rsplit_once('@').unwrap_or((uri, ""));
+    let url = hyperlink::web(&Url::parse(base).ok()?)?;
+    let slug = github_slug(&url)?;
+    let path = url.path().strip_prefix(&format!("/{slug}/"))?;
+    let revision = claims.build_config_digest.as_deref().unwrap_or_else(|| {
+        reference
+            .strip_prefix("refs/heads/")
+            .or_else(|| reference.strip_prefix("refs/tags/"))
+            .unwrap_or(reference)
+    });
+    if path.is_empty() || revision.is_empty() {
+        return None;
+    }
+    Url::parse(&format!("https://github.com/{slug}/blob/{revision}/{path}")).ok()
+}
+
+fn github_slug(url: &Url) -> Option<String> {
+    if url.host_str()? != "github.com" {
+        return None;
+    }
+    let mut segments = url.path_segments()?;
+    let owner = segments.next().filter(|s| !s.is_empty())?;
+    let repo = segments.next().filter(|s| !s.is_empty())?;
+    Some(format!("{owner}/{repo}"))
+}
+
+/// Compact labels are used only when the full destination is clickable.
+fn compact_link(url: Option<Url>, label: &str, fallback: &str) -> String {
+    if url.is_some() && hyperlink::enabled(Stream::Stdout) {
+        hyperlink::maybe_link(url, label)
+    } else {
+        fallback.to_string()
+    }
+}
+
+fn run_label(url: &Url) -> Option<String> {
+    github_slug(url)?;
+    let segments: Vec<_> = url.path_segments()?.collect();
+    match segments.as_slice() {
+        [_, _, "actions", "runs", id] => Some(format!("run {id}")),
+        [_, _, "actions", "runs", id, "attempts", attempt] => {
+            Some(format!("run {id}, attempt {attempt}"))
+        }
+        _ => None,
+    }
+}
+
+fn sidecar_label(url: &Url) -> String {
+    let name = url
+        .path_segments()
+        .and_then(|mut s| s.next_back())
+        .unwrap_or(url.as_str());
+    match name.rsplit_once('.') {
+        Some((head, digest))
+            if digest.len() == 64 && digest.bytes().all(|b| b.is_ascii_hexdigit()) =>
+        {
+            format!("{head}.{}…", &digest[..10])
+        }
+        _ => name.to_string(),
+    }
+}
+
+/// The sidecar `url` itself, if it can be opened from a terminal.
+///
+/// Unlike the URLs that come out of the attestation, this one is the sidecar the
+/// user named on the command line, so a local one is linked as well: a `file://`
+/// URL here only ever points at the path they passed in.
+fn attestation_link(url: &str) -> Option<Url> {
+    let url = Url::parse(url).ok()?;
+    matches!(url.scheme(), "http" | "https" | "file").then_some(url)
+}
+
+/// The page showing `commit` in `repository`, for the forges whose URL for it
+/// can be derived from the repository URL.
+///
+/// A commit digest is the value a trust policy is pinned to, so being able to
+/// open the commit it names is worth the host specific knowledge; an unknown
+/// forge gets no link rather than a guessed one.
+fn commit_url(repository: Option<&str>, commit: &str) -> Option<Url> {
+    let repository = repository?;
+    let path = match Url::parse(repository).ok()?.host_str()? {
+        // Gitea and Forgejo, which Codeberg runs, use the same path as GitHub.
+        "github.com" | "codeberg.org" => format!("{repository}/commit/{commit}"),
+        "gitlab.com" => format!("{repository}/-/commit/{commit}"),
+        _ => return None,
+    };
+    hyperlink::web(&Url::parse(&path).ok()?)
+}
 
 /// Verify Sigstore attestations for a conda package.
 #[derive(Debug, clap::Parser)]
@@ -395,7 +490,17 @@ fn print_report(report: &Report) {
     println!();
     field("Package", &report.package);
     field("SHA-256", &report.sha256);
-    field("Attestation", &report.attestation_url);
+    field(
+        "Attestation",
+        &compact_link(
+            attestation_link(&report.attestation_url),
+            &Url::parse(&report.attestation_url).map_or_else(
+                |_| report.attestation_url.clone(),
+                |url| sidecar_label(&url),
+            ),
+            &report.attestation_url,
+        ),
+    );
 
     let total = report.bundles.len();
     for bundle in &report.bundles {
@@ -409,7 +514,9 @@ fn print_report(report: &Report) {
 }
 
 fn print_bundle(bundle: &BundleReport) {
-    indented("Identity", bundle.identity.as_deref().unwrap_or(UNKNOWN));
+    let identity = bundle.identity.as_deref().unwrap_or(UNKNOWN);
+    // A certificate identity is a literal policy value, not a web page.
+    indented("Identity", identity);
     indented("Issuer", bundle.issuer.as_deref().unwrap_or(UNKNOWN));
 
     if let Some(certificate) = &bundle.certificate {
@@ -430,27 +537,50 @@ fn print_bundle(bundle: &BundleReport) {
             if let Some(id) = &claims.source_repository_identifier {
                 annotations.push(format!("id {id}"));
             }
+            // Only the repository URL is linked, not the annotations that
+            // follow it, so that what the link covers is what it points at.
+            let link = compact_link(
+                Url::parse(repository)
+                    .ok()
+                    .as_ref()
+                    .and_then(hyperlink::web),
+                &Url::parse(repository)
+                    .ok()
+                    .and_then(|url| github_slug(&url))
+                    .unwrap_or_else(|| repository.clone()),
+                repository,
+            );
             if annotations.is_empty() {
-                indented("Repository", repository);
+                indented("Repository", &link);
             } else {
                 indented(
                     "Repository",
-                    &format!("{repository} ({})", annotations.join(", ")),
+                    &format!("{link} ({})", annotations.join(", ")),
                 );
             }
         }
         if let Some(commit) = &claims.source_repository_digest {
+            let link = hyperlink::maybe_link(
+                commit_url(claims.source_repository_uri.as_deref(), commit),
+                commit,
+            );
             let reference = claims.source_repository_ref.as_deref();
             indented(
                 "Commit",
                 &reference.map_or_else(
-                    || commit.clone(),
-                    |reference| format!("{commit} on {reference}"),
+                    || link.clone(),
+                    |reference| format!("{link} on {reference}"),
                 ),
             );
         }
-        if let Some(workflow) = &claims.build_config_uri {
-            let workflow = shorten_build_config(workflow, claims);
+        if let Some(uri) = &claims.build_config_uri {
+            // The text is shortened to the path in the repository, so the link
+            // is what restores the full URI the claim carried.
+            let workflow = compact_link(
+                workflow_url(uri, claims),
+                &shorten_build_config(uri, claims),
+                uri,
+            );
             indented(
                 "Workflow",
                 &claims.build_trigger.as_ref().map_or_else(
@@ -469,7 +599,18 @@ fn print_bundle(bundle: &BundleReport) {
             indented("Environment", environment);
         }
         if let Some(run) = &claims.run_invocation_uri {
-            indented("Build", run);
+            indented(
+                "Build",
+                &compact_link(
+                    Url::parse(run).ok().as_ref().and_then(hyperlink::web),
+                    &Url::parse(run)
+                        .ok()
+                        .as_ref()
+                        .and_then(run_label)
+                        .unwrap_or_else(|| run.clone()),
+                    run,
+                ),
+            );
         }
         indented("Signed at", &certificate.not_before);
     }
@@ -479,21 +620,35 @@ fn print_bundle(bundle: &BundleReport) {
             .inclusion_proof
             .as_ref()
             .and_then(|proof| proof.origin.as_deref());
-        indented(
-            "Transparency log",
-            &origin.map_or_else(
-                || format!("index {}", log.log_index),
-                |origin| format!("index {} on {}", log.log_index, log_host(origin)),
-            ),
+        let entry = origin.map_or_else(
+            || format!("index {}", log.log_index),
+            |origin| format!("index {} on {}", log.log_index, log_host(origin)),
         );
-        if let Some(url) = &log.url {
+        let url = log
+            .url
+            .as_deref()
+            .and_then(|url| Url::parse(url).ok())
+            .as_ref()
+            .and_then(hyperlink::web);
+        let linked = url.is_some() && hyperlink::enabled(Stream::Stdout);
+        indented("Transparency log", &hyperlink::maybe_link(url, &entry));
+        // The URL only needs a line of its own where the entry above it is not
+        // already clickable.
+        if let Some(url) = &log.url
+            && !linked
+        {
             continuation(url);
         }
     }
 
+    let channel = bundle.target_channel.as_deref().unwrap_or("<none>");
     indented(
         "Target channel",
-        bundle.target_channel.as_deref().unwrap_or("<none>"),
+        &hyperlink::maybe_link(
+            hyperlink::channel_page(channel)
+                .or_else(|| Url::parse(channel).ok().as_ref().and_then(hyperlink::web)),
+            channel,
+        ),
     );
     indented("Checks", &describe_checks(&bundle.checks));
 }
@@ -671,6 +826,55 @@ mod tests {
         };
         assert_eq!(sidecar.path(), "/noarch/foo-1.0-0.conda.sigs");
         assert_eq!(sidecar.query(), Some("token=abc"));
+    }
+
+    #[test]
+    fn workflow_links_use_the_build_config_revision() {
+        let mut claims = ClaimsReport::default();
+        let uri = "https://github.com/org/repo/.github/workflows/publish.yml@refs/heads/main";
+        assert_eq!(
+            workflow_url(uri, &claims).unwrap().as_str(),
+            "https://github.com/org/repo/blob/main/.github/workflows/publish.yml"
+        );
+        claims.build_config_digest = Some("abc123".into());
+        claims.source_repository_digest = Some("different-source-commit".into());
+        assert_eq!(
+            workflow_url(uri, &claims).unwrap().as_str(),
+            "https://github.com/org/repo/blob/abc123/.github/workflows/publish.yml"
+        );
+        assert!(workflow_url("https://example.com/org/repo/workflow@main", &claims).is_none());
+        assert!(workflow_url("someone@example.com", &claims).is_none());
+    }
+
+    #[test]
+    fn compact_attestation_labels() {
+        let run = Url::parse("https://github.com/org/repo/actions/runs/123/attempts/2").unwrap();
+        assert_eq!(run_label(&run).as_deref(), Some("run 123, attempt 2"));
+        assert!(run_label(&Url::parse("https://example.com/actions/runs/123").unwrap()).is_none());
+        let sidecar = Url::parse(&format!(
+            "https://example.com/pkg.conda.sigs.{}",
+            "a".repeat(64)
+        ))
+        .unwrap();
+        assert_eq!(sidecar_label(&sidecar), "pkg.conda.sigs.aaaaaaaaaa…");
+    }
+
+    #[test]
+    fn commits_are_linked_only_on_forges_with_a_known_path() {
+        let commit = "8a96d273f7245383c451499fb65375ec408ca042";
+        assert_eq!(
+            commit_url(Some("https://github.com/org/repo"), commit).map(Url::into),
+            Some(format!("https://github.com/org/repo/commit/{commit}"))
+        );
+        assert_eq!(
+            commit_url(Some("https://gitlab.com/org/repo"), commit).map(Url::into),
+            Some(format!("https://gitlab.com/org/repo/-/commit/{commit}"))
+        );
+        assert_eq!(
+            commit_url(Some("https://git.example.com/org/repo"), commit),
+            None
+        );
+        assert_eq!(commit_url(None, commit), None);
     }
 
     #[test]

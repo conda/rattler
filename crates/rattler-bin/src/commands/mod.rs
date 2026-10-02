@@ -12,6 +12,7 @@ pub mod exec;
 pub mod extract;
 pub mod fetch_file;
 pub mod gateway;
+pub mod hyperlink;
 pub mod info;
 pub mod inspect;
 pub mod link;
@@ -68,7 +69,8 @@ pub fn write_all_to_stdout(bytes: &[u8]) -> miette::Result<()> {
 /// Writes `urls` to stdout, one per line.
 ///
 /// This output is meant to be piped (e.g. into `head`), so a closed stdout is
-/// a normal way to end instead of an error.
+/// a normal way to end instead of an error, and the lines are never decorated
+/// with [`hyperlink`]s.
 pub fn print_url_lines(
     urls: impl IntoIterator<Item = impl std::fmt::Display>,
 ) -> miette::Result<()> {

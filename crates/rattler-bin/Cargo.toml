@@ -49,6 +49,7 @@ clap_complete = { workspace = true }
 clap_complete_nushell = { workspace = true }
 console = { workspace = true, features = ["windows-console-colors"] }
 dirs = { workspace = true }
+file_url = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
 humantime = { workspace = true }
@@ -85,6 +86,7 @@ reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+supports-hyperlinks = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
