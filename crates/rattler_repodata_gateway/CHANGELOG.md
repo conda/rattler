@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.1](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.34.0...rattler_repodata_gateway-v0.34.1) - 2026-10-02
+
+### Fixed
+
+- refresh sharded index cache policy after 304 ([#2724](https://github.com/conda/rattler/pull/2724))
+
 ## [0.34.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.33.6...rattler_repodata_gateway-v0.34.0) - 2026-09-29
 
 ### Fixed

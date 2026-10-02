@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.1](https://github.com/conda/rattler/compare/rattler_index-v0.32.0...rattler_index-v0.32.1) - 2026-10-02
+
+### Added
+
+- emit consistent v3 repodata ([#2668](https://github.com/conda/rattler/pull/2668))
+
+### Other
+
+- remove old aws-lc-sys cmake workaround ([#2890](https://github.com/conda/rattler/pull/2890))
+
 ## [0.32.0](https://github.com/conda/rattler/compare/rattler_index-v0.31.7...rattler_index-v0.32.0) - 2026-09-29
 
 ### Added
