@@ -19,6 +19,7 @@ use url::Url;
 
 mod conditional_tests;
 mod extras_tests;
+mod favored_tests;
 mod helpers;
 mod min_age_tests;
 mod solver_case_tests;
@@ -718,6 +719,18 @@ macro_rules! solver_backend_tests {
         fn test_solve_with_unparsable_dependency() {
             crate::solver_case_tests::solve_with_unparsable_dependency::<$T>();
         }
+
+        #[test]
+        #[ignore = "follow-up: a favored package reachable only through another favored package is not kept yet"]
+        fn test_favored_kept_via_favored_parent() {
+            crate::favored_tests::favored_kept_via_favored_parent::<$T>();
+        }
+
+        #[test]
+        #[ignore = "follow-up: a favored package reachable only through the unlocked spec is not kept yet"]
+        fn test_favored_kept_via_unlocked_target() {
+            crate::favored_tests::favored_kept_via_unlocked_target::<$T>();
+        }
     };
 }
 
@@ -735,6 +748,14 @@ mod libsolv_c {
     };
 
     solver_backend_tests!(rattler_solve::libsolv_c::Solver);
+
+    #[test]
+    #[ignore = "libsolv_c drops the favored python when cython is decided first"]
+    fn test_favored_kept_independent_of_spec_order() {
+        crate::favored_tests::favored_kept_independent_of_spec_order::<
+            rattler_solve::libsolv_c::Solver,
+        >();
+    }
 
     #[test]
     fn test_root_flags_are_unsupported() {
@@ -868,6 +889,13 @@ mod resolvo {
     };
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);
+
+    #[test]
+    fn test_favored_kept_independent_of_spec_order() {
+        crate::favored_tests::favored_kept_independent_of_spec_order::<
+            rattler_solve::resolvo::Solver,
+        >();
+    }
 
     /// When a single node in the conflict merges many versions, the version list
     /// is abbreviated with an ellipsis instead of printing every version.
