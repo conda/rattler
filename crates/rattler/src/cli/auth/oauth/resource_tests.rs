@@ -50,14 +50,8 @@ async fn device_flow_requests_audience_and_persists_only_resource_key() {
     let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     let mut storage = AuthenticationStorage::empty();
     storage.add_backend(Arc::new(MemoryStorage::new()));
-    let resource = OAuthResource::new(
-        issuer.clone(),
-        "rattler".into(),
-        "https://audit.example".into(),
-    )
-    .unwrap();
-    let config = OAuthConfig {
-        issuer_url: issuer,
+    let config = || OAuthConfig {
+        issuer_url: issuer.clone(),
         client_id: "rattler".into(),
         client_secret: None,
         flow: OAuthFlow::DeviceCode,
@@ -66,9 +60,9 @@ async fn device_flow_requests_audience_and_persists_only_resource_key() {
         user_agent: None,
         callback_page: None,
     };
-    let token = ensure_oauth_resource(
-        config,
-        &resource,
+    let token = ensure_oauth_audience(
+        config(),
+        "https://audit.example",
         &storage,
         ResourceInteraction::Allow,
         false,
@@ -77,6 +71,52 @@ async fn device_flow_requests_audience_and_persists_only_resource_key() {
     .unwrap();
     assert_eq!(token.access_token(), "fixture-opaque");
     assert!(storage.get("127.0.0.1").unwrap().is_none());
-    assert!(storage.get(&resource.storage_key()).unwrap().is_some());
+    let entries = storage.backends[0].list().unwrap();
+    assert_eq!(entries.len(), 1);
+    assert!(entries[0].0.starts_with("oauth-resource-v1:"));
     server.abort();
+    let _ = server.await;
+
+    // The existing config is the only source of issuer/client identity. No
+    // separate resource object or live provider is needed to reuse the grant.
+    let cached = ensure_oauth_audience(
+        config(),
+        "https://audit.example",
+        &storage,
+        ResourceInteraction::Deny,
+        true,
+    )
+    .await
+    .unwrap();
+    assert_eq!(cached.access_token(), "fixture-opaque");
+    let mut other_client = config();
+    other_client.client_id = "another-client".into();
+    let mut other_issuer = config();
+    other_issuer.issuer_url.push_str("/another-issuer");
+    for (config, audience) in [
+        (config(), "https://another-audit.example"),
+        (other_client, "https://audit.example"),
+        (other_issuer, "https://audit.example"),
+    ] {
+        assert_eq!(
+            ensure_oauth_audience(config, audience, &storage, ResourceInteraction::Allow, true,)
+                .await
+                .unwrap_err(),
+            ResourceOAuthError::AuthorizationRequired
+        );
+    }
+    let mut confidential = config();
+    confidential.client_secret = Some("fixture-secret".into());
+    assert_eq!(
+        ensure_oauth_audience(
+            confidential,
+            "https://audit.example",
+            &storage,
+            ResourceInteraction::Deny,
+            true,
+        )
+        .await
+        .unwrap_err(),
+        ResourceOAuthError::InvalidConfiguration
+    );
 }

@@ -23,7 +23,7 @@ use openidconnect::{
 };
 use rattler_networking::{
     Authentication, AuthenticationStorage,
-    oauth_resource::{OAuthResource, ResourceInteraction, ResourceOAuthError, ResourceToken},
+    oauth_resource::{ResourceInteraction, ResourceOAuthError, ResourceToken, acquire_audience},
 };
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
@@ -73,39 +73,44 @@ mod resource_tests;
 /// identity are printed by this resource wrapper.
 ///
 /// ```no_run
-/// use rattler::cli::auth::oauth::{ensure_oauth_resource, OAuthConfig};
-/// use rattler_networking::{AuthenticationStorage, oauth_resource::{OAuthResource, ResourceInteraction, ResourceOAuthError}};
+/// use rattler::cli::auth::oauth::{ensure_oauth_audience, OAuthConfig};
+/// use rattler_networking::{AuthenticationStorage, oauth_resource::{ResourceInteraction, ResourceOAuthError}};
 /// # async fn example(config: OAuthConfig, storage: &AuthenticationStorage) -> Result<(), ResourceOAuthError> {
-/// let resource = OAuthResource::new(
-///     config.issuer_url.clone(), config.client_id.clone(), "https://api.example.test".into(),
-/// )?;
-/// let token = ensure_oauth_resource(config, &resource, storage, ResourceInteraction::Deny, false).await?;
+/// let token = ensure_oauth_audience(
+///     config, "https://api.example.test", storage, ResourceInteraction::Deny, false,
+/// ).await?;
 /// // Attach token.access_token() as a Bearer only to your independently trusted API.
 /// // Do not log it. Deny permits silent refresh but never opens a login flow.
 /// # let _ = token;
 /// # Ok(())
 /// # }
 /// ```
-pub async fn ensure_oauth_resource(
+pub async fn ensure_oauth_audience(
     config: OAuthConfig,
-    resource: &OAuthResource,
+    audience: &str,
     storage: &AuthenticationStorage,
     interaction: ResourceInteraction,
     offline: bool,
 ) -> Result<ResourceToken, ResourceOAuthError> {
-    if config.issuer_url != resource.issuer()
-        || config.client_id != resource.client_id()
-        || config.client_secret.is_some()
-    {
+    if config.client_secret.is_some() {
         return Err(ResourceOAuthError::InvalidConfiguration);
     }
-    resource
-        .acquire(storage, interaction, offline, || async {
-            perform_oauth_login_inner(config, Some(resource.audience()))
+    let issuer = config.issuer_url.clone();
+    let client_id = config.client_id.clone();
+    acquire_audience(
+        &issuer,
+        &client_id,
+        audience,
+        storage,
+        interaction,
+        offline,
+        || async {
+            perform_oauth_login_inner(config, Some(audience))
                 .await
                 .map_err(|_error| ResourceOAuthError::AuthorizationFailed)
-        })
-        .await
+        },
+    )
+    .await
 }
 
 /// Generic OIDC scopes used when no host-specific defaults apply.

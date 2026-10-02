@@ -18,10 +18,10 @@ use std::{
 };
 use url::Url;
 
-/// A trusted resource authorization target. Do not construct from arbitrary
-/// server challenges or audit-mirror URLs without an explicit trust decision.
-#[derive(Clone, Debug)]
-pub struct OAuthResource {
+// Private grant context for validation, namespacing and refresh. Callers do not
+// construct a second configuration object alongside their OAuth login config.
+#[derive(Clone)]
+struct AudienceContext {
     issuer: String,
     client_id: String,
     audience: String,
@@ -85,10 +85,56 @@ impl ResourceToken {
     }
 }
 
-impl OAuthResource {
+/// Low-level audience acquisition for callers supplying their own login callback.
+/// Standard OAuth clients can use `rattler::cli::auth::oauth::ensure_oauth_audience`.
+/// Issuer, client ID and audience must come from trusted configuration, not server
+/// challenges. Public clients only. The callback must request this audience and
+/// provide trusted expiry metadata, not unverified JWT claims.
+///
+/// Offline never performs network I/O or invokes login; [`ResourceInteraction::Deny`]
+/// still permits silent refresh. Storage clones share a per-tuple gate, including
+/// interactive acquisition. Independent storage instances/processes do not; share
+/// one storage across tasks.
+///
+/// Credentials are returned only after successful persistence. A failed write
+/// preserves the local record, but cannot undo provider-side refresh-token rotation;
+/// reauthorization can be necessary after a storage failure.
+pub async fn acquire_audience<F, Fut>(
+    issuer: &str,
+    client_id: &str,
+    audience: &str,
+    storage: &AuthenticationStorage,
+    interaction: ResourceInteraction,
+    offline: bool,
+    login: F,
+) -> Result<ResourceToken, ResourceOAuthError>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Result<Authentication, ResourceOAuthError>>,
+{
+    AudienceContext::new(issuer.into(), client_id.into(), audience.into())?
+        .acquire(storage, interaction, offline, login)
+        .await
+}
+
+/// Refresh a cached audience token after rejection by a trusted resource server,
+/// even if it has not expired locally. Never starts interactive login. This makes
+/// a network request; offline callers must not invoke it.
+pub async fn refresh_audience(
+    issuer: &str,
+    client_id: &str,
+    audience: &str,
+    storage: &AuthenticationStorage,
+) -> Result<ResourceToken, ResourceOAuthError> {
+    AudienceContext::new(issuer.into(), client_id.into(), audience.into())?
+        .refresh_cached(storage)
+        .await
+}
+
+impl AudienceContext {
     /// Create a tuple without URL/audience normalization. HTTP is allowed only
     /// for literal loopback issuers used by local tests.
-    pub fn new(
+    fn new(
         issuer: String,
         client_id: String,
         audience: String,
@@ -115,21 +161,9 @@ impl OAuthResource {
             audience,
         })
     }
-    /// Exact expected issuer.
-    pub fn issuer(&self) -> &str {
-        &self.issuer
-    }
-    /// OAuth public client ID.
-    pub fn client_id(&self) -> &str {
-        &self.client_id
-    }
-    /// Exact requested audience (not an OAuth scope).
-    pub fn audience(&self) -> &str {
-        &self.audience
-    }
     /// Stable non-host key. Length-prefix ambiguity is avoided by JSON encoding.
     /// No host/wildcard lookup can select this key for a channel request.
-    pub fn storage_key(&self) -> String {
+    fn storage_key(&self) -> String {
         let tuple = serde_json::to_vec(&[&self.issuer, &self.client_id, &self.audience])
             .expect("string tuple serializes");
         format!(
@@ -138,18 +172,8 @@ impl OAuthResource {
         )
     }
 
-    /// Reuse, refresh, or authorize an isolated resource grant. The supplied
-    /// login function must request this audience from the trusted issuer.
-    /// Offline never performs network I/O or invokes login; Deny still permits
-    /// silent refresh. Clones of one storage share a per-tuple gate, including
-    /// interactive acquisition. Separately constructed storage/backend instances
-    /// and separate processes are not coordinated; share one storage across tasks.
-    /// The callback must provide trusted expiry metadata, not unverified JWT claims.
-    ///
-    /// Credentials are returned only after successful persistence. A failed
-    /// write preserves the local record, but cannot undo provider-side refresh
-    /// token rotation; reauthorization can be necessary after a storage failure.
-    pub async fn acquire<F, Fut>(
+    /// Reuse, refresh, or authorize an isolated resource grant.
+    async fn acquire<F, Fut>(
         &self,
         storage: &AuthenticationStorage,
         interaction: ResourceInteraction,
@@ -166,7 +190,7 @@ impl OAuthResource {
 
     /// Refresh after the resource rejects an otherwise unexpired cached token. Never
     /// opens a browser; requires a previously stored resource refresh grant.
-    pub async fn refresh_cached(
+    async fn refresh_cached(
         &self,
         storage: &AuthenticationStorage,
     ) -> Result<ResourceToken, ResourceOAuthError> {

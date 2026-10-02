@@ -12,8 +12,8 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
-fn target() -> OAuthResource {
-    OAuthResource::new(
+fn target() -> AudienceContext {
+    AudienceContext::new(
         "https://issuer.example".into(),
         "rattler".into(),
         "https://audit.example".into(),
@@ -79,13 +79,13 @@ fn keys_preserve_exact_tuple_and_cannot_be_channel_hosts() {
     ] {
         assert_ne!(
             key,
-            OAuthResource::new(issuer.into(), client.into(), audience.into())
+            AudienceContext::new(issuer.into(), client.into(), audience.into())
                 .unwrap()
                 .storage_key()
         );
     }
     assert!(
-        OAuthResource::new(
+        AudienceContext::new(
             "http://remote.example".into(),
             "rattler".into(),
             "audience".into()
@@ -93,7 +93,7 @@ fn keys_preserve_exact_tuple_and_cannot_be_channel_hosts() {
         .is_err()
     );
     assert!(
-        OAuthResource::new(
+        AudienceContext::new(
             "https://issuer.example".into(),
             "rattler".into(),
             " ".into()
@@ -133,7 +133,7 @@ async fn channel_and_other_audience_credentials_are_untouched() {
             .1,
         Some(channel)
     );
-    let other = OAuthResource::new(
+    let other = AudienceContext::new(
         target.issuer.clone(),
         target.client_id.clone(),
         "other-audience".into(),
@@ -232,7 +232,7 @@ async fn concurrent_refresh_preserves_audience_and_rotated_token() {
         (StatusCode::OK, Json(json!({"access_token":"fresh-fixture", "refresh_token":"rotated-fixture", "expires_in":3600, "token_type":"Bearer"})))
     }).await;
     let target =
-        OAuthResource::new(issuer.clone(), "rattler".into(), "audit-resource".into()).unwrap();
+        AudienceContext::new(issuer.clone(), "rattler".into(), "audit-resource".into()).unwrap();
     let store = storage();
     store
         .write_resource(
@@ -273,7 +273,7 @@ async fn transient_errors_never_prompt_and_provider_details_are_redacted() {
     })
     .await;
     let target =
-        OAuthResource::new(issuer.clone(), "rattler".into(), "audit-resource".into()).unwrap();
+        AudienceContext::new(issuer.clone(), "rattler".into(), "audit-resource".into()).unwrap();
     let store = storage();
     let old = credential(&format!("{issuer}/token"), now() - 10);
     store.write_resource(&target.storage_key(), &old).unwrap();
@@ -300,7 +300,7 @@ async fn revoked_refresh_requires_interaction_without_touching_storage() {
     })
     .await;
     let target =
-        OAuthResource::new(issuer.clone(), "rattler".into(), "audit-resource".into()).unwrap();
+        AudienceContext::new(issuer.clone(), "rattler".into(), "audit-resource".into()).unwrap();
     let store = storage();
     let old = credential(&format!("{issuer}/token"), now() - 10);
     store.write_resource(&target.storage_key(), &old).unwrap();

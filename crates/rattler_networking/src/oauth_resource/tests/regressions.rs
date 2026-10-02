@@ -48,7 +48,7 @@ async fn forced_refresh_preserves_omitted_refresh_token() {
         )
     })
     .await;
-    let resource = OAuthResource::new(issuer.clone(), "rattler".into(), "audit".into()).unwrap();
+    let resource = AudienceContext::new(issuer.clone(), "rattler".into(), "audit".into()).unwrap();
     let store = storage();
     store
         .write_resource(
@@ -57,8 +57,7 @@ async fn forced_refresh_preserves_omitted_refresh_token() {
         )
         .unwrap();
     assert_eq!(
-        resource
-            .refresh_cached(&store)
+        refresh_audience(&issuer, "rattler", "audit", &store)
             .await
             .unwrap()
             .access_token(),
@@ -74,7 +73,7 @@ async fn forced_refresh_preserves_omitted_refresh_token() {
 #[tokio::test]
 async fn refresh_persistence_failure_retains_old_record_without_caching_new_token() {
     let (issuer,server)=endpoint(|_| (StatusCode::OK,Json(json!({"access_token":"fresh-fixture", "refresh_token":"rotated-fixture", "token_type":"Bearer", "expires_in":3600})))).await;
-    let resource = OAuthResource::new(issuer.clone(), "rattler".into(), "audit".into()).unwrap();
+    let resource = AudienceContext::new(issuer.clone(), "rattler".into(), "audit".into()).unwrap();
     let old = credential(&format!("{issuer}/token"), now() - 10);
     let mut store = AuthenticationStorage::empty();
     store.add_backend(Arc::new(FailingBackend {
@@ -101,7 +100,7 @@ async fn malformed_refresh_responses_preserve_existing_grant() {
     ] {
         let (issuer, server) = endpoint(move |_| (StatusCode::OK, Json(response.clone()))).await;
         let resource =
-            OAuthResource::new(issuer.clone(), "rattler".into(), "audit".into()).unwrap();
+            AudienceContext::new(issuer.clone(), "rattler".into(), "audit".into()).unwrap();
         let store = storage();
         let old = credential(&format!("{issuer}/token"), now() - 10);
         store.write_resource(&resource.storage_key(), &old).unwrap();
@@ -136,7 +135,7 @@ async fn refresh_redirect_does_not_forward_credentials() {
             }),
         );
     let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-    let resource = OAuthResource::new(issuer.clone(), "rattler".into(), "audit".into()).unwrap();
+    let resource = AudienceContext::new(issuer.clone(), "rattler".into(), "audit".into()).unwrap();
     let store = storage();
     let old = credential(&format!("{issuer}/token"), now() - 10);
     store.write_resource(&resource.storage_key(), &old).unwrap();
@@ -198,7 +197,7 @@ fn different_audiences_and_channel_updates_share_one_file_transaction_lock() {
                 .build()
                 .unwrap()
                 .block_on(async {
-                    let resource = OAuthResource::new(
+                    let resource = AudienceContext::new(
                         "https://issuer.example".into(),
                         "rattler".into(),
                         format!("audience-{i}"),
@@ -226,7 +225,7 @@ fn different_audiences_and_channel_updates_share_one_file_transaction_lock() {
     assert_eq!(reopened.get("issuer.example").unwrap(), Some(channel));
     assert!(reopened.get("obsolete-channel").unwrap().is_none());
     for i in 0..8 {
-        let resource = OAuthResource::new(
+        let resource = AudienceContext::new(
             "https://issuer.example".into(),
             "rattler".into(),
             format!("audience-{i}"),
