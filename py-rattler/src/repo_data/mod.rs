@@ -1,7 +1,9 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
 use pyo3::{PyResult, pyclass, pymethods};
-use rattler_conda_types::{ChannelInfo, ChannelRelations, RepoData, RepodataRevisions};
+use rattler_conda_types::{
+    ChannelInfo, ChannelRelations, RepoData, RepodataRevisionMetadata, RepodataRevisions,
+};
 
 use crate::{channel::PyChannel, error::PyRattlerError, record::PyRecord};
 
@@ -10,6 +12,22 @@ use patch_instructions::PyPatchInstructions;
 /// The Python representation of metadata for one advertised repodata revision.
 pub(crate) type PyRepodataRevisionMetadata =
     (Option<String>, Option<u64>, Option<i64>, Option<i64>);
+
+/// Convert the metadata of one revision to its Python representation.
+pub(crate) fn repodata_revision_metadata_to_python(
+    metadata: &RepodataRevisionMetadata,
+) -> PyRepodataRevisionMetadata {
+    (
+        metadata.message.clone(),
+        metadata.n_packages,
+        metadata
+            .oldest
+            .map(|timestamp| timestamp.timestamp_millis()),
+        metadata
+            .newest
+            .map(|timestamp| timestamp.timestamp_millis()),
+    )
+}
 
 /// Convert revision metadata to a Python-friendly, `vN`-keyed mapping.
 pub(crate) fn repodata_revisions_to_python(
@@ -20,16 +38,7 @@ pub(crate) fn repodata_revisions_to_python(
         .map(|(revision, metadata)| {
             (
                 revision.to_string(),
-                (
-                    metadata.message.clone(),
-                    metadata.n_packages,
-                    metadata
-                        .oldest
-                        .map(|timestamp| timestamp.timestamp_millis()),
-                    metadata
-                        .newest
-                        .map(|timestamp| timestamp.timestamp_millis()),
-                ),
+                repodata_revision_metadata_to_python(metadata),
             )
         })
         .collect()

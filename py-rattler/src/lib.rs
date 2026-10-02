@@ -79,6 +79,7 @@ use repo_data::{
     PyChannelInfo, PyChannelRelations, PyRepoData,
     gateway::{
         PyChannelNotice, PyFetchRepoDataOptions, PyGateway, PyRemovedPackage, PySourceConfig,
+        PyUnsupportedRepodataRevision,
     },
     patch_instructions::PyPatchInstructions,
     sparse::{PyPackageFormatSelection, PySparseRepoData},
@@ -168,6 +169,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyGateway>()?;
     m.add_class::<PyChannelNotice>()?;
     m.add_class::<PyRemovedPackage>()?;
+    m.add_class::<PyUnsupportedRepodataRevision>()?;
     m.add_class::<PySourceConfig>()?;
     m.add_class::<PyFetchRepoDataOptions>()?;
 

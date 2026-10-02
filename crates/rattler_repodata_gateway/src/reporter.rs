@@ -3,7 +3,7 @@ use std::future::Future;
 use bytes::Bytes;
 use futures::{Stream, TryStreamExt};
 #[cfg(feature = "gateway")]
-use rattler_conda_types::{Channel, RepodataRevisions};
+use rattler_conda_types::{ChannelUrl, RepodataRevisions, Subdir};
 #[cfg(feature = "sparse")]
 use rattler_conda_types::{RepodataRevision, RepodataRevisionMetadata};
 #[cfg(feature = "gateway")]
@@ -95,7 +95,8 @@ pub trait Reporter: Send + Sync {
     fn download_reporter(&self) -> Option<&dyn DownloadReporter>;
 
     /// Called when a channel advertises a repodata revision layout this client
-    /// does not support.
+    /// does not support. Repodata and names queries also collect the report
+    /// on their output.
     #[cfg(feature = "sparse")]
     fn on_unsupported_repodata_revision(&self, _message: &UnsupportedRepodataRevision) {}
 
@@ -110,29 +111,35 @@ pub trait Reporter: Send + Sync {
     fn on_gateway_warning(&self, _warning: &crate::GatewayWarning) {}
 }
 
+/// Returns a report for every revision advertised by the `subdir` of
+/// `channel` that this client does not support.
 #[cfg(feature = "gateway")]
-pub(crate) fn report_unsupported_repodata_revisions(
-    reporter: Option<&dyn Reporter>,
-    channel: &Channel,
-    subdir: &str,
+pub(crate) fn unsupported_repodata_revisions(
+    channel: &ChannelUrl,
+    subdir: Subdir,
     revisions: &RepodataRevisions,
-) {
-    let Some(reporter) = reporter else {
-        return;
-    };
-
-    let channel = channel.base_url.url().clone().redact().to_string();
-    for (&revision, metadata) in revisions {
-        if !matches!(revision, RepodataRevision::Legacy | RepodataRevision::V3) {
-            reporter.on_unsupported_repodata_revision(&UnsupportedRepodataRevision {
-                channel: channel.clone(),
-                subdir: subdir.to_string(),
-                supported_revision: SUPPORTED_REPODATA_REVISION,
-                revision,
-                metadata: metadata.clone(),
-            });
-        }
+) -> Vec<UnsupportedRepodataRevision> {
+    let mut unsupported = revisions
+        .iter()
+        .filter(|(revision, _)| match revision {
+            RepodataRevision::Legacy | RepodataRevision::V3 => false,
+            RepodataRevision::Unknown(_) => true,
+        })
+        .peekable();
+    if unsupported.peek().is_none() {
+        return Vec::new();
     }
+
+    let channel = channel.url().clone().redact().to_string();
+    unsupported
+        .map(|(&revision, metadata)| UnsupportedRepodataRevision {
+            channel: channel.clone(),
+            subdir: subdir.as_str().to_owned(),
+            supported_revision: SUPPORTED_REPODATA_REVISION,
+            revision,
+            metadata: metadata.clone(),
+        })
+        .collect()
 }
 
 #[allow(dead_code)]

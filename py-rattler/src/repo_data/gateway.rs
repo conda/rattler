@@ -13,6 +13,7 @@ use rattler_repodata_gateway::fetch::{CacheAction, FetchRepoDataOptions, Variant
 use rattler_repodata_gateway::{
     CacheClearMode, ChannelConfig, ChannelNoticeResult, ChannelRelationsMode, Gateway,
     GatewayWarning, RemovedPackage, Source, SourceConfig, SubdirSelection,
+    UnsupportedRepodataRevision,
 };
 use url::Url;
 
@@ -22,9 +23,11 @@ use crate::match_spec::PyMatchSpec;
 use crate::networking::client::PyClientWithMiddleware;
 use crate::package_name::PyPackageName;
 use crate::record::PyRecord;
-use crate::repo_data::PyChannelRelations;
 use crate::repo_data::source::PyRepoDataSource;
 use crate::repo_data::sparse::PySparseRepoData;
+use crate::repo_data::{
+    PyChannelRelations, PyRepodataRevisionMetadata, repodata_revision_metadata_to_python,
+};
 use crate::subdir::PySubdir;
 use crate::{PyChannel, Wrap};
 
@@ -91,6 +94,30 @@ impl From<RemovedPackage> for PyRemovedPackage {
             version: identifier.version,
             build: identifier.build_string,
             channel: value.channel,
+        }
+    }
+}
+
+/// A repodata revision advertised by a queried channel subdir that this
+/// client does not support, see [`UnsupportedRepodataRevision`].
+#[pyclass(get_all, skip_from_py_object)]
+#[derive(Clone)]
+pub struct PyUnsupportedRepodataRevision {
+    channel: String,
+    subdir: String,
+    supported_revision: String,
+    advertised_revision: String,
+    metadata: PyRepodataRevisionMetadata,
+}
+
+impl From<UnsupportedRepodataRevision> for PyUnsupportedRepodataRevision {
+    fn from(value: UnsupportedRepodataRevision) -> Self {
+        Self {
+            channel: value.channel,
+            subdir: value.subdir,
+            supported_revision: value.supported_revision.to_string(),
+            advertised_revision: value.revision.to_string(),
+            metadata: repodata_revision_metadata_to_python(&value.metadata),
         }
     }
 }
@@ -407,7 +434,12 @@ impl PyGateway {
                 .into_iter()
                 .map(PyChannelNotice::from)
                 .collect::<Vec<_>>();
-            Ok((records, removed, notices))
+            let unsupported_repodata_revisions = output
+                .unsupported_repodata_revisions
+                .into_iter()
+                .map(PyUnsupportedRepodataRevision::from)
+                .collect::<Vec<_>>();
+            Ok((records, removed, notices, unsupported_repodata_revisions))
         })
     }
 
@@ -494,6 +526,7 @@ impl PyGateway {
                 std::collections::HashSet::new();
 
             let mut notices = Vec::new();
+            let mut unsupported_repodata_revisions = Vec::new();
             if !channels.is_empty() {
                 let mut query = gateway
                     .names(channels, platforms_vec.iter().copied())
@@ -516,6 +549,12 @@ impl PyGateway {
                 emit_gateway_warnings(output.warnings)?;
                 all_names.extend(output.names);
                 notices.extend(output.notices.into_iter().map(PyChannelNotice::from));
+                unsupported_repodata_revisions.extend(
+                    output
+                        .unsupported_repodata_revisions
+                        .into_iter()
+                        .map(PyUnsupportedRepodataRevision::from),
+                );
             }
 
             // Collect names from custom sources directly
@@ -537,6 +576,7 @@ impl PyGateway {
                     .map(PyPackageName::from)
                     .collect::<Vec<_>>(),
                 notices,
+                unsupported_repodata_revisions,
             ))
         })
     }

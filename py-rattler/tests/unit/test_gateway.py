@@ -1,3 +1,4 @@
+import datetime
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -5,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from rattler import Channel, Config, Gateway, SourceConfig, SparseRepoData
+from rattler import Channel, Config, Gateway, SourceConfig, SparseRepoData, UnsupportedRepodataRevision
 
 
 @pytest.mark.asyncio
@@ -42,6 +43,38 @@ async def test_removed_packages(tmp_path: Path) -> None:
     assert [record.file_name for record in sparse.load_records("demo")] == ["demo-1.0-0.tar.bz2"]
     assert [removed.file_name for removed in sparse.load_removed()] == ["demo-2.0-0.tar.bz2", "other-1.0-0.tar.bz2"]
     assert [removed.file_name for removed in sparse.load_removed("other")] == ["other-1.0-0.tar.bz2"]
+
+
+def _write_repodata(
+    channel: Path,
+    subdir: str,
+    revisions: dict[str, dict[str, object]],
+) -> None:
+    subdir_path = channel / subdir
+    subdir_path.mkdir(parents=True, exist_ok=True)
+    (subdir_path / "repodata.json").write_text(
+        json.dumps(
+            {
+                "repodata_version": 1,
+                "info": {"subdir": subdir, "repodata_revisions": revisions},
+                "packages": {},
+                "packages.conda": {
+                    "demo-1.0-0.conda": {
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "md5": "82ecc40f09b9c44483e6b70cad2545d7",
+                        "name": "demo",
+                        "sha256": "eb65e866067865793b981c2ba74485f75bef441842b5998badc4ec66717685c7",
+                        "size": 1234,
+                        "subdir": subdir,
+                        "timestamp": 1689209309623,
+                        "version": "1.0",
+                    }
+                },
+            }
+        )
+    )
 
 
 @pytest.mark.asyncio
@@ -105,6 +138,54 @@ async def test_channel_notices(tmp_path: Path) -> None:
     names = await gateway.names([channel], ["noarch"], channel_notices=True)
     assert names.names is names
     assert names.notices == notices
+
+
+@pytest.mark.asyncio
+async def test_unsupported_repodata_revisions(tmp_path: Path) -> None:
+    supported_path = tmp_path / "supported"
+    _write_repodata(supported_path, "noarch", {"v3": {}})
+    newer_path = tmp_path / "newer"
+    _write_repodata(newer_path, "linux-64", {"v3": {}, "v5": {}})
+    _write_repodata(
+        newer_path,
+        "noarch",
+        {"v4": {"message": "update rattler", "n_packages": 2, "oldest": 1768249989851, "newest": 1773851561010}},
+    )
+    supported = Channel(str(supported_path))
+    newer = Channel(str(newer_path))
+    linux_report = UnsupportedRepodataRevision(
+        channel=newer.base_url,
+        subdir="linux-64",
+        supported_revision="v3",
+        advertised_revision="v5",
+        metadata={},
+    )
+    noarch_report = UnsupportedRepodataRevision(
+        channel=newer.base_url,
+        subdir="noarch",
+        supported_revision="v3",
+        advertised_revision="v4",
+        metadata={
+            "message": "update rattler",
+            "n_packages": 2,
+            "oldest": datetime.datetime(2026, 1, 12, 20, 33, 9, 851000, tzinfo=datetime.timezone.utc),
+            "newest": datetime.datetime(2026, 3, 18, 16, 32, 41, 10000, tzinfo=datetime.timezone.utc),
+        },
+    )
+    gateway = Gateway()
+
+    # Records of the supported layouts are still returned next to the reports.
+    result = await gateway.query([supported, newer], ["linux-64", "noarch"], ["demo"])
+    assert [len(records) for records in result] == [0, 1, 1, 1]
+    assert sorted(result.unsupported_repodata_revisions, key=lambda report: report.subdir) == [
+        linux_report,
+        noarch_report,
+    ]
+
+    # Subdirs loaded by an earlier query report their revisions again.
+    names = await gateway.names([newer], ["noarch"])
+    assert [name.source for name in names] == ["demo"]
+    assert names.unsupported_repodata_revisions == [noarch_report]
 
 
 def test_init_per_channel_config_key() -> None:

@@ -5,7 +5,8 @@ use rattler_conda_types::{
     RepodataRevision, Subdir,
 };
 use rattler_repodata_gateway::{
-    ChannelConfig, Gateway, GatewayWarning, SourceConfig, fetch::CacheAction,
+    ChannelConfig, Gateway, GatewayWarning, SourceConfig, UnsupportedRepodataRevision,
+    fetch::CacheAction,
 };
 use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
@@ -64,6 +65,55 @@ impl From<rattler_repodata_gateway::ChannelNoticeResult> for Notice {
                 .expires_at
                 .map(|timestamp| timestamp.to_string()),
             interval: result.notice.interval,
+        }
+    }
+}
+
+/// A repodata revision advertised by a queried channel subdir that this
+/// client does not support, see [`UnsupportedRepodataRevision`].
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UnsupportedRevision {
+    channel: String,
+    subdir: String,
+    supported_revision: String,
+    advertised_revision: String,
+    metadata: RevisionMetadata,
+}
+
+/// The metadata a channel publishes for a repodata revision. Absent fields
+/// are omitted, timestamps are milliseconds since the Unix epoch.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RevisionMetadata {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    n_packages: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    oldest: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    newest: Option<i64>,
+}
+
+impl From<UnsupportedRepodataRevision> for UnsupportedRevision {
+    fn from(value: UnsupportedRepodataRevision) -> Self {
+        let metadata = value.metadata;
+        Self {
+            channel: value.channel,
+            subdir: value.subdir,
+            supported_revision: value.supported_revision.to_string(),
+            advertised_revision: value.revision.to_string(),
+            metadata: RevisionMetadata {
+                message: metadata.message,
+                n_packages: metadata.n_packages,
+                oldest: metadata
+                    .oldest
+                    .map(|timestamp| timestamp.timestamp_millis()),
+                newest: metadata
+                    .newest
+                    .map(|timestamp| timestamp.timestamp_millis()),
+            },
         }
     }
 }
@@ -260,9 +310,11 @@ impl JsGateway {
         self.emit_warnings(output.warnings);
 
         #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
         struct NamesOutput {
             names: Vec<String>,
             notices: Vec<Notice>,
+            unsupported_repodata_revisions: Vec<UnsupportedRevision>,
         }
 
         Ok(serde_wasm_bindgen::to_value(&NamesOutput {
@@ -272,6 +324,11 @@ impl JsGateway {
                 .map(|name| name.as_source().to_string())
                 .collect(),
             notices: output.notices.into_iter().map(Notice::from).collect(),
+            unsupported_repodata_revisions: output
+                .unsupported_repodata_revisions
+                .into_iter()
+                .map(UnsupportedRevision::from)
+                .collect(),
         })?)
     }
 
@@ -279,7 +336,8 @@ impl JsGateway {
     /// given match specs. Returns the matching records as plain objects in
     /// the same shape as they appear in `repodata.json`, extended with the
     /// `fn`, `url` and `channel` fields, together with any non-fatal
-    /// warnings encountered during the query.
+    /// warnings and unsupported repodata revisions encountered during the
+    /// query.
     pub async fn query(
         &self,
         channels: Vec<String>,
@@ -326,9 +384,11 @@ impl JsGateway {
         self.emit_warnings(output.warnings);
 
         #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
         struct QueryOutput<'a> {
             records: Vec<&'a RepoDataRecord>,
             warnings: Vec<String>,
+            unsupported_repodata_revisions: Vec<UnsupportedRevision>,
         }
 
         let records = output
@@ -336,7 +396,17 @@ impl JsGateway {
             .iter()
             .flat_map(|repodata| repodata.iter())
             .collect::<Vec<_>>();
+        let unsupported_repodata_revisions = output
+            .unsupported_repodata_revisions
+            .into_iter()
+            .map(UnsupportedRevision::from)
+            .collect();
         let serializer = serde_wasm_bindgen::Serializer::json_compatible();
-        Ok(QueryOutput { records, warnings }.serialize(&serializer)?)
+        Ok(QueryOutput {
+            records,
+            warnings,
+            unsupported_repodata_revisions,
+        }
+        .serialize(&serializer)?)
     }
 }
