@@ -77,6 +77,11 @@ impl Issuer {
         Self::new("https://gitlab.com")
     }
 
+    /// The Codeberg Actions (Forgejo) OIDC issuer.
+    pub fn codeberg() -> Self {
+        Self::new("https://codeberg.org/api/actions")
+    }
+
     /// Returns the issuer as a string.
     pub fn as_str(&self) -> &str {
         &self.0
