@@ -7,15 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- Add optional audience metadata to `Authentication::OAuth` and preserve it during existing OAuth refresh. Existing JSON credentials remain readable; Rust literals must supply `audience: None`.
-- Add `AuthenticationStorage::oauth_audience_key` and `AuthenticationMiddleware::with_oauth_audience` for exact issuer/client/audience selection bound to a caller-trusted origin, without channel fallback.
-
-### Fixed
-
-- Serialize credential-file updates across backend clones and check buffered writes before replacement, so concurrent audience grants are retained.
-
 ## [0.31.0](https://github.com/conda/rattler/compare/rattler_networking-v0.30.10...rattler_networking-v0.31.0) - 2026-09-29
 
 ### Added
