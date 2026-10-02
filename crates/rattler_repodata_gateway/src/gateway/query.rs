@@ -973,7 +973,7 @@ impl QueryExecutor {
             return;
         }
 
-        let Some(names) = subdir.package_names() else {
+        let Some(names) = subdir.package_names(self.package_format_selection) else {
             return;
         };
 
@@ -1405,6 +1405,9 @@ pub struct NamesQuery {
 
     /// Maximum recursion depth when following CEP-42 `channel_relations`.
     channel_relations_max_depth: usize,
+
+    /// Which archive formats a package must have records in to be listed.
+    package_format_selection: PackageFormatSelection,
 }
 
 impl NamesQuery {
@@ -1424,6 +1427,7 @@ impl NamesQuery {
             channel_notices: false,
             channel_relations_mode: ChannelRelationsMode::default(),
             channel_relations_max_depth: DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
+            package_format_selection: PackageFormatSelection::default(),
         }
     }
 
@@ -1432,6 +1436,23 @@ impl NamesQuery {
     pub fn channel_notices(self, enabled: bool) -> Self {
         Self {
             channel_notices: enabled,
+            ..self
+        }
+    }
+
+    /// Only lists packages that have records in the given package format
+    /// selection. Defaults to [`PackageFormatSelection::PreferConda`].
+    ///
+    /// The result is exact for `repodata.json` channels. Sharded channels only
+    /// index package names, so they list every package regardless of the
+    /// selection.
+    #[must_use]
+    pub fn package_format_selection(
+        self,
+        package_format_selection: PackageFormatSelection,
+    ) -> Self {
+        Self {
+            package_format_selection,
             ..self
         }
     }
@@ -1515,7 +1536,7 @@ impl NamesQuery {
                     if let Some(w) = warning {
                         expander.push_warning(w);
                     }
-                    if let Some(subdir_names) = subdir.package_names() {
+                    if let Some(subdir_names) = subdir.package_names(self.package_format_selection) {
                         names.extend(subdir_names);
                     }
                     for (new_url, new_channel, new_plat) in expander.observe(&url, platform, &subdir)? {

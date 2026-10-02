@@ -22,7 +22,7 @@ use crate::{
         subdir::{FetchedPackage, SubdirClient},
     },
     reporter::ResponseReporterExt,
-    sparse::FormatBucketSet,
+    sparse::{FormatBucketSet, PackageFormatSelection},
     utils::js_fetch::JsFetcher,
 };
 
@@ -188,7 +188,7 @@ impl SubdirClient for ShardedSubdir {
         .await
     }
 
-    fn package_names(&self) -> Vec<String> {
+    fn package_names(&self, _selection: PackageFormatSelection) -> Vec<String> {
         self.sharded_repodata.shards.keys().cloned().collect()
     }
 

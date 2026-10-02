@@ -33,6 +33,7 @@ use super::{
 };
 use crate::{
     Reporter,
+    sparse::PackageFormatSelection,
     who_needs::{Dependent, WhoNeedsTarget, who_needs},
 };
 
@@ -328,7 +329,7 @@ fn scan_subdir(
 ) -> BoxStream<Result<Dependent, GatewayError>> {
     let names: Vec<PackageName> = match subdir.as_ref() {
         SubdirState::Found(subdir_data) => subdir_data
-            .package_names()
+            .package_names(PackageFormatSelection::default())
             .into_iter()
             .filter_map(|name| PackageName::try_from(name).ok())
             .collect(),

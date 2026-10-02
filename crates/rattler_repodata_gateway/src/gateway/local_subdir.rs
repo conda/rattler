@@ -102,9 +102,9 @@ impl SubdirClient for LocalSubdirClient {
         simple_spawn_blocking::tokio::run_blocking_task(load_records).await
     }
 
-    fn package_names(&self) -> Vec<String> {
+    fn package_names(&self, selection: PackageFormatSelection) -> Vec<String> {
         self.sparse
-            .package_names(PackageFormatSelection::All)
+            .package_names(selection)
             .map(Into::into)
             .collect()
     }

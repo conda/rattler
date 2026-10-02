@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     Reporter,
-    sparse::{FormatBucketSet, SparseRepoData},
+    sparse::{FormatBucketSet, PackageFormatSelection, SparseRepoData},
 };
 
 /// A source of repodata records for a specific subdirectory.
@@ -123,7 +123,7 @@ impl SubdirClient for CustomSourceClient {
         Ok(FetchedPackage::from_records(records, Vec::new()))
     }
 
-    fn package_names(&self) -> Vec<String> {
+    fn package_names(&self, _selection: PackageFormatSelection) -> Vec<String> {
         self.source.package_names(self.platform)
     }
 }

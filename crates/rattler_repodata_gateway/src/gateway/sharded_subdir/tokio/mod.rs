@@ -19,7 +19,7 @@ use crate::{
         subdir::{FetchedPackage, SubdirClient},
     },
     reporter::ResponseReporterExt,
-    sparse::FormatBucketSet,
+    sparse::{FormatBucketSet, PackageFormatSelection},
 };
 use fs_err::tokio as tokio_fs;
 use futures::future::OptionFuture;
@@ -312,7 +312,7 @@ impl SubdirClient for ShardedSubdir {
         Ok(records)
     }
 
-    fn package_names(&self) -> Vec<String> {
+    fn package_names(&self, _selection: PackageFormatSelection) -> Vec<String> {
         self.sharded_repodata.shards.keys().cloned().collect()
     }
 

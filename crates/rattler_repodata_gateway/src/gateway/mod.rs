@@ -4902,9 +4902,9 @@ mod test {
         assert_eq!(names, expected_names);
     }
 
-    /// A pattern query expands to the names of every package in the channel,
-    /// so a package that only has a wheel is found once the selection uses
-    /// wheels.
+    /// A pattern query expands to the names of the packages that have records
+    /// in the selection, so a package that only has a wheel is found once the
+    /// selection uses wheels.
     #[rstest]
     #[case::prefer_conda(PackageFormatSelection::PreferConda, "")]
     #[case::all(PackageFormatSelection::All, "wheelonly-1-0.whl")]
@@ -4933,5 +4933,32 @@ mod test {
             render_file_names(output.iter().flat_map(RepoData::iter)),
             expected
         );
+    }
+
+    /// A names query on a `repodata.json` channel only lists the packages
+    /// with records in the selection. `bar` only has a `.conda` file and
+    /// `wheelonly` only a wheel.
+    #[rstest]
+    #[case::prefer_conda(PackageFormatSelection::PreferConda, &["bar", "foo"])]
+    #[case::only_tar_bz2(PackageFormatSelection::OnlyTarBz2, &["foo"])]
+    #[case::all(PackageFormatSelection::All, &["bar", "foo", "wheelonly"])]
+    #[tokio::test]
+    async fn names_query_lists_packages_in_the_selection(
+        #[case] selection: PackageFormatSelection,
+        #[case] expected: &[&str],
+    ) {
+        let output = Gateway::new()
+            .names([format_selection_channel()], [Subdir::NoArch])
+            .package_format_selection(selection)
+            .await
+            .unwrap();
+
+        let names: Vec<&str> = output
+            .names
+            .iter()
+            .map(PackageName::as_normalized)
+            .sorted()
+            .collect();
+        assert_eq!(names, expected);
     }
 }

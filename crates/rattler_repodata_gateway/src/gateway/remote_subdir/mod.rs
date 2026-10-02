@@ -1,5 +1,5 @@
 use crate::gateway::subdir::{FetchedPackage, SubdirClient};
-use crate::sparse::FormatBucketSet;
+use crate::sparse::{FormatBucketSet, PackageFormatSelection};
 use crate::{GatewayError, Reporter};
 use rattler_conda_types::{ChannelRelations, PackageName, RepodataRevisions};
 
@@ -27,8 +27,8 @@ impl SubdirClient for RemoteSubdirClient {
             .await
     }
 
-    fn package_names(&self) -> Vec<String> {
-        self.sparse.package_names()
+    fn package_names(&self, selection: PackageFormatSelection) -> Vec<String> {
+        self.sparse.package_names(selection)
     }
 
     fn repodata_revisions(&self) -> &RepodataRevisions {

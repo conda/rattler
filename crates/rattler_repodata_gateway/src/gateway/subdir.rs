@@ -193,10 +193,11 @@ pub enum SubdirState {
 }
 
 impl SubdirState {
-    /// Returns the names of all packages in the subdirectory.
-    pub fn package_names(&self) -> Option<Vec<String>> {
+    /// Returns the names of the packages in the subdirectory that may have
+    /// records in `selection`, see [`SubdirClient::package_names`].
+    pub fn package_names(&self, selection: PackageFormatSelection) -> Option<Vec<String>> {
         match self {
-            SubdirState::Found(subdir) => Some(subdir.package_names()),
+            SubdirState::Found(subdir) => Some(subdir.package_names(selection)),
             SubdirState::NotFound => None,
         }
     }
@@ -432,8 +433,10 @@ impl SubdirData {
         self.packages.len()
     }
 
-    pub fn package_names(&self) -> Vec<String> {
-        self.client.package_names()
+    /// Returns the names of the packages that may have records in
+    /// `selection`, see [`SubdirClient::package_names`].
+    pub fn package_names(&self, selection: PackageFormatSelection) -> Vec<String> {
+        self.client.package_names(selection)
     }
 
     pub fn repodata_revisions(&self) -> &RepodataRevisions {
@@ -465,8 +468,14 @@ pub trait SubdirClient: Send + Sync {
         reporter: Option<&dyn Reporter>,
     ) -> Result<FetchedPackage, GatewayError>;
 
-    /// Returns the names of all packages in the subdirectory, in any format.
-    fn package_names(&self) -> Vec<String>;
+    /// Returns the names of the packages in the subdirectory that may have
+    /// records in `selection`.
+    ///
+    /// A client whose index tells which archive formats each package has
+    /// returns exactly the names with records in `selection`. A client that
+    /// only knows names (sharded repodata, custom sources) returns every name,
+    /// because filtering would mean fetching every package.
+    fn package_names(&self, selection: PackageFormatSelection) -> Vec<String>;
 
     /// Returns repodata revisions advertised by the subdirectory.
     fn repodata_revisions(&self) -> &RepodataRevisions {
