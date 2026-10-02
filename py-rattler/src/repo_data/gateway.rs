@@ -476,11 +476,12 @@ impl PyGateway {
             Vec::new();
 
         for source in rust_sources {
-            match source {
-                Source::Channel(channel) => channels.push(channel),
-                Source::Custom(custom) => custom_sources.push(custom),
-                Source::SparseRepoData(sparse) => sparse_sources.extend(sparse),
-            }
+            split_source(
+                source,
+                &mut channels,
+                &mut custom_sources,
+                &mut sparse_sources,
+            );
         }
 
         let platforms_vec: Vec<rattler_conda_types::Subdir> =
@@ -539,6 +540,26 @@ impl PyGateway {
                 notices,
             ))
         })
+    }
+}
+
+/// Splits `source` into channels, custom sources and sparse repodata. The
+/// sources of a group are split like sources that are passed on their own.
+fn split_source(
+    source: Source,
+    channels: &mut Vec<rattler_conda_types::Channel>,
+    custom_sources: &mut Vec<Arc<dyn rattler_repodata_gateway::RepoDataSource>>,
+    sparse_sources: &mut Vec<Arc<rattler_repodata_gateway::sparse::SparseRepoData>>,
+) {
+    match source {
+        Source::Channel(channel) => channels.push(channel),
+        Source::Custom(custom) => custom_sources.push(custom),
+        Source::SparseRepoData(sparse) => sparse_sources.extend(sparse),
+        Source::Multi(multi_source) => {
+            for member in multi_source.sources() {
+                split_source(member.clone(), channels, custom_sources, sparse_sources);
+            }
+        }
     }
 }
 
