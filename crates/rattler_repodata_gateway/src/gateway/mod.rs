@@ -3,6 +3,7 @@ mod boxed;
 mod builder;
 mod channel_config;
 mod channel_expander;
+mod channel_expansion;
 mod channel_notices;
 mod channel_relations;
 #[cfg(not(target_arch = "wasm32"))]
@@ -19,6 +20,7 @@ mod sharded_subdir;
 mod source;
 mod subdir;
 mod subdir_builder;
+mod virtual_package_detectors_query;
 mod warning;
 mod who_needs_query;
 
@@ -48,6 +50,11 @@ pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
 pub use source::{RepoDataSource, Source};
 use subdir::SubdirState;
 use tracing::{Level, instrument};
+pub use virtual_package_detectors_query::{
+    AcceptedDetectorRegistration, RegistrationConflict, RegistrationConflictKind,
+    RejectedDetectorRegistration, VirtualPackageDetectorWarning, VirtualPackageDetectorsOutput,
+    VirtualPackageDetectorsQuery,
+};
 pub use warning::GatewayWarning;
 pub use who_needs_query::WhoNeedsQuery;
 
@@ -191,6 +198,37 @@ impl Gateway {
             self.inner.clone(),
             channels.into_iter().map(Into::into).collect(),
             platforms.into_iter().collect(),
+        )
+    }
+
+    /// The package cache this gateway shares with the installers it feeds.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn package_cache(&self) -> &PackageCache {
+        &self.inner.package_cache
+    }
+
+    /// Collects the virtual package detectors that `channels` and the
+    /// channels they relate to register for the supplied `subdirs`.
+    ///
+    /// Registrations of these subdirs are combined per channel and accepted
+    /// or rejected in CEP 42 channel order. Duplicate subdirs are ignored,
+    /// and no subdirs are added implicitly. To include platform-independent
+    /// registrations, pass `Subdir::NoArch` explicitly alongside the target.
+    /// See [`VirtualPackageDetectorsQuery`] for the options and output.
+    pub fn virtual_package_detectors<AsChannel, ChannelIter, SubdirIter>(
+        &self,
+        channels: ChannelIter,
+        subdirs: SubdirIter,
+    ) -> VirtualPackageDetectorsQuery
+    where
+        AsChannel: Into<Channel>,
+        ChannelIter: IntoIterator<Item = AsChannel>,
+        SubdirIter: IntoIterator<Item = Subdir>,
+    {
+        VirtualPackageDetectorsQuery::new(
+            self.inner.clone(),
+            channels.into_iter().map(Into::into).collect(),
+            subdirs.into_iter().collect(),
         )
     }
 
@@ -4572,6 +4610,80 @@ mod test {
             )),
             "expected UserOrderConflict warning; got {:?}",
             output.warnings,
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn package_fetches_run_while_channel_discovery_is_pending() {
+        use axum::{Router, routing::get};
+        use std::time::Duration;
+        use tokio::{net::TcpListener, sync::Notify, time::timeout};
+
+        struct UnblockingSource(Arc<Notify>);
+
+        #[async_trait::async_trait]
+        impl super::RepoDataSource for UnblockingSource {
+            async fn fetch_package_records(
+                &self,
+                _platform: Subdir,
+                _name: &PackageName,
+            ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
+                self.0.notify_one();
+                Ok(vec![Arc::new(make_test_record(
+                    "shared", "9.0.0", "linux-64",
+                ))])
+            }
+
+            fn package_names(&self, _platform: Subdir) -> Vec<String> {
+                vec!["shared".to_string()]
+            }
+        }
+
+        // Discovery cannot finish until an independent package fetch runs.
+        let package_fetched = Arc::new(Notify::new());
+        let wait_for_package = package_fetched.clone();
+        let app = Router::new().route(
+            "/linux-64/repodata.json",
+            get(move || {
+                let wait_for_package = wait_for_package.clone();
+                async move {
+                    wait_for_package.notified().await;
+                    r#"{"info":{"subdir":"linux-64"},"packages":{},"packages.conda":{}}"#
+                }
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let channel = Channel::from_url(Url::parse(&format!("http://{address}/")).unwrap());
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(UnblockingSource(package_fetched));
+        let gateway = Gateway::new();
+        let result = timeout(
+            Duration::from_secs(5),
+            gateway
+                .query(
+                    [
+                        super::Source::Channel(channel),
+                        super::Source::Custom(source),
+                    ],
+                    [Subdir::Linux64],
+                    [PackageName::try_from("shared").unwrap()],
+                )
+                .execute(),
+        )
+        .await;
+        server.abort();
+        let output = result
+            .expect("discovery blocked independent package fetching")
+            .unwrap();
+        assert!(output[0].is_empty());
+        assert_eq!(
+            output[1]
+                .iter()
+                .map(|record| record.package_record.version.as_str())
+                .collect::<Vec<_>>(),
+            ["9.0.0"],
         );
     }
 }

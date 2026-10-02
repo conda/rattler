@@ -10,7 +10,8 @@ use url::Url;
 use super::{
     BarrierCell, ChannelNoticeResult, GatewayError, GatewayInner, GatewayWarning, RepoData,
     boxed::{BoxFuture, box_future},
-    channel_expander::{ChannelExpander, ChannelRelationsMode, ChannelRelationsWarning},
+    channel_expander::{ChannelRelationsMode, ChannelRelationsWarning},
+    channel_expansion::{ChannelDiscovery, ScheduledSubdir},
     channel_relations::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
     local_subdir::LocalSubdirClient,
     source::{CustomSourceClient, Source},
@@ -373,8 +374,8 @@ struct QueryExecutor {
     // Record fetching
     pending_records: FuturesUnordered<BoxFuture<PendingRecordsResult>>,
 
-    /// CEP-42 expansion state.
-    expander: ChannelExpander,
+    /// Shared incremental channel discovery and subdir fetch scheduling.
+    discovery: ChannelDiscovery<'static>,
 
     /// CEP-6 notice collection state.
     notices: NoticeCollector,
@@ -507,11 +508,14 @@ impl QueryExecutor {
 
         let direct_url_result = (!direct_url_specs.is_empty()).then(RepoData::default);
 
-        let mut expander = ChannelExpander::new(
+        let mut discovery = ChannelDiscovery::new(
+            gateway.clone(),
+            platforms.clone(),
             channel_relations_mode,
             channel_relations_max_depth,
-            platforms.clone(),
             reporter.clone(),
+            None,
+            false,
         );
 
         // Iterate per caller-source index then per platform, so each
@@ -524,44 +528,42 @@ impl QueryExecutor {
         let mut notices = NoticeCollector::new(channel_notices);
 
         for (caller_idx, source) in sources_with_idx {
+            if let Source::Channel(channel) = source {
+                let (url, channel) = discovery.register_user_channel(channel);
+                notices.queue(&gateway, &url, channel.clone(), reporter.clone());
+                for &platform in &platforms {
+                    let scheduled =
+                        discovery.schedule_user_subdir(url.clone(), channel.clone(), platform);
+                    subdir_handles.push(SubdirHandle {
+                        barrier: scheduled.barrier,
+                        kind: SubdirKind::Channel {
+                            url: scheduled.url,
+                            platform,
+                        },
+                        data: RepoData::default(),
+                        caller_source_idx: Some(caller_idx),
+                    });
+                }
+                continue;
+            }
             for &platform in &platforms {
                 let source_clone = source.clone();
-                let barrier = Arc::new(BarrierCell::new());
 
-                let (kind, pending) = match source_clone {
-                    Source::Channel(channel) => {
-                        let (url, channel) = expander.register_user_channel(channel);
-                        notices.queue(&gateway, &url, channel.clone(), reporter.clone());
-                        let kind = SubdirKind::Channel {
-                            url: url.clone(),
-                            platform,
-                        };
-                        let fut = build_channel_subdir_future(
-                            gateway.clone(),
-                            channel,
-                            platform,
-                            url,
-                            reporter.clone(),
-                            barrier.clone(),
-                            FetchErrorPolicy::Propagate,
-                        );
-                        (kind, fut)
-                    }
+                let (kind, pending, barrier) = match source_clone {
+                    Source::Channel(_) => unreachable!("channel sources are scheduled above"),
                     Source::Custom(custom_source) => {
+                        let barrier = Arc::new(BarrierCell::new());
                         let client = CustomSourceClient::new(custom_source, platform);
                         let subdir = Arc::new(SubdirState::Found(SubdirData::from_client(client)));
                         let b = barrier.clone();
                         let fut = box_future(async move {
                             b.set(subdir.clone()).expect("subdir was set twice");
-                            Ok(PendingSubdirOk {
-                                subdir,
-                                kind_url_and_platform: None,
-                                warning: None,
-                            })
+                            Ok(PendingSubdirOk { subdir })
                         });
-                        (SubdirKind::Custom, fut)
+                        (SubdirKind::Custom, fut, barrier)
                     }
                     Source::SparseRepoData(sparse_list) => {
+                        let barrier = Arc::new(BarrierCell::new());
                         // Each entry represents a different subdir, so find the one
                         // matching the requested platform; if none matches, treat it
                         // as having no records, same as a channel that doesn't
@@ -587,13 +589,9 @@ impl QueryExecutor {
                         let b = barrier.clone();
                         let fut = box_future(async move {
                             b.set(subdir.clone()).expect("subdir was set twice");
-                            Ok(PendingSubdirOk {
-                                subdir,
-                                kind_url_and_platform: None,
-                                warning: None,
-                            })
+                            Ok(PendingSubdirOk { subdir })
                         });
-                        (kind, fut)
+                        (kind, fut, barrier)
                     }
                 };
 
@@ -624,7 +622,7 @@ impl QueryExecutor {
             subdir_handles,
             pending_subdirs,
             pending_records: FuturesUnordered::new(),
-            expander,
+            discovery,
             notices,
         })
     }
@@ -986,18 +984,24 @@ impl QueryExecutor {
             self.spawn_package_fetches();
 
             select_biased! {
-                // Handle any error that was emitted by the pending subdirs
+                // Custom and local sources remain independent of channel discovery.
                 subdir_result = self.pending_subdirs.select_next_some() => {
                     let ok = subdir_result?;
-                    let PendingSubdirOk { subdir, kind_url_and_platform, warning } = ok;
-                    if let Some(w) = warning {
-                        self.expander.push_warning(w);
+                    self.expand_pattern_specs_for_subdir(ok.subdir.as_ref());
+                    if self.pending_subdirs.is_empty() && self.discovery.pending.is_empty() {
+                        self.pending_pattern_specs.clear();
+                        self.pattern_names_seen.clear();
                     }
-                    self.expand_pattern_specs_for_subdir(subdir.as_ref());
-                    if let Some((url, platform)) = kind_url_and_platform {
-                        self.expand_relations_for_subdir(&url, platform, subdir.as_ref())?;
+                }
+
+                // Drive channel discovery concurrently with package fetches.
+                result = self.discovery.pending.select_next_some() => {
+                    let fetched = result?;
+                    self.expand_pattern_specs_for_subdir(fetched.subdir.as_ref());
+                    for scheduled in self.discovery.observe(fetched)? {
+                        self.schedule_transitive_subdir(scheduled);
                     }
-                    if self.pending_subdirs.is_empty() {
+                    if self.pending_subdirs.is_empty() && self.discovery.pending.is_empty() {
                         self.pending_pattern_specs.clear();
                         self.pattern_names_seen.clear();
                     }
@@ -1040,51 +1044,18 @@ impl QueryExecutor {
         self.finalize_channel_relations()
     }
 
-    /// Hand a freshly resolved subdir to the expander; schedule fetches
-    /// for any newly discovered (channel, platform) pairs. In `Strict`
-    /// mode propagates an incremental cycle/parse error so the
-    /// executor aborts the remaining in-flight fetches.
-    fn expand_relations_for_subdir(
-        &mut self,
-        channel_url: &ChannelUrl,
-        platform: Subdir,
-        subdir: &SubdirState,
-    ) -> Result<(), GatewayError> {
-        let new_pairs = self.expander.observe(channel_url, platform, subdir)?;
-        for (url, channel, plat) in new_pairs {
-            self.schedule_transitive_subdir(url, channel, plat);
-        }
-        Ok(())
-    }
-
     /// Allocate a result slot for a transitively discovered (channel,
     /// platform) pair, spawn its subdir fetch, and kick off package
     /// fetches for every spec already queued.
-    fn schedule_transitive_subdir(
-        &mut self,
-        url: ChannelUrl,
-        channel: Arc<Channel>,
-        platform: Subdir,
-    ) {
-        self.notices
-            .queue(&self.gateway, &url, channel.clone(), self.reporter.clone());
-        let barrier = Arc::new(BarrierCell::new());
-
-        let policy = if self.expander.strict() {
-            FetchErrorPolicy::WrapAsChannelRelationsError
-        } else {
-            FetchErrorPolicy::SwallowAsWarning
-        };
-        let fut = build_channel_subdir_future(
-            self.gateway.clone(),
+    fn schedule_transitive_subdir(&mut self, scheduled: ScheduledSubdir) {
+        let ScheduledSubdir {
+            url,
             channel,
             platform,
-            url.clone(),
-            self.reporter.clone(),
-            barrier.clone(),
-            policy,
-        );
-        self.pending_subdirs.push(fut);
+            barrier,
+        } = scheduled;
+        self.notices
+            .queue(&self.gateway, &url, channel, self.reporter.clone());
 
         let handle_idx = self.subdir_handles.len();
         self.subdir_handles.push(SubdirHandle {
@@ -1107,8 +1078,8 @@ impl QueryExecutor {
         let direct = self.direct_url_result;
         let mut handles = self.subdir_handles;
 
-        if self.expander.enabled() && self.expander.has_observed_relations() {
-            let resolution = self.expander.finalize()?;
+        if self.discovery.expander.enabled() && self.discovery.expander.has_observed_relations() {
+            let resolution = self.discovery.expander.finalize()?;
 
             let priority_of: std::collections::HashMap<&ChannelUrl, usize> = resolution
                 .order
@@ -1117,6 +1088,7 @@ impl QueryExecutor {
                 .map(|(i, u)| (u, i))
                 .collect();
             let platform_idx_of: std::collections::HashMap<Subdir, usize> = self
+                .discovery
                 .expander
                 .platforms()
                 .iter()
@@ -1145,7 +1117,7 @@ impl QueryExecutor {
                 .into_iter()
                 .map(|(_, url)| url)
                 .collect();
-            let anchor_of = self.expander.anchors(&user_priority);
+            let anchor_of = self.discovery.expander.anchors(&user_priority);
 
             let mut tagged: Vec<((usize, usize, usize, usize), SubdirHandle)> = handles
                 .into_iter()
@@ -1188,6 +1160,7 @@ impl QueryExecutor {
             repodata,
             notices: self.notices.collected,
             warnings: self
+                .discovery
                 .expander
                 .take_warnings()
                 .into_iter()
@@ -1200,7 +1173,7 @@ impl QueryExecutor {
 /// How a channel subdir fetch should handle errors from
 /// `get_or_create_subdir`.
 #[derive(Clone, Copy)]
-enum FetchErrorPolicy {
+pub(super) enum FetchErrorPolicy {
     /// Surface the error to the caller (user-supplied channels).
     Propagate,
     /// Emit a [`ChannelRelationsWarning::DiscoveryFetchFailed`] and
@@ -1211,59 +1184,12 @@ enum FetchErrorPolicy {
     WrapAsChannelRelationsError,
 }
 
-/// Build a future that fetches a channel subdir, sets the barrier, and
-/// applies `policy` to any fetch error. Used by `RepoDataQuery`'s
-/// executor; `NamesQuery` uses the simpler [`spawn_names_fetch`]
-/// wrapper around the same [`fetch_subdir_with_policy`] core.
-fn build_channel_subdir_future(
-    gateway: Arc<GatewayInner>,
-    channel: Arc<Channel>,
-    platform: Subdir,
-    url: ChannelUrl,
-    reporter: Option<Arc<dyn Reporter>>,
-    barrier: Arc<BarrierCell<Arc<SubdirState>>>,
-    policy: FetchErrorPolicy,
-) -> BoxFuture<PendingSubdirResult> {
-    box_future(async move {
-        let (subdir, warning) =
-            fetch_subdir_with_policy(&gateway, &channel, platform, &url, reporter, policy).await?;
-        barrier.set(subdir.clone()).expect("subdir was set twice");
-        Ok(PendingSubdirOk {
-            subdir,
-            kind_url_and_platform: Some((url, platform)),
-            warning,
-        })
-    })
-}
-
-/// Fetch a channel subdir and apply `policy` to any error. Shared core
-/// for the channel-fetch futures spawned by both `RepoDataQuery` and
-/// `NamesQuery`. Returns the resolved subdir plus an optional
-/// [`ChannelRelationsWarning`] when the policy swallowed a fetch
-/// failure.
-async fn fetch_subdir_with_policy(
-    gateway: &GatewayInner,
-    channel: &Channel,
-    platform: Subdir,
-    url: &ChannelUrl,
-    reporter: Option<Arc<dyn Reporter>>,
-    policy: FetchErrorPolicy,
-) -> Result<(Arc<SubdirState>, Option<ChannelRelationsWarning>), GatewayError> {
-    match gateway
-        .get_or_create_subdir(channel, platform, reporter, true)
-        .await
-    {
-        Ok(subdir) => Ok((subdir, None)),
-        Err(err) => apply_fetch_error_policy(err, url, platform, policy),
-    }
-}
-
 /// Translate a subdir fetch error into the policy-prescribed outcome.
 /// Returns `Ok((SubdirState::NotFound, Some(warning)))` for
 /// `SwallowAsWarning` so callers can proceed as if the subdir were
 /// absent; returns `Err` for `Propagate` or
 /// `WrapAsChannelRelationsError`.
-fn apply_fetch_error_policy(
+pub(super) fn apply_fetch_error_policy(
     err: GatewayError,
     url: &ChannelUrl,
     platform: Subdir,
@@ -1294,15 +1220,9 @@ fn apply_fetch_error_policy(
     }
 }
 
-/// Outcome of a pending subdir fetch. `kind_url_and_platform` is
-/// `Some` for channel sources (used to register CEP-42 relations) and
-/// `None` for custom sources. `warning` carries a fetch-failure
-/// warning when the [`FetchErrorPolicy::SwallowAsWarning`] policy was
-/// applied.
+/// Outcome of a custom or local subdir fetch.
 struct PendingSubdirOk {
     subdir: Arc<SubdirState>,
-    kind_url_and_platform: Option<(ChannelUrl, Subdir)>,
-    warning: Option<ChannelRelationsWarning>,
 }
 
 /// Push a future onto `pending_records` that awaits the subdir's
@@ -1434,63 +1354,36 @@ impl NamesQuery {
     /// Execute the query and return the package names along with any
     /// non-fatal CEP-42 warnings.
     pub async fn execute(self) -> Result<NamesQueryOutput, GatewayError> {
-        let mut expander = ChannelExpander::new(
+        let mut discovery = ChannelDiscovery::new(
+            self.gateway.clone(),
+            self.platforms.clone(),
             self.channel_relations_mode,
             self.channel_relations_max_depth,
-            self.platforms.clone(),
             self.reporter.clone(),
+            None,
+            false,
         );
         let mut notices = NoticeCollector::new(self.channel_notices);
 
-        let mut pending: FuturesUnordered<BoxFuture<NamesFetchResult>> = FuturesUnordered::new();
         for channel in self.channels {
-            let (url, channel_arc) = expander.register_user_channel(channel);
-            notices.queue(
-                &self.gateway,
-                &url,
-                channel_arc.clone(),
-                self.reporter.clone(),
-            );
+            let (url, channel) = discovery.register_user_channel(channel);
+            notices.queue(&self.gateway, &url, channel.clone(), self.reporter.clone());
             for &platform in &self.platforms {
-                pending.push(spawn_names_fetch(
-                    self.gateway.clone(),
-                    channel_arc.clone(),
-                    platform,
-                    url.clone(),
-                    self.reporter.clone(),
-                    FetchErrorPolicy::Propagate,
-                ));
+                discovery.schedule_user_subdir(url.clone(), channel.clone(), platform);
             }
         }
 
         let mut names: std::collections::HashSet<String> = std::collections::HashSet::default();
-        let strict = expander.strict();
-        let policy = if strict {
-            FetchErrorPolicy::WrapAsChannelRelationsError
-        } else {
-            FetchErrorPolicy::SwallowAsWarning
-        };
 
         loop {
             select_biased! {
-                result = pending.select_next_some() => {
-                    let (url, platform, subdir, warning) = result?;
-                    if let Some(w) = warning {
-                        expander.push_warning(w);
-                    }
-                    if let Some(subdir_names) = subdir.package_names() {
+                result = discovery.pending.select_next_some() => {
+                    let fetched = result?;
+                    if let Some(subdir_names) = fetched.subdir.package_names() {
                         names.extend(subdir_names);
                     }
-                    for (new_url, new_channel, new_plat) in expander.observe(&url, platform, &subdir)? {
-                        notices.queue(&self.gateway, &new_url, new_channel.clone(), self.reporter.clone());
-                        pending.push(spawn_names_fetch(
-                            self.gateway.clone(),
-                            new_channel,
-                            new_plat,
-                            new_url,
-                            self.reporter.clone(),
-                            policy,
-                        ));
+                    for scheduled in discovery.observe(fetched)? {
+                        notices.queue(&self.gateway, &scheduled.url, scheduled.channel, self.reporter.clone());
                     }
                 }
 
@@ -1504,10 +1397,9 @@ impl NamesQuery {
             }
         }
 
-        if expander.enabled() && expander.has_observed_relations() {
-            // Names are an unordered set; finalize only for its
-            // depth/cycle diagnostics and strict-mode errors.
-            expander.finalize()?;
+        if discovery.expander.enabled() && discovery.expander.has_observed_relations() {
+            // Names are unordered; finalize for depth/cycle diagnostics.
+            discovery.expander.finalize()?;
         }
 
         let names = names
@@ -1517,40 +1409,14 @@ impl NamesQuery {
         Ok(NamesQueryOutput {
             names,
             notices: notices.collected,
-            warnings: expander
+            warnings: discovery
+                .expander
                 .take_warnings()
                 .into_iter()
                 .map(GatewayWarning::from)
                 .collect(),
         })
     }
-}
-
-type NamesFetchResult = Result<
-    (
-        ChannelUrl,
-        Subdir,
-        Arc<SubdirState>,
-        Option<ChannelRelationsWarning>,
-    ),
-    GatewayError,
->;
-
-/// Build a future that fetches a channel subdir for `NamesQuery` and
-/// applies `policy` to any fetch error.
-fn spawn_names_fetch(
-    gateway: Arc<GatewayInner>,
-    channel: Arc<Channel>,
-    platform: Subdir,
-    url: ChannelUrl,
-    reporter: Option<Arc<dyn Reporter>>,
-    policy: FetchErrorPolicy,
-) -> BoxFuture<NamesFetchResult> {
-    box_future(async move {
-        let (subdir, warning) =
-            fetch_subdir_with_policy(&gateway, &channel, platform, &url, reporter, policy).await?;
-        Ok((url, platform, subdir, warning))
-    })
 }
 
 impl IntoFuture for NamesQuery {
