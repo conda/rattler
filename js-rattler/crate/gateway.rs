@@ -1,8 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
 use rattler_conda_types::{
-    Channel, ChannelNoticeLevel, MatchSpec, ParseMatchSpecOptions, RepoDataRecord,
-    RepodataRevision, Subdir,
+    Channel, ChannelNoticeLevel, MatchSpec, ParseStrictness, RepoDataRecord, Subdir,
 };
 use rattler_repodata_gateway::{
     ChannelConfig, Gateway, GatewayWarning, SourceConfig, fetch::CacheAction,
@@ -30,7 +29,7 @@ pub(crate) fn emit_gateway_warnings(warnings: Vec<GatewayWarning>) {
     }
 }
 
-use crate::JsResult;
+use crate::{JsResult, match_spec::parse_options};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -304,12 +303,7 @@ impl JsGateway {
             .collect::<Result<Vec<_>, _>>()?;
         let specs = specs
             .into_iter()
-            .map(|s| {
-                MatchSpec::from_str(
-                    &s,
-                    ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3),
-                )
-            })
+            .map(|s| MatchSpec::from_str(&s, parse_options(ParseStrictness::Lenient)))
             .collect::<Result<Vec<_>, _>>()?;
 
         let output = self

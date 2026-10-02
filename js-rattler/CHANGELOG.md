@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `MatchSpec`: parse a match spec (`numpy >=2 py313*`, `conda-forge::python[extras=[foo]]`) with the same lenient, repodata v3 syntax the gateway accepts, read its fields (`name`, `version`, `build`, `channel`, `subdir`, `sha256`, …) and test records against it with `matches` (a `PackageRecord`) or `matchesJson` (the plain records a `Gateway.query` returns)
+- `Gateway.query` accepts `MatchSpec` objects next to strings
+
 ## [0.4.0] - 2026-08-19
 
 ### Highlights

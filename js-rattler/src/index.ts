@@ -1,6 +1,7 @@
 export { ParseStrictness } from "../pkg/";
 export * from "./Version";
 export * from "./VersionSpec";
+export * from "./MatchSpec";
 export * from "./Platform";
 export * from "./solve";
 export * from "./PackageName";
