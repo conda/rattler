@@ -10,6 +10,7 @@ from rattler import (
     ChannelPriority,
     Gateway,
     MatchSpec,
+    MultiSource,
     PackageFormatSelection,
     RepoDataRecord,
     SparseRepoData,
@@ -319,6 +320,65 @@ async def test_solve_accepts_sparse_repodata_as_source() -> None:
     assert isinstance(solved_data, list)
     assert isinstance(solved_data[0], RepoDataRecord)
     assert len(solved_data) == 2
+
+
+def multichannel_test_channel_dir(name: str) -> str:
+    data_dir = os.path.join(os.path.dirname(__file__), "../../../test-data/")
+    return os.path.abspath(os.path.join(data_dir, f"channels/multichannel-{name}"))
+
+
+@pytest.mark.asyncio
+async def test_solve_multi_source(gateway: Gateway) -> None:
+    """The channels of a `MultiSource` share a channel priority tier. With strict
+    channel priority `pkg` 1.0 in the first channel does not hide `pkg` 2.0 in the
+    second, while `pkg` 3.0 in the channel after the group is excluded."""
+    channel_a, channel_b, channel_c = (Channel(multichannel_test_channel_dir(name)) for name in "abc")
+
+    solved_data = await solve(
+        [MultiSource("grp", [channel_a, channel_b]), channel_c],
+        ["pkg"],
+        gateway=gateway,
+        platforms=["noarch"],
+        channel_priority=ChannelPriority.Strict,
+    )
+
+    assert [(str(record.version), record.channel) for record in solved_data] == [("2.0", channel_b.base_url)]
+
+
+def multichannel_test_sparse_repodata(name: str) -> SparseRepoData:
+    channel_dir = multichannel_test_channel_dir(name)
+    return SparseRepoData(
+        channel=Channel(channel_dir), subdir="noarch", path=os.path.join(channel_dir, "noarch", "repodata.json")
+    )
+
+
+@pytest.mark.asyncio
+async def test_solve_multi_source_of_sparse_repodata() -> None:
+    sparse_a, sparse_b, sparse_c = (multichannel_test_sparse_repodata(name) for name in "abc")
+
+    solved_data = await solve(
+        [MultiSource("grp", [sparse_a, sparse_b]), sparse_c],
+        ["pkg"],
+        platforms=["noarch"],
+        channel_priority=ChannelPriority.Strict,
+    )
+    solved_without_gateway = await solve_with_sparse_repodata(
+        ["pkg"],
+        [MultiSource("grp", [sparse_a, sparse_b]), sparse_c],
+        channel_priority=ChannelPriority.Strict,
+    )
+
+    expected = [("2.0", Channel(multichannel_test_channel_dir("b")).base_url)]
+    assert [(str(record.version), record.channel) for record in solved_data] == expected
+    assert [(str(record.version), record.channel) for record in solved_without_gateway] == expected
+
+
+@pytest.mark.asyncio
+async def test_solve_with_sparse_repodata_rejects_channels_in_multi_source() -> None:
+    multi_source = MultiSource("grp", [Channel(multichannel_test_channel_dir("a"))])
+
+    with pytest.raises(TypeError, match="can only contain SparseRepoData"):
+        await solve_with_sparse_repodata(["pkg"], [multi_source])
 
 
 @pytest.mark.asyncio

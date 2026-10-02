@@ -78,7 +78,8 @@ use record::{PyLink, PyRecord};
 use repo_data::{
     PyChannelInfo, PyChannelRelations, PyRepoData,
     gateway::{
-        PyChannelNotice, PyFetchRepoDataOptions, PyGateway, PyRemovedPackage, PySourceConfig,
+        PyChannelNotice, PyFetchRepoDataOptions, PyGateway, PyMultiSource, PyRemovedPackage,
+        PySourceConfig,
     },
     patch_instructions::PyPatchInstructions,
     sparse::{PyPackageFormatSelection, PySparseRepoData},
@@ -123,6 +124,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
 
     m.add_class::<PyChannel>()?;
     m.add_class::<PyChannelConfig>()?;
+    m.add_class::<PyMultiSource>()?;
     m.add_class::<PyChannelPriority>()?;
     m.add_class::<PyConfig>()?;
     m.add_class::<PySubdir>()?;
