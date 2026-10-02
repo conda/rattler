@@ -6,6 +6,8 @@
 
 #[cfg(feature = "libsolv_c")]
 pub mod libsolv_c;
+#[cfg(any(feature = "resolvo", feature = "libsolv_c"))]
+mod priority_tier;
 #[cfg(feature = "resolvo")]
 pub mod resolvo;
 
@@ -504,12 +506,12 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     pub cancellation_token: Option<CancellationToken>,
 }
 
-impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
-    for SolverTask<'r, Vec<RepoDataIter<I>>>
-{
-    fn from_iter<T: IntoIterator<Item = I>>(iter: T) -> Self {
+impl<'r, T> SolverTask<'r, T> {
+    /// Creates a task that solves against `available_packages` with default
+    /// settings for everything else.
+    fn with_available_packages(available_packages: T) -> Self {
         Self {
-            available_packages: iter.into_iter().map(|iter| RepoDataIter(iter)).collect(),
+            available_packages,
             locked_packages: Vec::new(),
             pinned_packages: Vec::new(),
             virtual_packages: Vec::new(),
@@ -523,6 +525,22 @@ impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
             excluded_candidates: HashMap::new(),
             cancellation_token: None,
         }
+    }
+}
+
+impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
+    for SolverTask<'r, Vec<RepoDataIter<I>>>
+{
+    fn from_iter<T: IntoIterator<Item = I>>(iter: T) -> Self {
+        Self::with_available_packages(iter.into_iter().map(|iter| RepoDataIter(iter)).collect())
+    }
+}
+
+impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<ChannelRepoData<'r, I>>
+    for SolverTask<'r, Vec<ChannelRepoData<'r, I>>>
+{
+    fn from_iter<T: IntoIterator<Item = ChannelRepoData<'r, I>>>(iter: T) -> Self {
+        Self::with_available_packages(iter.into_iter().collect())
     }
 }
 
@@ -559,7 +577,12 @@ pub enum SolveStrategy {
 /// Some solvers may add additional functionality to their specific
 /// implementation that enables caching the repodata to disk in an efficient way
 /// (see [`crate::libsolv_c::RepoData`] for an example).
-pub trait SolverRepoData<'a>: FromIterator<&'a RepoDataRecord> {}
+pub trait SolverRepoData<'a>: FromIterator<&'a RepoDataRecord> {
+    /// Places these records in the multichannel called `name`.
+    ///
+    /// See [`ChannelRepoData`] for how a multichannel affects the solve.
+    fn set_multi_channel(&mut self, name: &'a str);
+}
 
 /// Defines the ability to convert a type into [`SolverRepoData`].
 pub trait IntoRepoData<'a, S: SolverRepoData<'a>> {
@@ -595,5 +618,40 @@ impl<'a, T: IntoIterator<Item = &'a RepoDataRecord>, S: SolverRepoData<'a>> Into
 {
     fn into(self) -> S {
         self.0.into_iter().collect()
+    }
+}
+
+/// The records of a single channel subdirectory, together with the
+/// multichannel the channel was requested through, if any.
+///
+/// All channels of one multichannel form a single channel priority tier, like
+/// conda treats them. With [`ChannelPriority::Strict`] a package is not
+/// excluded from a later member just because an earlier member also provides
+/// that package, while channels outside the multichannel are still excluded.
+/// With [`ChannelPriority::Flexible`] the solver does not prefer an earlier
+/// member over a later one. The order of the members only breaks ties between
+/// otherwise identical candidates.
+///
+/// For backends that support channel-specific match specs, a spec whose
+/// channel name equals the name of the multichannel (e.g. `defaults::python`)
+/// accepts records from every member.
+pub struct ChannelRepoData<'a, T> {
+    /// The records of the channel subdirectory.
+    pub records: T,
+
+    /// The name of the multichannel this channel belongs to, or `None` if the
+    /// channel was requested on its own.
+    pub multi_channel: Option<&'a str>,
+}
+
+impl<'a, T: IntoIterator<Item = &'a RepoDataRecord>, S: SolverRepoData<'a>> IntoRepoData<'a, S>
+    for ChannelRepoData<'a, T>
+{
+    fn into(self) -> S {
+        let mut repo_data: S = self.records.into_iter().collect();
+        if let Some(name) = self.multi_channel {
+            repo_data.set_multi_channel(name);
+        }
+        repo_data
     }
 }
