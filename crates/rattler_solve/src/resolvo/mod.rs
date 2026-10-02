@@ -171,6 +171,16 @@ impl SolverPackageRecord<'_> {
         }
     }
 
+    /// The build string of the record, if it has a meaningful one. Extras are not
+    /// backed by a record, and a virtual package's build string is a placeholder
+    /// that only adds noise when reported to the user.
+    fn build(&self) -> Option<&str> {
+        match self {
+            SolverPackageRecord::Record(rec) => Some(&rec.package_record.build),
+            SolverPackageRecord::VirtualPackage(_) | SolverPackageRecord::Extra { .. } => None,
+        }
+    }
+
     fn track_features(&self) -> &[String] {
         const EMPTY: [String; 0] = [];
         match self {
@@ -736,34 +746,51 @@ impl Interner for CondaDependencyProvider<'_> {
             return String::new();
         }
 
-        // Collect the distinct versions in sorted order. The same version can
-        // appear multiple times when there are several builds of it.
-        let versions = solvables
+        // Collect the distinct version/build pairs in sorted order. The version
+        // alone does not identify a candidate: two builds of the same version can
+        // have different dependencies, so they show up as separate entries in a
+        // conflict report and are indistinguishable without the build string.
+        let variants = solvables
             .iter()
-            .filter_map(|&id| self.pool.resolve_solvable(id).record.version())
+            .map(|&id| &self.pool.resolve_solvable(id).record)
+            .filter_map(|record| record.version().map(|version| (version, record.build())))
             .sorted()
             .dedup()
             .collect::<Vec<_>>();
+
+        // When every candidate comes from the same build, naming it once reads much
+        // better than repeating it after every version. Otherwise pair each version
+        // with its build in the conda-spec `version=build` form.
+        let common_build = variants
+            .iter()
+            .map(|&(_, build)| build)
+            .all_equal_value()
+            .ok()
+            .flatten();
+        let versions = variants
+            .iter()
+            .map(|(version, build)| match build {
+                Some(build) if common_build.is_none() => format!("{version}={build}"),
+                _ => version.to_string(),
+            })
+            .collect::<Vec<_>>();
+        let suffix = common_build.map_or(String::new(), |build| format!(" (build {build})"));
 
         // Abbreviate long lists with an ellipsis so a package with many versions
         // does not flood the error message, similar to micromamba.
         let versions = if versions.len() > HEAD + TAIL + 1 {
             versions[..HEAD]
                 .iter()
-                .map(ToString::to_string)
-                .chain(std::iter::once("...".to_string()))
-                .chain(
-                    versions[versions.len() - TAIL..]
-                        .iter()
-                        .map(ToString::to_string),
-                )
+                .map(String::as_str)
+                .chain(std::iter::once("..."))
+                .chain(versions[versions.len() - TAIL..].iter().map(String::as_str))
                 .join(" | ")
         } else {
-            versions.iter().map(ToString::to_string).join(" | ")
+            versions.join(" | ")
         };
 
         let name = self.display_solvable_name(solvables[0]);
-        let result = format!("{name} {versions}");
+        let result = format!("{name} {versions}{suffix}");
         result.trim_end().to_string()
     }
 

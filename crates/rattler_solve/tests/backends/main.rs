@@ -55,6 +55,18 @@ fn dummy_channel_with_optional_dependencies_json_path() -> String {
     )
 }
 
+/// The records `rattler solve 'diffle!=0.0.2' vscode-langservers-extracted`
+/// loads on `osx-arm64`, as conda-forge served them on 2026-09-28. Both specs
+/// end up needing `nodejs`, but different majors of it.
+fn nodejs_conflict_json_paths() -> [String; 2] {
+    ["osx-arm64", "noarch"].map(|subdir| {
+        format!(
+            "{}/../../test-data/channels/nodejs-conflict/{subdir}/repodata.json",
+            env!("CARGO_MANIFEST_DIR")
+        )
+    })
+}
+
 pub(crate) fn dummy_md5_hash() -> rattler_digest::Md5Hash {
     rattler_digest::parse_digest_from_hex::<rattler_digest::Md5>("b3af409bb8423187c75e6c7f5b683908")
         .unwrap()
@@ -81,6 +93,14 @@ fn read_sparse_repodata(path: &str) -> SparseRepoData {
         None,
     )
     .unwrap()
+}
+
+fn virtual_package(name: &str, version: &str, build_string: &str) -> GenericVirtualPackage {
+    GenericVirtualPackage {
+        name: name.parse().unwrap(),
+        version: Version::from_str(version).unwrap(),
+        build_string: build_string.to_string(),
+    }
 }
 
 fn installed_package(
@@ -168,13 +188,18 @@ impl PackageBuilder {
         self
     }
 
+    // The archive identifier is kept in step with the record: records that share
+    // one are deduplicated before they reach the solver, so builders that only
+    // differ in version or build string have to differ in their identifier too.
     fn version(mut self, version: &str) -> Self {
         self.record.package_record.version = Version::from_str(version).unwrap().into();
+        self.record.identifier.identifier.version = version.to_string();
         self
     }
 
     fn build_string(mut self, build: &str) -> Self {
         self.record.package_record.build = build.to_string();
+        self.record.identifier.identifier.build_string = build.to_string();
         self
     }
 
@@ -864,7 +889,8 @@ mod resolvo {
     use super::dummy_channel_with_optional_dependencies_json_path;
     use super::{
         FromStr, GenericVirtualPackage, PackageBuilder, SimpleSolveTask, SolveError, Version,
-        dummy_channel_json_path, installed_package, solve, solve_real_world,
+        dummy_channel_json_path, installed_package, nodejs_conflict_json_paths, solve,
+        solve_real_world, virtual_package,
     };
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);
@@ -895,11 +921,93 @@ mod resolvo {
         };
 
         let err = rattler_solve::resolvo::Solver.solve(task).unwrap_err();
-        insta::assert_snapshot!(err, @r###"
-        Cannot solve the request because of: foo * cannot be installed because there are no viable options:
-        └─ foo 1.0 | 2.0 | ... | 8.0 would require
+        insta::assert_snapshot!(err, @"
+        foo * cannot be installed because there are no viable options:
+        └─ foo 1.0 | 2.0 | ... | 8.0 (build h123456_0) would require
            └─ bar ==1.0, for which no candidates were found.
-        "###);
+        ");
+    }
+
+    /// A conflict that a single branch cannot explain: `app` pins one `node`
+    /// major per build while `tool` needs one of two entirely different ones.
+    ///
+    /// Every branch of the report is printed in full, so the same `tool` subtree
+    /// appears under each of `app`'s builds. Every requirement a conflict message
+    /// points at therefore carries an `(A)`-style label, and the messages name
+    /// that label alongside the version set so the reader can jump to the line
+    /// the conflict came from.
+    #[test]
+    fn test_unsat_repeated_subtrees_are_labelled() {
+        fn record(name: &str, version: &str, build: &str, depends: &[&str]) -> RepoDataRecord {
+            PackageBuilder::new(name)
+                .version(version)
+                .build_string(build)
+                .depends(depends.to_vec())
+                .build()
+        }
+
+        let repo_data: Vec<RepoDataRecord> = [
+            // Two `node` lines `tool` can be built against, and two more that
+            // `app` pins. `4.1` and `4.2` behave identically in the graph and so
+            // merge into one line, spelled out as `version=build` pairs because
+            // they do not share a build string. `5.1` fails for a reason of its
+            // own, so the branch that pins it shows both kinds of dead end.
+            record("node", "2.1", "hnode_0", &[]),
+            record("node", "2.2", "hnode_0", &[]),
+            record("node", "2.3", "hnode_0", &[]),
+            record("node", "3.1", "hnode_0", &[]),
+            record("node", "3.2", "hnode_0", &[]),
+            record("node", "4.1", "hnode_0", &[]),
+            record("node", "4.2", "hnode_1", &[]),
+            record("node", "5.0", "hnode_0", &[]),
+            record("node", "5.1", "hnode_0", &["libc >=2"]),
+            record("libc", "1.0", "hlibc_0", &[]),
+            record("tool", "1.0", "hold_0", &["node 2.*"]),
+            record("tool", "1.0", "hnew_0", &["node 3.*"]),
+        ]
+        .into_iter()
+        // Two versions of `app` per build, so that the branches show a merged
+        // version list rather than a single version.
+        .chain(["1.0", "1.1"].into_iter().flat_map(|version| {
+            [("hcpu_0", "node >=4,<5"), ("hgpu_0", "node >=5,<6")]
+                .into_iter()
+                .map(move |(build, pin)| record("app", version, build, &["tool", pin]))
+        }))
+        .collect();
+
+        let task = SolverTask {
+            specs: vec![MatchSpec::from_str("app", ParseStrictness::Lenient).unwrap()],
+            ..SolverTask::from_iter([&repo_data])
+        };
+
+        let err = rattler_solve::resolvo::Solver.solve(task).unwrap_err();
+        insta::assert_snapshot!(err);
+    }
+
+    /// The same shape of conflict as
+    /// [`test_unsat_repeated_subtrees_are_labelled`], but from real repodata:
+    /// `rattler solve 'diffle!=0.0.2' vscode-langservers-extracted
+    /// --exclude-newer 2026-09-28`. Every `diffle` build needs a `nodejs` of at
+    /// least 24 while `vscode-langservers-extracted` only has builds for 20 and
+    /// 22, and conda-forge ships enough `nodejs` builds that the report leans on
+    /// both merged candidate lists and labels to stay readable.
+    #[test]
+    fn test_unsat_real_world_nodejs_conflict() {
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            &nodejs_conflict_json_paths(),
+            SimpleSolveTask {
+                specs: &["diffle!=0.0.2", "vscode-langservers-extracted"],
+                exclude_newer: Some("2026-09-28T00:00:00Z".parse::<Timestamp>().unwrap().into()),
+                virtual_packages: vec![
+                    virtual_package("__unix", "0", "0"),
+                    virtual_package("__osx", "27.0.1", "0"),
+                    virtual_package("__archspec", "1", "m1"),
+                ],
+                ..SimpleSolveTask::default()
+            },
+        );
+
+        insta::assert_snapshot!(result.unwrap_err());
     }
 
     #[test]
@@ -1337,19 +1445,19 @@ mod resolvo {
             },
         );
 
-        insta::assert_snapshot!(result.unwrap_err(), @r###"
-        Cannot solve the request because of: The following packages are incompatible
+        insta::assert_snapshot!(result.unwrap_err(), @"
+        The following packages are incompatible
         ├─ conflicting-extras[extra1] can be installed with any of the following options:
         │  └─ conflicting-extras[extra1]
         ├─ conflicting-extras[extra2] can be installed with any of the following options:
         │  └─ conflicting-extras[extra2]
         └─ conflicting-extras [extras=[extra1, extra2]] cannot be installed because there are no viable options:
-           └─ conflicting-extras 1 would require
-              ├─ bar >=2, which can be installed with any of the following options:
-              │  └─ bar 2
+           └─ conflicting-extras 1 (build xxx) would require
+              ├─ (A) bar >=2, which can be installed with any of the following options:
+              │  └─ bar 2 (build xxx)
               └─ bar <2, which cannot be installed because there are no viable options:
-                 └─ bar 1, which conflicts with the versions reported above.
-        "###);
+                 └─ bar 1 (build xxx), which conflicts with bar >=2 (A)
+        ");
     }
 
     /// A test that checks that extras can cause conflicts with other package
@@ -1364,17 +1472,17 @@ mod resolvo {
             },
         );
 
-        insta::assert_snapshot!(result.unwrap_err(), @r###"
-        Cannot solve the request because of: The following packages are incompatible
+        insta::assert_snapshot!(result.unwrap_err(), @"
+        The following packages are incompatible
         ├─ conflicting-extras[extra1] can be installed with any of the following options:
         │  └─ conflicting-extras[extra1]
-        ├─ bar >=2 can be installed with any of the following options:
-        │  └─ bar 2
+        ├─ (A) bar >=2 can be installed with any of the following options:
+        │  └─ bar 2 (build xxx)
         └─ conflicting-extras [extras=[extra1]] cannot be installed because there are no viable options:
-           └─ conflicting-extras 1 would require
+           └─ conflicting-extras 1 (build xxx) would require
               └─ bar <2, which cannot be installed because there are no viable options:
-                 └─ bar 1, which conflicts with the versions reported above.
-        "###);
+                 └─ bar 1 (build xxx), which conflicts with bar >=2 (A)
+        ");
     }
 
     #[test]
@@ -1772,8 +1880,8 @@ fn channel_priority_strict() {
 #[should_panic(
     expected = "called `Result::unwrap()` on an `Err` value: Unsolvable([\"The following packages \
     are incompatible\\n└─ pytorch-cpu ==0.4.1 py36_cpu_1 cannot be installed because there are no \
-    viable options:\\n   └─ pytorch-cpu 0.4.1 is excluded because due to strict channel priority \
-    not using this option from: 'https://conda.anaconda.org/pytorch/'\\n\"])"
+    viable options:\\n   └─ pytorch-cpu 0.4.1 (build py36_cpu_1) is excluded because due to strict \
+    channel priority not using this option from: 'https://conda.anaconda.org/pytorch/'\\n\"])"
 )]
 fn channel_priority_strict_panic() {
     let repodata = vec![
