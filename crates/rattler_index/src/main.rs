@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
+use bytesize::ByteSize;
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
 use rattler_conda_types::Subdir;
@@ -8,7 +9,8 @@ use rattler_config::config::{
     concurrency::default_max_concurrent_solves, index::IndexChannelConfig,
 };
 use rattler_index::{
-    ChannelMetadata, IndexFsConfig, PackageRevisionAssignment, index_fs_with_channel_metadata,
+    ChannelMetadata, IndexFsConfig, IndexProcessingOptions, IndexStats, PackageRevisionAssignment,
+    index_fs_with_channel_metadata,
 };
 #[cfg(feature = "s3")]
 use rattler_index::{IndexS3Config, PreconditionChecks, index_s3_with_channel_metadata};
@@ -16,8 +18,12 @@ use rattler_index::{IndexS3Config, PreconditionChecks, index_s3_with_channel_met
 use rattler_networking::AuthenticationStorage;
 #[cfg(feature = "s3")]
 use rattler_s3::{S3CredentialSource, S3Credentials};
+use tokio_util::sync::CancellationToken;
 #[cfg(feature = "s3")]
 use url::Url;
+
+/// Exit code used when the process was interrupted with `SIGINT`.
+const EXIT_INTERRUPTED: i32 = 130;
 
 #[cfg(feature = "s3")]
 fn parse_s3_url(value: &str) -> Result<Url, String> {
@@ -51,6 +57,19 @@ struct Cli {
     /// This is necessary to limit memory usage when indexing large channels.
     #[arg(long, global = true)]
     max_parallel: Option<usize>,
+
+    /// The maximum number of package bytes to hold in memory simultaneously.
+    /// Accepts a suffix like `512MiB` or `4GB`. Together with `--max-parallel`
+    /// this bounds the memory used for packages in flight.
+    #[arg(long, global = true, default_value = "2GiB")]
+    max_in_flight_bytes: ByteSize,
+
+    /// Persist parsed package metadata in the channel under `<subdir>/.cache/`.
+    /// A package is only downloaded and parsed again when it changed, an
+    /// interrupted run resumes from what was already cached, and several
+    /// machines can index the same channel at once.
+    #[arg(long, global = true, default_value = "false")]
+    cache: bool,
 
     /// A specific platform to index.
     /// Defaults to all platforms available in the channel.
@@ -134,7 +153,15 @@ async fn main() -> anyhow::Result<()> {
         PreconditionChecks::Enabled
     };
 
-    match cli.command {
+    let cancellation_token = CancellationToken::new();
+    spawn_ctrl_c_handler(cancellation_token.clone());
+    let processing = IndexProcessingOptions {
+        cache: cli.cache,
+        max_in_flight_bytes: Some(cli.max_in_flight_bytes.as_u64()),
+        cancellation_token: Some(cancellation_token.clone()),
+    };
+
+    let stats = match cli.command {
         Commands::FileSystem { channel } => {
             let target = channel
                 .canonicalize()
@@ -158,6 +185,7 @@ async fn main() -> anyhow::Result<()> {
                     force: cli.force,
                     max_parallel,
                     multi_progress: Some(multi_progress),
+                    processing,
                 },
                 channel_metadata,
             )
@@ -208,14 +236,75 @@ async fn main() -> anyhow::Result<()> {
                     max_parallel,
                     multi_progress: Some(multi_progress),
                     precondition_checks,
+                    processing,
                 },
                 channel_metadata,
             )
             .await
         }
     }?;
-    println!("Finished indexing channel.");
+
+    report(&stats);
+    if stats.cancelled {
+        std::process::exit(EXIT_INTERRUPTED);
+    }
+    if stats.has_failures() {
+        std::process::exit(1);
+    }
     Ok(())
+}
+
+/// Cancels `token` on the first `SIGINT` and aborts the process on the second.
+fn spawn_ctrl_c_handler(token: CancellationToken) {
+    tokio::spawn(async move {
+        if tokio::signal::ctrl_c().await.is_err() {
+            return;
+        }
+        eprintln!(
+            "\nInterrupted. Finishing the packages in flight and saving progress; press Ctrl-C again to abort."
+        );
+        token.cancel();
+        if tokio::signal::ctrl_c().await.is_ok() {
+            eprintln!("Aborted.");
+            std::process::exit(EXIT_INTERRUPTED);
+        }
+    });
+}
+
+/// Prints a summary of the indexing run.
+fn report(stats: &IndexStats) {
+    let added: usize = stats.subdirs.values().map(|s| s.packages_added).sum();
+    let removed: usize = stats.subdirs.values().map(|s| s.packages_removed).sum();
+    let skipped: usize = stats.subdirs.values().map(|s| s.packages_skipped).sum();
+    let failed = stats.failed_packages().count();
+
+    if failed > 0 {
+        eprintln!("{failed} packages could not be indexed and were left out of the repodata:");
+        let mut failures = stats.failed_packages().collect::<Vec<_>>();
+        failures.sort_by(|a, b| (a.0.as_str(), &a.1.filename).cmp(&(b.0.as_str(), &b.1.filename)));
+        for (subdir, failure) in failures {
+            eprintln!("  {subdir}/{}: {}", failure.filename, failure.error);
+        }
+    }
+
+    if stats.cancelled {
+        let not_written = stats
+            .subdirs
+            .iter()
+            .filter(|(_, s)| s.cancelled && !s.repodata_written)
+            .map(|(subdir, _)| subdir.as_str())
+            .collect::<Vec<_>>();
+        println!(
+            "Interrupted after indexing {added} packages ({skipped} not attempted). Re-run the same command to continue."
+        );
+        if !not_written.is_empty() {
+            println!("Repodata was not updated for: {}.", not_written.join(", "));
+        }
+    } else {
+        println!(
+            "Finished indexing channel: {added} packages added, {removed} removed, {failed} failed."
+        );
+    }
 }
 
 fn resolve_index_channel_config(config: &Option<Config>, target: &str) -> IndexChannelConfig {
