@@ -8,4 +8,5 @@ export * from "./PackageName";
 export * from "./typeUtils";
 export * from "./PackageRecord";
 export * from "./Gateway";
+export * from "./PackageArchive";
 export * from "./RattlerError";

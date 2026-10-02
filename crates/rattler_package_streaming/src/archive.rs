@@ -66,52 +66,14 @@ use tracing::debug;
 use url::Url;
 
 use crate::ExtractError;
-
-/// Bytes fetched from the end of a remote archive on open: enough for the
-/// ZIP central directory, with the surplus acting as a cache that often
-/// contains the entire info section.
-const TAIL_SIZE: u64 = 64 * 1024;
+pub use crate::range::{ArchiveEntryKind, Section};
+use crate::range::{LOCAL_HEADER_MAGIC, TAIL_SIZE, member_data_range, normalize};
 
 /// Buffer size used for the decompression pipelines.
 const STREAM_BUF_SIZE: usize = 128 * 1024;
 
-/// Signature of a ZIP local file header (`PK\x03\x04`).
-const LOCAL_HEADER_MAGIC: [u8; 4] = [0x50, 0x4b, 0x03, 0x04];
-
 /// Cap for upfront buffer allocations based on (untrusted) tar header sizes.
 const MAX_PREALLOC: u64 = 4 * 1024 * 1024;
-
-/// The two sections of a conda package.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Section {
-    /// Package metadata: everything under `info/`. Stored in the
-    /// `info-*.tar.zst` member of a `.conda` archive.
-    Info,
-    /// The package payload. Stored in the `pkg-*.tar.zst` member of a
-    /// `.conda` archive.
-    Content,
-}
-
-impl Section {
-    /// Returns the section a path inside the package belongs to.
-    pub(crate) fn containing(path: &Path) -> Section {
-        let first = path
-            .components()
-            .find(|c| !matches!(c, std::path::Component::CurDir));
-        match first {
-            Some(std::path::Component::Normal(first)) if first == "info" => Section::Info,
-            _ => Section::Content,
-        }
-    }
-
-    /// The file name prefix of the ZIP member holding this section.
-    pub(crate) fn zip_prefix(self) -> &'static str {
-        match self {
-            Section::Info => "info-",
-            Section::Content => "pkg-",
-        }
-    }
-}
 
 /// How a remote archive should be opened.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -233,29 +195,6 @@ pub struct PackageArchive {
 /// A boxed reader used for the section decompression pipelines.
 type DynReader = Box<dyn AsyncRead + Send + Unpin>;
 type RawSectionEntry = tokio_tar::Entry<tokio_tar::Archive<DynReader>>;
-
-/// The kind of an entry in a package archive.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum ArchiveEntryKind {
-    /// A regular file.
-    File,
-    /// A directory.
-    Directory,
-    /// A symbolic link.
-    Symlink,
-    /// A hard link.
-    Hardlink,
-    /// Another tar entry type.
-    Other,
-}
-
-impl ArchiveEntryKind {
-    /// Returns whether this entry is a symbolic or hard link.
-    pub fn is_link(self) -> bool {
-        matches!(self, Self::Symlink | Self::Hardlink)
-    }
-}
 
 /// An entry yielded by [`SectionStream::next_entry`].
 ///
@@ -975,50 +914,6 @@ pub(crate) async fn read_raw_entry_contents<R: AsyncRead + Unpin>(
 pub(crate) fn parse_package_file<P: PackageFile>(bytes: &[u8]) -> Result<P, ExtractError> {
     P::from_slice(bytes)
         .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
-}
-
-/// Validates a package-relative path and strips `.` components.
-///
-/// Package paths may not be empty, absolute, or contain parent components.
-pub(crate) fn normalize(path: &Path) -> Result<std::borrow::Cow<'_, Path>, ExtractError> {
-    let mut needs_normalization = false;
-    let mut has_component = false;
-    for component in path.components() {
-        match component {
-            std::path::Component::Normal(_) => has_component = true,
-            std::path::Component::CurDir => needs_normalization = true,
-            std::path::Component::ParentDir
-            | std::path::Component::RootDir
-            | std::path::Component::Prefix(_) => {
-                return Err(ExtractError::InvalidArchivePath(path.to_owned()));
-            }
-        }
-    }
-    if !has_component {
-        return Err(ExtractError::InvalidArchivePath(path.to_owned()));
-    }
-    if needs_normalization {
-        Ok(std::borrow::Cow::Owned(
-            path.components()
-                .filter(|component| !matches!(component, std::path::Component::CurDir))
-                .collect(),
-        ))
-    } else {
-        Ok(std::borrow::Cow::Borrowed(path))
-    }
-}
-
-/// Parses a ZIP local file header at the start of `buf` and returns the
-/// range of the member data if `buf` contains all of it.
-fn member_data_range(buf: &[u8], size: u64) -> Option<std::ops::Range<usize>> {
-    if buf.len() < 30 || buf[0..4] != LOCAL_HEADER_MAGIC {
-        return None;
-    }
-    let name_len = u16::from_le_bytes([buf[26], buf[27]]) as usize;
-    let extra_len = u16::from_le_bytes([buf[28], buf[29]]) as usize;
-    let data_start = 30 + name_len + extra_len;
-    let data_end = data_start.checked_add(size as usize)?;
-    (data_end <= buf.len()).then_some(data_start..data_end)
 }
 
 /// Reads and skips a ZIP local file header from a stream, leaving the reader

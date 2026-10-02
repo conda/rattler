@@ -1,4 +1,3 @@
-
 use rattler_conda_types::{
     MatchSpec, Matches, PackageRecord, ParseMatchSpecOptions, ParseStrictness, RepoDataRecord,
     RepodataRevision,
