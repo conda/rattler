@@ -251,14 +251,12 @@ mod tests {
     use super::*;
     use crate::authentication_storage::backends::{file::FileStorage, memory::MemoryStorage};
 
-    #[cfg(feature = "keyring")]
     // Requests are only authenticated when executed, so we need to capture and
     // cancel the request
     struct CaptureAbortMiddleware {
         pub captured_tx: tokio::sync::mpsc::Sender<reqwest::Request>,
     }
 
-    #[cfg(feature = "keyring")]
     #[async_trait::async_trait]
     impl Middleware for CaptureAbortMiddleware {
         async fn handle(
@@ -277,18 +275,15 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "keyring")]
     fn make_client_harness(
-        storage: &AuthenticationStorage,
+        middleware: AuthenticationMiddleware,
     ) -> (
         reqwest_middleware::ClientWithMiddleware,
         tokio::sync::mpsc::Receiver<reqwest::Request>,
     ) {
         let (captured_tx, captured_rx) = tokio::sync::mpsc::channel(1);
         let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::default())
-            .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
-                storage.clone(),
-            )))
+            .with(middleware)
             .with_arc(Arc::new(CaptureAbortMiddleware { captured_tx }))
             .build();
 
@@ -344,7 +339,8 @@ mod tests {
         let auth = retrieved.unwrap();
         assert!(auth == authentication);
 
-        let (client, mut captured_rx) = make_client_harness(&storage);
+        let (client, mut captured_rx) =
+            make_client_harness(AuthenticationMiddleware::from_auth_storage(storage.clone()));
 
         let request = client.get("https://conda.example.com/conda-forge/noarch/testpkg.tar.bz2");
         let request = request.build().unwrap();
@@ -395,7 +391,8 @@ mod tests {
         let auth = retrieved.unwrap();
         assert!(auth == authentication);
 
-        let (client, mut captured_rx) = make_client_harness(&storage);
+        let (client, mut captured_rx) =
+            make_client_harness(AuthenticationMiddleware::from_auth_storage(storage.clone()));
 
         let request = client.get("https://bearer.example.com/conda-forge/noarch/testpkg.tar.bz2");
         let request = request.build().unwrap();
@@ -454,7 +451,8 @@ mod tests {
         let auth = retrieved.unwrap();
         assert!(auth == authentication);
 
-        let (client, mut captured_rx) = make_client_harness(&storage);
+        let (client, mut captured_rx) =
+            make_client_harness(AuthenticationMiddleware::from_auth_storage(storage.clone()));
 
         let request = client.get("https://basic.example.com/conda-forge/noarch/testpkg.tar.bz2");
         let request = request.build().unwrap();
@@ -724,31 +722,9 @@ mod tests {
 
     #[tokio::test]
     async fn audience_credentials_require_exact_context_and_origin() {
-        async fn authorization(
-            client: &reqwest_middleware::ClientWithMiddleware,
-            url: Url,
-        ) -> String {
-            client.post(url).send().await.unwrap().text().await.unwrap()
-        }
         const ISSUER: &str = "https://issuer.example";
         const AUDIENCE: &str = "https://audit.example";
-        let router = Router::new().route(
-            "/api",
-            post(|headers: HeaderMap| async move {
-                headers
-                    .get("authorization")
-                    .map(|header| header.to_str().unwrap().to_owned())
-                    .unwrap_or_default()
-            }),
-        );
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let url = Url::parse(&format!("http://{}/api", listener.local_addr().unwrap())).unwrap();
-        let other = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let other_url = Url::parse(&format!("http://{}/api", other.local_addr().unwrap())).unwrap();
-        let second_router = router.clone();
-        let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-        let other_server =
-            tokio::spawn(async move { axum::serve(other, second_router).await.unwrap() });
+        let origin = Url::parse(AUDIENCE).unwrap().origin();
         let mut storage = AuthenticationStorage::empty();
         storage.add_backend(Arc::new(MemoryStorage::new()));
         let auth = Authentication::OAuth {
@@ -766,46 +742,58 @@ mod tests {
                 &auth,
             )
             .unwrap();
-        let channel = Authentication::BearerToken("fixture-channel".into());
-        storage.store("127.0.0.1", &channel).unwrap();
-        let client =
-            |issuer, id, audience| {
-                reqwest_middleware::ClientBuilder::new(
-                    reqwest::Client::builder()
-                        .redirect(reqwest::redirect::Policy::none())
-                        .build()
-                        .unwrap(),
-                )
-                .with(
-                    AuthenticationMiddleware::from_auth_storage(storage.clone())
-                        .with_oauth_audience(issuer, id, audience, url.origin()),
-                )
-                .build()
-            };
-        let http = client(ISSUER, "rattler", AUDIENCE);
-        assert_eq!(
-            authorization(&http, url.clone()).await,
-            "Bearer fixture.opaque.token"
-        );
-        assert_eq!(storage.get("127.0.0.1").unwrap(), Some(channel));
-        assert_eq!(authorization(&http, other_url).await, "");
-        // Even a misplaced audience grant under a host key must not be a fallback.
-        storage.store("127.0.0.1", &auth).unwrap();
-        for (issuer, id, audience) in [
-            ("https://other.example", "rattler", AUDIENCE),
-            (ISSUER, "other", AUDIENCE),
-            (ISSUER, "rattler", "other-audience"),
+        storage
+            .store(
+                "audit.example",
+                &Authentication::BearerToken("fixture-channel".into()),
+            )
+            .unwrap();
+        for (issuer, client_id, audience, url, expected) in [
+            (
+                ISSUER,
+                "rattler",
+                AUDIENCE,
+                AUDIENCE,
+                Some("Bearer fixture.opaque.token"),
+            ),
+            (ISSUER, "rattler", AUDIENCE, "https://other.example", None),
+            (
+                ISSUER,
+                "rattler",
+                AUDIENCE,
+                "https://audit.example:444",
+                None,
+            ),
+            (ISSUER, "rattler", AUDIENCE, "http://audit.example", None),
+            ("https://other.example", "rattler", AUDIENCE, AUDIENCE, None),
+            (ISSUER, "other", AUDIENCE, AUDIENCE, None),
+            (ISSUER, "rattler", "other-audience", AUDIENCE, None),
         ] {
+            let middleware = AuthenticationMiddleware::from_auth_storage(storage.clone())
+                .with_oauth_audience(issuer, client_id, audience, origin.clone());
+            let (http, mut captured) = make_client_harness(middleware);
+            let _ = http.post(url).send().await;
+            let request = captured.recv().await.unwrap();
             assert_eq!(
-                authorization(&client(issuer, id, audience), url.clone()).await,
-                ""
+                request
+                    .headers()
+                    .get("authorization")
+                    .map(|v| v.to_str().unwrap()),
+                expected
             );
         }
-        let channel_http = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
-            .with(AuthenticationMiddleware::from_auth_storage(storage))
-            .build();
-        assert_eq!(authorization(&channel_http, url).await, "");
-        server.abort();
-        other_server.abort();
+        // A misplaced audience grant must not be used by channel middleware.
+        storage.store("audit.example", &auth).unwrap();
+        let (http, mut captured) =
+            make_client_harness(AuthenticationMiddleware::from_auth_storage(storage));
+        let _ = http.post(AUDIENCE).send().await;
+        assert!(
+            !captured
+                .recv()
+                .await
+                .unwrap()
+                .headers()
+                .contains_key("authorization")
+        );
     }
 }

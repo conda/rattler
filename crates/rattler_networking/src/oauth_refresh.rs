@@ -437,12 +437,8 @@ mod tests {
 
     /// Spawn a token endpoint whose handler receives the posted form parameters,
     /// so tests can assert on (and react to) the `refresh_token` that was sent.
-    async fn spawn_token_endpoint_with_form(
-        handler: impl Fn(HashMap<String, String>) -> (StatusCode, Json<serde_json::Value>)
-        + Clone
-        + Send
-        + Sync
-        + 'static,
+    async fn spawn_token_endpoint_with_form<R: axum::response::IntoResponse + 'static>(
+        handler: impl Fn(HashMap<String, String>) -> R + Clone + Send + Sync + 'static,
     ) -> String {
         let router = Router::new().route(
             "/token",
@@ -460,23 +456,10 @@ mod tests {
         format!("http://{addr}/token")
     }
 
-    async fn spawn_token_endpoint(
-        handler: impl Fn() -> (StatusCode, Json<serde_json::Value>) + Clone + Send + Sync + 'static,
+    async fn spawn_token_endpoint<R: axum::response::IntoResponse + 'static>(
+        handler: impl Fn() -> R + Clone + Send + Sync + 'static,
     ) -> String {
-        let router = Router::new().route(
-            "/token",
-            post({
-                let handler = handler.clone();
-                move || {
-                    let handler = handler.clone();
-                    async move { handler() }
-                }
-            }),
-        );
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-        format!("http://{addr}/token")
+        spawn_token_endpoint_with_form(move |_| handler()).await
     }
 
     #[tokio::test]
@@ -690,49 +673,54 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn refresh_preserves_omitted_refresh_token_and_rejects_invalid_responses() {
-        for (response, valid) in [
-            (
-                json!({"access_token":"fixture.fresh.token", "expires_in":3600,"token_type":"bearer"}),
-                true,
-            ),
-            (
-                json!({"access_token":"fixture", "expires_in":3600,"token_type":"MAC"}),
-                false,
-            ),
-            (
-                json!({"access_token":"fixture", "token_type":"Bearer"}),
-                false,
-            ),
-            (
-                json!({"access_token":"fixture", "expires_in":-1,"token_type":"Bearer"}),
-                false,
-            ),
-            (
-                json!({"access_token":"fixture", "expires_in":i64::MAX,"token_type":"Bearer"}),
-                false,
-            ),
-            (
-                json!({"access_token":"fixture", "expires_in":3600,"token_type":"Bearer","refresh_token":""}),
-                false,
-            ),
-            (json!("x".repeat(70_000)), false),
+    async fn refresh_preserves_omitted_refresh_token() {
+        for audience in [None, Some(AUDIENCE)] {
+            let endpoint = spawn_token_endpoint_with_form(move |form| {
+                assert_eq!(form.get("audience").map(String::as_str), audience);
+                (StatusCode::OK, Json(json!({"access_token":"fixture.fresh.token", "expires_in":3600,"token_type":"Bearer"})))
+            }).await;
+            let (old, key) = if audience.is_some() {
+                (expired_audience_oauth(endpoint), audience_key())
+            } else {
+                (expired_oauth(endpoint), "repo.prefix.dev".into())
+            };
+            let store = auth_storage(&key, &old);
+            let result = maybe_refresh_oauth(&store, old, &key).await;
+            assert!(result.failure().is_none());
+            let refreshed = result.into_authentication().unwrap();
+            assert!(
+                matches!(&refreshed, Authentication::OAuth { access_token, refresh_token: Some(refresh), audience: aud, .. }
+                if access_token == "fixture.fresh.token" && refresh == "refresh-token" && aud.as_deref() == audience)
+            );
+            assert_eq!(store.get(&key).unwrap(), Some(refreshed));
+        }
+    }
+
+    #[tokio::test]
+    async fn audience_refresh_rejects_invalid_responses() {
+        for (field, value) in [
+            ("token_type", json!("MAC")),
+            ("expires_in", json!(null)),
+            ("expires_in", json!(-1)),
+            ("expires_in", json!(i64::MAX)),
+            ("refresh_token", json!("")),
+            ("access_token", json!("x".repeat(70_000))),
         ] {
+            let mut response =
+                json!({"access_token":"fixture", "expires_in":3600,"token_type":"Bearer"});
+            if value.is_null() {
+                response.as_object_mut().unwrap().remove(field);
+            } else {
+                response[field] = value;
+            }
             let endpoint =
                 spawn_token_endpoint(move || (StatusCode::OK, Json(response.clone()))).await;
             let old = expired_audience_oauth(endpoint);
             let store = auth_storage(&audience_key(), &old);
             let result = maybe_refresh_oauth(&store, old.clone(), &audience_key()).await;
-            if valid {
-                assert!(result.failure().is_none());
-                assert!(
-                    matches!(result.into_authentication(), Some(Authentication::OAuth { refresh_token: Some(refresh), audience: Some(aud), .. }) if refresh == "refresh-token" && aud == AUDIENCE)
-                );
-            } else {
-                assert!(result.failure().is_some());
-                assert!(result.into_authentication().is_none());
-                assert_eq!(store.get(&audience_key()).unwrap(), Some(old));
-            }
+            assert!(result.failure().is_some(), "invalid {field}");
+            assert!(result.into_authentication().is_none());
+            assert_eq!(store.get(&audience_key()).unwrap(), Some(old));
         }
     }
     #[tokio::test]
@@ -748,17 +736,13 @@ mod tests {
             )
         })
         .await;
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let endpoint = format!("http://{}/token", listener.local_addr().unwrap());
-        let redirect = destination;
-        let router = Router::new().route(
-            "/token",
-            post(move || {
-                let redirect = redirect.clone();
-                async move { (StatusCode::TEMPORARY_REDIRECT, [(LOCATION, redirect)]) }
-            }),
-        );
-        let source = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let endpoint = spawn_token_endpoint(move || {
+            (
+                StatusCode::TEMPORARY_REDIRECT,
+                [(LOCATION, destination.clone())],
+            )
+        })
+        .await;
         let old = expired_audience_oauth(endpoint);
         let store = auth_storage(&audience_key(), &old);
         let result = maybe_refresh_oauth(&store, old.clone(), &audience_key()).await;
@@ -766,7 +750,6 @@ mod tests {
         assert!(result.into_authentication().is_none());
         assert_eq!(calls.load(Ordering::SeqCst), 0);
         assert_eq!(store.get(&audience_key()).unwrap(), Some(old));
-        source.abort();
     }
     #[derive(Debug)]
     struct FailedBackend {

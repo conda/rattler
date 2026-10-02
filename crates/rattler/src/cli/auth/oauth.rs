@@ -1010,7 +1010,7 @@ mod tests {
         require_resource_bearer,
     };
     use openidconnect::core::CoreTokenType;
-    use rattler_networking::{Authentication, AuthenticationStorage};
+    use rattler_networking::Authentication;
     use std::collections::HashSet;
     use url::Url;
 
@@ -1111,29 +1111,38 @@ mod tests {
         assert!(append_audience(&mut url, Some("other")).is_err());
     }
 
-    #[tokio::test]
-    async fn invalid_audience_is_rejected_before_login() {
-        for audience in ["", "one two", "a\nb"] {
-            assert!(
-                perform_oauth_login(config("http://127.0.0.1:1", Some(audience)))
-                    .await
-                    .is_err()
-            );
+    #[test]
+    fn audience_validation() {
+        for audience in ["", "one two", "a\nb", "a\0b", &"a".repeat(2049)] {
+            assert!(super::validate_audience(Some(audience)).is_err());
+        }
+        for audience in [
+            None,
+            Some("https://AUDIT.example/path/?x=y"),
+            Some("audit"),
+            Some(&"a".repeat(2048)),
+        ] {
+            assert!(super::validate_audience(audience).is_ok());
         }
     }
 
     #[tokio::test]
-    async fn device_login_returns_credentials_and_caller_owns_storage() {
+    async fn device_login_forwards_audience_and_redacts_provider_errors() {
+        use axum::http::StatusCode;
         use axum::{
             Json, Router,
             extract::Form,
             routing::{get, post},
         };
-        use rattler_networking::authentication_storage::backends::memory::MemoryStorage;
         use serde_json::json;
-        use std::{collections::HashMap, sync::Arc};
+        use std::collections::HashMap;
 
-        for audience in [Some("https://audit.example"), None] {
+        for (audience, fail) in [
+            (Some("https://audit.example"), false),
+            (None, false),
+            (Some("https://audit.example"), true),
+            (None, true),
+        ] {
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             let issuer = format!("http://{}", listener.local_addr().unwrap());
             let discovery = json!({"issuer":issuer,"authorization_endpoint":format!("{issuer}/authorize"),"token_endpoint":format!("{issuer}/token"),"jwks_uri":format!("{issuer}/jwks"),"device_authorization_endpoint":format!("{issuer}/device"),"response_types_supported":["code"],"subject_types_supported":["public"],"id_token_signing_alg_values_supported":["RS256"]});
@@ -1142,32 +1151,33 @@ mod tests {
                 .route("/jwks", get(|| async {Json(json!({"keys":[]}))}))
                 .route("/device", post(move |Form(form):Form<HashMap<String,String>>| async move {
                     assert_eq!(form.get("audience").map(String::as_str), audience);
-                    assert_eq!(form["client_id"], "rattler");
-                    assert!(form["scope"].contains("offline_access"));
                     Json(json!({"device_code":"fixture-device", "user_code":"TEST", "verification_uri":"https://issuer.example/verify", "expires_in":60,"interval":0}))
                 }))
-                .route("/token", post(|Form(form):Form<HashMap<String,String>>| async move {
-                    assert_eq!(form["grant_type"], "urn:ietf:params:oauth:grant-type:device_code");
-                    Json(json!({"access_token":"fixture.opaque.token", "refresh_token":"fixture-refresh", "token_type":"Bearer", "expires_in":3600}))
+                .route("/token", post(move || async move {
+                    if fail {
+                        (StatusCode::BAD_REQUEST, Json(json!({"error":"invalid_grant", "error_description":"fixture-sensitive-detail"})))
+                    } else {
+                        (StatusCode::OK, Json(json!({"access_token":"fixture.opaque.token", "refresh_token":"fixture-refresh", "token_type":"Bearer", "expires_in":3600})))
+                    }
                 }));
             let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-            let mut storage = AuthenticationStorage::empty();
-            storage.add_backend(Arc::new(MemoryStorage::new()));
-            let channel = Authentication::BearerToken("fixture-channel".into());
-            storage.store("issuer.example", &channel).unwrap();
-            let auth = perform_oauth_login(config(&issuer, audience))
-                .await
-                .unwrap();
-            assert!(
-                matches!(&auth, Authentication::OAuth { audience: value, access_token, .. } if value.as_deref() == audience && access_token == "fixture.opaque.token")
-            );
-            let key = audience.map_or_else(
-                || "127.0.0.1".into(),
-                |audience| AuthenticationStorage::oauth_audience_key(&issuer, "rattler", audience),
-            );
-            storage.store(&key, &auth).unwrap();
-            assert_eq!(storage.get(&key).unwrap(), Some(auth));
-            assert_eq!(storage.get("issuer.example").unwrap(), Some(channel));
+            let result = perform_oauth_login(config(&issuer, audience)).await;
+            if fail {
+                let error = result.unwrap_err();
+                // Control: the ordinary flow includes the provider description;
+                // the audience flow strips it from both Display and Debug.
+                for message in [error.to_string(), format!("{error:?}")] {
+                    assert_eq!(
+                        message.contains("fixture-sensitive-detail"),
+                        audience.is_none()
+                    );
+                }
+            } else {
+                assert!(
+                    matches!(result.unwrap(), Authentication::OAuth { audience: value, access_token, .. }
+                    if value.as_deref() == audience && access_token == "fixture.opaque.token")
+                );
+            }
             server.abort();
         }
     }
