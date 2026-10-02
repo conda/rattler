@@ -56,11 +56,12 @@ http-auth = { workspace = true }
 itertools = { workspace = true }
 keyring-core = { workspace = true, optional = true }
 netrc-rs = { workspace = true, optional = true }
-reqwest = { workspace = true, features = ["json", "form"] }
+reqwest = { workspace = true, features = ["json", "form", "stream"] }
 reqwest-middleware = { workspace = true, features = ["json"] }
 retry-policies = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, optional = true }
@@ -94,7 +95,6 @@ tokio = { workspace = true, features = ["macros", "time"] }
 reqwest = { workspace = true, features = ["json", "form", "stream"] }
 axum = { workspace = true, features = ["json", "form"] }
 reqwest-retry = { workspace = true }
-sha2 = { workspace = true }
 hex = { workspace = true }
 temp-env = { workspace = true }
 rstest = { workspace = true }

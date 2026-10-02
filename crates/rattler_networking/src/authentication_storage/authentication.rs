@@ -30,6 +30,10 @@ pub enum Authentication {
     },
     /// OAuth/OIDC credentials with automatic token refresh support
     OAuth {
+        /// Optional audience requested at login, retained for refresh.
+        /// Absent in existing channel credentials.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        audience: Option<String>,
         /// The OAuth access token
         access_token: String,
         /// The OAuth refresh token (if available)
@@ -74,5 +78,25 @@ impl Authentication {
             Authentication::S3Credentials { .. } => "S3",
             Authentication::OAuth { .. } => "OAuth",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_oauth_json_round_trips_without_audience() {
+        let old = serde_json::json!({"OAuth": {
+            "access_token": "fixture", "refresh_token": null, "expires_at": null,
+            "token_endpoint": "https://issuer.example/token", "revocation_endpoint": null,
+            "client_id": "rattler"
+        }});
+        let auth: Authentication = serde_json::from_value(old.clone()).unwrap();
+        assert!(matches!(
+            &auth,
+            Authentication::OAuth { audience: None, .. }
+        ));
+        assert_eq!(serde_json::to_value(auth).unwrap(), old);
     }
 }

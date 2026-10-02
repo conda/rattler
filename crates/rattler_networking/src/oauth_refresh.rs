@@ -2,6 +2,7 @@
 
 use std::fmt;
 
+use futures::StreamExt;
 use serde::Deserialize;
 
 use crate::{Authentication, AuthenticationStorage};
@@ -12,6 +13,7 @@ struct TokenRefreshResponse {
     access_token: String,
     refresh_token: Option<String>,
     expires_in: Option<i64>,
+    token_type: Option<String>,
 }
 
 /// Number of seconds before `expires_at` at which a token is considered
@@ -38,11 +40,22 @@ fn oauth_expires_at(auth: &Authentication) -> Option<i64> {
 }
 
 fn needs_refresh(auth: &Authentication) -> bool {
-    oauth_expires_at(auth).is_some_and(|exp| exp - now_unix_timestamp() < EXPIRY_SKEW_SECONDS)
+    is_expired(auth)
+        || oauth_expires_at(auth)
+            .is_some_and(|exp| exp.saturating_sub(now_unix_timestamp()) < EXPIRY_SKEW_SECONDS)
 }
 
 fn is_expired(auth: &Authentication) -> bool {
-    oauth_expires_at(auth).is_some_and(|exp| exp <= now_unix_timestamp())
+    match oauth_expires_at(auth) {
+        Some(exp) => exp <= now_unix_timestamp(),
+        None => matches!(
+            auth,
+            Authentication::OAuth {
+                audience: Some(_),
+                ..
+            }
+        ),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -139,7 +152,39 @@ pub(crate) async fn maybe_refresh_oauth(
             }
             current_auth
         }
+        Ok(None)
+            if matches!(
+                &auth,
+                Authentication::OAuth {
+                    audience: Some(_),
+                    ..
+                }
+            ) =>
+        {
+            return OAuthRefreshOutcome {
+                authentication: None,
+                failure: Some(OAuthRefreshFailure::ReauthenticationRequired {
+                    reason: "Audience credentials were removed".into(),
+                }),
+            };
+        }
         Ok(None) => auth,
+        Err(_error)
+            if matches!(
+                &auth,
+                Authentication::OAuth {
+                    audience: Some(_),
+                    ..
+                }
+            ) =>
+        {
+            return OAuthRefreshOutcome {
+                authentication: None,
+                failure: Some(OAuthRefreshFailure::Transient {
+                    reason: "Failed to read audience credentials".into(),
+                }),
+            };
+        }
         Err(e) => {
             tracing::warn!("Failed to re-read OAuth credentials before refresh: {e}");
             auth
@@ -147,6 +192,7 @@ pub(crate) async fn maybe_refresh_oauth(
     };
 
     let Authentication::OAuth {
+        ref audience,
         access_token: _,
         ref refresh_token,
         expires_at: _,
@@ -158,6 +204,17 @@ pub(crate) async fn maybe_refresh_oauth(
         return auth_outcome(auth);
     };
 
+    // The browser transport cannot enforce the no-redirect refresh policy.
+    #[cfg(target_arch = "wasm32")]
+    if audience.is_some() {
+        return stale_auth_fallback(
+            auth,
+            OAuthRefreshFailure::Transient {
+                reason: "Audience refresh requires a native HTTP client".into(),
+            },
+        );
+    }
+
     let Some(refresh_token_val) = refresh_token.as_deref() else {
         let failure = OAuthRefreshFailure::MissingRefreshToken;
         tracing::warn!("{failure}");
@@ -166,12 +223,32 @@ pub(crate) async fn maybe_refresh_oauth(
 
     tracing::debug!("OAuth token expired, attempting refresh");
 
-    let client = reqwest::Client::new();
-    let params = [
+    let builder = reqwest::Client::builder();
+    #[cfg(not(target_arch = "wasm32"))]
+    let builder = if audience.is_some() {
+        builder.redirect(reqwest::redirect::Policy::none())
+    } else {
+        builder
+    };
+    let client = match builder.build() {
+        Ok(client) => client,
+        Err(_) => {
+            return stale_auth_fallback(
+                auth,
+                OAuthRefreshFailure::Transient {
+                    reason: "Failed to construct OAuth client".into(),
+                },
+            );
+        }
+    };
+    let mut params = vec![
         ("grant_type", "refresh_token"),
         ("refresh_token", refresh_token_val),
-        ("client_id", client_id),
+        ("client_id", client_id.as_str()),
     ];
+    if let Some(audience) = audience {
+        params.push(("audience", audience.as_str()));
+    }
 
     let response = match client
         .post(token_endpoint.as_str())
@@ -181,18 +258,22 @@ pub(crate) async fn maybe_refresh_oauth(
         .await
     {
         Ok(resp) => resp,
-        Err(e) => {
+        Err(_error) => {
             let failure = OAuthRefreshFailure::Transient {
-                reason: format!("Failed to refresh OAuth token: {e}"),
+                reason: "Failed to refresh OAuth token".into(),
             };
             tracing::warn!("{failure}");
             return stale_auth_fallback(auth, failure);
         }
     };
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let failure = match response.json::<serde_json::Value>().await {
+    let status = response.status();
+    let body = match read_refresh_body(response).await {
+        Ok(body) => body,
+        Err(failure) => return stale_auth_fallback(auth, failure),
+    };
+    if !status.is_success() {
+        let failure = match serde_json::from_slice::<serde_json::Value>(&body) {
             Ok(body) => {
                 let error_code = body
                     .get("error")
@@ -205,7 +286,7 @@ pub(crate) async fn maybe_refresh_oauth(
                     }
                 } else {
                     OAuthRefreshFailure::Transient {
-                        reason: format!("OAuth token refresh failed with error code: {error_code}"),
+                        reason: format!("OAuth token refresh failed with HTTP {status}"),
                     }
                 }
             }
@@ -217,26 +298,42 @@ pub(crate) async fn maybe_refresh_oauth(
         return stale_auth_fallback(auth, failure);
     }
 
-    let token_response: TokenRefreshResponse = match response.json().await {
+    let token_response: TokenRefreshResponse = match serde_json::from_slice(&body) {
         Ok(body) => body,
-        Err(e) => {
+        Err(_error) => {
             let failure = OAuthRefreshFailure::InvalidResponse {
-                reason: format!("Failed to read OAuth refresh response body: {e}"),
+                reason: "Invalid OAuth refresh response".into(),
             };
             tracing::warn!("{failure}");
             return stale_auth_fallback(auth, failure);
         }
     };
 
-    let new_expires_at = token_response.expires_in.map(|secs| {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64
-            + secs
-    });
+    let new_expires_at = token_response
+        .expires_in
+        .and_then(|secs| now_unix_timestamp().checked_add(secs));
+    if audience.is_some()
+        && (token_response.access_token.is_empty()
+            || !token_response
+                .token_type
+                .as_deref()
+                .is_some_and(|t| t.eq_ignore_ascii_case("bearer"))
+            || new_expires_at.is_none_or(|expiry| expiry <= now_unix_timestamp())
+            || token_response
+                .refresh_token
+                .as_ref()
+                .is_some_and(String::is_empty))
+    {
+        return stale_auth_fallback(
+            auth,
+            OAuthRefreshFailure::InvalidResponse {
+                reason: "Invalid audience token refresh response".into(),
+            },
+        );
+    }
 
     let refreshed = Authentication::OAuth {
+        audience: audience.clone(),
         access_token: token_response.access_token,
         refresh_token: token_response
             .refresh_token
@@ -248,10 +345,42 @@ pub(crate) async fn maybe_refresh_oauth(
     };
 
     if let Err(e) = storage.store(matched_key, &refreshed) {
+        if audience.is_some() {
+            return stale_auth_fallback(
+                auth,
+                OAuthRefreshFailure::Transient {
+                    reason: "Failed to persist refreshed audience token".into(),
+                },
+            );
+        }
         tracing::warn!("Failed to store refreshed OAuth token: {e}");
     }
 
     auth_outcome(refreshed)
+}
+
+// Bound success and error bodies; report read/size failures without response text.
+async fn read_refresh_body(response: reqwest::Response) -> Result<Vec<u8>, OAuthRefreshFailure> {
+    const MAX_BODY: usize = 64 * 1024;
+    let invalid = || OAuthRefreshFailure::InvalidResponse {
+        reason: "Invalid or oversized OAuth refresh response".into(),
+    };
+    if response
+        .content_length()
+        .is_some_and(|len| len > MAX_BODY as u64)
+    {
+        return Err(invalid());
+    }
+    let mut stream = Box::pin(response.bytes_stream());
+    let mut body = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|_error| invalid())?;
+        if body.len() + chunk.len() > MAX_BODY {
+            return Err(invalid());
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
 }
 
 #[cfg(test)]
@@ -269,10 +398,13 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::authentication_storage::backends::memory::MemoryStorage;
+    use crate::authentication_storage::{
+        AuthenticationStorageError, StorageBackend, backends::memory::MemoryStorage,
+    };
 
     fn expired_oauth(token_endpoint: String) -> Authentication {
         Authentication::OAuth {
+            audience: None,
             access_token: "expired-access-token".to_string(),
             refresh_token: Some("refresh-token".to_string()),
             expires_at: Some(now_unix_timestamp() - 60),
@@ -286,6 +418,7 @@ mod tests {
     /// but not yet expired (so `is_expired` is false).
     fn near_expiry_oauth(token_endpoint: String) -> Authentication {
         Authentication::OAuth {
+            audience: None,
             access_token: "near-expiry-access-token".to_string(),
             refresh_token: Some("refresh-token".to_string()),
             expires_at: Some(now_unix_timestamp() + 60),
@@ -304,12 +437,8 @@ mod tests {
 
     /// Spawn a token endpoint whose handler receives the posted form parameters,
     /// so tests can assert on (and react to) the `refresh_token` that was sent.
-    async fn spawn_token_endpoint_with_form(
-        handler: impl Fn(HashMap<String, String>) -> (StatusCode, Json<serde_json::Value>)
-        + Clone
-        + Send
-        + Sync
-        + 'static,
+    async fn spawn_token_endpoint_with_form<R: axum::response::IntoResponse + 'static>(
+        handler: impl Fn(HashMap<String, String>) -> R + Clone + Send + Sync + 'static,
     ) -> String {
         let router = Router::new().route(
             "/token",
@@ -327,23 +456,10 @@ mod tests {
         format!("http://{addr}/token")
     }
 
-    async fn spawn_token_endpoint(
-        handler: impl Fn() -> (StatusCode, Json<serde_json::Value>) + Clone + Send + Sync + 'static,
+    async fn spawn_token_endpoint<R: axum::response::IntoResponse + 'static>(
+        handler: impl Fn() -> R + Clone + Send + Sync + 'static,
     ) -> String {
-        let router = Router::new().route(
-            "/token",
-            post({
-                let handler = handler.clone();
-                move || {
-                    let handler = handler.clone();
-                    async move { handler() }
-                }
-            }),
-        );
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-        format!("http://{addr}/token")
+        spawn_token_endpoint_with_form(move |_| handler()).await
     }
 
     #[tokio::test]
@@ -472,6 +588,7 @@ mod tests {
     async fn missing_refresh_token_yields_unauthenticated() {
         let host = "repo.prefix.dev";
         let expired = Authentication::OAuth {
+            audience: None,
             access_token: "expired-access-token".to_string(),
             refresh_token: None,
             expires_at: Some(now_unix_timestamp() - 60),
@@ -541,5 +658,164 @@ mod tests {
             result.failure,
             Some(OAuthRefreshFailure::Transient { .. })
         ));
+    }
+
+    const AUDIENCE: &str = "https://audit.example";
+    fn audience_key() -> String {
+        AuthenticationStorage::oauth_audience_key("https://issuer.example", "client-id", AUDIENCE)
+    }
+    fn expired_audience_oauth(endpoint: String) -> Authentication {
+        let mut auth = expired_oauth(endpoint);
+        if let Authentication::OAuth { audience, .. } = &mut auth {
+            *audience = Some(AUDIENCE.into());
+        }
+        auth
+    }
+
+    #[tokio::test]
+    async fn refresh_preserves_omitted_refresh_token() {
+        for audience in [None, Some(AUDIENCE)] {
+            let endpoint = spawn_token_endpoint_with_form(move |form| {
+                assert_eq!(form.get("audience").map(String::as_str), audience);
+                (StatusCode::OK, Json(json!({"access_token":"fixture.fresh.token", "expires_in":3600,"token_type":"Bearer"})))
+            }).await;
+            let (old, key) = if audience.is_some() {
+                (expired_audience_oauth(endpoint), audience_key())
+            } else {
+                (expired_oauth(endpoint), "repo.prefix.dev".into())
+            };
+            let store = auth_storage(&key, &old);
+            let result = maybe_refresh_oauth(&store, old, &key).await;
+            assert!(result.failure().is_none());
+            let refreshed = result.into_authentication().unwrap();
+            assert!(
+                matches!(&refreshed, Authentication::OAuth { access_token, refresh_token: Some(refresh), audience: aud, .. }
+                if access_token == "fixture.fresh.token" && refresh == "refresh-token" && aud.as_deref() == audience)
+            );
+            assert_eq!(store.get(&key).unwrap(), Some(refreshed));
+        }
+    }
+
+    #[tokio::test]
+    async fn audience_refresh_rejects_invalid_responses() {
+        for (field, value) in [
+            ("token_type", json!("MAC")),
+            ("expires_in", json!(null)),
+            ("expires_in", json!(-1)),
+            ("expires_in", json!(i64::MAX)),
+            ("refresh_token", json!("")),
+            ("access_token", json!("x".repeat(70_000))),
+        ] {
+            let mut response =
+                json!({"access_token":"fixture", "expires_in":3600,"token_type":"Bearer"});
+            if value.is_null() {
+                response.as_object_mut().unwrap().remove(field);
+            } else {
+                response[field] = value;
+            }
+            let endpoint =
+                spawn_token_endpoint(move || (StatusCode::OK, Json(response.clone()))).await;
+            let old = expired_audience_oauth(endpoint);
+            let store = auth_storage(&audience_key(), &old);
+            let result = maybe_refresh_oauth(&store, old.clone(), &audience_key()).await;
+            assert!(result.failure().is_some(), "invalid {field}");
+            assert!(result.into_authentication().is_none());
+            assert_eq!(store.get(&audience_key()).unwrap(), Some(old));
+        }
+    }
+    #[tokio::test]
+    async fn audience_refresh_does_not_follow_redirects() {
+        use axum::http::{StatusCode, header::LOCATION};
+        let calls = Arc::new(AtomicUsize::new(0));
+        let count = calls.clone();
+        let destination = spawn_token_endpoint(move || {
+            count.fetch_add(1, Ordering::SeqCst);
+            (
+                StatusCode::OK,
+                Json(json!({"access_token":"fixture", "expires_in":3600,"token_type":"Bearer"})),
+            )
+        })
+        .await;
+        let endpoint = spawn_token_endpoint(move || {
+            (
+                StatusCode::TEMPORARY_REDIRECT,
+                [(LOCATION, destination.clone())],
+            )
+        })
+        .await;
+        let old = expired_audience_oauth(endpoint);
+        let store = auth_storage(&audience_key(), &old);
+        let result = maybe_refresh_oauth(&store, old.clone(), &audience_key()).await;
+        assert!(result.failure().is_some());
+        assert!(result.into_authentication().is_none());
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert_eq!(store.get(&audience_key()).unwrap(), Some(old));
+    }
+    #[derive(Debug)]
+    struct FailedBackend {
+        old: Authentication,
+        fail_read: bool,
+    }
+    fn storage_error() -> AuthenticationStorageError {
+        AuthenticationStorageError::StoreFailed {
+            host: "fixture".into(),
+            backends: "fixture".into(),
+        }
+    }
+    impl StorageBackend for FailedBackend {
+        fn name(&self) -> String {
+            "fixture".into()
+        }
+        fn get(&self, _key: &str) -> Result<Option<Authentication>, AuthenticationStorageError> {
+            if self.fail_read {
+                Err(storage_error())
+            } else {
+                Ok(Some(self.old.clone()))
+            }
+        }
+        fn store(
+            &self,
+            _key: &str,
+            _auth: &Authentication,
+        ) -> Result<(), AuthenticationStorageError> {
+            Err(storage_error())
+        }
+        fn delete(&self, _key: &str) -> Result<(), AuthenticationStorageError> {
+            Err(storage_error())
+        }
+    }
+
+    #[tokio::test]
+    async fn storage_failure_never_returns_or_shadows_unpersisted_refresh() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let count = calls.clone();
+        let endpoint = spawn_token_endpoint(move || {
+            count.fetch_add(1, Ordering::SeqCst);
+            (
+                StatusCode::OK,
+                Json(
+                    json!({"access_token":"fixture-new", "expires_in":3600,"token_type":"Bearer"}),
+                ),
+            )
+        })
+        .await;
+        for fail_read in [true, false] {
+            let mut store = AuthenticationStorage::empty();
+            let old = expired_audience_oauth(endpoint.clone());
+            store.add_backend(Arc::new(FailedBackend {
+                old: old.clone(),
+                fail_read,
+            }));
+            let fallback = Arc::new(MemoryStorage::new());
+            store.add_backend(fallback.clone());
+            let result = maybe_refresh_oauth(&store, old.clone(), &audience_key()).await;
+            assert!(result.failure().is_some());
+            assert!(result.into_authentication().is_none());
+            assert_eq!(fallback.get(&audience_key()).unwrap(), None);
+            if !fail_read {
+                assert_eq!(store.get(&audience_key()).unwrap(), Some(old));
+            }
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
     }
 }
