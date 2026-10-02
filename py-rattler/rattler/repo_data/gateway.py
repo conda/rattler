@@ -439,6 +439,7 @@ class Gateway:
         channel_relations: ChannelRelationsMode | None = None,
         channel_relations_max_depth: int | None = None,
         channel_notices: bool = False,
+        package_format_selection: PackageFormatSelection | None = None,
     ) -> GatewayNamesResult:
         """Queries all the names of packages in channels or custom sources.
 
@@ -452,6 +453,12 @@ class Gateway:
                                          ``channel_relations``. ``None`` uses the
                                          default (10).
             channel_notices: Whether to fetch CEP-6 notices for this query.
+            package_format_selection: Only list packages that have records in this
+                                      selection. ``None`` uses the gateway default
+                                      (``PackageFormatSelection.PREFER_CONDA``). Exact for
+                                      ``repodata.json`` channels; sharded channels and
+                                      custom sources only index names, so they list
+                                      every package.
 
         Returns:
             A list of package names that are present in the given subdirectories.
@@ -476,6 +483,7 @@ class Gateway:
             channel_notices=channel_notices,
             channel_relations=channel_relations,
             channel_relations_max_depth=channel_relations_max_depth,
+            package_format_selection=package_format_selection.value if package_format_selection is not None else None,
         )
 
         # Convert the names and notices into Python objects.

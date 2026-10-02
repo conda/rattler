@@ -459,7 +459,9 @@ impl PyGateway {
         channel_relations=None,
         channel_relations_max_depth=None,
         channel_notices=false,
+        package_format_selection=None,
     ))]
+    #[expect(clippy::too_many_arguments)]
     pub fn names<'a>(
         &self,
         py: Python<'a>,
@@ -468,6 +470,7 @@ impl PyGateway {
         channel_relations: Option<Wrap<ChannelRelationsMode>>,
         channel_relations_max_depth: Option<usize>,
         channel_notices: bool,
+        package_format_selection: Option<PyPackageFormatSelection>,
     ) -> PyResult<Bound<'a, PyAny>> {
         // Convert Python sources to Rust Source enum
         let rust_sources: Vec<Source> = sources
@@ -510,6 +513,9 @@ impl PyGateway {
                 }
                 if let Some(depth) = channel_relations_max_depth {
                     query = query.channel_relations_max_depth(depth);
+                }
+                if let Some(package_format_selection) = package_format_selection {
+                    query = query.package_format_selection(package_format_selection.into());
                 }
 
                 if show_progress {
