@@ -739,4 +739,31 @@ mod tests {
             "expected a StoreFailed error, got {result:?}"
         );
     }
+
+    #[test]
+    fn audience_keys_are_exact() {
+        let key = AuthenticationStorage::oauth_audience_key(
+            "https://issuer.example",
+            "rattler",
+            "https://audit.example",
+        );
+        for (issuer, client, audience) in [
+            ("https://ISSUER.example", "rattler", "https://audit.example"),
+            (
+                "https://issuer.example",
+                "other-client",
+                "https://audit.example",
+            ),
+            (
+                "https://issuer.example",
+                "rattler",
+                "https://audit.example/",
+            ),
+        ] {
+            assert_ne!(
+                key,
+                AuthenticationStorage::oauth_audience_key(issuer, client, audience)
+            );
+        }
+    }
 }

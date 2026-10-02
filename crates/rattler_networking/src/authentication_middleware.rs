@@ -228,20 +228,19 @@ pub fn default_auth_store_fallback_directory() -> &'static Path {
     })
 }
 
-#[cfg(all(test, not(target_arch = "wasm32")))]
-#[path = "authentication_middleware/audience_tests.rs"]
-mod audience_tests;
-
 #[cfg(test)]
 mod tests {
-    use std::sync::{
-        Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
+    use std::{
+        collections::HashMap,
+        sync::{
+            Arc, Mutex,
+            atomic::{AtomicUsize, Ordering},
+        },
     };
 
     use axum::{
         Json, Router,
-        extract::State,
+        extract::{Form, State},
         http::{HeaderMap, StatusCode},
         routing::post,
     };
@@ -516,11 +515,16 @@ mod tests {
     async fn concurrent_oauth_refresh_is_coalesced_by_authentication_middleware() {
         #[derive(Clone)]
         struct TestState {
+            audience: Option<&'static str>,
             refresh_count: Arc<AtomicUsize>,
             seen_authorization: Arc<Mutex<Vec<Option<String>>>>,
         }
 
-        async fn token(State(state): State<TestState>) -> (StatusCode, Json<serde_json::Value>) {
+        async fn token(
+            State(state): State<TestState>,
+            Form(form): Form<HashMap<String, String>>,
+        ) -> (StatusCode, Json<serde_json::Value>) {
+            assert_eq!(form.get("audience").map(String::as_str), state.audience);
             state.refresh_count.fetch_add(1, Ordering::SeqCst);
             (
                 StatusCode::OK,
@@ -528,6 +532,7 @@ mod tests {
                     "access_token": "fresh-access-token",
                     "refresh_token": "rotated-refresh-token",
                     "expires_in": 3600,
+                    "token_type": "Bearer",
                 })),
             )
         }
@@ -541,54 +546,83 @@ mod tests {
             "ok"
         }
 
-        let state = TestState {
-            refresh_count: Arc::new(AtomicUsize::new(0)),
-            seen_authorization: Arc::new(Mutex::new(Vec::new())),
-        };
-        let router = Router::new()
-            .route("/token", post(token))
-            .route("/repo", post(repo))
-            .with_state(state.clone());
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        for audience in [None, Some("https://audit.example")] {
+            let state = TestState {
+                audience,
+                refresh_count: Arc::new(AtomicUsize::new(0)),
+                seen_authorization: Arc::new(Mutex::new(Vec::new())),
+            };
+            let router = Router::new()
+                .route("/token", post(token))
+                .route("/repo", post(repo))
+                .with_state(state.clone());
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = listener.local_addr().unwrap();
+            tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
 
-        let host = "127.0.0.1";
-        let mut storage = AuthenticationStorage::empty();
-        storage.add_backend(Arc::new(MemoryStorage::new()));
-        storage
-            .store(
-                host,
-                &Authentication::OAuth {
-                    audience: None,
-                    access_token: "expired-access-token".to_string(),
-                    refresh_token: Some("refresh-token".to_string()),
-                    expires_at: Some(0),
-                    token_endpoint: format!("http://{addr}/token"),
-                    revocation_endpoint: None,
-                    client_id: "client-id".to_string(),
+            let host = audience.map_or_else(
+                || "127.0.0.1".to_owned(),
+                |audience| {
+                    AuthenticationStorage::oauth_audience_key(
+                        "https://issuer.example",
+                        "client-id",
+                        audience,
+                    )
                 },
+            );
+            let mut storage = AuthenticationStorage::empty();
+            storage.add_backend(Arc::new(MemoryStorage::new()));
+            storage
+                .store(
+                    &host,
+                    &Authentication::OAuth {
+                        audience: audience.map(str::to_owned),
+                        access_token: "expired-access-token".to_string(),
+                        refresh_token: Some("refresh-token".to_string()),
+                        expires_at: Some(0),
+                        token_endpoint: format!("http://{addr}/token"),
+                        revocation_endpoint: None,
+                        client_id: "client-id".to_string(),
+                    },
+                )
+                .unwrap();
+
+            let repo_url = format!("http://{addr}/repo");
+            let mut middleware = AuthenticationMiddleware::from_auth_storage(storage.clone());
+            if let Some(audience) = audience {
+                middleware = middleware.with_oauth_audience(
+                    "https://issuer.example",
+                    "client-id",
+                    audience,
+                    Url::parse(&repo_url).unwrap().origin(),
+                );
+            }
+            let client = reqwest_middleware::ClientBuilder::new(
+                reqwest::Client::builder()
+                    .redirect(reqwest::redirect::Policy::none())
+                    .build()
+                    .unwrap(),
             )
-            .unwrap();
-
-        let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::default())
-            .with(AuthenticationMiddleware::from_auth_storage(storage))
+            .with(middleware)
             .build();
-        let repo_url = format!("http://{addr}/repo");
 
-        let responses = join_all((0..8).map(|_| client.post(&repo_url).send())).await;
-        for response in responses {
-            assert_eq!(response.unwrap().status(), StatusCode::OK);
+            let responses = join_all((0..8).map(|_| client.post(&repo_url).send())).await;
+            for response in responses {
+                assert_eq!(response.unwrap().status(), StatusCode::OK);
+            }
+
+            assert_eq!(state.refresh_count.load(Ordering::SeqCst), 1);
+            assert!(
+                matches!(storage.get(&host).unwrap(), Some(Authentication::OAuth { audience: saved, refresh_token: Some(refresh), .. }) if saved.as_deref() == audience && refresh == "rotated-refresh-token")
+            );
+            let seen_authorization = state.seen_authorization.lock().unwrap();
+            assert_eq!(seen_authorization.len(), 8);
+            assert!(
+                seen_authorization
+                    .iter()
+                    .all(|auth| { auth.as_deref() == Some("Bearer fresh-access-token") })
+            );
         }
-
-        assert_eq!(state.refresh_count.load(Ordering::SeqCst), 1);
-        let seen_authorization = state.seen_authorization.lock().unwrap();
-        assert_eq!(seen_authorization.len(), 8);
-        assert!(
-            seen_authorization
-                .iter()
-                .all(|auth| { auth.as_deref() == Some("Bearer fresh-access-token") })
-        );
     }
 
     #[tokio::test]
@@ -686,5 +720,92 @@ mod tests {
             std::fs::read_to_string(file).unwrap(),
             "{\"test.example.com\":{\"CondaToken\":\"testtoken\"}}"
         );
+    }
+
+    #[tokio::test]
+    async fn audience_credentials_require_exact_context_and_origin() {
+        async fn authorization(
+            client: &reqwest_middleware::ClientWithMiddleware,
+            url: Url,
+        ) -> String {
+            client.post(url).send().await.unwrap().text().await.unwrap()
+        }
+        const ISSUER: &str = "https://issuer.example";
+        const AUDIENCE: &str = "https://audit.example";
+        let router = Router::new().route(
+            "/api",
+            post(|headers: HeaderMap| async move {
+                headers
+                    .get("authorization")
+                    .map(|header| header.to_str().unwrap().to_owned())
+                    .unwrap_or_default()
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = Url::parse(&format!("http://{}/api", listener.local_addr().unwrap())).unwrap();
+        let other = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let other_url = Url::parse(&format!("http://{}/api", other.local_addr().unwrap())).unwrap();
+        let second_router = router.clone();
+        let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let other_server =
+            tokio::spawn(async move { axum::serve(other, second_router).await.unwrap() });
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::new(MemoryStorage::new()));
+        let auth = Authentication::OAuth {
+            audience: Some(AUDIENCE.into()),
+            access_token: "fixture.opaque.token".into(),
+            refresh_token: None,
+            expires_at: Some(i64::MAX),
+            token_endpoint: "https://issuer.example/token".into(),
+            revocation_endpoint: None,
+            client_id: "rattler".into(),
+        };
+        storage
+            .store(
+                &AuthenticationStorage::oauth_audience_key(ISSUER, "rattler", AUDIENCE),
+                &auth,
+            )
+            .unwrap();
+        let channel = Authentication::BearerToken("fixture-channel".into());
+        storage.store("127.0.0.1", &channel).unwrap();
+        let client =
+            |issuer, id, audience| {
+                reqwest_middleware::ClientBuilder::new(
+                    reqwest::Client::builder()
+                        .redirect(reqwest::redirect::Policy::none())
+                        .build()
+                        .unwrap(),
+                )
+                .with(
+                    AuthenticationMiddleware::from_auth_storage(storage.clone())
+                        .with_oauth_audience(issuer, id, audience, url.origin()),
+                )
+                .build()
+            };
+        let http = client(ISSUER, "rattler", AUDIENCE);
+        assert_eq!(
+            authorization(&http, url.clone()).await,
+            "Bearer fixture.opaque.token"
+        );
+        assert_eq!(storage.get("127.0.0.1").unwrap(), Some(channel));
+        assert_eq!(authorization(&http, other_url).await, "");
+        // Even a misplaced audience grant under a host key must not be a fallback.
+        storage.store("127.0.0.1", &auth).unwrap();
+        for (issuer, id, audience) in [
+            ("https://other.example", "rattler", AUDIENCE),
+            (ISSUER, "other", AUDIENCE),
+            (ISSUER, "rattler", "other-audience"),
+        ] {
+            assert_eq!(
+                authorization(&client(issuer, id, audience), url.clone()).await,
+                ""
+            );
+        }
+        let channel_http = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+            .with(AuthenticationMiddleware::from_auth_storage(storage))
+            .build();
+        assert_eq!(authorization(&channel_http, url).await, "");
+        server.abort();
+        other_server.abort();
     }
 }

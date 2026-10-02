@@ -225,4 +225,42 @@ mod tests {
 
         assert!(FileStorage::from_path(path.clone()).is_err());
     }
+
+    #[test]
+    fn concurrent_updates_and_deletion_preserve_other_entries() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("credentials.json");
+        let file = FileStorage::from_path(path.clone()).unwrap();
+        file.store("delete-me", &Authentication::BearerToken("fixture".into()))
+            .unwrap();
+        let barrier = Arc::new(std::sync::Barrier::new(10));
+        let jobs: Vec<_> = (0..9)
+            .map(|i| {
+                let file = file.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    if i == 8 {
+                        file.delete("delete-me").unwrap();
+                    } else {
+                        file.store(
+                            &format!("key-{i}"),
+                            &Authentication::BearerToken("fixture".into()),
+                        )
+                        .unwrap();
+                    }
+                })
+            })
+            .collect();
+        barrier.wait();
+        for job in jobs {
+            job.join().unwrap();
+        }
+        let reopened = FileStorage::from_path(path).unwrap();
+        assert_eq!(reopened.list().unwrap().len(), 8);
+        assert!(reopened.get("delete-me").unwrap().is_none());
+        for i in 0..8 {
+            assert!(reopened.get(&format!("key-{i}")).unwrap().is_some());
+        }
+    }
 }
