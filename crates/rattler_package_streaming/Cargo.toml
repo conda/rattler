@@ -50,11 +50,9 @@ zstd = { workspace = true, default-features = false }
 # wasm32 has neither of; `range` reads archives there instead.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # https://github.com/Majored/rs-async-zip/issues/173
-astral_async_zip = { workspace = true, features = [
-  "deflate",
-  "tokio",
-  "tokio-fs",
-] }
+# Only the seek and stream readers are used, never the filesystem reader, so
+# the `tokio-fs` feature stays off; without it the crate also builds for wasm32.
+astral_async_zip = { workspace = true, features = ["deflate", "tokio"] }
 astral-tokio-tar = { workspace = true }
 num_cpus = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
