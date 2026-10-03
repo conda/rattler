@@ -13,13 +13,16 @@ use rattler_redaction::Redact;
 
 #[cfg(all(feature = "reqwest", not(target_arch = "wasm32")))]
 pub mod archive;
+pub mod range;
 pub mod read;
 pub mod seek;
 
 #[cfg(feature = "reqwest")]
 pub mod reqwest;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub mod fs;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod tokio;
 pub mod write;
 
@@ -47,7 +50,7 @@ pub enum ExtractError {
     #[error("invalid zip archive: {0}")]
     ZipError(#[source] zip::result::ZipError),
 
-    #[cfg(feature = "reqwest")]
+    #[cfg(all(feature = "reqwest", not(target_arch = "wasm32")))]
     #[error("invalid zip archive (async): {0}")]
     AsyncZipError(#[from] async_zip::error::ZipError),
 

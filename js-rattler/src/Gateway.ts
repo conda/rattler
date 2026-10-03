@@ -1,4 +1,4 @@
-import { JsGateway, PackageRecordJson } from "../pkg";
+import { JsGateway, MatchSpec, PackageRecordJson } from "../pkg";
 import { Platform } from "./Platform";
 import { NormalizedPackageName } from "./PackageName";
 
@@ -219,20 +219,21 @@ export class Gateway {
      *
      * @param channels - The channels to query
      * @param platforms - The platforms to query
-     * @param specs - The match specs to query for. A bare package name matches
-     *   every version of that package.
+     * @param specs - The match specs to query for, as {@link MatchSpec} objects
+     *   or as strings parsed leniently. A bare package name matches every
+     *   version of that package.
      * @param options - Per-query options
      */
     public async query(
         channels: string[],
         platforms: Platform[],
-        specs: string[],
+        specs: (string | MatchSpec)[],
         options?: GatewayRecordsQueryOptions,
     ): Promise<GatewayQueryResult> {
         const output = (await this.native.query(
             channels,
             platforms,
-            specs,
+            specs.map((spec) => spec.toString()),
             options?.recursive ?? false,
         )) as { records: RepoDataRecordJson[]; warnings: string[] };
         const result = output.records as GatewayQueryResult;

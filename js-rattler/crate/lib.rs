@@ -1,6 +1,8 @@
 mod error;
 mod gateway;
+mod match_spec;
 mod noarch_type;
+mod package_archive;
 mod package_name;
 mod package_record;
 mod parse_strictness;

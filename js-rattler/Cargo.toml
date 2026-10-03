@@ -27,9 +27,11 @@ console_error_panic_hook = { version = "0.1", optional = true }
 
 thiserror = "2"
 
+bytes = "1"
 hex = "0.4"
 rattler_conda_types = { path = "../crates/rattler_conda_types" }
 rattler_digest = { path = "../crates/rattler_digest" }
+rattler_package_streaming = { path = "../crates/rattler_package_streaming", default-features = false, features = ["wasm"] }
 rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", features = ["gateway"] }
 rattler_solve = { path = "../crates/rattler_solve", default-features = false, features = ["resolvo"] }
 

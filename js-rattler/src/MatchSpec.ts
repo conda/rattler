@@ -1,0 +1,1 @@
+export { MatchSpec } from "../pkg";

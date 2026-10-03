@@ -42,6 +42,13 @@ tokio-util = { workspace = true, features = ["io-util"] }
 tracing = { workspace = true }
 url = { workspace = true }
 zip = { workspace = true, features = ["deflate", "time"] }
+bytes = { workspace = true }
+async-compression = { workspace = true }
+zstd = { workspace = true, default-features = false }
+
+# The tokio based readers and writers need a filesystem and threads, which
+# wasm32 has neither of; `range` reads archives there instead.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # https://github.com/Majored/rs-async-zip/issues/173
 astral_async_zip = { workspace = true, features = [
   "deflate",
@@ -49,11 +56,6 @@ astral_async_zip = { workspace = true, features = [
   "tokio-fs",
 ] }
 astral-tokio-tar = { workspace = true }
-bytes = { workspace = true }
-async-compression = { workspace = true }
-zstd = { workspace = true, default-features = false }
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 num_cpus = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
 zstd = { workspace = true, features = ["zstdmt"] }

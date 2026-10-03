@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `MatchSpec`: parse a match spec (`numpy >=2 py313*`, `conda-forge::python[extras=[foo]]`) with the same lenient, repodata v3 syntax the gateway accepts, read its fields (`name`, `version`, `build`, `channel`, `subdir`, `sha256`, …) and test records against it with `matches` (a `PackageRecord`) or `matchesJson` (the plain records a `Gateway.query` returns)
+- `Gateway.query` accepts `MatchSpec` objects next to strings
+- `PackageArchive`: open a `.conda` or `.tar.bz2` archive on a server with `PackageArchive.fromUrl` and read it with HTTP range requests; `listFiles` lists a section, `readFile` reads one file, and `indexJson`, `aboutJson`, `pathsJson` and `runExportsJson` parse the metadata files. The `info` section of a `.conda` archive usually comes with the one request made on open
+
 ## [0.4.0] - 2026-08-19
 
 ### Highlights
