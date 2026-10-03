@@ -8,6 +8,7 @@ mod package_record;
 mod parse_strictness;
 mod platform;
 pub mod solve;
+mod sparse_reader;
 mod utils;
 mod version;
 mod version_spec;

@@ -42,17 +42,17 @@ tokio-util = { workspace = true, features = ["io-util"] }
 tracing = { workspace = true }
 url = { workspace = true }
 zip = { workspace = true, features = ["deflate", "time"] }
+# https://github.com/Majored/rs-async-zip/issues/173
+astral_async_zip = { workspace = true, features = [
+  "deflate",
+  "tokio",
+] }
 bytes = { workspace = true }
 async-compression = { workspace = true }
 zstd = { workspace = true, default-features = false }
 
-# The tokio based readers and writers need a filesystem and threads, which
-# wasm32 has neither of; `range` reads archives there instead.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-# https://github.com/Majored/rs-async-zip/issues/173
-# Only the seek and stream readers are used, never the filesystem reader, so
-# the `tokio-fs` feature stays off; without it the crate also builds for wasm32.
-astral_async_zip = { workspace = true, features = ["deflate", "tokio"] }
+# Needs tokio's `fs` feature, which wasm32 does not support.
 astral-tokio-tar = { workspace = true }
 num_cpus = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }

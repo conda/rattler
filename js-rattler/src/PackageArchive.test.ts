@@ -64,13 +64,19 @@ beforeAll(async () => {
                 `bytes ${start}-${end}/${file.length}`,
             );
             response.setHeader("content-length", end - start + 1);
-            response.end(request.method === "HEAD" ? undefined : file.subarray(start, end + 1));
+            response.end(
+                request.method === "HEAD"
+                    ? undefined
+                    : file.subarray(start, end + 1),
+            );
             return;
         }
         response.setHeader("content-length", file.length);
         response.end(request.method === "HEAD" ? undefined : file);
     });
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    await new Promise<void>((resolve) =>
+        server.listen(0, "127.0.0.1", resolve),
+    );
     const address = server.address();
     if (address === null || typeof address === "string") {
         throw new Error("test server did not expose a TCP address");
@@ -90,9 +96,13 @@ const requestsSince = (mark: number) => requests.slice(mark);
 describe("PackageArchive", () => {
     it("opens a .conda archive with a HEAD and one tail request", async () => {
         const mark = since();
-        const archive = await PackageArchive.fromUrl(`${base}/sparse-test-1.0.0-0.conda`);
+        const archive = await PackageArchive.fromUrl(
+            `${base}/sparse-test-1.0.0-0.conda`,
+        );
         expect(archive.archiveType).toBe("conda");
-        expect(archive.size).toBe(files.get("/sparse-test-1.0.0-0.conda")!.length);
+        expect(archive.size).toBe(
+            files.get("/sparse-test-1.0.0-0.conda")!.length,
+        );
         expect(archive.url).toBe(`${base}/sparse-test-1.0.0-0.conda`);
         const made = requestsSince(mark);
         expect(made.map((r) => r.method)).toEqual(["HEAD", "GET"]);
@@ -102,13 +112,18 @@ describe("PackageArchive", () => {
     it("skips the HEAD request when the size is known", async () => {
         const size = files.get("/sparse-test-1.0.0-0.conda")!.length;
         const mark = since();
-        const archive = await PackageArchive.fromUrl(`${base}/sparse-test-1.0.0-0.conda`, size);
+        const archive = await PackageArchive.fromUrl(
+            `${base}/sparse-test-1.0.0-0.conda`,
+            size,
+        );
         expect(archive.size).toBe(size);
         expect(requestsSince(mark).map((r) => r.method)).toEqual(["GET"]);
     });
 
     it("reads the info section from the tail without another request", async () => {
-        const archive = await PackageArchive.fromUrl(`${base}/sparse-test-1.0.0-0.conda`);
+        const archive = await PackageArchive.fromUrl(
+            `${base}/sparse-test-1.0.0-0.conda`,
+        );
         const mark = since();
         const index = await archive.indexJson();
         expect(index.name).toBe("sparse-test");
@@ -127,11 +142,14 @@ describe("PackageArchive", () => {
             { path: "info/paths.json", size: expect.any(Number), kind: "file" },
         ]);
         expect(requestsSince(mark)).toEqual([]);
-        expect(archive.sectionSize("info")).toBeLessThan(64 * 1024);
+        expect(archive.bytesToFetch("info")).toBe(0);
     });
 
     it("fetches the payload once with a range request", async () => {
-        const archive = await PackageArchive.fromUrl(`${base}/sparse-test-1.0.0-0.conda`);
+        const archive = await PackageArchive.fromUrl(
+            `${base}/sparse-test-1.0.0-0.conda`,
+        );
+        expect(archive.bytesToFetch("pkg")).toBeGreaterThan(64 * 1024);
         const mark = since();
         const entries = await archive.listFiles("pkg");
         expect(entries.map((e) => e.path)).toEqual([
@@ -145,11 +163,13 @@ describe("PackageArchive", () => {
         const made = requestsSince(mark);
         expect(made).toHaveLength(1);
         expect(made[0].range).toMatch(/^bytes=\d+-\d+$/);
-        expect(archive.sectionSize("pkg")).toBeGreaterThan(64 * 1024);
+        expect(archive.bytesToFetch("pkg")).toBe(0);
     });
 
     it("lists links with their targets and refuses to read them", async () => {
-        const archive = await PackageArchive.fromUrl(`${base}/symlink-test-1.0.0-0.conda`);
+        const archive = await PackageArchive.fromUrl(
+            `${base}/symlink-test-1.0.0-0.conda`,
+        );
         const entries = await archive.listFiles("pkg");
         expect(entries).toContainEqual({
             path: "lib/liblink.so",
@@ -157,7 +177,9 @@ describe("PackageArchive", () => {
             kind: "symlink",
             linkTarget: "libreal.so.1",
         });
-        expect(entries.find((e) => e.path === "lib/libhard.so")?.kind).toBe("hardlink");
+        expect(entries.find((e) => e.path === "lib/libhard.so")?.kind).toBe(
+            "hardlink",
+        );
         await expect(archive.readFile("lib/liblink.so")).rejects.toMatchObject({
             code: "ARCHIVE",
         });
@@ -173,12 +195,18 @@ describe("PackageArchive", () => {
         const last = await archive.readFile("share/last-file.txt");
         expect(new TextDecoder().decode(last)).toBe("last payload file\n");
         // HEAD, then the one GET that returned everything.
-        expect(requestsSince(mark).map((r) => r.method)).toEqual(["HEAD", "GET"]);
+        expect(requestsSince(mark).map((r) => r.method)).toEqual([
+            "HEAD",
+            "GET",
+        ]);
     });
 
     it("reads a .tar.bz2 archive", async () => {
-        const archive = await PackageArchive.fromUrl(`${base}/test-package-0.1-0.tar.bz2`);
+        const archive = await PackageArchive.fromUrl(
+            `${base}/test-package-0.1-0.tar.bz2`,
+        );
         expect(archive.archiveType).toBe("tar.bz2");
+        expect(archive.bytesToFetch("info")).toBe(archive.size);
         const mark = since();
         const index = await archive.indexJson();
         expect(index.name).toBe("test-package");
@@ -187,6 +215,7 @@ describe("PackageArchive", () => {
         const about = await archive.aboutJson();
         expect(about).toBeDefined();
         expect(requestsSince(mark)).toHaveLength(1);
+        expect(archive.bytesToFetch("pkg")).toBe(0);
     });
 
     it("rejects URLs that are not conda archives", async () => {
@@ -195,20 +224,27 @@ describe("PackageArchive", () => {
             await PackageArchive.fromUrl(`${base}/sparse-test.zip`);
         } catch (err) {
             expect(isRattlerError(err)).toBe(true);
-            if (isRattlerError(err)) expect(err.code).toBe("UNSUPPORTED_ARCHIVE_TYPE");
+            if (isRattlerError(err))
+                expect(err.code).toBe("UNSUPPORTED_ARCHIVE_TYPE");
         }
     });
 
     it("reports a missing archive", async () => {
-        await expect(PackageArchive.fromUrl(`${base}/missing-1.0-0.conda`)).rejects.toMatchObject({
+        await expect(
+            PackageArchive.fromUrl(`${base}/missing-1.0-0.conda`),
+        ).rejects.toMatchObject({
             code: "FETCH",
         });
     });
 
     it("rejects unknown sections", async () => {
-        const archive = await PackageArchive.fromUrl(`${base}/sparse-test-1.0.0-0.conda`);
-        await expect(archive.listFiles("payload" as any)).rejects.toMatchObject({
-            code: "INVALID_SECTION",
-        });
+        const archive = await PackageArchive.fromUrl(
+            `${base}/sparse-test-1.0.0-0.conda`,
+        );
+        await expect(archive.listFiles("payload" as any)).rejects.toMatchObject(
+            {
+                code: "INVALID_SECTION",
+            },
+        );
     });
 });

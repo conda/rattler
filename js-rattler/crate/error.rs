@@ -41,6 +41,8 @@ pub enum JsError {
     ParseUrl(#[from] url::ParseError),
     #[error(transparent)]
     Extract(#[from] ExtractError),
+    #[error("{0}")]
+    Fetch(String),
     #[error("{0:?} is not an archive section: expected \"info\" or \"pkg\"")]
     InvalidSection(String),
 }
@@ -72,13 +74,9 @@ impl JsError {
             JsError::InvalidHexMd5(_) => "PARSE_MD5",
             JsError::InvalidHexSha256(_) => "PARSE_SHA256",
             JsError::ParseUrl(_) => "PARSE_URL",
-            JsError::Extract(error) => match error {
-                ExtractError::UnsupportedArchiveType => "UNSUPPORTED_ARCHIVE_TYPE",
-                // The HTTP range source reports its network failures as
-                // `io::Error::other`; the archive parsers use specific kinds.
-                ExtractError::IoError(err) if err.kind() == std::io::ErrorKind::Other => "FETCH",
-                _ => "ARCHIVE",
-            },
+            JsError::Extract(ExtractError::UnsupportedArchiveType) => "UNSUPPORTED_ARCHIVE_TYPE",
+            JsError::Extract(_) => "ARCHIVE",
+            JsError::Fetch(_) => "FETCH",
             JsError::InvalidSection(_) => "INVALID_SECTION",
         }
     }
