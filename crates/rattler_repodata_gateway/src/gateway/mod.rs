@@ -24,7 +24,6 @@ mod who_needs_query;
 
 use std::{collections::HashSet, sync::Arc};
 
-use crate::reporter::report_unsupported_repodata_revisions;
 use crate::{Reporter, gateway::subdir_builder::SubdirBuilder, who_needs::WhoNeedsTarget};
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
@@ -473,16 +472,14 @@ impl GatewayInner {
             && self.channel_config.get(&channel.base_url).sharded_enabled;
         let key = (channel.clone(), platform, sharded_enabled);
         let channel_for_create = channel.clone();
-        let reporter_for_create = reporter.clone();
 
-        let subdir = self
-            .subdirs
+        self.subdirs
             .get_or_try_init(key, || async move {
                 let subdir = SubdirBuilder::new(
                     self,
                     channel_for_create,
                     platform,
-                    reporter_for_create,
+                    reporter,
                     sharded_enabled,
                 )
                 .build()
@@ -496,16 +493,7 @@ impl GatewayInner {
                     "a coalesced request failed".to_string(),
                     std::io::ErrorKind::Other.into(),
                 ),
-            })?;
-
-        report_unsupported_repodata_revisions(
-            reporter.as_deref(),
-            channel,
-            platform.as_str(),
-            subdir.repodata_revisions(),
-        );
-
-        Ok(subdir)
+            })
     }
 }
 
@@ -679,7 +667,7 @@ mod test {
         // attach a reporter per query and still surface the warning.
         let records = gateway
             .query(
-                vec![channel],
+                vec![channel.clone()],
                 vec![Subdir::NoArch],
                 vec![PackageName::from_str("demo").unwrap()],
             )
@@ -688,7 +676,7 @@ mod test {
             .unwrap();
 
         assert_eq!(records.iter().map(RepoData::len).sum::<usize>(), 1);
-        let messages = reporter.messages.lock().unwrap();
+        let messages = reporter.messages.lock().unwrap().clone();
         assert_eq!(messages.len(), 4);
         assert_eq!(messages[0].subdir, "noarch");
         assert_eq!(messages[0].supported_revision, RepodataRevision::V3);
@@ -706,6 +694,15 @@ mod test {
         );
         assert_eq!(messages[2], messages[0]);
         assert_eq!(messages[3], messages[1]);
+
+        // Every query also collects the reports it streamed on its output.
+        assert_eq!(records.unsupported_repodata_revisions, messages[2..]);
+        let names = gateway
+            .names(vec![channel], vec![Subdir::NoArch])
+            .execute()
+            .await
+            .unwrap();
+        assert_eq!(names.unsupported_repodata_revisions, messages[..2]);
     }
 
     #[tokio::test]

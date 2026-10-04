@@ -13,10 +13,17 @@ from rattler.networking.client import Client
 from rattler.networking.fetch_repo_data import CacheAction
 from rattler.package.package_name import PackageName
 from rattler.platform.subdir import Subdir, SubdirLiteral
-from rattler.rattler import PyChannelNotice, PyGateway, PyMatchSpec, PySourceConfig
+from rattler.rattler import (
+    PyChannelNotice,
+    PyGateway,
+    PyMatchSpec,
+    PySourceConfig,
+    PyUnsupportedRepodataRevision,
+)
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.removed_package import RemovedPackage
 from rattler.repo_data.repo_data import ChannelRelations
+from rattler.repo_data.revisions import RepodataRevisionMetadata, _repodata_revision_metadata_from_py
 from rattler.repo_data.who_needs import Dependent, _target_to_py
 
 if TYPE_CHECKING:
@@ -158,8 +165,45 @@ class ChannelNotice:
         )
 
 
+@dataclass(frozen=True)
+class UnsupportedRepodataRevision:
+    """A repodata revision advertised by a queried channel subdir that this rattler
+    version cannot read, see [CEP-48].
+
+    Records published only in this revision are missing from query results.
+
+    [CEP-48]: https://github.com/conda/ceps/blob/main/cep-0048.md
+    """
+
+    channel: str
+    """The redacted base URL of the channel."""
+
+    subdir: str
+    """The subdirectory that advertises the revision, for example ``noarch``."""
+
+    supported_revision: str
+    """The newest revision this rattler version reads, for example ``v3``."""
+
+    advertised_revision: str
+    """The unsupported revision, for example ``v4``."""
+
+    metadata: RepodataRevisionMetadata
+    """The metadata the channel publishes for the revision, such as the number of
+    packages it contains and the publisher's ``message``."""
+
+    @classmethod
+    def _from_py(cls, report: PyUnsupportedRepodataRevision) -> UnsupportedRepodataRevision:
+        return cls(
+            channel=report.channel,
+            subdir=report.subdir,
+            supported_revision=report.supported_revision,
+            advertised_revision=report.advertised_revision,
+            metadata=_repodata_revision_metadata_from_py(report.metadata),
+        )
+
+
 class GatewayQueryResult(list[list[RepoDataRecord]]):
-    """Repodata, removed packages, and CEP-6 notices returned by :meth:`Gateway.query`.
+    """Repodata, removed packages, and query metadata returned by :meth:`Gateway.query`.
 
     This remains a list for compatibility with earlier releases.
     """
@@ -169,6 +213,7 @@ class GatewayQueryResult(list[list[RepoDataRecord]]):
         repodata: list[list[RepoDataRecord]],
         notices: list[ChannelNotice],
         removed: list[list[RemovedPackage]] | None = None,
+        unsupported_repodata_revisions: list[UnsupportedRepodataRevision] | None = None,
     ) -> None:
         super().__init__(repodata)
         self.repodata = self
@@ -180,18 +225,31 @@ class GatewayQueryResult(list[list[RepoDataRecord]]):
         match specs of the query do not filter this list. Removed packages never
         appear in ``repodata``.
         """
+        self.unsupported_repodata_revisions: list[UnsupportedRepodataRevision] = (
+            unsupported_repodata_revisions if unsupported_repodata_revisions is not None else []
+        )
+        """Repodata revisions advertised by the queried channels that this rattler
+        version cannot read."""
 
 
 class GatewayNamesResult(list[PackageName]):
-    """Package names and CEP-6 notices returned by :meth:`Gateway.names`.
+    """Package names and query metadata returned by :meth:`Gateway.names`.
 
     This remains a list for compatibility with earlier releases.
     """
 
-    def __init__(self, names: list[PackageName], notices: list[ChannelNotice]) -> None:
+    def __init__(
+        self,
+        names: list[PackageName],
+        notices: list[ChannelNotice],
+        unsupported_repodata_revisions: list[UnsupportedRepodataRevision],
+    ) -> None:
         super().__init__(names)
         self.names = self
         self.notices = notices
+        self.unsupported_repodata_revisions = unsupported_repodata_revisions
+        """Repodata revisions advertised by the queried channels that this rattler
+        version cannot read."""
 
 
 class Gateway:
@@ -350,6 +408,10 @@ class Gateway:
             packages the source lists as removed for the fetched package names.
             Use it to detect that a previously locked package was yanked.
 
+            ``unsupported_repodata_revisions`` lists the CEP-48 repodata revisions
+            the queried channels advertise that this rattler version cannot read.
+            Records published only in those revisions are missing from the result.
+
         Examples
         --------
         ```python
@@ -360,7 +422,7 @@ class Gateway:
         >>>
         ```
         """
-        py_records, py_removed, py_notices = await self._gateway.query(
+        py_records, py_removed, py_notices, py_unsupported_repodata_revisions = await self._gateway.query(
             sources=_convert_sources(sources),
             platforms=[
                 platform._inner if isinstance(platform, Subdir) else Subdir(platform)._inner for platform in platforms
@@ -380,6 +442,7 @@ class Gateway:
             [[RepoDataRecord._from_py_record(record) for record in records] for records in py_records],
             [ChannelNotice._from_py(notice) for notice in py_notices],
             [[RemovedPackage._from_py(removed) for removed in removed_packages] for removed_packages in py_removed],
+            [UnsupportedRepodataRevision._from_py(report) for report in py_unsupported_repodata_revisions],
         )
 
     async def who_needs(
@@ -448,6 +511,8 @@ class Gateway:
 
         Returns:
             A list of package names that are present in the given subdirectories.
+            ``unsupported_repodata_revisions`` lists the CEP-48 repodata revisions
+            the queried channels advertise that this rattler version cannot read.
 
         Examples
         --------
@@ -461,7 +526,7 @@ class Gateway:
         ```
         """
 
-        py_package_names, py_notices = await self._gateway.names(
+        py_package_names, py_notices, py_unsupported_repodata_revisions = await self._gateway.names(
             sources=_convert_sources(sources),
             platforms=[
                 platform._inner if isinstance(platform, Subdir) else Subdir(platform)._inner for platform in platforms
@@ -471,10 +536,11 @@ class Gateway:
             channel_relations_max_depth=channel_relations_max_depth,
         )
 
-        # Convert the names and notices into Python objects.
+        # Convert the names and query metadata into Python objects.
         return GatewayNamesResult(
             [PackageName._from_py_package_name(package_name) for package_name in py_package_names],
             [ChannelNotice._from_py(notice) for notice in py_notices],
+            [UnsupportedRepodataRevision._from_py(report) for report in py_unsupported_repodata_revisions],
         )
 
     async def channel_notices(

@@ -33,6 +33,7 @@ use super::{
 };
 use crate::{
     Reporter,
+    reporter::unsupported_repodata_revisions,
     who_needs::{Dependent, WhoNeedsTarget, who_needs},
 };
 
@@ -266,8 +267,17 @@ async fn resolve_subdirs(
                 let reporter = reporter.clone();
                 pending.push(box_future(async move {
                     let subdir = gateway
-                        .get_or_create_subdir(&channel, platform, reporter, false)
+                        .get_or_create_subdir(&channel, platform, reporter.clone(), false)
                         .await?;
+                    if let Some(reporter) = reporter.as_deref() {
+                        for report in unsupported_repodata_revisions(
+                            &channel.base_url,
+                            platform,
+                            subdir.repodata_revisions(),
+                        ) {
+                            reporter.on_unsupported_repodata_revision(&report);
+                        }
+                    }
                     Ok((source_index, subdir))
                 }));
             }

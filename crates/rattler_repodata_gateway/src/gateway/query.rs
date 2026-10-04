@@ -16,7 +16,10 @@ use super::{
     source::{CustomSourceClient, ExpandedSource, Source, SourcePosition},
     subdir::{PackageRecords, SubdirData, SubdirState, extract_unique_deps_split},
 };
-use crate::Reporter;
+use crate::{
+    Reporter,
+    reporter::{UnsupportedRepodataRevision, unsupported_repodata_revisions},
+};
 
 type RecordPatch = dyn Fn(&RepoDataRecord) -> Option<RepoDataRecord> + Send + Sync;
 
@@ -38,6 +41,12 @@ pub struct RepoDataQueryOutput {
     /// Non-fatal warnings encountered during the query. Also streamed
     /// to [`Reporter::on_gateway_warning`] as they are recorded.
     pub warnings: Vec<GatewayWarning>,
+    /// Repodata revisions advertised by the queried channel subdirs that
+    /// this client does not support, see [CEP-48]. Also streamed to
+    /// [`Reporter::on_unsupported_repodata_revision`].
+    ///
+    /// [CEP-48]: https://github.com/conda/ceps/blob/main/cep-0048.md
+    pub unsupported_repodata_revisions: Vec<UnsupportedRepodataRevision>,
 }
 
 impl std::ops::Deref for RepoDataQueryOutput {
@@ -81,6 +90,12 @@ pub struct NamesQueryOutput {
     /// Non-fatal warnings encountered during the query. Also streamed
     /// to [`Reporter::on_gateway_warning`] as they are recorded.
     pub warnings: Vec<GatewayWarning>,
+    /// Repodata revisions advertised by the queried channel subdirs that
+    /// this client does not support, see [CEP-48]. Also streamed to
+    /// [`Reporter::on_unsupported_repodata_revision`].
+    ///
+    /// [CEP-48]: https://github.com/conda/ceps/blob/main/cep-0048.md
+    pub unsupported_repodata_revisions: Vec<UnsupportedRepodataRevision>,
 }
 
 impl std::ops::Deref for NamesQueryOutput {
@@ -408,6 +423,9 @@ struct QueryExecutor {
 
     /// CEP-6 notice collection state.
     notices: NoticeCollector,
+
+    /// Unsupported repodata revision collection state.
+    unsupported_revisions: UnsupportedRevisionCollector,
 }
 
 /// Collects CEP-6 notices while a query runs. Fetches are queued as channels
@@ -461,6 +479,40 @@ impl NoticeCollector {
     fn collect(&mut self, reporter: Option<&dyn Reporter>, batch: Vec<ChannelNoticeResult>) {
         GatewayInner::report_channel_notices(reporter, &batch);
         self.collected.extend(batch);
+    }
+}
+
+/// Collects the unsupported repodata revisions advertised by the channel
+/// subdirs a query loads, streaming each to the reporter.
+#[derive(Default)]
+struct UnsupportedRevisionCollector {
+    /// Subdirs that were already inspected; a query can load the same
+    /// subdir more than once when a channel is listed repeatedly.
+    seen: HashSet<(ChannelUrl, Subdir)>,
+    /// Reports collected so far.
+    collected: Vec<UnsupportedRepodataRevision>,
+}
+
+impl UnsupportedRevisionCollector {
+    /// Record the unsupported revisions advertised by `subdir`, the
+    /// `platform` subdir of the channel at `url`.
+    fn observe(
+        &mut self,
+        reporter: Option<&dyn Reporter>,
+        url: &ChannelUrl,
+        platform: Subdir,
+        subdir: &SubdirState,
+    ) {
+        if !self.seen.insert((url.clone(), platform)) {
+            return;
+        }
+        let reports = unsupported_repodata_revisions(url, platform, subdir.repodata_revisions());
+        if let Some(reporter) = reporter {
+            for report in &reports {
+                reporter.on_unsupported_repodata_revision(report);
+            }
+        }
+        self.collected.extend(reports);
     }
 }
 
@@ -661,6 +713,7 @@ impl QueryExecutor {
             pending_records: FuturesUnordered::new(),
             expander,
             notices,
+            unsupported_revisions: UnsupportedRevisionCollector::default(),
         })
     }
 
@@ -1030,6 +1083,12 @@ impl QueryExecutor {
                     }
                     self.expand_pattern_specs_for_subdir(subdir.as_ref());
                     if let Some((url, platform)) = kind_url_and_platform {
+                        self.unsupported_revisions.observe(
+                            self.reporter.as_deref(),
+                            &url,
+                            platform,
+                            subdir.as_ref(),
+                        );
                         self.expand_relations_for_subdir(&url, platform, subdir.as_ref())?;
                     }
                     if self.pending_subdirs.is_empty() {
@@ -1243,6 +1302,7 @@ impl QueryExecutor {
         Ok(RepoDataQueryOutput {
             repodata,
             notices: self.notices.collected,
+            unsupported_repodata_revisions: self.unsupported_revisions.collected,
             warnings: self
                 .expander
                 .take_warnings()
@@ -1497,6 +1557,7 @@ impl NamesQuery {
             self.reporter.clone(),
         );
         let mut notices = NoticeCollector::new(self.channel_notices);
+        let mut unsupported_revisions = UnsupportedRevisionCollector::default();
 
         let mut pending: FuturesUnordered<BoxFuture<NamesFetchResult>> = FuturesUnordered::new();
         for channel in self.channels {
@@ -1534,6 +1595,7 @@ impl NamesQuery {
                     if let Some(w) = warning {
                         expander.push_warning(w);
                     }
+                    unsupported_revisions.observe(self.reporter.as_deref(), &url, platform, &subdir);
                     if let Some(subdir_names) = subdir.package_names() {
                         names.extend(subdir_names);
                     }
@@ -1573,6 +1635,7 @@ impl NamesQuery {
         Ok(NamesQueryOutput {
             names,
             notices: notices.collected,
+            unsupported_repodata_revisions: unsupported_revisions.collected,
             warnings: expander
                 .take_warnings()
                 .into_iter()
