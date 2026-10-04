@@ -2761,6 +2761,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../multi_source/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MultiSource
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../repo_data_source/" class="md-nav__link">
         
   
@@ -4033,12 +4061,13 @@ that should be present in the environment.</p>
                 <code>sources</code>
             </td>
             <td>
-                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="Channel (rattler.channel.channel.Channel)" href="../channel/#rattler.channel.channel.Channel">Channel</a> | <span title="str">str</span> | <a class="autorefs autorefs-internal" title="RepoDataSource (rattler.repo_data.source.RepoDataSource)" href="../repo_data_source/#rattler.repo_data.source.RepoDataSource">RepoDataSource</a> | <a class="autorefs autorefs-internal" title="SparseRepoData (rattler.repo_data.sparse.SparseRepoData)" href="../sparse_repo_data/#rattler.repo_data.sparse.SparseRepoData">SparseRepoData</a>]</code>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="Channel (rattler.channel.channel.Channel)" href="../channel/#rattler.channel.channel.Channel">Channel</a> | <a class="autorefs autorefs-internal" title="MultiSource (rattler.repo_data.multi_source.MultiSource)" href="../multi_source/#rattler.repo_data.multi_source.MultiSource">MultiSource</a> | <span title="str">str</span> | <a class="autorefs autorefs-internal" title="RepoDataSource (rattler.repo_data.source.RepoDataSource)" href="../repo_data_source/#rattler.repo_data.source.RepoDataSource">RepoDataSource</a> | <a class="autorefs autorefs-internal" title="SparseRepoData (rattler.repo_data.sparse.SparseRepoData)" href="../sparse_repo_data/#rattler.repo_data.sparse.SparseRepoData">SparseRepoData</a>]</code>
             </td>
             <td>
               <div class="doc-md-description">
                 <p>The sources to query for the packages. Can be channels (by name, URL,
-     or Channel object), custom RepoDataSource implementations or SparseRepoData objects.</p>
+     or Channel object), <code>MultiSource</code> groups, custom RepoDataSource implementations or
+     SparseRepoData objects.</p>
               </div>
             </td>
             <td>
@@ -4445,11 +4474,12 @@ repodata.</p>
                 <code>sparse_repodata</code>
             </td>
             <td>
-                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="SparseRepoData (rattler.repo_data.sparse.SparseRepoData)" href="../sparse_repo_data/#rattler.repo_data.sparse.SparseRepoData">SparseRepoData</a>]</code>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="SparseRepoData (rattler.repo_data.sparse.SparseRepoData)" href="../sparse_repo_data/#rattler.repo_data.sparse.SparseRepoData">SparseRepoData</a> | <a class="autorefs autorefs-internal" title="MultiSource (rattler.repo_data.multi_source.MultiSource)" href="../multi_source/#rattler.repo_data.multi_source.MultiSource">MultiSource</a>]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>The repodata to query for the packages.</p>
+                <p>The repodata to query for the packages. A <code>MultiSource</code> of
+<code>SparseRepoData</code> makes its repodata share a single channel priority tier.</p>
               </div>
             </td>
             <td>
