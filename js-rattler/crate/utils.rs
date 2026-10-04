@@ -8,3 +8,13 @@ pub fn set_panic_hook() {
     #[cfg(feature = "console_error_panic_hook")]
     console_error_panic_hook::set_once();
 }
+
+/// Converts an ordering to the `-1`, `0`, `1` convention of JavaScript
+/// comparators.
+pub fn ordering_to_i8(ordering: std::cmp::Ordering) -> i8 {
+    match ordering {
+        std::cmp::Ordering::Less => -1,
+        std::cmp::Ordering::Equal => 0,
+        std::cmp::Ordering::Greater => 1,
+    }
+}
