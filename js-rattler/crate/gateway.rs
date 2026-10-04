@@ -1,8 +1,6 @@
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
-use rattler_conda_types::{
-    Channel, ChannelNoticeLevel, MatchSpec, ParseMatchSpecOptions, RepodataRevision, Subdir,
-};
+use rattler_conda_types::{Channel, ChannelNoticeLevel, MatchSpec, Subdir};
 use rattler_repodata_gateway::{
     ChannelConfig, Gateway, GatewayWarning, SourceConfig, fetch::CacheAction,
 };
@@ -29,7 +27,7 @@ pub(crate) fn emit_gateway_warnings(warnings: Vec<GatewayWarning>) {
     }
 }
 
-use crate::{JsResult, repo_data_record::JsRepoDataRecord};
+use crate::{JsResult, match_spec::JsMatchSpec, repo_data_record::JsRepoDataRecord};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -283,7 +281,10 @@ impl JsGateway {
         &self,
         channels: Vec<String>,
         platforms: Vec<String>,
-        specs: Vec<String>,
+        #[wasm_bindgen(
+            param_description = "The match specs to query for. They are consumed by the call."
+        )]
+        specs: Vec<JsMatchSpec>,
         #[wasm_bindgen(
             param_description = "Whether to recursively fetch the records of dependencies as well"
         )]
@@ -301,17 +302,7 @@ impl JsGateway {
             .into_iter()
             .map(|p| Subdir::from_str(&p))
             .collect::<Result<Vec<_>, _>>()?;
-        let specs = specs
-            .into_iter()
-            .map(|s| {
-                MatchSpec::from_str(
-                    &s,
-                    ParseMatchSpecOptions::lenient()
-                        .with_repodata_revision(RepodataRevision::V3)
-                        .with_exact_names_only(false),
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let specs = specs.into_iter().map(MatchSpec::from).collect::<Vec<_>>();
 
         let output = self
             .inner

@@ -164,11 +164,23 @@ describe("Gateway", () => {
                     ),
             });
 
+            const spec = new MatchSpec("f* >=1", { exactNamesOnly: false });
             const records = await gateway.query(
                 ["https://example.com/test-channel"],
                 ["noarch"],
-                [new MatchSpec("f* >=1", { exactNamesOnly: false })],
+                [spec],
             );
+
+            // The caller's spec stays usable after the query.
+            expect(spec.toString()).toBe("f* >=1");
+            expect(spec.matchesRepoDataRecord(records[0])).toBe(true);
+            expect(
+                await gateway.query(
+                    ["https://example.com/test-channel"],
+                    ["noarch"],
+                    ["f*"],
+                ),
+            ).toHaveLength(1);
 
             expect(records.map((record) => record.fileName)).toEqual([
                 "foo-1.0-h123_0.conda",
@@ -340,6 +352,21 @@ describe("Gateway", () => {
             expect(isRattlerError(error)).toBe(true);
             if (isRattlerError(error)) {
                 expect(error.code).toBe("PARSE_PLATFORM");
+            }
+        });
+        it("marks invalid specs with PARSE_MATCH_SPEC", async () => {
+            const gateway = new Gateway();
+
+            const error: unknown = await gateway
+                .query(["https://example.com/channel"], ["noarch"], [">=1"])
+                .then(
+                    () => null,
+                    (err: unknown) => err,
+                );
+
+            expect(isRattlerError(error)).toBe(true);
+            if (isRattlerError(error)) {
+                expect(error.code).toBe("PARSE_MATCH_SPEC");
             }
         });
     });

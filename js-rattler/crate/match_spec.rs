@@ -122,6 +122,12 @@ impl JsMatchSpec {
         Ok(MatchSpec::from_str(spec, options)?.into())
     }
 
+    /// Returns an independent copy of this match spec.
+    #[wasm_bindgen(js_name = "clone")]
+    pub fn clone_spec(&self) -> Self {
+        self.clone()
+    }
+
     /// Returns the string representation of the match spec.
     #[wasm_bindgen(js_name = "toString")]
     pub fn as_str(&self) -> String {

@@ -215,7 +215,13 @@ export class Gateway {
         const output = (await this.native.query(
             channels,
             platforms,
-            specs.map((spec) => spec.toString()),
+            // The native call consumes the specs it is given, so hand it
+            // copies and leave the caller's `MatchSpec` objects usable.
+            specs.map((spec) =>
+                typeof spec === "string"
+                    ? new MatchSpec(spec, { exactNamesOnly: false })
+                    : spec.clone(),
+            ),
             options?.recursive ?? false,
         )) as { records: RepoDataRecord[]; warnings: string[] };
         const result = output.records as GatewayQueryResult;
