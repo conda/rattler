@@ -83,9 +83,9 @@ mod gateway;
 pub use gateway::{
     CacheClearMode, ChannelConfig, ChannelNoticeResult, ChannelRelationsMode,
     ChannelRelationsWarning, DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH, Gateway, GatewayBuilder,
-    GatewayError, GatewayWarning, MaxConcurrency, NamesQuery, NamesQueryOutput, RemovedPackages,
-    RepoData, RepoDataQuery, RepoDataQueryOutput, RepoDataSource, Source, SourceConfig,
-    SubdirSelection, WhoNeedsQuery,
+    GatewayError, GatewayWarning, MaxConcurrency, MultiSource, MultiSourceError, NamesQuery,
+    NamesQueryOutput, RemovedPackages, RepoData, RepoDataQuery, RepoDataQueryOutput,
+    RepoDataSource, Source, SourceConfig, SubdirSelection, WhoNeedsQuery,
 };
 #[cfg(feature = "indicatif")]
 pub use gateway::{IndicatifReporter, IndicatifReporterBuilder};
