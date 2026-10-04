@@ -30,12 +30,25 @@ let server: Server;
 let base: string;
 // Paths under /no-ranges/ are served by a server that ignores `Range`.
 const noRanges = "/no-ranges";
+// Paths under /no-validator/ omit ETag and Last-Modified.
+const noValidator = "/no-validator";
+// Paths under /changes/ switch validators between range requests.
+const changes = "/changes";
+let changingRangeRequests = 0;
 
 beforeAll(async () => {
     server = createServer((request, response) => {
         const url = request.url ?? "";
         const ignoreRange = url.startsWith(noRanges);
-        const path = ignoreRange ? url.slice(noRanges.length) : url;
+        const omitValidator = url.startsWith(noValidator);
+        const changesEntity = url.startsWith(changes);
+        const path = ignoreRange
+            ? url.slice(noRanges.length)
+            : omitValidator
+              ? url.slice(noValidator.length)
+              : changesEntity
+                ? url.slice(changes.length)
+                : url;
         requests.push({
             method: request.method ?? "",
             path,
@@ -49,6 +62,14 @@ beforeAll(async () => {
         }
         response.setHeader("accept-ranges", "bytes");
         const range = ignoreRange ? undefined : request.headers.range;
+        if (changesEntity && range) changingRangeRequests += 1;
+        if (!omitValidator)
+            response.setHeader(
+                "last-modified",
+                changesEntity && changingRangeRequests > 1
+                    ? "Tue, 02 Jan 2024 00:00:00 GMT"
+                    : "Mon, 01 Jan 2024 00:00:00 GMT",
+            );
         if (range) {
             const match = /^bytes=(\d+)-(\d+)$/.exec(range);
             if (!match) {
@@ -198,6 +219,38 @@ describe("PackageArchive", () => {
         expect(requestsSince(mark).map((r) => r.method)).toEqual([
             "HEAD",
             "GET",
+        ]);
+    });
+
+    it("rejects ranges from a changed remote archive", async () => {
+        changingRangeRequests = 0;
+        const archive = await PackageArchive.fromUrl(
+            `${base}${changes}/sparse-test-1.0.0-0.conda`,
+        );
+        await expect(archive.listFiles("pkg")).rejects.toMatchObject({
+            code: "FETCH",
+        });
+    });
+
+    it("fetches one complete response when no validator is available", async () => {
+        const path = "/sparse-test-1.0.0-0.conda";
+        const archive = await PackageArchive.fromUrl(
+            `${base}${noValidator}${path}`,
+        );
+        const mark = since();
+        expect(
+            (await archive.listFiles("pkg")).map((entry) => entry.path),
+        ).toEqual([
+            "bin/first-file.txt",
+            "lib/blob.bin",
+            "share/last-file.txt",
+        ]);
+        expect(requestsSince(mark)).toEqual([
+            {
+                method: "GET",
+                path,
+                range: `bytes=0-${archive.size - 1}`,
+            },
         ]);
     });
 

@@ -38,6 +38,12 @@ impl Fetched {
 
     pub fn insert(&mut self, start: u64, bytes: Bytes) {
         if !bytes.is_empty() {
+            // A server may stop honoring ranges or return the full entity
+            // after it changed. Do not let older sparse blocks shadow bytes
+            // from this self-contained response.
+            if start == 0 && bytes.len() as u64 == self.len {
+                self.blocks.clear();
+            }
             self.blocks.insert(start, bytes);
         }
     }

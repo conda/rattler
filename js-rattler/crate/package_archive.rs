@@ -19,7 +19,10 @@ use rattler_conda_types::package::{
     AboutJson, CondaArchiveType, IndexJson, PackageFile, PathsJson, RunExportsJson,
 };
 use rattler_package_streaming::{ExtractError, read::stream_tar_bz2, seek};
-use reqwest::{StatusCode, header::RANGE};
+use reqwest::{
+    Response, StatusCode,
+    header::{ETAG, HeaderValue, LAST_MODIFIED, RANGE},
+};
 use serde::Serialize;
 use url::Url;
 use wasm_bindgen::prelude::*;
@@ -45,11 +48,68 @@ const MAX_PREALLOC: u64 = 4 * 1024 * 1024;
 struct HttpSource {
     client: reqwest::Client,
     url: Url,
+    validator: RefCell<Option<EntityValidator>>,
+}
+
+/// A response validator that browsers are allowed to expose. A strong ETag is
+/// preferred, with Last-Modified as the widely available CORS-safe fallback.
+#[derive(Clone, PartialEq, Eq)]
+enum EntityValidator {
+    Etag(HeaderValue),
+    LastModified(HeaderValue),
+}
+
+impl EntityValidator {
+    fn from_response(response: &Response) -> Option<Self> {
+        response
+            .headers()
+            .get(ETAG)
+            .filter(|value| !value.as_bytes().starts_with(b"W/"))
+            .cloned()
+            .map(Self::Etag)
+            .or_else(|| {
+                response
+                    .headers()
+                    .get(LAST_MODIFIED)
+                    .cloned()
+                    .map(Self::LastModified)
+            })
+    }
 }
 
 impl HttpSource {
     fn error(&self, what: &str, err: impl std::fmt::Display) -> JsError {
         JsError::Fetch(format!("could not {what} {}: {err}", self.url))
+    }
+
+    fn has_validator(&self) -> bool {
+        self.validator.borrow().is_some()
+    }
+
+    /// Records the response validator and rejects partial bytes from a
+    /// different entity. Full-file responses are self-contained and replace
+    /// both the validator and all previously fetched blocks.
+    fn observe_validator(&self, response: &Response, whole: bool) -> JsResult<()> {
+        let response_validator = EntityValidator::from_response(response);
+        let mut validator = self.validator.borrow_mut();
+        if whole {
+            *validator = response_validator;
+            return Ok(());
+        }
+        match (&*validator, response_validator) {
+            (Some(expected), Some(actual)) if expected != &actual => {
+                Err(self.error("read", "the remote archive changed after it was opened"))
+            }
+            (Some(_), None) => Err(self.error(
+                "read",
+                "the remote archive stopped providing its response validator",
+            )),
+            (None, Some(actual)) => {
+                *validator = Some(actual);
+                Ok(())
+            }
+            _ => Ok(()),
+        }
     }
 
     /// The size of the file, from a `HEAD` request. Without a usable
@@ -64,6 +124,7 @@ impl HttpSource {
         if !response.status().is_success() {
             return Err(self.error("reach", response.status()));
         }
+        self.observe_validator(&response, false)?;
         if let Some(len) = response.content_length() {
             return Ok((len, None));
         }
@@ -76,6 +137,7 @@ impl HttpSource {
         if !response.status().is_success() {
             return Err(self.error("download", response.status()));
         }
+        self.observe_validator(&response, true)?;
         let bytes = response
             .bytes()
             .await
@@ -93,12 +155,14 @@ impl HttpSource {
             .send()
             .await
             .map_err(|err| self.error("read", err))?;
-        let (start, expected) = match response.status() {
-            StatusCode::PARTIAL_CONTENT => (range.start, range.end - range.start),
+        let requested_whole = range.start == 0 && range.end == len;
+        let (start, expected, whole) = match response.status() {
+            StatusCode::PARTIAL_CONTENT => (range.start, range.end - range.start, requested_whole),
             // The server ignored the range and sent everything.
-            StatusCode::OK => (0, len),
+            StatusCode::OK => (0, len, true),
             status => return Err(self.error("read", status)),
         };
+        self.observe_validator(&response, whole)?;
         let bytes = response
             .bytes()
             .await
@@ -293,6 +357,14 @@ impl JsPackageArchive {
                 let fetched = self.fetched.borrow();
                 (fetched.missing_range(offset), fetched.len())
             };
+            // Without an entity validator, only accept a self-contained
+            // response. This avoids combining ranges that may belong to
+            // different versions of the URL.
+            let range = if self.source.has_validator() {
+                range
+            } else {
+                0..len
+            };
             let (start, bytes) = self.source.fetch(range, len).await?;
             self.fetched.borrow_mut().insert(start, bytes);
         }
@@ -350,6 +422,7 @@ impl JsPackageArchive {
         let source = HttpSource {
             client: reqwest::Client::new(),
             url,
+            validator: RefCell::new(None),
         };
         let size = size
             .filter(|size| size.is_finite() && *size >= 0.0)
