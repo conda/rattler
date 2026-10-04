@@ -16,9 +16,10 @@ use crate::{
     fetch::{CacheAction, FetchRepoDataError},
     gateway::{
         error::SubdirNotFoundError,
-        subdir::{PackageRecords, SubdirClient},
+        subdir::{FetchedPackage, SubdirClient},
     },
     reporter::ResponseReporterExt,
+    sparse::{FormatBucketSet, PackageFormatSelection},
 };
 use fs_err::tokio as tokio_fs;
 use futures::future::OptionFuture;
@@ -194,11 +195,12 @@ impl SubdirClient for ShardedSubdir {
     async fn fetch_package_records(
         &self,
         name: &PackageName,
+        _buckets: FormatBucketSet,
         reporter: Option<&dyn Reporter>,
-    ) -> Result<PackageRecords, GatewayError> {
+    ) -> Result<FetchedPackage, GatewayError> {
         // Find the shard that contains the package
         let Some(shard) = self.sharded_repodata.shards.get(name.as_normalized()) else {
-            return Ok(PackageRecords::default());
+            return Ok(FetchedPackage::empty());
         };
 
         // Check if we already have the shard in the cache.
@@ -243,7 +245,7 @@ impl SubdirClient for ShardedSubdir {
             // shard *index* is a different matter and stays an error either
             // way: without it nothing is known about the subdir at all.
             if self.cache_policy.missing_shards_are_empty {
-                return Ok(PackageRecords::default());
+                return Ok(FetchedPackage::empty());
             }
             return Err(GatewayError::ShardNotCached(name.as_source().to_string()));
         }
@@ -310,7 +312,7 @@ impl SubdirClient for ShardedSubdir {
         Ok(records)
     }
 
-    fn package_names(&self) -> Vec<String> {
+    fn package_names(&self, _selection: PackageFormatSelection) -> Vec<String> {
         self.sharded_repodata.shards.keys().cloned().collect()
     }
 

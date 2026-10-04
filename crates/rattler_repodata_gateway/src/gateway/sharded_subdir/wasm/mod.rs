@@ -19,9 +19,10 @@ use crate::{
         sharded_subdir::{
             decode_zst_bytes_async, is_missing_sharded_repodata_status, parse_records,
         },
-        subdir::{PackageRecords, SubdirClient},
+        subdir::{FetchedPackage, SubdirClient},
     },
     reporter::ResponseReporterExt,
+    sparse::{FormatBucketSet, PackageFormatSelection},
     utils::js_fetch::JsFetcher,
 };
 
@@ -119,11 +120,12 @@ impl SubdirClient for ShardedSubdir {
     async fn fetch_package_records(
         &self,
         name: &PackageName,
+        _buckets: FormatBucketSet,
         reporter: Option<&dyn Reporter>,
-    ) -> Result<PackageRecords, GatewayError> {
+    ) -> Result<FetchedPackage, GatewayError> {
         // Find the shard that contains the package
         let Some(shard) = self.sharded_repodata.shards.get(name.as_normalized()) else {
-            return Ok(PackageRecords::default());
+            return Ok(FetchedPackage::empty());
         };
 
         // Download the shard
@@ -177,7 +179,7 @@ impl SubdirClient for ShardedSubdir {
 
         let shard_bytes = decode_zst_bytes_async(shard_bytes, shard_url).await?;
 
-        // Parse the records from the shard (includes dep extraction)
+        // Parse the records from the shard
         parse_records(
             shard_bytes,
             self.channel.base_url.clone(),
@@ -186,7 +188,7 @@ impl SubdirClient for ShardedSubdir {
         .await
     }
 
-    fn package_names(&self) -> Vec<String> {
+    fn package_names(&self, _selection: PackageFormatSelection) -> Vec<String> {
         self.sharded_repodata.shards.keys().cloned().collect()
     }
 

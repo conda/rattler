@@ -487,7 +487,7 @@ impl<'a> CondaDependencyProvider<'a> {
                                     // A previous package that we already stored
                                     // is actually a package of a better
                                     // "type" so we'll just use that instead
-                                    // (.conda > .tar.bz)
+                                    // (.conda > .whl > .tar.bz2)
                                 }
                                 Ordering::Equal => {
                                     return Err(SolveError::DuplicateRecords(

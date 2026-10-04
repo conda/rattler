@@ -33,6 +33,7 @@ use super::{
 };
 use crate::{
     Reporter,
+    sparse::PackageFormatSelection,
     who_needs::{Dependent, WhoNeedsTarget, who_needs},
 };
 
@@ -60,6 +61,9 @@ const NAME_BATCH_SIZE: usize = 100;
 ///
 /// Channel sources always use full repodata, even if sharding is enabled
 /// or a previous query has already loaded a sharded subdir.
+///
+/// The records are scanned in the default
+/// [`PackageFormatSelection`](crate::sparse::PackageFormatSelection).
 ///
 /// The matches themselves can still be numerous enough to dominate memory —
 /// half a million records depend on `python` in conda-forge. Use
@@ -325,7 +329,7 @@ fn scan_subdir(
 ) -> BoxStream<Result<Dependent, GatewayError>> {
     let names: Vec<PackageName> = match subdir.as_ref() {
         SubdirState::Found(subdir_data) => subdir_data
-            .package_names()
+            .package_names(PackageFormatSelection::default())
             .into_iter()
             .filter_map(|name| PackageName::try_from(name).ok())
             .collect(),
@@ -349,7 +353,7 @@ fn scan_subdir(
                     let mut matches = Vec::new();
                     for name in batch {
                         let records = subdir_data
-                            .fetch_package_records_uncached(&name, reporter.as_deref())
+                            .scan_package_records(&name, reporter.as_deref())
                             .await?;
                         matches.extend(who_needs(&records, &target));
                         // The scanned records are dropped here; only the

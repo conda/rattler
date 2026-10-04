@@ -7,9 +7,9 @@ use crate::{
     gateway::{
         GatewayError,
         error::SubdirNotFoundError,
-        subdir::{PackageRecords, SubdirClient, extract_unique_deps_split},
+        subdir::{FetchedPackage, SubdirClient},
     },
-    sparse::{PackageFormatSelection, SparseRepoData},
+    sparse::{FormatBucketSet, PackageFormatSelection, SparsePackage, SparseRepoData},
 };
 
 /// A client that can be used to fetch repodata for a specific subdirectory from
@@ -78,31 +78,22 @@ impl SubdirClient for LocalSubdirClient {
     async fn fetch_package_records(
         &self,
         name: &PackageName,
+        buckets: FormatBucketSet,
         _reporter: Option<&dyn Reporter>,
-    ) -> Result<PackageRecords, GatewayError> {
+    ) -> Result<FetchedPackage, GatewayError> {
         let sparse_repodata = self.sparse.clone();
         let name = name.clone();
 
         let load_records = move || {
-            let io_error = |err: std::io::Error| {
-                GatewayError::IoError(
-                    "failed to extract repodata records from sparse repodata".to_string(),
-                    err,
-                )
-            };
-            let records = sparse_repodata
-                .load_records(&name, PackageFormatSelection::PreferConda)
-                .map_err(io_error)?;
-            let removed = sparse_repodata
-                .load_removed(Some(&name))
-                .map_err(io_error)?;
-            let (unique_base_deps, unique_extra_deps) = extract_unique_deps_split(&records);
-            Ok(PackageRecords {
-                records: records.into_iter().map(Arc::new).collect(),
-                removed,
-                unique_base_deps,
-                unique_extra_deps,
-            })
+            let SparsePackage { records, removed } = sparse_repodata
+                .load_package_buckets(&name, buckets)
+                .map_err(|err| {
+                    GatewayError::IoError(
+                        "failed to extract repodata records from sparse repodata".to_string(),
+                        err,
+                    )
+                })?;
+            Ok(FetchedPackage::from_buckets(buckets, records, removed))
         };
 
         #[cfg(target_arch = "wasm32")]
@@ -111,11 +102,10 @@ impl SubdirClient for LocalSubdirClient {
         simple_spawn_blocking::tokio::run_blocking_task(load_records).await
     }
 
-    fn package_names(&self) -> Vec<String> {
-        let sparse_repodata: Arc<SparseRepoData> = self.sparse.clone();
-        sparse_repodata
-            .package_names(PackageFormatSelection::PreferConda)
-            .map(std::convert::Into::into)
+    fn package_names(&self, selection: PackageFormatSelection) -> Vec<String> {
+        self.sparse
+            .package_names(selection)
+            .map(Into::into)
             .collect()
     }
 

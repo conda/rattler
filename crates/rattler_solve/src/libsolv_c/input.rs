@@ -329,12 +329,13 @@ pub fn add_repodata_records<'a>(
     Ok(solvable_ids)
 }
 
-/// When adding packages, we want to make sure that `.conda` packages have
-/// preference over `.tar.bz` packages. For that reason, when adding a solvable
-/// we check first if a `.conda` version of the package has already been added,
-/// in which case we forgo adding its `.tar.bz` version (and return `None`). If
-/// no `.conda` version has been added, we create a new solvable (replacing any
-/// existing solvable for the `.tar.bz` version of the package).
+/// When adding packages, we want to make sure that the preferred archive type
+/// of a build is used (`.conda` > `.whl` > `.tar.bz2`, see
+/// [`DistArchiveType::cmp_preference`]). For that reason, when adding a
+/// solvable we check first if a more preferred archive of the same build has
+/// already been added, in which case we forgo adding this one (and return
+/// `None`). Otherwise we create a new solvable (replacing any existing solvable
+/// for a less preferred archive of the same build).
 fn add_or_reuse_solvable<'a>(
     pool: &Pool,
     repo: &Repo<'_>,
@@ -350,7 +351,7 @@ fn add_or_reuse_solvable<'a>(
         match archive_type.cmp_preference(other_package_type) {
             Ordering::Less => {
                 // A previous package that we already stored is actually a package of a better
-                // "type" so we'll just use that instead (.conda > .tar.bz)
+                // "type" so we'll just use that instead (.conda > .whl > .tar.bz2)
                 Ok(None)
             }
             Ordering::Greater => {

@@ -512,26 +512,37 @@ impl GatewayInner {
 #[cfg(test)]
 mod test {
     use std::{
+        collections::{BTreeMap, HashMap},
+        future::IntoFuture,
         path::{Path, PathBuf},
         str::FromStr,
-        sync::{Arc, Mutex},
+        sync::{
+            Arc, Mutex,
+            atomic::{AtomicUsize, Ordering},
+        },
         time::Instant,
     };
 
     use assert_matches::assert_matches;
     use dashmap::DashSet;
+    use itertools::Itertools;
     use rattler_cache::{default_cache_dir, package_cache::PackageCache};
     use rattler_conda_types::{
         Channel, ChannelConfig, MatchSpec, PackageName,
         ParseStrictness::{Lenient, Strict},
-        RepoDataRecord, Subdir,
+        ParseStrictnessWithNameMatcher, RepoDataRecord, RepodataRevisions, Shard, ShardedRepodata,
+        ShardedSubdirInfo, Subdir,
     };
     use rstest::rstest;
     use url::Url;
 
+    use super::Source;
     use crate::{
         DownloadReporter, GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
-        UnsupportedRepodataRevision, fetch::CacheAction, gateway::Gateway,
+        UnsupportedRepodataRevision,
+        fetch::CacheAction,
+        gateway::Gateway,
+        sparse::{PackageFormatSelection, SparseRepoData},
         utils::simple_channel_server::SimpleChannelServer,
     };
     use rattler_conda_types::RepodataRevision;
@@ -4729,5 +4740,381 @@ mod test {
             "expected UserOrderConflict warning; got {:?}",
             output.warnings,
         );
+    }
+
+    /// The `format-selection` test channel. It has builds of `foo` in every
+    /// combination of archive formats, with removed files and with a file
+    /// listed both in a legacy map and in `v3`. `foo-10-0.whl.conda` has a
+    /// build string that ends in `.whl`; it must not be mistaken for the
+    /// removed `foo-10-0.conda`. It also has `bar`, a dependency of
+    /// `foo-2-0.tar.bz2` only, and `wheelonly`, a package that only has a
+    /// wheel.
+    fn format_selection_channel_dir() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/channels/format-selection")
+    }
+
+    fn format_selection_channel() -> Channel {
+        Channel::try_from_directory(&format_selection_channel_dir()).unwrap()
+    }
+
+    /// Renders records as their sorted file names. A record with a license is
+    /// annotated with it, which tells the legacy and `v3` entries of the same
+    /// file in the `format-selection` channel apart.
+    fn render_file_names<'r>(records: impl IntoIterator<Item = &'r RepoDataRecord>) -> String {
+        records
+            .into_iter()
+            .map(|record| match &record.package_record.license {
+                Some(license) => format!("{} ({license})", record.identifier.to_file_name()),
+                None => record.identifier.to_file_name(),
+            })
+            .sorted()
+            .join("\n")
+    }
+
+    /// Returns the shard of the package with the given name.
+    fn shard_of<'s>(shards: &'s mut BTreeMap<String, Shard>, name: &PackageName) -> &'s mut Shard {
+        shards.entry(name.as_normalized().to_owned()).or_default()
+    }
+
+    /// Serves the records of a `noarch` repodata.json as sharded repodata and
+    /// counts how many shards are downloaded.
+    struct ShardedChannelServer {
+        url: Url,
+        shard_requests: Arc<AtomicUsize>,
+        _shutdown: tokio::sync::oneshot::Sender<()>,
+    }
+
+    impl ShardedChannelServer {
+        async fn new(repodata_path: &Path) -> Self {
+            let repodata: rattler_conda_types::RepoData =
+                serde_json::from_str(&fs_err::read_to_string(repodata_path).unwrap()).unwrap();
+
+            let mut shards: BTreeMap<String, Shard> = BTreeMap::new();
+            for (identifier, record) in repodata.packages {
+                shard_of(&mut shards, &record.name)
+                    .packages
+                    .insert(identifier, record);
+            }
+            for (identifier, record) in repodata.conda_packages {
+                shard_of(&mut shards, &record.name)
+                    .conda_packages
+                    .insert(identifier, record);
+            }
+            for (identifier, record) in repodata.v3.tar_bz2 {
+                shard_of(&mut shards, &record.name)
+                    .v3
+                    .tar_bz2
+                    .insert(identifier, record);
+            }
+            for (identifier, record) in repodata.v3.conda {
+                shard_of(&mut shards, &record.name)
+                    .v3
+                    .conda
+                    .insert(identifier, record);
+            }
+            for (identifier, record) in repodata.v3.whl {
+                shard_of(&mut shards, &record.package_record.name)
+                    .v3
+                    .whl
+                    .insert(identifier, record);
+            }
+            for identifier in repodata.removed {
+                let name = PackageName::new_unchecked(identifier.identifier.name.as_str());
+                shard_of(&mut shards, &name).removed.insert(identifier);
+            }
+
+            let mut shard_hashes = ahash::HashMap::default();
+            let mut shard_files = HashMap::new();
+            for (name, shard) in shards {
+                let bytes =
+                    zstd::encode_all(rmp_serde::to_vec_named(&shard).unwrap().as_slice(), 0)
+                        .unwrap();
+                let hash = rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(&bytes);
+                shard_files.insert(format!("{}.msgpack.zst", hex::encode(hash)), bytes);
+                shard_hashes.insert(name, hash);
+            }
+            let index = ShardedRepodata {
+                info: ShardedSubdirInfo {
+                    subdir: "noarch".into(),
+                    base_url: "./".into(),
+                    shards_base_url: "./shards/".into(),
+                    created_at: None,
+                    repodata_revisions: RepodataRevisions::default(),
+                    channel_relations: None,
+                },
+                shards: shard_hashes,
+            };
+            let index_bytes =
+                zstd::encode_all(rmp_serde::to_vec_named(&index).unwrap().as_slice(), 0).unwrap();
+
+            let shard_requests = Arc::new(AtomicUsize::new(0));
+            let app = axum::Router::new()
+                .route(
+                    "/noarch/repodata_shards.msgpack.zst",
+                    axum::routing::get(move || std::future::ready(index_bytes.clone())),
+                )
+                .route(
+                    "/noarch/shards/{file}",
+                    axum::routing::get({
+                        let shard_requests = shard_requests.clone();
+                        move |axum::extract::Path(file): axum::extract::Path<String>| {
+                            shard_requests.fetch_add(1, Ordering::SeqCst);
+                            std::future::ready(
+                                shard_files
+                                    .get(&file)
+                                    .cloned()
+                                    .ok_or(axum::http::StatusCode::NOT_FOUND),
+                            )
+                        }
+                    }),
+                );
+
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let (shutdown, shutdown_received) = tokio::sync::oneshot::channel();
+            tokio::spawn(
+                axum::serve(listener, app)
+                    .with_graceful_shutdown(async {
+                        shutdown_received.await.ok();
+                    })
+                    .into_future(),
+            );
+
+            Self {
+                url: Url::parse(&format!("http://localhost:{port}")).unwrap(),
+                shard_requests,
+                _shutdown: shutdown,
+            }
+        }
+
+        fn channel(&self) -> Channel {
+            Channel::from_url(self.url.clone())
+        }
+
+        fn shard_request_count(&self) -> usize {
+            self.shard_requests.load(Ordering::SeqCst)
+        }
+    }
+
+    /// A gateway that never caches shards on disk, so every shard it parses
+    /// is downloaded from the server.
+    fn gateway_without_disk_cache(cache_dir: &Path) -> Gateway {
+        Gateway::builder()
+            .with_client(reqwest::Client::builder().no_proxy().build().unwrap())
+            .with_cache_dir(cache_dir)
+            .with_channel_config(super::ChannelConfig {
+                default: SourceConfig {
+                    cache_action: CacheAction::NoCache,
+                    ..SourceConfig::default()
+                },
+                per_channel: std::collections::HashMap::default(),
+            })
+            .finish()
+    }
+
+    /// Every kind of source returns the same records of `foo` for the same
+    /// package format selection.
+    #[rstest]
+    #[tokio::test]
+    async fn package_format_selection_is_the_same_for_every_source(
+        #[values(
+            PackageFormatSelection::OnlyTarBz2,
+            PackageFormatSelection::OnlyConda,
+            PackageFormatSelection::PreferConda,
+            PackageFormatSelection::PreferCondaWithWhl,
+            PackageFormatSelection::Both,
+            PackageFormatSelection::All
+        )]
+        selection: PackageFormatSelection,
+    ) {
+        let foo = PackageName::new_unchecked("foo");
+        let sparse = Arc::new(
+            SparseRepoData::from_file(
+                format_selection_channel(),
+                "noarch",
+                format_selection_channel_dir().join("noarch/repodata.json"),
+                None,
+            )
+            .unwrap(),
+        );
+        let expected = render_file_names(&sparse.load_records(&foo, selection).unwrap());
+
+        // A custom source has no notion of removed files or of legacy and
+        // `v3` entries, so it serves the files that remain after both are
+        // applied.
+        let mut custom_source = MockRepoDataSource::new();
+        for record in sparse
+            .load_records(&foo, PackageFormatSelection::All)
+            .unwrap()
+        {
+            custom_source.add_record(Subdir::NoArch, record);
+        }
+
+        let server =
+            ShardedChannelServer::new(&format_selection_channel_dir().join("noarch/repodata.json"))
+                .await;
+        let cache_dir = tempfile::tempdir().unwrap();
+        let gateway = gateway_without_disk_cache(cache_dir.path());
+
+        let sources: [(&str, Source); 4] = [
+            ("local channel", format_selection_channel().into()),
+            (
+                "sparse repodata",
+                Source::SparseRepoData(vec![sparse.clone()]),
+            ),
+            ("sharded channel", server.channel().into()),
+            ("custom source", Source::Custom(Arc::new(custom_source))),
+        ];
+        for (description, source) in sources {
+            let output = gateway
+                .query([source], [Subdir::NoArch], [foo.clone()])
+                .recursive(false)
+                .package_format_selection(selection)
+                .await
+                .unwrap();
+            assert_eq!(
+                render_file_names(output.iter().flat_map(RepoData::iter)),
+                expected,
+                "{description} disagrees on {selection}"
+            );
+        }
+
+        insta::with_settings!({snapshot_suffix => selection.to_string()}, {
+            insta::assert_snapshot!(expected);
+        });
+    }
+
+    /// Requesting several selections of the same package through one gateway
+    /// reuses the records the selections share, and fetches a shard only
+    /// once.
+    #[tokio::test]
+    async fn package_format_selections_share_cached_records() {
+        let foo = PackageName::new_unchecked("foo");
+        let server =
+            ShardedChannelServer::new(&format_selection_channel_dir().join("noarch/repodata.json"))
+                .await;
+        let cache_dir = tempfile::tempdir().unwrap();
+        let gateway = gateway_without_disk_cache(cache_dir.path());
+
+        for channel in [format_selection_channel(), server.channel()] {
+            let mut first_seen: HashMap<String, Arc<RepoDataRecord>> = HashMap::new();
+            for selection in [
+                PackageFormatSelection::PreferConda,
+                PackageFormatSelection::Both,
+                PackageFormatSelection::All,
+            ] {
+                let output = gateway
+                    .query([channel.clone()], [Subdir::NoArch], [foo.clone()])
+                    .recursive(false)
+                    .package_format_selection(selection)
+                    .await
+                    .unwrap();
+                for record in output.iter().flat_map(RepoData::iter_arc) {
+                    let file_name = record.identifier.to_file_name();
+                    let first = first_seen
+                        .entry(file_name.clone())
+                        .or_insert_with(|| record.clone());
+                    assert!(
+                        Arc::ptr_eq(first, record),
+                        "{file_name} of {} was parsed again for {selection}",
+                        channel.base_url
+                    );
+                }
+            }
+        }
+
+        assert_eq!(server.shard_request_count(), 1);
+    }
+
+    /// A recursive query only follows the dependencies of selected records:
+    /// `bar` is only a dependency of `foo-2-0.tar.bz2`, which `PreferConda`
+    /// drops in favor of `foo-2-0.conda`.
+    #[rstest]
+    #[case::prefer_conda(PackageFormatSelection::PreferConda, &["foo"])]
+    #[case::both(PackageFormatSelection::Both, &["bar", "foo"])]
+    #[tokio::test]
+    async fn recursive_query_follows_only_selected_records(
+        #[case] selection: PackageFormatSelection,
+        #[case] expected_names: &[&str],
+    ) {
+        let output = Gateway::new()
+            .query(
+                [format_selection_channel()],
+                [Subdir::NoArch],
+                [PackageName::new_unchecked("foo")],
+            )
+            .recursive(true)
+            .package_format_selection(selection)
+            .await
+            .unwrap();
+
+        let names: Vec<&str> = output
+            .iter()
+            .flat_map(RepoData::iter)
+            .map(|record| record.package_record.name.as_normalized())
+            .sorted()
+            .dedup()
+            .collect();
+        assert_eq!(names, expected_names);
+    }
+
+    /// A pattern query expands to the names of the packages that have records
+    /// in the selection, so a package that only has a wheel is found once the
+    /// selection uses wheels.
+    #[rstest]
+    #[case::prefer_conda(PackageFormatSelection::PreferConda, "")]
+    #[case::all(PackageFormatSelection::All, "wheelonly-1-0.whl")]
+    #[tokio::test]
+    async fn pattern_query_finds_wheel_only_packages(
+        #[case] selection: PackageFormatSelection,
+        #[case] expected: &str,
+    ) {
+        let spec = MatchSpec::from_str(
+            "wheel*",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+
+        let output = Gateway::new()
+            .query([format_selection_channel()], [Subdir::NoArch], [spec])
+            .recursive(false)
+            .package_format_selection(selection)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            render_file_names(output.iter().flat_map(RepoData::iter)),
+            expected
+        );
+    }
+
+    /// A names query on a `repodata.json` channel only lists the packages
+    /// with records in the selection. `bar` only has a `.conda` file and
+    /// `wheelonly` only a wheel.
+    #[rstest]
+    #[case::prefer_conda(PackageFormatSelection::PreferConda, &["bar", "foo"])]
+    #[case::only_tar_bz2(PackageFormatSelection::OnlyTarBz2, &["foo"])]
+    #[case::all(PackageFormatSelection::All, &["bar", "foo", "wheelonly"])]
+    #[tokio::test]
+    async fn names_query_lists_packages_in_the_selection(
+        #[case] selection: PackageFormatSelection,
+        #[case] expected: &[&str],
+    ) {
+        let output = Gateway::new()
+            .names([format_selection_channel()], [Subdir::NoArch])
+            .package_format_selection(selection)
+            .await
+            .unwrap();
+
+        let names: Vec<&str> = output
+            .names
+            .iter()
+            .map(PackageName::as_normalized)
+            .sorted()
+            .collect();
+        assert_eq!(names, expected);
     }
 }
