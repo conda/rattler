@@ -2,6 +2,8 @@ import { describe, expect, it } from "@jest/globals";
 import { Gateway } from "./Gateway";
 import { Platform } from "./Platform";
 import { isRattlerError } from "./RattlerError";
+import { MatchSpec } from "./MatchSpec";
+import { RepoDataRecord } from "./RepoDataRecord";
 
 // Disable all repodata variants so the gateway requests exactly one URL per
 // subdir: the plain `repodata.json`.
@@ -140,13 +142,52 @@ describe("Gateway", () => {
             }
             expect(records).toHaveLength(1);
             expect(records[0].name).toBe("foo");
-            expect(records[0].version).toBe("1.0");
+            expect(records[0]).toBeInstanceOf(RepoDataRecord);
+            expect(records[0].version.source).toBe("1.0");
             expect(records[0].build).toBe("h123_0");
-            expect(records[0].fn).toBe("foo-1.0-h123_0.conda");
+            expect(records[0].fileName).toBe("foo-1.0-h123_0.conda");
             expect(records[0].url).toBe(
                 "https://example.com/test-channel/noarch/foo-1.0-h123_0.conda",
             );
             expect(records.warnings).toEqual([]);
+        });
+
+        it("accepts MatchSpec objects with name globs", async () => {
+            const gateway = new Gateway({
+                channelConfig: plainOnly,
+                fetch: () =>
+                    Promise.resolve(
+                        new Response(repodata, {
+                            status: 200,
+                            headers: { "content-type": "application/json" },
+                        }),
+                    ),
+            });
+
+            const spec = new MatchSpec("f* >=1", { exactNamesOnly: false });
+            const records = await gateway.query(
+                ["https://example.com/test-channel"],
+                ["noarch"],
+                [spec],
+            );
+
+            // The caller's spec stays usable after the query.
+            expect(spec.toString()).toBe("f* >=1");
+            expect(spec.matchesRepoDataRecord(records[0])).toBe(true);
+            expect(
+                await gateway.query(
+                    ["https://example.com/test-channel"],
+                    ["noarch"],
+                    ["f*"],
+                ),
+            ).toHaveLength(1);
+
+            expect(records.map((record) => record.fileName)).toEqual([
+                "foo-1.0-h123_0.conda",
+            ]);
+            expect(records[0].channel).toBe(
+                "https://example.com/test-channel/",
+            );
         });
 
         it("returns gateway warnings on the query result", async () => {
@@ -311,6 +352,21 @@ describe("Gateway", () => {
             expect(isRattlerError(error)).toBe(true);
             if (isRattlerError(error)) {
                 expect(error.code).toBe("PARSE_PLATFORM");
+            }
+        });
+        it("marks invalid specs with PARSE_MATCH_SPEC", async () => {
+            const gateway = new Gateway();
+
+            const error: unknown = await gateway
+                .query(["https://example.com/channel"], ["noarch"], [">=1"])
+                .then(
+                    () => null,
+                    (err: unknown) => err,
+                );
+
+            expect(isRattlerError(error)).toBe(true);
+            if (isRattlerError(error)) {
+                expect(error.code).toBe("PARSE_MATCH_SPEC");
             }
         });
     });

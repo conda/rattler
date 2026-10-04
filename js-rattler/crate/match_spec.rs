@@ -1,28 +1,87 @@
-use rattler_conda_types::{
-    MatchSpec, Matches, PackageRecord, ParseMatchSpecOptions, ParseStrictness, RepoDataRecord,
-    RepodataRevision,
-};
-use wasm_bindgen::{JsValue, prelude::wasm_bindgen};
+use rattler_conda_types::{MatchSpec, Matches, ParseMatchSpecOptions, ParseStrictness};
+use serde::Deserialize;
+use wasm_bindgen::prelude::*;
 
 use crate::{
     JsResult, package_name::JsPackageName, package_record::JsPackageRecord,
-    parse_strictness::JsParseStrictness, version_spec::JsVersionSpec,
+    repo_data_record::JsRepoDataRecord, version_spec::JsVersionSpec,
 };
 
-/// A match spec selects packages from a channel: a package name, optionally
-/// narrowed by a version spec, a build string, a channel, a subdir and other
-/// fields, in the syntax conda and pixi use (`numpy >=2`, `python 3.13.*`,
-/// `conda-forge::pytorch[build=cuda*]`).
-///
-/// Parsing accepts the repodata v3 syntax as well: extras
-/// (`python[extras=[foo]]`), conditionals (`python[when="numpy"]`) and flags
-/// (`python[flags=[cuda]]`). The package name must be exact: a glob or regex
-/// name (`py*`) is rejected, as a gateway query could not look it up.
+#[wasm_bindgen(typescript_custom_section)]
+const MATCH_SPEC_OPTIONS_TS: &'static str = r#"
+/**
+ * Options that control how a `MatchSpec` is parsed.
+ *
+ * @public
+ */
+export type MatchSpecOptions = {
+    /** The strictness of the parser. Defaults to `"lenient"`. */
+    strictness?: ParseStrictness;
+    /**
+     * Only accept exact package names. When `false`, the name may also be a
+     * glob (`foo*`) or an anchored regex (`^foo.*$`). Defaults to `true`.
+     */
+    exactNamesOnly?: boolean;
+    /** Accept the extras syntax (`foo[extras=[bar]]`). Defaults to `true`. */
+    extras?: boolean;
+    /** Accept the conditionals syntax (`foo[when="python >=3.6"]`). Defaults to `true`. */
+    conditionals?: boolean;
+    /** Accept the flags syntax (`foo[flags=[cuda]]`). Defaults to `true`. */
+    flags?: boolean;
+};
+"#;
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(typescript_type = "MatchSpecOptions")]
+    pub type JsMatchSpecOptions;
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MatchSpecOptions {
+    #[serde(default)]
+    strictness: Option<Strictness>,
+    #[serde(default)]
+    exact_names_only: Option<bool>,
+    #[serde(default)]
+    extras: Option<bool>,
+    #[serde(default)]
+    conditionals: Option<bool>,
+    #[serde(default)]
+    flags: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum Strictness {
+    Strict,
+    Lenient,
+}
+
+impl From<MatchSpecOptions> for ParseMatchSpecOptions {
+    fn from(value: MatchSpecOptions) -> Self {
+        let strictness = match value.strictness {
+            Some(Strictness::Strict) => ParseStrictness::Strict,
+            Some(Strictness::Lenient) | None => ParseStrictness::Lenient,
+        };
+        ParseMatchSpecOptions::new(strictness)
+            .with_exact_names_only(value.exact_names_only.unwrap_or(true))
+            .with_extras(value.extras.unwrap_or(true))
+            .with_conditionals(value.conditionals.unwrap_or(true))
+            .with_flags(value.flags.unwrap_or(true))
+    }
+}
+
+/// A match spec is a query language for conda packages. It selects package
+/// records by name, version, build string, channel and more, for example
+/// `numpy >=1.20`, `conda-forge::python 3.12.* *_cpython` or
+/// `pytest[version=">=8"]`.
 ///
 /// @public
 #[wasm_bindgen(js_name = "MatchSpec")]
 #[repr(transparent)]
-#[derive(Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct JsMatchSpec {
     inner: MatchSpec,
 }
@@ -45,193 +104,189 @@ impl AsRef<MatchSpec> for JsMatchSpec {
     }
 }
 
-/// The options the bindings parse match specs with: the given strictness,
-/// exact package names only, and the full repodata v3 syntax. This is also
-/// what the gateway parses the specs of a query with, so a spec that parses
-/// here is accepted there.
-pub(crate) fn parse_options(strictness: ParseStrictness) -> ParseMatchSpecOptions {
-    ParseMatchSpecOptions::new(strictness).with_repodata_revision(RepodataRevision::V3)
-}
-
 #[wasm_bindgen(js_class = "MatchSpec")]
 impl JsMatchSpec {
-    /// Constructs a new `MatchSpec` object from a string representation.
-    ///
-    /// Throws an error with code `PARSE_MATCH_SPEC` when the string is not a
-    /// valid match spec.
+    /// Parses a match spec from its string representation.
     #[wasm_bindgen(constructor)]
     pub fn new(
         #[wasm_bindgen(param_description = "The string representation of the match spec.")]
         spec: &str,
-        #[wasm_bindgen(param_description = "The strictness of the parser. Defaults to `lenient`.")]
-        parse_strictness: Option<JsParseStrictness>,
+        #[wasm_bindgen(param_description = "Options that control how the spec is parsed.")]
+        options: Option<JsMatchSpecOptions>,
     ) -> JsResult<Self> {
-        let parse_strictness = parse_strictness
-            .map(TryFrom::try_from)
-            .transpose()?
-            .unwrap_or(ParseStrictness::Lenient);
+        let options: Option<MatchSpecOptions> = match options {
+            Some(options) => serde_wasm_bindgen::from_value(options.into())?,
+            None => None,
+        };
+        let options = ParseMatchSpecOptions::from(options.unwrap_or_default());
+        Ok(MatchSpec::from_str(spec, options)?.into())
+    }
 
-        let spec = MatchSpec::from_str(spec, parse_options(parse_strictness))?;
-        Ok(spec.into())
+    /// Returns an independent copy of this match spec.
+    #[wasm_bindgen(js_name = "clone")]
+    pub fn clone_spec(&self) -> Self {
+        self.clone()
     }
 
     /// Returns the string representation of the match spec.
-    ///
-    /// An attempt is made to return the spec in the same format as the input
-    /// string, but this is not guaranteed.
     #[wasm_bindgen(js_name = "toString")]
     pub fn as_str(&self) -> String {
-        format!("{}", self.as_ref())
+        self.inner.to_string()
     }
 
-    /// The name of the package this spec selects, normalized to lower case.
+    /// The name matcher as written in the spec. This is either an exact
+    /// package name, a glob (`foo*`) or an anchored regex (`^foo.*$`).
     #[wasm_bindgen(getter)]
-    pub fn name(&self) -> JsPackageName {
-        let name = match self.as_ref().name.as_exact() {
-            Some(name) => name.as_normalized().to_owned(),
-            // The parser only produces exact names; see `parse_options`.
-            None => self.as_ref().name.to_string(),
-        };
-        JsValue::from(name).into()
+    pub fn name(&self) -> String {
+        self.inner.name.to_string()
     }
 
-    /// The version spec of the package (e.g. `>=1.2.3`), if any.
+    /// The normalized package name if the spec selects a single package by
+    /// its exact name, `undefined` for glob and regex names.
+    #[wasm_bindgen(
+        getter,
+        js_name = "exactName",
+        unchecked_return_type = "PackageName | undefined"
+    )]
+    pub fn exact_name(&self) -> Option<String> {
+        self.inner
+            .name
+            .as_exact()
+            .map(|name| name.as_normalized().to_string())
+    }
+
+    /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`).
     #[wasm_bindgen(getter)]
     pub fn version(&self) -> Option<JsVersionSpec> {
-        self.as_ref().version.clone().map(Into::into)
+        self.inner.version.clone().map(Into::into)
     }
 
-    /// The build string matcher of the package (e.g. `py37_0`, `py*`), if any.
+    /// The build string matcher of the package (e.g. `py37_0`, `py*`).
     #[wasm_bindgen(getter)]
     pub fn build(&self) -> Option<String> {
-        self.as_ref().build.as_ref().map(ToString::to_string)
+        self.inner.build.as_ref().map(ToString::to_string)
     }
 
-    /// The build number spec of the package (e.g. `>=3`), if any.
+    /// The build number spec of the package (e.g. `1`, `>=2`).
     #[wasm_bindgen(getter, js_name = "buildNumber")]
     pub fn build_number(&self) -> Option<String> {
-        self.as_ref().build_number.as_ref().map(ToString::to_string)
+        self.inner.build_number.as_ref().map(ToString::to_string)
     }
 
-    /// The exact filename of the package archive, if any.
+    /// The file name of the package.
     #[wasm_bindgen(getter, js_name = "fileName")]
     pub fn file_name(&self) -> Option<String> {
-        self.as_ref().file_name.clone()
+        self.inner.file_name.clone()
     }
 
-    /// The extras selected on the package (`python[extras=[foo]]`), if any.
+    /// The selected optional dependency groups of the package.
     #[wasm_bindgen(getter)]
     pub fn extras(&self) -> Option<Vec<String>> {
-        self.as_ref().extras.clone()
+        self.inner.extras.clone()
     }
 
-    /// The flag matchers of the package (`python[flags=[cuda]]`), if any.
+    /// The package flags the selected records must carry.
     #[wasm_bindgen(getter)]
     pub fn flags(&self) -> Option<Vec<String>> {
-        self.as_ref()
+        self.inner
             .flags
             .as_ref()
             .map(|flags| flags.iter().map(ToString::to_string).collect())
     }
 
-    /// The base URL of the channel the package must come from, if any.
+    /// The base url of the channel of the package, if one was specified.
     #[wasm_bindgen(getter)]
     pub fn channel(&self) -> Option<String> {
-        self.as_ref()
+        self.inner
             .channel
             .as_ref()
             .map(|channel| channel.base_url.to_string())
     }
 
-    /// The subdir of the channel the package must come from, if any.
+    /// The subdir of the channel.
     #[wasm_bindgen(getter)]
     pub fn subdir(&self) -> Option<String> {
-        self.as_ref().subdir.clone()
+        self.inner.subdir.clone()
     }
 
-    /// The namespace of the package, if any. Namespaces are not used yet.
+    /// The namespace of the package (currently not used).
     #[wasm_bindgen(getter)]
     pub fn namespace(&self) -> Option<String> {
-        self.as_ref().namespace.clone()
+        self.inner.namespace.clone()
     }
 
-    /// The hex encoded MD5 hash the package must have, if any.
+    /// The hex encoded md5 hash of the package.
     #[wasm_bindgen(getter)]
     pub fn md5(&self) -> Option<String> {
-        self.as_ref().md5.as_ref().map(hex::encode)
+        self.inner.md5.map(hex::encode)
     }
 
-    /// The hex encoded SHA256 hash the package must have, if any.
+    /// The hex encoded sha256 hash of the package.
     #[wasm_bindgen(getter)]
     pub fn sha256(&self) -> Option<String> {
-        self.as_ref().sha256.as_ref().map(hex::encode)
+        self.inner.sha256.map(hex::encode)
     }
 
-    /// The URL the package must be downloaded from, if any.
+    /// The url of the package.
     #[wasm_bindgen(getter)]
     pub fn url(&self) -> Option<String> {
-        self.as_ref().url.as_ref().map(ToString::to_string)
+        self.inner.url.as_ref().map(ToString::to_string)
     }
 
-    /// The license the package must have, if any.
+    /// The license of the package.
     #[wasm_bindgen(getter)]
     pub fn license(&self) -> Option<String> {
-        self.as_ref().license.clone()
+        self.inner.license.clone()
     }
 
-    /// The license family the package must have (e.g. `MIT`, `BSD`), if any.
+    /// The license family of the package.
     #[wasm_bindgen(getter, js_name = "licenseFamily")]
     pub fn license_family(&self) -> Option<String> {
-        self.as_ref().license_family.clone()
+        self.inner.license_family.clone()
     }
 
-    /// The condition under which the spec applies
-    /// (`python[when="numpy >=2"]`), if any.
+    /// The condition under which this match spec applies
+    /// (e.g. `python >=3.12`).
     #[wasm_bindgen(getter)]
     pub fn condition(&self) -> Option<String> {
-        self.as_ref().condition.as_ref().map(ToString::to_string)
+        self.inner.condition.as_ref().map(ToString::to_string)
     }
 
-    /// The track features the package must have, if any.
+    /// The track features of the package.
     #[wasm_bindgen(getter, js_name = "trackFeatures")]
     pub fn track_features(&self) -> Option<Vec<String>> {
-        self.as_ref().track_features.clone()
+        self.inner.track_features.clone()
     }
 
-    /// Returns `true` if the record satisfies this spec.
-    ///
-    /// A `PackageRecord` carries no `url`, so a spec selecting a package by
-    /// its URL cannot be satisfied here; pass the plain record a gateway
-    /// query returned to {@link MatchSpec.matchesJson} for that.
+    /// Returns `true` if the name of this spec matches the given package
+    /// name.
+    #[wasm_bindgen(js_name = "matchesName")]
+    pub fn matches_name(
+        &self,
+        #[wasm_bindgen(param_description = "The package name to match")] name: JsPackageName,
+    ) -> JsResult<bool> {
+        let name: String = serde_wasm_bindgen::from_value(name.into())?;
+        let name = rattler_conda_types::PackageName::try_from(name)?;
+        Ok(self.inner.name.matches(&name))
+    }
+
+    /// Returns `true` if the package record matches this spec.
     pub fn matches(
         &self,
         #[wasm_bindgen(param_description = "The record to match")] record: &JsPackageRecord,
     ) -> bool {
-        self.as_ref().matches(record.as_ref())
+        self.inner.matches(record.as_ref())
     }
 
-    /// Returns `true` if the record, given as the plain JSON object a gateway
-    /// query returns or as it appears in `repodata.json`, satisfies this spec.
-    ///
-    /// A record carrying `url` and `fn` is matched as a repodata record, so a
-    /// spec selecting a package by URL is honored. Throws an error with code
-    /// `SERDE` when the object is not a valid record.
-    #[wasm_bindgen(js_name = "matchesJson")]
-    pub fn matches_json(
+    /// Returns `true` if the repodata record matches this spec. Unlike
+    /// `matches`, this also compares the `url` of the spec with the url of
+    /// the record.
+    #[wasm_bindgen(js_name = "matchesRepoDataRecord")]
+    pub fn matches_repo_data_record(
         &self,
-        #[wasm_bindgen(
-            param_description = "The record to match",
-            unchecked_param_type = "PackageRecordJson & { fn?: string; url?: string; channel?: string | null }"
-        )]
-        record: JsValue,
-    ) -> JsResult<bool> {
-        let has_url = js_sys::Reflect::has(&record, &JsValue::from_str("url")).unwrap_or(false);
-        if has_url {
-            let record: RepoDataRecord = serde_wasm_bindgen::from_value(record)?;
-            Ok(self.as_ref().matches(&record))
-        } else {
-            let record: PackageRecord = serde_wasm_bindgen::from_value(record)?;
-            Ok(self.as_ref().matches(&record))
-        }
+        #[wasm_bindgen(param_description = "The record to match")] record: &JsRepoDataRecord,
+    ) -> bool {
+        self.inner
+            .matches(AsRef::<rattler_conda_types::RepoDataRecord>::as_ref(record))
     }
 }

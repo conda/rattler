@@ -1,8 +1,6 @@
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
-use rattler_conda_types::{
-    Channel, ChannelNoticeLevel, MatchSpec, ParseStrictness, RepoDataRecord, Subdir,
-};
+use rattler_conda_types::{Channel, ChannelNoticeLevel, MatchSpec, Subdir};
 use rattler_repodata_gateway::{
     ChannelConfig, Gateway, GatewayWarning, SourceConfig, fetch::CacheAction,
 };
@@ -29,7 +27,7 @@ pub(crate) fn emit_gateway_warnings(warnings: Vec<GatewayWarning>) {
     }
 }
 
-use crate::{JsResult, match_spec::parse_options};
+use crate::{JsResult, match_spec::JsMatchSpec, repo_data_record::JsRepoDataRecord};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -283,7 +281,10 @@ impl JsGateway {
         &self,
         channels: Vec<String>,
         platforms: Vec<String>,
-        specs: Vec<String>,
+        #[wasm_bindgen(
+            param_description = "The match specs to query for. They are consumed by the call."
+        )]
+        specs: Vec<JsMatchSpec>,
         #[wasm_bindgen(
             param_description = "Whether to recursively fetch the records of dependencies as well"
         )]
@@ -301,10 +302,7 @@ impl JsGateway {
             .into_iter()
             .map(|p| Subdir::from_str(&p))
             .collect::<Result<Vec<_>, _>>()?;
-        let specs = specs
-            .into_iter()
-            .map(|s| MatchSpec::from_str(&s, parse_options(ParseStrictness::Lenient)))
-            .collect::<Result<Vec<_>, _>>()?;
+        let specs = specs.into_iter().map(MatchSpec::from).collect::<Vec<_>>();
 
         let output = self
             .inner
@@ -319,18 +317,21 @@ impl JsGateway {
             .collect::<Vec<_>>();
         self.emit_warnings(output.warnings);
 
-        #[derive(Serialize)]
-        struct QueryOutput<'a> {
-            records: Vec<&'a RepoDataRecord>,
-            warnings: Vec<String>,
-        }
-
         let records = output
             .repodata
             .iter()
             .flat_map(|repodata| repodata.iter())
-            .collect::<Vec<_>>();
-        let serializer = serde_wasm_bindgen::Serializer::json_compatible();
-        Ok(QueryOutput { records, warnings }.serialize(&serializer)?)
+            .map(|record| JsValue::from(JsRepoDataRecord::from(record.clone())))
+            .collect::<js_sys::Array>();
+        let result = js_sys::Object::new();
+        js_sys::Reflect::set(&result, &JsValue::from_str("records"), &records)
+            .expect("setting a property on a plain object cannot fail");
+        js_sys::Reflect::set(
+            &result,
+            &JsValue::from_str("warnings"),
+            &serde_wasm_bindgen::to_value(&warnings)?,
+        )
+        .expect("setting a property on a plain object cannot fail");
+        Ok(result.into())
     }
 }

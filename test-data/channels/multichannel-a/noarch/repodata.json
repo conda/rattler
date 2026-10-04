@@ -1,0 +1,23 @@
+{
+  "info": {
+    "subdir": "noarch"
+  },
+  "packages": {
+    "pkg-1.0-0.tar.bz2": {
+      "build": "0",
+      "build_number": 0,
+      "depends": [],
+      "license": "MIT",
+      "name": "pkg",
+      "noarch": "generic",
+      "md5": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size": 100,
+      "subdir": "noarch",
+      "timestamp": 1700000000000,
+      "version": "1.0"
+    }
+  },
+  "packages.conda": {},
+  "repodata_version": 1
+}

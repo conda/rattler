@@ -18,6 +18,8 @@ export type RattlerErrorCode =
     | "UNSUPPORTED_ARCHIVE_TYPE"
     | "ARCHIVE"
     | "INVALID_SECTION"
+    | "PARSE_FILE_NAME"
+    | "PARSE_JSON"
     | "SUBDIR_NOT_FOUND"
     | "FETCH"
     | "GATEWAY"

@@ -19,7 +19,7 @@ use crate::{
         progress::{wrap_in_async_progress, wrap_in_progress},
         table::{Cell, Table},
     },
-    solver_args::SolverArgs,
+    solver_args::{SolverArgs, task_for_repodata},
 };
 
 /// The examples shown by `rattler solve --help` and in `rattler skill`.
@@ -134,7 +134,7 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
         strategy: opt.solver.strategy(),
         channel_priority: opt.solver.channel_priority(),
         exclude_newer,
-        ..SolverTask::from_iter(&repo_data)
+        ..task_for_repodata(&repo_data)
     };
 
     let start_solve = Instant::now();

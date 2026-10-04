@@ -1,1 +1,1 @@
-export { MatchSpec } from "../pkg";
+export { MatchSpec, MatchSpecOptions } from "../pkg";

@@ -1,4 +1,4 @@
-import { JsGateway, MatchSpec, PackageRecordJson } from "../pkg";
+import { JsGateway, MatchSpec, RepoDataRecord } from "../pkg";
 import { Platform } from "./Platform";
 import { NormalizedPackageName } from "./PackageName";
 
@@ -107,32 +107,14 @@ export type GatewayRecordsQueryOptions = {
 };
 
 /**
- * A single record in the Conda repodata as returned by {@link Gateway.query}.
- * This is the `repodata.json` representation of a package extended with the
- * filename, the canonical download URL, and the channel it came from.
- *
- * @public
- */
-export type RepoDataRecordJson = PackageRecordJson & {
-    /** The filename of the package archive. */
-    fn: string;
-
-    /** The canonical URL from where to download this package. */
-    url: string;
-
-    /** The channel the package came from. */
-    channel?: string | null;
-};
-
-/**
  * The result of {@link Gateway.query}: the matching records, with the non-fatal
  * warnings encountered during the query attached. The warnings are also
- * forwarded to the `onWarning` callback (or `console.warn` when none is set)
- * as they are recorded, so they surface even when this field is ignored.
+ * forwarded to the `onWarning` callback (or `console.warn` when none is set) as
+ * they are recorded, so they surface even when this field is ignored.
  *
  * @public
  */
-export type GatewayQueryResult = RepoDataRecordJson[] & {
+export type GatewayQueryResult = RepoDataRecord[] & {
     /** Non-fatal warnings encountered during the query. */
     warnings: string[];
 };
@@ -219,9 +201,9 @@ export class Gateway {
      *
      * @param channels - The channels to query
      * @param platforms - The platforms to query
-     * @param specs - The match specs to query for, as {@link MatchSpec} objects
-     *   or as strings parsed leniently. A bare package name matches every
-     *   version of that package.
+     * @param specs - The match specs to query for. A bare package name matches
+     *   every version of that package. Package names may be globs (`foo*`) or
+     *   anchored regexes (`^foo.*$`).
      * @param options - Per-query options
      */
     public async query(
@@ -233,9 +215,15 @@ export class Gateway {
         const output = (await this.native.query(
             channels,
             platforms,
-            specs.map((spec) => spec.toString()),
+            // The native call consumes the specs it is given, so hand it
+            // copies and leave the caller's `MatchSpec` objects usable.
+            specs.map((spec) =>
+                typeof spec === "string"
+                    ? new MatchSpec(spec, { exactNamesOnly: false })
+                    : spec.clone(),
+            ),
             options?.recursive ?? false,
-        )) as { records: RepoDataRecordJson[]; warnings: string[] };
+        )) as { records: RepoDataRecord[]; warnings: string[] };
         const result = output.records as GatewayQueryResult;
         result.warnings = output.warnings;
         return result;
