@@ -30,7 +30,7 @@ pub struct SolverArgs {
     /// multichannel NAME instead, whose channels share a single channel
     /// priority tier.
     ///
-    /// Example: -c conda-forge -c defaults=https://repo.anaconda.com/pkgs/main,https://repo.anaconda.com/pkgs/r
+    /// Example: `-c conda-forge -c defaults=https://repo.anaconda.com/pkgs/main,https://repo.anaconda.com/pkgs/r`
     #[clap(short, long = "channel")]
     channels: Vec<ChannelArg>,
 
