@@ -307,7 +307,9 @@ impl JsGateway {
             .map(|s| {
                 MatchSpec::from_str(
                     &s,
-                    ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3),
+                    ParseMatchSpecOptions::lenient()
+                        .with_repodata_revision(RepodataRevision::V3)
+                        .with_exact_names_only(false),
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;

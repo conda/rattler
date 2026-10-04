@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `MatchSpec` parses match specs and exposes their fields (`name`, `exactName`, `version`, `build`, `channel`, …). Use `matches` and `matchesRepoDataRecord` to test records against a spec. Pass `{ exactNamesOnly: false }` to allow glob (`foo*`) and regex (`^foo.*$`) package names.
+- `Gateway.query` accepts `MatchSpec` objects in addition to strings. Spec strings may now use glob and regex package names too.
+- `Channel` parses channel names and urls and exposes `name`, `baseUrl`, `canonicalName`, `platforms` and `platformUrl`.
+- `RepoDataRecord` wraps a record returned by `Gateway.query`. It has the same accessors as `PackageRecord` plus `fileName`, `url` and `channel`.
+- `PackageRecord.compare` and `RepoDataRecord.compare` order records like rattler does, e.g. `records.sort((a, b) => a.compare(b))`.
+- `parseIndexJson`, `parseAboutJson`, `parsePathsJson` and `parseRunExportsJson` validate the metadata files in a package's `info/` directory and return typed JSON (`IndexJson`, `AboutJson`, `PathsJson`, `RunExportsJson`).
+- New error codes `PARSE_FILE_NAME`, `PARSE_URL` and `PARSE_JSON`.
+
 ## [0.4.0] - 2026-08-19
 
 ### Highlights

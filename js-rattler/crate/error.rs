@@ -36,6 +36,12 @@ pub enum JsError {
     InvalidHexMd5(String),
     #[error("{0} is not a valid hex encoded SHA256 hash")]
     InvalidHexSha256(String),
+    #[error("{0} is not a valid package archive file name")]
+    InvalidFileName(String),
+    #[error("{0} is not a valid url")]
+    InvalidUrl(String),
+    #[error(transparent)]
+    ParseJson(#[from] serde_json::Error),
 }
 
 pub type JsResult<T> = Result<T, JsError>;
@@ -64,6 +70,9 @@ impl JsError {
             JsError::PackageNameError(_) => "PARSE_PACKAGE_NAME",
             JsError::InvalidHexMd5(_) => "PARSE_MD5",
             JsError::InvalidHexSha256(_) => "PARSE_SHA256",
+            JsError::InvalidFileName(_) => "PARSE_FILE_NAME",
+            JsError::InvalidUrl(_) => "PARSE_URL",
+            JsError::ParseJson(_) => "PARSE_JSON",
         }
     }
 }

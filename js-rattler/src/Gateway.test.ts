@@ -2,6 +2,8 @@ import { describe, expect, it } from "@jest/globals";
 import { Gateway } from "./Gateway";
 import { Platform } from "./Platform";
 import { isRattlerError } from "./RattlerError";
+import { MatchSpec } from "./MatchSpec";
+import { RepoDataRecord } from "./RepoDataRecord";
 
 // Disable all repodata variants so the gateway requests exactly one URL per
 // subdir: the plain `repodata.json`.
@@ -147,6 +149,32 @@ describe("Gateway", () => {
                 "https://example.com/test-channel/noarch/foo-1.0-h123_0.conda",
             );
             expect(records.warnings).toEqual([]);
+        });
+
+        it("accepts MatchSpec objects with name globs", async () => {
+            const gateway = new Gateway({
+                channelConfig: plainOnly,
+                fetch: () =>
+                    Promise.resolve(
+                        new Response(repodata, {
+                            status: 200,
+                            headers: { "content-type": "application/json" },
+                        }),
+                    ),
+            });
+
+            const records = await gateway.query(
+                ["https://example.com/test-channel"],
+                ["noarch"],
+                [new MatchSpec("f* >=1", { exactNamesOnly: false })],
+            );
+
+            expect(records.map((record) => record.fn)).toEqual([
+                "foo-1.0-h123_0.conda",
+            ]);
+            const record = new RepoDataRecord(records[0]);
+            expect(record.fileName).toBe("foo-1.0-h123_0.conda");
+            expect(record.channel).toBe("https://example.com/test-channel/");
         });
 
         it("returns gateway warnings on the query result", async () => {
