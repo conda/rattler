@@ -5,7 +5,6 @@ import { isRattlerError } from "./RattlerError";
 import { MatchSpec } from "./MatchSpec";
 import { RepoDataRecord } from "./RepoDataRecord";
 import { PackageRecord } from "./PackageRecord";
-import { Config } from "./Config";
 
 // Disable all repodata variants so the gateway requests exactly one URL per
 // subdir: the plain `repodata.json`.
@@ -585,45 +584,6 @@ describe("Gateway", () => {
                     "not-a-platform" as Platform,
                 ]),
             ).toThrow();
-        });
-    });
-    describe("fromConfig", () => {
-        it("applies the repodata config", async () => {
-            const seen: string[] = [];
-            const gateway = Gateway.fromConfig(
-                Config.fromToml(`
-                    [repodata-config]
-                    disable-zstd = true
-                    disable-bzip2 = true
-                    disable-sharded = true
-                `),
-                {
-                    fetch: (request) => {
-                        seen.push(request.url);
-                        return Promise.resolve(
-                            new Response(
-                                JSON.stringify({
-                                    info: { subdir: "noarch" },
-                                    packages: {},
-                                    "packages.conda": {},
-                                }),
-                                { status: 200 },
-                            ),
-                        );
-                    },
-                },
-            );
-
-            await gateway.query(
-                ["https://example.com/from-config"],
-                ["noarch"],
-                ["foo"],
-            );
-
-            expect(gateway).toBeInstanceOf(Gateway);
-            expect(seen).toEqual([
-                "https://example.com/from-config/noarch/repodata.json",
-            ]);
         });
     });
 });

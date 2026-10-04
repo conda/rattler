@@ -1,10 +1,4 @@
-import {
-    Config,
-    JsGateway,
-    MatchSpec,
-    PackageRecord,
-    RepoDataRecord,
-} from "../pkg";
+import { JsGateway, MatchSpec, PackageRecord, RepoDataRecord } from "../pkg";
 import { Platform } from "./Platform";
 import { NormalizedPackageName } from "./PackageName";
 
@@ -126,17 +120,6 @@ export type GatewayQueryResult = RepoDataRecord[] & {
 };
 
 /**
- * Options for {@link Gateway.fromConfig}. Everything else is taken from the
- * configuration.
- *
- * @public
- */
-export type GatewayFromConfigOptions = Pick<
-    GatewayOptions,
-    "fetch" | "onWarning"
->;
-
-/**
  * A virtual package (e.g. `__cuda`) to find the reverse dependencies of with
  * {@link Gateway.whoNeeds}.
  *
@@ -244,43 +227,6 @@ export class Gateway {
         } else {
             this.native = new JsGateway(options);
         }
-    }
-
-    /**
-     * Constructs a Gateway whose channel and concurrency settings come from a
-     * shared rattler configuration: `repodata-config` selects the enabled
-     * repodata formats (with its per-channel overrides) and
-     * `concurrency.downloads` limits the number of concurrent requests.
-     *
-     * Requests are always made through `fetch`, so the networking keys of the
-     * configuration (mirrors, proxies, TLS and authentication) are not
-     * applied.
-     *
-     * @example
-     *
-     * ```ts
-     * const gateway = Gateway.fromConfig(
-     *     Config.fromToml(`
-     *         [repodata-config]
-     *         disable-sharded = true
-     *     `),
-     * );
-     * ```
-     *
-     * @param config - The configuration to apply
-     * @param options - The options that are not part of the configuration
-     */
-    public static fromConfig(
-        config: Config,
-        options?: GatewayFromConfigOptions,
-    ): Gateway {
-        const gateway = Object.create(Gateway.prototype) as Gateway;
-        gateway.native = JsGateway.fromConfig(
-            config,
-            options?.fetch,
-            options?.onWarning,
-        );
-        return gateway;
     }
 
     /**

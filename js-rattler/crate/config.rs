@@ -1,14 +1,110 @@
-use rattler_config::{Config as _, ConfigBase};
+use std::collections::HashMap;
+
+use rattler_config::{CommonConfig, Config as _, ConfigBase};
+use rattler_repodata_gateway::{ChannelConfig, SourceConfig};
+use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 use crate::{JsError, JsResult};
 
+#[wasm_bindgen(typescript_custom_section)]
+const CONFIG_JSON_TS: &'static str = r#"
+/**
+ * The repodata options of the `repodata-config` table, or of one of its
+ * per-channel entries.
+ *
+ * @public
+ */
+export type RepodataChannelConfigJson = {
+    "disable-bzip2"?: boolean;
+    "disable-zstd"?: boolean;
+    "disable-sharded"?: boolean;
+};
+
+/**
+ * The `repodata-config` table: the channel-independent options, plus one
+ * entry per channel url that overrides them.
+ *
+ * @public
+ */
+export type RepodataConfigJson = RepodataChannelConfigJson & {
+    [channelUrl: string]: RepodataChannelConfigJson | boolean | undefined;
+};
+
+/**
+ * The shared rattler configuration as a plain object. The keys are the ones
+ * of a rattler `config.toml`, so `[repodata-config]` becomes
+ * `"repodata-config"`.
+ *
+ * @public
+ */
+export type ConfigJson = {
+    /** The channels used when none are specified. */
+    "default-channels"?: string[];
+    /** Mirrors per channel url, in order of preference. */
+    mirrors?: Record<string, string[]>;
+    /** Which repodata formats are fetched, globally and per channel. */
+    "repodata-config"?: RepodataConfigJson;
+    concurrency?: {
+        /** The maximum number of concurrent solves. */
+        solves?: number;
+        /** The maximum number of concurrent HTTP requests. */
+        downloads?: number;
+    };
+    "authentication-override-file"?: string;
+    "tls-no-verify"?: boolean;
+    "tls-root-certs"?: "webpki" | "system";
+    "run-post-link-scripts"?: "insecure" | "false";
+    "allow-symbolic-links"?: boolean;
+    "allow-hard-links"?: boolean;
+    "allow-ref-links"?: boolean;
+    build?: Record<string, unknown>;
+    "proxy-config"?: Record<string, unknown>;
+    "s3-options"?: Record<string, unknown>;
+    "index-config"?: Record<string, unknown>;
+};
+
+/**
+ * The options {@link Config.gatewayOptions} derives from a configuration. They
+ * are a subset of the `GatewayOptions` a `Gateway` is constructed with.
+ *
+ * @public
+ */
+export type ConfigGatewayOptions = {
+    maxConcurrentRequests: number;
+    channelConfig: {
+        default: ConfigGatewaySourceConfig;
+        perChannel: { [channelUrl: string]: ConfigGatewaySourceConfig };
+    };
+};
+
+/**
+ * The repodata formats enabled for a channel, see
+ * {@link ConfigGatewayOptions}.
+ *
+ * @public
+ */
+export type ConfigGatewaySourceConfig = {
+    zstdEnabled: boolean;
+    bz2Enabled: boolean;
+    shardedEnabled: boolean;
+};
+"#;
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(typescript_type = "ConfigJson")]
+    pub type JsConfigJson;
+
+    #[wasm_bindgen(typescript_type = "ConfigGatewayOptions")]
+    pub type JsGatewayOptionsJson;
+
+    #[wasm_bindgen(js_namespace = console, js_name = warn)]
+    fn console_warn(s: &str);
+}
+
 /// The shared rattler configuration, as read from a `config.toml` by
-/// rattler-based tools.
-///
-/// There is no file system in the browser, so a configuration is parsed from
-/// a TOML string with {@link Config.fromToml} instead of being loaded from the
-/// default locations.
+/// rattler-based tools, in the form of a plain object with the same keys.
 ///
 /// @public
 #[wasm_bindgen(js_name = "Config")]
@@ -29,75 +125,110 @@ impl AsRef<ConfigBase> for JsConfig {
     }
 }
 
-fn parse_toml(toml: &str, shared: Option<bool>) -> JsResult<(ConfigBase, Vec<String>)> {
-    let (config, unused) = if shared.unwrap_or(false) {
-        ConfigBase::from_toml_str_shared(toml)
-    } else {
-        ConfigBase::from_toml_str(toml)
-    }
-    .map_err(|err| JsError::ParseConfig(err.to_string()))?;
-    Ok((config, unused.into_iter().collect()))
-}
-
 #[wasm_bindgen(js_class = "Config")]
 impl JsConfig {
-    /// Creates a configuration with every key at its default.
+    /// Creates a configuration from its plain object form. Keys that are not
+    /// set keep their default; keys that are not recognized are reported
+    /// through `console.warn` and ignored.
     #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Parses a configuration from a TOML string, discarding the keys that
-    /// were not recognized. Use {@link Config.fromTomlWithUnusedKeys} to
-    /// inspect them.
-    ///
-    /// When `shared` is `true` the string is parsed as a *shared*
-    /// configuration file: only the keys shared by all rattler-based tools
-    /// are accepted.
-    #[wasm_bindgen(js_name = "fromToml")]
-    pub fn from_toml(
-        #[wasm_bindgen(param_description = "The TOML document to parse")] toml: &str,
-        #[wasm_bindgen(
-            param_description = "Whether to parse the document as a shared configuration file"
-        )]
-        shared: Option<bool>,
+    pub fn new(
+        #[wasm_bindgen(param_description = "The configuration, defaults when omitted")]
+        json: Option<JsConfigJson>,
     ) -> JsResult<JsConfig> {
-        Ok(parse_toml(toml, shared)?.0.into())
+        let Some(json) = json else {
+            return Ok(Self::default());
+        };
+        // `serde_wasm_bindgen` only looks up the fields a struct declares, so
+        // unknown keys would go unnoticed. Going through a JSON value lets
+        // `serde_ignored` see every key of the object.
+        let json: serde_json::Value = serde_wasm_bindgen::from_value(json.into())?;
+        let mut unused = Vec::new();
+        let common: CommonConfig =
+            serde_ignored::deserialize(json, |path| unused.push(path.to_string()))
+                .map_err(|err| JsError::InvalidConfig(err.to_string()))?;
+        for key in unused {
+            console_warn(&format!("ignoring unknown configuration key '{key}'"));
+        }
+        Ok(ConfigBase {
+            common,
+            ..ConfigBase::default()
+        }
+        .into())
     }
 
-    /// Parses a configuration from a TOML string and returns it together
-    /// with the sorted keys that were not recognized.
-    ///
-    /// When `shared` is `true` the string is parsed as a *shared*
-    /// configuration file: only the keys shared by all rattler-based tools
-    /// are accepted.
-    #[wasm_bindgen(
-        js_name = "fromTomlWithUnusedKeys",
-        unchecked_return_type = "{ config: Config; unusedKeys: string[] }"
-    )]
-    pub fn from_toml_with_unused_keys(
-        #[wasm_bindgen(param_description = "The TOML document to parse")] toml: &str,
-        #[wasm_bindgen(
-            param_description = "Whether to parse the document as a shared configuration file"
-        )]
-        shared: Option<bool>,
-    ) -> JsResult<JsValue> {
-        let (config, unused) = parse_toml(toml, shared)?;
+    /// Creates a configuration from its plain object form, as returned by
+    /// {@link Config.toJson}. Equivalent to the constructor.
+    #[wasm_bindgen(js_name = "fromJson")]
+    pub fn from_json(
+        #[wasm_bindgen(param_description = "The configuration")] json: JsConfigJson,
+    ) -> JsResult<JsConfig> {
+        Self::new(Some(json))
+    }
 
-        let result = js_sys::Object::new();
-        js_sys::Reflect::set(
-            &result,
-            &JsValue::from_str("config"),
-            &JsValue::from(JsConfig::from(config)),
-        )
-        .expect("setting a property on a plain object cannot fail");
-        js_sys::Reflect::set(
-            &result,
-            &JsValue::from_str("unusedKeys"),
-            &serde_wasm_bindgen::to_value(&unused)?,
-        )
-        .expect("setting a property on a plain object cannot fail");
-        Ok(result.into())
+    /// Converts this configuration to its plain object form. Keys at their
+    /// default are left out.
+    #[wasm_bindgen(js_name = "toJson")]
+    pub fn to_json(&self) -> JsResult<JsConfigJson> {
+        let serializer = serde_wasm_bindgen::Serializer::json_compatible();
+        Ok(self.inner.common.serialize(&serializer)?.into())
+    }
+
+    /// The options to construct a `Gateway` with this configuration:
+    /// `repodata-config` selects the enabled repodata formats (with its
+    /// per-channel overrides) and `concurrency.downloads` limits the number
+    /// of concurrent requests. Spread the result to add or override
+    /// options: `new Gateway({ ...config.gatewayOptions(), fetch })`.
+    ///
+    /// Requests are always made through `fetch`, so the networking keys
+    /// (mirrors, proxies, TLS and authentication) are not part of it.
+    #[wasm_bindgen(js_name = "gatewayOptions")]
+    pub fn gateway_options(&self) -> JsResult<JsGatewayOptionsJson> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct SourceConfigJson {
+            zstd_enabled: bool,
+            bz2_enabled: bool,
+            sharded_enabled: bool,
+        }
+
+        impl From<SourceConfig> for SourceConfigJson {
+            fn from(value: SourceConfig) -> Self {
+                Self {
+                    zstd_enabled: value.zstd_enabled,
+                    bz2_enabled: value.bz2_enabled,
+                    sharded_enabled: value.sharded_enabled,
+                }
+            }
+        }
+
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ChannelConfigJson {
+            default: SourceConfigJson,
+            per_channel: HashMap<String, SourceConfigJson>,
+        }
+
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct GatewayOptionsJson {
+            max_concurrent_requests: usize,
+            channel_config: ChannelConfigJson,
+        }
+
+        let channel_config = ChannelConfig::from(&self.inner.common);
+        let options = GatewayOptionsJson {
+            max_concurrent_requests: self.inner.concurrency.downloads,
+            channel_config: ChannelConfigJson {
+                default: channel_config.default.into(),
+                per_channel: channel_config
+                    .per_channel
+                    .into_iter()
+                    .map(|(url, config)| (url.to_string(), config.into()))
+                    .collect(),
+            },
+        };
+        let serializer = serde_wasm_bindgen::Serializer::json_compatible();
+        Ok(options.serialize(&serializer)?.into())
     }
 
     /// The channels used when none are specified, as written in the

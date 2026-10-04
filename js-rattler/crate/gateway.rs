@@ -5,8 +5,7 @@ use rattler_conda_types::{
     Subdir, Version,
 };
 use rattler_repodata_gateway::{
-    CacheClearMode, ChannelConfig, Gateway, GatewayBuilder, GatewayWarning, SourceConfig,
-    SubdirSelection,
+    CacheClearMode, ChannelConfig, Gateway, GatewayWarning, SourceConfig, SubdirSelection,
     fetch::CacheAction,
     who_needs::{DependencyKind, Dependent, RunExportKind, WhoNeedsTarget},
 };
@@ -34,7 +33,7 @@ pub(crate) fn emit_gateway_warnings(warnings: Vec<GatewayWarning>) {
 }
 
 use crate::{
-    JsResult, config::JsConfig, match_spec::JsMatchSpec, package_record::JsPackageRecord,
+    JsResult, match_spec::JsMatchSpec, package_record::JsPackageRecord,
     repo_data_record::JsRepoDataRecord,
 };
 
@@ -254,7 +253,12 @@ impl JsGateway {
     ) -> JsResult<Self> {
         let options: Option<JsGatewayOptions> = serde_wasm_bindgen::from_value(input)?;
 
-        let mut builder = Self::builder(fetch);
+        // Creating the Gateway with a default client to avoid adding a user-agent header
+        // (Not supported from the browser)
+        let mut builder = Gateway::builder().with_client(ClientWithMiddleware::from(Client::new()));
+        if let Some(fetch) = fetch {
+            builder.set_js_fetch(fetch);
+        }
         if let Some(options) = options {
             if let Some(max_concurrent_requests) = options.max_concurrent_requests {
                 builder.set_max_concurrent_requests(max_concurrent_requests);
@@ -266,26 +270,6 @@ impl JsGateway {
             inner: builder.finish(),
             on_warning,
         })
-    }
-
-    /// Constructs a gateway whose channel and concurrency settings come
-    /// from `config`: `repodata-config` selects the enabled repodata formats
-    /// (with its per-channel overrides) and `concurrency.downloads` limits
-    /// the number of concurrent requests.
-    #[wasm_bindgen(js_name = "fromConfig")]
-    pub fn from_config(
-        #[wasm_bindgen(param_description = "The configuration to apply")] config: &JsConfig,
-        #[wasm_bindgen(param_description = "A custom fetch implementation used for all requests")]
-        fetch: Option<js_sys::Function>,
-        #[wasm_bindgen(param_description = "A callback invoked for every gateway warning")]
-        on_warning: Option<js_sys::Function>,
-    ) -> Self {
-        let mut builder = Self::builder(fetch);
-        builder.set_config(&config.as_ref().common);
-        Self {
-            inner: builder.finish(),
-            on_warning,
-        }
     }
 
     /// Clears the in-memory repodata cache of `channel` for the given
@@ -396,18 +380,6 @@ impl JsGateway {
             .map(Notice::from)
             .collect();
         Ok(serde_wasm_bindgen::to_value(&notices)?)
-    }
-
-    /// Creates a gateway builder that fetches through `fetch`, or through the
-    /// global `fetch` when none is given.
-    fn builder(fetch: Option<js_sys::Function>) -> GatewayBuilder {
-        // Creating the Gateway with a default client to avoid adding a user-agent header
-        // (Not supported from the browser)
-        let mut builder = Gateway::builder().with_client(ClientWithMiddleware::from(Client::new()));
-        if let Some(fetch) = fetch {
-            builder.set_js_fetch(fetch);
-        }
-        builder
     }
 
     /// Runs a reverse dependency query. The inputs are parsed synchronously,

@@ -1549,6 +1549,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde-wasm-bindgen",
+ "serde_ignored",
  "serde_json",
  "thiserror 2.0.20",
  "url",
