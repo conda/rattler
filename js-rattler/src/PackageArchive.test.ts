@@ -187,6 +187,44 @@ describe("PackageArchive", () => {
         expect(archive.bytesToFetch("pkg")).toBe(0);
     });
 
+    it("fetches a section once for concurrent reads", async () => {
+        // A page asks for several files at once. They all miss the same
+        // payload range, and only the first read may fetch it; the others
+        // wait for it and read the bytes it brought.
+        const archive = await PackageArchive.fromUrl(
+            `${base}/sparse-test-1.0.0-0.conda`,
+        );
+        const mark = since();
+        const [entries, first, last, missing] = await Promise.all([
+            archive.listFiles("pkg"),
+            archive.readFile("bin/first-file.txt"),
+            archive.readFile("share/last-file.txt"),
+            archive.readFile("share/missing.txt"),
+        ]);
+        expect(entries).toHaveLength(3);
+        expect(new TextDecoder().decode(first)).toBe("first payload file\n");
+        expect(new TextDecoder().decode(last)).toBe("last payload file\n");
+        expect(missing).toBeUndefined();
+        const made = requestsSince(mark);
+        expect(made).toHaveLength(1);
+        expect(made[0].range).toMatch(/^bytes=\d+-\d+$/);
+    });
+
+    it("downloads the archive once for concurrent reads without a validator", async () => {
+        // Without a validator every miss downloads the whole archive, so a
+        // duplicate fetch would cost the full size each time.
+        const archive = await PackageArchive.fromUrl(
+            `${base}${noValidator}/sparse-test-1.0.0-0.conda`,
+        );
+        const mark = since();
+        await Promise.all([
+            archive.listFiles("pkg"),
+            archive.readFile("bin/first-file.txt"),
+            archive.readFile("share/last-file.txt"),
+        ]);
+        expect(requestsSince(mark)).toHaveLength(1);
+    });
+
     it("lists links with their targets and refuses to read them", async () => {
         const archive = await PackageArchive.fromUrl(
             `${base}/symlink-test-1.0.0-0.conda`,

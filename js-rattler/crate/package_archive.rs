@@ -15,6 +15,7 @@ use std::{
 };
 
 use bytes::Bytes;
+use futures_util::lock::Mutex;
 use rattler_conda_types::package::{
     AboutJson, CondaArchiveType, IndexJson, PackageFile, PathsJson, RunExportsJson,
 };
@@ -340,6 +341,10 @@ pub struct JsPackageArchive {
     source: HttpSource,
     archive_type: CondaArchiveType,
     fetched: Rc<RefCell<Fetched>>,
+    /// Held while a missing range is fetched. Reads that run concurrently,
+    /// such as the metadata files a page asks for at once, usually miss the
+    /// same section; without the lock each of them would fetch it.
+    fetch_lock: Mutex<()>,
 }
 
 impl JsPackageArchive {
@@ -353,6 +358,13 @@ impl JsPackageArchive {
             let Some(offset) = miss.get() else {
                 return Ok(result?);
             };
+            // One fetch at a time. A read that waited for the lock finds the
+            // gap filled by the read that held it, and runs again instead of
+            // fetching the same bytes.
+            let _fetching = self.fetch_lock.lock().await;
+            if self.fetched.borrow().contains(offset) {
+                continue;
+            }
             let (range, len) = {
                 let fetched = self.fetched.borrow();
                 (fetched.missing_range(offset), fetched.len())
@@ -446,6 +458,7 @@ impl JsPackageArchive {
             source,
             archive_type,
             fetched: Rc::new(RefCell::new(fetched)),
+            fetch_lock: Mutex::new(()),
         })
     }
 

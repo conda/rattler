@@ -29,6 +29,9 @@ console_error_panic_hook = { version = "0.1", optional = true }
 thiserror = "2"
 
 bytes = "1"
+# An async mutex that serializes archive fetches; it needs no threads, so it
+# works on wasm32.
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 hex = "0.4"
 rattler_conda_types = { path = "../crates/rattler_conda_types" }
 rattler_digest = { path = "../crates/rattler_digest" }

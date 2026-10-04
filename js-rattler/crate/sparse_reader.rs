@@ -62,6 +62,11 @@ impl Fetched {
     /// The range to fetch after a read missed at `offset`: up to the next
     /// fetched block, or the end of the file. Filling the whole gap fetches a
     /// ZIP member in one request rather than one per read.
+    /// Whether the byte at `offset` has been fetched.
+    pub fn contains(&self, offset: u64) -> bool {
+        self.block_at(offset).is_some()
+    }
+
     pub fn missing_range(&self, offset: u64) -> Range<u64> {
         let end = self
             .blocks
