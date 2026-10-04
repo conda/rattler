@@ -17,6 +17,8 @@ export type RattlerErrorCode =
     | "PARSE_FILE_NAME"
     | "PARSE_URL"
     | "PARSE_JSON"
+    | "PARSE_CONFIG"
+    | "INVALID_CONFIG"
     | "SUBDIR_NOT_FOUND"
     | "FETCH"
     | "GATEWAY"

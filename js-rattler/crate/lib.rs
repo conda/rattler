@@ -1,4 +1,5 @@
 mod channel;
+mod config;
 mod error;
 mod gateway;
 mod match_spec;

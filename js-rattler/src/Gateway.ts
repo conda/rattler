@@ -1,4 +1,10 @@
-import { JsGateway, MatchSpec, RepoDataRecord } from "../pkg";
+import {
+    Config,
+    JsGateway,
+    MatchSpec,
+    PackageRecord,
+    RepoDataRecord,
+} from "../pkg";
 import { Platform } from "./Platform";
 import { NormalizedPackageName } from "./PackageName";
 
@@ -120,6 +126,95 @@ export type GatewayQueryResult = RepoDataRecord[] & {
 };
 
 /**
+ * Options for {@link Gateway.fromConfig}. Everything else is taken from the
+ * configuration.
+ *
+ * @public
+ */
+export type GatewayFromConfigOptions = Pick<
+    GatewayOptions,
+    "fetch" | "onWarning"
+>;
+
+/**
+ * A virtual package (e.g. `__cuda`) to find the reverse dependencies of with
+ * {@link Gateway.whoNeeds}.
+ *
+ * @public
+ */
+export type VirtualPackageTarget = {
+    /** The name of the virtual package, e.g. `__cuda`. */
+    name: string;
+    /** The version of the virtual package, e.g. `12.4`. */
+    version: string;
+    /** The build string of the virtual package. Defaults to `"0"`. */
+    buildString?: string;
+};
+
+/**
+ * The package to find the reverse dependencies of with {@link Gateway.whoNeeds}.
+ *
+ * A package name matches every dependency on that name, regardless of its
+ * version or build constraints. A record or virtual package only matches
+ * dependencies whose match spec accepts it.
+ *
+ * @public
+ */
+export type WhoNeedsTarget =
+    | string
+    | PackageRecord
+    | RepoDataRecord
+    | VirtualPackageTarget;
+
+/**
+ * The run export field through which a {@link Dependent} references the queried
+ * package.
+ *
+ * @public
+ */
+export type RunExportKind =
+    | "weak"
+    | "strong"
+    | "noarch"
+    | "weak_constrains"
+    | "strong_constrains";
+
+/**
+ * A record that references the package queried through {@link Gateway.whoNeeds}.
+ *
+ * @public
+ */
+export type Dependent = {
+    /** The record that references the queried package. */
+    record: RepoDataRecord;
+    /**
+     * The dependency string through which the record references the queried
+     * package.
+     */
+    dependency: string;
+} & (
+    | {
+          /** The field of the record the dependency comes from. */
+          kind: "depends" | "constrains";
+      }
+    | {
+          /** The dependency comes from an optional feature in `extra_depends`. */
+          kind: "extra_depends";
+          /**
+           * The name of the optional feature; the reference only applies when
+           * that extra is enabled.
+           */
+          extra: string;
+      }
+    | {
+          /** The dependency comes from the run exports of the record. */
+          kind: "run_export";
+          /** The run export field the dependency comes from. */
+          runExportKind: RunExportKind;
+      }
+);
+
+/**
  * A `Gateway` provides efficient access to conda repodata.
  *
  * Repodata can be accessed through several different methods. The `Gateway`
@@ -149,6 +244,114 @@ export class Gateway {
         } else {
             this.native = new JsGateway(options);
         }
+    }
+
+    /**
+     * Constructs a Gateway whose channel and concurrency settings come from a
+     * shared rattler configuration: `repodata-config` selects the enabled
+     * repodata formats (with its per-channel overrides) and
+     * `concurrency.downloads` limits the number of concurrent requests.
+     *
+     * Requests are always made through `fetch`, so the networking keys of the
+     * configuration (mirrors, proxies, TLS and authentication) are not
+     * applied.
+     *
+     * @example
+     *
+     * ```ts
+     * const gateway = Gateway.fromConfig(
+     *     Config.fromToml(`
+     *         [repodata-config]
+     *         disable-sharded = true
+     *     `),
+     * );
+     * ```
+     *
+     * @param config - The configuration to apply
+     * @param options - The options that are not part of the configuration
+     */
+    public static fromConfig(
+        config: Config,
+        options?: GatewayFromConfigOptions,
+    ): Gateway {
+        const gateway = Object.create(Gateway.prototype) as Gateway;
+        gateway.native = JsGateway.fromConfig(
+            config,
+            options?.fetch,
+            options?.onWarning,
+        );
+        return gateway;
+    }
+
+    /**
+     * Clears the in-memory repodata cache of a channel, so that subsequent
+     * queries fetch its repodata again.
+     *
+     * @param channel - The channel to clear the cache of
+     * @param platforms - The platforms to clear. When omitted, the cache of
+     *   every platform of the channel is cleared.
+     */
+    public clearRepodataCache(channel: string, platforms?: Platform[]): void {
+        this.native.clearRepodataCache(channel, platforms);
+    }
+
+    /**
+     * Returns the reverse dependencies of `target`: the records of the given
+     * channels and platforms that reference it through their `depends`,
+     * `constrains`, `extra_depends` or run exports. The `kind` of each result
+     * tells which field matched.
+     *
+     * Every record of the queried platforms is scanned, so this reads far more
+     * repodata than {@link Gateway.query}; the scanned records are dropped again
+     * right away and only the matches are kept. Channels are always read
+     * through their full repodata, regardless of the sharding configuration,
+     * and CEP-42 `channel_relations` are not followed.
+     *
+     * @example
+     *
+     * ```ts
+     * const dependents = await gateway.whoNeeds(
+     *     ["conda-forge"],
+     *     ["linux-64", "noarch"],
+     *     "polars",
+     * );
+     * ```
+     *
+     * @param channels - The channels to query
+     * @param platforms - The platforms to query
+     * @param target - The package to find the reverse dependencies of: a
+     *   package name, a record, or a virtual package.
+     */
+    public async whoNeeds(
+        channels: string[],
+        platforms: Platform[],
+        target: WhoNeedsTarget,
+    ): Promise<Dependent[]> {
+        let dependents: Promise<unknown[]>;
+        if (typeof target === "string") {
+            dependents = this.native.whoNeedsName(channels, platforms, target);
+        } else if (target instanceof RepoDataRecord) {
+            dependents = this.native.whoNeedsRepoDataRecord(
+                channels,
+                platforms,
+                target,
+            );
+        } else if (target instanceof PackageRecord) {
+            dependents = this.native.whoNeedsRecord(
+                channels,
+                platforms,
+                target,
+            );
+        } else {
+            dependents = this.native.whoNeedsVirtualPackage(
+                channels,
+                platforms,
+                target.name,
+                target.version,
+                target.buildString ?? "0",
+            );
+        }
+        return (await dependents) as Dependent[];
     }
 
     /** Fetches CEP-6 notices for the given channels. */

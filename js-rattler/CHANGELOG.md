@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Gateway.whoNeeds(channels, platforms, target)` returns the reverse dependencies of a package: every record whose `depends`, `constrains`, `extra_depends` or run exports reference it. Each `Dependent` carries the `record`, the matching `dependency` string and its `kind` (with `extra` or `runExportKind` where applicable). The target is a package name, a `PackageRecord` or `RepoDataRecord` (only matching dependencies whose spec accepts it), or a virtual package `{ name, version, buildString? }`.
+- `Gateway.clearRepodataCache(channel, platforms?)` drops the cached repodata of a channel so the next query fetches it again.
+- `Config` parses the shared rattler configuration from a TOML string (`Config.fromToml`, `Config.fromTomlWithUnusedKeys`) and exposes `defaultChannels`, `concurrencyDownloads`, `concurrencySolves`, `merge` and `validate`. Parse failures carry the `PARSE_CONFIG` error code, invalid configurations `INVALID_CONFIG`.
+- `Gateway.fromConfig(config, { fetch, onWarning })` applies the `repodata-config` and `concurrency.downloads` settings of a `Config`.
+
+```js
+const gateway = Gateway.fromConfig(
+    Config.fromToml(`
+        [repodata-config]
+        disable-sharded = true
+    `),
+);
+const dependents = await gateway.whoNeeds(
+    ["https://prefix.dev/conda-forge"],
+    ["linux-64", "noarch"],
+    "polars",
+);
+for (const { record, kind, dependency } of dependents) {
+    console.log(record.name, kind, dependency);
+}
+```
+
 ## [0.4.0] - 2026-08-19
 
 ### Highlights

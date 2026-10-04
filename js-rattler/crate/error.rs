@@ -42,6 +42,10 @@ pub enum JsError {
     InvalidUrl(String),
     #[error(transparent)]
     ParseJson(#[from] serde_json::Error),
+    #[error("failed to parse the configuration: {0}")]
+    ParseConfig(String),
+    #[error("invalid configuration: {0}")]
+    InvalidConfig(String),
 }
 
 pub type JsResult<T> = Result<T, JsError>;
@@ -73,6 +77,8 @@ impl JsError {
             JsError::InvalidFileName(_) => "PARSE_FILE_NAME",
             JsError::InvalidUrl(_) => "PARSE_URL",
             JsError::ParseJson(_) => "PARSE_JSON",
+            JsError::ParseConfig(_) => "PARSE_CONFIG",
+            JsError::InvalidConfig(_) => "INVALID_CONFIG",
         }
     }
 }
