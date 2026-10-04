@@ -80,7 +80,13 @@ impl JsChannel {
             None => None,
         };
         let mut config = ChannelConfig::default_with_root_dir(PathBuf::from(""));
-        if let Some(channel_alias) = options.unwrap_or_default().channel_alias {
+        if let Some(mut channel_alias) = options.unwrap_or_default().channel_alias {
+            // Channel names are joined onto the alias, which replaces the last
+            // path segment unless the path ends with a slash.
+            if !channel_alias.path().ends_with('/') {
+                let path = format!("{}/", channel_alias.path());
+                channel_alias.set_path(&path);
+            }
             config.channel_alias = channel_alias;
         }
         Ok(Channel::from_str(channel, &config)?.into())
