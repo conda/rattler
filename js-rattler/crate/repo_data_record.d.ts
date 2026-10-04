@@ -1,7 +1,7 @@
 /**
- * A single record in the Conda repodata as returned by {@link Gateway.query}.
- * This is the `repodata.json` representation of a package extended with the
- * filename, the canonical download URL, and the channel it came from.
+ * The JSON representation of a {@link RepoDataRecord}: the `repodata.json`
+ * representation of a package extended with the filename, the canonical
+ * download URL, and the channel it came from.
  *
  * @public
  */

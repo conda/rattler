@@ -1,8 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
 use rattler_conda_types::{
-    Channel, ChannelNoticeLevel, MatchSpec, ParseMatchSpecOptions, RepoDataRecord,
-    RepodataRevision, Subdir,
+    Channel, ChannelNoticeLevel, MatchSpec, ParseMatchSpecOptions, RepodataRevision, Subdir,
 };
 use rattler_repodata_gateway::{
     ChannelConfig, Gateway, GatewayWarning, SourceConfig, fetch::CacheAction,
@@ -30,7 +29,7 @@ pub(crate) fn emit_gateway_warnings(warnings: Vec<GatewayWarning>) {
     }
 }
 
-use crate::JsResult;
+use crate::{JsResult, repo_data_record::JsRepoDataRecord};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -327,18 +326,21 @@ impl JsGateway {
             .collect::<Vec<_>>();
         self.emit_warnings(output.warnings);
 
-        #[derive(Serialize)]
-        struct QueryOutput<'a> {
-            records: Vec<&'a RepoDataRecord>,
-            warnings: Vec<String>,
-        }
-
         let records = output
             .repodata
             .iter()
             .flat_map(|repodata| repodata.iter())
-            .collect::<Vec<_>>();
-        let serializer = serde_wasm_bindgen::Serializer::json_compatible();
-        Ok(QueryOutput { records, warnings }.serialize(&serializer)?)
+            .map(|record| JsValue::from(JsRepoDataRecord::from(record.clone())))
+            .collect::<js_sys::Array>();
+        let result = js_sys::Object::new();
+        js_sys::Reflect::set(&result, &JsValue::from_str("records"), &records)
+            .expect("setting a property on a plain object cannot fail");
+        js_sys::Reflect::set(
+            &result,
+            &JsValue::from_str("warnings"),
+            &serde_wasm_bindgen::to_value(&warnings)?,
+        )
+        .expect("setting a property on a plain object cannot fail");
+        Ok(result.into())
     }
 }

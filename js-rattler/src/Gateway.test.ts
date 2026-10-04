@@ -142,9 +142,10 @@ describe("Gateway", () => {
             }
             expect(records).toHaveLength(1);
             expect(records[0].name).toBe("foo");
-            expect(records[0].version).toBe("1.0");
+            expect(records[0]).toBeInstanceOf(RepoDataRecord);
+            expect(records[0].version.source).toBe("1.0");
             expect(records[0].build).toBe("h123_0");
-            expect(records[0].fn).toBe("foo-1.0-h123_0.conda");
+            expect(records[0].fileName).toBe("foo-1.0-h123_0.conda");
             expect(records[0].url).toBe(
                 "https://example.com/test-channel/noarch/foo-1.0-h123_0.conda",
             );
@@ -169,12 +170,12 @@ describe("Gateway", () => {
                 [new MatchSpec("f* >=1", { exactNamesOnly: false })],
             );
 
-            expect(records.map((record) => record.fn)).toEqual([
+            expect(records.map((record) => record.fileName)).toEqual([
                 "foo-1.0-h123_0.conda",
             ]);
-            const record = new RepoDataRecord(records[0]);
-            expect(record.fileName).toBe("foo-1.0-h123_0.conda");
-            expect(record.channel).toBe("https://example.com/test-channel/");
+            expect(records[0].channel).toBe(
+                "https://example.com/test-channel/",
+            );
         });
 
         it("returns gateway warnings on the query result", async () => {

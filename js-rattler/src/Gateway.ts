@@ -1,4 +1,4 @@
-import { JsGateway, MatchSpec, RepoDataRecordJson } from "../pkg";
+import { JsGateway, MatchSpec, RepoDataRecord } from "../pkg";
 import { Platform } from "./Platform";
 import { NormalizedPackageName } from "./PackageName";
 
@@ -114,7 +114,7 @@ export type GatewayRecordsQueryOptions = {
  *
  * @public
  */
-export type GatewayQueryResult = RepoDataRecordJson[] & {
+export type GatewayQueryResult = RepoDataRecord[] & {
     /** Non-fatal warnings encountered during the query. */
     warnings: string[];
 };
@@ -217,7 +217,7 @@ export class Gateway {
             platforms,
             specs.map((spec) => spec.toString()),
             options?.recursive ?? false,
-        )) as { records: RepoDataRecordJson[]; warnings: string[] };
+        )) as { records: RepoDataRecord[]; warnings: string[] };
         const result = output.records as GatewayQueryResult;
         result.warnings = output.warnings;
         return result;

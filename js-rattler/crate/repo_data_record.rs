@@ -68,7 +68,7 @@ extern "C" {
 #[wasm_bindgen(js_class = "RepoDataRecord")]
 impl JsRepoDataRecord {
     /// Constructs a new instance from the json representation of a
-    /// RepoDataRecord, e.g. a record returned by `Gateway.query`.
+    /// RepoDataRecord.
     #[wasm_bindgen(constructor)]
     pub fn new(json: JsRepoDataRecordJson) -> JsResult<JsRepoDataRecord> {
         let record: RepoDataRecord = serde_wasm_bindgen::from_value(json.into())?;
