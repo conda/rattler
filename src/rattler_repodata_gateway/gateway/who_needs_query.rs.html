@@ -30,7 +30,7 @@
 <a href=#28 id=28 data-nosnippet>28</a>    GatewayError, GatewayInner,
 <a href=#29 id=29 data-nosnippet>29</a>    boxed::{BoxFuture, BoxStream, box_future, box_stream},
 <a href=#30 id=30 data-nosnippet>30</a>    local_subdir::LocalSubdirClient,
-<a href=#31 id=31 data-nosnippet>31</a>    source::{CustomSourceClient, Source},
+<a href=#31 id=31 data-nosnippet>31</a>    source::{CustomSourceClient, ExpandedSource, Source},
 <a href=#32 id=32 data-nosnippet>32</a>    subdir::{SubdirData, SubdirState},
 <a href=#33 id=33 data-nosnippet>33</a>};
 <a href=#34 id=34 data-nosnippet>34</a><span class="kw">use </span>crate::{
@@ -261,9 +261,9 @@
 <a href=#259 id=259 data-nosnippet>259</a>        FuturesUnordered::new();
 <a href=#260 id=260 data-nosnippet>260</a>    <span class="kw">let </span><span class="kw-2">mut </span>subdirs: Vec&lt;IndexedSubdir&gt; = Vec::new();
 <a href=#261 id=261 data-nosnippet>261</a>
-<a href=#262 id=262 data-nosnippet>262</a>    <span class="kw">for </span>(source_index, source) <span class="kw">in </span>sources.into_iter().enumerate() {
+<a href=#262 id=262 data-nosnippet>262</a>    <span class="kw">for </span>(source_index, (<span class="kw">_</span>, source)) <span class="kw">in </span>ExpandedSource::expand(sources).into_iter().enumerate() {
 <a href=#263 id=263 data-nosnippet>263</a>        <span class="kw">match </span>source {
-<a href=#264 id=264 data-nosnippet>264</a>            Source::Channel(channel) =&gt; {
+<a href=#264 id=264 data-nosnippet>264</a>            ExpandedSource::Channel(channel, <span class="kw">_</span>) =&gt; {
 <a href=#265 id=265 data-nosnippet>265</a>                <span class="kw">let </span>gateway = gateway.clone();
 <a href=#266 id=266 data-nosnippet>266</a>                <span class="kw">let </span>reporter = reporter.clone();
 <a href=#267 id=267 data-nosnippet>267</a>                pending.push(box_future(<span class="kw">async move </span>{
@@ -273,14 +273,14 @@
 <a href=#271 id=271 data-nosnippet>271</a>                    <span class="prelude-val">Ok</span>((source_index, subdir))
 <a href=#272 id=272 data-nosnippet>272</a>                }));
 <a href=#273 id=273 data-nosnippet>273</a>            }
-<a href=#274 id=274 data-nosnippet>274</a>            Source::Custom(custom_source) =&gt; {
+<a href=#274 id=274 data-nosnippet>274</a>            ExpandedSource::Custom(custom_source, <span class="kw">_</span>) =&gt; {
 <a href=#275 id=275 data-nosnippet>275</a>                <span class="kw">let </span>client = CustomSourceClient::new(custom_source, platform);
 <a href=#276 id=276 data-nosnippet>276</a>                subdirs.push((
 <a href=#277 id=277 data-nosnippet>277</a>                    source_index,
 <a href=#278 id=278 data-nosnippet>278</a>                    Arc::new(SubdirState::Found(SubdirData::from_client(client))),
 <a href=#279 id=279 data-nosnippet>279</a>                ));
 <a href=#280 id=280 data-nosnippet>280</a>            }
-<a href=#281 id=281 data-nosnippet>281</a>            Source::SparseRepoData(sparse_list) =&gt; {
+<a href=#281 id=281 data-nosnippet>281</a>            ExpandedSource::SparseRepoData(sparse_list, <span class="kw">_</span>) =&gt; {
 <a href=#282 id=282 data-nosnippet>282</a>                <span class="kw">let </span>subdir = <span class="kw">match </span>sparse_list
 <a href=#283 id=283 data-nosnippet>283</a>                    .iter()
 <a href=#284 id=284 data-nosnippet>284</a>                    .find(|sparse| platform.as_str() == sparse.subdir())
