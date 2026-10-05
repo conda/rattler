@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve discovered-channel fetch failures as warnings when resolving detector origins, without discarding unrelated registrations.
+
 ## [0.35.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.34.0...rattler_repodata_gateway-v0.35.0) - 2026-10-05
 
 ### Added

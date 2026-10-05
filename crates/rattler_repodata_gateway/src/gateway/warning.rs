@@ -3,6 +3,7 @@
 //! [`GatewayWarning`].
 
 use super::channel_expander::ChannelRelationsWarning;
+use super::virtual_package_detectors_query::VirtualPackageDetectorWarning;
 
 /// A non-fatal issue surfaced by a gateway query.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -13,4 +14,9 @@ pub enum GatewayWarning {
     /// [CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
     #[error(transparent)]
     ChannelRelations(#[from] ChannelRelationsWarning),
+
+    /// A non-fatal issue surfaced while collecting virtual package detector
+    /// registrations.
+    #[error(transparent)]
+    VirtualPackageDetectors(#[from] VirtualPackageDetectorWarning),
 }
