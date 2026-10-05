@@ -63,9 +63,9 @@ struct LoginArgs {
     s3_session_token: Option<String>,
 
     // -- OAuth/OIDC --
-    /// Use OAuth/OIDC authentication
+    /// Log in interactively with OAuth/OIDC (browser or device code)
     #[cfg(feature = "oauth")]
-    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id", "oidc"], help_heading = "OAuth/OIDC Authentication")]
+    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id", "workload_identity"], help_heading = "OAuth/OIDC Authentication")]
     oauth: bool,
 
     /// OIDC issuer URL (defaults to <https://{host>})
@@ -104,31 +104,39 @@ struct LoginArgs {
     #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
     oauth_redirect_uri: Option<String>,
 
-    // -- CI OIDC token exchange --
+    // -- Workload identity --
     /// Log in non-interactively by exchanging the CI provider's OIDC ID
     /// token (GitHub Actions, GitLab CI, ...) for an access token
-    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id"], help_heading = "CI OIDC Token Exchange")]
-    oidc: bool,
+    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id"], help_heading = "Workload Identity (CI, non-interactive)")]
+    workload_identity: bool,
 
     /// Audience requested in the OIDC ID token (defaults to the host, or
     /// `prefix.dev` for prefix.dev hosts)
-    #[clap(long, requires = "oidc", help_heading = "CI OIDC Token Exchange")]
-    oidc_audience: Option<String>,
+    #[clap(
+        long,
+        requires = "workload_identity",
+        help_heading = "Workload Identity (CI, non-interactive)"
+    )]
+    workload_identity_audience: Option<String>,
 
     /// How the server exchanges the ID token (defaults to `prefix` for
     /// prefix.dev hosts and `token-exchange` otherwise)
     #[clap(
         long,
-        requires = "oidc",
+        requires = "workload_identity",
         value_enum,
-        help_heading = "CI OIDC Token Exchange"
+        help_heading = "Workload Identity (CI, non-interactive)"
     )]
-    oidc_exchange: Option<OidcExchange>,
+    workload_identity_exchange: Option<WorkloadIdentityExchange>,
 
-    /// Token endpoint for `--oidc-exchange token-exchange`: a URL or a path
+    /// Token endpoint for `--workload-identity-exchange token-exchange`: a URL or a path
     /// on the host
-    #[clap(long, requires = "oidc", help_heading = "CI OIDC Token Exchange")]
-    oidc_token_endpoint: Option<String>,
+    #[clap(
+        long,
+        requires = "workload_identity",
+        help_heading = "Workload Identity (CI, non-interactive)"
+    )]
+    workload_identity_token_endpoint: Option<String>,
 
     /// User-Agent header used for requests
     #[clap(long)]
@@ -137,14 +145,14 @@ struct LoginArgs {
 
 /// How the server exchanges the CI provider's OIDC ID token.
 #[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
-enum OidcExchange {
-    /// OAuth 2.0 Token Exchange (RFC 8693) at `--oidc-token-endpoint`
+enum WorkloadIdentityExchange {
+    /// OAuth 2.0 Token Exchange (RFC 8693) at `--workload-identity-token-endpoint`
     TokenExchange,
     /// prefix.dev's mint endpoint
     Prefix,
 }
 
-impl OidcExchange {
+impl WorkloadIdentityExchange {
     fn name(self) -> String {
         clap::ValueEnum::to_possible_value(&self)
             .map(|value| value.get_name().to_string())
@@ -284,18 +292,18 @@ pub enum AuthenticationCLIError {
     #[error(transparent)]
     OAuthError(#[from] oauth::OAuthError),
 
-    /// The selected OIDC exchange needs a flag that wasn't passed.
-    #[error("`--oidc-exchange {exchange}` requires `{flag}`")]
-    MissingOidcFlag {
+    /// The selected workload identity exchange needs a flag that wasn't passed.
+    #[error("`--workload-identity-exchange {exchange}` requires `{flag}`")]
+    MissingWorkloadIdentityFlag {
         /// The missing flag.
         flag: &'static str,
         /// The selected exchange.
         exchange: String,
     },
 
-    /// A flag was passed that the selected OIDC exchange doesn't use.
-    #[error("`{flag}` can't be used with `--oidc-exchange {exchange}`")]
-    UnsupportedOidcFlag {
+    /// A flag was passed that the selected workload identity exchange doesn't use.
+    #[error("`{flag}` can't be used with `--workload-identity-exchange {exchange}`")]
+    UnsupportedWorkloadIdentityFlag {
         /// The unsupported flag.
         flag: &'static str,
         /// The selected exchange.
@@ -303,12 +311,12 @@ pub enum AuthenticationCLIError {
     },
 
     /// The CI OIDC ID token must not be sent over plain HTTP.
-    #[error("OIDC token exchange requires an https URL, got {0}")]
-    OidcRequiresHttps(String),
+    #[error("Workload identity login requires an https endpoint, got {0}")]
+    WorkloadIdentityRequiresHttps(String),
 
     /// No CI provider that issues OIDC ID tokens was detected.
     #[error(
-        "No CI OIDC provider detected. `--oidc` only works in CI; on GitHub Actions the job needs `permissions: id-token: write`"
+        "No CI OIDC provider detected. `--workload-identity` only works in CI; on GitHub Actions the job needs `permissions: id-token: write`"
     )]
     NoCiOidcProvider,
 
@@ -393,7 +401,7 @@ fn default_oauth_for_login(args: &LoginArgs) -> Option<DefaultOAuthConfig> {
         && args.password.is_none()
         && args.conda_token.is_none()
         && args.s3_access_key_id.is_none()
-        && !args.oidc;
+        && !args.workload_identity;
 
     if !no_explicit_method {
         return None;
@@ -457,11 +465,11 @@ async fn login_with_offline(
     storage: AuthenticationStorage,
     offline: bool,
 ) -> Result<(), AuthenticationCLIError> {
-    if args.oidc {
+    if args.workload_identity {
         if offline {
             return Err(AuthenticationCLIError::Offline);
         }
-        let auth = oidc_login(&args).await?;
+        let auth = workload_identity_login(&args).await?;
         let host = get_url(&args.host)?;
         storage.store(&host, &auth)?;
         eprintln!("Credentials stored for {host}.");
@@ -612,41 +620,44 @@ async fn login_with_offline(
     Ok(())
 }
 
-/// Builds the exchange options for `--oidc` from the login args.
-fn oidc_options(
+/// Builds the exchange options for `--workload-identity` from the login args.
+fn workload_identity_options(
     args: &LoginArgs,
     server_url: &Url,
 ) -> Result<OidcExchangeOptions, AuthenticationCLIError> {
     let host = server_url.host_str().unwrap_or_default();
-    let exchange = args.oidc_exchange.unwrap_or(if is_prefix_dev_host(host) {
-        OidcExchange::Prefix
-    } else {
-        OidcExchange::TokenExchange
-    });
+    let exchange = args
+        .workload_identity_exchange
+        .unwrap_or(if is_prefix_dev_host(host) {
+            WorkloadIdentityExchange::Prefix
+        } else {
+            WorkloadIdentityExchange::TokenExchange
+        });
 
     Ok(match exchange {
-        OidcExchange::TokenExchange => {
-            let endpoint = args.oidc_token_endpoint.clone().ok_or_else(|| {
-                AuthenticationCLIError::MissingOidcFlag {
-                    flag: "--oidc-token-endpoint",
+        WorkloadIdentityExchange::TokenExchange => {
+            let endpoint = args
+                .workload_identity_token_endpoint
+                .clone()
+                .ok_or_else(|| AuthenticationCLIError::MissingWorkloadIdentityFlag {
+                    flag: "--workload-identity-token-endpoint",
                     exchange: exchange.name(),
-                }
-            })?;
+                })?;
             let audience = args
-                .oidc_audience
+                .workload_identity_audience
                 .clone()
                 .unwrap_or_else(|| host.to_string());
             OidcExchangeOptions::token_exchange(audience, endpoint)
         }
-        OidcExchange::Prefix => {
-            if args.oidc_token_endpoint.is_some() {
-                return Err(AuthenticationCLIError::UnsupportedOidcFlag {
-                    flag: "--oidc-token-endpoint",
+        WorkloadIdentityExchange::Prefix => {
+            if args.workload_identity_token_endpoint.is_some() {
+                return Err(AuthenticationCLIError::UnsupportedWorkloadIdentityFlag {
+                    flag: "--workload-identity-token-endpoint",
                     exchange: exchange.name(),
                 });
             }
             let mut options = OidcExchangeOptions::prefix_dev(server_url);
-            if let Some(audience) = &args.oidc_audience {
+            if let Some(audience) = &args.workload_identity_audience {
                 options.audience.clone_from(audience);
             }
             options
@@ -655,13 +666,15 @@ fn oidc_options(
 }
 
 /// Exchanges the CI provider's OIDC ID token for a bearer token at `host`.
-async fn oidc_login(args: &LoginArgs) -> Result<Authentication, AuthenticationCLIError> {
+async fn workload_identity_login(
+    args: &LoginArgs,
+) -> Result<Authentication, AuthenticationCLIError> {
     let server_url = Url::parse(&ensure_url_scheme(&args.host))?;
-    let options = oidc_options(args, &server_url)?;
+    let options = workload_identity_options(args, &server_url)?;
 
     // The ID token is a live credential: only send it over https. Plain
     // http is allowed for loopback hosts, e.g. local test servers. Checked
-    // on the resolved endpoint, since `--oidc-token-endpoint` may be a URL.
+    // on the resolved endpoint, since `--workload-identity-token-endpoint` may be a URL.
     let endpoint = server_url.join(match &options.exchange {
         ExchangeProtocol::TokenExchange { endpoint } => endpoint,
         ExchangeProtocol::PrefixMint { path } => path,
@@ -673,7 +686,7 @@ async fn oidc_login(args: &LoginArgs) -> Result<Authentication, AuthenticationCL
         None => false,
     };
     if endpoint.scheme() != "https" && !is_loopback {
-        return Err(AuthenticationCLIError::OidcRequiresHttps(
+        return Err(AuthenticationCLIError::WorkloadIdentityRequiresHttps(
             endpoint.to_string(),
         ));
     }
@@ -1374,10 +1387,10 @@ mod tests {
             oauth_scopes: vec![],
             #[cfg(feature = "oauth")]
             oauth_redirect_uri: None,
-            oidc: false,
-            oidc_audience: None,
-            oidc_exchange: None,
-            oidc_token_endpoint: None,
+            workload_identity: false,
+            workload_identity_audience: None,
+            workload_identity_exchange: None,
+            workload_identity_token_endpoint: None,
             user_agent: None,
         }
     }
@@ -1710,9 +1723,9 @@ mod tests {
         args.token = Some("t".into());
         assert!(default_oauth_for_login(&args).is_none());
 
-        // `--oidc` is an explicit method too.
+        // `--workload-identity` is an explicit method too.
         let mut args = create_login_args("prefix.dev");
-        args.oidc = true;
+        args.workload_identity = true;
         assert!(default_oauth_for_login(&args).is_none());
 
         // No explicit method on a non-OAuth host → still falls through to existing
@@ -1720,42 +1733,42 @@ mod tests {
         assert!(default_oauth_for_login(&create_login_args("example.com")).is_none());
     }
 
-    fn oidc_args(host: &str) -> LoginArgs {
+    fn workload_identity_args(host: &str) -> LoginArgs {
         let mut args = create_login_args(host);
-        args.oidc = true;
+        args.workload_identity = true;
         args
     }
 
     #[tokio::test]
-    async fn oidc_login_requires_https() {
+    async fn workload_identity_login_requires_https() {
         let (storage, _temp_dir) = create_test_storage();
-        let mut args = oidc_args("http://example.com");
-        args.oidc_token_endpoint = Some("/oauth/token".into());
+        let mut args = workload_identity_args("http://example.com");
+        args.workload_identity_token_endpoint = Some("/oauth/token".into());
         assert!(matches!(
             login(args, storage.clone()).await,
-            Err(AuthenticationCLIError::OidcRequiresHttps(_))
+            Err(AuthenticationCLIError::WorkloadIdentityRequiresHttps(_))
         ));
 
         // An absolute token endpoint is checked, not just the host.
-        let mut args = oidc_args("https://example.com");
-        args.oidc_token_endpoint = Some("http://example.com/oauth/token".into());
+        let mut args = workload_identity_args("https://example.com");
+        args.workload_identity_token_endpoint = Some("http://example.com/oauth/token".into());
         assert!(matches!(
             login(args, storage).await,
-            Err(AuthenticationCLIError::OidcRequiresHttps(_))
+            Err(AuthenticationCLIError::WorkloadIdentityRequiresHttps(_))
         ));
     }
 
     #[tokio::test]
-    async fn oidc_login_offline_is_rejected() {
+    async fn workload_identity_login_offline_is_rejected() {
         let (storage, _temp_dir) = create_test_storage();
         assert!(matches!(
-            login_with_offline(oidc_args("prefix.dev"), storage, true).await,
+            login_with_offline(workload_identity_args("prefix.dev"), storage, true).await,
             Err(AuthenticationCLIError::Offline)
         ));
     }
 
     #[tokio::test]
-    async fn oidc_login_stores_exchanged_token() {
+    async fn workload_identity_login_stores_exchanged_token() {
         use axum::{Form, Json, routing::post};
 
         let router = axum::Router::new().route(
@@ -1772,9 +1785,9 @@ mod tests {
         tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
 
         let (storage, _temp_dir) = create_test_storage();
-        let mut args = oidc_args(&format!("http://{addr}"));
-        args.oidc_token_endpoint = Some("/oauth/token".into());
-        args.oidc_audience = Some("example-audience".into());
+        let mut args = workload_identity_args(&format!("http://{addr}"));
+        args.workload_identity_token_endpoint = Some("/oauth/token".into());
+        args.workload_identity_audience = Some("example-audience".into());
 
         // Force ambient-id's GitLab detector, which reads the ID token from
         // an env var derived from the audience.
@@ -1801,10 +1814,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn oidc_login_outside_ci_fails() {
+    async fn workload_identity_login_outside_ci_fails() {
         let (storage, _temp_dir) = create_test_storage();
-        let mut args = oidc_args("example.com");
-        args.oidc_token_endpoint = Some("/oauth/token".into());
+        let mut args = workload_identity_args("example.com");
+        args.workload_identity_token_endpoint = Some("/oauth/token".into());
         let result = async_with_vars(
             [
                 ("GITLAB_CI", None::<&str>),

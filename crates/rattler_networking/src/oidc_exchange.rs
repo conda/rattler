@@ -5,7 +5,7 @@
 //! 2. Exchange it at the server (see [`ExchangeProtocol`]) for a
 //!    short-lived bearer token.
 //!
-//! Used by `rattler auth login --oidc` and, through
+//! Used by `rattler auth login --workload-identity` and, through
 //! [`crate::trusted_publishing`], for trusted publishing to prefix.dev.
 
 use reqwest::{StatusCode, header::CONTENT_TYPE};
