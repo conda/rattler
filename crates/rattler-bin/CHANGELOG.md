@@ -13,9 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(rattler-bin)* accept multichannels in -c of solve and create ([#2883](https://github.com/conda/rattler/pull/2883))
 
-### Other
+### Fixed
 
-- remove old aws-lc-sys cmake workaround ([#2890](https://github.com/conda/rattler/pull/2890))
+- use CMake for aws-lc-sys in Conda builds to preserve jitterentropy's required optimization flags
 
 ## [0.5.0](https://github.com/conda/rattler/compare/rattler-bin-v0.4.1...rattler-bin-v0.5.0) - 2026-09-29
 

@@ -14,9 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - *(conda-types)* parse virtual package detector registrations ([#2859](https://github.com/conda/rattler/pull/2859))
 - emit consistent v3 repodata ([#2668](https://github.com/conda/rattler/pull/2668))
 
-### Other
+### Fixed
 
-- remove old aws-lc-sys cmake workaround ([#2890](https://github.com/conda/rattler/pull/2890))
+- use CMake for aws-lc-sys in Conda builds to preserve jitterentropy's required optimization flags
 
 ## [0.32.0](https://github.com/conda/rattler/compare/rattler_index-v0.31.7...rattler_index-v0.32.0) - 2026-09-29
 

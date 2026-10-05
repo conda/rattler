@@ -52,6 +52,10 @@ clang = ">=18.1.8,<19.0"
 compilers = ">=1.6.0"
 mold = ">=2.33.0,<3.0"
 
+# CMake preserves the -O0 required by jitterentropy despite Conda's -O2 CFLAGS.
+[activation.env]
+AWS_LC_SYS_CMAKE_BUILDER = "1"
+
 [target.linux-64.activation]
 scripts = ["scripts/activate_linux.sh"]
 
