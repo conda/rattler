@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.34.0...rattler_repodata_gateway-v0.35.0) - 2026-10-05
+
+### Added
+
+- *(conda-types)* parse virtual package detector registrations ([#2859](https://github.com/conda/rattler/pull/2859))
+- [**breaking**] query multichannels through the gateway ([#2882](https://github.com/conda/rattler/pull/2882))
+
+### Fixed
+
+- refresh sharded index cache policy after 304 ([#2724](https://github.com/conda/rattler/pull/2724))
+
 ## [0.34.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.33.6...rattler_repodata_gateway-v0.34.0) - 2026-09-29
 
 ### Fixed
