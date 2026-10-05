@@ -1069,6 +1069,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rattler.config.config.Config.virtual_package_detectors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        virtual_package_detectors
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rattler.config.config.Config.__init__" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4492,6 +4503,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rattler.config.config.Config.virtual_package_detectors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        virtual_package_detectors
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rattler.config.config.Config.__init__" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5406,6 +5428,46 @@ depends on the TLS backend the consumer is built with.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Config</span><span class="o">.</span><span class="n">from_toml</span><span class="p">(</span><span class="s1">&#39;tls-root-certs = &quot;webpki&quot;&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">tls_root_certs</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="s1">&#39;webpki&#39;</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span>
+</span></code></pre></div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rattler.config.config.Config.virtual_package_detectors" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">virtual_package_detectors</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#rattler.config.config.Config.virtual_package_detectors" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">virtual_package_detectors</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The <code>virtual-package-detectors</code> section: the optional
+<code>timeout-seconds</code> and the <code>consent</code> decisions keyed by the registering
+channel's canonical base URL. Each decision covers all detectors
+registered by that channel and their resolved dependencies.</p>
+<h5 id="rattler.config.config.Config.virtual_package_detectors--examples">Examples<a class="headerlink" href="#rattler.config.config.Config.virtual_package_detectors--examples" title="Permanent link">#</a></h5>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">config</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">from_toml</span><span class="p">(</span><span class="s1">&#39;&#39;&#39;</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="s1">... [virtual-package-detectors]</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="s1">... timeout-seconds = 60</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="s1">... [virtual-package-detectors.consent]</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="s1">... &quot;https://conda.anaconda.org/conda-forge&quot; = &quot;allow&quot;</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="s1">... &#39;&#39;&#39;</span><span class="p">)</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">config</span><span class="o">.</span><span class="n">virtual_package_detectors</span><span class="p">[</span><span class="s2">&quot;timeout-seconds&quot;</span><span class="p">]</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="mi">60</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">config</span><span class="o">.</span><span class="n">virtual_package_detectors</span><span class="p">[</span><span class="s2">&quot;consent&quot;</span><span class="p">][</span><span class="s2">&quot;https://conda.anaconda.org/conda-forge&quot;</span><span class="p">]</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="s1">&#39;allow&#39;</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
     </div>
