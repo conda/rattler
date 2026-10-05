@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.56.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.55.0...rattler_conda_types-v0.56.0) - 2026-10-05
+
+### Added
+
+- *(conda-types)* parse virtual package detector registrations ([#2859](https://github.com/conda/rattler/pull/2859))
+- Implementation offsets in paths.json ([#2565](https://github.com/conda/rattler/pull/2565))
+- emit consistent v3 repodata ([#2668](https://github.com/conda/rattler/pull/2668))
+- add freebsd-ppc64le and freebsd-ppc64 subdirs ([#2768](https://github.com/conda/rattler/pull/2768))
+
+### Fixed
+
+- handle empty channel specifiers ([#2737](https://github.com/conda/rattler/pull/2737))
+- *(rattler_conda_types)* keep backslashes in file names when serializing paths on Unix ([#2878](https://github.com/conda/rattler/pull/2878))
+
 ## [0.55.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.54.0...rattler_conda_types-v0.55.0) - 2026-09-29
 
 ### Added
