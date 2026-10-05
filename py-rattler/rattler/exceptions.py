@@ -43,6 +43,7 @@ try:
         ValidatePackageRecordsError,
         VersionBumpError,
         VersionExtendError,
+        VirtualPackageOverrideError,
     )
 except ImportError:
     # They are only redefined for documentation purposes
@@ -120,6 +121,9 @@ except ImportError:
 
     class InvalidVersionSpecError(Exception):  # type: ignore[no-redef]
         """Error that can occur when parsing a VersionSpec"""
+
+    class VirtualPackageOverrideError(Exception):  # type: ignore[no-redef]
+        """Error that can occur when a `CONDA_OVERRIDE_*` variable of a detector-provided virtual package is invalid"""
 
     class IoError(Exception):  # type: ignore[no-redef]
         """An error that can occur during io operations"""
@@ -226,4 +230,5 @@ __all__ = [
     "ValidatePackageRecordsError",
     "VersionBumpError",
     "VersionExtendError",
+    "VirtualPackageOverrideError",
 ]

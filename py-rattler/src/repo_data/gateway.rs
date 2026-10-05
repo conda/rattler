@@ -26,6 +26,7 @@ use crate::repo_data::PyChannelRelations;
 use crate::repo_data::source::PyRepoDataSource;
 use crate::repo_data::sparse::PySparseRepoData;
 use crate::subdir::PySubdir;
+use crate::virtual_package_detectors::{PyDetectorRegistration, PyRejectedDetectorRegistration};
 use crate::{PyChannel, Wrap};
 
 #[pyclass(from_py_object)]
@@ -388,6 +389,8 @@ impl PyGateway {
         channel_relations=None,
         channel_relations_max_depth=None,
         channel_notices=false,
+        detector_target=None,
+        constraints=Vec::new(),
     ))]
     #[allow(clippy::too_many_arguments)]
     pub fn query<'a>(
@@ -400,6 +403,8 @@ impl PyGateway {
         channel_relations: Option<Wrap<ChannelRelationsMode>>,
         channel_relations_max_depth: Option<usize>,
         channel_notices: bool,
+        detector_target: Option<PySubdir>,
+        constraints: Vec<PyMatchSpec>,
     ) -> PyResult<Bound<'a, PyAny>> {
         // Convert Python sources to Rust Source enum
         let rust_sources: Vec<Source> = sources
@@ -414,6 +419,11 @@ impl PyGateway {
                 .query(rust_sources, platforms.into_iter().map(|p| p.inner), specs)
                 .recursive(recursive)
                 .channel_notices(channel_notices);
+            if let Some(target) = detector_target {
+                query = query
+                    .virtual_package_detectors(target.inner)
+                    .constraints(constraints.into_iter().map(Into::into));
+            }
 
             if let Some(mode) = channel_relations {
                 query = query.channel_relations(mode.0);
@@ -455,7 +465,27 @@ impl PyGateway {
                 .into_iter()
                 .map(PyChannelNotice::from)
                 .collect::<Vec<_>>();
-            Ok((records, removed, notices))
+            let detectors = output.virtual_package_detectors.map(|detectors| {
+                (
+                    PySubdir::from(detectors.target_platform),
+                    detectors
+                        .wanted_names
+                        .into_iter()
+                        .map(PyPackageName::from)
+                        .collect::<Vec<_>>(),
+                    detectors
+                        .registrations
+                        .into_iter()
+                        .map(PyDetectorRegistration::from)
+                        .collect::<Vec<_>>(),
+                    detectors
+                        .rejected
+                        .into_iter()
+                        .map(PyRejectedDetectorRegistration::from)
+                        .collect::<Vec<_>>(),
+                )
+            });
+            Ok((records, removed, notices, detectors))
         })
     }
 
@@ -492,6 +522,58 @@ impl PyGateway {
                 .into_iter()
                 .map(crate::who_needs::PyDependent::from)
                 .collect::<Vec<_>>())
+        })
+    }
+
+    /// Collects the virtual package detectors registered by `channels` and
+    /// their related channels for the supplied subdirs, in CEP 42 channel order.
+    #[pyo3(signature = (
+        channels,
+        subdirs,
+        channel_relations=None,
+        channel_relations_max_depth=None,
+    ))]
+    pub fn virtual_package_detectors<'a>(
+        &self,
+        py: Python<'a>,
+        channels: Vec<PyChannel>,
+        subdirs: Vec<PySubdir>,
+        channel_relations: Option<Wrap<ChannelRelationsMode>>,
+        channel_relations_max_depth: Option<usize>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let gateway = self.inner.clone();
+        let channels: Vec<rattler_conda_types::Channel> =
+            channels.into_iter().map(|channel| channel.inner).collect();
+        let show_progress = self.show_progress;
+        future_into_py(py, async move {
+            let mut query = gateway.virtual_package_detectors(
+                channels,
+                subdirs.into_iter().map(|subdir| subdir.inner),
+            );
+            if let Some(mode) = channel_relations {
+                query = query.channel_relations(mode.0);
+            }
+            if let Some(depth) = channel_relations_max_depth {
+                query = query.channel_relations_max_depth(depth);
+            }
+            if show_progress {
+                query = query
+                    .with_reporter(rattler_repodata_gateway::IndicatifReporter::builder().finish());
+            }
+            let output = query.execute().await.map_err(PyRattlerError::from)?;
+            emit_gateway_warnings(output.warnings)?;
+            Ok((
+                output
+                    .registrations
+                    .into_iter()
+                    .map(PyDetectorRegistration::from)
+                    .collect::<Vec<_>>(),
+                output
+                    .rejected
+                    .into_iter()
+                    .map(PyRejectedDetectorRegistration::from)
+                    .collect::<Vec<_>>(),
+            ))
         })
     }
 
