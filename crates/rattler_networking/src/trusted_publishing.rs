@@ -31,7 +31,8 @@ const JFROG_TOKEN_PATH: &str = "/access/api/v1/oidc/token";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExchangeProtocol {
     /// The prefix.dev convention: `POST {"token": "<id token>"}` to `path`;
-    /// the response body is the bearer token.
+    /// the response body is the bearer token. This is prefix.dev's own API,
+    /// not based on any standard.
     ///
     /// `path` is joined onto the server URL with [`Url::join`]; it must
     /// start with `/` or it would resolve relative to the URL's path.
