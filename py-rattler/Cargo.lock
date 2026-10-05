@@ -4467,6 +4467,7 @@ dependencies = [
  "fs-err",
  "indexmap 2.14.0",
  "itertools 0.15.0",
+ "libc",
  "rattler_conda_types",
  "rattler_pty",
  "serde_json",
@@ -4475,6 +4476,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tracing",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

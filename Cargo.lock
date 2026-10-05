@@ -5234,6 +5234,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_environment_digest"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "rattler_conda_types",
+ "rattler_digest",
+ "url",
+]
+
+[[package]]
 name = "rattler_git"
 version = "0.3.8"
 dependencies = [
@@ -5625,6 +5635,7 @@ dependencies = [
  "indexmap 2.14.2",
  "insta",
  "itertools 0.15.0",
+ "libc",
  "rattler_conda_types",
  "rattler_pty",
  "serde_json",
@@ -5634,6 +5645,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tracing",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5725,6 +5737,41 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tokio-util",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "rattler_virtual_package_detectors"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "fs-err",
+ "futures",
+ "hex",
+ "indexmap 2.14.2",
+ "insta",
+ "jiff",
+ "rattler",
+ "rattler_boot_id",
+ "rattler_cache",
+ "rattler_conda_types",
+ "rattler_config",
+ "rattler_digest",
+ "rattler_environment_digest",
+ "rattler_index",
+ "rattler_networking",
+ "rattler_package_streaming",
+ "rattler_prefix_guard",
+ "rattler_repodata_gateway",
+ "rattler_shell",
+ "rattler_solve",
+ "rstest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
  "tracing",
  "url",
 ]
