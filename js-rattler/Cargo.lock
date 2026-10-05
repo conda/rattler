@@ -2053,7 +2053,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.10.14"
+version = "0.10.15"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2086,7 +2086,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.56.0"
+version = "0.56.1"
 dependencies = [
  "ahash",
  "core-foundation",
@@ -2128,7 +2128,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_version"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "itertools 0.15.0",
  "nom",
@@ -2139,7 +2139,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "blake2",
  "digest",
@@ -2156,7 +2156,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_macros"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "quote",
  "syn 2.0.119",
@@ -2164,7 +2164,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.32.0"
+version = "0.32.1"
 dependencies = [
  "ambient-id",
  "astral-reqwest-middleware",
@@ -2190,7 +2190,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.27.9"
+version = "0.27.10"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-tokio-tar",
@@ -2229,7 +2229,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_redaction"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "astral-reqwest-middleware",
  "reqwest",
@@ -2238,7 +2238,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.35.0"
+version = "0.36.0"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2304,7 +2304,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "11.0.0"
+version = "11.1.0"
 dependencies = [
  "futures",
  "hex",
