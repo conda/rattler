@@ -33,6 +33,10 @@ check = "cargo check"
 # libsolv compilation cannot find pixi's clang for some reason
 # so we skip that test for now
 test = "cargo nextest run --workspace --no-default-features --features=indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,edit,rattler_config,cli-tools,rattler_conda_types/semver,rattler_lock/conda-lock -E 'not test(libsolv_bindings_up_to_date)' --no-fail-fast"
+insta-review = {
+  cmd = "cargo insta review --workspace",
+  description = "Review cargo-insta snapshots",
+}
 rattler = "cargo run --bin rattler --release --"
 doc = "RUSTDOCFLAGS='-Dwarnings -Wunreachable-pub' cargo doc --no-deps --all --all-features"
 
@@ -46,6 +50,7 @@ cmake = "~=3.26.4"
 cargo-nextest = ">=0.9.91,<0.10"
 # for rust-analyzer
 rust-src = "~=1.95.0"
+cargo-insta = ">=1.48.0,<2"
 
 [target.linux-64.dependencies]
 clang = ">=18.1.8,<19.0"
