@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["EnvironmentError"],"fn":["detector_spec","ensure_environment","prefix_for","resolve_detector"],"struct":["DetectorEnvironment","EnvironmentOptions","RattlerEnvironmentProvider","ResolvedDetector"],"trait":["DetectorEnvironmentProvider"]};

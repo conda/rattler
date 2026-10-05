@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["LoadError","MergeError","ValidationError"],"mod":["build","channel_config","concurrency","index","proxy","repodata_config","run_post_link_scripts","s3","tls"],"struct":["CommonConfig","ConfigBase","NoExtension"],"trait":["Config"]};
+window.SIDEBAR_ITEMS = {"enum":["LoadError","MergeError","ValidationError"],"mod":["build","channel_config","concurrency","index","proxy","repodata_config","run_post_link_scripts","s3","tls","virtual_package_detectors"],"struct":["CommonConfig","ConfigBase","NoExtension"],"trait":["Config"]};

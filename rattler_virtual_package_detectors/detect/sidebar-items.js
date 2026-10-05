@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["DetectError","DetectedValue","DetectionSource","SkipReason","WantedNames"],"fn":["detect","merge_results"],"struct":["DetectOptions","DetectionOutcome","DetectorFailure","DetectorResult","SkippedRegistration"]};

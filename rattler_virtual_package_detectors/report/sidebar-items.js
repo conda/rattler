@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PROTOCOL_VERSION"],"enum":["CacheLifetime","ReportError"],"fn":["parse_report"],"struct":["CacheHints","DetectedVersion","DetectorReport"]};

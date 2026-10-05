@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Consent"],"struct":["AllowAll","ConfiguredConsent","ConsentRequest","DenyAll"],"trait":["DetectorConsent"]};

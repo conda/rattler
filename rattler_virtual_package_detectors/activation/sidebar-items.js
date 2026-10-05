@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ActivationError"],"fn":["activated_environment"]};

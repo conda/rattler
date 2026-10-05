@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["activation","cache","consent","detect","environment","limits","overrides","report","runner"],"struct":["EnvironmentSnapshot"]};

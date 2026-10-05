@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["activation","run","shell"]};
+window.SIDEBAR_ITEMS = {"mod":["activation","environment","process","run","shell"]};
