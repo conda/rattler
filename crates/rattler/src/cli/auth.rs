@@ -129,8 +129,10 @@ struct LoginArgs {
     )]
     workload_identity_exchange: Option<WorkloadIdentityExchange>,
 
-    /// Token endpoint for `--workload-identity-exchange token-exchange`: a URL or a path
-    /// on the host
+    /// Token endpoint for `--workload-identity-exchange token-exchange`: a
+    /// URL or a path on the host (defaults to the `token_endpoint` from the
+    /// host's RFC 8414 metadata, or `/access/api/v1/oidc/token` for
+    /// *.jfrog.io hosts)
     #[clap(
         long,
         requires = "workload_identity",
@@ -292,14 +294,11 @@ pub enum AuthenticationCLIError {
     #[error(transparent)]
     OAuthError(#[from] oauth::OAuthError),
 
-    /// The selected workload identity exchange needs a flag that wasn't passed.
-    #[error("`--workload-identity-exchange {exchange}` requires `{flag}`")]
-    MissingWorkloadIdentityFlag {
-        /// The missing flag.
-        flag: &'static str,
-        /// The selected exchange.
-        exchange: String,
-    },
+    /// No token endpoint was passed and none could be found.
+    #[error(
+        "Could not find the token endpoint of {0}: it doesn't publish RFC 8414 authorization server metadata with a usable `token_endpoint`. Pass `--workload-identity-token-endpoint`"
+    )]
+    TokenEndpointNotFound(String),
 
     /// A flag was passed that the selected workload identity exchange doesn't use.
     #[error("`{flag}` can't be used with `--workload-identity-exchange {exchange}`")]
@@ -620,10 +619,37 @@ async fn login_with_offline(
     Ok(())
 }
 
+/// Token endpoint path of JFrog Cloud instances (`*.jfrog.io`), which don't
+/// publish RFC 8414 metadata.
+const JFROG_TOKEN_ENDPOINT: &str = "/access/api/v1/oidc/token";
+
+/// Finds the token endpoint when `--workload-identity-token-endpoint` isn't
+/// passed: from the server's RFC 8414 metadata, falling back to known
+/// defaults.
+async fn find_token_endpoint(
+    server_url: &Url,
+    client: &reqwest_middleware::ClientWithMiddleware,
+) -> Result<String, AuthenticationCLIError> {
+    if let Some(endpoint) =
+        rattler_networking::oidc_exchange::discover_token_endpoint(client, server_url).await?
+    {
+        eprintln!("Using the token endpoint from the server's RFC 8414 metadata");
+        return Ok(endpoint.to_string());
+    }
+    let host = server_url.host_str().unwrap_or_default();
+    if host.ends_with(".jfrog.io") {
+        return Ok(JFROG_TOKEN_ENDPOINT.to_string());
+    }
+    Err(AuthenticationCLIError::TokenEndpointNotFound(
+        host.to_string(),
+    ))
+}
+
 /// Builds the exchange options for `--workload-identity` from the login args.
-fn workload_identity_options(
+async fn workload_identity_options(
     args: &LoginArgs,
     server_url: &Url,
+    client: &reqwest_middleware::ClientWithMiddleware,
 ) -> Result<OidcExchangeOptions, AuthenticationCLIError> {
     let host = server_url.host_str().unwrap_or_default();
     let exchange = args
@@ -636,13 +662,10 @@ fn workload_identity_options(
 
     Ok(match exchange {
         WorkloadIdentityExchange::TokenExchange => {
-            let endpoint = args
-                .workload_identity_token_endpoint
-                .clone()
-                .ok_or_else(|| AuthenticationCLIError::MissingWorkloadIdentityFlag {
-                    flag: "--workload-identity-token-endpoint",
-                    exchange: exchange.name(),
-                })?;
+            let endpoint = match &args.workload_identity_token_endpoint {
+                Some(endpoint) => endpoint.clone(),
+                None => find_token_endpoint(server_url, client).await?,
+            };
             let audience = args
                 .workload_identity_audience
                 .clone()
@@ -665,31 +688,30 @@ fn workload_identity_options(
     })
 }
 
-/// Exchanges the CI provider's OIDC ID token for a bearer token at `host`.
-async fn workload_identity_login(
-    args: &LoginArgs,
-) -> Result<Authentication, AuthenticationCLIError> {
-    let server_url = Url::parse(&ensure_url_scheme(&args.host))?;
-    let options = workload_identity_options(args, &server_url)?;
-
-    // The ID token is a live credential: only send it over https. Plain
-    // http is allowed for loopback hosts, e.g. local test servers. Checked
-    // on the resolved endpoint, since `--workload-identity-token-endpoint` may be a URL.
-    let endpoint = server_url.join(match &options.exchange {
-        ExchangeProtocol::TokenExchange { endpoint } => endpoint,
-        ExchangeProtocol::PrefixMint { path } => path,
-    })?;
-    let is_loopback = match endpoint.host() {
+/// The CI provider's ID token is a live credential: only send it, and only
+/// trust metadata pointing to where it's sent, over https. Plain http is
+/// allowed for loopback hosts, e.g. local test servers.
+fn ensure_https(url: &Url) -> Result<(), AuthenticationCLIError> {
+    let is_loopback = match url.host() {
         Some(url::Host::Domain(domain)) => domain == "localhost",
         Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
         Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
         None => false,
     };
-    if endpoint.scheme() != "https" && !is_loopback {
+    if url.scheme() != "https" && !is_loopback {
         return Err(AuthenticationCLIError::WorkloadIdentityRequiresHttps(
-            endpoint.to_string(),
+            url.to_string(),
         ));
     }
+    Ok(())
+}
+
+/// Exchanges the CI provider's OIDC ID token for a bearer token at `host`.
+async fn workload_identity_login(
+    args: &LoginArgs,
+) -> Result<Authentication, AuthenticationCLIError> {
+    let server_url = Url::parse(&ensure_url_scheme(&args.host))?;
+    ensure_https(&server_url)?;
 
     let client = reqwest_middleware::ClientBuilder::new(
         Client::builder()
@@ -697,6 +719,14 @@ async fn workload_identity_login(
             .build()?,
     )
     .build();
+    let options = workload_identity_options(args, &server_url, &client).await?;
+
+    // Checked again on the resolved endpoint, which may be on another host.
+    let endpoint = server_url.join(match &options.exchange {
+        ExchangeProtocol::TokenExchange { endpoint } => endpoint,
+        ExchangeProtocol::PrefixMint { path } => path,
+    })?;
+    ensure_https(&endpoint)?;
 
     eprintln!(
         "Exchanging the CI OIDC token (audience `{}`) at {endpoint}",
@@ -1810,6 +1840,61 @@ mod tests {
         assert!(matches!(
             auth,
             Some(Authentication::BearerToken(token)) if token == "exchanged.access.token"
+        ));
+    }
+
+    #[tokio::test]
+    async fn workload_identity_login_discovers_token_endpoint() {
+        use axum::{
+            Form, Json,
+            routing::{get, post},
+        };
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let metadata = json!({
+            "issuer": format!("http://{addr}"),
+            "token_endpoint": format!("http://{addr}/discovered/token"),
+        });
+        let router = axum::Router::new()
+            .route(
+                "/.well-known/oauth-authorization-server",
+                get(move || async move { Json(metadata) }),
+            )
+            .route(
+                "/discovered/token",
+                post(
+                    |Form(body): Form<std::collections::HashMap<String, String>>| async move {
+                        assert_eq!(body["subject_token"], "fake.oidc.token");
+                        Json(json!({ "access_token": "discovered.access.token" }))
+                    },
+                ),
+            );
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+        let (storage, _temp_dir) = create_test_storage();
+        let mut args = workload_identity_args(&format!("http://{addr}"));
+        args.workload_identity_audience = Some("example-audience".into());
+
+        async_with_vars(
+            [
+                ("GITLAB_CI", Some("true")),
+                ("EXAMPLE_AUDIENCE_ID_TOKEN", Some("fake.oidc.token")),
+                ("GITHUB_ACTIONS", None),
+                ("BUILDKITE", None),
+                ("CIRCLECI", None),
+            ],
+            login(args, storage.clone()),
+        )
+        .await
+        .unwrap();
+
+        let (_, auth) = storage
+            .get_by_url(format!("http://{addr}/channel/repodata.json"))
+            .unwrap();
+        assert!(matches!(
+            auth,
+            Some(Authentication::BearerToken(token)) if token == "discovered.access.token"
         ));
     }
 

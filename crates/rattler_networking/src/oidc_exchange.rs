@@ -19,6 +19,12 @@ use crate::challenge_middleware::BearerToken;
 /// Default path of the prefix.dev mint endpoint.
 pub(crate) const DEFAULT_MINT_PATH: &str = "/api/oidc/mint_token";
 
+/// Well-known path of OAuth 2.0 Authorization Server Metadata (RFC 8414 §3).
+const AUTHORIZATION_SERVER_METADATA_PATH: &str = "/.well-known/oauth-authorization-server";
+
+/// The RFC 8693 token exchange grant type.
+const TOKEN_EXCHANGE_GRANT_TYPE: &str = "urn:ietf:params:oauth:grant-type:token-exchange";
+
 /// How the CI provider's OIDC ID token is exchanged for a bearer token.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExchangeProtocol {
@@ -98,6 +104,85 @@ impl OidcExchangeOptions {
 /// hosts (`beta.prefix.dev.`, preserved as-is by [`Url`]) fail closed.
 pub(crate) fn is_prefix_dev_host(host: &str) -> bool {
     host == "prefix.dev" || host.ends_with(".prefix.dev")
+}
+
+/// The fields of OAuth 2.0 Authorization Server Metadata (RFC 8414 §2) we use.
+#[derive(Deserialize)]
+struct AuthorizationServerMetadata {
+    issuer: String,
+    token_endpoint: Option<String>,
+    grant_types_supported: Option<Vec<String>>,
+}
+
+/// The metadata URL for `issuer`: the well-known path is inserted between
+/// the host and the issuer's path, if any (RFC 8414 §3.1).
+fn authorization_server_metadata_url(issuer: &Url) -> Url {
+    let mut url = issuer.clone();
+    let issuer_path = issuer.path().trim_end_matches('/');
+    url.set_path(&format!(
+        "{AUTHORIZATION_SERVER_METADATA_PATH}{issuer_path}"
+    ));
+    url.set_query(None);
+    url.set_fragment(None);
+    url
+}
+
+/// Looks up the token endpoint of `issuer` in its OAuth 2.0 Authorization
+/// Server Metadata (RFC 8414).
+///
+/// Returns `None` when the server publishes no metadata, or when the
+/// metadata can't be used: it's for a different issuer (which RFC 8414 §3.3
+/// forbids using), has no `token_endpoint`, or lists `grant_types_supported`
+/// without the token exchange grant.
+pub async fn discover_token_endpoint(
+    client: &ClientWithMiddleware,
+    issuer: &Url,
+) -> Result<Option<Url>, OidcExchangeError> {
+    let metadata_url = authorization_server_metadata_url(issuer);
+    let response = client
+        .get(metadata_url.clone())
+        .send()
+        .await
+        .map_err(|err| OidcExchangeError::ReqwestMiddleware(metadata_url.clone(), err))?;
+    if !response.status().is_success() {
+        tracing::debug!(
+            "No authorization server metadata at {metadata_url} (HTTP {})",
+            response.status()
+        );
+        return Ok(None);
+    }
+    let body = response
+        .bytes()
+        .await
+        .map_err(|err| OidcExchangeError::Reqwest(metadata_url.clone(), err))?;
+    let Ok(metadata) = serde_json::from_slice::<AuthorizationServerMetadata>(&body) else {
+        tracing::debug!("Invalid authorization server metadata at {metadata_url}");
+        return Ok(None);
+    };
+
+    // RFC 8414 §3.3: the `issuer` in the metadata must be identical to the
+    // issuer the metadata was requested for, or it must not be used.
+    // Compared without a trailing slash, which `Url` always adds to an
+    // empty path.
+    if metadata.issuer.trim_end_matches('/') != issuer.as_str().trim_end_matches('/') {
+        tracing::warn!(
+            "Ignoring authorization server metadata at {metadata_url}: it is for issuer `{}`",
+            metadata.issuer
+        );
+        return Ok(None);
+    }
+    // RFC 8414 §2: when `grant_types_supported` is omitted, the default
+    // doesn't include token exchange. We still try the token endpoint then,
+    // since many servers don't list every grant they support.
+    if let Some(grant_types) = &metadata.grant_types_supported
+        && !grant_types.iter().any(|g| g == TOKEN_EXCHANGE_GRANT_TYPE)
+    {
+        tracing::debug!("{metadata_url} doesn't list the token exchange grant type");
+        return Ok(None);
+    }
+    Ok(metadata
+        .token_endpoint
+        .and_then(|endpoint| Url::parse(&endpoint).ok()))
 }
 
 /// Errors that can occur while exchanging an OIDC ID token.
@@ -220,10 +305,7 @@ async fn token_exchange(
     // ID token identifies the caller, and the RFC leaves client
     // authentication to the server.
     let body = url::form_urlencoded::Serializer::new(String::new())
-        .append_pair(
-            "grant_type",
-            "urn:ietf:params:oauth:grant-type:token-exchange",
-        )
+        .append_pair("grant_type", TOKEN_EXCHANGE_GRANT_TYPE)
         .append_pair(
             "subject_token_type",
             "urn:ietf:params:oauth:token-type:id_token",
@@ -393,6 +475,95 @@ mod tests {
         .unwrap_err();
         assert!(matches!(err, OidcExchangeError::MissingAccessToken));
         assert!(!err.to_string().contains("must-not-leak"));
+    }
+
+    /// Serves `metadata` as the RFC 8414 metadata of the issuer at the
+    /// server's root; `{issuer}` in it is replaced with the server's URL.
+    async fn metadata_server(metadata: &'static str) -> Url {
+        use axum::routing::get;
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let metadata = metadata.replace("{issuer}", &format!("http://{addr}"));
+        let router = axum::Router::new().route(
+            "/.well-known/oauth-authorization-server",
+            get(move || async move { metadata }),
+        );
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        Url::parse(&format!("http://{addr}")).unwrap()
+    }
+
+    #[tokio::test]
+    async fn discovers_token_endpoint() {
+        let issuer = metadata_server(
+            r#"{"issuer":"{issuer}","token_endpoint":"https://auth.example.com/token","grant_types_supported":["urn:ietf:params:oauth:grant-type:token-exchange"]}"#,
+        )
+        .await;
+        assert_eq!(
+            discover_token_endpoint(&plain_client(), &issuer)
+                .await
+                .unwrap()
+                .unwrap()
+                .as_str(),
+            "https://auth.example.com/token"
+        );
+
+        // `grant_types_supported` may be omitted.
+        let issuer = metadata_server(
+            r#"{"issuer":"{issuer}","token_endpoint":"https://auth.example.com/token"}"#,
+        )
+        .await;
+        assert!(
+            discover_token_endpoint(&plain_client(), &issuer)
+                .await
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[tokio::test]
+    async fn rejects_unusable_metadata() {
+        for metadata in [
+            // metadata for a different issuer (RFC 8414 §3.3)
+            r#"{"issuer":"https://evil.example.com","token_endpoint":"https://evil.example.com/token"}"#,
+            // token exchange not supported
+            r#"{"issuer":"{issuer}","token_endpoint":"https://auth.example.com/token","grant_types_supported":["authorization_code"]}"#,
+            // no token endpoint
+            r#"{"issuer":"{issuer}"}"#,
+        ] {
+            let issuer = metadata_server(metadata).await;
+            assert!(
+                discover_token_endpoint(&plain_client(), &issuer)
+                    .await
+                    .unwrap()
+                    .is_none(),
+                "{metadata}"
+            );
+        }
+
+        // no metadata at all
+        let (server_url, _) = token_server("/oauth/token", (StatusCode::OK, "{}")).await;
+        assert!(
+            discover_token_endpoint(&plain_client(), &server_url)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn metadata_url_inserts_well_known_path() {
+        let url = |issuer: &str| {
+            authorization_server_metadata_url(&Url::parse(issuer).unwrap()).to_string()
+        };
+        assert_eq!(
+            url("https://auth.example.com"),
+            "https://auth.example.com/.well-known/oauth-authorization-server"
+        );
+        assert_eq!(
+            url("https://example.com/tenant1/"),
+            "https://example.com/.well-known/oauth-authorization-server/tenant1"
+        );
     }
 
     #[test]
