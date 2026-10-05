@@ -1,1 +1,1 @@
-doc-valid-idents = ["JFrog", "OpenID", "AppTrust", ".."]
+doc-valid-idents = ["OpenID", ".."]

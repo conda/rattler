@@ -116,8 +116,7 @@ struct LoginArgs {
     oidc_audience: Option<String>,
 
     /// How the server exchanges the ID token (defaults to `prefix` for
-    /// prefix.dev hosts, `jfrog` for *.jfrog.io hosts and `token-exchange`
-    /// otherwise)
+    /// prefix.dev hosts and `token-exchange` otherwise)
     #[clap(
         long,
         requires = "oidc",
@@ -131,11 +130,6 @@ struct LoginArgs {
     #[clap(long, requires = "oidc", help_heading = "CI OIDC Token Exchange")]
     oidc_token_endpoint: Option<String>,
 
-    /// Name of the OIDC integration configured in JFrog (required for
-    /// `--oidc-exchange jfrog`)
-    #[clap(long, requires = "oidc", help_heading = "CI OIDC Token Exchange")]
-    oidc_provider_name: Option<String>,
-
     /// User-Agent header used for requests
     #[clap(long)]
     user_agent: Option<String>,
@@ -146,8 +140,6 @@ struct LoginArgs {
 enum OidcExchange {
     /// OAuth 2.0 Token Exchange (RFC 8693) at `--oidc-token-endpoint`
     TokenExchange,
-    /// JFrog Access' token exchange (an RFC 8693 variant)
-    Jfrog,
     /// prefix.dev's mint endpoint
     Prefix,
 }
@@ -626,52 +618,33 @@ fn oidc_options(
     server_url: &Url,
 ) -> Result<OidcExchangeOptions, AuthenticationCLIError> {
     let host = server_url.host_str().unwrap_or_default();
-    let exchange = args.oidc_exchange.unwrap_or_else(|| {
-        if is_prefix_dev_host(host) {
-            OidcExchange::Prefix
-        } else if host.ends_with(".jfrog.io") {
-            OidcExchange::Jfrog
-        } else {
-            OidcExchange::TokenExchange
-        }
+    let exchange = args.oidc_exchange.unwrap_or(if is_prefix_dev_host(host) {
+        OidcExchange::Prefix
+    } else {
+        OidcExchange::TokenExchange
     });
-    let missing = |flag| AuthenticationCLIError::MissingOidcFlag {
-        flag,
-        exchange: exchange.name(),
-    };
-    let reject = |flag, value: &Option<String>| match value {
-        Some(_) => Err(AuthenticationCLIError::UnsupportedOidcFlag {
-            flag,
-            exchange: exchange.name(),
-        }),
-        None => Ok(()),
-    };
-    let audience = || {
-        args.oidc_audience
-            .clone()
-            .unwrap_or_else(|| host.to_string())
-    };
 
     Ok(match exchange {
         OidcExchange::TokenExchange => {
-            reject("--oidc-provider-name", &args.oidc_provider_name)?;
-            let endpoint = args
-                .oidc_token_endpoint
+            let endpoint = args.oidc_token_endpoint.clone().ok_or_else(|| {
+                AuthenticationCLIError::MissingOidcFlag {
+                    flag: "--oidc-token-endpoint",
+                    exchange: exchange.name(),
+                }
+            })?;
+            let audience = args
+                .oidc_audience
                 .clone()
-                .ok_or_else(|| missing("--oidc-token-endpoint"))?;
-            OidcExchangeOptions::token_exchange(audience(), endpoint)
-        }
-        OidcExchange::Jfrog => {
-            reject("--oidc-token-endpoint", &args.oidc_token_endpoint)?;
-            let provider_name = args
-                .oidc_provider_name
-                .clone()
-                .ok_or_else(|| missing("--oidc-provider-name"))?;
-            OidcExchangeOptions::jfrog(audience(), provider_name)
+                .unwrap_or_else(|| host.to_string());
+            OidcExchangeOptions::token_exchange(audience, endpoint)
         }
         OidcExchange::Prefix => {
-            reject("--oidc-provider-name", &args.oidc_provider_name)?;
-            reject("--oidc-token-endpoint", &args.oidc_token_endpoint)?;
+            if args.oidc_token_endpoint.is_some() {
+                return Err(AuthenticationCLIError::UnsupportedOidcFlag {
+                    flag: "--oidc-token-endpoint",
+                    exchange: exchange.name(),
+                });
+            }
             let mut options = OidcExchangeOptions::prefix_dev(server_url);
             if let Some(audience) = &args.oidc_audience {
                 options.audience.clone_from(audience);
@@ -690,7 +663,7 @@ async fn oidc_login(args: &LoginArgs) -> Result<Authentication, AuthenticationCL
     // http is allowed for loopback hosts, e.g. local test servers. Checked
     // on the resolved endpoint, since `--oidc-token-endpoint` may be a URL.
     let endpoint = server_url.join(match &options.exchange {
-        ExchangeProtocol::TokenExchange(exchange) => &exchange.endpoint,
+        ExchangeProtocol::TokenExchange { endpoint } => endpoint,
         ExchangeProtocol::PrefixMint { path } => path,
     })?;
     let is_loopback = match endpoint.host() {
@@ -1405,7 +1378,6 @@ mod tests {
             oidc_audience: None,
             oidc_exchange: None,
             oidc_token_endpoint: None,
-            oidc_provider_name: None,
             user_agent: None,
         }
     }
@@ -1757,8 +1729,8 @@ mod tests {
     #[tokio::test]
     async fn oidc_login_requires_https() {
         let (storage, _temp_dir) = create_test_storage();
-        let mut args = oidc_args("http://my-org.jfrog.io");
-        args.oidc_provider_name = Some("github-oidc".into());
+        let mut args = oidc_args("http://example.com");
+        args.oidc_token_endpoint = Some("/oauth/token".into());
         assert!(matches!(
             login(args, storage.clone()).await,
             Err(AuthenticationCLIError::OidcRequiresHttps(_))
@@ -1783,16 +1755,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn oidc_login_stores_jfrog_token() {
-        use axum::{Json, routing::post};
+    async fn oidc_login_stores_exchanged_token() {
+        use axum::{Form, Json, routing::post};
 
         let router = axum::Router::new().route(
-            "/access/api/v1/oidc/token",
-            post(|Json(body): Json<Value>| async move {
-                assert_eq!(body["subject_token"], "fake.oidc.token");
-                assert_eq!(body["provider_name"], "github-oidc");
-                Json(json!({ "access_token": "jfrog.access.token" }))
-            }),
+            "/oauth/token",
+            post(
+                |Form(body): Form<std::collections::HashMap<String, String>>| async move {
+                    assert_eq!(body["subject_token"], "fake.oidc.token");
+                    Json(json!({ "access_token": "exchanged.access.token" }))
+                },
+            ),
         );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -1800,16 +1773,15 @@ mod tests {
 
         let (storage, _temp_dir) = create_test_storage();
         let mut args = oidc_args(&format!("http://{addr}"));
-        args.oidc_exchange = Some(OidcExchange::Jfrog);
-        args.oidc_provider_name = Some("github-oidc".into());
-        args.oidc_audience = Some("jfrog-github".into());
+        args.oidc_token_endpoint = Some("/oauth/token".into());
+        args.oidc_audience = Some("example-audience".into());
 
         // Force ambient-id's GitLab detector, which reads the ID token from
         // an env var derived from the audience.
         async_with_vars(
             [
                 ("GITLAB_CI", Some("true")),
-                ("JFROG_GITHUB_ID_TOKEN", Some("fake.oidc.token")),
+                ("EXAMPLE_AUDIENCE_ID_TOKEN", Some("fake.oidc.token")),
                 ("GITHUB_ACTIONS", None),
                 ("BUILDKITE", None),
                 ("CIRCLECI", None),
@@ -1824,15 +1796,15 @@ mod tests {
             .unwrap();
         assert!(matches!(
             auth,
-            Some(Authentication::BearerToken(token)) if token == "jfrog.access.token"
+            Some(Authentication::BearerToken(token)) if token == "exchanged.access.token"
         ));
     }
 
     #[tokio::test]
     async fn oidc_login_outside_ci_fails() {
         let (storage, _temp_dir) = create_test_storage();
-        let mut args = oidc_args("my-org.jfrog.io");
-        args.oidc_provider_name = Some("github-oidc".into());
+        let mut args = oidc_args("example.com");
+        args.oidc_token_endpoint = Some("/oauth/token".into());
         let result = async_with_vars(
             [
                 ("GITLAB_CI", None::<&str>),

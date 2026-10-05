@@ -19,14 +19,16 @@ use crate::challenge_middleware::BearerToken;
 /// Default path of the prefix.dev mint endpoint.
 pub(crate) const DEFAULT_MINT_PATH: &str = "/api/oidc/mint_token";
 
-/// Path of the JFrog Access OIDC token exchange endpoint.
-const JFROG_TOKEN_PATH: &str = "/access/api/v1/oidc/token";
-
 /// How the CI provider's OIDC ID token is exchanged for a bearer token.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExchangeProtocol {
-    /// OAuth 2.0 Token Exchange (RFC 8693).
-    TokenExchange(TokenExchange),
+    /// OAuth 2.0 Token Exchange (RFC 8693) at `endpoint`.
+    TokenExchange {
+        /// The token endpoint, joined onto the server URL with [`Url::join`]:
+        /// either an absolute URL or a path starting with `/`. RFC 8693
+        /// doesn't define a path, so it must be configured.
+        endpoint: String,
+    },
     /// The prefix.dev convention: `POST {"token": "<id token>"}` to `path`;
     /// the response body is the bearer token. This is prefix.dev's own API,
     /// not based on any standard.
@@ -39,46 +41,6 @@ pub enum ExchangeProtocol {
         /// Path on the server where the ID token is exchanged.
         path: String,
     },
-}
-
-/// Settings for an RFC 8693 token exchange.
-///
-/// The defaults follow the RFC; servers that deviate from it (like JFrog)
-/// are expressed by changing [`encoding`](Self::encoding) and adding
-/// [`extra_params`](Self::extra_params).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TokenExchange {
-    /// The token endpoint, joined onto the server URL with [`Url::join`]:
-    /// either an absolute URL or a path starting with `/`.
-    pub endpoint: String,
-    /// How the request body is encoded.
-    pub encoding: RequestEncoding,
-    /// Extension parameters sent in addition to the RFC 8693 ones. OAuth
-    /// servers must ignore parameters they don't recognize (RFC 6749 §3.2),
-    /// so these are allowed by the spec.
-    pub extra_params: Vec<(String, String)>,
-}
-
-impl TokenExchange {
-    /// A standard RFC 8693 exchange at `endpoint`.
-    pub fn new(endpoint: impl Into<String>) -> Self {
-        Self {
-            endpoint: endpoint.into(),
-            encoding: RequestEncoding::Form,
-            extra_params: Vec::new(),
-        }
-    }
-}
-
-/// Encoding of the token exchange request body.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum RequestEncoding {
-    /// `application/x-www-form-urlencoded`, as RFC 8693 §2.1 requires.
-    #[default]
-    Form,
-    /// `application/json`. Deviates from RFC 8693 §2.1, but some servers
-    /// (JFrog) only accept JSON.
-    Json,
 }
 
 /// Which audience to request the ID token for and how to exchange it.
@@ -98,34 +60,14 @@ pub struct OidcExchangeOptions {
 }
 
 impl OidcExchangeOptions {
-    /// A standard RFC 8693 exchange at `endpoint` (see
-    /// [`TokenExchange::endpoint`]).
+    /// An RFC 8693 token exchange at `endpoint` (see
+    /// [`ExchangeProtocol::TokenExchange`]).
     pub fn token_exchange(audience: impl Into<String>, endpoint: impl Into<String>) -> Self {
         Self {
             audience: audience.into(),
-            exchange: ExchangeProtocol::TokenExchange(TokenExchange::new(endpoint)),
-        }
-    }
-
-    /// JFrog Access' token exchange at `/access/api/v1/oidc/token`: RFC 8693
-    /// with a JSON body, the `provider_name` of the OIDC integration to
-    /// validate against and, on GitHub Actions, the job's context.
-    ///
-    /// Reads the GitHub Actions context from the environment when called.
-    pub fn jfrog(audience: impl Into<String>, provider_name: impl Into<String>) -> Self {
-        // JFrog extension: selects the OIDC integration to validate against.
-        // A plain RFC 8693 server would pick its trust configuration from the
-        // token's `iss` claim.
-        let mut extra_params = vec![("provider_name".to_string(), provider_name.into())];
-        extra_params.extend(jfrog_github_context());
-        Self {
-            audience: audience.into(),
-            exchange: ExchangeProtocol::TokenExchange(TokenExchange {
-                endpoint: JFROG_TOKEN_PATH.to_string(),
-                // JFrog's endpoint only takes JSON.
-                encoding: RequestEncoding::Json,
-                extra_params,
-            }),
+            exchange: ExchangeProtocol::TokenExchange {
+                endpoint: endpoint.into(),
+            },
         }
     }
 
@@ -158,33 +100,6 @@ pub(crate) fn is_prefix_dev_host(host: &str) -> bool {
     host == "prefix.dev" || host.ends_with(".prefix.dev")
 }
 
-/// JFrog extension: GitHub Actions context sent along with the exchange.
-/// The `gh_*` fields are used by JFrog for usage tracking, `repo`/
-/// `revision`/`branch` are AppTrust context which JFrog policies can
-/// evaluate. Empty outside GitHub Actions; unset variables are omitted
-/// rather than sent empty.
-fn jfrog_github_context() -> Vec<(String, String)> {
-    if std::env::var("GITHUB_ACTIONS").ok().as_deref() != Some("true") {
-        return Vec::new();
-    }
-    [
-        ("gh_job_id", "GITHUB_JOB"),
-        ("gh_run_id", "GITHUB_RUN_ID"),
-        ("gh_repo", "GITHUB_REPOSITORY"),
-        ("gh_revision", "GITHUB_SHA"),
-        ("gh_branch", "GITHUB_REF_NAME"),
-        ("repo", "GITHUB_REPOSITORY"),
-        ("revision", "GITHUB_SHA"),
-        ("branch", "GITHUB_REF_NAME"),
-    ]
-    .into_iter()
-    .filter_map(|(param, var)| {
-        let value = std::env::var(var).ok().filter(|v| !v.is_empty())?;
-        Some((param.to_string(), value))
-    })
-    .collect()
-}
-
 /// Errors that can occur while exchanging an OIDC ID token.
 #[derive(Debug, Error)]
 pub enum OidcExchangeError {
@@ -204,7 +119,7 @@ pub enum OidcExchangeError {
     MintToken(StatusCode, String),
     /// The token exchange endpoint returned an error.
     #[error(
-        "Server returned error code {0} from the OIDC token exchange, is the server's OIDC trust configuration (audience, provider) correct?\nResponse: {1}"
+        "Server returned error code {0} from the OIDC token exchange, is the server's OIDC trust configuration (issuer, audience) correct?\nResponse: {1}"
     )]
     TokenExchange(StatusCode, String),
     /// The token exchange succeeded but the response had no usable
@@ -232,8 +147,8 @@ pub async fn get_token(
     };
 
     let token = match &options.exchange {
-        ExchangeProtocol::TokenExchange(exchange) => {
-            token_exchange(oidc_token.reveal(), server_url, exchange, client).await?
+        ExchangeProtocol::TokenExchange { endpoint } => {
+            token_exchange(oidc_token.reveal(), server_url, endpoint, client).await?
         }
         ExchangeProtocol::PrefixMint { path } => {
             prefix_mint(oidc_token.reveal(), server_url, path, client).await?
@@ -295,48 +210,30 @@ struct TokenExchangeResponse {
 async fn token_exchange(
     oidc_token: &str,
     server_url: &Url,
-    exchange: &TokenExchange,
+    endpoint: &str,
     client: &ClientWithMiddleware,
 ) -> Result<BearerToken, OidcExchangeError> {
-    let exchange_url = server_url.join(&exchange.endpoint)?;
+    let exchange_url = server_url.join(endpoint)?;
     tracing::info!("Exchanging the OIDC token at {exchange_url}");
 
-    // RFC 8693 §2.1. No client authentication: the ID token identifies the
-    // caller, and the RFC leaves client authentication to the server.
-    let mut params = vec![
-        (
+    // RFC 8693 §2.1: a form-encoded request. No client authentication: the
+    // ID token identifies the caller, and the RFC leaves client
+    // authentication to the server.
+    let body = url::form_urlencoded::Serializer::new(String::new())
+        .append_pair(
             "grant_type",
             "urn:ietf:params:oauth:grant-type:token-exchange",
-        ),
-        (
+        )
+        .append_pair(
             "subject_token_type",
             "urn:ietf:params:oauth:token-type:id_token",
-        ),
-        ("subject_token", oidc_token),
-    ];
-    params.extend(
-        exchange
-            .extra_params
-            .iter()
-            .map(|(key, value)| (key.as_str(), value.as_str())),
-    );
-
-    let request = client.post(exchange_url.clone());
-    let request = match exchange.encoding {
-        RequestEncoding::Form => request
-            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .body(
-                url::form_urlencoded::Serializer::new(String::new())
-                    .extend_pairs(&params)
-                    .finish(),
-            ),
-        RequestEncoding::Json => request.json(
-            &params
-                .into_iter()
-                .map(|(key, value)| (key.to_string(), value.into()))
-                .collect::<serde_json::Map<_, _>>(),
-        ),
-    };
+        )
+        .append_pair("subject_token", oidc_token)
+        .finish();
+    let request = client
+        .post(exchange_url.clone())
+        .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(body);
     let response = request
         .send()
         .await
@@ -461,57 +358,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn jfrog_exchange_sends_json_request() {
-        let (server_url, seen) = token_server(
-            "/access/api/v1/oidc/token",
-            (
-                StatusCode::OK,
-                r#"{"access_token":"jfrog.access.token","token_type":"Bearer"}"#,
-            ),
-        )
-        .await;
-
-        let token = temp_env::async_with_vars(gitlab_env("JFROG_GITHUB_ID_TOKEN"), async {
-            get_token(
-                &plain_client(),
-                &server_url,
-                &OidcExchangeOptions::jfrog("jfrog-github", "github-oidc"),
-            )
-            .await
-        })
-        .await
-        .unwrap();
-
-        assert_eq!(
-            token.expect("expected a token").secret(),
-            "jfrog.access.token"
-        );
-        let (content_type, body) = seen.lock().unwrap().take().unwrap();
-        assert_eq!(content_type, "application/json");
-        // Outside GitHub Actions no GitHub context is sent.
-        assert_eq!(
-            serde_json::from_str::<serde_json::Value>(&body).unwrap(),
-            serde_json::json!({
-                "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
-                "subject_token_type": "urn:ietf:params:oauth:token-type:id_token",
-                "subject_token": "fake.oidc.token",
-                "provider_name": "github-oidc",
-            })
-        );
-    }
-
-    #[tokio::test]
     async fn token_exchange_reports_errors() {
-        let exchange = TokenExchange::new("/oauth/token");
-
         let (server_url, _) = token_server(
             "/oauth/token",
             (StatusCode::UNAUTHORIZED, r#"{"error":"invalid_target"}"#),
         )
         .await;
-        let err = token_exchange("fake.oidc.token", &server_url, &exchange, &plain_client())
-            .await
-            .unwrap_err();
+        let err = token_exchange(
+            "fake.oidc.token",
+            &server_url,
+            "/oauth/token",
+            &plain_client(),
+        )
+        .await
+        .unwrap_err();
         assert!(
             matches!(&err, OidcExchangeError::TokenExchange(status, body)
                 if *status == 401 && body.contains("invalid_target")),
@@ -523,46 +383,16 @@ mod tests {
             (StatusCode::OK, r#"{"secret":"must-not-leak"}"#),
         )
         .await;
-        let err = token_exchange("fake.oidc.token", &server_url, &exchange, &plain_client())
-            .await
-            .unwrap_err();
+        let err = token_exchange(
+            "fake.oidc.token",
+            &server_url,
+            "/oauth/token",
+            &plain_client(),
+        )
+        .await
+        .unwrap_err();
         assert!(matches!(err, OidcExchangeError::MissingAccessToken));
         assert!(!err.to_string().contains("must-not-leak"));
-    }
-
-    #[test]
-    fn jfrog_github_context_from_env() {
-        temp_env::with_vars(
-            [
-                ("GITHUB_ACTIONS", Some("true")),
-                ("GITHUB_JOB", Some("build")),
-                ("GITHUB_RUN_ID", Some("42")),
-                ("GITHUB_REPOSITORY", Some("org/repo")),
-                ("GITHUB_SHA", Some("abc123")),
-                ("GITHUB_REF_NAME", Some("")),
-            ],
-            || {
-                let params = jfrog_github_context();
-                let params: Vec<_> = params
-                    .iter()
-                    .map(|(k, v)| (k.as_str(), v.as_str()))
-                    .collect();
-                assert_eq!(
-                    params,
-                    [
-                        ("gh_job_id", "build"),
-                        ("gh_run_id", "42"),
-                        ("gh_repo", "org/repo"),
-                        ("gh_revision", "abc123"),
-                        ("repo", "org/repo"),
-                        ("revision", "abc123"),
-                    ]
-                );
-            },
-        );
-        temp_env::with_vars([("GITHUB_ACTIONS", None::<&str>)], || {
-            assert!(jfrog_github_context().is_empty());
-        });
     }
 
     #[test]
