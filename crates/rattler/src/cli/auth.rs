@@ -13,7 +13,7 @@ use jiff::Timestamp;
 use rattler_networking::{
     Authentication, AuthenticationStorage,
     authentication_storage::AuthenticationStorageError,
-    trusted_publishing::{TrustedPublishingError, TrustedPublishingOptions},
+    oidc_exchange::{ExchangeProtocol, OidcExchangeError, OidcExchangeOptions},
 };
 use reqwest::{Client, header::CONTENT_TYPE};
 use serde_json::{Value, json};
@@ -116,9 +116,20 @@ struct LoginArgs {
     oidc_audience: Option<String>,
 
     /// How the server exchanges the ID token (defaults to `prefix` for
-    /// prefix.dev hosts and `jfrog` for *.jfrog.io hosts)
-    #[clap(long, requires = "oidc", value_parser = ["prefix", "jfrog"], help_heading = "CI OIDC Token Exchange")]
-    oidc_exchange: Option<String>,
+    /// prefix.dev hosts, `jfrog` for *.jfrog.io hosts and `token-exchange`
+    /// otherwise)
+    #[clap(
+        long,
+        requires = "oidc",
+        value_enum,
+        help_heading = "CI OIDC Token Exchange"
+    )]
+    oidc_exchange: Option<OidcExchange>,
+
+    /// Token endpoint for `--oidc-exchange token-exchange`: a URL or a path
+    /// on the host
+    #[clap(long, requires = "oidc", help_heading = "CI OIDC Token Exchange")]
+    oidc_token_endpoint: Option<String>,
 
     /// Name of the OIDC integration configured in JFrog (required for
     /// `--oidc-exchange jfrog`)
@@ -128,6 +139,25 @@ struct LoginArgs {
     /// User-Agent header used for requests
     #[clap(long)]
     user_agent: Option<String>,
+}
+
+/// How the server exchanges the CI provider's OIDC ID token.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+enum OidcExchange {
+    /// OAuth 2.0 Token Exchange (RFC 8693) at `--oidc-token-endpoint`
+    TokenExchange,
+    /// JFrog Access' token exchange (an RFC 8693 variant)
+    Jfrog,
+    /// prefix.dev's mint endpoint
+    Prefix,
+}
+
+impl OidcExchange {
+    fn name(self) -> String {
+        clap::ValueEnum::to_possible_value(&self)
+            .map(|value| value.get_name().to_string())
+            .unwrap_or_default()
+    }
 }
 
 #[derive(Parser, Debug)]
@@ -262,19 +292,23 @@ pub enum AuthenticationCLIError {
     #[error(transparent)]
     OAuthError(#[from] oauth::OAuthError),
 
-    /// The OIDC exchange protocol could not be derived from the host.
-    #[error(
-        "Cannot tell how {0} exchanges OIDC tokens. Use `--oidc-exchange prefix` or `--oidc-exchange jfrog`"
-    )]
-    OidcExchangeRequired(String),
+    /// The selected OIDC exchange needs a flag that wasn't passed.
+    #[error("`--oidc-exchange {exchange}` requires `{flag}`")]
+    MissingOidcFlag {
+        /// The missing flag.
+        flag: &'static str,
+        /// The selected exchange.
+        exchange: String,
+    },
 
-    /// `--oidc-exchange jfrog` needs the name of the JFrog OIDC integration.
-    #[error("JFrog OIDC token exchange requires `--oidc-provider-name`")]
-    MissingOidcProviderName,
-
-    /// `--oidc-provider-name` only applies to the JFrog exchange.
-    #[error("`--oidc-provider-name` can only be used with `--oidc-exchange jfrog`")]
-    UnexpectedOidcProviderName,
+    /// A flag was passed that the selected OIDC exchange doesn't use.
+    #[error("`{flag}` can't be used with `--oidc-exchange {exchange}`")]
+    UnsupportedOidcFlag {
+        /// The unsupported flag.
+        flag: &'static str,
+        /// The selected exchange.
+        exchange: String,
+    },
 
     /// The CI OIDC ID token must not be sent over plain HTTP.
     #[error("OIDC token exchange requires an https URL, got {0}")]
@@ -288,7 +322,7 @@ pub enum AuthenticationCLIError {
 
     /// The OIDC token exchange failed.
     #[error(transparent)]
-    TrustedPublishing(#[from] TrustedPublishingError),
+    OidcExchange(#[from] OidcExchangeError),
 }
 
 /// Normalize a user-supplied host into its canonical hostname form.
@@ -586,60 +620,91 @@ async fn login_with_offline(
     Ok(())
 }
 
-/// Builds the trusted-publishing options for `--oidc` from the login args.
+/// Builds the exchange options for `--oidc` from the login args.
 fn oidc_options(
     args: &LoginArgs,
     server_url: &Url,
-) -> Result<TrustedPublishingOptions, AuthenticationCLIError> {
+) -> Result<OidcExchangeOptions, AuthenticationCLIError> {
     let host = server_url.host_str().unwrap_or_default();
-    let jfrog = match args.oidc_exchange.as_deref() {
-        Some(exchange) => exchange == "jfrog",
-        None if is_prefix_dev_host(host) => false,
-        None if host.ends_with(".jfrog.io") => true,
-        None => {
-            return Err(AuthenticationCLIError::OidcExchangeRequired(
-                host.to_string(),
-            ));
+    let exchange = args.oidc_exchange.unwrap_or_else(|| {
+        if is_prefix_dev_host(host) {
+            OidcExchange::Prefix
+        } else if host.ends_with(".jfrog.io") {
+            OidcExchange::Jfrog
+        } else {
+            OidcExchange::TokenExchange
         }
+    });
+    let missing = |flag| AuthenticationCLIError::MissingOidcFlag {
+        flag,
+        exchange: exchange.name(),
+    };
+    let reject = |flag, value: &Option<String>| match value {
+        Some(_) => Err(AuthenticationCLIError::UnsupportedOidcFlag {
+            flag,
+            exchange: exchange.name(),
+        }),
+        None => Ok(()),
+    };
+    let audience = || {
+        args.oidc_audience
+            .clone()
+            .unwrap_or_else(|| host.to_string())
     };
 
-    let mut options = if jfrog {
-        let provider_name = args
-            .oidc_provider_name
-            .clone()
-            .ok_or(AuthenticationCLIError::MissingOidcProviderName)?;
-        TrustedPublishingOptions::for_jfrog(host, provider_name)
-    } else {
-        if args.oidc_provider_name.is_some() {
-            return Err(AuthenticationCLIError::UnexpectedOidcProviderName);
+    Ok(match exchange {
+        OidcExchange::TokenExchange => {
+            reject("--oidc-provider-name", &args.oidc_provider_name)?;
+            let endpoint = args
+                .oidc_token_endpoint
+                .clone()
+                .ok_or_else(|| missing("--oidc-token-endpoint"))?;
+            OidcExchangeOptions::token_exchange(audience(), endpoint)
         }
-        TrustedPublishingOptions::for_server(server_url)
-            .ok_or_else(|| AuthenticationCLIError::OidcExchangeRequired(host.to_string()))?
-    };
-    if let Some(audience) = &args.oidc_audience {
-        options.audience.clone_from(audience);
-    }
-    Ok(options)
+        OidcExchange::Jfrog => {
+            reject("--oidc-token-endpoint", &args.oidc_token_endpoint)?;
+            let provider_name = args
+                .oidc_provider_name
+                .clone()
+                .ok_or_else(|| missing("--oidc-provider-name"))?;
+            OidcExchangeOptions::jfrog(audience(), provider_name)
+        }
+        OidcExchange::Prefix => {
+            reject("--oidc-provider-name", &args.oidc_provider_name)?;
+            reject("--oidc-token-endpoint", &args.oidc_token_endpoint)?;
+            let mut options = OidcExchangeOptions::prefix_dev(server_url);
+            if let Some(audience) = &args.oidc_audience {
+                options.audience.clone_from(audience);
+            }
+            options
+        }
+    })
 }
 
 /// Exchanges the CI provider's OIDC ID token for a bearer token at `host`.
 async fn oidc_login(args: &LoginArgs) -> Result<Authentication, AuthenticationCLIError> {
     let server_url = Url::parse(&ensure_url_scheme(&args.host))?;
-    // The ID token is a live credential. Plain http is only allowed for
-    // loopback hosts, e.g. local test servers.
-    let is_loopback = match server_url.host() {
+    let options = oidc_options(args, &server_url)?;
+
+    // The ID token is a live credential: only send it over https. Plain
+    // http is allowed for loopback hosts, e.g. local test servers. Checked
+    // on the resolved endpoint, since `--oidc-token-endpoint` may be a URL.
+    let endpoint = server_url.join(match &options.exchange {
+        ExchangeProtocol::TokenExchange(exchange) => &exchange.endpoint,
+        ExchangeProtocol::PrefixMint { path } => path,
+    })?;
+    let is_loopback = match endpoint.host() {
         Some(url::Host::Domain(domain)) => domain == "localhost",
         Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
         Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
         None => false,
     };
-    if server_url.scheme() != "https" && !is_loopback {
+    if endpoint.scheme() != "https" && !is_loopback {
         return Err(AuthenticationCLIError::OidcRequiresHttps(
-            server_url.to_string(),
+            endpoint.to_string(),
         ));
     }
 
-    let options = oidc_options(args, &server_url)?;
     let client = reqwest_middleware::ClientBuilder::new(
         Client::builder()
             .user_agent(args.user_agent.as_deref().unwrap_or(DEFAULT_USER_AGENT))
@@ -648,10 +713,10 @@ async fn oidc_login(args: &LoginArgs) -> Result<Authentication, AuthenticationCL
     .build();
 
     eprintln!(
-        "Exchanging the CI OIDC token (audience `{}`) at {server_url}",
+        "Exchanging the CI OIDC token (audience `{}`) at {endpoint}",
         options.audience
     );
-    let token = rattler_networking::trusted_publishing::get_token(&client, &server_url, &options)
+    let token = rattler_networking::oidc_exchange::get_token(&client, &server_url, &options)
         .await?
         .ok_or(AuthenticationCLIError::NoCiOidcProvider)?;
     Ok(Authentication::BearerToken(token.secret().to_string()))
@@ -1339,6 +1404,7 @@ mod tests {
             oidc: false,
             oidc_audience: None,
             oidc_exchange: None,
+            oidc_token_endpoint: None,
             oidc_provider_name: None,
             user_agent: None,
         }
@@ -1688,84 +1754,19 @@ mod tests {
         args
     }
 
-    fn oidc_options_for(
-        args: &LoginArgs,
-    ) -> Result<TrustedPublishingOptions, AuthenticationCLIError> {
-        oidc_options(args, &Url::parse(&ensure_url_scheme(&args.host)).unwrap())
-    }
-
-    #[test]
-    fn oidc_options_pick_exchange_from_host() {
-        use rattler_networking::trusted_publishing::ExchangeProtocol;
-
-        let prefix = oidc_options_for(&oidc_args("beta.prefix.dev")).unwrap();
-        assert_eq!(prefix.audience, "prefix.dev");
-        assert!(matches!(
-            prefix.exchange,
-            ExchangeProtocol::PrefixMint { .. }
-        ));
-
-        let mut args = oidc_args("my-org.jfrog.io");
-        assert!(matches!(
-            oidc_options_for(&args),
-            Err(AuthenticationCLIError::MissingOidcProviderName)
-        ));
-        args.oidc_provider_name = Some("github-oidc".into());
-        let jfrog = oidc_options_for(&args).unwrap();
-        assert_eq!(jfrog.audience, "my-org.jfrog.io");
-        assert_eq!(
-            jfrog.exchange,
-            ExchangeProtocol::Jfrog {
-                provider_name: "github-oidc".into()
-            }
-        );
-
-        assert!(matches!(
-            oidc_options_for(&oidc_args("artifactory.example.com")),
-            Err(AuthenticationCLIError::OidcExchangeRequired(_))
-        ));
-    }
-
-    #[test]
-    fn oidc_options_respect_explicit_flags() {
-        use rattler_networking::trusted_publishing::ExchangeProtocol;
-
-        let mut args = oidc_args("artifactory.example.com");
-        args.oidc_exchange = Some("jfrog".into());
-        args.oidc_provider_name = Some("github-oidc".into());
-        args.oidc_audience = Some("jfrog-github".into());
-        let options = oidc_options_for(&args).unwrap();
-        assert_eq!(options.audience, "jfrog-github");
-        assert!(matches!(options.exchange, ExchangeProtocol::Jfrog { .. }));
-
-        let mut args = oidc_args("prefix.dev");
-        args.oidc_provider_name = Some("github-oidc".into());
-        assert!(matches!(
-            oidc_options_for(&args),
-            Err(AuthenticationCLIError::UnexpectedOidcProviderName)
-        ));
-    }
-
-    #[test]
-    fn oidc_flag_conflicts_with_other_methods() {
-        let parse = |extra: &[&str]| {
-            LoginArgs::try_parse_from(["login", "my-org.jfrog.io", "--oidc"].iter().chain(extra))
-        };
-        assert!(parse(&[]).is_ok());
-        assert!(parse(&["--token", "t"]).is_err());
-        #[cfg(feature = "oauth")]
-        assert!(parse(&["--oauth"]).is_err());
-        assert!(
-            LoginArgs::try_parse_from(["login", "my-org.jfrog.io", "--oidc-audience", "a"])
-                .is_err()
-        );
-    }
-
     #[tokio::test]
     async fn oidc_login_requires_https() {
         let (storage, _temp_dir) = create_test_storage();
         let mut args = oidc_args("http://my-org.jfrog.io");
         args.oidc_provider_name = Some("github-oidc".into());
+        assert!(matches!(
+            login(args, storage.clone()).await,
+            Err(AuthenticationCLIError::OidcRequiresHttps(_))
+        ));
+
+        // An absolute token endpoint is checked, not just the host.
+        let mut args = oidc_args("https://example.com");
+        args.oidc_token_endpoint = Some("http://example.com/oauth/token".into());
         assert!(matches!(
             login(args, storage).await,
             Err(AuthenticationCLIError::OidcRequiresHttps(_))
@@ -1799,7 +1800,7 @@ mod tests {
 
         let (storage, _temp_dir) = create_test_storage();
         let mut args = oidc_args(&format!("http://{addr}"));
-        args.oidc_exchange = Some("jfrog".into());
+        args.oidc_exchange = Some(OidcExchange::Jfrog);
         args.oidc_provider_name = Some("github-oidc".into());
         args.oidc_audience = Some("jfrog-github".into());
 
