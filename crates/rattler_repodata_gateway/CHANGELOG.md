@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.35.0...rattler_repodata_gateway-v0.36.0) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+- *(repodata-gateway)* discover virtual package detectors ([#2860](https://github.com/conda/rattler/pull/2860))
+
 ### Fixed
 
 - Preserve discovered-channel fetch failures as warnings when resolving detector origins, without discarding unrelated registrations.

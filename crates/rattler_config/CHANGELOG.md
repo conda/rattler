@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0](https://github.com/conda/rattler/compare/rattler_config-v0.8.1...rattler_config-v0.9.0) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+- *(config)* configure virtual package detectors ([#2862](https://github.com/conda/rattler/pull/2862))
+
 ## [0.8.1](https://github.com/conda/rattler/compare/rattler_config-v0.8.0...rattler_config-v0.8.1) - 2026-10-05
 
 ### Added
