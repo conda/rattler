@@ -211,7 +211,7 @@ impl Display for SolverPackageRecord<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             SolverPackageRecord::Record(rec) => {
-                write!(f, "{}", &rec.package_record)
+                write!(f, "{}", rec.package_record)
             }
             SolverPackageRecord::Extra { package, extra } => {
                 write!(f, "{}[{}]", package.as_normalized(), extra)
@@ -556,7 +556,7 @@ impl<'a> CondaDependencyProvider<'a> {
                             "Ignoring {} {} because it was not requested from that channel.",
                             &record.package_record.name.as_normalized(),
                             match &record.channel {
-                                Some(channel) => format!("from {}", &channel),
+                                Some(channel) => format!("from {channel}"),
                                 None => "without a channel".to_string(),
                             }
                         );

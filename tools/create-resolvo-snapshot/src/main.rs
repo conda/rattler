@@ -119,7 +119,7 @@ async fn main() {
                 .join("-")
         )
     });
-    eprintln!("serializing snapshot to {}", &output_file);
+    eprintln!("serializing snapshot to {output_file}");
     let snapshot_path = Path::new(&output_file);
     if let Some(dir) = snapshot_path.parent() {
         std::fs::create_dir_all(dir).unwrap();

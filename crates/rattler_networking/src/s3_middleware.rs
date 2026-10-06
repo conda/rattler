@@ -231,6 +231,7 @@ impl S3 {
     /// * `url` - The S3 URL to obtain authentication information from the
     ///   authentication storage. Only respected for custom (non-AWS-based)
     ///   configuration without a credential provider of its own.
+    #[allow(clippy::result_large_err)] // boxing fields of the public error type would be breaking
     pub async fn create_s3_client(
         &self,
         url: Url,
@@ -319,6 +320,7 @@ impl S3 {
     }
 
     /// Generate a pre-signed S3 `GetObject` request.
+    #[allow(clippy::result_large_err)]
     async fn generate_presigned_s3_url(
         &self,
         url: Url,
