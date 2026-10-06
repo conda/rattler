@@ -96,9 +96,9 @@ use subdir::{PyArch, PySubdir};
 use version::{PyVersion, PyVersionSpec};
 use virtual_package::{PyOverride, PyVirtualPackage, PyVirtualPackageOverrides};
 use virtual_package_detectors::{
-    PyConsentRequest, PyDetectionOutcome, PyDetectorFailure, PyDetectorRegistration,
-    PyDetectorResult, PyRejectedDetectorRegistration, PySkippedRegistration,
-    py_detect_virtual_packages,
+    PyConsentRequest, PyDetectionOutcome, PyDetectorDiagnostics, PyDetectorFailure,
+    PyDetectorRegistration, PyDetectorResult, PyRejectedDetectorRegistration,
+    PySkippedRegistration, py_detect_virtual_packages,
 };
 use who_needs::PyDependent;
 
@@ -191,6 +191,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyRejectedDetectorRegistration>()?;
     m.add_class::<PyConsentRequest>()?;
     m.add_class::<PyDetectorResult>()?;
+    m.add_class::<PyDetectorDiagnostics>()?;
     m.add_class::<PyDetectorFailure>()?;
     m.add_class::<PySkippedRegistration>()?;
     m.add_class::<PyDetectionOutcome>()?;

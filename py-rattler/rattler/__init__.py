@@ -76,6 +76,7 @@ from rattler.version import Version, VersionSpec, VersionWithSource
 from rattler.virtual_package import (
     ConsentRequest,
     DetectionOutcome,
+    DetectorDiagnostics,
     DetectorFailure,
     DetectorRegistration,
     DetectorRegistrations,
@@ -110,6 +111,7 @@ __all__ = [
     "ConsentRequest",
     "Dependent",
     "DetectionOutcome",
+    "DetectorDiagnostics",
     "DetectorFailure",
     "DetectorRegistration",
     "DetectorRegistrations",

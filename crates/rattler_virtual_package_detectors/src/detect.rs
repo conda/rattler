@@ -203,11 +203,28 @@ pub struct DetectorFailure {
     pub stderr: Option<String>,
 }
 
+/// Diagnostics from one successful detector invocation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DetectorDiagnostics {
+    /// The registration's origin.
+    pub origin: ChannelUrl,
+    /// The detector.
+    pub detector: PackageName,
+    /// The environment digest of the detector that ran.
+    pub digest: Sha256Hash,
+    /// Whether the diagnostics were served from the result cache.
+    pub from_cache: bool,
+    /// Nonempty, lossily decoded standard error.
+    pub stderr: String,
+}
+
 /// Everything a detection produced.
 #[derive(Debug, Default)]
 pub struct DetectionOutcome {
     /// The results, in registration order, with overrides applied.
     pub results: Vec<DetectorResult>,
+    /// Nonempty standard error, once per successful detector invocation.
+    pub diagnostics: Vec<DetectorDiagnostics>,
     /// The detectors that failed. Their names are absent unless overridden.
     pub failures: Vec<DetectorFailure>,
     /// The detectors that did not run.
@@ -319,7 +336,13 @@ pub async fn detect(
 
     while let Some(result) = runs.next().await {
         match result {
-            RunOutcome::Results(results) => outcome.results.extend(results),
+            RunOutcome::Results {
+                results,
+                diagnostics,
+            } => {
+                outcome.results.extend(results);
+                outcome.diagnostics.extend(diagnostics);
+            }
             RunOutcome::Skipped(skipped) => outcome.skipped.push(skipped),
             RunOutcome::Failed(failure) => outcome.failures.push(failure),
         }
@@ -328,7 +351,10 @@ pub async fn detect(
 }
 
 enum RunOutcome {
-    Results(Vec<DetectorResult>),
+    Results {
+        results: Vec<DetectorResult>,
+        diagnostics: Option<DetectorDiagnostics>,
+    },
     Skipped(SkippedRegistration),
     Failed(DetectorFailure),
 }
@@ -343,20 +369,37 @@ async fn run_one(
     let origin = registration.origin().clone();
     let detector = registration.registration.detector.clone();
     match run_detector_pipeline(registration, options, cache, timeout).await {
-        Ok(Some((virtual_packages, source))) => RunOutcome::Results(
-            virtual_packages
-                .into_iter()
-                .filter(|(name, _)| !overridden.contains(name))
-                .map(|(name, version)| DetectorResult {
-                    name,
-                    value: match version {
-                        None => DetectedValue::Absent,
-                        Some(version) => DetectedValue::Present(version),
-                    },
-                    source: source.clone(),
-                })
-                .collect(),
-        ),
+        Ok(Some(output)) => {
+            let source = DetectionSource::Detector {
+                origin: origin.clone(),
+                detector: detector.clone(),
+                digest: output.digest,
+                from_cache: output.from_cache,
+            };
+            let diagnostics = output.stderr.map(|stderr| DetectorDiagnostics {
+                origin,
+                detector,
+                digest: output.digest,
+                from_cache: output.from_cache,
+                stderr,
+            });
+            RunOutcome::Results {
+                results: output
+                    .virtual_packages
+                    .into_iter()
+                    .filter(|(name, _)| !overridden.contains(name))
+                    .map(|(name, version)| DetectorResult {
+                        name,
+                        value: match version {
+                            None => DetectedValue::Absent,
+                            Some(version) => DetectedValue::Present(version),
+                        },
+                        source: source.clone(),
+                    })
+                    .collect(),
+                diagnostics,
+            }
+        }
         Ok(None) => RunOutcome::Skipped(SkippedRegistration {
             origin,
             detector,
@@ -379,13 +422,14 @@ async fn run_one(
     }
 }
 
-type PipelineResult = Result<
-    Option<(
-        IndexMap<PackageName, Option<DetectedVersion>>,
-        DetectionSource,
-    )>,
-    DetectError,
->;
+struct PipelineOutput {
+    virtual_packages: IndexMap<PackageName, Option<DetectedVersion>>,
+    digest: Sha256Hash,
+    from_cache: bool,
+    stderr: Option<String>,
+}
+
+type PipelineResult = Result<Option<PipelineOutput>, DetectError>;
 
 /// Resolves, asks consent, installs, runs and caches. `Ok(None)` means
 /// consent was denied.
@@ -430,15 +474,14 @@ async fn run_detector_pipeline(
             .map(|name| name.as_package_name().clone()),
         &resolved.digest,
     );
-    let source = |from_cache| DetectionSource::Detector {
-        origin: origin.clone(),
-        detector: detector.clone(),
-        digest,
-        from_cache,
-    };
     if let Some(cached) = cache.read(&key, &options.clock, options.environment).await {
         tracing::debug!(%origin, detector = detector.as_source(), "using cached detector result");
-        return Ok(Some((cached.virtual_packages, source(true))));
+        return Ok(Some(PipelineOutput {
+            virtual_packages: cached.virtual_packages,
+            digest,
+            from_cache: true,
+            stderr: cached.stderr.filter(|stderr| !stderr.is_empty()),
+        }));
     }
 
     let environment = options.environment_provider.install(resolved).await?;
@@ -463,21 +506,36 @@ async fn run_detector_pipeline(
     if !run.stderr.is_empty() {
         tracing::debug!(%origin, detector = detector.as_source(), stderr = %run.stderr, "detector diagnostics");
     }
-    let report = parse_report(&run.stdout, &registration.registration).map_err(|source| {
-        DetectError::Report {
-            source,
-            stderr: run.stderr,
+    let report = match parse_report(&run.stdout, &registration.registration) {
+        Ok(report) => report,
+        Err(source) => {
+            return Err(DetectError::Report {
+                source,
+                stderr: run.stderr,
+            });
         }
-    })?;
+    };
+    let stderr = (!run.stderr.is_empty()).then_some(run.stderr);
     // Caching is a convenience; a report that could not be stored is still a
     // valid report.
     if let Err(error) = cache
-        .write(&key, &report, &options.clock, options.environment)
+        .write(
+            &key,
+            &report,
+            stderr.as_deref(),
+            &options.clock,
+            options.environment,
+        )
         .await
     {
         tracing::warn!(%origin, detector = detector.as_source(), "could not cache the detector result: {error}");
     }
-    Ok(Some((report.virtual_packages, source(false))))
+    Ok(Some(PipelineOutput {
+        virtual_packages: report.virtual_packages,
+        digest,
+        from_cache: false,
+        stderr,
+    }))
 }
 
 /// Applies detector results to the client's own virtual packages: a present

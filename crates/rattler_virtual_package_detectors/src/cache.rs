@@ -160,6 +160,25 @@ pub struct CachedResult {
     pub watch_env: Vec<WatchedVariable>,
     /// The detector's results.
     pub virtual_packages: IndexMap<PackageName, Option<DetectedVersion>>,
+    /// Nonempty standard error from the successful invocation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stderr: Option<String>,
+}
+
+#[derive(Serialize)]
+struct BorrowedCachedResult<'a> {
+    key: &'a CacheKey,
+    written_at: u64,
+    expires_at: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    boot_id: Option<BootId>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    watch_paths: Vec<WatchedPath>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    watch_env: Vec<WatchedVariable>,
+    virtual_packages: &'a IndexMap<PackageName, Option<DetectedVersion>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stderr: Option<&'a str>,
 }
 
 /// The time and boot session against which entries are validated. Passed
@@ -248,18 +267,19 @@ impl ResultCache {
         }
     }
 
-    /// Stores `report`'s results for `key`, honoring its cache hints.
+    /// Stores `report`'s results and diagnostics for `key`, honoring its cache hints.
     ///
-    /// Returns `None` without writing when the report asked not to be reused.
+    /// Writes nothing when the report asked not to be reused.
     pub async fn write(
         &self,
         key: &CacheKey,
         report: &DetectorReport,
+        stderr: Option<&str>,
         clock: &CacheClock,
         environment: &EnvironmentSnapshot,
-    ) -> Result<Option<CachedResult>, CacheError> {
+    ) -> Result<(), CacheError> {
         let Some(lifetime) = lifetime(report.cache.ttl, clock.boot_id.is_some()) else {
-            return Ok(None);
+            return Ok(());
         };
         let boot_id = match report.cache.ttl {
             Some(CacheLifetime::Reboot) => clock.boot_id.clone(),
@@ -272,8 +292,8 @@ impl ResultCache {
                 state: PathState::observe(path).await,
             });
         }
-        let entry = CachedResult {
-            key: key.clone(),
+        let entry = BorrowedCachedResult {
+            key,
             written_at: clock.now,
             expires_at: clock.now.saturating_add(lifetime.as_secs()),
             boot_id,
@@ -284,7 +304,8 @@ impl ResultCache {
                 .iter()
                 .map(|name| WatchedVariable::observe(name, environment))
                 .collect(),
-            virtual_packages: report.virtual_packages.clone(),
+            virtual_packages: &report.virtual_packages,
+            stderr: stderr.filter(|stderr| !stderr.is_empty()),
         };
 
         let path = self.path_for(key);
@@ -308,7 +329,7 @@ impl ResultCache {
         fs_err::tokio::rename(&temporary, &path)
             .await
             .map_err(io_error)?;
-        Ok(Some(entry))
+        Ok(())
     }
 
     /// Removes every entry.
@@ -472,7 +493,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let cache = ResultCache::new(dir.path().join("results"));
         let key = key();
-        let written = cache
+        cache
             .write(
                 &key,
                 &report(CacheHints {
@@ -480,12 +501,14 @@ mod tests {
                     watch_paths: Vec::new(),
                     watch_env: vec!["WATCHED".to_string()],
                 }),
+                Some("hardware probe warning\n"),
                 &clock(1_000),
                 &env(),
             )
             .await
-            .unwrap()
             .unwrap();
+        let written = cache.read(&key, &clock(1_000), &env()).await.unwrap();
+        assert_eq!(written.stderr.as_deref(), Some("hardware probe warning\n"));
         assert_eq!(written.expires_at, 1_100);
 
         assert_eq!(
@@ -528,7 +551,11 @@ mod tests {
                     .unwrap()
                     .build_string = index.to_string().repeat(index + 1);
                 barrier.wait().await;
-                cache.write(&key, &report, &clock(1), &env()).await
+                let stderr = format!("publication {index}");
+                cache
+                    .write(&key, &report, Some(&stderr), &clock(1), &env())
+                    .await?;
+                Ok::<_, CacheError>((report.virtual_packages, stderr))
             });
         }
         let mut publications = Vec::new();
@@ -537,14 +564,14 @@ mod tests {
         }
         let publications = publications
             .into_iter()
-            .map(|result| result.expect("a concurrent publication failed").unwrap())
+            .map(|result| result.expect("a concurrent publication failed"))
             .collect::<Vec<_>>();
         let cached = cache
             .read(&key, &clock(2), &env())
             .await
             .expect("concurrent publications left an unreadable cache entry");
         assert!(
-            publications.contains(&cached),
+            publications.contains(&(cached.virtual_packages, cached.stderr.unwrap())),
             "the cached entry combines data from different publications"
         );
     }
@@ -556,19 +583,20 @@ mod tests {
         let cache = ResultCache::new(dir.path());
         let key = key();
         let original: EnvironmentSnapshot = [("Path", "original")].into_iter().collect();
-        let stored = cache
+        cache
             .write(
                 &key,
                 &report(CacheHints {
                     watch_env: vec!["PATH".to_string()],
                     ..CacheHints::default()
                 }),
+                None,
                 &clock(1),
                 &original,
             )
             .await
-            .unwrap()
             .unwrap();
+        let stored = cache.read(&key, &clock(1), &original).await.unwrap();
         let mut changed: EnvironmentSnapshot = [("Path", "changed")].into_iter().collect();
         assert_eq!(cache.read(&key, &clock(2), &changed).await, None);
 
@@ -582,19 +610,19 @@ mod tests {
     async fn ttl_zero_is_never_stored() {
         let dir = tempfile::tempdir().unwrap();
         let cache = ResultCache::new(dir.path());
-        let stored = cache
+        cache
             .write(
                 &key(),
                 &report(CacheHints {
                     ttl: Some(CacheLifetime::Seconds(0)),
                     ..CacheHints::default()
                 }),
+                Some("uncached diagnostics"),
                 &clock(1),
                 &env(),
             )
             .await
             .unwrap();
-        assert!(stored.is_none());
         assert!(cache.read(&key(), &clock(1), &env()).await.is_none());
     }
 
@@ -609,6 +637,7 @@ mod tests {
                     ttl: Some(CacheLifetime::Reboot),
                     ..CacheHints::default()
                 }),
+                None,
                 &clock(1),
                 &env(),
             )
@@ -635,7 +664,7 @@ mod tests {
         };
         // Absent at write time: appearing expires the entry.
         cache
-            .write(&key(), &report(hints.clone()), &clock(1), &env())
+            .write(&key(), &report(hints.clone()), None, &clock(1), &env())
             .await
             .unwrap();
         assert!(cache.read(&key(), &clock(2), &env()).await.is_some());
@@ -644,7 +673,7 @@ mod tests {
 
         // Present at write time: disappearing expires the entry.
         cache
-            .write(&key(), &report(hints), &clock(3), &env())
+            .write(&key(), &report(hints), None, &clock(3), &env())
             .await
             .unwrap();
         assert!(cache.read(&key(), &clock(4), &env()).await.is_some());
@@ -653,12 +682,65 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn old_entries_without_diagnostics_remain_valid() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ResultCache::new(dir.path());
+        let key = key();
+        let old_entry = serde_json::json!({
+            "key": key,
+            "written_at": 1,
+            "expires_at": 100,
+            "virtual_packages": { "__a": null, "__b": null }
+        });
+        std::fs::write(
+            dir.path().join(key.file_name()),
+            serde_json::to_vec(&old_entry).unwrap(),
+        )
+        .unwrap();
+        let cached = cache.read(&key, &clock(2), &env()).await.unwrap();
+        assert!(cached.stderr.is_none());
+        assert_eq!(cached.virtual_packages.len(), 2);
+        assert!(
+            !serde_json::to_value(cached)
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .contains_key("stderr")
+        );
+    }
+
+    #[tokio::test]
+    async fn empty_diagnostics_are_not_stored() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ResultCache::new(dir.path());
+        let key = key();
+        cache
+            .write(
+                &key,
+                &report(CacheHints::default()),
+                Some(""),
+                &clock(1),
+                &env(),
+            )
+            .await
+            .unwrap();
+        let cached = cache.read(&key, &clock(2), &env()).await.unwrap();
+        assert!(cached.stderr.is_none());
+    }
+
+    #[tokio::test]
     async fn entries_for_other_keys_are_ignored() {
         let dir = tempfile::tempdir().unwrap();
         let cache = ResultCache::new(dir.path());
         let key = key();
         cache
-            .write(&key, &report(CacheHints::default()), &clock(1), &env())
+            .write(
+                &key,
+                &report(CacheHints::default()),
+                None,
+                &clock(1),
+                &env(),
+            )
             .await
             .unwrap();
         // Rewrite the entry on disk under the same file name with a different

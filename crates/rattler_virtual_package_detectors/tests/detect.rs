@@ -86,8 +86,8 @@ echo {"version": 1, "virtual_packages": {"__test_activated": {"version": "%DETEC
     Fixture {
         name: "malformed-detect",
         depends: &[],
-        sh: "echo not json",
-        bat: "echo not json",
+        sh: "echo report rejected >&2\necho not json",
+        bat: "echo report rejected 1>&2\r\necho not json",
         registers: Some(&["__test_malformed"]),
     },
     Fixture {
@@ -407,6 +407,7 @@ async fn detects_caches_and_activates() {
         .await;
     assert!(outcome.failures.is_empty(), "{:?}", failed(&outcome));
     assert!(outcome.skipped.is_empty());
+    assert!(outcome.diagnostics.is_empty());
     assert_eq!(
         values(&outcome),
         HashMap::from([
@@ -447,6 +448,7 @@ async fn detects_caches_and_activates() {
         .run(&["good-detect", "activated-detect"], &AllowAll)
         .await;
     assert_eq!(values(&again), values(&outcome));
+    assert!(again.diagnostics.is_empty());
     assert!(again.results.iter().all(|r| matches!(
         r.source,
         DetectionSource::Detector {
@@ -491,6 +493,32 @@ async fn failures_discard_the_detector_and_keep_the_others() {
             .collect::<BTreeSet<_>>(),
         BTreeSet::from(["bad-exit-detect", "malformed-detect", "undeclared-detect"])
     );
+    assert!(outcome.diagnostics.is_empty());
+    let exit_failure = outcome
+        .failures
+        .iter()
+        .find(|failure| failure.detector.as_normalized() == "bad-exit-detect")
+        .unwrap();
+    assert!(matches!(
+        exit_failure.error,
+        DetectError::Run(RunError::Exited { .. })
+    ));
+    assert_eq!(exit_failure.stderr.as_deref().unwrap().trim(), "boom");
+    let report_failure = outcome
+        .failures
+        .iter()
+        .find(|failure| failure.detector.as_normalized() == "malformed-detect")
+        .unwrap();
+    assert_eq!(
+        report_failure.stderr.as_deref().unwrap().trim(),
+        "report rejected"
+    );
+    match &report_failure.error {
+        DetectError::Report { stderr, .. } => {
+            assert_eq!(stderr.trim(), "report rejected");
+        }
+        other => panic!("unexpected failure {other:?}"),
+    }
 }
 
 #[tokio::test]
@@ -513,6 +541,7 @@ async fn channel_denial_skips_all_detectors_before_resolving() {
         .unwrap();
     assert!(outcome.results.is_empty());
     assert!(outcome.failures.is_empty());
+    assert!(outcome.diagnostics.is_empty());
     assert_eq!(
         outcome
             .skipped
