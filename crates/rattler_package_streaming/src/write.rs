@@ -196,7 +196,9 @@ fn write_zst_archive<W: Write>(
     let compression_level = compression_level.to_zstd_level()?;
     let mut zst_encoder = zstd::Encoder::new(writer, compression_level)?;
     #[cfg(not(target_arch = "wasm32"))]
-    zst_encoder.multithread(num_threads.unwrap_or_else(|| num_cpus::get() as u32))?;
+    zst_encoder.multithread(num_threads.unwrap_or_else(|| {
+        std::thread::available_parallelism().map_or(1, std::num::NonZero::get) as u32
+    }))?;
     // mark as "used" to avoid "unused" warning
     #[cfg(target_arch = "wasm32")]
     let _ = num_threads;
