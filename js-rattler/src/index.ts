@@ -9,6 +9,7 @@ export * from "./PackageRecord";
 export * from "./RepoDataRecord";
 export * from "./MatchSpec";
 export * from "./Channel";
+export * from "./Config";
 export * from "./PackageMetadata";
 export * from "./Gateway";
 export * from "./RattlerError";
