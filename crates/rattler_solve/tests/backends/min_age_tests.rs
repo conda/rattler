@@ -65,6 +65,7 @@ pub fn solve_min_age_filters_new_packages<T: SolverImpl + Default>() {
 }
 
 /// Test that packages can override the global cutoff.
+#[allow(deprecated)] // Tests the deprecated package cutoff overrides.
 pub fn solve_min_age_with_package_override<T: SolverImpl + Default>() {
     let repo = create_timestamped_repo();
 
@@ -105,6 +106,7 @@ pub fn solve_min_age_with_dependencies<T: SolverImpl + Default>() {
 }
 
 /// Test that package-specific cutoffs work correctly with dependencies.
+#[allow(deprecated)] // Tests the deprecated package cutoff overrides.
 pub fn solve_min_age_package_override_dependency<T: SolverImpl + Default>() {
     let repo = create_timestamped_repo();
 
@@ -158,6 +160,7 @@ pub fn solve_min_age_excludes_unknown_timestamp<T: SolverImpl + Default>() {
 }
 
 /// Test that package-specific cutoffs do not override missing timestamps.
+#[allow(deprecated)] // Tests the deprecated package cutoff overrides.
 pub fn solve_min_age_package_override_no_timestamp<T: SolverImpl + Default>() {
     let repo = vec![
         PackageBuilder::new("pkg-a")

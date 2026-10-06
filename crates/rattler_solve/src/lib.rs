@@ -221,8 +221,6 @@ pub enum InvalidExemptionError {
 ///
 /// // Only allow packages that have been published for at least 1 hour
 /// let config = ExcludeNewer::from_duration(Duration::from_secs(60 * 60))
-///     // But allow "my-internal-package" to use a package-specific cutoff
-///     .with_package_duration("my-internal-package".parse().unwrap(), Duration::ZERO)
 ///     // And allow a trusted internal channel to skip the delay entirely
 ///     .with_channel_duration("my-internal-channel", Duration::ZERO);
 /// ```
@@ -239,6 +237,8 @@ pub struct ExcludeNewer {
 
     /// Package-specific cutoff dates that override both [`Self::cutoff`] and
     /// [`Self::channel_cutoffs`] for matching package names.
+    ///
+    /// Deprecated in favor of [`Self::exemptions`].
     package_cutoffs: HashMap<PackageName, Timestamp>,
 
     /// Records matching any of these specs are never excluded.
@@ -284,12 +284,18 @@ impl ExcludeNewer {
     }
 
     /// Sets the absolute cutoff override for a specific package.
+    #[deprecated(
+        note = "use `with_exemption` to allow specific vetted releases instead of lowering the cutoff for every release of a package"
+    )]
     pub fn with_package_cutoff(mut self, package: PackageName, cutoff: Timestamp) -> Self {
         self.package_cutoffs.insert(package, cutoff);
         self
     }
 
     /// Sets the duration override for a specific package.
+    #[deprecated(
+        note = "use `with_exemption` to allow specific vetted releases instead of lowering the cutoff for every release of a package"
+    )]
     pub fn with_package_duration(
         mut self,
         package: PackageName,
@@ -304,6 +310,9 @@ impl ExcludeNewer {
 
     /// Sets the duration override for a specific package using an explicit
     /// reference time.
+    #[deprecated(
+        note = "use `with_exemption` to allow specific vetted releases instead of lowering the cutoff for every release of a package"
+    )]
     pub fn with_package_duration_with_now(
         mut self,
         package: PackageName,
