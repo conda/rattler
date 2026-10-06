@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ExchangeProtocol","OidcExchangeError"],"fn":["discover_token_endpoint","get_token"],"struct":["OidcExchangeOptions"]};
