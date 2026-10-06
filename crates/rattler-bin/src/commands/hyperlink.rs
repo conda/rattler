@@ -22,7 +22,6 @@ use url::Url;
 const PREFIX_DEV_MIRRORS: &[&str] = &[
     "bioconda",
     "conda-forge",
-    "main",
     "nvidia",
     "pytorch",
     "rapidsai",
@@ -190,10 +189,6 @@ mod tests {
             page("https://conda.anaconda.org/conda-forge/osx-arm64"),
             expected
         );
-        assert_eq!(
-            page("https://repo.anaconda.com/pkgs/main"),
-            Some("https://prefix.dev/channels/main/packages/xtensor".to_string())
-        );
     }
 
     #[test]
@@ -201,6 +196,11 @@ mod tests {
         assert_eq!(
             page("https://conda.anaconda.org/some-user/"),
             Some("https://anaconda.org/some-user/xtensor".to_string())
+        );
+        // The `defaults` channels are not mirrored on prefix.dev.
+        assert_eq!(
+            page("https://repo.anaconda.com/pkgs/main"),
+            Some("https://anaconda.org/main/xtensor".to_string())
         );
     }
 
