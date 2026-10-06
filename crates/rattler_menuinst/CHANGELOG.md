@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2](https://github.com/conda/rattler/compare/rattler_menuinst-v0.4.1...rattler_menuinst-v0.4.2) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+
+## [0.4.1](https://github.com/conda/rattler/compare/rattler_menuinst-v0.4.0...rattler_menuinst-v0.4.1) - 2026-10-05
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.4.0](https://github.com/conda/rattler/compare/rattler_menuinst-v0.3.1...rattler_menuinst-v0.4.0) - 2026-09-29
+
+### Other
+
+- [**breaking**] rename Platform to Subdir and validate names against CEP 26 ([#2787](https://github.com/conda/rattler/pull/2787))
+
 ## [0.3.1](https://github.com/conda/rattler/compare/rattler_menuinst-v0.3.0...rattler_menuinst-v0.3.1) - 2026-09-23
 
 ### Added

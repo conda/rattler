@@ -1,7 +1,7 @@
 [package]
 exclude = ["tests/**", "**/snapshots/**"]
 name = "rattler_networking"
-version = "0.30.10"
+version = "0.33.0"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "Authenticated requests in the conda ecosystem"
@@ -56,11 +56,12 @@ http-auth = { workspace = true }
 itertools = { workspace = true }
 keyring-core = { workspace = true, optional = true }
 netrc-rs = { workspace = true, optional = true }
-reqwest = { workspace = true, features = ["json", "form"] }
+reqwest = { workspace = true, features = ["json", "form", "stream"] }
 reqwest-middleware = { workspace = true, features = ["json"] }
 retry-policies = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, optional = true }
@@ -85,6 +86,7 @@ windows-native-keyring-store = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }
 
 [dev-dependencies]
+aws-credential-types = { workspace = true }
 insta = { workspace = true, features = ["json"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "time"] }
@@ -93,7 +95,6 @@ tokio = { workspace = true, features = ["macros", "time"] }
 reqwest = { workspace = true, features = ["json", "form", "stream"] }
 axum = { workspace = true, features = ["json", "form"] }
 reqwest-retry = { workspace = true }
-sha2 = { workspace = true }
 hex = { workspace = true }
 temp-env = { workspace = true }
 rstest = { workspace = true }

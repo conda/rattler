@@ -2,7 +2,7 @@
 use std::{
     collections::BTreeMap,
     ffi::OsStr,
-    io::BufWriter,
+    io::{BufWriter, Write},
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
@@ -82,13 +82,9 @@ impl FileStorage {
         Self::from_path(path)
     }
 
-    /// Updates the cache by reading the JSON file and deserializing it into a
-    /// `BTreeMap`, or return an empty `BTreeMap` if the file does not exist
+    /// Read the latest file contents while the caller holds the cache write lock.
     fn read_json(&self) -> Result<BTreeMap<String, Authentication>, FileStorageError> {
-        let new_cache = FileStorageCache::from_path(&self.path)?;
-        let mut cache = self.cache.write().unwrap();
-        cache.content = new_cache.content;
-        Ok(cache.content.clone())
+        Ok(FileStorageCache::from_path(&self.path)?.content)
     }
 
     /// Serialize the given `BTreeMap` and write it to the JSON file
@@ -118,15 +114,15 @@ impl FileStorage {
             .prefix(prefix)
             .suffix(&format!(".{extension}"))
             .tempfile_in(parent)?;
-        serde_json::to_writer(BufWriter::new(&mut temp_file), dict)
-            .map_err(std::io::Error::from)?;
+        let mut writer = BufWriter::new(&mut temp_file);
+        serde_json::to_writer(&mut writer, dict).map_err(std::io::Error::from)?;
+        // BufWriter's Drop ignores flush errors. Never replace the old file
+        // until the buffered credential bytes have been written successfully.
+        writer.flush()?;
+        drop(writer);
         temp_file
             .persist(&self.path)
             .map_err(std::io::Error::from)?;
-
-        // Store the new data in the cache
-        let mut cache = self.cache.write().unwrap();
-        cache.content = dict.clone();
 
         Ok(())
     }
@@ -142,9 +138,14 @@ impl StorageBackend for FileStorage {
         host: &str,
         authentication: &crate::Authentication,
     ) -> Result<(), AuthenticationStorageError> {
+        // Hold one lock through read/modify/replace, not just the cache update.
+        // Different resource contexts share this file and must not lose each other's grants.
+        let mut cache = self.cache.write().unwrap();
         let mut dict = self.read_json()?;
         dict.insert(host.to_string(), authentication.clone());
-        Ok(self.write_json(&dict)?)
+        self.write_json(&dict)?;
+        cache.content = dict;
+        Ok(())
     }
 
     fn get(&self, host: &str) -> Result<Option<crate::Authentication>, AuthenticationStorageError> {
@@ -162,12 +163,13 @@ impl StorageBackend for FileStorage {
     }
 
     fn delete(&self, host: &str) -> Result<(), AuthenticationStorageError> {
+        let mut cache = self.cache.write().unwrap();
         let mut dict = self.read_json()?;
         if dict.remove(host).is_some() {
-            Ok(self.write_json(&dict)?)
-        } else {
-            Ok(())
+            self.write_json(&dict)?;
         }
+        cache.content = dict;
+        Ok(())
     }
 }
 
@@ -222,5 +224,43 @@ mod tests {
         file.write_all(b"invalid json").unwrap();
 
         assert!(FileStorage::from_path(path.clone()).is_err());
+    }
+
+    #[test]
+    fn concurrent_updates_and_deletion_preserve_other_entries() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("credentials.json");
+        let file = FileStorage::from_path(path.clone()).unwrap();
+        file.store("delete-me", &Authentication::BearerToken("fixture".into()))
+            .unwrap();
+        let barrier = Arc::new(std::sync::Barrier::new(10));
+        let jobs: Vec<_> = (0..9)
+            .map(|i| {
+                let file = file.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    if i == 8 {
+                        file.delete("delete-me").unwrap();
+                    } else {
+                        file.store(
+                            &format!("key-{i}"),
+                            &Authentication::BearerToken("fixture".into()),
+                        )
+                        .unwrap();
+                    }
+                })
+            })
+            .collect();
+        barrier.wait();
+        for job in jobs {
+            job.join().unwrap();
+        }
+        let reopened = FileStorage::from_path(path).unwrap();
+        assert_eq!(reopened.list().unwrap().len(), 8);
+        assert!(reopened.get("delete-me").unwrap().is_none());
+        for i in 0..8 {
+            assert!(reopened.get(&format!("key-{i}")).unwrap().is_some());
+        }
     }
 }

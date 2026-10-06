@@ -1023,6 +1023,13 @@ impl NamelessMatchSpec {
 fn parse_channel_and_subdir(
     input: &str,
 ) -> Result<(Option<Channel>, Option<String>), ParseMatchSpecError> {
+    // An empty matchspec (such as caused by ::some-package)
+    // does not have channel or namespace. See https://github.com/conda/rattler/issues/2736
+    let input = input.trim();
+    if input.is_empty() {
+        return Ok((None, None));
+    }
+
     // The root directory only resolves relative path channels. With an
     // empty-root fallback those fail with a parse error instead of panicking
     // when the current directory is unavailable.
@@ -1737,6 +1744,27 @@ mod tests {
     fn test_empty_namespace() {
         let spec = MatchSpec::from_str("conda-forge::foo", Strict).unwrap();
         assert!(spec.namespace.is_none());
+    }
+
+    /// An empty channel component (e.g. the leading `::` in `::foo`) means no
+    /// channel was specified at all, mirroring how an empty namespace
+    /// component is handled above. Regression tests for <https://github.com/conda/rattler/issues/2736>
+    #[test]
+    fn test_empty_channel() {
+        let spec = MatchSpec::from_str("::foo", Strict).unwrap();
+        assert!(spec.channel.is_none());
+        assert!(spec.namespace.is_none());
+
+        let spec = MatchSpec::from_str(":ns:foo", Strict).unwrap();
+        assert!(spec.channel.is_none());
+        assert_eq!(spec.namespace.as_deref(), Some("ns"));
+
+        let nameless = NamelessMatchSpec::from_str("::", Strict).unwrap();
+        assert!(nameless.channel.is_none());
+
+        // The bracket form `[channel=""]` must behave the same way.
+        let spec = MatchSpec::from_str("foo[channel=\"\"]", Strict).unwrap();
+        assert!(spec.channel.is_none());
     }
 
     #[test]

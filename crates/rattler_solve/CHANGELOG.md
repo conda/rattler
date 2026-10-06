@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [11.1.1](https://github.com/conda/rattler/compare/rattler_solve-v11.1.0...rattler_solve-v11.1.1) - 2026-10-06
+
+### Other
+
+- updated the following local packages: rattler_cache
+
+## [11.1.0](https://github.com/conda/rattler/compare/rattler_solve-v11.0.0...rattler_solve-v11.1.0) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+
+## [11.0.0](https://github.com/conda/rattler/compare/rattler_solve-v10.0.1...rattler_solve-v11.0.0) - 2026-10-05
+
+### Added
+
+- *(rattler_solve)* [**breaking**] let channels of a multichannel share a priority tier ([#2881](https://github.com/conda/rattler/pull/2881))
+
+## [10.0.1](https://github.com/conda/rattler/compare/rattler_solve-v10.0.0...rattler_solve-v10.0.1) - 2026-09-29
+
+### Other
+
+- updated the following local packages: rattler_digest, rattler_conda_types, rattler_cache
+
 ## [10.0.0](https://github.com/conda/rattler/compare/rattler_solve-v9.0.8...rattler_solve-v10.0.0) - 2026-09-23
 
 ### Added

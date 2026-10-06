@@ -22,6 +22,9 @@
 //! [index-config."s3://my-bucket/staging".channel-relations]
 //! base = "../conda-forge"
 //!
+//! [index-config."https://conda.anaconda.org/conda-forge".virtual-package-detectors]
+//! mpi-detect = ["__conda_forge_openmpi", "__conda_forge_mpich"]
+//!
 //! [[index-config."s3://my-bucket/staging".notices]]
 //! id = "security-1"
 //! message = "Please update the affected package"
@@ -36,8 +39,11 @@ use std::{collections::HashMap, str::FromStr};
 
 use rattler_conda_types::{
     ChannelNotice, ChannelRelations, RepodataRevision, RepodataRevisionSelection,
+    virtual_package_detector::{
+        ChannelDetectorRegistrations, DetectorRegistrationMetadata, SubdirDetectorRegistrations,
+    },
 };
-use serde::{Deserialize, Deserializer, Serialize, de::Error as DeError};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
 
 use crate::config::{Config, MergeError, ValidationError};
 
@@ -87,10 +93,12 @@ pub struct IndexChannelConfig {
 
     /// Additional repodata revisions to advertise in generated repodata.
     /// The legacy layout is implicit; currently only v3 can be selected.
+    /// Entries are either `"v3"` or `{ revision = "v3", message = "..." }`.
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
-        deserialize_with = "deserialize_optional_repodata_revisions"
+        deserialize_with = "deserialize_optional_repodata_revisions",
+        serialize_with = "serialize_optional_repodata_revisions"
     )]
     pub repodata_revisions: Option<Vec<RepodataRevisionSelection>>,
 
@@ -112,6 +120,11 @@ pub struct IndexChannelConfig {
     /// `info.channel_relations` value written to generated repodata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub channel_relations: Option<ChannelRelations>,
+
+    /// `info.virtual_package_detectors` value written to generated repodata:
+    /// detector package names mapped to the virtual packages they report.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub virtual_package_detectors: Option<DetectorRegistrationMetadata>,
 }
 
 impl IndexChannelConfig {
@@ -124,6 +137,7 @@ impl IndexChannelConfig {
             && self.base_url.is_none()
             && self.notices.is_none()
             && self.channel_relations.is_none()
+            && self.virtual_package_detectors.is_none()
     }
 
     /// Layer `other` on top of `self`. Fields set in `other` win.
@@ -142,6 +156,9 @@ impl IndexChannelConfig {
             channel_relations: other
                 .channel_relations
                 .or_else(|| self.channel_relations.clone()),
+            virtual_package_detectors: other
+                .virtual_package_detectors
+                .or_else(|| self.virtual_package_detectors.clone()),
         }
     }
 }
@@ -226,8 +243,10 @@ impl Config for IndexConfig {
     fn validate(&self) -> Result<(), ValidationError> {
         for (key, cfg) in &self.per_channel {
             validate_channel_relations(key, cfg)?;
+            validate_virtual_package_detectors(key, cfg)?;
         }
         validate_channel_relations("default", &self.default)?;
+        validate_virtual_package_detectors("default", &self.default)?;
         Ok(())
     }
 
@@ -255,27 +274,102 @@ fn validate_channel_relations(
     Ok(())
 }
 
+/// A `repodata-revisions` entry: a bare revision (`"v3"`) or a table with an
+/// optional message (`{ revision = "v3", message = "..." }`).
+#[derive(Deserialize)]
+#[serde(untagged, deny_unknown_fields)]
+enum ConfiguredRepodataRevision {
+    Revision(String),
+    WithMessage {
+        revision: String,
+        #[serde(default)]
+        message: Option<String>,
+    },
+}
+
+/// Writes every entry in table form, which [`ConfiguredRepodataRevision`]
+/// reads back.
+fn serialize_optional_repodata_revisions<S>(
+    revisions: &Option<Vec<RepodataRevisionSelection>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    #[derive(Serialize)]
+    struct Entry<'a> {
+        revision: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        message: Option<&'a str>,
+    }
+
+    revisions
+        .as_ref()
+        .map(|revisions| {
+            revisions
+                .iter()
+                .map(|selection| Entry {
+                    revision: selection.revision.to_string(),
+                    message: selection.message.as_deref(),
+                })
+                .collect::<Vec<_>>()
+        })
+        .serialize(serializer)
+}
+
+/// Registrations must be valid on their own, so a channel never publishes a
+/// set that every client would discard.
+fn validate_virtual_package_detectors(
+    label: &str,
+    cfg: &IndexChannelConfig,
+) -> Result<(), ValidationError> {
+    let Some(detectors) = &cfg.virtual_package_detectors else {
+        return Ok(());
+    };
+    let key = format!("index-config.{label}.virtual-package-detectors");
+    let subdir = SubdirDetectorRegistrations::parse(Some(detectors))
+        .map_err(|err| ValidationError::InvalidValue(key.clone(), err.to_string()))?;
+    let combined = ChannelDetectorRegistrations::combine([&subdir])
+        .map_err(|err| ValidationError::InvalidValue(key.clone(), err.to_string()))?;
+    if let Some(dropped) = combined.dropped_names().first() {
+        return Err(ValidationError::InvalidValue(
+            key,
+            format!(
+                "detector '{}' registers an invalid virtual package name: {}",
+                dropped.detector.as_source(),
+                dropped.reason
+            ),
+        ));
+    }
+    Ok(())
+}
+
 fn deserialize_optional_repodata_revisions<'de, D>(
     deserializer: D,
 ) -> Result<Option<Vec<RepodataRevisionSelection>>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let revisions: Option<Vec<String>> = Option::deserialize(deserializer)?;
+    let revisions: Option<Vec<ConfiguredRepodataRevision>> = Option::deserialize(deserializer)?;
     revisions
-        .map(|revs| {
-            revs.into_iter()
-                .map(|s| {
-                    let revision = RepodataRevision::from_str(&s).map_err(D::Error::custom)?;
+        .map(|revisions| {
+            revisions
+                .into_iter()
+                .map(|configured| {
+                    let (revision, message) = match configured {
+                        ConfiguredRepodataRevision::Revision(revision) => (revision, None),
+                        ConfiguredRepodataRevision::WithMessage { revision, message } => {
+                            (revision, message)
+                        }
+                    };
+                    let revision =
+                        RepodataRevision::from_str(&revision).map_err(D::Error::custom)?;
                     if revision != RepodataRevision::V3 {
                         return Err(D::Error::custom(
                             "only v3 can be configured; the legacy layout is implicit",
                         ));
                     }
-                    Ok(RepodataRevisionSelection {
-                        revision,
-                        message: None,
-                    })
+                    Ok(RepodataRevisionSelection { revision, message })
                 })
                 .collect::<Result<Vec<_>, _>>()
         })
@@ -435,6 +529,34 @@ base-url = "../packages/"
     }
 
     #[test]
+    fn parses_repodata_revision_message() {
+        let cfg = parse(
+            r#"
+repodata-revisions = [{ revision = "v3", message = "v3 packages" }]
+"#,
+        );
+        assert_eq!(
+            cfg.default.repodata_revisions,
+            Some(vec![RepodataRevisionSelection {
+                revision: RepodataRevision::V3,
+                message: Some("v3 packages".to_string()),
+            }])
+        );
+    }
+
+    #[test]
+    fn repodata_revision_messages_roundtrip_through_toml() {
+        let config = parse(
+            r#"
+repodata-revisions = ["v3", { revision = "v3", message = "v3 packages" }]
+"#,
+        );
+
+        let serialized = toml::to_string(&config).unwrap();
+        assert_eq!(toml::from_str::<IndexConfig>(&serialized).unwrap(), config);
+    }
+
+    #[test]
     fn rejects_legacy_repodata_revision_selection() {
         let err = toml::from_str::<IndexConfig>("repodata-revisions = [\"legacy\"]\n").unwrap_err();
         assert!(err.to_string().contains("the legacy layout is implicit"));
@@ -442,10 +564,16 @@ base-url = "../packages/"
 
     #[test]
     fn rejects_numeric_repodata_revisions() {
-        let err = toml::from_str::<IndexConfig>("repodata-revisions = [3]\n").unwrap_err();
+        assert!(toml::from_str::<IndexConfig>("repodata-revisions = [3]\n").is_err());
+    }
+
+    #[test]
+    fn rejects_obsolete_repodata_revision_metadata() {
         assert!(
-            err.to_string().contains("invalid type"),
-            "unexpected error: {err}"
+            toml::from_str::<IndexConfig>(
+                "repodata-revisions = [{ revision = \"v3\", n-packages = 1 }]\n",
+            )
+            .is_err()
         );
     }
 
@@ -460,6 +588,95 @@ overrides = "../same"
         );
         let err = cfg.validate().unwrap_err();
         assert!(err.to_string().contains("must not be the same channel"));
+    }
+
+    #[test]
+    fn parses_and_validates_virtual_package_detectors() {
+        let cfg = parse(
+            r#"
+[virtual-package-detectors]
+mpi-detect = ["__conda_forge_openmpi", "__conda_forge_mpich"]
+"#,
+        );
+        cfg.validate().unwrap();
+        let detectors = cfg.default.virtual_package_detectors.as_ref().unwrap();
+        assert_eq!(
+            detectors["mpi-detect"],
+            ["__conda_forge_openmpi", "__conda_forge_mpich"]
+        );
+
+        let invalid = parse(
+            r#"
+["s3://my-bucket"]
+virtual-package-detectors = { mpi-detect = ["openmpi"] }
+"#,
+        );
+        let err = invalid.validate().unwrap_err().to_string();
+        assert!(
+            err.contains("index-config.s3://my-bucket.virtual-package-detectors"),
+            "{err}"
+        );
+        assert!(err.contains("does not start with two underscores"), "{err}");
+
+        let duplicate = parse(
+            r#"
+[virtual-package-detectors]
+a-detect = ["__x"]
+b-detect = ["__x"]
+"#,
+        );
+        let err = duplicate.validate().unwrap_err().to_string();
+        assert!(err.contains("registered more than once"), "{err}");
+    }
+
+    #[test]
+    fn detector_metadata_rejects_wrong_shapes_before_validation() {
+        for raw in [
+            r#"virtual-package-detectors = ["mpi-detect"]"#,
+            r#"virtual-package-detectors = { mpi-detect = "__cuda" }"#,
+            r#"virtual-package-detectors = { mpi-detect = ["__cuda", 5] }"#,
+            r#"virtual-package-detectors = { mpi-detect = { __cuda = true } }"#,
+        ] {
+            assert!(toml::from_str::<IndexConfig>(raw).is_err(), "{raw}");
+        }
+    }
+
+    #[test]
+    fn detector_metadata_validates_raw_detector_keys_and_limits() {
+        for (raw, expected) in [
+            (
+                r#"virtual-package-detectors = { "mpi detect" = ["__cuda"] }"#,
+                "not a valid package name",
+            ),
+            (
+                r#"virtual-package-detectors = { __mpi = ["__cuda"] }"#,
+                "detectors must be installable packages",
+            ),
+            (
+                r#"virtual-package-detectors = { mpi-detect = [] }"#,
+                "expected between 1 and 16",
+            ),
+            (
+                r#"virtual-package-detectors = { mpi-detect = ["__mpi-abi", "__mpi_abi"] }"#,
+                "map to the same override variable",
+            ),
+        ] {
+            let error = parse(raw).validate().unwrap_err().to_string();
+            assert!(error.contains(expected), "{error}");
+        }
+        for raw in ["", "virtual-package-detectors = {}"] {
+            let config = parse(raw);
+            config.validate().unwrap();
+            let parsed = SubdirDetectorRegistrations::parse(
+                config.default.virtual_package_detectors.as_ref(),
+            )
+            .unwrap();
+            assert!(
+                ChannelDetectorRegistrations::combine([&parsed])
+                    .unwrap()
+                    .is_empty()
+            );
+        }
     }
 
     #[test]

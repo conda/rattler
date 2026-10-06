@@ -39,6 +39,7 @@ use crate::{
             sort_set_alphabetically,
         },
     },
+    virtual_package_detector::DetectorRegistrationMetadata,
 };
 
 /// [`RepoData`] is an index of package binaries available on in a subdirectory
@@ -107,12 +108,28 @@ pub struct ChannelInfo {
     /// [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
     #[serde(default, skip_serializing_if = "ChannelRelations::is_none_or_empty")]
     pub channel_relations: Option<ChannelRelations>,
+
+    /// The virtual package detectors the channel registers for this subdir.
+    /// Malformed metadata shapes reject repodata during deserialization.
+    /// Validate detector keys and registration semantics with
+    /// [`SubdirDetectorRegistrations::parse`](crate::virtual_package_detector::SubdirDetectorRegistrations::parse).
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::virtual_package_detector::deserialize_present"
+    )]
+    pub virtual_package_detectors: Option<DetectorRegistrationMetadata>,
 }
 
 /// Repodata revisions keyed by revision, mirroring the `vN` dictionary of the
 /// CEP draft <https://github.com/conda/ceps/pull/146>. Keying encodes
 /// uniqueness; insertion order is preserved.
 pub type RepodataRevisions = IndexMap<RepodataRevision, RepodataRevisionMetadata>;
+
+/// The maximum length in bytes of a [`RepodataRevisionMetadata::message`]
+/// written by a producer, as required by CEP 48. Readers accept longer
+/// messages.
+pub const MAX_REPODATA_REVISION_MESSAGE_BYTES: usize = 8192;
 
 /// Metadata for a single [`RepodataRevisions`] entry; the revision itself is
 /// the map key.
@@ -1236,6 +1253,9 @@ mod test {
         RepodataRevision, V3Extensions, V3Packages,
         package::DistArchiveIdentifier,
         repo_data::{compute_package_url, determine_subdir},
+        virtual_package_detector::{
+            ChannelDetectorRegistrations, RegistrationError, SubdirDetectorRegistrations,
+        },
     };
 
     // isl-0.12.2-1.tar.bz2
@@ -1362,6 +1382,7 @@ mod test {
                     base: Some("../conda-forge".to_string()),
                     overrides: None,
                 }),
+                virtual_package_detectors: None,
             }),
             packages: IndexMap::default(),
             conda_packages: IndexMap::default(),
@@ -1384,6 +1405,7 @@ mod test {
                     base_url: None,
                     repodata_revisions: IndexMap::default(),
                     channel_relations,
+                    virtual_package_detectors: None,
                 }),
                 packages: IndexMap::default(),
                 conda_packages: IndexMap::default(),
@@ -1393,6 +1415,109 @@ mod test {
             let json = serde_json::to_string(&repodata).unwrap();
             assert!(!json.contains("channel_relations"));
         }
+    }
+
+    #[test]
+    fn test_virtual_package_detectors_round_trip() {
+        let raw = r#"{
+            "info": {
+                "subdir": "linux-64",
+                "virtual_package_detectors": {
+                    "mpi-detect": ["__conda_forge_openmpi", "__conda_forge_mpich"]
+                }
+            },
+            "packages": {},
+            "packages.conda": {}
+        }"#;
+        let repodata: RepoData = serde_json::from_str(raw).unwrap();
+        let detectors = repodata
+            .info
+            .as_ref()
+            .and_then(|info| info.virtual_package_detectors.as_ref())
+            .unwrap();
+        assert_eq!(
+            detectors["mpi-detect"],
+            ["__conda_forge_openmpi", "__conda_forge_mpich"]
+        );
+
+        let json = serde_json::to_string(&repodata).unwrap();
+        assert_eq!(serde_json::from_str::<RepoData>(&json).unwrap(), repodata);
+
+        let without = RepoData {
+            info: Some(ChannelInfo {
+                subdir: Some("linux-64".to_string()),
+                base_url: None,
+                repodata_revisions: IndexMap::default(),
+                channel_relations: None,
+                virtual_package_detectors: None,
+            }),
+            ..repodata
+        };
+        let json = serde_json::to_string(&without).unwrap();
+        assert!(!json.contains("virtual_package_detectors"));
+    }
+
+    #[test]
+    fn virtual_package_detector_metadata_rejects_malformed_shapes() {
+        for metadata in [
+            "null",
+            "true",
+            "42",
+            "\"mpi-detect\"",
+            "[]",
+            "[[\"mpi-detect\", [\"__cuda\"]]]",
+            r#"{"mpi-detect": null}"#,
+            r#"{"mpi-detect": "__cuda"}"#,
+            r#"{"mpi-detect": {"__cuda": true}}"#,
+            r#"{"mpi-detect": ["__cuda", 5]}"#,
+        ] {
+            let raw = format!(r#"{{"info": {{"virtual_package_detectors": {metadata}}}}}"#);
+            assert!(
+                serde_json::from_str::<RepoData>(&raw).is_err(),
+                "{metadata}"
+            );
+        }
+    }
+
+    #[test]
+    fn virtual_package_detector_metadata_preserves_semantic_validation() {
+        for metadata in [None, Some("{}")] {
+            let raw = metadata.map_or_else(
+                || r#"{"info": {}}"#.to_string(),
+                |metadata| format!(r#"{{"info": {{"virtual_package_detectors": {metadata}}}}}"#),
+            );
+            let repodata: RepoData = serde_json::from_str(&raw).unwrap();
+            let parsed = SubdirDetectorRegistrations::parse(
+                repodata
+                    .info
+                    .as_ref()
+                    .unwrap()
+                    .virtual_package_detectors
+                    .as_ref(),
+            )
+            .unwrap();
+            assert!(
+                ChannelDetectorRegistrations::combine([&parsed])
+                    .unwrap()
+                    .is_empty()
+            );
+        }
+
+        let repodata: RepoData = serde_json::from_str(
+            r#"{"info":{"virtual_package_detectors":{"mpi detect":["__cuda"]}}}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            SubdirDetectorRegistrations::parse(
+                repodata
+                    .info
+                    .as_ref()
+                    .unwrap()
+                    .virtual_package_detectors
+                    .as_ref()
+            ),
+            Err(RegistrationError::InvalidDetectorName { .. })
+        ));
     }
 
     #[test]

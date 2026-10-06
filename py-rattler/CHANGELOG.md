@@ -7,6 +7,117 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-10-05
+
+### Highlights
+
+**Multichannels.** `MultiSource` groups several sources under one name, like conda's `defaults` (`pkgs/main`, `pkgs/r`, `pkgs/msys2`) or its `custom_multichannels`. Pass it to `solve()`, `solve_with_sparse_repodata()` or the `Gateway` methods anywhere a channel goes. The sources of a group share one channel priority tier, the way conda-libmamba-solver treats them: with strict priority a package in an earlier member no longer hides a newer build in a later one, while channels outside the group are still excluded. Within the group, member order only breaks ties. A spec like `defaults::python` matches packages from any member. Members can be channels, channel names, `SparseRepoData` or a custom `RepoDataSource`, but not another `MultiSource`.
+
+```python
+defaults = MultiSource("defaults", ["https://repo.anaconda.com/pkgs/main", "https://repo.anaconda.com/pkgs/r"])
+records = await solve(
+    [defaults],
+    ["python 3.12.*"],
+    platforms=["linux-64", "noarch"],
+    channel_priority=ChannelPriority.Strict,
+    virtual_packages=VirtualPackage.detect(),
+)
+```
+
+`RepoDataRecord.channel` is still the URL of the member the record came from. Solves that don't use a `MultiSource` come out exactly as before.
+
+**Channel-provided virtual package detectors.** Channels can now register detector packages that report virtual packages rattler doesn't know about natively. `Gateway.virtual_package_detectors()` collects the registrations of a set of channels, and `detect_virtual_packages()` installs and runs the accepted detectors behind a consent callback, returning detected values, failures and skipped registrations. `Gateway.query()` can collect registrations for a solve as well, through its new `detector_target` and `constraints` arguments.
+
+### Added
+
+- `MultiSource`, a named group of sources that share a channel priority tier, accepted by `solve()`, `solve_with_sparse_repodata()`, `Gateway.query()`, `Gateway.who_needs()` and `Gateway.names()`, in [#2881](https://github.com/conda/rattler/pull/2881), [#2882](https://github.com/conda/rattler/pull/2882) and [#2884](https://github.com/conda/rattler/pull/2884)
+- Discover and run channel-provided virtual package detectors with `Gateway.virtual_package_detectors()`, `detect_virtual_packages()` and the `detector_target`/`constraints` arguments of `Gateway.query()`, along with `DetectorRegistrations`, `ConsentRequest`, `DetectionOutcome` and related types, in [#2864](https://github.com/conda/rattler/pull/2864)
+- `PrefixPlaceholder.experimental_offsets` and `PrefixPlaceholder.experimental_shebang_length`, the recorded placeholder offsets from `paths.json`, in [#2565](https://github.com/conda/rattler/pull/2565)
+- `freebsd-ppc64` and `freebsd-ppc64le` subdirs in [#2768](https://github.com/conda/rattler/pull/2768)
+- `index_fs()`/`index_s3()` accept a v3 revision message in `index-config` and patches can set `extra_depends` and `flags` in [#2668](https://github.com/conda/rattler/pull/2668)
+
+### Fixed
+
+- Parse `::numpy` (an empty channel) as a spec without a channel instead of pinning it to `conda.anaconda.org`, so `MatchSpec("::numpy").channel` is `None` in [#2737](https://github.com/conda/rattler/pull/2737)
+- `index_fs()`/`index_s3()` write `repodata_version: 2` only when a `base_url` is set, always write the `v3` map, use `indexed_timestamp` for revision bounds, and validate patches for every subdir before writing anything in [#2668](https://github.com/conda/rattler/pull/2668)
+- Keep backslashes in file names when writing `paths.json` and `conda-meta` records on Linux and macOS instead of turning them into path separators, which made such packages fail to install in [#2878](https://github.com/conda/rattler/pull/2878)
+- Store the refreshed cache policy after a `304 Not Modified` on the sharded repodata index, so later processes stop revalidating an unchanged index in [#2724](https://github.com/conda/rattler/pull/2724)
+
+## [0.27.0] - 2026-09-29
+
+### Highlights
+
+**Verify Sigstore attestations before installing a package.** `verify_attestation()` checks the Sigstore attestation a channel advertises for a `RepoDataRecord` against a `VerificationPolicy`, and `install()` accepts the same policy to check every package it installs, replaces or relinks before touching the prefix.
+
+```python
+from rattler import Issuer, Publisher, VerificationPolicy, install
+
+publisher = Publisher(identity="https://github.com/conda/rattler/*", issuer=Issuer.github_actions())
+policy = VerificationPolicy.require(publisher)
+await install(records, target_prefix, attestation_policy=policy)
+```
+
+A verified attestation also says where the package came from. `VerifiedAttestation.claims` carries what the signing certificate recorded about the CI workload that signed it: repository, commit, ref, workflow, trigger, runner and deployment environment.
+
+```python
+outcome = await verify_attestation(record, policy)
+if outcome.attestation is not None and outcome.attestation.claims is not None:
+    claims = outcome.attestation.claims
+    print(claims.source_repository_uri, claims.source_repository_digest, claims.build_config_uri)
+```
+
+**Breaking: `S3Config`'s `force_path_style` is `addressing_style` now.** The boolean flag is gone in favor of an explicit `"path"` or `"virtual-host"` string, on both the Python constructor and the `[s3-options.<bucket>]` TOML `Config` reads. A `force-path-style` key left over in an existing config is not rejected: it is silently ignored, and the bucket falls back to virtual-host addressing, so double-check any config using RustFS or another path-style-only S3 endpoint.
+
+```python
+from rattler.networking.middleware import S3Config
+
+# before
+S3Config(endpoint_url="https://s3.example.com", region="us-east-1", force_path_style=True)
+# now
+S3Config(endpoint_url="https://s3.example.com", region="us-east-1", addressing_style="path")
+```
+
+```toml
+# before
+[s3-options.my-bucket]
+force-path-style = true
+# now
+[s3-options.my-bucket]
+addressing-style = "path"
+```
+
+**`Platform` is `Subdir` now.** `Platform`, `PlatformLiteral` and `ParsePlatformError` remain as deprecated aliases that emit a `DeprecationWarning`; switch to `Subdir`, `SubdirLiteral` and `ParseSubdirError`. Parsing behavior is unchanged: an unrecognized name already raised before this rename, and still does.
+
+**Breaking: `Subdir.current()`/`Arch.current()` can raise now.** The `unknown` platform is gone, along with `Platform.unknown` and `only_platform`/`arch` returning `None` for it; `Subdir.all()`/`Platform.all()` yield 32 members instead of 33. On a host with no conda subdir (some WASM targets, Mac Catalyst), `Subdir.current()` and `Arch.current()` raise `RuntimeError("the current host is not a known conda platform")` instead of returning that sentinel.
+
+### Added
+
+- Verify Sigstore attestations with `verify_attestation()`, `VerificationPolicy`, `Publisher` and `Issuer`, and check them during `install()` with the new `attestation_policy` argument in [#2814](https://github.com/conda/rattler/pull/2814)
+- Verify against a pinned trust anchor with `TrustedRoot`, avoiding the TUF fetch of the production Sigstore root in [#2834](https://github.com/conda/rattler/pull/2834)
+- Read the provenance of a verified package from `VerifiedAttestation.claims`, the Fulcio CI claims of the signing certificate, together with `signed_at`, `log_index`, `log_origin` and `checks`, which records which parts of the Sigstore verification were performed in [#2844](https://github.com/conda/rattler/pull/2844)
+- `TrustedRoot.embedded()`, the public good instance's trust anchors that ship with py-rattler, so verification works when `tuf-repo-cdn.sigstore.dev` is unreachable in [#2844](https://github.com/conda/rattler/pull/2844)
+- `PackageRecord.attestations_sha256`, the sha256 of a package's Sigstore attestation sidecar, in [#2773](https://github.com/conda/rattler/pull/2773)
+- `PackageRecord.indexed_timestamp`, the server-assigned time an artifact first entered the channel index, in [#2790](https://github.com/conda/rattler/pull/2790)
+- `timestamp_policy` on `solve()`/`solve_with_sparse_repodata()`, controlling whether `exclude_newer` filtering prefers `indexed_timestamp`, falls back to the build `timestamp`, or requires one of them explicitly, in [#2798](https://github.com/conda/rattler/pull/2798)
+- `FileMode.mode`, returning `"binary"`, `"text"` or `"unknown"` in [#2789](https://github.com/conda/rattler/pull/2789)
+- `__amdgpu` and `__amdgpu_arch` virtual package overrides in [#2806](https://github.com/conda/rattler/pull/2806)
+
+### Changed
+
+- **BREAKING:** `S3Config` takes `addressing_style` (`"path"` or `"virtual-host"`) instead of `force_path_style: bool`; `Config.s3_options` and its underlying TOML follow the same rename in [#2843](https://github.com/conda/rattler/pull/2843)
+- **BREAKING:** `Subdir.current()`/`Arch.current()` raise `RuntimeError` instead of returning the now-removed `unknown` platform in [#2786](https://github.com/conda/rattler/pull/2786)
+- Rename `Platform` to `Subdir` and validate names against CEP 26; `Platform`, `PlatformLiteral` and `ParsePlatformError` remain as deprecated aliases, and parsing an unrecognized name still raises the way it always did in [#2787](https://github.com/conda/rattler/pull/2787)
+
+### Fixed
+
+- Resolve packages reachable only through a dependency's `extra_depends` when solving from `SparseRepoData`, so extras work with the sources `solve()` gained in 0.26.0 in [#2830](https://github.com/conda/rattler/pull/2830)
+- Refresh expiring S3 credentials during a long-running `index_s3()` instead of resolving them once, so temporary credentials from SSO, an assumed role or instance metadata no longer expire mid-run in [#2846](https://github.com/conda/rattler/pull/2846) and [#2847](https://github.com/conda/rattler/pull/2847)
+- Fall back to `repodata.json` instead of erroring when an OCI channel doesn't support sharded repodata in [#2733](https://github.com/conda/rattler/pull/2733)
+- Stop writing a `v0` entry into `repodata_revisions` for channels indexed with `index_fs`/`index_s3` that only hold legacy-layout packages in [#2785](https://github.com/conda/rattler/pull/2785)
+- Stop excluding a package from legacy repodata written by `index_fs`/`index_s3` just because one of its extras requires the v3 layout in [#2809](https://github.com/conda/rattler/pull/2809)
+- Replace a file `install()` can't overwrite in place, such as one owned by another user in a shared prefix, instead of failing in [#2827](https://github.com/conda/rattler/pull/2827)
+- Extract packages that carry a directory past Windows' `MAX_PATH` instead of rejecting their entries with `trying to unpack outside of destination path`, which broke `install()` for a deep directory under a short prefix in [#2857](https://github.com/conda/rattler/pull/2857)
+
 ## [0.26.0] - 2026-09-10
 
 ### Highlights

@@ -1,92 +1,21 @@
 //! Trusted publishing (via OIDC).
 //!
-//! Owns the OIDC exchange with the server's mint endpoint and provides
-//! [`TrustedPublishingFlow`] and [`PrefixAuthAmbientFlow`] for
-//! [`crate::challenge_middleware`].
-//!
-//! The flow:
-//! 1. Ask `ambient-id` for an OIDC ID token with the configured `audience`
-//!    claim (`None` outside supported CI providers).
-//! 2. Exchange it at the server's mint endpoint for a short-lived bearer
-//!    token.
+//! Provides [`TrustedPublishingFlow`] and [`PrefixAuthAmbientFlow`] for
+//! [`crate::challenge_middleware`] and [`check_trusted_publishing`] for
+//! uploads. The token exchange itself lives in [`crate::oidc_exchange`].
 
 use std::sync::Arc;
 
-use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
-use serde::Serialize;
-use thiserror::Error;
 use url::Url;
 
-use crate::challenge_middleware::{AuthFlow, AuthFlowError, BearerToken, Challenge};
-
-/// Default path of the prefix.dev-convention mint endpoint.
-const DEFAULT_MINT_PATH: &str = "/api/oidc/mint_token";
-
-/// Knobs for the trusted-publishing flow. Use
-/// [`for_prefix_dev`](Self::for_prefix_dev) for the prefix.dev defaults.
-///
-/// On GitLab CI the runner must populate the OIDC ID token under an env
-/// var that `ambient-id` derives from [`audience`](Self::audience)
-/// (uppercased, non-alphanumerics to `_`, suffixed `_ID_TOKEN`; audience
-/// `prefix.dev` resolves to `PREFIX_DEV_ID_TOKEN`). Set it via the
-/// `id_tokens` block in `.gitlab-ci.yml`.
-#[derive(Debug, Clone)]
-pub struct TrustedPublishingOptions {
-    /// The `aud` claim requested in the OIDC ID token. The server validates
-    /// this against the trusted-publisher configuration before minting a
-    /// token.
-    pub audience: String,
-    /// Path on the server where the ID token is exchanged for a bearer token.
-    ///
-    /// Joined onto challenged URLs with [`Url::join`]; it must start with
-    /// `/` or it would resolve relative to the challenged URL's path.
-    /// [`TrustedPublishingFlow::new`] normalizes a missing leading slash.
-    pub mint_path: String,
-}
-
-impl TrustedPublishingOptions {
-    /// Options preconfigured for prefix.dev: audience `prefix.dev`, mint path
-    /// `/api/oidc/mint_token`.
-    pub fn for_prefix_dev() -> Self {
-        Self {
-            audience: "prefix.dev".to_string(),
-            mint_path: DEFAULT_MINT_PATH.to_string(),
-        }
-    }
-
-    /// Options for a server following the prefix.dev convention: the OIDC
-    /// audience is the server's host name (scoping each ID token to the
-    /// server it is sent to) and tokens are minted at
-    /// `/api/oidc/mint_token`.
-    ///
-    /// Returns `None` when `server` has no host. Does not validate scheme
-    /// or host; callers handling ambient CI credentials must enforce
-    /// `https` and an allow-list themselves. The audience is the
-    /// URL-normalized host: lowercased, punycode, no port.
-    pub fn for_host(server: &Url) -> Option<Self> {
-        Some(Self {
-            audience: server.host_str()?.to_string(),
-            mint_path: DEFAULT_MINT_PATH.to_string(),
-        })
-    }
-
-    /// Like [`Self::for_host`], except prefix.dev deployments
-    /// (`prefix.dev` and `*.prefix.dev`) get the shared audience
-    /// `prefix.dev`, which is what they validate GitHub OIDC tokens
-    /// against; tokens are still minted at the deployment's own host.
-    ///
-    /// Returns `None` when `server` has no host. The [`Self::for_host`]
-    /// caveats apply.
-    pub fn for_server(server: &Url) -> Option<Self> {
-        let host = server.host_str()?;
-        if host == "prefix.dev" || host.ends_with(".prefix.dev") {
-            Some(Self::for_prefix_dev())
-        } else {
-            Self::for_host(server)
-        }
-    }
-}
+use crate::{
+    challenge_middleware::{AuthFlow, AuthFlowError, BearerToken, Challenge},
+    oidc_exchange::{
+        DEFAULT_MINT_PATH, ExchangeProtocol, OidcExchangeError, OidcExchangeOptions, get_token,
+        is_prefix_dev_host,
+    },
+};
 
 /// Outcome of an optional trusted-publishing attempt.
 pub enum TrustedPublishResult {
@@ -95,40 +24,12 @@ pub enum TrustedPublishResult {
     /// We checked for trusted publishing and got a token.
     Configured(BearerToken),
     /// We checked for optional trusted publishing, but it didn't succeed.
-    Ignored(TrustedPublishingError),
-}
-
-/// Errors that can occur during the trusted-publishing flow.
-#[derive(Debug, Error)]
-pub enum TrustedPublishingError {
-    /// Failed to parse a URL.
-    #[error(transparent)]
-    Url(#[from] url::ParseError),
-    /// HTTP request failed at the reqwest layer.
-    #[error("Failed to fetch: `{0}`")]
-    Reqwest(Url, #[source] reqwest::Error),
-    /// HTTP request failed at the reqwest-middleware layer.
-    #[error("Failed to fetch: `{0}`")]
-    ReqwestMiddleware(Url, #[source] reqwest_middleware::Error),
-    /// The mint endpoint returned an error.
-    #[error(
-        "Server returned error code {0} from the mint endpoint, is trusted publishing correctly configured?\nResponse: {1}"
-    )]
-    MintToken(StatusCode, String),
-    /// Retrieving the OIDC ID token from the CI provider failed.
-    #[error("Failed to retrieve an OIDC ID token from the CI provider")]
-    OidcToken(#[from] ambient_id::Error),
+    Ignored(OidcExchangeError),
 }
 
 /// Deprecated alias kept for backwards compatibility.
 #[deprecated(note = "use `rattler_networking::BearerToken` instead")]
 pub type TrustedPublishingToken = BearerToken;
-
-/// The body sent to the server's mint endpoint.
-#[derive(Serialize)]
-struct MintTokenRequest {
-    token: String,
-}
 
 /// If applicable, attempt to obtain a bearer token via trusted publishing.
 ///
@@ -139,7 +40,7 @@ struct MintTokenRequest {
 pub async fn check_trusted_publishing(
     client: &ClientWithMiddleware,
     server_url: &Url,
-    options: &TrustedPublishingOptions,
+    options: &OidcExchangeOptions,
 ) -> TrustedPublishResult {
     match get_token(client, server_url, options).await {
         Ok(Some(token)) => TrustedPublishResult::Configured(token),
@@ -148,63 +49,6 @@ pub async fn check_trusted_publishing(
             tracing::debug!("Could not obtain trusted publishing credentials, skipping: {err}");
             TrustedPublishResult::Ignored(err)
         }
-    }
-}
-
-/// Returns the short-lived token to use against `server_url`, or `None` when
-/// `ambient-id` reports no usable CI provider.
-///
-/// Delegates OIDC ID-token retrieval to `ambient-id`; this function owns the
-/// mint exchange with `server_url`.
-pub async fn get_token(
-    client: &ClientWithMiddleware,
-    server_url: &Url,
-    options: &TrustedPublishingOptions,
-) -> Result<Option<BearerToken>, TrustedPublishingError> {
-    let detector = ambient_id::Detector::new_with_client(client.clone());
-    let Some(oidc_token) = detector.detect(&options.audience).await? else {
-        return Ok(None);
-    };
-
-    let publish_token = get_publish_token(&oidc_token, server_url, client, options).await?;
-
-    tracing::info!("Received OIDC token from CI provider, using trusted publishing");
-
-    Ok(Some(publish_token))
-}
-
-async fn get_publish_token(
-    oidc_token: &ambient_id::IdToken,
-    server_url: &Url,
-    client: &ClientWithMiddleware,
-    options: &TrustedPublishingOptions,
-) -> Result<BearerToken, TrustedPublishingError> {
-    let mint_token_url = server_url.join(&options.mint_path)?;
-    tracing::info!("Querying the trusted publishing token from {mint_token_url}");
-    let mint_token_payload = MintTokenRequest {
-        token: oidc_token.reveal().to_string(),
-    };
-
-    let response = client
-        .post(mint_token_url.clone())
-        .json(&mint_token_payload)
-        .send()
-        .await
-        .map_err(|err| TrustedPublishingError::ReqwestMiddleware(mint_token_url.clone(), err))?;
-
-    let status = response.status();
-    let body = response
-        .bytes()
-        .await
-        .map_err(|err| TrustedPublishingError::Reqwest(mint_token_url.clone(), err))?;
-
-    if status.is_success() {
-        Ok(BearerToken::new(String::from_utf8_lossy(&body).to_string()))
-    } else {
-        Err(TrustedPublishingError::MintToken(
-            status,
-            String::from_utf8_lossy(&body).to_string(),
-        ))
     }
 }
 
@@ -227,23 +71,32 @@ async fn get_publish_token(
 /// trusted host.
 #[derive(Debug, Clone)]
 pub struct TrustedPublishingFlow {
-    options: TrustedPublishingOptions,
+    options: OidcExchangeOptions,
     client: ClientWithMiddleware,
 }
 
 impl TrustedPublishingFlow {
-    /// Create a flow with custom [`TrustedPublishingOptions`]. A missing
-    /// leading `/` on [`TrustedPublishingOptions::mint_path`] is normalized.
-    pub fn new(mut options: TrustedPublishingOptions, client: ClientWithMiddleware) -> Self {
-        if !options.mint_path.starts_with('/') {
-            options.mint_path.insert(0, '/');
+    /// Create a flow with custom [`OidcExchangeOptions`]. A missing
+    /// leading `/` on an [`ExchangeProtocol::PrefixMint`] path is normalized.
+    pub fn new(mut options: OidcExchangeOptions, client: ClientWithMiddleware) -> Self {
+        if let ExchangeProtocol::PrefixMint { path } = &mut options.exchange
+            && !path.starts_with('/')
+        {
+            path.insert(0, '/');
         }
         Self { options, client }
     }
 
-    /// Create a flow preconfigured for prefix.dev.
+    /// Create a flow preconfigured for prefix.dev: audience `prefix.dev`,
+    /// mint path `/api/oidc/mint_token`.
     pub fn for_prefix_dev(client: ClientWithMiddleware) -> Self {
-        Self::new(TrustedPublishingOptions::for_prefix_dev(), client)
+        let options = OidcExchangeOptions {
+            audience: "prefix.dev".to_string(),
+            exchange: ExchangeProtocol::PrefixMint {
+                path: DEFAULT_MINT_PATH.to_string(),
+            },
+        };
+        Self::new(options, client)
     }
 }
 
@@ -267,19 +120,12 @@ impl AuthFlow for TrustedPublishingFlow {
     }
 }
 
-/// Returns `true` for `prefix.dev` and any true subdomain (`*.prefix.dev`).
-/// Lookalikes (`evil-prefix.dev`, `prefix.dev.evil.com`) and trailing-dot
-/// hosts (`beta.prefix.dev.`, preserved as-is by [`Url`]) fail closed.
-fn is_prefix_dev_host(host: &str) -> bool {
-    host == "prefix.dev" || host.ends_with(".prefix.dev")
-}
-
 /// Origin-gated [`AuthFlow`] for the prefix.dev family, safe to register
 /// in an unscoped [`crate::AuthChallengeMiddleware`]; the default flow
 /// behind [`crate::AuthChallengeMiddleware::default`].
 ///
 /// Delegates to an inner flow (by default [`TrustedPublishingFlow`] with
-/// [`TrustedPublishingOptions::for_prefix_dev`]) only for `https` URLs on
+/// [`TrustedPublishingFlow::for_prefix_dev`]) only for `https` URLs on
 /// `prefix.dev` or a true subdomain. The gate keys on the request URL
 /// alone; server-controlled challenge params such as `realm` cannot open
 /// it. Outside CI the inner flow reports "not applicable".
@@ -431,9 +277,11 @@ mod tests {
             ],
             async {
                 let flow = TrustedPublishingFlow::new(
-                    TrustedPublishingOptions {
+                    OidcExchangeOptions {
                         audience: "prefix.dev".to_string(),
-                        mint_path: "api/x".to_string(),
+                        exchange: ExchangeProtocol::PrefixMint {
+                            path: "api/x".to_string(),
+                        },
                     },
                     plain_client(),
                 );
@@ -532,78 +380,6 @@ mod tests {
         .await;
 
         assert_eq!(mints.load(Ordering::SeqCst), 1);
-    }
-
-    #[test]
-    fn for_prefix_dev_matches_prefix_dev() {
-        let opts = TrustedPublishingOptions::for_prefix_dev();
-        assert_eq!(opts.audience, "prefix.dev");
-        assert_eq!(opts.mint_path, "/api/oidc/mint_token");
-    }
-
-    #[test]
-    fn for_host_derives_audience_from_host() {
-        let options = TrustedPublishingOptions::for_host(
-            &Url::parse("https://beta.prefix.dev/some-channel/noarch/repodata.json").unwrap(),
-        )
-        .unwrap();
-        assert_eq!(options.audience, "beta.prefix.dev");
-        assert_eq!(options.mint_path, "/api/oidc/mint_token");
-
-        let prod =
-            TrustedPublishingOptions::for_host(&Url::parse("https://prefix.dev").unwrap()).unwrap();
-        assert_eq!(
-            prod.audience,
-            TrustedPublishingOptions::for_prefix_dev().audience
-        );
-        assert_eq!(
-            prod.mint_path,
-            TrustedPublishingOptions::for_prefix_dev().mint_path
-        );
-    }
-
-    #[test]
-    fn for_host_returns_none_without_host() {
-        // data: URLs have no host component
-        let url = Url::parse("data:text/plain,hello").unwrap();
-        assert!(TrustedPublishingOptions::for_host(&url).is_none());
-    }
-
-    #[test]
-    fn for_host_normalizes_case_and_drops_default_port() {
-        let options = TrustedPublishingOptions::for_host(
-            &Url::parse("https://Beta.PREFIX.dev:443/some-channel").unwrap(),
-        )
-        .unwrap();
-        assert_eq!(options.audience, "beta.prefix.dev");
-    }
-
-    #[test]
-    fn for_server_uses_shared_audience_for_prefix_dev_family() {
-        // prefix.dev deployments share the audience "prefix.dev"
-        let beta = TrustedPublishingOptions::for_server(
-            &Url::parse("https://beta.prefix.dev/some-channel").unwrap(),
-        )
-        .unwrap();
-        assert_eq!(beta.audience, "prefix.dev");
-
-        let prod = TrustedPublishingOptions::for_server(&Url::parse("https://prefix.dev").unwrap())
-            .unwrap();
-        assert_eq!(prod.audience, "prefix.dev");
-
-        // hosts outside the family keep the host-derived audience
-        let other = TrustedPublishingOptions::for_server(
-            &Url::parse("https://conda.example.com/channel").unwrap(),
-        )
-        .unwrap();
-        assert_eq!(other.audience, "conda.example.com");
-
-        // ...and lookalike hosts are not part of the family
-        let evil = TrustedPublishingOptions::for_server(
-            &Url::parse("https://evil-prefix.dev/channel").unwrap(),
-        )
-        .unwrap();
-        assert_eq!(evil.audience, "evil-prefix.dev");
     }
 
     use std::sync::{

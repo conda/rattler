@@ -151,6 +151,34 @@ fn test_hyperlinks_can_be_forced() {
     assert!(!plain.contains("\u{1b}[4m"));
 }
 
+/// A `--channel NAME=CHANNEL,...` is a multichannel, whose channels share a
+/// channel priority tier. With strict channel priority `pkg` 1.0 in the first
+/// member therefore does not hide `pkg` 2.0 in the second member, while
+/// `pkg` 3.0 in the channel after the multichannel is still excluded.
+#[test]
+fn test_solve_multichannel() {
+    let urls = run_rattler(&[
+        "solve",
+        "pkg",
+        "--platform",
+        "linux-64",
+        "--virtual-package",
+        "__unix",
+        "--channel-priority",
+        "strict",
+        "-c",
+        "grp=./test-data/channels/multichannel-a,./test-data/channels/multichannel-b",
+        "-c",
+        "./test-data/channels/multichannel-c",
+        "--format",
+        "urls",
+    ]);
+    let urls = regex::Regex::new(r"file://\S*/test-data/")
+        .expect("the pattern is valid")
+        .replace_all(&urls, "file:///[ROOT]/test-data/");
+    insta::assert_snapshot!(urls);
+}
+
 /// The skill embeds the crate version, which is replaced so the snapshot does
 /// not change on every release.
 ///

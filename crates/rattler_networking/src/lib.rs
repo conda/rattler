@@ -32,6 +32,7 @@ mod lazy_client;
 pub mod mirror_middleware;
 pub mod oci_middleware;
 pub mod offline_middleware;
+pub mod oidc_exchange;
 #[cfg(feature = "rattler_config")]
 pub mod proxy;
 pub mod retry_policies;

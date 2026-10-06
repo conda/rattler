@@ -1,10 +1,15 @@
+mod channel;
+mod config;
 mod error;
 mod gateway;
+mod match_spec;
 mod noarch_type;
+mod package_metadata;
 mod package_name;
 mod package_record;
 mod parse_strictness;
 mod platform;
+mod repo_data_record;
 pub mod solve;
 mod utils;
 mod version;
