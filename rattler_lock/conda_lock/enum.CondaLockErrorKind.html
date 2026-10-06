@@ -7,7 +7,7 @@
     UnknownCategory {
         category: <a class="struct" href="https://doc.rust-lang.org/1.95.0/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>,
     },
-    UnsupportedPlatform(ParseSubdirError),
+    UnsupportedPlatform(<a class="enum" href="../../rattler_conda_types/subdir/enum.ParseSubdirError.html" title="enum rattler_conda_types::subdir::ParseSubdirError">ParseSubdirError</a>),
     Builder(<a class="struct" href="https://doc.rust-lang.org/1.95.0/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;<a class="enum" href="../enum.ParseCondaLockError.html" title="enum rattler_lock::ParseCondaLockError">ParseCondaLockError</a>&gt;),
     IncompatibleSelection,
     ConflictingArtifact,
@@ -20,12 +20,12 @@
     UnnormalizedUrl,
     MissingFileName,
     MissingBuildString,
-    InvalidCondaName(InvalidPackageNameError),
+    InvalidCondaName(<a class="enum" href="../../rattler_conda_types/package_name/enum.InvalidPackageNameError.html" title="enum rattler_conda_types::package_name::InvalidPackageNameError">InvalidPackageNameError</a>),
     InvalidCondaVersion(<a class="struct" href="../../rattler_conda_version/version/parse/struct.ParseVersionError.html" title="struct rattler_conda_version::version::parse::ParseVersionError">ParseVersionError</a>),
     InvalidPythonName(InvalidNameError),
     InvalidPythonVersion(VersionParseError),
     InvalidRequirement(<a class="struct" href="https://doc.rust-lang.org/1.95.0/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;Pep508Error&gt;),
-    InvalidMatchSpec(ParseMatchSpecError),
+    InvalidMatchSpec(<a class="enum" href="../../rattler_conda_types/match_spec/parse/enum.ParseMatchSpecError.html" title="enum rattler_conda_types::match_spec::parse::ParseMatchSpecError">ParseMatchSpecError</a>),
     SubdirMismatch,
     AmbiguousDependencyName,
     RepeatedDependencyName {
@@ -60,7 +60,7 @@ silently changed an installed environment.</p>
 </div><section id="variant.EmptySelection" class="variant"><a href="#variant.EmptySelection" class="anchor">§</a><h3 class="code-header">EmptySelection</h3></section><div class="docblock"><p>An environment name or its category set is empty.</p>
 </div><section id="variant.UnknownCategory" class="variant"><a href="#variant.UnknownCategory" class="anchor">§</a><h3 class="code-header">UnknownCategory</h3></section><div class="docblock"><p>A selected category occurs in no package.</p>
 </div><div class="sub-variant" id="variant.UnknownCategory.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.UnknownCategory.field.category" class="section-header"><a href="#variant.UnknownCategory.field.category" class="anchor field">§</a><code>category: <a class="struct" href="https://doc.rust-lang.org/1.95.0/alloc/string/struct.String.html" title="struct alloc::string::String">String</a></code></span><div class="docblock"><p>The requested category.</p>
-</div></div></div><section id="variant.UnsupportedPlatform" class="variant"><a href="#variant.UnsupportedPlatform" class="anchor">§</a><h3 class="code-header">UnsupportedPlatform(ParseSubdirError)</h3></section><div class="docblock"><p>A target platform is not a platform pixi knows.</p>
+</div></div></div><section id="variant.UnsupportedPlatform" class="variant"><a href="#variant.UnsupportedPlatform" class="anchor">§</a><h3 class="code-header">UnsupportedPlatform(<a class="enum" href="../../rattler_conda_types/subdir/enum.ParseSubdirError.html" title="enum rattler_conda_types::subdir::ParseSubdirError">ParseSubdirError</a>)</h3></section><div class="docblock"><p>A target platform is not a platform pixi knows.</p>
 </div><section id="variant.Builder" class="variant"><a href="#variant.Builder" class="anchor">§</a><h3 class="code-header">Builder(<a class="struct" href="https://doc.rust-lang.org/1.95.0/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;<a class="enum" href="../enum.ParseCondaLockError.html" title="enum rattler_lock::ParseCondaLockError">ParseCondaLockError</a>&gt;)</h3></section><div class="docblock"><p>The pixi lock-file builder rejected the imported data.</p>
 </div><section id="variant.IncompatibleSelection" class="variant"><a href="#variant.IncompatibleSelection" class="anchor">§</a><h3 class="code-header">IncompatibleSelection</h3></section><div class="docblock"><p>Two selected categories hold different packages under one name, so the
 destination environment cannot contain both.</p>
@@ -77,12 +77,12 @@ situation a valid document reaches.</p>
 identity a pixi lock file records.</p>
 </div><section id="variant.MissingFileName" class="variant"><a href="#variant.MissingFileName" class="anchor">§</a><h3 class="code-header">MissingFileName</h3></section><div class="docblock"><p>The URL has no conda archive file name.</p>
 </div><section id="variant.MissingBuildString" class="variant"><a href="#variant.MissingBuildString" class="anchor">§</a><h3 class="code-header">MissingBuildString</h3></section><div class="docblock"><p>Neither the <code>build</code> field nor the URL yields a build string.</p>
-</div><section id="variant.InvalidCondaName" class="variant"><a href="#variant.InvalidCondaName" class="anchor">§</a><h3 class="code-header">InvalidCondaName(InvalidPackageNameError)</h3></section><div class="docblock"><p>A conda package name is invalid.</p>
+</div><section id="variant.InvalidCondaName" class="variant"><a href="#variant.InvalidCondaName" class="anchor">§</a><h3 class="code-header">InvalidCondaName(<a class="enum" href="../../rattler_conda_types/package_name/enum.InvalidPackageNameError.html" title="enum rattler_conda_types::package_name::InvalidPackageNameError">InvalidPackageNameError</a>)</h3></section><div class="docblock"><p>A conda package name is invalid.</p>
 </div><section id="variant.InvalidCondaVersion" class="variant"><a href="#variant.InvalidCondaVersion" class="anchor">§</a><h3 class="code-header">InvalidCondaVersion(<a class="struct" href="../../rattler_conda_version/version/parse/struct.ParseVersionError.html" title="struct rattler_conda_version::version::parse::ParseVersionError">ParseVersionError</a>)</h3></section><div class="docblock"><p>A conda version is invalid.</p>
 </div><section id="variant.InvalidPythonName" class="variant"><a href="#variant.InvalidPythonName" class="anchor">§</a><h3 class="code-header">InvalidPythonName(InvalidNameError)</h3></section><div class="docblock"><p>A Python package name is invalid.</p>
 </div><section id="variant.InvalidPythonVersion" class="variant"><a href="#variant.InvalidPythonVersion" class="anchor">§</a><h3 class="code-header">InvalidPythonVersion(VersionParseError)</h3></section><div class="docblock"><p>A Python version is invalid.</p>
 </div><section id="variant.InvalidRequirement" class="variant"><a href="#variant.InvalidRequirement" class="anchor">§</a><h3 class="code-header">InvalidRequirement(<a class="struct" href="https://doc.rust-lang.org/1.95.0/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;Pep508Error&gt;)</h3></section><div class="docblock"><p>A dependency is not a valid PEP 508 requirement.</p>
-</div><section id="variant.InvalidMatchSpec" class="variant"><a href="#variant.InvalidMatchSpec" class="anchor">§</a><h3 class="code-header">InvalidMatchSpec(ParseMatchSpecError)</h3></section><div class="docblock"><p>A dependency is not a valid conda <code>MatchSpec</code>.</p>
+</div><section id="variant.InvalidMatchSpec" class="variant"><a href="#variant.InvalidMatchSpec" class="anchor">§</a><h3 class="code-header">InvalidMatchSpec(<a class="enum" href="../../rattler_conda_types/match_spec/parse/enum.ParseMatchSpecError.html" title="enum rattler_conda_types::match_spec::parse::ParseMatchSpecError">ParseMatchSpecError</a>)</h3></section><div class="docblock"><p>A dependency is not a valid conda <code>MatchSpec</code>.</p>
 </div><section id="variant.SubdirMismatch" class="variant"><a href="#variant.SubdirMismatch" class="anchor">§</a><h3 class="code-header">SubdirMismatch</h3></section><div class="docblock"><p>The artifact subdir and the package’s target platform disagree.</p>
 </div><section id="variant.AmbiguousDependencyName" class="variant"><a href="#variant.AmbiguousDependencyName" class="anchor">§</a><h3 class="code-header">AmbiguousDependencyName</h3></section><div class="docblock"><p>Two dependencies normalize to one name, so one would be lost.</p>
 </div><section id="variant.RepeatedDependencyName" class="variant"><a href="#variant.RepeatedDependencyName" class="anchor">§</a><h3 class="code-header">RepeatedDependencyName</h3></section><div class="docblock"><p>A repeated dependency name cannot be a CEP-37 mapping key.</p>
