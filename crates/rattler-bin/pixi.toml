@@ -5,6 +5,10 @@ name = "rattler"
 name = "pixi-build-rust"
 channels = ["https://prefix.dev/conda-forge"]
 
+# CMake preserves the -O0 required by jitterentropy despite Conda's -O2 CFLAGS.
+[package.build.config]
+env = { AWS_LC_SYS_CMAKE_BUILDER = "1" }
+
 [package.target.linux.build-dependencies]
 cmake = ">=3,<4"
 make = ">=4,<5"

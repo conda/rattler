@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2](https://github.com/conda/rattler/compare/rattler-bin-v0.5.1...rattler-bin-v0.5.2) - 2026-10-05
+
+### Added
+
+- *(cli)* Run channel virtual package detectors in solve and create ([#2886](https://github.com/conda/rattler/pull/2886))
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+
+### Added
+
+- Run trusted channel virtual package detectors in `rattler solve` and `rattler create`, including offline operation and explicit overrides.
+
+## [0.5.1](https://github.com/conda/rattler/compare/rattler-bin-v0.5.0...rattler-bin-v0.5.1) - 2026-10-05
+
+### Added
+
+- *(rattler-bin)* accept multichannels in -c of solve and create ([#2883](https://github.com/conda/rattler/pull/2883))
+
+### Fixed
+
+- use CMake for aws-lc-sys in Conda builds to preserve jitterentropy's required optimization flags
+
 ## [0.5.0](https://github.com/conda/rattler/compare/rattler-bin-v0.4.1...rattler-bin-v0.5.0) - 2026-09-29
 
 ### Added

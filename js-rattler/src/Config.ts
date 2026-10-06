@@ -1,0 +1,1 @@
+export { Config } from "../pkg";

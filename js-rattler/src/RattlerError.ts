@@ -20,6 +20,7 @@ export type RattlerErrorCode =
     | "INVALID_SECTION"
     | "PARSE_FILE_NAME"
     | "PARSE_JSON"
+    | "INVALID_CONFIG"
     | "SUBDIR_NOT_FOUND"
     | "FETCH"
     | "GATEWAY"

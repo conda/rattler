@@ -7,7 +7,7 @@ use serde::Deserialize;
 
 use crate::{Authentication, AuthenticationStorage};
 
-/// Standard OAuth 2.0 token response.
+/// Standard OAuth 2.0 token response (RFC 6749 §5.1).
 #[derive(Deserialize)]
 struct TokenRefreshResponse {
     access_token: String,
@@ -241,11 +241,14 @@ pub(crate) async fn maybe_refresh_oauth(
             );
         }
     };
+    // Refresh token grant (RFC 6749 §6).
     let mut params = vec![
         ("grant_type", "refresh_token"),
         ("refresh_token", refresh_token_val),
         ("client_id", client_id.as_str()),
     ];
+    // `audience` is a provider-specific extension (e.g. Auth0), not part of
+    // RFC 6749.
     if let Some(audience) = audience {
         params.push(("audience", audience.as_str()));
     }
