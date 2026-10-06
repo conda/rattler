@@ -619,7 +619,7 @@ async fn login_with_offline(
     Ok(())
 }
 
-/// Token endpoint path of JFrog Cloud instances (`*.jfrog.io`), which don't
+/// Token endpoint path of `JFrog` Cloud instances (`*.jfrog.io`), which don't
 /// publish RFC 8414 metadata.
 const JFROG_TOKEN_ENDPOINT: &str = "/access/api/v1/oidc/token";
 

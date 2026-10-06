@@ -2,7 +2,7 @@
 //!
 //! Supports authorization code grant with PKCE (primary, RFC 6749 §4.1 and
 //! RFC 7636) and device code flow (fallback for headless environments,
-//! RFC 8628). Endpoints are found via OpenID Connect Discovery 1.0.
+//! RFC 8628). Endpoints are found via `OpenID` Connect Discovery 1.0.
 
 use std::{
     collections::HashSet,
@@ -373,7 +373,7 @@ fn append_audience(url: &mut Url, audience: Option<&str>) -> Result<(), OAuthErr
     Ok(())
 }
 
-/// Perform OIDC discovery (OpenID Connect Discovery 1.0) and extract all
+/// Perform OIDC discovery (`OpenID` Connect Discovery 1.0) and extract all
 /// needed endpoints.
 ///
 /// Uses our custom `ExtendedCoreProviderMetadata` type so that the
