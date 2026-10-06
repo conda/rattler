@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `PackageArchive`: open a `.conda` or `.tar.bz2` archive on a server with `PackageArchive.fromUrl` and read it with HTTP range requests; `listFiles` lists a section, `readFile` reads one file, and `indexJson`, `aboutJson`, `pathsJson` and `runExportsJson` parse the metadata files. The `info` section of a `.conda` archive usually comes with the one request made on open
+
 ## [0.4.0] - 2026-08-19
 
 ### Highlights

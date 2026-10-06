@@ -46,14 +46,14 @@ zip = { workspace = true, features = ["deflate", "time"] }
 astral_async_zip = { workspace = true, features = [
   "deflate",
   "tokio",
-  "tokio-fs",
 ] }
-astral-tokio-tar = { workspace = true }
 bytes = { workspace = true }
 async-compression = { workspace = true }
 zstd = { workspace = true, default-features = false }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Needs tokio's `fs` feature, which wasm32 does not support.
+astral-tokio-tar = { workspace = true }
 num_cpus = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
 zstd = { workspace = true, features = ["zstdmt"] }

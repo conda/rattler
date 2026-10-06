@@ -3,6 +3,7 @@ use rattler_conda_types::{
     InvalidPackageNameError, ParseChannelError, ParseMatchSpecError, ParseSubdirError,
     ParseVersionError, VersionBumpError, VersionExtendError,
 };
+use rattler_package_streaming::ExtractError;
 use rattler_repodata_gateway::{GatewayError, fetch::FetchRepoDataError};
 use rattler_solve::SolveError;
 use thiserror::Error;
@@ -36,6 +37,14 @@ pub enum JsError {
     InvalidHexMd5(String),
     #[error("{0} is not a valid hex encoded SHA256 hash")]
     InvalidHexSha256(String),
+    #[error(transparent)]
+    ParseUrl(#[from] url::ParseError),
+    #[error(transparent)]
+    Extract(#[from] ExtractError),
+    #[error("{0}")]
+    Fetch(String),
+    #[error("{0:?} is not an archive section: expected \"info\" or \"pkg\"")]
+    InvalidSection(String),
     #[error("{0} is not a valid package archive file name")]
     InvalidFileName(String),
     #[error("{0} is not a valid url")]
@@ -72,8 +81,12 @@ impl JsError {
             JsError::PackageNameError(_) => "PARSE_PACKAGE_NAME",
             JsError::InvalidHexMd5(_) => "PARSE_MD5",
             JsError::InvalidHexSha256(_) => "PARSE_SHA256",
+            JsError::ParseUrl(_) | JsError::InvalidUrl(_) => "PARSE_URL",
+            JsError::Extract(ExtractError::UnsupportedArchiveType) => "UNSUPPORTED_ARCHIVE_TYPE",
+            JsError::Extract(_) => "ARCHIVE",
+            JsError::Fetch(_) => "FETCH",
+            JsError::InvalidSection(_) => "INVALID_SECTION",
             JsError::InvalidFileName(_) => "PARSE_FILE_NAME",
-            JsError::InvalidUrl(_) => "PARSE_URL",
             JsError::ParseJson(_) => "PARSE_JSON",
             JsError::InvalidConfig(_) => "INVALID_CONFIG",
         }
