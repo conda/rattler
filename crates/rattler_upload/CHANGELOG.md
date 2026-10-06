@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0](https://github.com/conda/rattler/compare/rattler_upload-v0.12.2...rattler_upload-v0.13.0) - 2026-10-06
+
+### Added
+
+- *(auth)* [**breaking**] Add RFC 8693 workload-identity login ([#2897](https://github.com/conda/rattler/pull/2897))
+
 ## [0.12.2](https://github.com/conda/rattler/compare/rattler_upload-v0.12.1...rattler_upload-v0.12.2) - 2026-10-05
 
 ### Added

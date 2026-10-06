@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1](https://github.com/conda/rattler/compare/rattler_config-v0.9.0...rattler_config-v0.9.1) - 2026-10-06
+
+### Added
+
+- *(js)* add Gateway.whoNeeds, clearRepodataCache, Config ([#2895](https://github.com/conda/rattler/pull/2895))
+
 ## [0.9.0](https://github.com/conda/rattler/compare/rattler_config-v0.8.1...rattler_config-v0.9.0) - 2026-10-05
 
 ### Added

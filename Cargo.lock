@@ -1681,9 +1681,9 @@ dependencies = [
 
 [[package]]
 name = "ctutils"
-version = "0.4.2"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d5515a3834141de9eafb9717ad39eea8247b5674e6066c404e8c4b365d2a29e"
+checksum = "03bb0e1cc970d482d121d9a1744999169b69a07470b3d644a7894e53fcaf4574"
 dependencies = [
  "cmov",
 ]
@@ -2166,9 +2166,9 @@ dependencies = [
 
 [[package]]
 name = "escape8259"
-version = "0.5.3"
+version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5692dd7b5a1978a5aeb0ce83b7655c58ca8efdcb79d21036ea249da95afec2c6"
+checksum = "9f1f0d310082fd5de539d4f41601182241147498444a7695c520288a0cdbead6"
 
 [[package]]
 name = "event-listener"
@@ -4017,9 +4017,9 @@ dependencies = [
 
 [[package]]
 name = "objc2"
-version = "0.6.4"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a12a8ed07aefc768292f076dc3ac8c48f3781c8f2d5851dd3d98950e8c5a89f"
+checksum = "08849bbd4767dfae9457696856ae1c84fe4e0281bbe4a7abff2d0e06fb7981f8"
 dependencies = [
  "objc2-encode",
 ]
@@ -4931,7 +4931,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.52.1"
+version = "0.53.0"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4998,7 +4998,7 @@ dependencies = [
 
 [[package]]
 name = "rattler-bin"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-reqwest-retry",
@@ -5059,7 +5059,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.10.15"
+version = "0.10.16"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5196,7 +5196,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "dirs",
  "fs-err",
@@ -5247,7 +5247,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_git"
-version = "0.3.9"
+version = "0.3.10"
 dependencies = [
  "astral-reqwest-middleware",
  "dashmap",
@@ -5268,7 +5268,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.33.0"
+version = "0.33.1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5321,7 +5321,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.34.2"
+version = "0.34.3"
 dependencies = [
  "ahash",
  "file_url",
@@ -5394,7 +5394,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.32.1"
+version = "0.33.0"
 dependencies = [
  "ambient-id",
  "apple-native-keyring-store",
@@ -5441,7 +5441,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.27.10"
+version = "0.27.11"
 dependencies = [
  "assert_matches",
  "astral-reqwest-middleware",
@@ -5520,7 +5520,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.36.0"
+version = "0.36.1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5599,7 +5599,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -5677,7 +5677,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "11.1.0"
+version = "11.1.1"
 dependencies = [
  "criterion",
  "futures",
@@ -5707,7 +5707,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_upload"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-reqwest-retry",
@@ -5745,7 +5745,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_package_detectors"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "fs-err",
@@ -8032,9 +8032,9 @@ dependencies = [
 
 [[package]]
 name = "want"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bfa7760aed19e106de2c7c0b581b509f2f25d3dacaf737cb82ac61bc6d760b0e"
+checksum = "ec4cdd0dd910afe868b7ef477227d8d538b46b3075031afee8a9f2acb0a2ed0b"
 dependencies = [
  "try-lock",
 ]
@@ -8588,18 +8588,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.59"
+version = "0.8.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6df92bf3d9227be3d53173901ddbffac2babc27ae50f397776ffd6dc33f800cb"
+checksum = "6400fc4bb7426f6faac3fb07566122bb18622e3022bd2c36426a92ed489b1dbe"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.59"
+version = "0.8.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac4f328cf2f05d084e496c3e9c3f33ed0a183656a16e1fcec4d464d8373aec82"
+checksum = "99c27cc7525bad4df59a45e073c45b2c2aa820efb588234cc23a547ec69a34db"
 dependencies = [
  "proc-macro2",
  "quote",

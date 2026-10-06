@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.53.0](https://github.com/conda/rattler/compare/rattler-v0.52.1...rattler-v0.53.0) - 2026-10-06
+
+### Added
+
+- *(auth)* [**breaking**] Add RFC 8693 workload-identity login ([#2897](https://github.com/conda/rattler/pull/2897))
+
+### Other
+
+- Delete clippy overrides ([#2907](https://github.com/conda/rattler/pull/2907))
+
 ## [0.52.1](https://github.com/conda/rattler/compare/rattler-v0.52.0...rattler-v0.52.1) - 2026-10-05
 
 ### Added
