@@ -260,3 +260,144 @@ pub fn solve_min_age_per_channel<T: SolverImpl + Default>() {
         .expect_absent([("pkg-a", "2.0"), ("pkg-b", "1.0")])
         .run::<T>();
 }
+
+/// Test that an exemption allows a specific version newer than the cutoff.
+pub fn solve_min_age_exemption<T: SolverImpl + Default>() {
+    let mut repo = create_timestamped_repo();
+    repo.push(
+        PackageBuilder::new("pkg-a")
+            .version("3.0")
+            .timestamp("2024-06-16T12:00:00Z")
+            .build(),
+    );
+
+    let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
+    let config = exclude_newer_duration_config(min_age)
+        .with_exemption("pkg-a ==2.0".parse().unwrap())
+        .unwrap();
+
+    SolverCase::new("min_age exemption")
+        .repository(repo)
+        .specs(["pkg-a"])
+        .exclude_newer(config)
+        // pkg-a 3.0 is newer than the cutoff and not exempt
+        .expect_present([("pkg-a", "2.0")])
+        .expect_absent([("pkg-a", "3.0")])
+        .run::<T>();
+}
+
+/// Test that an exemption does not allow other builds of the same version.
+pub fn solve_min_age_exemption_build<T: SolverImpl + Default>() {
+    let repo = vec![
+        PackageBuilder::new("pkg-a")
+            .version("1.0")
+            .timestamp("2020-01-15T12:00:00Z")
+            .build(),
+        PackageBuilder::new("pkg-a")
+            .version("2.0")
+            .build_string("h123456_0")
+            .timestamp("2024-06-15T12:00:00Z")
+            .build(),
+        PackageBuilder::new("pkg-a")
+            .version("2.0")
+            .build_string("h123456_1")
+            .build_number(1)
+            .timestamp("2024-06-16T12:00:00Z")
+            .build(),
+    ];
+
+    let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
+    let config = exclude_newer_duration_config(min_age)
+        .with_exemption("pkg-a ==2.0 h123456_0".parse().unwrap())
+        .unwrap();
+
+    SolverCase::new("min_age exemption build")
+        .repository(repo)
+        .specs(["pkg-a"])
+        .exclude_newer(config)
+        // The solver would prefer build number 1, but only build 0 is exempt
+        .expect_present([("pkg-a", "2.0", "h123456_0")])
+        .expect_absent([("pkg-a", "2.0", "h123456_1")])
+        .run::<T>();
+}
+
+/// Test that an exemption does not extend to the dependencies of the exempt
+/// package.
+pub fn solve_min_age_exemption_not_transitive<T: SolverImpl + Default>() {
+    let repo = create_timestamped_repo();
+
+    let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
+    let config = exclude_newer_duration_config(min_age)
+        .with_exemption("pkg-b ==2.0".parse().unwrap())
+        .unwrap();
+
+    SolverCase::new("min_age exemption not transitive")
+        .repository(repo)
+        .specs(["pkg-b"])
+        .exclude_newer(config)
+        // pkg-b 2.0 is exempt but requires pkg-a >=2, which is still too new
+        .expect_present([("pkg-b", "1.0"), ("pkg-a", "1.0")])
+        .expect_absent([("pkg-b", "2.0"), ("pkg-a", "2.0")])
+        .run::<T>();
+}
+
+/// Test that an exemption also covers records without a timestamp.
+pub fn solve_min_age_exemption_no_timestamp<T: SolverImpl + Default>() {
+    let repo = vec![
+        PackageBuilder::new("pkg-a")
+            .version("1.0")
+            .timestamp("2020-01-15T12:00:00Z")
+            .build(),
+        PackageBuilder::new("pkg-a").version("2.0").build(),
+    ];
+
+    let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
+    let config = exclude_newer_duration_config(min_age)
+        .with_exemption("pkg-a ==2.0".parse().unwrap())
+        .unwrap();
+
+    SolverCase::new("min_age exemption without timestamp")
+        .repository(repo)
+        .specs(["pkg-a"])
+        .exclude_newer(config)
+        .expect_present([("pkg-a", "2.0")])
+        .run::<T>();
+}
+
+/// Test that an exemption with a channel only applies to that channel.
+pub fn solve_min_age_exemption_channel<T: SolverImpl + Default>() {
+    let repo_in = |channel: &str| {
+        vec![
+            PackageBuilder::new("pkg-a")
+                .version("1.0")
+                .channel(channel)
+                .timestamp("2020-01-15T12:00:00Z")
+                .build(),
+            PackageBuilder::new("pkg-a")
+                .version("2.0")
+                .channel(channel)
+                .timestamp("2024-06-15T12:00:00Z")
+                .build(),
+        ]
+    };
+
+    let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
+    let config = exclude_newer_duration_config(min_age)
+        .with_exemption("vetted::pkg-a ==2.0".parse().unwrap())
+        .unwrap();
+
+    SolverCase::new("min_age exemption in the exempt channel")
+        .repository(repo_in("https://conda.anaconda.org/vetted/"))
+        .specs(["pkg-a"])
+        .exclude_newer(config.clone())
+        .expect_present([("pkg-a", "2.0")])
+        .run::<T>();
+
+    SolverCase::new("min_age exemption in another channel")
+        .repository(repo_in("https://conda.anaconda.org/other/"))
+        .specs(["pkg-a"])
+        .exclude_newer(config)
+        .expect_present([("pkg-a", "1.0")])
+        .expect_absent([("pkg-a", "2.0")])
+        .run::<T>();
+}

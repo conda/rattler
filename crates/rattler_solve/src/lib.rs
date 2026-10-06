@@ -11,7 +11,7 @@ mod priority_tier;
 #[cfg(feature = "resolvo")]
 pub mod resolvo;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::{
     Arc,
@@ -20,7 +20,7 @@ use std::sync::{
 
 use jiff::Timestamp;
 use rattler_conda_types::{
-    GenericVirtualPackage, MatchSpec, PackageName, RepoDataRecord, SolverResult,
+    GenericVirtualPackage, MatchSpec, Matches, PackageName, RepoDataRecord, SolverResult,
 };
 use url::Url;
 
@@ -180,6 +180,18 @@ pub enum TimestampExclusionReason {
     },
 }
 
+/// Error returned by [`ExcludeNewer::with_exemption`] for a spec that cannot
+/// be used as an exemption.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum InvalidExemptionError {
+    /// The spec does not name exactly one package.
+    #[error("exclude-newer exemption '{0}' must name exactly one package")]
+    NotExactName(String),
+    /// The spec has extras or a condition, which do not select records.
+    #[error("exclude-newer exemption '{0}' must not have extras or a condition")]
+    UnsupportedField(String),
+}
+
 /// Configuration for filtering packages newer than a cutoff.
 ///
 /// This feature helps reduce the risk of installing compromised packages by
@@ -195,6 +207,11 @@ pub enum TimestampExclusionReason {
 /// falls back to build time, and excludes records missing both. Use
 /// [`Self::with_timestamp_policy`] to change this for all packages and channels.
 /// Records exactly at their effective cutoff remain eligible.
+///
+/// Records matching an exemption added with [`Self::with_exemption`] are
+/// never excluded, regardless of their timestamp. This allows a single vetted
+/// release (for example an urgent security fix) without lowering the cutoff
+/// for every future release of that package.
 ///
 /// # Example
 ///
@@ -224,6 +241,9 @@ pub struct ExcludeNewer {
     /// [`Self::channel_cutoffs`] for matching package names.
     package_cutoffs: HashMap<PackageName, Timestamp>,
 
+    /// Records matching any of these specs are never excluded.
+    exemptions: HashSet<MatchSpec>,
+
     /// Timestamp policy shared by all packages and channels.
     timestamp_policy: TimestampPolicy,
 }
@@ -241,6 +261,7 @@ impl ExcludeNewer {
             cutoff,
             channel_cutoffs: HashMap::new(),
             package_cutoffs: HashMap::new(),
+            exemptions: HashSet::new(),
             timestamp_policy: TimestampPolicy::default(),
         }
     }
@@ -257,6 +278,7 @@ impl ExcludeNewer {
             cutoff: Self::cutoff_from_duration(duration, now),
             channel_cutoffs: HashMap::new(),
             package_cutoffs: HashMap::new(),
+            exemptions: HashSet::new(),
             timestamp_policy: TimestampPolicy::default(),
         }
     }
@@ -325,6 +347,35 @@ impl ExcludeNewer {
         self
     }
 
+    /// Exempts records matching `spec` from the cutoff and the timestamp
+    /// policy.
+    ///
+    /// The spec must name exactly one package; a spec without a name or with
+    /// a glob or regex name would exempt more than intended. Extras and
+    /// conditions are rejected because matching ignores them. If the spec has
+    /// a channel, only records from exactly that channel are exempt.
+    pub fn with_exemption(mut self, spec: MatchSpec) -> Result<Self, InvalidExemptionError> {
+        if spec.name.as_exact().is_none() {
+            return Err(InvalidExemptionError::NotExactName(spec.to_string()));
+        }
+        if spec.extras.is_some() || spec.condition.is_some() {
+            return Err(InvalidExemptionError::UnsupportedField(spec.to_string()));
+        }
+        self.exemptions.insert(spec);
+        Ok(self)
+    }
+
+    /// Returns whether a record matches one of the exemptions.
+    pub fn is_exempt(&self, record: &RepoDataRecord) -> bool {
+        self.exemptions.iter().any(|spec| {
+            // `MatchSpec::matches` ignores the channel, so check it here.
+            let channel_matches = spec.channel.as_ref().is_none_or(|channel| {
+                record.channel.as_deref() == Some(channel.canonical_name().as_str())
+            });
+            channel_matches && spec.matches(record)
+        })
+    }
+
     /// Sets the global timestamp policy. Cutoff overrides do not change it.
     pub fn with_timestamp_policy(mut self, policy: TimestampPolicy) -> Self {
         self.timestamp_policy = policy;
@@ -347,6 +398,9 @@ impl ExcludeNewer {
 
     /// Returns why a record is excluded, preserving timestamp provenance.
     pub fn exclusion_reason(&self, record: &RepoDataRecord) -> Option<TimestampExclusionReason> {
+        if self.is_exempt(record) {
+            return None;
+        }
         let package = &record.package_record;
         let timestamp = match self.timestamp_policy {
             TimestampPolicy::RequireIndexedTimestamp => match package.indexed_timestamp {
@@ -653,5 +707,44 @@ impl<'a, T: IntoIterator<Item = &'a RepoDataRecord>, S: SolverRepoData<'a>> Into
             repo_data.set_multi_channel(name);
         }
         repo_data
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rattler_conda_types::ParseMatchSpecOptions;
+
+    use super::*;
+
+    #[test]
+    fn exemption_requires_exact_name() {
+        let config = ExcludeNewer::from_datetime(Timestamp::UNIX_EPOCH);
+        let options = ParseMatchSpecOptions::lenient().with_exact_names_only(false);
+        for spec in ["pkg-*", "*", "^pkg-.*$"] {
+            let spec = MatchSpec::from_str(spec, options).unwrap();
+            assert!(
+                matches!(
+                    config.clone().with_exemption(spec.clone()),
+                    Err(InvalidExemptionError::NotExactName(_))
+                ),
+                "expected '{spec}' to be rejected"
+            );
+        }
+        let options = ParseMatchSpecOptions::strict()
+            .with_extras(true)
+            .with_conditionals(true);
+        for spec in ["pkg[extras=[foo]]", r#"pkg[when="other"]"#] {
+            let spec = MatchSpec::from_str(spec, options).unwrap();
+            assert!(
+                matches!(
+                    config.clone().with_exemption(spec.clone()),
+                    Err(InvalidExemptionError::UnsupportedField(_))
+                ),
+                "expected '{spec}' to be rejected"
+            );
+        }
+
+        let spec = MatchSpec::from_str("pkg ==1.0", ParseMatchSpecOptions::strict()).unwrap();
+        assert!(config.with_exemption(spec).is_ok());
     }
 }

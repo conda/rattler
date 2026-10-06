@@ -106,6 +106,16 @@ pub struct SolverArgs {
     )]
     package_cutoffs: Vec<NamedCutoff>,
 
+    /// Allow records matching this spec regardless of `--exclude-newer`, for
+    /// example `"polars ==1.43.1"`. The spec must name exactly one package.
+    /// May be specified multiple times.
+    #[clap(
+        long = "exclude-newer-exemption",
+        value_name = "SPEC",
+        requires = "exclude_newer"
+    )]
+    exclude_newer_exemptions: Vec<String>,
+
     /// Policy for selecting package timestamps when using `--exclude-newer`.
     #[clap(long, default_value = "require-timestamp")]
     timestamp_policy: TimestampPolicy,
@@ -393,6 +403,12 @@ impl SolverArgs {
             exclude_newer = override_
                 .cutoff
                 .apply_to_package(exclude_newer, package, now);
+        }
+
+        for spec in &self.exclude_newer_exemptions {
+            let spec =
+                MatchSpec::from_str(spec, ParseMatchSpecOptions::strict()).into_diagnostic()?;
+            exclude_newer = exclude_newer.with_exemption(spec).into_diagnostic()?;
         }
 
         Ok(Some(
