@@ -1,4 +1,4 @@
-//! Parsing Azure Blob channel URLs and minting short-lived credentials for them.
+//! Parsing Azure Blob channel URLs.
 //!
 //! # Channel URLs
 //!
