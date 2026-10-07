@@ -16,7 +16,7 @@ requires-pixi = ">=0.67.0"
 
 [workspace.build-variants]
 # Use the same Rust version everywhere
-rust_compiler_version = ["1.95.0"]
+rust_compiler_version = ["1.98.1"]
 
 # The build backend has to match the build API version that pixi hands out, so
 # the workspace cutoff cannot hold it back. On Windows the MSVC runtime it links
@@ -26,6 +26,10 @@ pixi-build-rust = "0d"
 vc14_runtime = "0d"
 vcomp14 = "0d"
 rustfs = "0d"
+rust_osx-arm64 = "0d"
+rust_osx-64 = "0d"
+rust_linux-64 = "0d"
+rust_win-64 = "0d"
 
 [tasks]
 build = "cargo build"
@@ -45,12 +49,13 @@ cxx-compiler = "~=1.11.0"
 openssl = "~=3.1"
 make = "~=4.3"
 pkg-config = "~=0.29.2"
-rust = "~=1.95.0"
+rust = "~=1.98.1"
 cmake = "~=3.26.4"
 cargo-nextest = ">=0.9.91,<0.10"
 # for rust-analyzer
-rust-src = "~=1.95.0"
+rust-src = "~=1.98.1"
 cargo-insta = ">=1.48.0,<2"
+go = ">=1.27.1,<2"
 
 [target.linux-64.dependencies]
 clang = ">=18.1.8,<19.0"
@@ -71,7 +76,7 @@ dprint = ">=0.50.0,<0.51"
 lefthook = ">=2.0.11,<3"
 actionlint = ">=1.7.7,<2"
 zizmor = ">=1.29.0,<2"
-shellcheck = ">=0.10.0,<0.11"
+shellcheck = ">=0.11.0,<0.12"
 [feature.lint.target.unix.dependencies]
 vouch = "*"
 

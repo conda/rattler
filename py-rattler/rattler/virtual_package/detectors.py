@@ -20,6 +20,7 @@ from rattler.platform.subdir import Subdir, SubdirLiteral
 from rattler.rattler import (
     PyConsentRequest,
     PyDetectionOutcome,
+    PyDetectorDiagnostics,
     PyDetectorFailure,
     PyDetectorRegistration,
     PyDetectorResult,
@@ -262,6 +263,46 @@ class DetectorResult:
         return f"DetectorResult({self.name!s}={self.virtual_package!r}, source={self.source!r})"
 
 
+class DetectorDiagnostics:
+    """Nonempty standard error from one successful detector invocation."""
+
+    _inner: PyDetectorDiagnostics
+
+    @classmethod
+    def _from_py(cls, inner: PyDetectorDiagnostics) -> DetectorDiagnostics:
+        instance = cls.__new__(cls)
+        instance._inner = inner
+        return instance
+
+    @property
+    def origin(self) -> str:
+        """The registration's origin."""
+        return self._inner.origin
+
+    @property
+    def detector(self) -> PackageName:
+        """The detector."""
+        return PackageName._from_py_package_name(self._inner.detector)
+
+    @property
+    def digest(self) -> str:
+        """The detector environment digest, as lowercase hexadecimal."""
+        return self._inner.digest
+
+    @property
+    def from_cache(self) -> bool:
+        """Whether these diagnostics came from the result cache."""
+        return self._inner.from_cache
+
+    @property
+    def stderr(self) -> str:
+        """The detector's nonempty, lossily decoded standard error."""
+        return self._inner.stderr
+
+    def __repr__(self) -> str:
+        return f"DetectorDiagnostics({self.detector!s} from {self.origin}, from_cache={self.from_cache})"
+
+
 class DetectorFailure:
     """A detector that failed; all of its results were discarded."""
 
@@ -349,6 +390,11 @@ class DetectionOutcome:
         return [DetectorResult._from_py(result) for result in self._inner.results]
 
     @property
+    def diagnostics(self) -> list[DetectorDiagnostics]:
+        """Nonempty standard error, once per successful invocation, including cache hits."""
+        return [DetectorDiagnostics._from_py(diagnostic) for diagnostic in self._inner.diagnostics]
+
+    @property
     def failures(self) -> list[DetectorFailure]:
         """The detectors that failed. Their names are absent unless overridden."""
         return [DetectorFailure._from_py(failure) for failure in self._inner.failures]
@@ -392,6 +438,10 @@ async def detect_virtual_packages(
     the outcome. ``CONDA_OVERRIDE_*`` variables replace results for their
     names; an invalid one raises `VirtualPackageOverrideError`. An exception raised by the
     ``consent`` callback denies that detector and is re-raised once detection is done.
+
+    ``outcome.diagnostics`` retains nonempty standard error once per successful
+    invocation, including cache hits. Each entry identifies the origin, detector,
+    environment digest and cache provenance.
 
     Arguments:
         registrations: The accepted registrations, from `Gateway.virtual_package_detectors`.

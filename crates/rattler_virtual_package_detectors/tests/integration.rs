@@ -505,6 +505,204 @@ fn count_lines(path: &Path) -> usize {
     std::fs::read_to_string(path).map_or(0, |contents| contents.lines().count())
 }
 
+#[tokio::test]
+async fn successful_diagnostics_survive_cache_hits_once_per_invocation() {
+    let mut harness = Harness::new();
+    let log = harness.dir.join("diagnostic-invocations.log");
+    harness
+        .environment
+        .insert("DETECTOR_TEST_LOG", log.to_str().unwrap());
+    harness.environment.remove("CONDA_OVERRIDE_TEST_DIAG_A");
+    harness.environment.remove("CONDA_OVERRIDE_TEST_DIAG_B");
+    harness.environment.remove("CONDA_OVERRIDE_TEST_OTHER_DIAG");
+    let first_channel = harness
+        .channel(
+            "first",
+            &ChannelSpec {
+                packages: vec![Package::detector(
+                    "diag-detect",
+                    &format!(
+                        "echo run >> \"$DETECTOR_TEST_LOG\"\nprintf 'driver probe warning\\n' >&2\n{}",
+                        report(&[("__test_diag_a", "null"), ("__test_diag_b", "null")])
+                    ),
+                )],
+                noarch_registrations: Some(registrations(&[(
+                    "diag-detect",
+                    &["__test_diag_a", "__test_diag_b"],
+                )])),
+                ..ChannelSpec::default()
+            },
+        )
+        .await;
+    let second_channel = harness
+        .channel(
+            "second",
+            &ChannelSpec {
+                packages: vec![Package::detector(
+                    "other-diag-detect",
+                    &format!(
+                        "echo run >> \"$DETECTOR_TEST_LOG\"\nprintf 'other probe warning\\n' >&2\n{}",
+                        report(&[("__test_other_diag", "null")])
+                    ),
+                )],
+                noarch_registrations: Some(registrations(&[(
+                    "other-diag-detect",
+                    &["__test_other_diag"],
+                )])),
+                ..ChannelSpec::default()
+            },
+        )
+        .await;
+    let registrations = harness
+        .registrations(&[first_channel, second_channel])
+        .await;
+
+    for cached in [false, true] {
+        let mut options = harness.options(&AllowAll);
+        options.clock = CacheClock {
+            now: if cached { 101 } else { 100 },
+            boot_id: None,
+        };
+        let outcome = detect(&registrations, options).await.unwrap();
+        assert!(outcome.failures.is_empty(), "{:?}", outcome.failures);
+        assert!(outcome.skipped.is_empty());
+        assert_eq!(outcome.results.len(), 3);
+        assert_eq!(outcome.diagnostics.len(), 2);
+        assert_eq!(count_lines(&log), 2);
+        for diagnostic in &outcome.diagnostics {
+            let registration = registrations
+                .iter()
+                .find(|registration| {
+                    registration.registration.detector == diagnostic.detector
+                        && registration.origin() == &diagnostic.origin
+                })
+                .unwrap();
+            let expected_stderr = match diagnostic.detector.as_normalized() {
+                "diag-detect" => "driver probe warning\n",
+                "other-diag-detect" => "other probe warning\n",
+                other => panic!("unexpected detector {other}"),
+            };
+            assert_eq!(diagnostic.stderr, expected_stderr);
+            assert_eq!(diagnostic.from_cache, cached);
+            let matching_results = outcome
+                .results
+                .iter()
+                .filter(|result| {
+                    result.source
+                        == DetectionSource::Detector {
+                            origin: diagnostic.origin.clone(),
+                            detector: diagnostic.detector.clone(),
+                            digest: diagnostic.digest,
+                            from_cache: cached,
+                        }
+                })
+                .count();
+            assert_eq!(
+                matching_results,
+                registration.registration.virtual_packages.len()
+            );
+        }
+    }
+    assert_eq!(harness.cached_results().len(), 2);
+    for entry in harness.cached_results() {
+        assert!(
+            entry["stderr"]
+                .as_str()
+                .unwrap()
+                .ends_with("probe warning\n")
+        );
+        assert!(
+            entry["virtual_packages"]
+                .as_object()
+                .unwrap()
+                .values()
+                .all(serde_json::Value::is_null)
+        );
+    }
+
+    harness
+        .environment
+        .insert("CONDA_OVERRIDE_TEST_DIAG_A", "2");
+    let mut options = harness.options(&AllowAll);
+    options.clock.now = 102;
+    let partial_override = detect(&registrations, options).await.unwrap();
+    assert_eq!(partial_override.diagnostics.len(), 2);
+    assert!(
+        partial_override
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.from_cache)
+    );
+    assert_eq!(count_lines(&log), 2);
+
+    harness
+        .environment
+        .insert("CONDA_OVERRIDE_TEST_DIAG_B", "2");
+    let mut options = harness.options(&AllowAll);
+    options.clock.now = 103;
+    let full_override = detect(&registrations, options).await.unwrap();
+    assert_eq!(full_override.diagnostics.len(), 1);
+    assert_eq!(
+        full_override.diagnostics[0].detector.as_normalized(),
+        "other-diag-detect"
+    );
+    assert_eq!(full_override.skipped.len(), 1);
+    assert_eq!(full_override.skipped[0].reason, SkipReason::NoWantedName);
+    assert_eq!(count_lines(&log), 2);
+}
+
+#[tokio::test]
+async fn successful_diagnostics_survive_disabled_or_failed_cache_writes() {
+    for fail_write in [false, true] {
+        let mut harness = Harness::new();
+        let log = harness.dir.join("uncached-invocations.log");
+        harness
+            .environment
+            .insert("DETECTOR_TEST_LOG", log.to_str().unwrap());
+        harness
+            .environment
+            .remove("CONDA_OVERRIDE_TEST_UNCACHED_DIAG");
+        if fail_write {
+            std::fs::create_dir_all(&harness.root).unwrap();
+            std::fs::write(harness.root.join("results"), "not a directory").unwrap();
+        }
+        let results = [("__test_uncached_diag", "null")];
+        let report = if fail_write {
+            report(&results)
+        } else {
+            report_with_cache(&results, "\\\"ttl_seconds\\\": 0")
+        };
+        let channel = harness
+            .channel(
+                "channel",
+                &ChannelSpec {
+                    packages: vec![Package::detector(
+                        "uncached-diag-detect",
+                        &format!(
+                            "echo run >> \"$DETECTOR_TEST_LOG\"\nprintf 'uncached probe warning\\n' >&2\n{report}"
+                        ),
+                    )],
+                    noarch_registrations: Some(registrations(&[(
+                        "uncached-diag-detect",
+                        &["__test_uncached_diag"],
+                    )])),
+                    ..ChannelSpec::default()
+                },
+            )
+            .await;
+        let registrations = harness.registrations(&[channel]).await;
+        for invocation in 1..=2 {
+            let outcome = harness.detect(&registrations).await;
+            assert!(outcome.failures.is_empty(), "{:?}", outcome.failures);
+            assert_eq!(outcome.results.len(), 1);
+            assert_eq!(outcome.diagnostics.len(), 1);
+            assert_eq!(outcome.diagnostics[0].stderr, "uncached probe warning\n");
+            assert!(!outcome.diagnostics[0].from_cache);
+            assert_eq!(count_lines(&log), invocation);
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Concurrency
 // ---------------------------------------------------------------------------

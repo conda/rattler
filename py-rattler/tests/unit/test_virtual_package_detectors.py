@@ -29,10 +29,10 @@ REPORT = json.dumps(
 
 
 def _detector_package(name: str) -> bytes:
-    """A `noarch: generic` package whose executable prints REPORT."""
+    """A `noarch: generic` package whose executable prints REPORT and diagnostics."""
     files = {
-        f"bin/{name}": f"#!/bin/sh\necho '{REPORT}'\n".encode(),
-        f"Scripts/{name}.bat": f"@echo off\r\necho {REPORT}\r\n".encode(),
+        f"bin/{name}": f"#!/bin/sh\nprintf 'driver probe warning\\n' >&2\necho '{REPORT}'\n".encode(),
+        f"Scripts/{name}.bat": f"@echo off\r\necho driver probe warning 1>&2\r\necho {REPORT}\r\n".encode(),
     }
     files["info/index.json"] = json.dumps(
         {
@@ -217,6 +217,31 @@ async def test_detects_with_a_consent_callback(tmp_path: Path) -> None:
     assert results["__test_good"].source == "detector"
     assert results["__test_good"].from_cache is False
     assert results["__test_absent"].absent
+    (diagnostics,) = outcome.diagnostics
+    assert diagnostics.origin == channel.base_url
+    assert diagnostics.detector.normalized == "good-detect"
+    assert diagnostics.digest == results["__test_good"].digest
+    assert diagnostics.from_cache is False
+    assert diagnostics.stderr == "driver probe warning\n"
+
+    cached = await detect_virtual_packages(
+        registrations.accepted,
+        gateway,
+        Subdir.current(),
+        Subdir.current(),
+        [],
+        True,
+        cache_dir=tmp_path / "cache",
+        wanted=query.wanted_virtual_packages,
+    )
+    assert cached.failures == [] and cached.skipped == []
+    assert len(cached.results) == 2
+    (cached_diagnostics,) = cached.diagnostics
+    assert cached_diagnostics.origin == diagnostics.origin
+    assert cached_diagnostics.detector == diagnostics.detector
+    assert cached_diagnostics.digest == diagnostics.digest
+    assert cached_diagnostics.from_cache is True
+    assert cached_diagnostics.stderr == diagnostics.stderr
 
     merged = outcome.merge([GenericVirtualPackage(PackageName("__test_good"), Version("0.1"), "0")])
     assert [str(package.version) for package in merged] == ["1.2.3"]

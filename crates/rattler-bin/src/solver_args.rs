@@ -5,8 +5,8 @@ use std::{collections::HashSet, fmt, str::FromStr, time::Duration};
 use clap::ValueEnum;
 use miette::IntoDiagnostic;
 use rattler_conda_types::{
-    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
-    ParseMatchSpecOptions, RepoDataRecord, SolverResult, Subdir, Version,
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, ParseMatchSpecOptions,
+    RepoDataRecord, SolverResult, Subdir, Version,
 };
 use rattler_config::{ConfigBase, NoExtension};
 use rattler_repodata_gateway::{MultiSource, RepoData, Source};
@@ -95,16 +95,17 @@ pub struct SolverArgs {
     )]
     channel_cutoffs: Vec<NamedCutoff>,
 
-    /// Override the cutoff for a package, as `PACKAGE=CUTOFF`.
-    /// The cutoff accepts the same timestamp, date, and duration formats as
-    /// `--exclude-newer`.
+    /// Allow records matching this spec regardless of `--exclude-newer`, for
+    /// example `"polars ==1.43.1"`. The spec must name exactly one package.
+    /// A broad spec such as `polars` exempts every future release too.
+    /// A channel must be a real channel name or URL, not a multichannel name.
     /// May be specified multiple times.
     #[clap(
-        long = "package-cutoff",
-        value_name = "PACKAGE=CUTOFF",
+        long = "exclude-newer-exemption",
+        value_name = "SPEC",
         requires = "exclude_newer"
     )]
-    package_cutoffs: Vec<NamedCutoff>,
+    exclude_newer_exemptions: Vec<String>,
 
     /// Policy for selecting package timestamps when using `--exclude-newer`.
     #[clap(long, default_value = "require-timestamp")]
@@ -381,18 +382,10 @@ impl SolverArgs {
                 .apply_to_channel(exclude_newer, channel, now);
         }
 
-        let mut packages = HashSet::new();
-        for override_ in &self.package_cutoffs {
-            let package = PackageName::from_str(&override_.name).into_diagnostic()?;
-            if !packages.insert(package.clone()) {
-                return Err(miette::miette!(
-                    "duplicate cutoff for package '{}'",
-                    override_.name
-                ));
-            }
-            exclude_newer = override_
-                .cutoff
-                .apply_to_package(exclude_newer, package, now);
+        for spec in &self.exclude_newer_exemptions {
+            let spec =
+                MatchSpec::from_str(spec, ParseMatchSpecOptions::strict()).into_diagnostic()?;
+            exclude_newer = exclude_newer.with_exemption(spec).into_diagnostic()?;
         }
 
         Ok(Some(

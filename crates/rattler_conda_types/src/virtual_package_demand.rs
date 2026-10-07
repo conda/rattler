@@ -1,15 +1,16 @@
 //! Which virtual package names a set of package records can reference.
 //!
 //! A detector only needs to run when a solve could ask for one of its names.
-//! Scanning the `depends` and `constrains` of the records that take part in
-//! the solve tells which names that is.
+//! Scanning `depends`, `constrains`, and every `extra_depends` group of the
+//! records taking part in the solve collects these potential references.
 
 use std::collections::BTreeSet;
 
 use crate::{MatchSpec, PackageName, PackageRecord, ParseStrictness};
 
 /// The virtual package names, starting with two underscores, that any of
-/// `records` mentions in `depends` or `constrains`.
+/// `records` mentions in `depends`, `constrains`, or any `extra_depends` group.
+/// All optional groups contribute potential demand, regardless of activation.
 ///
 /// Ordinary specs only have their exact package name parsed; the solver validates
 /// the remaining constraints. Qualified and bracket specs use lenient `MatchSpec`
@@ -19,7 +20,12 @@ pub fn referenced_virtual_packages<'a>(
 ) -> BTreeSet<PackageName> {
     let mut names = BTreeSet::new();
     for record in records {
-        for spec in record.depends.iter().chain(&record.constrains) {
+        for spec in record
+            .depends
+            .iter()
+            .chain(&record.constrains)
+            .chain(record.extra_depends.values().flatten())
+        {
             let spec = spec.trim_start();
             let name = if spec.contains(':') || spec.contains('[') {
                 MatchSpec::from_str(spec, ParseStrictness::Lenient)
@@ -102,6 +108,64 @@ mod tests {
             &["__GLIBC >=2.17", "__archspec=1=x86_64"],
         )];
         let names: Vec<_> = referenced_virtual_packages(&records)
+            .into_iter()
+            .map(|name| name.as_normalized().to_owned())
+            .collect();
+        assert_eq!(names, ["__archspec", "__cuda", "__glibc"]);
+    }
+
+    #[test]
+    fn collects_potential_names_from_all_optional_groups() {
+        let mut record = record(&["__cuda >=12"], &["__glibc >=2.28"]);
+        record.extra_depends.insert(
+            "gpu".to_string(),
+            vec!["__cuda >=11".to_string(), "__rocm >=6".to_string()],
+        );
+        record.extra_depends.insert(
+            "mpi".to_string(),
+            vec![
+                "__conda_forge_openmpi >=5".to_string(),
+                "__rocm >=5".to_string(),
+                "__glibc >=2.17".to_string(),
+            ],
+        );
+        record.extra_depends.insert("empty".to_string(), Vec::new());
+
+        let names: Vec<_> = referenced_virtual_packages([&record])
+            .into_iter()
+            .map(|name| name.as_normalized().to_owned())
+            .collect();
+        assert_eq!(
+            names,
+            ["__conda_forge_openmpi", "__cuda", "__glibc", "__rocm"]
+        );
+    }
+
+    #[test]
+    fn preserves_exact_name_rules_in_optional_groups() {
+        let mut record = record(&[], &[]);
+        record.extra_depends.insert(
+            "__group_name_is_not_a_dependency".to_string(),
+            [
+                "  __CUDA >=12",
+                "__cuda<13",
+                "conda-forge::__CUDA 12.*",
+                "__glibc[version='>=2.28']",
+                "__archspec=1=x86_64",
+                "__cuda[name=__other]",
+                "*[name=__other]",
+                "__cuda[ab]",
+                "__cuda* >=12",
+                "conda-forge::__cuda* >=12",
+                "^__cuda.*$",
+                "python >=3.10",
+            ]
+            .into_iter()
+            .map(ToString::to_string)
+            .collect(),
+        );
+
+        let names: Vec<_> = referenced_virtual_packages([&record])
             .into_iter()
             .map(|name| name.as_normalized().to_owned())
             .collect();

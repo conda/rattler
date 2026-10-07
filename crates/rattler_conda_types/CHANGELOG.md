@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.56.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.56.1...rattler_conda_types-v0.56.2) - 2026-10-07
+
+### Fixed
+
+- include optional dependencies in virtual package demand ([#2912](https://github.com/conda/rattler/pull/2912))
+
+### Other
+
+- bump rust to 1.98.1 ([#2906](https://github.com/conda/rattler/pull/2906))
+
 ## [0.56.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.56.0...rattler_conda_types-v0.56.1) - 2026-10-05
 
 ### Added
