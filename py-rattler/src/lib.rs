@@ -15,6 +15,7 @@ mod no_arch_type;
 mod package_name;
 mod package_name_matcher;
 mod package_streaming;
+mod package_cache;
 mod paths_json;
 mod prefix_paths;
 #[cfg(feature = "pty")]
@@ -69,6 +70,7 @@ use networking::middleware::{
 };
 use networking::{client::PyClientWithMiddleware, py_fetch_repo_data};
 use no_arch_type::PyNoArchType;
+use package_cache::{PyCacheIndex, PyPackageCache, PyPackageCacheLayer, PyValidationMode};
 use package_name::PyPackageName;
 use package_name_matcher::PyPackageNameMatcher;
 use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
@@ -229,6 +231,12 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     // Explicit environment specification
     m.add_class::<PyExplicitEnvironmentSpec>()?;
     m.add_class::<PyExplicitEnvironmentEntry>()?;
+
+    // Package cache
+    m.add_class::<PyPackageCache>()?;
+    m.add_class::<PyPackageCacheLayer>()?;
+    m.add_class::<PyCacheIndex>()?;
+    m.add_class::<PyValidationMode>()?;
 
     // Exceptions
     m.add("InvalidVersionError", py.get_type::<InvalidVersionError>())?;
