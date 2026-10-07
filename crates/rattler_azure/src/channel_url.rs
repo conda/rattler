@@ -37,6 +37,11 @@ impl AzureChannelUrl {
         if let Some(segment) = written_segments.iter().find(|s| s.is_dot_segment()) {
             return Err(AzureUrlError::DotSegmentInPath(segment.raw.to_string()));
         }
+        if let Some(segment) = written_segments.iter().find(|s| s.hides_separator()) {
+            return Err(AzureUrlError::EncodedSeparatorInPath(
+                segment.raw.to_string(),
+            ));
+        }
 
         let segments = url
             .path_segments()
@@ -183,6 +188,10 @@ impl WrittenSegment<'_> {
     fn is_dot_segment(&self) -> bool {
         self.decoded == "." || self.decoded == ".."
     }
+
+    fn hides_separator(&self) -> bool {
+        self.decoded.contains(PATH_SEPARATORS)
+    }
 }
 
 /// Percent-decodes and UTF-8-validates every segment of the url tail
@@ -264,6 +273,10 @@ mod tests {
             "az://acct.blob.core.windows.net/general/../../othercontainer",
             "az://acct.blob.core.windows.net/general/./noarch",
             "az://acct.blob.core.windows.net/general/%2E%2E/othercontainer",
+            // encoded separators hide dot segments and split once decoded
+            "az://acct.blob.core.windows.net/general/gen%2F..%2Fx",
+            "az://acct.blob.core.windows.net/general/a%2fb",
+            "az://acct.blob.core.windows.net/general/a%5Cb",
             // empty segments
             "az://acct.blob.core.windows.net//general/noarch",
             "az://acct.blob.core.windows.net/general//noarch",

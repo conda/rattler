@@ -33,6 +33,12 @@ pub enum AzureUrlError {
     DotSegmentInPath(String),
 
     #[error(
+        "Azure blob channel URL segment `{0}` percent-decodes to a path separator; write `/` \
+         unencoded between segments"
+    )]
+    EncodedSeparatorInPath(String),
+
+    #[error(
         "Azure blob channel URL path `{path}` has an empty segment; a doubled `/` names nothing, \
          so write the path with single separators"
     )]
