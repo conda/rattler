@@ -6,20 +6,20 @@ environments.</p>
 <p>The high-level API provided by this type holds internal references to the
 data. Its is therefore cheap to clone this type.</p>
 </div></details><h2 id="implementations" class="section-header">Implementations<a href="#implementations" class="anchor">§</a></h2><div id="implementations-list"><details class="toggle implementors-toggle" open><summary><section id="impl-LockFile" class="impl"><a class="src rightside" href="../src/rattler_lock/conda_lock/import.rs.html#37-82">Source</a><a href="#impl-LockFile" class="anchor">§</a><h3 class="code-header">impl <a class="struct" href="struct.LockFile.html" title="struct rattler_lock::LockFile">LockFile</a></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.from_conda_lock" class="method"><a class="src rightside" href="../src/rattler_lock/conda_lock/import.rs.html#55-60">Source</a><h4 class="code-header">pub fn <a href="#method.from_conda_lock" class="fn">from_conda_lock</a>(
-    lock_file: &amp;CepLockFile,
+    lock_file: &amp;<a class="struct" href="../rattler_conda_lock/model/struct.LockFile.html" title="struct rattler_conda_lock::model::LockFile">CepLockFile</a>,
     options: &amp;<a class="struct" href="conda_lock/struct.ImportOptions.html" title="struct rattler_lock::conda_lock::ImportOptions">ImportOptions</a>,
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.98.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;Self, <a class="struct" href="conda_lock/struct.CondaLockError.html" title="struct rattler_lock::conda_lock::CondaLockError">CondaLockError</a>&gt;</h4></section></summary><div class="docblock"><p>Imports selected categories of a CEP-37 lock file, without solving,
 downloading, or expanding variables.</p>
 <p>Empty declared platforms remain present in every destination environment.
 Errors refer to CEP-37 model paths, including both sides of conflicting
-selections; pass a [<code>Document</code>] to <a href="struct.LockFile.html#method.from_conda_lock_document" title="associated function rattler_lock::LockFile::from_conda_lock_document"><code>Self::from_conda_lock_document</code></a> to
+selections; pass a <a href="../rattler_conda_lock/document/struct.Document.html" title="struct rattler_conda_lock::document::Document"><code>Document</code></a> to <a href="struct.LockFile.html#method.from_conda_lock_document" title="associated function rattler_lock::LockFile::from_conda_lock_document"><code>Self::from_conda_lock_document</code></a> to
 have those paths resolved to source spans as well.</p>
 
 <div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>rattler_lock::{LockFile, conda_lock::ImportOptions};
 
 <span class="kw">let </span>pixi = LockFile::from_conda_lock(cep, <span class="kw-2">&amp;</span>ImportOptions::default())<span class="question-mark">?</span>;
 <span class="macro">assert!</span>(pixi.default_environment().is_some());</code></pre></div></div></details><details class="toggle method-toggle" open><summary><section id="method.from_conda_lock_document" class="method"><a class="src rightside" href="../src/rattler_lock/conda_lock/import.rs.html#73-81">Source</a><h4 class="code-header">pub fn <a href="#method.from_conda_lock_document" class="fn">from_conda_lock_document</a>(
-    document: &amp;Document,
+    document: &amp;<a class="struct" href="../rattler_conda_lock/document/struct.Document.html" title="struct rattler_conda_lock::document::Document">Document</a>,
     options: &amp;<a class="struct" href="conda_lock/struct.ImportOptions.html" title="struct rattler_lock::conda_lock::ImportOptions">ImportOptions</a>,
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.98.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;Self, <a class="struct" href="conda_lock/struct.CondaLockError.html" title="struct rattler_lock::conda_lock::CondaLockError">CondaLockError</a>&gt;</h4></section></summary><div class="docblock"><p>Imports a parsed document, attaching its source spans to any error.</p>
 
