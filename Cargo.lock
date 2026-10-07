@@ -4998,7 +4998,7 @@ dependencies = [
 
 [[package]]
 name = "rattler-bin"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-reqwest-retry",
@@ -5321,7 +5321,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.34.4"
+version = "0.34.5"
 dependencies = [
  "ahash",
  "file_url",
@@ -5677,7 +5677,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "11.1.2"
+version = "11.2.0"
 dependencies = [
  "criterion",
  "futures",
@@ -5707,7 +5707,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_upload"
-version = "0.13.1"
+version = "0.13.2"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-reqwest-retry",
@@ -5745,7 +5745,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_package_detectors"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "fs-err",

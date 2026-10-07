@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.5](https://github.com/conda/rattler/compare/rattler-bin-v0.5.4...rattler-bin-v0.5.5) - 2026-10-07
+
+### Added
+
+- *(solve)* Add exemptions to exclude-newer, deprecate package_cutoffs ([#2910](https://github.com/conda/rattler/pull/2910))
+
 ## [0.5.4](https://github.com/conda/rattler/compare/rattler-bin-v0.5.3...rattler-bin-v0.5.4) - 2026-10-07
 
 ### Other
