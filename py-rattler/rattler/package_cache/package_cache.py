@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import TYPE_CHECKING
 
 from rattler.rattler import (
     PyCacheIndex,
@@ -13,6 +13,7 @@ from rattler.rattler import (
 
 if TYPE_CHECKING:
     from rattler.repo_data import RepoDataRecord
+
     BasePathLike = os.PathLike[str]
 else:
     BasePathLike = os.PathLike
@@ -78,7 +79,7 @@ class PackageCacheLayer:
 
     _inner: PyPackageCacheLayer
 
-    def __init__(self, path: Union[str, BasePathLike]) -> None:
+    def __init__(self, path: str | BasePathLike) -> None:
         """Creates an unfiltered package-cache layer pointing to the given path."""
         self._inner = PyPackageCacheLayer(Path(path))
 
@@ -100,9 +101,7 @@ class PackageCacheLayer:
 
     def with_validation_mode(self, validation_mode: ValidationMode) -> PackageCacheLayer:
         """Sets the validation mode used by this layer."""
-        return PackageCacheLayer._from_py_layer(
-            self._inner.with_validation_mode(validation_mode._inner)
-        )
+        return PackageCacheLayer._from_py_layer(self._inner.with_validation_mode(validation_mode._inner))
 
     def __repr__(self) -> str:
         return self._inner.__repr__()
@@ -142,7 +141,7 @@ class PackageCache:
 
     _inner: PyPackageCache
 
-    def __init__(self, path: Union[str, BasePathLike]) -> None:
+    def __init__(self, path: str | BasePathLike) -> None:
         """Creates a new PackageCache targeting the given directory."""
         self._inner = PyPackageCache(Path(path))
 
@@ -155,21 +154,19 @@ class PackageCache:
     @classmethod
     def new_layered(
         cls,
-        paths: List[Union[str, BasePathLike]],
+        paths: list[str | BasePathLike],
         cache_origin: bool = False,
-        validation_mode: Optional[ValidationMode] = None,
+        validation_mode: ValidationMode | None = None,
     ) -> PackageCache:
         """Constructs a new `PackageCache` located at the specified paths."""
         rust_paths = [Path(p) for p in paths]
         val_mode = validation_mode._inner if validation_mode is not None else None
-        return cls._from_py_package_cache(
-            PyPackageCache.new_layered(rust_paths, cache_origin, val_mode)
-        )
+        return cls._from_py_package_cache(PyPackageCache.new_layered(rust_paths, cache_origin, val_mode))
 
     @classmethod
-    def from_layers(cls, layers: List[PackageCacheLayer], cache_origin: bool = False) -> PackageCache:
+    def from_layers(cls, layers: list[PackageCacheLayer], cache_origin: bool = False) -> PackageCache:
         """Creates a PackageCache from multiple configured layers."""
-        py_layers = [l._inner for l in layers]
+        py_layers = [layer._inner for layer in layers]
         return cls._from_py_package_cache(PyPackageCache.from_layers(py_layers, cache_origin))
 
     def with_cached_origin(self) -> PackageCache:
@@ -178,20 +175,18 @@ class PackageCache:
 
     def with_prepended_layer(self, layer: PackageCacheLayer) -> PackageCache:
         """Prepends a configured layer to this cache."""
-        return PackageCache._from_py_package_cache(
-            self._inner.with_prepended_layer(layer._inner)
-        )
+        return PackageCache._from_py_package_cache(self._inner.with_prepended_layer(layer._inner))
 
     @property
-    def first_writable(self) -> Optional[Path]:
+    def first_writable(self) -> Path | None:
         """Returns the first writable directory in the package cache, if any."""
         path = self._inner.first_writable()
         return Path(path) if path is not None else None
 
     @property
-    def layers(self) -> List[PackageCacheLayer]:
+    def layers(self) -> list[PackageCacheLayer]:
         """Returns the layers in this package cache."""
-        return [PackageCacheLayer._from_py_layer(l) for l in self._inner.layers]
+        return [PackageCacheLayer._from_py_layer(layer) for layer in self._inner.layers]
 
     async def index(self) -> CacheIndex:
         """Takes an async snapshot of the packages present in the cache."""

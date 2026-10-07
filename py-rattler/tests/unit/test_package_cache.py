@@ -1,5 +1,7 @@
 from pathlib import Path
+
 import pytest
+
 from rattler import CacheIndex, PackageCache, PackageCacheLayer, ValidationMode
 
 
