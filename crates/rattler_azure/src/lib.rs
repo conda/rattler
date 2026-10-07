@@ -7,7 +7,6 @@
 //! equivalent URLs compare equal.
 
 mod channel_url;
-mod credentials;
 mod error;
 mod host;
 mod names;
@@ -16,10 +15,7 @@ pub mod options;
 mod test_support;
 
 pub use channel_url::AzureChannelUrl;
-pub use credentials::AzureCredentials;
 pub use error::AzureUrlError;
 pub use host::AzureHost;
-pub use names::{AccountName, ContainerName};
+pub use names::ContainerName;
 pub use options::{Auth, AzureEndpointOptions, AzureFetchOptions, AzureScheme};
-
-pub use secrecy::{ExposeSecret, SecretString};

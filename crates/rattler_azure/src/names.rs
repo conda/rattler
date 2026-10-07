@@ -1,35 +1,5 @@
 use crate::AzureUrlError;
 
-/// A name that satisfies Azure's storage-account rules: 3-24 characters,
-/// lowercase letters and digits only.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct AccountName(String);
-
-impl AccountName {
-    pub fn new(name: &str) -> Result<Self, AzureUrlError> {
-        let valid = (3..=24).contains(&name.len())
-            && name
-                .chars()
-                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit());
-
-        if valid {
-            Ok(Self(name.to_string()))
-        } else {
-            Err(AzureUrlError::InvalidAccountName(name.to_string()))
-        }
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for AccountName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
 /// A name that satisfies Azure's container rules: 3-63 characters of
 /// lowercase letters, digits and non-consecutive interior hyphens.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -95,8 +65,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn empty_components_are_rejected() {
-        assert!(AccountName::new("").is_err());
+    fn empty_container_name_is_rejected() {
         assert!(ContainerName::new("").is_err());
     }
 }

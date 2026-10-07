@@ -16,7 +16,6 @@ serde = ["dep:serde", "indexmap/serde"]
 [dependencies]
 indexmap = { workspace = true }
 percent-encoding = { workspace = true }
-secrecy = { workspace = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 thiserror = { workspace = true }
 url = { workspace = true }

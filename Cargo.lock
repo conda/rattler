@@ -5026,7 +5026,6 @@ dependencies = [
  "indexmap 2.14.2",
  "insta",
  "percent-encoding",
- "secrecy",
  "serde",
  "thiserror 2.0.20",
  "toml",
