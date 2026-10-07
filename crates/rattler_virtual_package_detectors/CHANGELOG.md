@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/conda/rattler/compare/rattler_virtual_package_detectors-v0.1.2...rattler_virtual_package_detectors-v0.2.0) - 2026-10-07
+
+### Fixed
+
+- *(detectors)* preserve successful stderr diagnostics ([#2913](https://github.com/conda/rattler/pull/2913))
+
 ## [0.1.2](https://github.com/conda/rattler/compare/rattler_virtual_package_detectors-v0.1.1...rattler_virtual_package_detectors-v0.1.2) - 2026-10-07
 
 ### Other
