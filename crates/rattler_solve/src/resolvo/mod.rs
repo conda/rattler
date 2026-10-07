@@ -13,8 +13,9 @@ use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::MatchSpecCondition;
 use rattler_conda_types::{
-    GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec, PackageName, PackageNameMatcher,
-    ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord, RepodataRevision, SolverResult,
+    Channel, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec, PackageName,
+    PackageNameMatcher, ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord,
+    RepodataRevision, SolverResult,
     package::{ArchiveIdentifier, DistArchiveType},
 };
 use resolvo::{
@@ -28,7 +29,8 @@ use url::Url;
 
 use crate::{
     CancellationToken, ChannelPriority, ExcludeNewer, IntoRepoData, SolveError, SolveStrategy,
-    SolverRepoData, SolverTask, resolvo::conda_sorting::CompareStrategy,
+    SolverRepoData, SolverTask, priority_tier::PriorityTier,
+    resolvo::conda_sorting::CompareStrategy,
 };
 
 mod conda_sorting;
@@ -60,17 +62,26 @@ struct PreparedDependencyOverride {
 pub struct RepoData<'a> {
     /// The actual records after parsing `repodata.json`
     pub records: Vec<&'a RepoDataRecord>,
+
+    /// The multichannel the channel of these records belongs to, see
+    /// [`crate::ChannelRepoData`].
+    pub multi_channel: Option<&'a str>,
 }
 
 impl<'a> FromIterator<&'a RepoDataRecord> for RepoData<'a> {
     fn from_iter<T: IntoIterator<Item = &'a RepoDataRecord>>(iter: T) -> Self {
         Self {
             records: Vec::from_iter(iter),
+            multi_channel: None,
         }
     }
 }
 
-impl<'a> SolverRepoData<'a> for RepoData<'a> {}
+impl<'a> SolverRepoData<'a> for RepoData<'a> {
+    fn set_multi_channel(&mut self, name: &'a str) {
+        self.multi_channel = Some(name);
+    }
+}
 
 /// Wrapper around `MatchSpec` so that we can use it in the `resolvo` pool
 #[allow(clippy::large_enum_variant)]
@@ -326,10 +337,11 @@ pub struct CondaDependencyProvider<'a> {
     /// The channel priority mode used for this solve.
     channel_priority: ChannelPriority,
 
-    /// Maps a channel to its priority rank. Lower ranks indicate
-    /// higher-priority channels. Ranks are assigned in the order
-    /// channels are first encountered in the repodata,
-    /// which matches the order in which channels were provided to the solver.
+    /// Maps a channel to the priority rank of its [`PriorityTier`]. Lower
+    /// ranks indicate higher-priority tiers. Ranks are assigned in the order
+    /// tiers are first encountered in the repodata, which matches the order in
+    /// which channels were provided to the solver. All channels of a
+    /// multichannel share a single rank.
     ///
     /// This is only populated (and consulted) for
     /// [`ChannelPriority::Flexible`].
@@ -395,17 +407,28 @@ impl<'a> CondaDependencyProvider<'a> {
             .filter(|spec| spec.channel.is_some())
             .collect::<Vec<_>>();
 
-        // Hashmap that maps the package name to the channel it was first found in.
+        // Hashmap that maps the package name to the priority tier it was first found in.
         // Only maintained (and consulted) for [`ChannelPriority::Strict`].
-        let mut package_name_found_in_channel = HashMap::<&str, &Option<String>>::new();
+        let mut package_name_found_in_tier = HashMap::<&str, PriorityTier<'a>>::new();
 
-        // Maps each channel to a priority rank in the order channels are first
-        // encountered (which matches the order channels were provided). Lower
+        // Maps each channel to the priority rank of its tier in the order tiers are
+        // first encountered (which matches the order channels were provided). Lower
         // rank == higher priority. Used by `ChannelPriority::Flexible`.
         let mut channel_order = HashMap::<Option<String>, u32>::new();
+        let mut tier_order = HashMap::<PriorityTier<'a>, u32>::new();
+
+        // A channel-specific spec that names one of these multichannels accepts
+        // records from every channel of that multichannel.
+        let repodata: Vec<RepoData<'a>> = repodata.into_iter().collect();
+        let multi_channels: HashSet<&'a str> = repodata
+            .iter()
+            .filter_map(|repo_data| repo_data.multi_channel)
+            .collect();
 
         // Add additional records
         for repo_data in repodata {
+            let multi_channel = repo_data.multi_channel;
+
             // Iterate over all records and dedup records that refer to the same package
             // data but with different archive types. This can happen if you
             // have two variants of the same package but with different
@@ -487,12 +510,15 @@ impl<'a> CondaDependencyProvider<'a> {
                 let candidates = records.entry(package_name).or_default();
                 candidates.candidates.push(solvable_id);
 
+                let tier = PriorityTier::new(multi_channel, record.channel.as_deref());
+
                 // Only [`ChannelPriority::Flexible`] consults channel ranks.
                 if channel_priority == ChannelPriority::Flexible
                     && !channel_order.contains_key(&record.channel)
                 {
-                    let next_rank = channel_order.len() as u32;
-                    channel_order.insert(record.channel.clone(), next_rank);
+                    let next_rank = tier_order.len() as u32;
+                    let rank = *tier_order.entry(tier).or_insert(next_rank);
+                    channel_order.insert(record.channel.clone(), rank);
                 }
 
                 // Exclusions the caller derived from outside the repodata, for
@@ -519,7 +545,12 @@ impl<'a> CondaDependencyProvider<'a> {
                     // Check if the spec has a channel, and compare it to the repodata
                     // channel
                     if let Some(spec_channel) = &spec.channel
-                        && record.channel.as_ref() != Some(&spec_channel.canonical_name())
+                        && !is_in_requested_channel(
+                            spec_channel,
+                            record,
+                            multi_channel,
+                            &multi_channels,
+                        )
                     {
                         tracing::debug!(
                             "Ignoring {} {} because it was not requested from that channel.",
@@ -548,12 +579,12 @@ impl<'a> CondaDependencyProvider<'a> {
                 // Enforce channel priority only in strict mode. Other modes do not
                 // consult this map, so avoid allocating and populating it for every record.
                 if channel_priority == ChannelPriority::Strict {
-                    match package_name_found_in_channel
+                    match package_name_found_in_tier
                         .entry(record.package_record.name.as_normalized())
                     {
-                        std::collections::hash_map::Entry::Occupied(first_channel) => {
-                            // Add the record to the excluded list when it is from a different channel.
-                            if *first_channel.get() != &record.channel {
+                        std::collections::hash_map::Entry::Occupied(first_tier) => {
+                            // Add the record to the excluded list when it is from a different tier.
+                            if *first_tier.get() != tier {
                                 if let Some(channel) = &record.channel {
                                     tracing::debug!(
                                         "Ignoring '{}' from '{}' because of strict channel priority.",
@@ -579,7 +610,7 @@ impl<'a> CondaDependencyProvider<'a> {
                             }
                         }
                         std::collections::hash_map::Entry::Vacant(entry) => {
-                            entry.insert(&record.channel);
+                            entry.insert(tier);
                         }
                     }
                 }
@@ -658,9 +689,10 @@ impl<'a> CondaDependencyProvider<'a> {
     }
 
     /// Returns the priority rank for a channel, where a lower rank indicates a
-    /// higher-priority channel. Channels not seen during the construction sort last.
-    /// Channel strings are compared byte-for-byte as URL normalization is still missing
-    /// (see TODO: Normalize these channel names to urls above)
+    /// higher-priority channel. Channels of the same multichannel share a rank.
+    /// Channels not seen during the construction sort last. Channel strings are
+    /// compared byte-for-byte as URL normalization is still missing (see TODO:
+    /// Normalize these channel names to urls above)
     fn channel_rank(&self, channel: &Option<String>) -> u32 {
         self.channel_order.get(channel).copied().unwrap_or(u32::MAX)
     }
@@ -694,6 +726,26 @@ impl<'a> CondaDependencyProvider<'a> {
             }
         }
         None
+    }
+}
+
+/// Returns true if `record`, which was requested through `multi_channel`,
+/// comes from the channel that a match spec asked for. A channel named after
+/// one of the multichannels of the solve refers to every channel of that
+/// multichannel.
+fn is_in_requested_channel(
+    spec_channel: &Channel,
+    record: &RepoDataRecord,
+    multi_channel: Option<&str>,
+    multi_channels: &HashSet<&str>,
+) -> bool {
+    match spec_channel
+        .name
+        .as_deref()
+        .filter(|name| multi_channels.contains(name))
+    {
+        Some(requested) => multi_channel == Some(requested),
+        None => record.channel.as_ref() == Some(&spec_channel.canonical_name()),
     }
 }
 

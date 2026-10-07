@@ -1,13 +1,17 @@
 #![allow(clippy::option_option)]
 
-use std::{collections::BTreeSet, io, path::Path};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    io,
+    path::Path,
+};
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
 use crate::{
-    PackageRecord, PackageUrl, RepoData, Shard, V3Extensions,
+    Flag, PackageRecord, PackageUrl, RepoData, Shard, V3Extensions,
     package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
 };
 
@@ -68,6 +72,12 @@ pub struct PackageRecordPatch {
     /// not required to be installed, but if they are installed they must follow
     /// these constraints.
     pub constrains: Option<Vec<String>>,
+
+    /// Optional dependency groups keyed by extra name.
+    pub extra_depends: Option<BTreeMap<String, Vec<String>>>,
+
+    /// Package variant flags.
+    pub flags: Option<Vec<Flag>>,
 
     /// Track features are nowadays only used to downweight packages (ie. give
     /// them less priority). To that effect, the number of track features is
@@ -223,6 +233,12 @@ impl PackageRecord {
         }
         if let Some(constrains) = &patch.constrains {
             self.constrains = constrains.clone();
+        }
+        if let Some(extra_depends) = &patch.extra_depends {
+            self.extra_depends = extra_depends.clone();
+        }
+        if let Some(flags) = &patch.flags {
+            self.flags = flags.clone();
         }
         if let Some(track_features) = &patch.track_features {
             self.track_features = track_features.clone().unwrap_or_default();

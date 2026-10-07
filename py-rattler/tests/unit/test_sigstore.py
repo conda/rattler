@@ -59,6 +59,22 @@ def test_trusted_root_from_path(tmp_path: Path) -> None:
         TrustedRoot.from_path(tmp_path / "missing.json")
 
 
+def test_trusted_root_embedded() -> None:
+    assert repr(TrustedRoot.embedded()) == "TrustedRoot()"
+
+
+@pytest.mark.asyncio
+async def test_verify_attestation_accepts_embedded_trusted_root() -> None:
+    record = await RepoDataRecord.from_package_archive(package_path())
+    outcome = await verify_attestation(
+        record,
+        VerificationPolicy.warn(),
+        trusted_root=TrustedRoot.embedded(),
+    )
+
+    assert not outcome.is_verified
+
+
 @pytest.mark.asyncio
 async def test_verify_attestation_accepts_trusted_root() -> None:
     record = await RepoDataRecord.from_package_archive(package_path())

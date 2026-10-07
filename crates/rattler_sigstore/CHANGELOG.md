@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2](https://github.com/conda/rattler/compare/rattler_sigstore-v0.2.1...rattler_sigstore-v0.2.2) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+
+## [0.2.1](https://github.com/conda/rattler/compare/rattler_sigstore-v0.2.0...rattler_sigstore-v0.2.1) - 2026-10-05
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.2.0](https://github.com/conda/rattler/compare/rattler_sigstore-v0.1.0...rattler_sigstore-v0.2.0) - 2026-09-29
+
+### Added
+
+- *(sigstore)* add FulcioCiClaims from `1.3.6.1.4.1.57264.1` ([#2844](https://github.com/conda/rattler/pull/2844))
+
 ## [0.1.0](https://github.com/conda/rattler/compare/rattler_sigstore-v0.0.0...rattler_sigstore-v0.1.0) - 2026-09-23
 
 ### Added

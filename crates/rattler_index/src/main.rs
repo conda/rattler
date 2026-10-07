@@ -15,7 +15,7 @@ use rattler_index::{IndexS3Config, PreconditionChecks, index_s3_with_channel_met
 #[cfg(feature = "s3")]
 use rattler_networking::AuthenticationStorage;
 #[cfg(feature = "s3")]
-use rattler_s3::S3Credentials;
+use rattler_s3::{S3CredentialSource, S3Credentials};
 #[cfg(feature = "s3")]
 use url::Url;
 
@@ -189,9 +189,9 @@ async fn main() -> anyhow::Result<()> {
             let credentials = match Option::<S3Credentials>::from(credentials) {
                 Some(credentials) => {
                     let auth_storage = AuthenticationStorage::from_env_and_defaults()?;
-                    credentials.resolve(&channel, &auth_storage).ok_or_else(|| anyhow::anyhow!("Could not find S3 credentials in the authentication storage, and no credentials were provided via the command line."))?
+                    credentials.resolve(&channel, &auth_storage).map(S3CredentialSource::from).ok_or_else(|| anyhow::anyhow!("Could not find S3 credentials in the authentication storage, and no credentials were provided via the command line."))?
                 }
-                None => rattler_s3::ResolvedS3Credentials::from_sdk().await?,
+                None => S3CredentialSource::from_sdk().await?,
             };
 
             index_s3_with_channel_metadata(

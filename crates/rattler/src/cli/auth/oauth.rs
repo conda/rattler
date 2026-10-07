@@ -1,7 +1,8 @@
 //! OAuth/OIDC authentication flows for the CLI.
 //!
-//! Supports authorization code grant with PKCE (primary) and device code
-//! flow (fallback for headless environments).
+//! Supports authorization code grant with PKCE (primary, RFC 6749 §4.1 and
+//! RFC 7636) and device code flow (fallback for headless environments,
+//! RFC 8628). Endpoints are found via `OpenID` Connect Discovery 1.0.
 
 use std::{
     collections::HashSet,
@@ -18,7 +19,7 @@ use openidconnect::{
         CoreAuthDisplay, CoreClaimName, CoreClaimType, CoreClient, CoreClientAuthMethod,
         CoreDeviceAuthorizationResponse, CoreGrantType, CoreIdTokenClaims, CoreJsonWebKey,
         CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm, CoreResponseMode,
-        CoreResponseType, CoreSubjectIdentifierType,
+        CoreResponseType, CoreSubjectIdentifierType, CoreTokenType,
     },
 };
 use rattler_networking::Authentication;
@@ -99,6 +100,9 @@ pub fn callback_page_renderer(
 
 /// Configuration for an OAuth login flow.
 pub struct OAuthConfig {
+    /// Optional provider-specific `audience` parameter (not RFC 8707 `resource`).
+    /// `None` preserves channel login. Callers own storage and interaction policy.
+    pub audience: Option<String>,
     /// The OIDC issuer URL.
     pub issuer_url: String,
     /// The OAuth client ID.
@@ -201,10 +205,54 @@ struct CallbackResult {
     stream: std::net::TcpStream,
 }
 
-/// Perform an OAuth/OIDC login and return the resulting
-/// `Authentication::OAuth`.
+/// Perform an OAuth/OIDC login and return `Authentication::OAuth` without storing it.
+///
+/// ```no_run
+/// use rattler::cli::auth::oauth::{OAuthConfig, perform_oauth_login};
+/// use rattler_networking::{AuthenticationStorage, AuthenticationMiddleware};
+/// # async fn example(mut config: OAuthConfig, storage: AuthenticationStorage, api: url::Url) -> Result<(), Box<dyn std::error::Error>> {
+/// let audience = "https://api.example.test";
+/// config.audience = Some(audience.into());
+/// let key = AuthenticationStorage::oauth_audience_key(&config.issuer_url, &config.client_id, audience);
+/// let middleware = AuthenticationMiddleware::from_auth_storage(storage.clone())
+///     .with_oauth_audience(&config.issuer_url, &config.client_id, audience, api.origin());
+/// let auth = perform_oauth_login(config).await?;
+/// storage.store(&key, &auth)?;
+/// // Reuse this middleware on the API client; never log the returned credentials.
+/// let client = reqwest_middleware::ClientBuilder::new(
+///     reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).build()?
+/// ).with(middleware).build();
+/// # let _ = client;
+/// # Ok(())
+/// # }
+/// ```
 pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, OAuthError> {
-    let mut config = config;
+    let has_audience = config.audience.is_some();
+    validate_audience(config.audience.as_deref())?;
+    let result = perform_oauth_login_inner(config).await;
+    if has_audience {
+        // IMPORTANT: do not format _error here. OAuth error Display includes the
+        // provider's error_description, whose contents we cannot control.
+        result.map_err(|_error| {
+            OAuthError::Authorization("Audience authorization did not complete".into())
+        })
+    } else {
+        result
+    }
+}
+
+fn validate_audience(audience: Option<&str>) -> Result<(), OAuthError> {
+    if audience.is_some_and(|value| {
+        value.is_empty()
+            || value.len() > 2048
+            || value.chars().any(|c| c.is_whitespace() || c.is_control())
+    }) {
+        return Err(OAuthError::Authorization("Invalid OAuth audience".into()));
+    }
+    Ok(())
+}
+
+async fn perform_oauth_login_inner(mut config: OAuthConfig) -> Result<Authentication, OAuthError> {
     if config.scopes.is_empty() {
         config.scopes = DEFAULT_OAUTH_SCOPES
             .iter()
@@ -224,63 +272,37 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
     // 1. OIDC Discovery
     let endpoints = discover_endpoints(&http_client, &config.issuer_url).await?;
 
-    let client_secret = config.client_secret.as_deref();
-    let redirect_uri = config.redirect_uri.as_deref();
-
-    let callback_page: CallbackPageRenderer = config.callback_page.unwrap_or_else(|| {
+    let renderer = config.callback_page.take().unwrap_or_else(|| {
         callback_page_renderer(CallbackPageTemplate::default(), &config.issuer_url)
     });
-    let callback_page: &(dyn Fn(bool, &str) -> String + Send + Sync) = &*callback_page;
+    let audience = config.audience.as_deref();
+    // Audience login uses a fixed failure message in the browser too: `detail`
+    // can include a provider error_description or a token-exchange error.
+    let callback_page = |success, detail: &str| {
+        renderer(
+            success,
+            if audience.is_some() && !success {
+                "Authorization did not complete."
+            } else {
+                detail
+            },
+        )
+    };
 
     // 2. Run the appropriate flow
     let tokens = match config.flow {
         OAuthFlow::AuthCode => {
-            auth_code_flow(
-                &endpoints,
-                &config.client_id,
-                client_secret,
-                &config.scopes,
-                redirect_uri,
-                &http_client,
-                callback_page,
-            )
-            .await?
+            auth_code_flow(&endpoints, &config, &http_client, &callback_page).await?
         }
-        OAuthFlow::DeviceCode => {
-            device_code_flow(
-                &endpoints,
-                &config.client_id,
-                client_secret,
-                &config.scopes,
-                &http_client,
-            )
-            .await?
-        }
+        OAuthFlow::DeviceCode => device_code_flow(&endpoints, &config, &http_client).await?,
         OAuthFlow::Auto => {
-            match auth_code_flow(
-                &endpoints,
-                &config.client_id,
-                client_secret,
-                &config.scopes,
-                redirect_uri,
-                &http_client,
-                callback_page,
-            )
-            .await
-            {
+            match auth_code_flow(&endpoints, &config, &http_client, &callback_page).await {
                 Ok(tokens) => tokens,
                 Err(OAuthError::BrowserOpen(e)) => {
                     tracing::info!(
                         "Failed to open browser ({e}), falling back to device code flow..."
                     );
-                    device_code_flow(
-                        &endpoints,
-                        &config.client_id,
-                        client_secret,
-                        &config.scopes,
-                        &http_client,
-                    )
-                    .await?
+                    device_code_flow(&endpoints, &config, &http_client).await?
                 }
                 Err(e) => return Err(e),
             }
@@ -288,21 +310,36 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
     };
 
     // 3. Display authenticated identity
-    match &tokens.authenticated_as {
-        Some(identity) => eprintln!("Authenticated as: {identity}"),
-        None => eprintln!("Authentication successful."),
+    if audience.is_none() {
+        match &tokens.authenticated_as {
+            Some(identity) => eprintln!("Authenticated as: {identity}"),
+            None => eprintln!("Authentication successful."),
+        }
     }
 
     // 4. Build the Authentication::OAuth value
-    let expires_at = tokens.expires_in.map(|d| {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64
-            + d.as_secs() as i64
-    });
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let expires_at = tokens
+        .expires_in
+        .map(|d| {
+            now.checked_add(d.as_secs())
+                .and_then(|value| i64::try_from(value).ok())
+                .ok_or_else(|| OAuthError::Authorization("Invalid token expiration".into()))
+        })
+        .transpose()?;
+    if audience.is_some()
+        && (tokens.access_token.is_empty() || expires_at.is_none_or(|expiry| expiry <= now as i64))
+    {
+        return Err(OAuthError::Authorization(
+            "Audience token requires a valid expires_in".into(),
+        ));
+    }
 
     Ok(Authentication::OAuth {
+        audience: audience.map(str::to_owned),
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         expires_at,
@@ -312,7 +349,32 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
     })
 }
 
-/// Perform OIDC discovery and extract all needed endpoints.
+fn require_resource_bearer(
+    audience: Option<&str>,
+    token_type: &CoreTokenType,
+) -> Result<(), OAuthError> {
+    if audience.is_some() && token_type != &CoreTokenType::Bearer {
+        return Err(OAuthError::TokenExchange(
+            "Resource requires a bearer access token".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn append_audience(url: &mut Url, audience: Option<&str>) -> Result<(), OAuthError> {
+    if let Some(audience) = audience {
+        if url.query_pairs().any(|(key, _)| key == "audience") {
+            return Err(OAuthError::Authorization(
+                "authorization endpoint already contains an audience".into(),
+            ));
+        }
+        url.query_pairs_mut().append_pair("audience", audience);
+    }
+    Ok(())
+}
+
+/// Perform OIDC discovery (`OpenID` Connect Discovery 1.0) and extract all
+/// needed endpoints.
 ///
 /// Uses our custom `ExtendedCoreProviderMetadata` type so that the
 /// `revocation_endpoint` and `device_authorization_endpoint` fields are
@@ -347,7 +409,7 @@ async fn discover_endpoints(
     })
 }
 
-/// Authorization code flow with PKCE.
+/// Authorization code flow (RFC 6749 §4.1) with PKCE (RFC 7636).
 ///
 /// 1. Binds a local TCP listener for the redirect
 /// 2. Opens the browser to the authorization URL
@@ -355,13 +417,15 @@ async fn discover_endpoints(
 /// 4. Exchanges the authorization code for tokens
 async fn auth_code_flow(
     endpoints: &DiscoveredEndpoints,
-    client_id: &str,
-    client_secret: Option<&str>,
-    scopes: &HashSet<String>,
-    redirect_uri: Option<&str>,
+    config: &OAuthConfig,
     http_client: &ReqwestClient,
     callback_page: &(dyn Fn(bool, &str) -> String + Send + Sync),
 ) -> Result<OAuthTokens, OAuthError> {
+    let audience = config.audience.as_deref();
+    let client_id = config.client_id.as_str();
+    let client_secret = config.client_secret.as_deref();
+    let scopes = &config.scopes;
+    let redirect_uri = config.redirect_uri.as_deref();
     // If the caller pinned a redirect URI (because the IdP requires an
     // exact match against what was registered), bind there. Otherwise
     // pick a random localhost port and use that.
@@ -405,7 +469,8 @@ async fn auth_code_flow(
     for scope in scopes {
         auth_request = auth_request.add_scope(Scope::new(scope.clone()));
     }
-    let (auth_url, csrf_token, nonce) = auth_request.set_pkce_challenge(pkce_challenge).url();
+    let (mut auth_url, csrf_token, nonce) = auth_request.set_pkce_challenge(pkce_challenge).url();
+    append_audience(&mut auth_url, audience)?;
 
     // Open browser
     let auth_url_str = auth_url.to_string();
@@ -449,6 +514,14 @@ async fn auth_code_flow(
         .await
     {
         Ok(response) => {
+            require_resource_bearer(audience, response.token_type()).inspect_err(|_| {
+                send_callback_response(
+                    &callback.stream,
+                    false,
+                    "Resource requires a bearer access token",
+                    callback_page,
+                );
+            })?;
             send_callback_response(&callback.stream, true, "", callback_page);
             response
         }
@@ -459,15 +532,18 @@ async fn auth_code_flow(
         }
     };
 
-    let authenticated_as = token_response.id_token().and_then(|id_token| {
-        match id_token.claims(&client.id_token_verifier(), &nonce) {
-            Ok(claims) => Some(display_name_from_claims(claims)),
-            Err(e) => {
-                tracing::debug!("ID token verification failed: {e}");
-                None
-            }
-        }
-    });
+    let authenticated_as = token_response
+        .id_token()
+        .filter(|_| audience.is_none())
+        .and_then(
+            |id_token| match id_token.claims(&client.id_token_verifier(), &nonce) {
+                Ok(claims) => Some(display_name_from_claims(claims)),
+                Err(e) => {
+                    tracing::debug!("ID token verification failed: {e}");
+                    None
+                }
+            },
+        );
 
     Ok(OAuthTokens {
         access_token: token_response.access_token().secret().clone(),
@@ -754,11 +830,13 @@ pub fn default_callback_page_with_template(
 /// includes the `openid` scope and handles polling with backoff.
 async fn device_code_flow(
     endpoints: &DiscoveredEndpoints,
-    client_id: &str,
-    client_secret: Option<&str>,
-    scopes: &HashSet<String>,
+    config: &OAuthConfig,
     http_client: &ReqwestClient,
 ) -> Result<OAuthTokens, OAuthError> {
+    let audience = config.audience.as_deref();
+    let client_id = config.client_id.as_str();
+    let client_secret = config.client_secret.as_deref();
+    let scopes = &config.scopes;
     let device_auth_url = endpoints
         .device_authorization_endpoint
         .as_deref()
@@ -785,6 +863,9 @@ async fn device_code_flow(
         device_request = device_request.add_scope(Scope::new(scope.clone()));
     }
 
+    if let Some(audience) = audience {
+        device_request = device_request.add_extra_param("audience", audience);
+    }
     let details: CoreDeviceAuthorizationResponse = device_request
         .request_async(http_client)
         .await
@@ -818,16 +899,21 @@ async fn device_code_flow(
         .await
         .map_err(|e| OAuthError::TokenExchange(e.to_string()))?;
 
+    require_resource_bearer(audience, token_response.token_type())?;
+
     // Device flow has no nonce (RFC 8628), so skip nonce verification
-    let authenticated_as = token_response.id_token().and_then(|id_token| {
-        match id_token.claims(&client.id_token_verifier(), |_: Option<&Nonce>| Ok(())) {
-            Ok(claims) => Some(display_name_from_claims(claims)),
-            Err(e) => {
-                tracing::debug!("ID token verification failed: {e}");
-                None
+    let authenticated_as = token_response
+        .id_token()
+        .filter(|_| audience.is_none())
+        .and_then(|id_token| {
+            match id_token.claims(&client.id_token_verifier(), |_: Option<&Nonce>| Ok(())) {
+                Ok(claims) => Some(display_name_from_claims(claims)),
+                Err(e) => {
+                    tracing::debug!("ID token verification failed: {e}");
+                    None
+                }
             }
-        }
-    });
+        });
 
     Ok(OAuthTokens {
         access_token: token_response.access_token().secret().clone(),
@@ -855,7 +941,7 @@ fn display_name_from_claims(claims: &CoreIdTokenClaims) -> String {
     claims.subject().to_string()
 }
 
-/// Revoke OAuth tokens at the provider's revocation endpoint.
+/// Revoke OAuth tokens at the provider's revocation endpoint (RFC 7009 §2.1).
 ///
 /// Best-effort: logs warnings on failure but does not return errors.
 pub async fn revoke_tokens(
@@ -920,9 +1006,15 @@ pub async fn revoke_tokens(
 #[cfg(test)]
 mod tests {
     use super::{
-        CallbackPageTemplate, DEFAULT_POWERED_BY, callback_page_domain_from_issuer,
-        default_callback_page, default_callback_page_with_template, html_escape,
+        CallbackPageTemplate, DEFAULT_POWERED_BY, OAuthConfig, OAuthFlow, append_audience,
+        callback_page_domain_from_issuer, default_callback_page,
+        default_callback_page_with_template, html_escape, perform_oauth_login,
+        require_resource_bearer,
     };
+    use openidconnect::core::CoreTokenType;
+    use rattler_networking::Authentication;
+    use std::collections::HashSet;
+    use url::Url;
 
     #[test]
     fn escapes_html_detail() {
@@ -984,5 +1076,111 @@ mod tests {
         assert!(page.contains("pixi is signed in to login.example.com"));
         assert!(page.contains("https://prefix.dev"));
         assert!(page.contains(">prefix.dev</a>"));
+    }
+
+    fn config(issuer: &str, audience: Option<&str>) -> OAuthConfig {
+        OAuthConfig {
+            audience: audience.map(str::to_owned),
+            issuer_url: issuer.into(),
+            client_id: "rattler".into(),
+            client_secret: None,
+            flow: OAuthFlow::DeviceCode,
+            scopes: HashSet::new(),
+            redirect_uri: None,
+            user_agent: None,
+            callback_page: None,
+        }
+    }
+
+    #[test]
+    fn resource_flow_requires_bearer_token_type() {
+        let other = serde_json::from_str("\"MAC\"").unwrap();
+        assert!(require_resource_bearer(Some("audit"), &other).is_err());
+        assert!(require_resource_bearer(Some("audit"), &CoreTokenType::Bearer).is_ok());
+        assert!(require_resource_bearer(None, &other).is_ok());
+    }
+
+    #[test]
+    fn auth_code_audience_is_exact_and_encoded_without_changing_state() {
+        let mut url =
+            Url::parse("https://issuer.example/authorize?state=fixture&code_challenge=challenge")
+                .unwrap();
+        append_audience(&mut url, Some("https://AUDIT.example/path/?x=y&other=z")).unwrap();
+        let pairs: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+        assert_eq!(pairs["audience"], "https://AUDIT.example/path/?x=y&other=z");
+        assert_eq!(pairs["state"], "fixture");
+        assert_eq!(pairs["code_challenge"], "challenge");
+        assert!(append_audience(&mut url, Some("other")).is_err());
+    }
+
+    #[test]
+    fn audience_validation() {
+        for audience in ["", "one two", "a\nb", "a\0b", &"a".repeat(2049)] {
+            assert!(super::validate_audience(Some(audience)).is_err());
+        }
+        for audience in [
+            None,
+            Some("https://AUDIT.example/path/?x=y"),
+            Some("audit"),
+            Some(&"a".repeat(2048)),
+        ] {
+            assert!(super::validate_audience(audience).is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn device_login_forwards_audience_and_redacts_provider_errors() {
+        use axum::http::StatusCode;
+        use axum::{
+            Json, Router,
+            extract::Form,
+            routing::{get, post},
+        };
+        use serde_json::json;
+        use std::collections::HashMap;
+
+        for (audience, fail) in [
+            (Some("https://audit.example"), false),
+            (None, false),
+            (Some("https://audit.example"), true),
+            (None, true),
+        ] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let issuer = format!("http://{}", listener.local_addr().unwrap());
+            let discovery = json!({"issuer":issuer,"authorization_endpoint":format!("{issuer}/authorize"),"token_endpoint":format!("{issuer}/token"),"jwks_uri":format!("{issuer}/jwks"),"device_authorization_endpoint":format!("{issuer}/device"),"response_types_supported":["code"],"subject_types_supported":["public"],"id_token_signing_alg_values_supported":["RS256"]});
+            let app=Router::new()
+                .route("/.well-known/openid-configuration", get(move || {let discovery=discovery.clone(); async move {Json(discovery)}}))
+                .route("/jwks", get(|| async {Json(json!({"keys":[]}))}))
+                .route("/device", post(move |Form(form):Form<HashMap<String,String>>| async move {
+                    assert_eq!(form.get("audience").map(String::as_str), audience);
+                    Json(json!({"device_code":"fixture-device", "user_code":"TEST", "verification_uri":"https://issuer.example/verify", "expires_in":60,"interval":0}))
+                }))
+                .route("/token", post(move || async move {
+                    if fail {
+                        (StatusCode::BAD_REQUEST, Json(json!({"error":"invalid_grant", "error_description":"fixture-sensitive-detail"})))
+                    } else {
+                        (StatusCode::OK, Json(json!({"access_token":"fixture.opaque.token", "refresh_token":"fixture-refresh", "token_type":"Bearer", "expires_in":3600})))
+                    }
+                }));
+            let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+            let result = perform_oauth_login(config(&issuer, audience)).await;
+            if fail {
+                let error = result.unwrap_err();
+                // Control: the ordinary flow includes the provider description;
+                // the audience flow strips it from both Display and Debug.
+                for message in [error.to_string(), format!("{error:?}")] {
+                    assert_eq!(
+                        message.contains("fixture-sensitive-detail"),
+                        audience.is_none()
+                    );
+                }
+            } else {
+                assert!(
+                    matches!(result.unwrap(), Authentication::OAuth { audience: value, access_token, .. }
+                    if value.as_deref() == audience && access_token == "fixture.opaque.token")
+                );
+            }
+            server.abort();
+        }
     }
 }

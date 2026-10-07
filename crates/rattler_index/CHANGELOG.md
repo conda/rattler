@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.1](https://github.com/conda/rattler/compare/rattler_index-v0.33.0...rattler_index-v0.33.1) - 2026-10-06
+
+### Other
+
+- updated the following local packages: rattler_config, rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.33.0](https://github.com/conda/rattler/compare/rattler_index-v0.32.1...rattler_index-v0.33.0) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+- *(config)* configure virtual package detectors ([#2862](https://github.com/conda/rattler/pull/2862))
+
+## [0.32.1](https://github.com/conda/rattler/compare/rattler_index-v0.32.0...rattler_index-v0.32.1) - 2026-10-05
+
+### Added
+
+- *(conda-types)* parse virtual package detector registrations ([#2859](https://github.com/conda/rattler/pull/2859))
+- emit consistent v3 repodata ([#2668](https://github.com/conda/rattler/pull/2668))
+
+### Fixed
+
+- use CMake for aws-lc-sys in Conda builds to preserve jitterentropy's required optimization flags
+
+## [0.32.0](https://github.com/conda/rattler/compare/rattler_index-v0.31.7...rattler_index-v0.32.0) - 2026-09-29
+
+### Added
+
+- *(sigstore)* add FulcioCiClaims from `1.3.6.1.4.1.57264.1` ([#2844](https://github.com/conda/rattler/pull/2844))
+
+### Other
+
+- *(index)* [**breaking**] build S3 operators from `S3CredentialSource` ([#2847](https://github.com/conda/rattler/pull/2847))
+- [**breaking**] rename Platform to Subdir and validate names against CEP 26 ([#2787](https://github.com/conda/rattler/pull/2787))
+
 ## [0.31.7](https://github.com/conda/rattler/compare/rattler_index-v0.31.6...rattler_index-v0.31.7) - 2026-09-23
 
 ### Added

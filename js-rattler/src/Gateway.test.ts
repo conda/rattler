@@ -2,6 +2,9 @@ import { describe, expect, it } from "@jest/globals";
 import { Gateway } from "./Gateway";
 import { Platform } from "./Platform";
 import { isRattlerError } from "./RattlerError";
+import { MatchSpec } from "./MatchSpec";
+import { RepoDataRecord } from "./RepoDataRecord";
+import { PackageRecord } from "./PackageRecord";
 
 // Disable all repodata variants so the gateway requests exactly one URL per
 // subdir: the plain `repodata.json`.
@@ -140,13 +143,52 @@ describe("Gateway", () => {
             }
             expect(records).toHaveLength(1);
             expect(records[0].name).toBe("foo");
-            expect(records[0].version).toBe("1.0");
+            expect(records[0]).toBeInstanceOf(RepoDataRecord);
+            expect(records[0].version.source).toBe("1.0");
             expect(records[0].build).toBe("h123_0");
-            expect(records[0].fn).toBe("foo-1.0-h123_0.conda");
+            expect(records[0].fileName).toBe("foo-1.0-h123_0.conda");
             expect(records[0].url).toBe(
                 "https://example.com/test-channel/noarch/foo-1.0-h123_0.conda",
             );
             expect(records.warnings).toEqual([]);
+        });
+
+        it("accepts MatchSpec objects with name globs", async () => {
+            const gateway = new Gateway({
+                channelConfig: plainOnly,
+                fetch: () =>
+                    Promise.resolve(
+                        new Response(repodata, {
+                            status: 200,
+                            headers: { "content-type": "application/json" },
+                        }),
+                    ),
+            });
+
+            const spec = new MatchSpec("f* >=1", { exactNamesOnly: false });
+            const records = await gateway.query(
+                ["https://example.com/test-channel"],
+                ["noarch"],
+                [spec],
+            );
+
+            // The caller's spec stays usable after the query.
+            expect(spec.toString()).toBe("f* >=1");
+            expect(spec.matchesRepoDataRecord(records[0])).toBe(true);
+            expect(
+                await gateway.query(
+                    ["https://example.com/test-channel"],
+                    ["noarch"],
+                    ["f*"],
+                ),
+            ).toHaveLength(1);
+
+            expect(records.map((record) => record.fileName)).toEqual([
+                "foo-1.0-h123_0.conda",
+            ]);
+            expect(records[0].channel).toBe(
+                "https://example.com/test-channel/",
+            );
         });
 
         it("returns gateway warnings on the query result", async () => {
@@ -313,6 +355,21 @@ describe("Gateway", () => {
                 expect(error.code).toBe("PARSE_PLATFORM");
             }
         });
+        it("marks invalid specs with PARSE_MATCH_SPEC", async () => {
+            const gateway = new Gateway();
+
+            const error: unknown = await gateway
+                .query(["https://example.com/channel"], ["noarch"], [">=1"])
+                .then(
+                    () => null,
+                    (err: unknown) => err,
+                );
+
+            expect(isRattlerError(error)).toBe(true);
+            if (isRattlerError(error)) {
+                expect(error.code).toBe("PARSE_MATCH_SPEC");
+            }
+        });
     });
     describe("onWarning", () => {
         it("routes gateway warnings to the callback", async () => {
@@ -351,6 +408,182 @@ describe("Gateway", () => {
             );
 
             expect(warnings.length).toBeGreaterThanOrEqual(1);
+        });
+    });
+    describe("whoNeeds", () => {
+        const record = (
+            name: string,
+            fields: Record<string, unknown> = {},
+        ): Record<string, unknown> => ({
+            name,
+            version: "1.0",
+            build: "h123_0",
+            build_number: 0,
+            subdir: "noarch",
+            depends: [],
+            ...fields,
+        });
+        const repodata = JSON.stringify({
+            info: { subdir: "noarch" },
+            packages: {},
+            "packages.conda": {
+                "bar-1.0-h123_0.conda": record("bar"),
+                "foo-1.0-h123_0.conda": record("foo", {
+                    depends: ["bar >=1"],
+                }),
+                "old-1.0-h123_0.conda": record("old", {
+                    depends: ["bar <1"],
+                }),
+                "pinned-1.0-h123_0.conda": record("pinned", {
+                    constrains: ["bar >=2"],
+                }),
+                "extra-1.0-h123_0.conda": record("extra", {
+                    extra_depends: { speedups: ["bar"] },
+                }),
+                "gpu-1.0-h123_0.conda": record("gpu", {
+                    depends: ["__cuda >=12"],
+                }),
+                "unrelated-1.0-h123_0.conda": record("unrelated", {
+                    depends: ["baz"],
+                }),
+            },
+        });
+        const gateway = () =>
+            new Gateway({
+                channelConfig: plainOnly,
+                fetch: () =>
+                    Promise.resolve(new Response(repodata, { status: 200 })),
+            });
+        const channels = ["https://example.com/who-needs"];
+
+        it("finds every dependent of a package name", async () => {
+            const dependents = await gateway().whoNeeds(
+                channels,
+                ["noarch"],
+                "bar",
+            );
+
+            const byName = Object.fromEntries(
+                dependents.map((dependent) => [
+                    dependent.record.name,
+                    dependent,
+                ]),
+            );
+            expect(Object.keys(byName).sort()).toEqual([
+                "extra",
+                "foo",
+                "old",
+                "pinned",
+            ]);
+            expect(byName.foo.record).toBeInstanceOf(RepoDataRecord);
+            expect(byName.foo.kind).toBe("depends");
+            expect(byName.foo.dependency).toBe("bar >=1");
+            expect(byName.pinned.kind).toBe("constrains");
+            expect(byName.pinned.dependency).toBe("bar >=2");
+            expect(byName.extra).toMatchObject({
+                kind: "extra_depends",
+                extra: "speedups",
+                dependency: "bar",
+            });
+        });
+
+        it("only matches dependencies accepting a record", async () => {
+            const gw = gateway();
+            const [bar] = await gw.query(channels, ["noarch"], ["bar"]);
+
+            const fromRepoDataRecord = await gw.whoNeeds(
+                channels,
+                ["noarch"],
+                bar,
+            );
+            const fromPackageRecord = await gw.whoNeeds(
+                channels,
+                ["noarch"],
+                new PackageRecord(bar.toJson()),
+            );
+
+            for (const dependents of [fromRepoDataRecord, fromPackageRecord]) {
+                expect(
+                    dependents.map((dependent) => dependent.record.name).sort(),
+                ).toEqual(["extra", "foo"]);
+            }
+        });
+
+        it("matches virtual packages", async () => {
+            const dependents = await gateway().whoNeeds(channels, ["noarch"], {
+                name: "__cuda",
+                version: "12.4",
+            });
+            expect(
+                dependents.map((dependent) => dependent.record.name),
+            ).toEqual(["gpu"]);
+
+            expect(
+                await gateway().whoNeeds(channels, ["noarch"], {
+                    name: "__cuda",
+                    version: "11.8",
+                }),
+            ).toEqual([]);
+        });
+
+        it("rejects invalid targets with error codes", async () => {
+            const error: unknown = await gateway()
+                .whoNeeds(channels, ["noarch"], "not a name!")
+                .then(
+                    () => null,
+                    (err: unknown) => err,
+                );
+            expect(isRattlerError(error)).toBe(true);
+            if (isRattlerError(error)) {
+                expect(error.code).toBe("PARSE_PACKAGE_NAME");
+            }
+        });
+    });
+    describe("clearRepodataCache", () => {
+        it("refetches the repodata of a cleared channel", async () => {
+            const seen: string[] = [];
+            const gateway = new Gateway({
+                channelConfig: plainOnly,
+                fetch: (request) => {
+                    seen.push(request.url);
+                    return Promise.resolve(
+                        new Response(
+                            JSON.stringify({
+                                info: { subdir: "noarch" },
+                                packages: {},
+                                "packages.conda": {},
+                            }),
+                            { status: 200 },
+                        ),
+                    );
+                },
+            });
+            const channel = "https://example.com/cleared";
+            const query = () => gateway.query([channel], ["noarch"], ["foo"]);
+
+            await query();
+            const fetchedOnce = seen.length;
+            expect(fetchedOnce).toBeGreaterThanOrEqual(1);
+
+            await query();
+            expect(seen.length).toBe(fetchedOnce);
+
+            // Clearing another platform keeps noarch cached.
+            gateway.clearRepodataCache(channel, ["linux-64"]);
+            await query();
+            expect(seen.length).toBe(fetchedOnce);
+
+            gateway.clearRepodataCache(channel);
+            await query();
+            expect(seen.length).toBe(2 * fetchedOnce);
+        });
+
+        it("rejects invalid platforms", () => {
+            expect(() =>
+                new Gateway().clearRepodataCache("conda-forge", [
+                    "not-a-platform" as Platform,
+                ]),
+            ).toThrow();
         });
     });
 });
