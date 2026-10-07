@@ -35,12 +35,6 @@ impl From<Auth> for bool {
     }
 }
 
-impl Auth {
-    pub fn is_granted(self) -> bool {
-        matches!(self, Auth::DefaultChain)
-    }
-}
-
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(
     feature = "serde",
@@ -167,11 +161,17 @@ mod tests {
         )
         .unwrap();
 
-        assert!(opts.fetch(Some(&container("releases"))).auth.is_granted());
-        assert!(!opts.fetch(Some(&container("public"))).auth.is_granted());
-        assert!(!opts.fetch(Some(&container("staging"))).auth.is_granted());
+        assert_eq!(
+            opts.fetch(Some(&container("releases"))).auth,
+            Auth::DefaultChain
+        );
+        assert_eq!(opts.fetch(Some(&container("public"))).auth, Auth::Anonymous);
+        assert_eq!(
+            opts.fetch(Some(&container("staging"))).auth,
+            Auth::Anonymous
+        );
 
-        assert!(!opts.fetch(None).auth.is_granted());
+        assert_eq!(opts.fetch(None).auth, Auth::Anonymous);
 
         // `grants` reports what the file says, explicit `false` included.
         let grants: HashMap<_, _> = opts.grants().collect();
