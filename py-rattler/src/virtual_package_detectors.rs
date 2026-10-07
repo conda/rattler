@@ -1,6 +1,6 @@
 //! Bindings for channel-registered virtual package detectors.
 
-use std::{collections::BTreeSet, path::PathBuf, time::Duration};
+use std::{collections::BTreeSet, path::PathBuf, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use pyo3::{
@@ -14,9 +14,9 @@ use rattler_repodata_gateway::{
 };
 use rattler_virtual_package_detectors::{
     AllowAll, CacheClock, Consent, ConsentRequest, DenyAll, DetectOptions, DetectedValue,
-    DetectionOutcome, DetectionSource, DetectorConsent, DetectorFailure, DetectorResult,
-    EnvironmentOptions, EnvironmentSnapshot, RattlerEnvironmentProvider, SkipReason,
-    SkippedRegistration, WantedNames, detect, limits,
+    DetectionOutcome, DetectionSource, DetectorConsent, DetectorDiagnostics, DetectorFailure,
+    DetectorResult, EnvironmentOptions, EnvironmentSnapshot, RattlerEnvironmentProvider,
+    SkipReason, SkippedRegistration, WantedNames, detect, limits,
 };
 
 use crate::{
@@ -372,6 +372,49 @@ impl PyDetectorResult {
     }
 }
 
+/// Diagnostics from one successful detector invocation.
+#[pyclass(from_py_object)]
+#[derive(Clone)]
+pub struct PyDetectorDiagnostics {
+    inner: Arc<DetectorDiagnostics>,
+}
+
+impl From<DetectorDiagnostics> for PyDetectorDiagnostics {
+    fn from(diagnostics: DetectorDiagnostics) -> Self {
+        Self {
+            inner: Arc::new(diagnostics),
+        }
+    }
+}
+
+#[pymethods]
+impl PyDetectorDiagnostics {
+    #[getter]
+    pub fn origin(&self) -> String {
+        self.inner.origin.to_string()
+    }
+
+    #[getter]
+    pub fn detector(&self) -> PyPackageName {
+        self.inner.detector.clone().into()
+    }
+
+    #[getter]
+    pub fn digest(&self) -> String {
+        hex::encode(self.inner.digest)
+    }
+
+    #[getter(from_cache)]
+    pub fn is_from_cache(&self) -> bool {
+        self.inner.from_cache
+    }
+
+    #[getter]
+    pub fn stderr(&self) -> &str {
+        &self.inner.stderr
+    }
+}
+
 /// A detector that failed; all of its results were discarded.
 #[pyclass(from_py_object)]
 #[derive(Clone)]
@@ -480,6 +523,7 @@ impl PySkippedRegistration {
 #[derive(Clone)]
 pub struct PyDetectionOutcome {
     results: Vec<PyDetectorResult>,
+    diagnostics: Vec<PyDetectorDiagnostics>,
     failures: Vec<PyDetectorFailure>,
     skipped: Vec<PySkippedRegistration>,
 }
@@ -492,6 +536,7 @@ impl From<DetectionOutcome> for PyDetectionOutcome {
                 .into_iter()
                 .map(|inner| PyDetectorResult { inner })
                 .collect(),
+            diagnostics: outcome.diagnostics.into_iter().map(Into::into).collect(),
             failures: outcome.failures.into_iter().map(Into::into).collect(),
             skipped: outcome.skipped.into_iter().map(Into::into).collect(),
         }
@@ -503,6 +548,11 @@ impl PyDetectionOutcome {
     #[getter]
     pub fn results(&self) -> Vec<PyDetectorResult> {
         self.results.clone()
+    }
+
+    #[getter]
+    pub fn diagnostics(&self) -> Vec<PyDetectorDiagnostics> {
+        self.diagnostics.clone()
     }
 
     #[getter]
