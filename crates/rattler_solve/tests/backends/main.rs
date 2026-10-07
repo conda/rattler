@@ -509,7 +509,7 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
-        fn test_min_age_with_exemption() {
+        fn test_min_age_with_package_override() {
             crate::min_age_tests::solve_min_age_with_package_override::<$T>();
         }
 
@@ -519,7 +519,7 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
-        fn test_min_age_exempt_dependency() {
+        fn test_min_age_package_override_dependency() {
             crate::min_age_tests::solve_min_age_package_override_dependency::<$T>();
         }
 
@@ -534,13 +534,43 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
-        fn test_min_age_exempt_no_timestamp() {
+        fn test_min_age_package_override_no_timestamp() {
             crate::min_age_tests::solve_min_age_package_override_no_timestamp::<$T>();
         }
 
         #[test]
         fn test_min_age_per_channel() {
             crate::min_age_tests::solve_min_age_per_channel::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exemption() {
+            crate::min_age_tests::solve_min_age_exemption::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exemption_build() {
+            crate::min_age_tests::solve_min_age_exemption_build::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exemption_not_transitive() {
+            crate::min_age_tests::solve_min_age_exemption_not_transitive::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exemption_no_timestamp() {
+            crate::min_age_tests::solve_min_age_exemption_no_timestamp::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exemption_channel() {
+            crate::min_age_tests::solve_min_age_exemption_channel::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exemption_subdir_and_file_name() {
+            crate::min_age_tests::solve_min_age_exemption_subdir_and_file_name::<$T>();
         }
 
         #[test]
