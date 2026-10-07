@@ -320,7 +320,7 @@ pub struct CondaDependencyProvider<'a> {
     dependency_tiebreak_cache: RefCell<DependencyTiebreakCache>,
 
     matchspec_to_highest_version:
-        RefCell<HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>>,
+        RefCell<HashMap<VersionSetId, Option<(&'a rattler_conda_types::Version, bool)>>>,
 
     parse_match_spec_cache: RefCell<MatchSpecParseCache>,
 
