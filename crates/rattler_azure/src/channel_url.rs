@@ -60,9 +60,8 @@ impl AzureChannelUrl {
         })
     }
 
-    /// The `az://` spelling with any SAS signature masked: for display,
-    /// config and comparison, not for sending.
-    pub fn canonical(&self) -> Url {
+    /// The `az://` spelling with any SAS signature masked. Log-safe but lossy.
+    pub fn redacted(&self) -> Url {
         self.spelled("az", Sas::Masked)
     }
 
@@ -103,14 +102,14 @@ impl std::fmt::Display for EncodedPath {
 
 impl std::fmt::Display for AzureChannelUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.canonical())
+        write!(f, "{}", self.redacted())
     }
 }
 
 impl std::fmt::Debug for AzureChannelUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("AzureChannelUrl")
-            .field(&self.canonical().as_str())
+            .field(&self.redacted().as_str())
             .finish()
     }
 }
@@ -309,18 +308,18 @@ mod tests {
 
         let canonical: indexmap::IndexMap<&str, String> = inputs
             .iter()
-            .map(|input| (*input, channel(input).canonical().to_string()))
+            .map(|input| (*input, channel(input).redacted().to_string()))
             .collect();
         insta::assert_yaml_snapshot!(canonical);
     }
 
     #[test]
-    fn canonical_and_wire_round_trip() {
+    fn redacted_and_wire_spellings() {
         let channel =
             AzureChannelUrl::parse("az://acct.blob.core.windows.net/general/noarch").unwrap();
 
         assert_eq!(
-            channel.canonical().as_str(),
+            channel.redacted().as_str(),
             "az://acct.blob.core.windows.net/general/noarch"
         );
         assert_eq!(
@@ -331,15 +330,7 @@ mod tests {
             channel.wire(AzureScheme::Http).as_str(),
             "http://acct.blob.core.windows.net/general/noarch"
         );
-        assert_eq!(channel.to_string(), channel.canonical().to_string());
-        assert_eq!(
-            channel,
-            channel
-                .canonical()
-                .as_str()
-                .parse::<AzureChannelUrl>()
-                .unwrap()
-        );
+        assert_eq!(channel.to_string(), channel.redacted().to_string());
     }
 
     #[test]
@@ -353,13 +344,13 @@ mod tests {
             "az://azurite.local:80/devstoreaccount1/general",
         ] {
             let channel = AzureChannelUrl::parse(input).unwrap();
-            let canonical = channel.canonical();
+            let redacted = channel.redacted();
             for scheme in [AzureScheme::Https, AzureScheme::Http] {
                 let wire = channel.wire(scheme);
                 assert_eq!(wire.scheme(), scheme.as_str());
-                assert_eq!(canonical.host_str(), wire.host_str(), "{input}");
-                assert_eq!(canonical.path(), wire.path(), "{input}");
-                assert_eq!(canonical.query(), wire.query(), "{input}");
+                assert_eq!(redacted.host_str(), wire.host_str(), "{input}");
+                assert_eq!(redacted.path(), wire.path(), "{input}");
+                assert_eq!(redacted.query(), wire.query(), "{input}");
 
                 let default = match scheme {
                     AzureScheme::Https => 443,
@@ -367,7 +358,7 @@ mod tests {
                 };
                 assert_eq!(
                     wire.port_or_known_default(),
-                    Some(canonical.port().unwrap_or(default)),
+                    Some(redacted.port().unwrap_or(default)),
                     "{input} over {scheme}"
                 );
             }
@@ -382,7 +373,7 @@ mod tests {
         assert_eq!(channel.host().to_string(), "azurite.local:443");
         assert_eq!(channel.host().port(), Some(443));
         assert_eq!(
-            channel.canonical().as_str(),
+            channel.redacted().as_str(),
             "az://azurite.local:443/devstoreaccount1/general"
         );
         assert_eq!(
@@ -412,7 +403,7 @@ mod tests {
             "http://127.0.0.1:10000/devstoreaccount1/general"
         );
         assert_eq!(
-            emulator.canonical().as_str(),
+            emulator.redacted().as_str(),
             "az://127.0.0.1:10000/devstoreaccount1/general"
         );
 
@@ -429,7 +420,7 @@ mod debug_redaction_tests {
 
     fn masked_spellings(channel: &AzureChannelUrl) -> [String; 3] {
         [
-            channel.canonical().to_string(),
+            channel.redacted().to_string(),
             channel.to_string(),
             format!("{channel:?}"),
         ]
