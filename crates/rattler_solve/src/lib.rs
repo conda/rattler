@@ -382,7 +382,7 @@ impl ExcludeNewer {
     }
 
     /// Returns whether a record matches one of the exemptions.
-    pub fn is_exempt(&self, record: &RepoDataRecord) -> bool {
+    fn is_exempt(&self, record: &RepoDataRecord) -> bool {
         self.exemptions.iter().any(|spec| {
             // `MatchSpec::matches` ignores the channel, subdir, and file name,
             // so check them here.
