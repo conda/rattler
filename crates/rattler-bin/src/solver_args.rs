@@ -97,6 +97,8 @@ pub struct SolverArgs {
 
     /// Allow records matching this spec regardless of `--exclude-newer`, for
     /// example `"polars ==1.43.1"`. The spec must name exactly one package.
+    /// A broad spec such as `polars` exempts every future release too.
+    /// A channel must be a real channel name or URL, not a multichannel name.
     /// May be specified multiple times.
     #[clap(
         long = "exclude-newer-exemption",

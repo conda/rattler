@@ -569,6 +569,11 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
+        fn test_min_age_exemption_subdir_and_file_name() {
+            crate::min_age_tests::solve_min_age_exemption_subdir_and_file_name::<$T>();
+        }
+
+        #[test]
         fn resolvo_issue_188() {
             crate::solver_case_tests::resolvo_issue_188::<$T>();
         }

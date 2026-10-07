@@ -404,3 +404,26 @@ pub fn solve_min_age_exemption_channel<T: SolverImpl + Default>() {
         .expect_absent([("pkg-a", "2.0")])
         .run::<T>();
 }
+
+/// Test that an exemption with a subdir or file name only applies to records
+/// with that subdir or file name.
+pub fn solve_min_age_exemption_subdir_and_file_name<T: SolverImpl + Default>() {
+    let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
+    for (exemption, expected) in [
+        (r#"pkg-a[version="==2.0", subdir=linux-64]"#, "2.0"),
+        (r#"pkg-a[version="==2.0", subdir=osx-64]"#, "1.0"),
+        ("pkg-a[fn=pkg-a-2.0-h123456_0.conda]", "2.0"),
+        ("pkg-a[fn=pkg-a-2.0-h123456_0.tar.bz2]", "1.0"),
+    ] {
+        let config = exclude_newer_duration_config(min_age)
+            .with_exemption(exemption.parse().unwrap())
+            .unwrap();
+
+        SolverCase::new(exemption)
+            .repository(create_timestamped_repo())
+            .specs(["pkg-a"])
+            .exclude_newer(config)
+            .expect_present([("pkg-a", expected)])
+            .run::<T>();
+    }
+}

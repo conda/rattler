@@ -187,8 +187,9 @@ pub enum InvalidExemptionError {
     /// The spec does not name exactly one package.
     #[error("exclude-newer exemption '{0}' must name exactly one package")]
     NotExactName(String),
-    /// The spec has extras or a condition, which do not select records.
-    #[error("exclude-newer exemption '{0}' must not have extras or a condition")]
+    /// The spec has extras, a condition, or a namespace, which do not select
+    /// records.
+    #[error("exclude-newer exemption '{0}' must not have extras, a condition, or a namespace")]
     UnsupportedField(String),
 }
 
@@ -211,7 +212,8 @@ pub enum InvalidExemptionError {
 /// Records matching an exemption added with [`Self::with_exemption`] are
 /// never excluded, regardless of their timestamp. This allows a single vetted
 /// release (for example an urgent security fix) without lowering the cutoff
-/// for every future release of that package.
+/// for every future release of that package. A broad spec such as `pkg` or
+/// `pkg >=1` exempts every matching release, including future ones.
 ///
 /// # Example
 ///
@@ -360,14 +362,19 @@ impl ExcludeNewer {
     /// policy.
     ///
     /// The spec must name exactly one package; a spec without a name or with
-    /// a glob or regex name would exempt more than intended. Extras and
-    /// conditions are rejected because matching ignores them. If the spec has
-    /// a channel, only records from exactly that channel are exempt.
+    /// a glob or regex name would exempt more than intended. Extras,
+    /// conditions, and namespaces are rejected because matching ignores them.
+    /// A broad spec such as `pkg` or `pkg >=1` exempts every matching release,
+    /// including future ones.
+    ///
+    /// If the spec has a channel, only records from exactly that channel are
+    /// exempt. The channel is compared by its canonical URL, so a multichannel
+    /// name never matches; use the name or URL of the underlying channel.
     pub fn with_exemption(mut self, spec: MatchSpec) -> Result<Self, InvalidExemptionError> {
         if spec.name.as_exact().is_none() {
             return Err(InvalidExemptionError::NotExactName(spec.to_string()));
         }
-        if spec.extras.is_some() || spec.condition.is_some() {
+        if spec.extras.is_some() || spec.condition.is_some() || spec.namespace.is_some() {
             return Err(InvalidExemptionError::UnsupportedField(spec.to_string()));
         }
         self.exemptions.insert(spec);
@@ -377,11 +384,22 @@ impl ExcludeNewer {
     /// Returns whether a record matches one of the exemptions.
     pub fn is_exempt(&self, record: &RepoDataRecord) -> bool {
         self.exemptions.iter().any(|spec| {
-            // `MatchSpec::matches` ignores the channel, so check it here.
-            let channel_matches = spec.channel.as_ref().is_none_or(|channel| {
-                record.channel.as_deref() == Some(channel.canonical_name().as_str())
-            });
-            channel_matches && spec.matches(record)
+            // `MatchSpec::matches` ignores the channel, subdir, and file name,
+            // so check them here.
+            // TODO: these checks may belong in `MatchSpec::matches` itself,
+            // which the solver also uses for ordinary specs.
+            spec.matches(record)
+                && spec
+                    .subdir
+                    .as_ref()
+                    .is_none_or(|subdir| *subdir == record.package_record.subdir)
+                && spec
+                    .file_name
+                    .as_ref()
+                    .is_none_or(|file_name| *file_name == record.identifier.to_file_name())
+                && spec.channel.as_ref().is_none_or(|channel| {
+                    record.channel.as_deref() == Some(channel.canonical_name().as_str())
+                })
         })
     }
 
@@ -753,7 +771,12 @@ mod tests {
             );
         }
 
-        let spec = MatchSpec::from_str("pkg ==1.0", ParseMatchSpecOptions::strict()).unwrap();
-        assert!(config.with_exemption(spec).is_ok());
+        let mut spec = MatchSpec::from_str("pkg ==1.0", ParseMatchSpecOptions::strict()).unwrap();
+        assert!(config.clone().with_exemption(spec.clone()).is_ok());
+        spec.namespace = Some("ns".to_string());
+        assert!(matches!(
+            config.with_exemption(spec),
+            Err(InvalidExemptionError::UnsupportedField(_))
+        ));
     }
 }
