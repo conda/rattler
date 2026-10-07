@@ -1,0 +1,14 @@
+---
+source: crates/rattler_azure/src/endpoint_key.rs
+expression: canonical
+---
+acct.blob.core.windows.net: acct.blob.core.windows.net
+MyCompany.blob.core.windows.net: mycompany.blob.core.windows.net
+"acct.blob.core.windows.net:443": "acct.blob.core.windows.net:443"
+proxy.internal/accta: proxy.internal/accta
+Proxy.Internal./accta: proxy.internal/accta
+"127.0.0.1:10000/acc%74": "127.0.0.1:10000/acct"
+ünï.blob.example/accta: xn--n-nga1b.blob.example/accta
+"[0:0:0:0:0:0:0:1]:10000/devstoreaccount1": "[::1]:10000/devstoreaccount1"
+"127.0.0.1:10000/devstoreaccount1": "127.0.0.1:10000/devstoreaccount1"
+"0x7f.1/devstoreaccount1": 127.0.0.1/devstoreaccount1

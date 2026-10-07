@@ -1,4 +1,4 @@
-/// Why a channel URL, host or container name failed to parse.
+/// Why a channel URL, host, name, endpoint key or location was rejected.
 #[derive(Debug, thiserror::Error)]
 pub enum AzureUrlError {
     #[error("no host in Azure blob URL")]
@@ -11,6 +11,33 @@ pub enum AzureUrlError {
 
     #[error("`{authority}` is not a valid Azure host: {reason}; expected `host` or `host:port`")]
     InvalidHostAuthority { authority: String, reason: String },
+
+    #[error(
+        "`{0}` has no storage account label: a host-style key needs a dotted host whose first \
+         label is the account; write `<host>/<account>` to name the account in the path"
+    )]
+    InvalidHost(String),
+
+    #[error("`{0}` is not a valid Azure endpoint key: write `<host>` or `<host>/<account>`")]
+    InvalidKey(String),
+
+    #[error(
+        "`{0}` is not a known Azure blob endpoint and has no `azure-options` entry; add an entry \
+         for `{0}` (host-style) or `{0}/<account>` (path-style)"
+    )]
+    UnconfiguredHost(String),
+
+    #[error(
+        "`{0}` is not a known Azure blob endpoint and has no `azure-options` entry; the host does \
+         not start with an account name, so add a path-style entry for `{0}/<account>`"
+    )]
+    UnconfiguredHostWithoutAccount(String),
+
+    #[error(
+        "`{0}` is not a valid Azure storage account name: account names are 3-24 characters of \
+         lowercase letters and digits only"
+    )]
+    InvalidAccountName(String),
 
     #[error(
         "`{0}` is not a valid Azure blob container name: container names are 3-63 characters of \
