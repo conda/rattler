@@ -111,6 +111,18 @@ impl AzureHost {
         self.port
     }
 
+    /// The first label of a dotted domain; `None` for IP addresses and single-label hosts.
+    pub(crate) fn account_label(&self) -> Option<&str> {
+        match &self.host {
+            url::Host::Domain(domain) => {
+                let mut labels = domain.split('.');
+                let first = labels.next()?;
+                labels.next().is_some().then_some(first)
+            }
+            url::Host::Ipv4(_) | url::Host::Ipv6(_) => None,
+        }
+    }
+
     /// Whether the host is one of Azure's own blob endpoints.
     ///
     /// A proxy or private endpoint in front of real Azure returns `false`,

@@ -94,11 +94,30 @@ impl AzureChannelUrl {
     pub fn host(&self) -> &AzureHost {
         &self.host
     }
+
+    pub(crate) fn query(&self) -> Option<&str> {
+        self.query.as_deref()
+    }
+
+    pub(crate) fn fragment(&self) -> Option<&str> {
+        self.fragment.as_deref()
+    }
+
+    pub(crate) fn path(&self) -> &EncodedPath {
+        &self.path
+    }
 }
 
 /// A URL's path in wire form with a leading `/` and percent-encoded
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) struct EncodedPath(String);
+
+impl EncodedPath {
+    /// The still-encoded segments. None are empty except possibly the last.
+    pub(crate) fn segments(&self) -> impl Iterator<Item = &str> {
+        self.0.strip_prefix('/').unwrap_or(&self.0).split('/')
+    }
+}
 
 impl std::fmt::Display for EncodedPath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
