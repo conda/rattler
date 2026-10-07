@@ -193,7 +193,7 @@ pub async fn fetch_repo_data(
     let cache_state_path = cache_path.join(format!("{cache_key}.info.json"));
 
     // Lock all files that have to do with that cache key
-    let lock_file_path = cache_path.join(format!("{}.lock", &cache_key));
+    let lock_file_path = cache_path.join(format!("{cache_key}.lock"));
     let lock_file =
         tokio::task::spawn_blocking(move || LockedFile::open_rw(lock_file_path, "repodata cache"))
             .await?

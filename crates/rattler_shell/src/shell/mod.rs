@@ -364,7 +364,7 @@ impl Shell for Bash {
         let combined_paths_string: String = match modification_behavior {
             PathModificationBehavior::Replace => paths_string,
             PathModificationBehavior::Prepend => {
-                format!("{paths_string}:{}", &self.format_env_var(path_var))
+                format!("{paths_string}:{}", self.format_env_var(path_var))
             }
             PathModificationBehavior::Append => {
                 format!("{}:{paths_string}", self.format_env_var(path_var))
