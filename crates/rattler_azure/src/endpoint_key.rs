@@ -1,4 +1,5 @@
-use crate::{AccountName, AzureChannelUrl, AzureHost, AzureUrlError};
+use crate::host::reject_stripped_characters;
+use crate::{AccountName, AzureHost, AzureUrlError};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Style {
@@ -16,26 +17,14 @@ pub struct AzureEndpointKey {
 impl AzureEndpointKey {
     /// Parses `<host>`, whose first label is the account, or `<host>/<account>`.
     pub fn parse(key: &str) -> Result<Self, AzureUrlError> {
-        if key.ends_with('/') {
+        reject_stripped_characters(key)?;
+        let Some((authority, account)) = key.split_once('/') else {
+            return Self::host_style(&AzureHost::parse(key)?);
+        };
+        if account.is_empty() || account.contains('/') {
             return Err(AzureUrlError::InvalidKey(key.to_string()));
         }
-
-        let channel = AzureChannelUrl::parse(&format!("az://{key}"))?;
-        if channel.query().is_some() || channel.fragment().is_some() {
-            return Err(AzureUrlError::InvalidKey(key.to_string()));
-        }
-
-        let segments = channel
-            .path()
-            .segments()
-            .filter(|segment| !segment.is_empty())
-            .collect::<Vec<_>>();
-
-        match segments.as_slice() {
-            [] => Self::host_style(channel.host()),
-            [account] => Self::path_style(channel.host().clone(), account),
-            _ => Err(AzureUrlError::InvalidKey(key.to_string())),
-        }
+        Self::path_style(AzureHost::parse(authority)?, account)
     }
 
     pub fn host_style(host: &AzureHost) -> Result<Self, AzureUrlError> {
@@ -146,6 +135,15 @@ mod tests {
             "127.0.0.1:10000/dev-store",
             "127.0.0.1:10000/ab",
             "127.0.0.1:10000/--as-user",
+            "proxy.internal/accta\\",
+            "proxy.internal/accta/ ",
+            "proxy.internal/accta/\n",
+            "acct.blob.core.windows.net/ ",
+            "acct.blob.core.windows.net\\",
+            "proxy.internal/acc\nta",
+            "proxy.internal\\accta",
+            "acc\tt.blob.core.windows.net",
+            "/accta",
         ];
 
         let rejections: indexmap::IndexMap<&str, String> = inputs

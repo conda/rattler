@@ -95,14 +95,6 @@ impl AzureChannelUrl {
         &self.host
     }
 
-    pub(crate) fn query(&self) -> Option<&str> {
-        self.query.as_deref()
-    }
-
-    pub(crate) fn fragment(&self) -> Option<&str> {
-        self.fragment.as_deref()
-    }
-
     pub(crate) fn path(&self) -> &EncodedPath {
         &self.path
     }
