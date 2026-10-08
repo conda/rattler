@@ -18,8 +18,10 @@ pub enum AzureUrlError {
     )]
     InvalidHost(String),
 
-    #[error("`{0}` is not a valid Azure endpoint key: write `<host>` or `<host>/<account>`")]
-    InvalidKey(String),
+    #[error(
+        "`{key}` is not a valid Azure endpoint key: {reason}; write `<host>` or `<host>/<account>`"
+    )]
+    InvalidKey { key: String, reason: &'static str },
 
     #[error(
         "`{0}` is not a known Azure blob endpoint and no `azure-options` entry matches it (ports \
@@ -30,8 +32,8 @@ pub enum AzureUrlError {
 
     #[error(
         "`{0}` is not a known Azure blob endpoint and no `azure-options` entry matches it (ports \
-         and path-style account names must match exactly); the host does not start with an \
-         account name, so add a path-style entry for `{0}/<account>`"
+         and path-style account names must match exactly); the host has no valid account \
+         label, so add a path-style entry for `{0}/<account>`"
     )]
     UnconfiguredHostWithoutAccount(String),
 
