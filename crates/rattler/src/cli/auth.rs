@@ -104,6 +104,17 @@ struct LoginArgs {
     #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
     oauth_redirect_uri: Option<String>,
 
+    /// OAuth `audience` to request, so the access token is also accepted by
+    /// that API (provider-specific). Defaults to the host's built-in audience
+    /// when rattler ships one; pass an empty value to request no audience.
+    #[cfg(feature = "oauth")]
+    #[clap(
+        long,
+        conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id", "workload_identity"],
+        help_heading = "OAuth/OIDC Authentication"
+    )]
+    oauth_audience: Option<String>,
+
     // -- Workload identity --
     /// Log in non-interactively by exchanging the CI provider's OIDC ID
     /// token (GitHub Actions, GitLab CI, ...) for an access token
@@ -367,7 +378,16 @@ struct DefaultOAuthConfig {
     client_id: String,
     scopes: Vec<String>,
     redirect_uri: Option<String>,
+    /// Audience requested alongside the channel scopes, so one login yields
+    /// a token that other first-party APIs of the host accept as well.
+    audience: Option<String>,
 }
+
+/// Audience requested by default when logging in to prefix.dev: the Basilisk
+/// vulnerability API used by `pixi audit`. prefix.dev itself ignores the
+/// audience claim, so the same token keeps working for channels.
+#[cfg(feature = "oauth")]
+const PREFIX_DEV_OAUTH_AUDIENCE: &str = "https://api.basilisk.prefix.dev";
 
 /// Returns the built-in OAuth configuration for a host, if rattler ships one.
 #[cfg(feature = "oauth")]
@@ -378,6 +398,11 @@ fn default_oauth_config_for_host(host: &str) -> Option<DefaultOAuthConfig> {
         return None;
     }
 
+    // Only the production host gets the production Basilisk audience; other
+    // prefix.dev deployments (e.g. `beta.prefix.dev`) front their own APIs and
+    // take the audience via `--oauth-audience`.
+    let audience = (normalized == "prefix.dev").then(|| PREFIX_DEV_OAUTH_AUDIENCE.to_string());
+
     Some(DefaultOAuthConfig {
         issuer_url: ensure_url_scheme(host),
         client_id: "rattler".to_string(),
@@ -386,7 +411,22 @@ fn default_oauth_config_for_host(host: &str) -> Option<DefaultOAuthConfig> {
             .map(|&s| s.to_string())
             .collect(),
         redirect_uri: None,
+        audience,
     })
+}
+
+/// Resolve the audience to request: an explicit flag wins, an explicit empty
+/// flag opts out, otherwise the host default (if any) applies.
+#[cfg(feature = "oauth")]
+fn resolve_oauth_audience(
+    flag: Option<String>,
+    host_default: Option<&DefaultOAuthConfig>,
+) -> Option<String> {
+    match flag {
+        Some(value) if value.is_empty() => None,
+        Some(value) => Some(value),
+        None => host_default.and_then(|config| config.audience.clone()),
+    }
 }
 
 /// Returns the built-in OAuth config for an implicit (flag-less) login —
@@ -514,6 +554,8 @@ async fn login_with_offline(
                 .oauth_redirect_uri
                 .or_else(|| host_default.as_ref().and_then(|c| c.redirect_uri.clone()));
 
+            let audience = resolve_oauth_audience(args.oauth_audience, host_default.as_ref());
+
             let scopes: std::collections::HashSet<String> = if !args.oauth_scopes.is_empty() {
                 args.oauth_scopes.into_iter().collect()
             } else if let Some(default) = host_default {
@@ -526,7 +568,7 @@ async fn login_with_offline(
             };
 
             let config = oauth::OAuthConfig {
-                audience: None,
+                audience,
                 issuer_url,
                 client_id,
                 client_secret: args.oauth_client_secret,
@@ -1417,6 +1459,8 @@ mod tests {
             oauth_scopes: vec![],
             #[cfg(feature = "oauth")]
             oauth_redirect_uri: None,
+            #[cfg(feature = "oauth")]
+            oauth_audience: None,
             workload_identity: false,
             workload_identity_audience: None,
             workload_identity_exchange: None,
@@ -1740,6 +1784,61 @@ mod tests {
         assert_eq!(prefix.issuer_url, "https://prefix.dev");
         assert_eq!(prefix.client_id, "rattler");
         assert!(prefix.scopes.iter().any(|s| s == "channel:upload"));
+        assert_eq!(prefix.audience.as_deref(), Some(PREFIX_DEV_OAUTH_AUDIENCE));
+        assert_eq!(
+            default_oauth_config_for_host("https://prefix.dev/")
+                .unwrap()
+                .audience
+                .as_deref(),
+            Some(PREFIX_DEV_OAUTH_AUDIENCE)
+        );
+
+        // Other prefix.dev deployments do not get the production audience.
+        assert!(
+            default_oauth_config_for_host("beta.prefix.dev")
+                .unwrap()
+                .audience
+                .is_none()
+        );
+        // The wildcard form normalizes to the production host.
+        assert_eq!(
+            default_oauth_config_for_host("*.prefix.dev")
+                .unwrap()
+                .audience
+                .as_deref(),
+            Some(PREFIX_DEV_OAUTH_AUDIENCE)
+        );
+    }
+
+    #[cfg(feature = "oauth")]
+    #[test]
+    fn test_resolve_oauth_audience() {
+        let prefix = default_oauth_config_for_host("prefix.dev").unwrap();
+        let beta = default_oauth_config_for_host("beta.prefix.dev").unwrap();
+
+        // Host default applies when no flag is given.
+        assert_eq!(
+            resolve_oauth_audience(None, Some(&prefix)).as_deref(),
+            Some(PREFIX_DEV_OAUTH_AUDIENCE)
+        );
+        assert_eq!(resolve_oauth_audience(None, Some(&beta)), None);
+        assert_eq!(resolve_oauth_audience(None, None), None);
+
+        // An explicit flag wins over the default.
+        assert_eq!(
+            resolve_oauth_audience(Some("https://api.example".into()), Some(&prefix)).as_deref(),
+            Some("https://api.example")
+        );
+        assert_eq!(
+            resolve_oauth_audience(Some("https://api.example".into()), None).as_deref(),
+            Some("https://api.example")
+        );
+
+        // An explicit empty flag opts out of the default.
+        assert_eq!(
+            resolve_oauth_audience(Some(String::new()), Some(&prefix)),
+            None
+        );
     }
 
     #[cfg(feature = "oauth")]
