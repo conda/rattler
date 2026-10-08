@@ -18,6 +18,7 @@ expression: located
 "az://proxy.internal/accta/general/noarch configured [proxy.internal, proxy.internal/accta]": "keyed Configured: proxy.internal/accta, container: general"
 "az://proxy.internal/accta/general configured [proxy.internal]": "keyed Configured: proxy.internal, container: accta"
 "az://proxy.internal/general/noarch configured [proxy.internal]": "keyed Configured: proxy.internal, container: general"
+"az://proxy.internal/my-channel/noarch configured [proxy.internal]": "keyed Configured: proxy.internal, container: my-channel"
 "az://proxy.internal/acc%74/gen%65ral configured [proxy.internal/acct]": "keyed Configured: proxy.internal/acct, container: general"
 "az://proxy.internal/ACCTA/general configured [proxy.internal/accta]": "unkeyed: `ACCTA` is not a valid Azure storage account name: account names are 3-24 characters of lowercase letters and digits only"
 "az://127.0.0.1:10000/devstoreaccount1/general configured [127.0.0.1:10000/devstoreaccount1]": "keyed Configured: 127.0.0.1:10000/devstoreaccount1, container: general"

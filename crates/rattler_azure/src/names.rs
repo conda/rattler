@@ -113,8 +113,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn empty_names_are_rejected() {
-        assert!(AccountName::new("").is_err());
+    fn empty_container_names_are_rejected() {
         assert!(ContainerName::new("").is_err());
+    }
+
+    #[test]
+    fn account_segments() {
+        let inputs = [
+            "",
+            "ab",
+            "abc",
+            "abcdefghijklmnopqrstuvwx",
+            "abcdefghijklmnopqrstuvwxy",
+            "acct1",
+            "Accta",
+            "acc-ta",
+            "acc%74a",
+            "acc%41a",
+        ];
+
+        let outcomes: indexmap::IndexMap<&str, String> = inputs
+            .iter()
+            .map(|segment| {
+                let outcome = match AccountName::from_segment(segment) {
+                    Ok(name) => format!("ok: {}", name.as_str()),
+                    Err(err) => format!("error: {err}"),
+                };
+                (*segment, outcome)
+            })
+            .collect();
+        insta::assert_yaml_snapshot!(outcomes);
     }
 }
