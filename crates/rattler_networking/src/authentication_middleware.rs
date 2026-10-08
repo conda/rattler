@@ -19,9 +19,8 @@ use crate::{
 #[derive(Clone)]
 pub struct AuthenticationMiddleware {
     auth_storage: AuthenticationStorage,
-    // A pinned storage key, sent only to the trusted origin. Pinning never
-    // falls back to host/wildcard credentials.
-    pinned_credential: Option<(url::Origin, String)>,
+    // Explicit audience selection never falls back to host/wildcard credentials.
+    oauth_audience: Option<(url::Origin, String)>,
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
@@ -39,7 +38,7 @@ impl Middleware for AuthenticationMiddleware {
         }
 
         let url = req.url().clone();
-        let selected = if let Some((origin, key)) = &self.pinned_credential {
+        let selected = if let Some((origin, key)) = &self.oauth_audience {
             if &url.origin() != origin {
                 return next.run(req, extensions).await;
             }
@@ -58,24 +57,17 @@ impl Middleware for AuthenticationMiddleware {
                 next.run(req, extensions).await
             }
             Ok((url, auth_with_key)) => {
-                // If this is an OAuth token, attempt refresh if expired. The
-                // storage key is the policy: a grant stored under a host is
-                // sent to that host whether or not it carries an audience, and
-                // a pinned key is sent to its trusted origin as-is.
+                // If this is an OAuth token, attempt refresh if expired
                 let auth = match auth_with_key {
                     Some((matched_key, auth)) => {
-                        if self.pinned_credential.is_some()
-                            && !matches!(
-                                auth,
-                                Authentication::OAuth { .. } | Authentication::BearerToken(_)
-                            )
-                        {
-                            // A pinned key only ever becomes a bearer header on
-                            // the foreign origin; never splice other credential
-                            // kinds (conda tokens, basic auth, S3) into it.
-                            tracing::warn!(
-                                "Credential stored under '{matched_key}' is not a bearer-style grant; not sending it to the pinned origin"
-                            );
+                        let has_audience = matches!(
+                            &auth,
+                            Authentication::OAuth {
+                                audience: Some(_),
+                                ..
+                            }
+                        );
+                        if has_audience != self.oauth_audience.is_some() {
                             return next.run(req, extensions).await;
                         }
                         let refresh_result = oauth_refresh::maybe_refresh_oauth(
@@ -112,7 +104,7 @@ impl AuthenticationMiddleware {
     pub fn from_auth_storage(auth_storage: AuthenticationStorage) -> Self {
         Self {
             auth_storage,
-            pinned_credential: None,
+            oauth_audience: None,
         }
     }
 
@@ -121,51 +113,28 @@ impl AuthenticationMiddleware {
     pub fn from_env_and_defaults() -> Result<Self, AuthenticationStorageError> {
         Ok(Self {
             auth_storage: AuthenticationStorage::from_env_and_defaults()?,
-            pinned_credential: None,
+            oauth_audience: None,
         })
     }
 
-    /// Send the credential stored under exactly `key`, and only to
-    /// `trusted_origin`. Requests to any other origin are left anonymous.
-    ///
-    /// This lets a grant obtained for one host (e.g. `prefix.dev`, whose
-    /// login requests an audience for a sibling API) be used against that
-    /// API's origin, which host/wildcard lookup would never resolve to.
-    /// The origin is chosen by the caller, never inferred from the key or a
-    /// server challenge. No channel/wildcard fallback or interactive login.
+    /// Select an exact audience grant, and send it only to `trusted_origin`.
+    /// The origin is chosen by the caller, never inferred from the audience or
+    /// a server challenge. No channel/wildcard fallback or interactive login.
     /// Use on a dedicated API client, not stacked with channel authentication.
     /// Disable redirects on the underlying client for credential-bearing requests.
-    /// OAuth refresh is supported on native targets only.
-    pub fn with_credential_key(
-        mut self,
-        key: impl Into<String>,
-        trusted_origin: url::Origin,
-    ) -> Self {
-        self.pinned_credential = Some((trusted_origin, key.into()));
-        self
-    }
-
-    /// Select an exact audience grant stored under
-    /// [`AuthenticationStorage::oauth_audience_key`], and send it only to
-    /// `trusted_origin`. See [`Self::with_credential_key`] for the policy.
-    ///
-    /// Storing a grant under a separate audience key next to its host entry
-    /// creates two copies of one rotating refresh token; the login CLI stores
-    /// each grant once, under its host, so prefer pinning that host key.
-    #[deprecated(
-        note = "store the grant once under its login host and pin that key with `with_credential_key`"
-    )]
+    /// Audience refresh is supported on native targets only.
     pub fn with_oauth_audience(
-        self,
+        mut self,
         issuer: &str,
         client_id: &str,
         audience: &str,
         trusted_origin: url::Origin,
     ) -> Self {
-        self.with_credential_key(
-            AuthenticationStorage::oauth_audience_key(issuer, client_id, audience),
+        self.oauth_audience = Some((
             trusted_origin,
-        )
+            AuthenticationStorage::oauth_audience_key(issuer, client_id, audience),
+        ));
+        self
     }
 
     /// Authenticate the given URL with the given authentication information
@@ -541,7 +510,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(deprecated)]
     async fn concurrent_oauth_refresh_is_coalesced_by_authentication_middleware() {
         #[derive(Clone)]
         struct TestState {
@@ -753,7 +721,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(deprecated)]
     async fn audience_credentials_require_exact_context_and_origin() {
         const ISSUER: &str = "https://issuer.example";
         const AUDIENCE: &str = "https://audit.example";
@@ -815,114 +782,18 @@ mod tests {
                 expected
             );
         }
-        // A grant stored under a host is sent to that host, audience or not:
-        // the storage key is the policy.
+        // A misplaced audience grant must not be used by channel middleware.
         storage.store("audit.example", &auth).unwrap();
         let (http, mut captured) =
             make_client_harness(AuthenticationMiddleware::from_auth_storage(storage));
         let _ = http.post(AUDIENCE).send().await;
-        assert_eq!(
-            captured
+        assert!(
+            !captured
                 .recv()
                 .await
                 .unwrap()
                 .headers()
-                .get("authorization")
-                .map(|v| v.to_str().unwrap()),
-            Some("Bearer fixture.opaque.token")
+                .contains_key("authorization")
         );
-    }
-
-    #[tokio::test]
-    async fn pinned_credential_key_is_sent_only_to_trusted_origin() {
-        // `pixi auth login prefix.dev` stores one grant under the host key and
-        // requests an audience for the Basilisk API. The channel middleware
-        // keeps using it for prefix.dev; an API client pins the same key to
-        // the API origin, which host lookup would never resolve to.
-        const API: &str = "https://api.basilisk.example";
-        let api_origin = Url::parse(API).unwrap().origin();
-        let mut storage = AuthenticationStorage::empty();
-        storage.add_backend(Arc::new(MemoryStorage::new()));
-        let grant = Authentication::OAuth {
-            audience: Some(API.into()),
-            access_token: "fixture.host.token".into(),
-            refresh_token: None,
-            expires_at: Some(i64::MAX),
-            token_endpoint: "https://issuer.example/token".into(),
-            revocation_endpoint: None,
-            client_id: "rattler".into(),
-        };
-        storage.store("issuer.example", &grant).unwrap();
-        storage
-            .store(
-                "*.basilisk.example",
-                &Authentication::BearerToken("fixture-wildcard".into()),
-            )
-            .unwrap();
-
-        let header = |request: &Request| {
-            request
-                .headers()
-                .get("authorization")
-                .map(|v| v.to_str().unwrap().to_owned())
-        };
-
-        // Channel middleware: host lookup finds the grant for the issuer host
-        // and the wildcard for the API host; neither is cross-wired.
-        let (http, mut captured) =
-            make_client_harness(AuthenticationMiddleware::from_auth_storage(storage.clone()));
-        let _ = http.post("https://issuer.example/channel").send().await;
-        assert_eq!(
-            header(&captured.recv().await.unwrap()).as_deref(),
-            Some("Bearer fixture.host.token")
-        );
-        let _ = http.post(API).send().await;
-        assert_eq!(
-            header(&captured.recv().await.unwrap()).as_deref(),
-            Some("Bearer fixture-wildcard")
-        );
-
-        // Pinned middleware: the host grant goes to the API origin only.
-        let pinned = AuthenticationMiddleware::from_auth_storage(storage.clone())
-            .with_credential_key("issuer.example", api_origin.clone());
-        for (url, expected) in [
-            (format!("{API}/v1/audit"), Some("Bearer fixture.host.token")),
-            ("https://issuer.example/channel".to_string(), None),
-            ("https://api.basilisk.example:444/".to_string(), None),
-            ("http://api.basilisk.example/".to_string(), None),
-        ] {
-            let (http, mut captured) = make_client_harness(pinned.clone());
-            let _ = http.post(&url).send().await;
-            assert_eq!(
-                header(&captured.recv().await.unwrap()).as_deref(),
-                expected,
-                "{url}"
-            );
-        }
-
-        // A pinned key only ever becomes a bearer header: other credential
-        // kinds are not spliced into the foreign origin's URL or headers.
-        storage
-            .store(
-                "conda.example",
-                &Authentication::CondaToken("fixture-conda".into()),
-            )
-            .unwrap();
-        let (http, mut captured) = make_client_harness(
-            AuthenticationMiddleware::from_auth_storage(storage.clone())
-                .with_credential_key("conda.example", api_origin.clone()),
-        );
-        let _ = http.post(format!("{API}/v1/audit")).send().await;
-        let request = captured.recv().await.unwrap();
-        assert_eq!(header(&request), None);
-        assert_eq!(request.url().path(), "/v1/audit");
-
-        // A pinned key with nothing stored stays anonymous.
-        let (http, mut captured) = make_client_harness(
-            AuthenticationMiddleware::from_auth_storage(storage)
-                .with_credential_key("missing", api_origin),
-        );
-        let _ = http.post(API).send().await;
-        assert_eq!(header(&captured.recv().await.unwrap()), None);
     }
 }
