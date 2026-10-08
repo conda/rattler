@@ -105,8 +105,7 @@ struct LoginArgs {
     oauth_redirect_uri: Option<String>,
 
     /// OAuth `audience` to request, so the access token is also accepted by
-    /// that API (provider-specific). Defaults to the host's built-in audience
-    /// when rattler ships one; pass an empty value to request no audience.
+    /// that API (provider-specific). No audience is requested by default.
     #[cfg(feature = "oauth")]
     #[clap(
         long,
@@ -378,16 +377,7 @@ struct DefaultOAuthConfig {
     client_id: String,
     scopes: Vec<String>,
     redirect_uri: Option<String>,
-    /// Audience requested alongside the channel scopes, so one login yields
-    /// a token that other first-party APIs of the host accept as well.
-    audience: Option<String>,
 }
-
-/// Audience requested by default when logging in to prefix.dev: the Basilisk
-/// vulnerability API used by `pixi audit`. prefix.dev itself ignores the
-/// audience claim, so the same token keeps working for channels.
-#[cfg(feature = "oauth")]
-const PREFIX_DEV_OAUTH_AUDIENCE: &str = "https://api.basilisk.prefix.dev";
 
 /// Returns the built-in OAuth configuration for a host, if rattler ships one.
 #[cfg(feature = "oauth")]
@@ -398,11 +388,6 @@ fn default_oauth_config_for_host(host: &str) -> Option<DefaultOAuthConfig> {
         return None;
     }
 
-    // Only the production host gets the production Basilisk audience; other
-    // prefix.dev deployments (e.g. `beta.prefix.dev`) front their own APIs and
-    // take the audience via `--oauth-audience`.
-    let audience = (normalized == "prefix.dev").then(|| PREFIX_DEV_OAUTH_AUDIENCE.to_string());
-
     Some(DefaultOAuthConfig {
         issuer_url: ensure_url_scheme(host),
         client_id: "rattler".to_string(),
@@ -411,36 +396,7 @@ fn default_oauth_config_for_host(host: &str) -> Option<DefaultOAuthConfig> {
             .map(|&s| s.to_string())
             .collect(),
         redirect_uri: None,
-        audience,
     })
-}
-
-/// Resolve the audience to request: an explicit flag wins, an explicit empty
-/// flag opts out, otherwise the host default (if any) applies.
-#[cfg(feature = "oauth")]
-fn resolve_oauth_audience(
-    flag: Option<String>,
-    host_default: Option<&DefaultOAuthConfig>,
-) -> Option<String> {
-    match flag {
-        Some(value) if value.is_empty() => None,
-        Some(value) => Some(value),
-        None => host_default.and_then(|config| config.audience.clone()),
-    }
-}
-
-/// Whether an OAuth login error is the authorization server rejecting the
-/// requested audience. Hydra/fosite phrase this as "Requested audience 'X' has
-/// not been whitelisted by the OAuth 2.0 Client". This is a heuristic on the
-/// server's message, so it only ever triggers a retry without the audience.
-#[cfg(feature = "oauth")]
-fn audience_rejected(error: &oauth::OAuthError) -> bool {
-    match error {
-        oauth::OAuthError::Authorization(message) => {
-            message.to_ascii_lowercase().contains("audience")
-        }
-        _ => false,
-    }
 }
 
 /// Returns the built-in OAuth config for an implicit (flag-less) login —
@@ -548,11 +504,6 @@ async fn login_with_offline(
             // (`--oauth` was set explicitly) fall back to a fresh lookup.
             let host_default = auto_default.or_else(|| default_oauth_config_for_host(&args.host));
 
-            // The built-in audience belongs to the built-in client and issuer;
-            // a custom client almost certainly does not allowlist it.
-            let builtin_client = args.oauth_issuer_url.is_none() && args.oauth_client_id.is_none();
-            let explicit_audience = args.oauth_audience.is_some();
-
             let issuer_url = args
                 .oauth_issuer_url
                 .or_else(|| host_default.as_ref().map(|c| c.issuer_url.clone()))
@@ -573,11 +524,6 @@ async fn login_with_offline(
                 .oauth_redirect_uri
                 .or_else(|| host_default.as_ref().and_then(|c| c.redirect_uri.clone()));
 
-            let audience = resolve_oauth_audience(
-                args.oauth_audience,
-                host_default.as_ref().filter(|_| builtin_client),
-            );
-
             let scopes: std::collections::HashSet<String> = if !args.oauth_scopes.is_empty() {
                 args.oauth_scopes.into_iter().collect()
             } else if let Some(default) = host_default {
@@ -589,33 +535,18 @@ async fn login_with_offline(
                     .collect()
             };
 
-            let login_config = |audience: Option<String>| oauth::OAuthConfig {
-                audience,
-                issuer_url: issuer_url.clone(),
-                client_id: client_id.clone(),
-                client_secret: args.oauth_client_secret.clone(),
+            let auth = oauth::perform_oauth_login(oauth::OAuthConfig {
+                audience: args.oauth_audience,
+                issuer_url,
+                client_id,
+                client_secret: args.oauth_client_secret,
                 flow,
-                scopes: scopes.clone(),
-                redirect_uri: redirect_uri.clone(),
-                user_agent: args.user_agent.clone(),
+                scopes,
+                redirect_uri,
+                user_agent: args.user_agent,
                 callback_page: None,
-            };
-
-            let auth = match oauth::perform_oauth_login(login_config(audience.clone())).await {
-                // Fail open: a built-in audience the server does not (yet)
-                // allow must not break the ordinary channel login.
-                Err(error)
-                    if !explicit_audience && audience.is_some() && audience_rejected(&error) =>
-                {
-                    eprintln!(
-                        "The server rejected the default audience {} ({error}); retrying without it. \
-                         Tools that need that audience will ask you to log in again once it is enabled.",
-                        audience.as_deref().unwrap_or_default()
-                    );
-                    oauth::perform_oauth_login(login_config(None)).await?
-                }
-                result => result?,
-            };
+            })
+            .await?;
             // Normalize the host so that `prefix.dev` and `prefix.dev/` (and
             // any `https://...` form) write to the same storage key
             let host = normalize_login_host(&args.host);
@@ -1820,86 +1751,6 @@ mod tests {
         assert_eq!(prefix.issuer_url, "https://prefix.dev");
         assert_eq!(prefix.client_id, "rattler");
         assert!(prefix.scopes.iter().any(|s| s == "channel:upload"));
-        assert_eq!(prefix.audience.as_deref(), Some(PREFIX_DEV_OAUTH_AUDIENCE));
-        assert_eq!(
-            default_oauth_config_for_host("https://prefix.dev/")
-                .unwrap()
-                .audience
-                .as_deref(),
-            Some(PREFIX_DEV_OAUTH_AUDIENCE)
-        );
-
-        // Other prefix.dev deployments do not get the production audience.
-        assert!(
-            default_oauth_config_for_host("beta.prefix.dev")
-                .unwrap()
-                .audience
-                .is_none()
-        );
-        // The wildcard form normalizes to the production host.
-        assert_eq!(
-            default_oauth_config_for_host("*.prefix.dev")
-                .unwrap()
-                .audience
-                .as_deref(),
-            Some(PREFIX_DEV_OAUTH_AUDIENCE)
-        );
-    }
-
-    #[cfg(feature = "oauth")]
-    #[test]
-    fn test_resolve_oauth_audience() {
-        let prefix = default_oauth_config_for_host("prefix.dev").unwrap();
-        let beta = default_oauth_config_for_host("beta.prefix.dev").unwrap();
-
-        // Host default applies when no flag is given.
-        assert_eq!(
-            resolve_oauth_audience(None, Some(&prefix)).as_deref(),
-            Some(PREFIX_DEV_OAUTH_AUDIENCE)
-        );
-        assert_eq!(resolve_oauth_audience(None, Some(&beta)), None);
-        assert_eq!(resolve_oauth_audience(None, None), None);
-
-        // An explicit flag wins over the default.
-        assert_eq!(
-            resolve_oauth_audience(Some("https://api.example".into()), Some(&prefix)).as_deref(),
-            Some("https://api.example")
-        );
-        assert_eq!(
-            resolve_oauth_audience(Some("https://api.example".into()), None).as_deref(),
-            Some("https://api.example")
-        );
-
-        // An explicit empty flag opts out of the default.
-        assert_eq!(
-            resolve_oauth_audience(Some(String::new()), Some(&prefix)),
-            None
-        );
-    }
-
-    #[cfg(feature = "oauth")]
-    #[test]
-    fn test_audience_rejected_matches_server_audience_errors_only() {
-        use oauth::OAuthError;
-
-        // Hydra/fosite at the authorization endpoint (auth-code callback).
-        assert!(audience_rejected(&OAuthError::Authorization(
-            "Requested audience 'https://api.basilisk.prefix.dev' has not been whitelisted by the OAuth 2.0 Client."
-                .into()
-        )));
-        // Same rejection surfaced through the device authorization request.
-        assert!(audience_rejected(&OAuthError::Authorization(
-            "Device authorization failed: invalid_request: audience not allowed".into()
-        )));
-
-        // Anything else is a real failure and must not trigger a retry.
-        assert!(!audience_rejected(&OAuthError::Authorization(
-            "The resource owner denied the request".into()
-        )));
-        assert!(!audience_rejected(&OAuthError::TokenExchange(
-            "audience".into()
-        )));
-        assert!(!audience_rejected(&OAuthError::CsrfMismatch));
     }
 
     #[cfg(feature = "oauth")]
@@ -1918,8 +1769,7 @@ mod tests {
             })
         };
 
-        // The flag works with the implicit prefix.dev login (no `--oauth`),
-        // and an empty value is accepted as the opt-out.
+        // The flag works with the implicit prefix.dev login (no `--oauth`).
         assert_eq!(login(&[]).unwrap().oauth_audience, None);
         assert_eq!(
             login(&["--oauth-audience", "https://api.example"])
@@ -1927,13 +1777,6 @@ mod tests {
                 .oauth_audience
                 .as_deref(),
             Some("https://api.example")
-        );
-        assert_eq!(
-            login(&["--oauth-audience", ""])
-                .unwrap()
-                .oauth_audience
-                .as_deref(),
-            Some("")
         );
         assert!(
             login(&["--oauth", "--oauth-audience", "https://api.example"])
