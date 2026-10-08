@@ -77,6 +77,7 @@ pub fn locate(
         None => match derive(channel) {
             Ok(key) => (key, KeySource::Derived),
             Err(reason) => {
+                let reason = miscased_account(channel, &is_configured).unwrap_or(reason);
                 return Ok(AzureLocation::Unkeyed {
                     channel: channel.clone(),
                     reason,
@@ -107,6 +108,18 @@ fn derive(channel: &AzureChannelUrl) -> Result<AzureEndpointKey, AzureUrlError> 
             channel.host().to_string(),
         ))
     }
+}
+
+/// The account segment when only its case keeps it from a configured
+/// path-style key.
+fn miscased_account(
+    channel: &AzureChannelUrl,
+    is_configured: impl Fn(&AzureEndpointKey) -> bool,
+) -> Option<AzureUrlError> {
+    let written = segment(channel, 0)?;
+    let lowercased =
+        AzureEndpointKey::path_style(channel.host().clone(), &written.to_ascii_lowercase()).ok()?;
+    is_configured(&lowercased).then(|| AzureUrlError::InvalidAccountName(written.to_string()))
 }
 
 fn segment(channel: &AzureChannelUrl, index: usize) -> Option<&str> {
