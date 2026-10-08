@@ -1,4 +1,4 @@
-//! Parsing Azure Blob channel URLs.
+//! Parsing and locating Azure Blob channels.
 //!
 //! # Channel URLs
 //!
@@ -6,7 +6,10 @@
 //! [`AzureChannelUrl`], which validates and normalizes the spelling so
 //! equivalent URLs compare equal.
 //!
-//! [`locate`] resolves a channel URL to an [`AzureEndpointKey`] and container.
+//! # Locating
+//!
+//! [`locate`] resolves a channel URL to an [`AzureEndpointKey`], written
+//! `<host>` or `<host>/<account>`, and the container that follows it, if any.
 
 mod channel_url;
 mod endpoint_key;

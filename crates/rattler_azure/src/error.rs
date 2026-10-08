@@ -1,4 +1,5 @@
-/// Why a channel URL, host, name, endpoint key or location was rejected.
+/// Why a channel URL, host, account or container name, or endpoint key was
+/// rejected, or why a URL has no endpoint key.
 #[derive(Debug, thiserror::Error)]
 pub enum AzureUrlError {
     #[error("no host in Azure blob URL")]
