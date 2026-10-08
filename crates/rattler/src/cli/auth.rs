@@ -429,6 +429,20 @@ fn resolve_oauth_audience(
     }
 }
 
+/// Whether an OAuth login error is the authorization server rejecting the
+/// requested audience. Hydra/fosite phrase this as "Requested audience 'X' has
+/// not been whitelisted by the OAuth 2.0 Client". This is a heuristic on the
+/// server's message, so it only ever triggers a retry without the audience.
+#[cfg(feature = "oauth")]
+fn audience_rejected(error: &oauth::OAuthError) -> bool {
+    match error {
+        oauth::OAuthError::Authorization(message) => {
+            message.to_ascii_lowercase().contains("audience")
+        }
+        _ => false,
+    }
+}
+
 /// Returns the built-in OAuth config for an implicit (flag-less) login —
 /// i.e. when the user passed no explicit auth method and the host ships
 /// an out-of-the-box OAuth configuration. The presence of `Some` is the
@@ -519,7 +533,7 @@ async fn login_with_offline(
     #[cfg(feature = "oauth")]
     {
         let auto_default = default_oauth_for_login(&args);
-        if args.oauth || auto_default.is_some() {
+        if args.oauth || args.oauth_audience.is_some() || auto_default.is_some() {
             if offline {
                 return Err(AuthenticationCLIError::Offline);
             }
@@ -533,6 +547,11 @@ async fn login_with_offline(
             // Reuse the implicit-default config when present; otherwise
             // (`--oauth` was set explicitly) fall back to a fresh lookup.
             let host_default = auto_default.or_else(|| default_oauth_config_for_host(&args.host));
+
+            // The built-in audience belongs to the built-in client and issuer;
+            // a custom client almost certainly does not allowlist it.
+            let builtin_client = args.oauth_issuer_url.is_none() && args.oauth_client_id.is_none();
+            let explicit_audience = args.oauth_audience.is_some();
 
             let issuer_url = args
                 .oauth_issuer_url
@@ -554,7 +573,10 @@ async fn login_with_offline(
                 .oauth_redirect_uri
                 .or_else(|| host_default.as_ref().and_then(|c| c.redirect_uri.clone()));
 
-            let audience = resolve_oauth_audience(args.oauth_audience, host_default.as_ref());
+            let audience = resolve_oauth_audience(
+                args.oauth_audience,
+                host_default.as_ref().filter(|_| builtin_client),
+            );
 
             let scopes: std::collections::HashSet<String> = if !args.oauth_scopes.is_empty() {
                 args.oauth_scopes.into_iter().collect()
@@ -567,19 +589,33 @@ async fn login_with_offline(
                     .collect()
             };
 
-            let config = oauth::OAuthConfig {
+            let login_config = |audience: Option<String>| oauth::OAuthConfig {
                 audience,
-                issuer_url,
-                client_id,
-                client_secret: args.oauth_client_secret,
+                issuer_url: issuer_url.clone(),
+                client_id: client_id.clone(),
+                client_secret: args.oauth_client_secret.clone(),
                 flow,
-                scopes,
-                redirect_uri,
-                user_agent: args.user_agent,
+                scopes: scopes.clone(),
+                redirect_uri: redirect_uri.clone(),
+                user_agent: args.user_agent.clone(),
                 callback_page: None,
             };
 
-            let auth = oauth::perform_oauth_login(config).await?;
+            let auth = match oauth::perform_oauth_login(login_config(audience.clone())).await {
+                // Fail open: a built-in audience the server does not (yet)
+                // allow must not break the ordinary channel login.
+                Err(error)
+                    if !explicit_audience && audience.is_some() && audience_rejected(&error) =>
+                {
+                    eprintln!(
+                        "The server rejected the default audience {} ({error}); retrying without it. \
+                         Tools that need that audience will ask you to log in again once it is enabled.",
+                        audience.as_deref().unwrap_or_default()
+                    );
+                    oauth::perform_oauth_login(login_config(None)).await?
+                }
+                result => result?,
+            };
             // Normalize the host so that `prefix.dev` and `prefix.dev/` (and
             // any `https://...` form) write to the same storage key
             let host = normalize_login_host(&args.host);
@@ -1839,6 +1875,31 @@ mod tests {
             resolve_oauth_audience(Some(String::new()), Some(&prefix)),
             None
         );
+    }
+
+    #[cfg(feature = "oauth")]
+    #[test]
+    fn test_audience_rejected_matches_server_audience_errors_only() {
+        use oauth::OAuthError;
+
+        // Hydra/fosite at the authorization endpoint (auth-code callback).
+        assert!(audience_rejected(&OAuthError::Authorization(
+            "Requested audience 'https://api.basilisk.prefix.dev' has not been whitelisted by the OAuth 2.0 Client."
+                .into()
+        )));
+        // Same rejection surfaced through the device authorization request.
+        assert!(audience_rejected(&OAuthError::Authorization(
+            "Device authorization failed: invalid_request: audience not allowed".into()
+        )));
+
+        // Anything else is a real failure and must not trigger a retry.
+        assert!(!audience_rejected(&OAuthError::Authorization(
+            "The resource owner denied the request".into()
+        )));
+        assert!(!audience_rejected(&OAuthError::TokenExchange(
+            "audience".into()
+        )));
+        assert!(!audience_rejected(&OAuthError::CsrfMismatch));
     }
 
     #[cfg(feature = "oauth")]

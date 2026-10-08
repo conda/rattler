@@ -64,6 +64,20 @@ impl Middleware for AuthenticationMiddleware {
                 // a pinned key is sent to its trusted origin as-is.
                 let auth = match auth_with_key {
                     Some((matched_key, auth)) => {
+                        if self.pinned_credential.is_some()
+                            && !matches!(
+                                auth,
+                                Authentication::OAuth { .. } | Authentication::BearerToken(_)
+                            )
+                        {
+                            // A pinned key only ever becomes a bearer header on
+                            // the foreign origin; never splice other credential
+                            // kinds (conda tokens, basic auth, S3) into it.
+                            tracing::warn!(
+                                "Credential stored under '{matched_key}' is not a bearer-style grant; not sending it to the pinned origin"
+                            );
+                            return next.run(req, extensions).await;
+                        }
                         let refresh_result = oauth_refresh::maybe_refresh_oauth(
                             &self.auth_storage,
                             auth,
@@ -134,6 +148,13 @@ impl AuthenticationMiddleware {
     /// Select an exact audience grant stored under
     /// [`AuthenticationStorage::oauth_audience_key`], and send it only to
     /// `trusted_origin`. See [`Self::with_credential_key`] for the policy.
+    ///
+    /// Storing a grant under a separate audience key next to its host entry
+    /// creates two copies of one rotating refresh token; the login CLI stores
+    /// each grant once, under its host, so prefer pinning that host key.
+    #[deprecated(
+        note = "store the grant once under its login host and pin that key with `with_credential_key`"
+    )]
     pub fn with_oauth_audience(
         self,
         issuer: &str,
@@ -520,6 +541,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(deprecated)]
     async fn concurrent_oauth_refresh_is_coalesced_by_authentication_middleware() {
         #[derive(Clone)]
         struct TestState {
@@ -731,6 +753,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(deprecated)]
     async fn audience_credentials_require_exact_context_and_origin() {
         const ISSUER: &str = "https://issuer.example";
         const AUDIENCE: &str = "https://audit.example";
@@ -876,6 +899,23 @@ mod tests {
                 "{url}"
             );
         }
+
+        // A pinned key only ever becomes a bearer header: other credential
+        // kinds are not spliced into the foreign origin's URL or headers.
+        storage
+            .store(
+                "conda.example",
+                &Authentication::CondaToken("fixture-conda".into()),
+            )
+            .unwrap();
+        let (http, mut captured) = make_client_harness(
+            AuthenticationMiddleware::from_auth_storage(storage.clone())
+                .with_credential_key("conda.example", api_origin.clone()),
+        );
+        let _ = http.post(format!("{API}/v1/audit")).send().await;
+        let request = captured.recv().await.unwrap();
+        assert_eq!(header(&request), None);
+        assert_eq!(request.url().path(), "/v1/audit");
 
         // A pinned key with nothing stored stays anonymous.
         let (http, mut captured) = make_client_harness(
