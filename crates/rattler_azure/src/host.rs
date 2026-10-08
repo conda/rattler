@@ -133,8 +133,8 @@ impl AzureHost {
         SUFFIXES.iter().any(|suffix| {
             domain
                 .strip_suffix(suffix)
-                // otherwise we could match `notblob.core.windows.net`.
-                .is_some_and(|prefix| prefix.ends_with('.'))
+                .and_then(|prefix| prefix.strip_suffix('.'))
+                .is_some_and(|account| !account.contains('.'))
         })
     }
 }
@@ -225,6 +225,7 @@ mod tests {
             "notblob.core.windows.net",             // no label boundary
             "blob.core.windows.net",                // the suffix alone carries no account
             "acct.blob.core.windows.net.evil.test", // suffix in the middle
+            "evil.acct.blob.core.windows.net",      // more than the account label
             "127.0.0.1:10000",
             "azurite",
         ] {
