@@ -16,6 +16,7 @@ pub struct AzureHost {
 
 impl AzureHost {
     pub fn parse(authority: &str) -> Result<Self, AzureUrlError> {
+        reject_stripped_characters(authority)?;
         if authority.contains('@') {
             return Err(AzureUrlError::UserInfoNotAllowed);
         }
@@ -138,6 +139,19 @@ impl AzureHost {
     }
 }
 
+/// Rejects what the URL Standard removes before parsing: ASCII tabs and
+/// newlines anywhere, and leading or trailing C0 controls and spaces.
+pub(crate) fn reject_stripped_characters(value: &str) -> Result<(), AzureUrlError> {
+    let stripped = value.contains(|c: char| c.is_ascii_control())
+        || value.starts_with(' ')
+        || value.ends_with(' ');
+    if stripped {
+        Err(AzureUrlError::StrippedCharacter(value.to_string()))
+    } else {
+        Ok(())
+    }
+}
+
 impl std::fmt::Display for AzureHost {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.host)?;
@@ -240,6 +254,10 @@ mod tests {
             "acct..blob.core.windows.net",
             "acct.blob.example..",
             ".example",
+            // characters URL parsing would drop
+            "acc\tt.blob.core.windows.net",
+            "acct.blob.core.windows.net\n",
+            " acct.blob.core.windows.net",
         ];
 
         let rejections: indexmap::IndexMap<&str, String> = inputs

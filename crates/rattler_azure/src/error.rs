@@ -64,4 +64,10 @@ pub enum AzureUrlError {
 
     #[error("Azure blob channel URL must use the `az://` scheme, got `{0}`")]
     InvalidScheme(String),
+
+    #[error(
+        "{0:?} contains a control character or a leading or trailing space, which URL parsing \
+         would silently drop; remove it"
+    )]
+    StrippedCharacter(String),
 }

@@ -26,6 +26,7 @@ const AUTHORITY_TERMINATORS: [char; 4] = ['/', '\\', '?', '#'];
 impl AzureChannelUrl {
     /// Parse and validate an `az://` channel URL.
     pub fn parse(value: &str) -> Result<Self, AzureUrlError> {
+        crate::host::reject_stripped_characters(value)?;
         let rest = strip_az_scheme(value)
             .ok_or_else(|| AzureUrlError::InvalidScheme(value.to_string()))?;
 
@@ -277,6 +278,12 @@ mod tests {
             "az://acct.blob.core.windows.net/general/gen%2F..%2Fx",
             "az://acct.blob.core.windows.net/general/a%2fb",
             "az://acct.blob.core.windows.net/general/a%5Cb",
+            // characters URL parsing would drop
+            "az://acc\tt.blob.core.windows.net/general",
+            "az://acct.blob.core.windows.net/gen\neral",
+            "az://acct.blob.core.windows.net/general\r\n",
+            "az://acct.blob.core.windows.net/general ",
+            " az://acct.blob.core.windows.net/general",
             // empty segments
             "az://acct.blob.core.windows.net//general/noarch",
             "az://acct.blob.core.windows.net/general//noarch",

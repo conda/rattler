@@ -15,3 +15,6 @@ acct.blob.core.windows.net?sv=token: "`acct.blob.core.windows.net?sv=token` is n
 acct..blob.core.windows.net: "`acct..blob.core.windows.net` is not a valid Azure host: one of its labels is empty; expected `host` or `host:port`"
 acct.blob.example..: "`acct.blob.example..` is not a valid Azure host: one of its labels is empty; expected `host` or `host:port`"
 ".example": "`.example` is not a valid Azure host: one of its labels is empty; expected `host` or `host:port`"
+"acc\tt.blob.core.windows.net": "\"acc\\tt.blob.core.windows.net\" contains a control character or a leading or trailing space, which URL parsing would silently drop; remove it"
+"acct.blob.core.windows.net\n": "\"acct.blob.core.windows.net\\n\" contains a control character or a leading or trailing space, which URL parsing would silently drop; remove it"
+" acct.blob.core.windows.net": "\" acct.blob.core.windows.net\" contains a control character or a leading or trailing space, which URL parsing would silently drop; remove it"
