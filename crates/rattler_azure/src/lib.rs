@@ -25,6 +25,6 @@ pub use channel_url::AzureChannelUrl;
 pub use endpoint_key::AzureEndpointKey;
 pub use error::AzureUrlError;
 pub use host::AzureHost;
-pub use locate::{AzureLocation, KeySource, KeyedLocation, locate};
+pub use locate::{AzureLocation, KeySource, KeyedLocation, UnkeyedReason, locate};
 pub use names::{AccountName, ContainerName};
 pub use options::{Auth, AzureEndpointOptions, AzureFetchOptions, AzureScheme};
