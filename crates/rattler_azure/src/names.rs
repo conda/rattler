@@ -19,7 +19,8 @@ impl AccountName {
         }
     }
 
-    /// Validates a still-percent-encoded path segment after decoding it.
+    /// Percent-decodes `segment`, then validates the result. Errors carry the
+    /// original encoded segment.
     pub(crate) fn from_segment(segment: &str) -> Result<Self, AzureUrlError> {
         Self::new(&decode(segment)).or(Err(AzureUrlError::InvalidAccountName(segment.to_string())))
     }
@@ -66,7 +67,8 @@ impl ContainerName {
         }
     }
 
-    /// Validates a still-percent-encoded path segment after decoding it.
+    /// Percent-decodes `segment`, then validates the result. Errors carry the
+    /// original encoded segment.
     pub(crate) fn from_segment(segment: &str) -> Result<Self, AzureUrlError> {
         Self::new(&decode(segment)).or(Err(AzureUrlError::InvalidContainerName(
             segment.to_string(),

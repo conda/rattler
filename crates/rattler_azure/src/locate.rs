@@ -54,11 +54,13 @@ impl KeyedLocation {
     }
 }
 
-/// Resolve a channel URL to an endpoint key.
+/// Resolve a channel URL to an endpoint key and the container that follows it.
 ///
-/// A configured path-style key is preferred over a configured host-style one.
-/// A URL matching neither gets a derived host-style key if its host is a known
-/// Azure blob endpoint, and is otherwise unkeyed.
+/// `is_configured` reports whether a candidate key is configured. A configured
+/// path-style key wins over a configured host-style one. Otherwise a known Azure
+/// blob endpoint gets a derived host-style key, and any other URL is
+/// [`AzureLocation::Unkeyed`] with the reason. `Err` means the key resolved but
+/// the segment after it is not a valid container name.
 pub fn locate(
     channel: &AzureChannelUrl,
     is_configured: impl Fn(&AzureEndpointKey) -> bool,
