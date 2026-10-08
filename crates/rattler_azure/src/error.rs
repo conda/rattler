@@ -22,14 +22,16 @@ pub enum AzureUrlError {
     InvalidKey(String),
 
     #[error(
-        "`{0}` is not a known Azure blob endpoint and has no `azure-options` entry; add an entry \
-         for `{0}` (host-style) or `{0}/<account>` (path-style)"
+        "`{0}` is not a known Azure blob endpoint and no `azure-options` entry matches it (ports \
+         and path-style account names must match exactly); add an entry for `{0}` (host-style) \
+         or `{0}/<account>` (path-style)"
     )]
     UnconfiguredHost(String),
 
     #[error(
-        "`{0}` is not a known Azure blob endpoint and has no `azure-options` entry; the host does \
-         not start with an account name, so add a path-style entry for `{0}/<account>`"
+        "`{0}` is not a known Azure blob endpoint and no `azure-options` entry matches it (ports \
+         and path-style account names must match exactly); the host does not start with an \
+         account name, so add a path-style entry for `{0}/<account>`"
     )]
     UnconfiguredHostWithoutAccount(String),
 
