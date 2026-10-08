@@ -1,5 +1,5 @@
 /// Why a channel URL, host, account or container name, or endpoint key was
-/// rejected, or why a URL has no endpoint key.
+/// rejected.
 #[derive(Debug, thiserror::Error)]
 pub enum AzureUrlError {
     #[error("no host in Azure blob URL")]
@@ -23,20 +23,6 @@ pub enum AzureUrlError {
         "`{key}` is not a valid Azure endpoint key: {reason}; write `<host>` or `<host>/<account>`"
     )]
     InvalidKey { key: String, reason: &'static str },
-
-    #[error(
-        "`{0}` is not a known Azure blob endpoint and no `azure-options` entry matches it (ports \
-         and path-style account names must match exactly); add an entry for `{0}` (host-style) \
-         or `{0}/<account>` (path-style)"
-    )]
-    UnconfiguredHost(String),
-
-    #[error(
-        "`{0}` is not a known Azure blob endpoint and no `azure-options` entry matches it (ports \
-         and path-style account names must match exactly); the host has no valid account \
-         label, so add a path-style entry for `{0}/<account>`"
-    )]
-    UnconfiguredHostWithoutAccount(String),
 
     #[error(
         "`{0}` is not a valid Azure storage account name: account names are 3-24 characters of \

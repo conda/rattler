@@ -1,4 +1,4 @@
-use crate::{AzureChannelUrl, AzureEndpointKey, AzureUrlError, ContainerName};
+use crate::{AzureChannelUrl, AzureEndpointKey, AzureHost, AzureUrlError, ContainerName};
 
 /// Where a channel URL's endpoint key came from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -8,13 +8,43 @@ pub enum KeySource {
 }
 
 /// A channel URL resolved to an endpoint key.
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AzureLocation {
     Keyed(KeyedLocation),
     Unkeyed {
         channel: AzureChannelUrl,
-        reason: AzureUrlError,
+        reason: UnkeyedReason,
     },
+}
+
+/// Why a channel URL has no endpoint key.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum UnkeyedReason {
+    #[error(
+        "`{0}` is not a known Azure blob endpoint and no `azure-options` entry matches it (ports \
+         and path-style account names must match exactly); add an entry for `{0}` (host-style) \
+         or `{0}/<account>` (path-style)"
+    )]
+    UnconfiguredHost(AzureHost),
+
+    #[error(
+        "`{0}` is not a known Azure blob endpoint and no `azure-options` entry matches it (ports \
+         and path-style account names must match exactly); the host has no valid account \
+         label, so add a path-style entry for `{0}/<account>`"
+    )]
+    UnconfiguredHostWithoutAccount(AzureHost),
+
+    #[error(
+        "the first label of `{0}` is not a valid Azure storage account name: account names are \
+         3-24 characters of lowercase letters and digits only"
+    )]
+    InvalidAccountLabel(AzureHost),
+
+    #[error(
+        "`{0}` is not a valid Azure storage account name: account names are 3-24 characters of \
+         lowercase letters and digits only"
+    )]
+    MiscasedAccount(String),
 }
 
 impl AzureLocation {
@@ -76,7 +106,7 @@ pub fn locate(
 
     let (key, source) = match matched {
         Some(key) => (key, KeySource::Configured),
-        None => match derive(channel) {
+        None => match derive(channel.host()) {
             Ok(key) => (key, KeySource::Derived),
             Err(reason) => {
                 let reason = miscased_account(channel, &is_configured).unwrap_or(reason);
@@ -100,15 +130,13 @@ pub fn locate(
     }))
 }
 
-fn derive(channel: &AzureChannelUrl) -> Result<AzureEndpointKey, AzureUrlError> {
-    if channel.host().is_known_azure_blob_endpoint() {
-        AzureEndpointKey::host_style(channel.host())
-    } else if AzureEndpointKey::host_style(channel.host()).is_ok() {
-        Err(AzureUrlError::UnconfiguredHost(channel.host().to_string()))
-    } else {
-        Err(AzureUrlError::UnconfiguredHostWithoutAccount(
-            channel.host().to_string(),
-        ))
+fn derive(host: &AzureHost) -> Result<AzureEndpointKey, UnkeyedReason> {
+    let key = AzureEndpointKey::host_style(host);
+    match (host.is_known_azure_blob_endpoint(), key) {
+        (true, Ok(key)) => Ok(key),
+        (true, Err(_)) => Err(UnkeyedReason::InvalidAccountLabel(host.clone())),
+        (false, Ok(_)) => Err(UnkeyedReason::UnconfiguredHost(host.clone())),
+        (false, Err(_)) => Err(UnkeyedReason::UnconfiguredHostWithoutAccount(host.clone())),
     }
 }
 
@@ -117,11 +145,11 @@ fn derive(channel: &AzureChannelUrl) -> Result<AzureEndpointKey, AzureUrlError> 
 fn miscased_account(
     channel: &AzureChannelUrl,
     is_configured: impl Fn(&AzureEndpointKey) -> bool,
-) -> Option<AzureUrlError> {
+) -> Option<UnkeyedReason> {
     let written = segment(channel, 0)?;
     let lowercased =
         AzureEndpointKey::path_style(channel.host().clone(), &written.to_ascii_lowercase()).ok()?;
-    is_configured(&lowercased).then(|| AzureUrlError::InvalidAccountName(written.to_string()))
+    is_configured(&lowercased).then(|| UnkeyedReason::MiscasedAccount(written.to_string()))
 }
 
 fn segment(channel: &AzureChannelUrl, index: usize) -> Option<&str> {
