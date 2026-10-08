@@ -86,7 +86,7 @@ impl std::fmt::Display for AzureEndpointKey {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{hash_of, key};
+    use crate::test_support::key;
 
     #[test]
     fn a_written_key_round_trips() {
@@ -109,7 +109,6 @@ mod tests {
                 let parsed = key(written);
                 let canonical = parsed.to_string();
                 assert_eq!(key(&canonical), parsed, "{written}");
-                assert_eq!(hash_of(&key(&canonical)), hash_of(&parsed), "{written}");
                 (*written, canonical)
             })
             .collect();

@@ -184,6 +184,7 @@ mod tests {
             ),
             ("az://proxy.internal/accta/general", &["proxy.internal"]),
             ("az://proxy.internal/general/noarch", &["proxy.internal"]),
+            ("az://proxy.internal/my-channel/noarch", &["proxy.internal"]),
             (
                 "az://proxy.internal/acc%74/gen%65ral",
                 &["proxy.internal/acct"],
