@@ -170,6 +170,7 @@ mod tests {
                 &["acct.blob.core.windows.net"],
             ),
             ("az://acct-1.blob.core.windows.net/general", &[]),
+            ("az://evil.acct.blob.core.windows.net/general", &[]),
             ("az://acct-1.blob.core.windows.net/General", &[]),
             (
                 "az://proxy.internal/accta/general/noarch",
