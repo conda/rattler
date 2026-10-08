@@ -21,8 +21,18 @@ impl AzureEndpointKey {
         let Some((authority, account)) = key.split_once('/') else {
             return Self::host_style(&AzureHost::parse(key)?);
         };
-        if account.is_empty() || account.contains('/') {
-            return Err(AzureUrlError::InvalidKey(key.to_string()));
+        let reason = if account.is_empty() {
+            Some("nothing follows the `/`")
+        } else if account.contains('/') {
+            Some("it has more than one `/`")
+        } else {
+            None
+        };
+        if let Some(reason) = reason {
+            return Err(AzureUrlError::InvalidKey {
+                key: key.to_string(),
+                reason,
+            });
         }
         Self::path_style(AzureHost::parse(authority)?, account)
     }
