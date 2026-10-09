@@ -14,7 +14,10 @@ use serde::Serialize;
 use url::Url;
 
 use super::gateway::{build_gateway, load_config, resolve_channels};
-use super::package_source::{PackageSource, client_for};
+use super::{
+    hyperlink,
+    package_source::{PackageSource, client_for},
+};
 
 /// Inspect package metadata from a local or remote conda package, or a matchspec.
 #[derive(Debug, clap::Parser)]
@@ -76,7 +79,16 @@ pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
         PackageSource::parse(&opt.package)
     } else {
         let record = find_newest_record(&opt, offline).await?;
-        eprintln!("Inspecting {}", record.url);
+        // The matchspec chose this package, so the note says which one it
+        // resolved to; it goes to stderr to keep `--json` pipeable.
+        eprintln!(
+            "Inspecting {}",
+            hyperlink::maybe_link_on(
+                hyperlink::Stream::Stderr,
+                hyperlink::web(&record.url),
+                &record.url
+            )
+        );
         PackageSource::Url(record.url)
     };
     let client = client_for([&source], offline)?;
@@ -267,7 +279,10 @@ fn print_about(about: &AboutJson) {
     print_urls("documentation", &about.doc_url);
     print_urls("repository", &about.dev_url);
     if let Some(source_url) = &about.source_url {
-        println!("source: {source_url}");
+        println!(
+            "source: {}",
+            hyperlink::maybe_link(hyperlink::web(source_url), source_url)
+        );
     }
 }
 
@@ -356,15 +371,19 @@ fn print_text(label: &str, text: &str) {
 }
 
 /// Prints a single URL inline and multiple URLs as a list, or nothing when
-/// there are none.
+/// there are none. The URLs stay visible in full; the hyperlink only makes
+/// them clickable.
 fn print_urls(label: &str, urls: &[Url]) {
     match urls {
         [] => {}
-        [url] => println!("{label}: {url}"),
+        [url] => println!(
+            "{label}: {}",
+            hyperlink::maybe_link(hyperlink::web(url), url)
+        ),
         urls => {
             println!("{label}:");
             for url in urls {
-                println!("  - {url}");
+                println!("  - {}", hyperlink::maybe_link(hyperlink::web(url), url));
             }
         }
     }

@@ -14,7 +14,7 @@ Bundle 1 of 1
   Token subject:     repo:pavelzw/skill-forge:environment:upload
   Repository:        https://github.com/pavelzw/skill-forge (public, id 1151760276)
   Commit:            8a96d273f7245383c451499fb65375ec408ca042 on refs/heads/main
-  Workflow:          .github/workflows/package.yml (trigger: push)
+  Workflow:          https://github.com/pavelzw/skill-forge/.github/workflows/package.yml@refs/heads/main (trigger: push)
   Runner:            github-hosted
   Environment:       upload
   Build:             https://github.com/pavelzw/skill-forge/actions/runs/36007002754/attempts/1
