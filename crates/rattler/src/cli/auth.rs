@@ -227,6 +227,27 @@ pub struct Args {
     subcommand: Subcommand,
 }
 
+#[cfg(feature = "oauth")]
+impl Args {
+    /// Set a default audience for OAuth login at `host` (HTTPS unless specified).
+    /// Explicit audiences, custom clients, and other authentication methods are unchanged.
+    pub fn with_default_oauth_audience(mut self, host: &str, audience: impl Into<String>) -> Self {
+        if let Subcommand::Login(args) = &mut self.subcommand
+            && args.oauth_audience.is_none()
+            && args.oauth_issuer_url.is_none()
+            && args.oauth_client_id.is_none()
+            && args.oauth_client_secret.is_none()
+            && (args.oauth || default_oauth_for_login(args).is_some())
+            && let Ok(host_url) = Url::parse(&ensure_url_scheme(host))
+            && Url::parse(&ensure_url_scheme(&args.host))
+                .is_ok_and(|url| url.origin() == host_url.origin())
+        {
+            args.oauth_audience = Some(audience.into());
+        }
+        self
+    }
+}
+
 /// Authentication errors that can be returned by the `AuthenticationCLIError`
 #[derive(thiserror::Error, Debug)]
 pub enum AuthenticationCLIError {
@@ -1751,6 +1772,72 @@ mod tests {
         assert_eq!(prefix.issuer_url, "https://prefix.dev");
         assert_eq!(prefix.client_id, "rattler");
         assert!(prefix.scopes.iter().any(|s| s == "channel:upload"));
+    }
+
+    #[cfg(feature = "oauth")]
+    #[test]
+    fn default_oauth_audience_matches_the_login_origin() {
+        for (host, expected) in [
+            ("prefix.dev", Some("https://api.example")),
+            ("https://prefix.dev/", Some("https://api.example")),
+            ("PREFIX.DEV", Some("https://api.example")),
+            ("https://prefix.dev:443", Some("https://api.example")),
+            ("http://prefix.dev", None),
+            ("https://prefix.dev:8443", None),
+            ("repo.prefix.dev", None),
+            ("example.com", None),
+        ] {
+            let args = Args {
+                subcommand: Subcommand::Login(create_login_args(host)),
+            }
+            .with_default_oauth_audience("prefix.dev", "https://api.example");
+            let Subcommand::Login(login) = args.subcommand else {
+                panic!("expected login");
+            };
+            assert_eq!(login.oauth_audience.as_deref(), expected, "{host}");
+        }
+    }
+
+    #[cfg(feature = "oauth")]
+    #[test]
+    fn default_oauth_audience_preserves_explicit_options() {
+        for (options, expected) in [
+            (vec!["--oauth"], Some("https://api.example")),
+            (vec!["--oauth-audience", "custom"], Some("custom")),
+            (
+                vec!["--oauth", "--oauth-issuer-url", "https://custom.example"],
+                None,
+            ),
+            (vec!["--oauth", "--oauth-client-id", "custom"], None),
+            (vec!["--oauth", "--oauth-client-secret", "custom"], None),
+            (vec!["--token", "token"], None),
+            (vec!["--username", "user", "--password", "password"], None),
+            (vec!["--conda-token", "token"], None),
+            (
+                vec![
+                    "--s3-access-key-id",
+                    "key",
+                    "--s3-secret-access-key",
+                    "secret",
+                ],
+                None,
+            ),
+            (vec!["--workload-identity"], None),
+        ] {
+            let args = Args::try_parse_from(
+                [vec!["auth", "login", "prefix.dev"], options.clone()].concat(),
+            )
+            .unwrap()
+            .with_default_oauth_audience("prefix.dev", "https://api.example");
+            let Subcommand::Login(login) = args.subcommand else {
+                panic!("expected login");
+            };
+            assert_eq!(login.oauth_audience.as_deref(), expected, "{options:?}");
+        }
+        let args = Args::try_parse_from(["auth", "status"])
+            .unwrap()
+            .with_default_oauth_audience("prefix.dev", "https://api.example");
+        assert!(matches!(args.subcommand, Subcommand::Status(_)));
     }
 
     #[cfg(feature = "oauth")]
