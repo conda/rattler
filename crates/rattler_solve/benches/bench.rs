@@ -37,11 +37,6 @@ fn read_sparse_repodata(path: &str) -> SparseRepoData {
 
 fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
     let name = specs.join(", ");
-    if let Ok(selected) = std::env::var("RATTLER_BENCH_CASE")
-        && selected != name
-    {
-        return;
-    }
     let mut group = c.benchmark_group(format!("solve {name}"));
 
     group.sampling_mode(SamplingMode::Flat);
@@ -89,19 +84,6 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
 
     #[cfg(feature = "resolvo")]
     group.bench_function("resolvo", |b| {
-        let solution = rattler_solve::resolvo::Solver
-            .solve(SolverTask {
-                specs: specs.clone(),
-                ..SolverTask::from_iter(&available_packages)
-            })
-            .unwrap();
-        let mut selected = solution
-            .records
-            .iter()
-            .map(|r| r.url.as_str())
-            .collect::<Vec<_>>();
-        selected.sort_unstable();
-        eprintln!("solution {name}: {selected:?}");
         b.iter(|| {
             rattler_solve::resolvo::Solver
                 .solve(black_box(SolverTask {
