@@ -143,7 +143,16 @@ pub(crate) async fn maybe_refresh_oauth(
             }
             current_auth
         }
-        Ok(None) => auth,
+        // Logout may have removed the entry while we waited for the lock.
+        // Never refresh the captured grant and recreate the deleted login.
+        Ok(None) => {
+            return OAuthRefreshOutcome {
+                authentication: None,
+                failure: Some(OAuthRefreshFailure::ReauthenticationRequired {
+                    reason: "OAuth credentials were removed".into(),
+                }),
+            };
+        }
         Err(e) => {
             tracing::warn!("Failed to re-read OAuth credentials before refresh: {e}");
             auth
@@ -163,6 +172,18 @@ pub(crate) async fn maybe_refresh_oauth(
         return auth_outcome(auth);
     };
 
+    // Browser fetch follows redirects, and reqwest cannot disable that policy
+    // on wasm. Do not risk forwarding an audience grant's refresh token.
+    #[cfg(target_arch = "wasm32")]
+    if audience.is_some() {
+        return stale_auth_fallback(
+            auth,
+            OAuthRefreshFailure::Transient {
+                reason: "Audience refresh requires a native HTTP client".into(),
+            },
+        );
+    }
+
     let Some(refresh_token_val) = refresh_token.as_deref() else {
         let failure = OAuthRefreshFailure::MissingRefreshToken;
         tracing::warn!("{failure}");
@@ -171,9 +192,8 @@ pub(crate) async fn maybe_refresh_oauth(
 
     tracing::debug!("OAuth token expired, attempting refresh");
 
-    // A token endpoint never legitimately redirects; following one would hand
-    // the refresh token to whatever the redirect points at. The browser
-    // transport cannot set a redirect policy, so wasm keeps its default.
+    // Do not forward refresh-token bodies to a redirect target. The browser
+    // transport cannot disable redirects; audience refresh is blocked above.
     let builder = reqwest::Client::builder();
     #[cfg(not(target_arch = "wasm32"))]
     let builder = builder.redirect(reqwest::redirect::Policy::none());
@@ -259,9 +279,21 @@ pub(crate) async fn maybe_refresh_oauth(
         }
     };
 
-    let new_expires_at = token_response
-        .expires_in
-        .and_then(|secs| now_unix_timestamp().checked_add(secs));
+    let now = now_unix_timestamp();
+    let new_expires_at = match token_response.expires_in {
+        None => None,
+        Some(seconds) => match now.checked_add(seconds).filter(|expiry| *expiry > now) {
+            Some(expiry) => Some(expiry),
+            None => {
+                return stale_auth_fallback(
+                    auth,
+                    OAuthRefreshFailure::InvalidResponse {
+                        reason: "OAuth refresh response contained an invalid expires_in".into(),
+                    },
+                );
+            }
+        },
+    };
     // The grant is sent as `Authorization: Bearer`, so an empty or non-bearer
     // access token is unusable. A missing `expires_in` is allowed (RFC 6749
     // §5.1); such a token is simply never refreshed proactively.
@@ -624,6 +656,50 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn queued_refresh_does_not_restore_deleted_credentials() {
+        for audience in [None, Some(AUDIENCE)] {
+            for seconds_to_expiry in [-60, 60] {
+                let calls = Arc::new(AtomicUsize::new(0));
+                let count = calls.clone();
+                let endpoint = spawn_token_endpoint(move || {
+                    count.fetch_add(1, Ordering::SeqCst);
+                    (
+                        StatusCode::OK,
+                        Json(json!({
+                            "access_token": "fixture-new",
+                            "expires_in": 3600,
+                            "token_type": "Bearer"
+                        })),
+                    )
+                })
+                .await;
+                let (mut old, key) = grant_for(audience, endpoint);
+                if let Authentication::OAuth { expires_at, .. } = &mut old {
+                    *expires_at = Some(now_unix_timestamp() + seconds_to_expiry);
+                }
+                let storage = auth_storage(&key, &old);
+                let lock = storage.oauth_refresh_lock(&key);
+                let guard = lock.lock().await;
+                let refresh = maybe_refresh_oauth(&storage, old, &key);
+                tokio::pin!(refresh);
+                assert!(futures::poll!(&mut refresh).is_pending());
+
+                // Logout while this request is waiting behind another refresh.
+                storage.delete(&key).unwrap();
+                drop(guard);
+                let result = refresh.await;
+                assert!(matches!(
+                    result.failure(),
+                    Some(OAuthRefreshFailure::ReauthenticationRequired { .. })
+                ));
+                assert!(result.into_authentication().is_none());
+                assert_eq!(storage.get(&key).unwrap(), None);
+                assert_eq!(calls.load(Ordering::SeqCst), 0);
+            }
+        }
+    }
+
+    #[tokio::test]
     async fn refresh_preserves_omitted_refresh_token() {
         for audience in [None, Some(AUDIENCE)] {
             let endpoint = spawn_token_endpoint_with_form(move |form| {
@@ -654,6 +730,9 @@ mod tests {
         for audience in [None, Some(AUDIENCE)] {
             for (field, value) in [
                 ("token_type", json!("MAC")),
+                ("expires_in", json!(-1)),
+                ("expires_in", json!(0)),
+                ("expires_in", json!(i64::MAX)),
                 ("access_token", json!("")),
                 ("access_token", json!("x".repeat(70_000))),
             ] {
