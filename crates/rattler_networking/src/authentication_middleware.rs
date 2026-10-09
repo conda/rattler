@@ -23,9 +23,6 @@ pub struct AuthenticationMiddleware {
     // Each destination origin uses the credential stored under its source host.
     // Explicit mappings do not fall back to other host or wildcard credentials.
     credential_sources: HashMap<url::Origin, url::Host<String>>,
-    // Compatibility with the deprecated audience-specific storage-key API.
-    // This selection and the host mappings above are mutually exclusive.
-    legacy_audience_credential: Option<(url::Origin, String)>,
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
@@ -43,23 +40,12 @@ impl Middleware for AuthenticationMiddleware {
         }
 
         let url = req.url().clone();
-        let explicit_source =
-            !self.credential_sources.is_empty() || self.legacy_audience_credential.is_some();
+        let explicit_source = !self.credential_sources.is_empty();
         let selected = if explicit_source {
-            let origin = url.origin();
-            let key = self
-                .credential_sources
-                .get(&origin)
-                .map(ToString::to_string)
-                .or_else(|| {
-                    self.legacy_audience_credential
-                        .as_ref()
-                        .filter(|(trusted_origin, _)| *trusted_origin == origin)
-                        .map(|(_, key)| key.clone())
-                });
-            let Some(key) = key else {
+            let Some(host) = self.credential_sources.get(&url.origin()) else {
                 return next.run(req, extensions).await;
             };
+            let key = host.to_string();
             self.auth_storage
                 .get(&key)
                 .map(|auth| (url, auth.map(|auth| (key, auth))))
@@ -130,7 +116,6 @@ impl AuthenticationMiddleware {
         Self {
             auth_storage,
             credential_sources: HashMap::new(),
-            legacy_audience_credential: None,
         }
     }
 
@@ -140,7 +125,6 @@ impl AuthenticationMiddleware {
         Ok(Self {
             auth_storage: AuthenticationStorage::from_env_and_defaults()?,
             credential_sources: HashMap::new(),
-            legacy_audience_credential: None,
         })
     }
 
@@ -155,7 +139,6 @@ impl AuthenticationMiddleware {
     /// Once configured, requests to unmapped origins remain anonymous, as do
     /// requests whose source credential is missing or unsupported. The receiving
     /// API must accept the credential; this method does not change its permissions.
-    /// This replaces any legacy selection made with `with_oauth_audience`.
     ///
     /// Use on a dedicated API client, not stacked with channel authentication.
     /// Disable redirects on the underlying client for credential-bearing requests.
@@ -166,35 +149,8 @@ impl AuthenticationMiddleware {
         trusted_origins: impl IntoIterator<Item = url::Origin>,
     ) -> Self {
         for origin in trusted_origins {
-            self.legacy_audience_credential = None;
             self.credential_sources.insert(origin, source_host.clone());
         }
-        self
-    }
-
-    /// Select an exact audience grant stored under
-    /// [`AuthenticationStorage::oauth_audience_key`], and send it only to
-    /// `trusted_origin`. This replaces any host mappings configured with
-    /// [`Self::with_credentials_from`]. Requests to other origins stay anonymous.
-    ///
-    /// Prefer storing the grant once under its login host and reusing it with
-    /// [`Self::with_credentials_from`], rather than making a second copy of a
-    /// rotating refresh token under an audience-specific key.
-    #[deprecated(
-        note = "store the grant once under its login host and reuse it with `with_credentials_from`"
-    )]
-    pub fn with_oauth_audience(
-        mut self,
-        issuer: &str,
-        client_id: &str,
-        audience: &str,
-        trusted_origin: url::Origin,
-    ) -> Self {
-        self.credential_sources.clear();
-        self.legacy_audience_credential = Some((
-            trusted_origin,
-            AuthenticationStorage::oauth_audience_key(issuer, client_id, audience),
-        ));
         self
     }
 
@@ -571,7 +527,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(deprecated)]
     async fn concurrent_oauth_refresh_is_coalesced_by_authentication_middleware() {
         #[derive(Clone)]
         struct TestState {
@@ -608,7 +563,6 @@ mod tests {
 
         for (audience, source_host) in [
             (None, None),
-            (Some("https://audit.example"), None),
             (Some("https://audit.example"), Some("issuer.example")),
         ] {
             let state = TestState {
@@ -624,15 +578,7 @@ mod tests {
             let addr = listener.local_addr().unwrap();
             tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
 
-            let host = match (source_host, audience) {
-                (Some(host), _) => host.to_owned(),
-                (None, Some(audience)) => AuthenticationStorage::oauth_audience_key(
-                    "https://issuer.example",
-                    "client-id",
-                    audience,
-                ),
-                (None, None) => "127.0.0.1".to_owned(),
-            };
+            let host = source_host.unwrap_or("127.0.0.1").to_owned();
             let mut storage = AuthenticationStorage::empty();
             storage.add_backend(Arc::new(MemoryStorage::new()));
             storage
@@ -666,13 +612,6 @@ mod tests {
                         Url::parse(&repo_url).unwrap().origin(),
                         Url::parse(&second_url).unwrap().origin(),
                     ],
-                );
-            } else if let Some(audience) = audience {
-                middleware = middleware.with_oauth_audience(
-                    "https://issuer.example",
-                    "client-id",
-                    audience,
-                    Url::parse(&repo_url).unwrap().origin(),
                 );
             }
             let client = reqwest_middleware::ClientBuilder::new(
@@ -809,87 +748,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(deprecated)]
-    async fn audience_credentials_require_exact_context_and_origin() {
-        const ISSUER: &str = "https://issuer.example";
-        const AUDIENCE: &str = "https://audit.example";
-        let origin = Url::parse(AUDIENCE).unwrap().origin();
-        let mut storage = AuthenticationStorage::empty();
-        storage.add_backend(Arc::new(MemoryStorage::new()));
-        let auth = Authentication::OAuth {
-            audience: Some(AUDIENCE.into()),
-            access_token: "fixture.opaque.token".into(),
-            refresh_token: None,
-            expires_at: Some(i64::MAX),
-            token_endpoint: "https://issuer.example/token".into(),
-            revocation_endpoint: None,
-            client_id: "rattler".into(),
-        };
-        storage
-            .store(
-                &AuthenticationStorage::oauth_audience_key(ISSUER, "rattler", AUDIENCE),
-                &auth,
-            )
-            .unwrap();
-        storage
-            .store(
-                "audit.example",
-                &Authentication::BearerToken("fixture-channel".into()),
-            )
-            .unwrap();
-        for (issuer, client_id, audience, url, expected) in [
-            (
-                ISSUER,
-                "rattler",
-                AUDIENCE,
-                AUDIENCE,
-                Some("Bearer fixture.opaque.token"),
-            ),
-            (ISSUER, "rattler", AUDIENCE, "https://other.example", None),
-            (
-                ISSUER,
-                "rattler",
-                AUDIENCE,
-                "https://audit.example:444",
-                None,
-            ),
-            (ISSUER, "rattler", AUDIENCE, "http://audit.example", None),
-            ("https://other.example", "rattler", AUDIENCE, AUDIENCE, None),
-            (ISSUER, "other", AUDIENCE, AUDIENCE, None),
-            (ISSUER, "rattler", "other-audience", AUDIENCE, None),
-        ] {
-            let middleware = AuthenticationMiddleware::from_auth_storage(storage.clone())
-                .with_oauth_audience(issuer, client_id, audience, origin.clone());
-            let (http, mut captured) = make_client_harness(middleware);
-            let _ = http.post(url).send().await;
-            let request = captured.recv().await.unwrap();
-            assert_eq!(
-                request
-                    .headers()
-                    .get("authorization")
-                    .map(|v| v.to_str().unwrap()),
-                expected
-            );
-        }
-        // A grant stored under a host is sent to that host, audience or not:
-        // the storage key is the policy.
-        storage.store("audit.example", &auth).unwrap();
-        let (http, mut captured) =
-            make_client_harness(AuthenticationMiddleware::from_auth_storage(storage));
-        let _ = http.post(AUDIENCE).send().await;
-        assert_eq!(
-            captured
-                .recv()
-                .await
-                .unwrap()
-                .headers()
-                .get("authorization")
-                .map(|v| v.to_str().unwrap()),
-            Some("Bearer fixture.opaque.token")
-        );
-    }
-
-    #[tokio::test]
     async fn multiple_origins_select_their_source_hosts() {
         let mut storage = AuthenticationStorage::empty();
         storage.add_backend(Arc::new(MemoryStorage::new()));
@@ -941,21 +799,11 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(deprecated)]
     async fn empty_origins_preserve_existing_credential_selection() {
         let api = Url::parse("https://api.example").unwrap();
         let mut storage = AuthenticationStorage::empty();
         storage.add_backend(Arc::new(MemoryStorage::new()));
-        let legacy_key = AuthenticationStorage::oauth_audience_key(
-            "https://issuer.example",
-            "client",
-            "audience",
-        );
-        for (key, token) in [
-            ("api.example", "destination"),
-            ("issuer.example", "source"),
-            (legacy_key.as_str(), "legacy"),
-        ] {
+        for (key, token) in [("api.example", "destination"), ("issuer.example", "source")] {
             storage
                 .store(key, &Authentication::BearerToken(token.into()))
                 .unwrap();
@@ -965,18 +813,8 @@ mod tests {
         for (middleware, expected) in [
             (base.clone(), "Bearer destination"),
             (
-                base.clone()
-                    .with_credentials_from(host.clone(), [api.origin()]),
+                base.with_credentials_from(host.clone(), [api.origin()]),
                 "Bearer source",
-            ),
-            (
-                base.with_oauth_audience(
-                    "https://issuer.example",
-                    "client",
-                    "audience",
-                    api.origin(),
-                ),
-                "Bearer legacy",
             ),
         ] {
             let (http, mut captured) =

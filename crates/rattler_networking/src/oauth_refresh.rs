@@ -635,9 +635,6 @@ mod tests {
     }
 
     const AUDIENCE: &str = "https://audit.example";
-    fn audience_key() -> String {
-        AuthenticationStorage::oauth_audience_key("https://issuer.example", "client-id", AUDIENCE)
-    }
     fn expired_audience_oauth(endpoint: String) -> Authentication {
         let mut auth = expired_oauth(endpoint);
         if let Authentication::OAuth { audience, .. } = &mut auth {
@@ -648,11 +645,12 @@ mod tests {
     /// An expired grant and the key it is stored under, with or without an
     /// audience. Both kinds take the same refresh path.
     fn grant_for(audience: Option<&str>, endpoint: String) -> (Authentication, String) {
-        if audience.is_some() {
-            (expired_audience_oauth(endpoint), audience_key())
+        let auth = if audience.is_some() {
+            expired_audience_oauth(endpoint)
         } else {
-            (expired_oauth(endpoint), "repo.prefix.dev".into())
-        }
+            expired_oauth(endpoint)
+        };
+        (auth, "repo.prefix.dev".into())
     }
 
     #[tokio::test]
@@ -706,11 +704,7 @@ mod tests {
                 assert_eq!(form.get("audience").map(String::as_str), audience);
                 (StatusCode::OK, Json(json!({"access_token":"fixture.fresh.token", "expires_in":3600,"token_type":"Bearer"})))
             }).await;
-            let (old, key) = if audience.is_some() {
-                (expired_audience_oauth(endpoint), audience_key())
-            } else {
-                (expired_oauth(endpoint), "repo.prefix.dev".into())
-            };
+            let (old, key) = grant_for(audience, endpoint);
             let store = auth_storage(&key, &old);
             let result = maybe_refresh_oauth(&store, old, &key).await;
             assert!(result.failure().is_none());
@@ -813,7 +807,6 @@ mod tests {
     #[derive(Debug)]
     struct FailedBackend {
         old: Authentication,
-        fail_read: bool,
     }
     fn storage_error() -> AuthenticationStorageError {
         AuthenticationStorageError::StoreFailed {
@@ -826,11 +819,7 @@ mod tests {
             "fixture".into()
         }
         fn get(&self, _key: &str) -> Result<Option<Authentication>, AuthenticationStorageError> {
-            if self.fail_read {
-                Err(storage_error())
-            } else {
-                Ok(Some(self.old.clone()))
-            }
+            Ok(Some(self.old.clone()))
         }
         fn store(
             &self,
@@ -845,7 +834,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn storage_failure_still_uses_refreshed_token_without_shadow_copy() {
+    async fn storage_failure_still_uses_refreshed_host_token() {
         let calls = Arc::new(AtomicUsize::new(0));
         let count = calls.clone();
         let endpoint = spawn_token_endpoint(move || {
@@ -858,30 +847,21 @@ mod tests {
             )
         })
         .await;
-        for fail_read in [true, false] {
+        for audience in [None, Some(AUDIENCE)] {
             let mut store = AuthenticationStorage::empty();
-            let old = expired_audience_oauth(endpoint.clone());
-            store.add_backend(Arc::new(FailedBackend {
-                old: old.clone(),
-                fail_read,
-            }));
-            let fallback = Arc::new(MemoryStorage::new());
-            store.add_backend(fallback.clone());
-            let result = maybe_refresh_oauth(&store, old.clone(), &audience_key()).await;
-            // The freshly minted token serves this request even though it could
-            // not be persisted: the provider has already rotated the refresh
-            // token, so withholding the new access token gains nothing.
-            assert!(result.failure().is_none(), "fail_read={fail_read}");
+            let (old, key) = grant_for(audience, endpoint.clone());
+            let backend = Arc::new(FailedBackend { old: old.clone() });
+            store.add_backend(backend.clone());
+            let result = maybe_refresh_oauth(&store, old.clone(), &key).await;
+            // Failed persistence must not prevent using the refreshed token.
+            assert!(result.failure().is_none());
+            let refreshed = result.into_authentication().unwrap();
             assert!(matches!(
-                result.into_authentication(),
-                Some(Authentication::OAuth { access_token, .. }) if access_token == "fixture-new"
+                &refreshed,
+                Authentication::OAuth { access_token, .. } if access_token == "fixture-new"
             ));
-            // Audience keys use strict storage: no shadow copy lands in a
-            // lower-priority backend behind the failing one.
-            assert_eq!(fallback.get(&audience_key()).unwrap(), None);
-            if !fail_read {
-                assert_eq!(store.get(&audience_key()).unwrap(), Some(old));
-            }
+            assert_eq!(store.get(&key).unwrap(), Some(refreshed));
+            assert_eq!(backend.get(&key).unwrap(), Some(old));
         }
         assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
