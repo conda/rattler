@@ -43,9 +43,6 @@ enum OciMiddlewareError {
     #[error("Invalid OCI URL '{0}': {1}")]
     InvalidUrl(Url, &'static str),
 
-    #[error("sharded repodata is not supported by the current OCI channel layout")]
-    ShardedRepodataUnavailable,
-
     #[error("OCI registry requested authentication")]
     AuthenticationRequired(Vec<Challenge>),
 }
@@ -442,6 +439,23 @@ struct OCIUrl {
     path: String,
     tag: String,
     media_type: String,
+    /// The sha256 of the artifact when the URL itself determines it, which is
+    /// the case for content-addressed repodata shards.
+    sha256: Option<String>,
+}
+
+/// Media type of the sharded repodata index layer in `repodata.json:latest`.
+const REPODATA_SHARDS_MEDIA_TYPE: &str = "application/vnd.conda.repodata.shards.v1+msgpack+zstd";
+
+/// Media type of a single repodata shard.
+const REPODATA_SHARD_MEDIA_TYPE: &str = "application/vnd.conda.repodata.shard.v1+msgpack+zstd";
+
+/// The shard hash if the last two path segments of a URL, `parent` and
+/// `filename`, name a repodata shard: `shards/<sha256>.msgpack.zst`.
+fn shard_sha256(parent: Option<&str>, filename: &str) -> Option<String> {
+    let hash = filename.strip_suffix(".msgpack.zst")?;
+    (parent == Some("shards") && hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
+        .then(|| hash.to_ascii_lowercase())
 }
 
 /// OCI registry tags are not allowed to contain `+`, `!`, or `=`, so we need to
@@ -461,26 +475,6 @@ fn version_build_tag(tag: &str) -> String {
         .replace('=', "__eq__")
 }
 
-/// Whether `url` is the sharded repodata index or one of its content-addressed
-/// shards. Keep this narrow: other `.msgpack.zst` paths may be valid OCI
-/// repository names.
-fn is_sharded_repodata(url: &Url) -> bool {
-    let Some(mut segments) = url.path_segments() else {
-        return false;
-    };
-    let Some(filename) = segments.next_back() else {
-        return false;
-    };
-    if filename == "repodata_shards.msgpack.zst" {
-        return true;
-    }
-
-    filename
-        .strip_suffix(".msgpack.zst")
-        .is_some_and(|digest| digest.len() == 64 && digest.bytes().all(|b| b.is_ascii_hexdigit()))
-        && segments.next_back() == Some("shards")
-}
-
 impl OCIUrl {
     pub fn manifest_url(&self) -> Result<Url, ParseError> {
         format!(
@@ -495,13 +489,14 @@ impl OCIUrl {
     }
 
     pub fn new(url: &Url) -> Result<Self, OciMiddlewareError> {
-        // get filename (last segment of path)
-        let filename = url
-            .path_segments()
-            .and_then(|mut s| s.next_back())
-            .ok_or_else(|| {
-                OciMiddlewareError::InvalidUrl(url.clone(), "URL has no path segments")
-            })?;
+        // get filename (last segment of path) and the segment before it
+        let mut segments = url.path_segments().ok_or_else(|| {
+            OciMiddlewareError::InvalidUrl(url.clone(), "URL has no path segments")
+        })?;
+        let filename = segments.next_back().ok_or_else(|| {
+            OciMiddlewareError::InvalidUrl(url.clone(), "URL has no path segments")
+        })?;
+        let parent = segments.next_back();
 
         let mut res = OCIUrl {
             url: url.clone(),
@@ -509,13 +504,28 @@ impl OCIUrl {
             media_type: "".to_string(),
             host: url.host_str().unwrap_or("").to_string(),
             path: url.path().trim_start_matches('/').to_string(),
+            sha256: None,
         };
 
         let mut computed_filename = filename.to_string();
 
-        // We reimplement some archive name splitting logic from rattler here
-        // because we don't want to introduce cyclic dependencies
-        if let Some(archive_name) = filename.strip_suffix(".conda") {
+        if let Some(sha256) = shard_sha256(parent, filename) {
+            // The shard index points at `<subdir>/shards/<sha256>.msgpack.zst`,
+            // but shards are stored as `<subdir>/repodata.json/shards:<sha256>`
+            // so they cannot collide with a package named `shards`. The blob
+            // digest is the shard hash, so no manifest request is needed.
+            res.tag.clone_from(&sha256);
+            res.media_type = REPODATA_SHARD_MEDIA_TYPE.to_string();
+            res.sha256 = Some(sha256);
+            res.url = url.join("../repodata.json/shards")?;
+            res.path = res.url.path().trim_start_matches('/').to_string();
+            return Ok(res);
+        } else if filename == "repodata_shards.msgpack.zst" {
+            computed_filename = "repodata.json".to_string();
+            res.media_type = REPODATA_SHARDS_MEDIA_TYPE.to_string();
+        } else if let Some(archive_name) = filename.strip_suffix(".conda") {
+            // We reimplement some archive name splitting logic from rattler here
+            // because we don't want to introduce cyclic dependencies
             let parts = archive_name.rsplitn(3, '-').collect::<Vec<&str>>();
             match parts.as_slice() {
                 [build, version, name] => {
@@ -556,13 +566,6 @@ impl OCIUrl {
             } else if filename.ends_with(".zst") {
                 res.media_type = "application/vnd.conda.repodata.v1+json+zst".to_string();
             }
-        } else if is_sharded_repodata(url) {
-            // The current OCI channel layout does not define a mapping for
-            // sharded repodata. Answer the gateway's probe without touching the
-            // network so it falls back to `repodata.json`. Falling through would
-            // turn the filename into a repository name; ghcr.io reports that
-            // missing repository as `403 DENIED` rather than a degradable 404.
-            return Err(OciMiddlewareError::ShardedRepodataUnavailable);
         }
 
         // OCI image names cannot start with `_`, so we prefix it with `zzz`
@@ -680,7 +683,8 @@ impl Middleware for OciMiddleware {
             .headers()
             .get("X-Expected-Sha256")
             .and_then(|s| s.to_str().ok())
-            .map(ToString::to_string);
+            .map(ToString::to_string)
+            .or_else(|| oci_url.sha256.clone());
 
         if let Err(e) = self
             .rewrite_to_blob_request(&oci_url, &mut req, expected_sha256.as_deref())
@@ -731,10 +735,6 @@ fn lookup_error_to_response(
         OciMiddlewareError::ManifestRequestFailed(StatusCode::NOT_FOUND) => {
             Ok(create_404_response(url, "Manifest not found"))
         }
-        OciMiddlewareError::ShardedRepodataUnavailable => Ok(create_404_response(
-            url,
-            "sharded repodata is not supported by the current OCI channel layout",
-        )),
         _ => Err(reqwest_middleware::Error::Middleware(error.into())),
     }
 }
@@ -743,10 +743,12 @@ fn lookup_error_to_response(
 mod tests {
     use sha2::{Digest, Sha256};
 
+    use std::collections::HashMap;
+
     use super::{
-        Authentication, OCIUrl, OciAction, OciMiddlewareError, RegistryAuth, StatusCode, Url,
-        credentials_header, parse_challenges, registry_auth_from_challenges,
-        registry_auth_from_probe, token_url,
+        Authentication, OCIUrl, OciAction, REPODATA_SHARD_MEDIA_TYPE, REPODATA_SHARDS_MEDIA_TYPE,
+        RegistryAuth, StatusCode, credentials_header, parse_challenges,
+        registry_auth_from_challenges, registry_auth_from_probe, shard_sha256, token_url,
     };
     use crate::{Challenge, OciMiddleware};
 
@@ -894,70 +896,128 @@ mod tests {
         ));
     }
 
-    /// Sharded repodata is reported as unavailable before any network request,
-    /// while unrelated `.msgpack.zst` repositories and compressed
-    /// `repodata.json` variants keep resolving normally.
+    /// The shard index is a layer of the `repodata.json` manifest.
     #[test]
-    fn sharded_repodata_is_unavailable_but_other_zstd_artifacts_are_not() {
-        for filename in [
-            "repodata_shards.msgpack.zst",
-            "shards/0000000000000000000000000000000000000000000000000000000000000000.msgpack.zst",
-        ] {
-            let url: Url =
-                format!("oci://ghcr.io/channel-mirrors/conda-forge/osx-arm64/{filename}")
-                    .parse()
-                    .unwrap();
-            assert!(
-                matches!(
-                    OCIUrl::new(&url),
-                    Err(OciMiddlewareError::ShardedRepodataUnavailable)
-                ),
-                "{filename} must be reported as unavailable, not turned into a repository name"
-            );
-        }
-
-        for filename in ["metadata.msgpack.zst", "shards/not-a-digest.msgpack.zst"] {
-            let url: Url =
-                format!("oci://ghcr.io/channel-mirrors/conda-forge/osx-arm64/{filename}")
-                    .parse()
-                    .unwrap();
-            OCIUrl::new(&url).unwrap_or_else(|_| panic!("{filename} may be a valid repository"));
-        }
-
-        let url: Url = "oci://ghcr.io/channel-mirrors/conda-forge/osx-arm64/repodata.json.zst"
-            .parse()
-            .unwrap();
-        let oci_url = OCIUrl::new(&url).expect("compressed repodata is published as a layer");
+    fn shard_index_url_maps_to_repodata_manifest() {
+        let url = OCIUrl::new(
+            &"oci://ghcr.io/channel-mirrors/conda-forge/linux-64/repodata_shards.msgpack.zst"
+                .parse()
+                .unwrap(),
+        )
+        .unwrap();
         assert_eq!(
-            oci_url.path,
-            "channel-mirrors/conda-forge/osx-arm64/repodata.json"
+            url.path,
+            "channel-mirrors/conda-forge/linux-64/repodata.json"
         );
-        assert_eq!(
-            oci_url.media_type,
-            "application/vnd.conda.repodata.v1+json+zst"
-        );
+        assert_eq!(url.tag, "latest");
+        assert_eq!(url.media_type, REPODATA_SHARDS_MEDIA_TYPE);
+        assert_eq!(url.sha256, None);
     }
 
-    /// The middleware answers the gateway's sharded probe with a 404 it can
-    /// degrade from. Without this the filename becomes a repository ghcr.io
-    /// does not have, and its `403 DENIED` aborts the whole solve.
+    /// Shards resolve to the `repodata.json/shards` repository, addressed by
+    /// their hash.
+    #[test]
+    fn shard_url_maps_to_shards_repository() {
+        let hash = "c4a611ee12e29d3f1be82f764055b832c41392ef44e2f01894d7d352ad698dc3";
+        let url = OCIUrl::new(
+            &format!(
+                "oci://ghcr.io/channel-mirrors/conda-forge/linux-64/shards/{hash}.msgpack.zst"
+            )
+            .parse()
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            url.path,
+            "channel-mirrors/conda-forge/linux-64/repodata.json/shards"
+        );
+        assert_eq!(url.tag, hash);
+        assert_eq!(url.media_type, REPODATA_SHARD_MEDIA_TYPE);
+        assert_eq!(url.sha256.as_deref(), Some(hash));
+    }
+
+    /// Only a hash under `shards/` is a shard.
+    #[test]
+    fn non_shard_msgpack_urls_are_not_shards() {
+        let hash = "c4a611ee12e29d3f1be82f764055b832c41392ef44e2f01894d7d352ad698dc3";
+        assert_eq!(
+            shard_sha256(Some("linux-64"), &format!("{hash}.msgpack.zst")),
+            None
+        );
+        assert_eq!(shard_sha256(Some("shards"), "xtensor.msgpack.zst"), None);
+        assert_eq!(
+            shard_sha256(Some("shards"), &format!("{hash}.msgpack")),
+            None
+        );
+
+        // Other `.msgpack.zst` paths may be valid repository names and keep
+        // resolving like any other artifact.
+        for filename in ["metadata.msgpack.zst", "shards/not-a-digest.msgpack.zst"] {
+            let url = OCIUrl::new(
+                &format!("oci://ghcr.io/channel-mirrors/conda-forge/osx-arm64/{filename}")
+                    .parse()
+                    .unwrap(),
+            )
+            .unwrap_or_else(|_| panic!("{filename} may be a valid repository"));
+            assert_eq!(url.sha256, None);
+        }
+
+        // Compressed `repodata.json` stays a layer of the repodata manifest.
+        let url = OCIUrl::new(
+            &"oci://ghcr.io/channel-mirrors/conda-forge/osx-arm64/repodata.json.zst"
+                .parse()
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            url.path,
+            "channel-mirrors/conda-forge/osx-arm64/repodata.json"
+        );
+        assert_eq!(url.media_type, "application/vnd.conda.repodata.v1+json+zst");
+    }
+
+    /// Fetch the live shard index and one of its shards through the middleware.
     #[cfg(any(feature = "rustls", feature = "native-tls"))]
     #[tokio::test]
-    async fn test_oci_middleware_sharded_repodata_is_404() {
+    async fn test_oci_middleware_sharded_repodata() {
+        #[derive(serde::Deserialize)]
+        struct ShardIndex {
+            shards: HashMap<String, serde_bytes::ByteBuf>,
+        }
         let client = reqwest::Client::new();
-        let middleware = OciMiddleware::new(client.clone());
-
-        let client_with_middleware = reqwest_middleware::ClientBuilder::new(client)
-            .with(middleware)
+        let client_with_middleware = reqwest_middleware::ClientBuilder::new(client.clone())
+            .with(OciMiddleware::new(client))
             .build();
 
-        let response = client_with_middleware
-            .get("oci://ghcr.io/channel-mirrors/conda-forge/osx-arm64/repodata_shards.msgpack.zst")
+        let index = client_with_middleware
+            .get("oci://ghcr.io/channel-mirrors/conda-forge/linux-64/repodata_shards.msgpack.zst")
             .send()
             .await
             .unwrap();
+        assert_eq!(index.status(), 200);
+        let index: ShardIndex =
+            rmp_serde::from_slice(&zstd::decode_all(&*index.bytes().await.unwrap()).unwrap())
+                .unwrap();
+        let shard_hash = index
+            .shards
+            .into_values()
+            .next()
+            .expect("the index has at least one shard")
+            .into_vec();
 
-        assert_eq!(response.status(), 404);
+        let shard = client_with_middleware
+            .get(format!(
+                "oci://ghcr.io/channel-mirrors/conda-forge/linux-64/shards/{}.msgpack.zst",
+                hex::encode(&shard_hash)
+            ))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(shard.status(), 200);
+        assert_eq!(
+            Sha256::digest(shard.bytes().await.unwrap()).as_slice(),
+            shard_hash
+        );
     }
 
     // test pulling an image from OCI registry

@@ -5425,8 +5425,10 @@ dependencies = [
  "regex",
  "reqwest",
  "retry-policies",
+ "rmp-serde",
  "rstest",
  "serde",
+ "serde_bytes",
  "serde_json",
  "sha2 0.11.0",
  "temp-env",
@@ -5437,6 +5439,7 @@ dependencies = [
  "tracing-test",
  "url",
  "windows-native-keyring-store",
+ "zstd 0.13.3",
 ]
 
 [[package]]
