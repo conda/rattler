@@ -105,7 +105,7 @@ struct LoginArgs {
     oauth_redirect_uri: Option<String>,
 
     /// OAuth `audience` to request, so the access token is also accepted by
-    /// that API (provider-specific). No audience is requested by default.
+    /// that API (provider-specific).
     #[cfg(feature = "oauth")]
     #[clap(
         long,
