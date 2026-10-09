@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.53.1](https://github.com/conda/rattler/compare/rattler-v0.53.0...rattler-v0.53.1) - 2026-10-07
+
+### Other
+
+- bump rust to 1.98.1 ([#2906](https://github.com/conda/rattler/pull/2906))
+
+## [0.53.0](https://github.com/conda/rattler/compare/rattler-v0.52.1...rattler-v0.53.0) - 2026-10-06
+
+### Added
+
+- *(auth)* [**breaking**] Add RFC 8693 workload-identity login ([#2897](https://github.com/conda/rattler/pull/2897))
+
+### Other
+
+- Delete clippy overrides ([#2907](https://github.com/conda/rattler/pull/2907))
+
+## [0.52.1](https://github.com/conda/rattler/compare/rattler-v0.52.0...rattler-v0.52.1) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+
+## [0.52.0](https://github.com/conda/rattler/compare/rattler-v0.51.0...rattler-v0.52.0) - 2026-10-05
+
+### Added
+
+- *(auth)* support audiences in existing OAuth flows ([#2880](https://github.com/conda/rattler/pull/2880))
+- Implementation offsets in paths.json ([#2565](https://github.com/conda/rattler/pull/2565))
+
 ## [0.51.0](https://github.com/conda/rattler/compare/rattler-v0.50.0...rattler-v0.51.0) - 2026-09-29
 
 ### Fixed

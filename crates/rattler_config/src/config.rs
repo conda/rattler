@@ -24,6 +24,7 @@ use crate::config::s3::S3OptionsMap;
 use crate::config::{
     build::BuildConfig, concurrency::ConcurrencyConfig, index::IndexConfig, proxy::ProxyConfig,
     repodata_config::RepodataConfig, run_post_link_scripts::RunPostLinkScripts,
+    virtual_package_detectors::VirtualPackageDetectorsConfig,
 };
 use crate::locations::{ConfigLayer, ConfigLocation};
 
@@ -36,6 +37,7 @@ pub mod repodata_config;
 pub mod run_post_link_scripts;
 pub mod s3;
 pub mod tls;
+pub mod virtual_package_detectors;
 use crate::config::channel_config::default_channel_config;
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
@@ -224,6 +226,13 @@ pub struct CommonConfig {
     #[serde(alias = "allow_ref_links")] // BREAK: remove to stop supporting snake_case alias
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allow_ref_links: Option<bool>,
+
+    /// Consent and limits for running virtual package detectors.
+    #[serde(
+        default,
+        skip_serializing_if = "VirtualPackageDetectorsConfig::is_default"
+    )]
+    pub virtual_package_detectors: VirtualPackageDetectorsConfig,
     // Missing in rattler but should be available in pixi:
     //   experimental
     //   shell
@@ -257,6 +266,7 @@ impl Default for CommonConfig {
             allow_symbolic_links: None,
             allow_hard_links: None,
             allow_ref_links: None,
+            virtual_package_detectors: VirtualPackageDetectorsConfig::default(),
         }
     }
 }
@@ -314,6 +324,9 @@ impl Config for CommonConfig {
             allow_symbolic_links: other.allow_symbolic_links.or(self.allow_symbolic_links),
             allow_hard_links: other.allow_hard_links.or(self.allow_hard_links),
             allow_ref_links: other.allow_ref_links.or(self.allow_ref_links),
+            virtual_package_detectors: self
+                .virtual_package_detectors
+                .merge_config(&other.virtual_package_detectors)?,
         })
     }
 
@@ -324,6 +337,7 @@ impl Config for CommonConfig {
         self.proxy_config.validate()?;
         self.s3_options.validate()?;
         self.index_config.validate()?;
+        self.virtual_package_detectors.validate()?;
         Ok(())
     }
 
@@ -349,6 +363,10 @@ impl Config for CommonConfig {
         keys.extend(prefixed_keys("concurrency", self.concurrency.keys()));
         keys.extend(prefixed_keys("proxy-config", self.proxy_config.keys()));
         keys.extend(prefixed_keys("s3-options", self.s3_options.keys()));
+        keys.extend(prefixed_keys(
+            "virtual-package-detectors",
+            self.virtual_package_detectors.keys(),
+        ));
         keys
     }
 }

@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.5](https://github.com/conda/rattler/compare/rattler-bin-v0.5.4...rattler-bin-v0.5.5) - 2026-10-07
+
+### Added
+
+- *(solve)* Add exemptions to exclude-newer, deprecate package_cutoffs ([#2910](https://github.com/conda/rattler/pull/2910))
+
+## [0.5.4](https://github.com/conda/rattler/compare/rattler-bin-v0.5.3...rattler-bin-v0.5.4) - 2026-10-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_cache, rattler_shell, rattler, rattler_solve, rattler_repodata_gateway, rattler_config, rattler_package_streaming, rattler_menuinst, rattler_sigstore, rattler_index, rattler_upload, rattler_virtual_package_detectors, rattler_virtual_packages
+
+## [0.5.3](https://github.com/conda/rattler/compare/rattler-bin-v0.5.2...rattler-bin-v0.5.3) - 2026-10-06
+
+### Other
+
+- updated the following local packages: rattler_config, rattler_networking, rattler, rattler_upload, rattler_package_streaming, rattler_cache, rattler_solve, rattler_repodata_gateway, rattler_index, rattler_virtual_package_detectors
+
+## [0.5.2](https://github.com/conda/rattler/compare/rattler-bin-v0.5.1...rattler-bin-v0.5.2) - 2026-10-05
+
+### Added
+
+- *(cli)* Run channel virtual package detectors in solve and create ([#2886](https://github.com/conda/rattler/pull/2886))
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+
+### Added
+
+- Run trusted channel virtual package detectors in `rattler solve` and `rattler create`, including offline operation and explicit overrides.
+
+## [0.5.1](https://github.com/conda/rattler/compare/rattler-bin-v0.5.0...rattler-bin-v0.5.1) - 2026-10-05
+
+### Added
+
+- *(rattler-bin)* accept multichannels in -c of solve and create ([#2883](https://github.com/conda/rattler/pull/2883))
+
+### Fixed
+
+- use CMake for aws-lc-sys in Conda builds to preserve jitterentropy's required optimization flags
+
 ## [0.5.0](https://github.com/conda/rattler/compare/rattler-bin-v0.4.1...rattler-bin-v0.5.0) - 2026-09-29
 
 ### Added

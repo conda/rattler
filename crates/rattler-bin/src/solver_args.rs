@@ -5,8 +5,8 @@ use std::{collections::HashSet, fmt, str::FromStr, time::Duration};
 use clap::ValueEnum;
 use miette::IntoDiagnostic;
 use rattler_conda_types::{
-    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
-    ParseMatchSpecOptions, RepoDataRecord, SolverResult, Subdir, Version,
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, ParseMatchSpecOptions,
+    RepoDataRecord, SolverResult, Subdir, Version,
 };
 use rattler_config::{ConfigBase, NoExtension};
 use rattler_repodata_gateway::{MultiSource, RepoData, Source};
@@ -95,16 +95,17 @@ pub struct SolverArgs {
     )]
     channel_cutoffs: Vec<NamedCutoff>,
 
-    /// Override the cutoff for a package, as `PACKAGE=CUTOFF`.
-    /// The cutoff accepts the same timestamp, date, and duration formats as
-    /// `--exclude-newer`.
+    /// Allow records matching this spec regardless of `--exclude-newer`, for
+    /// example `"polars ==1.43.1"`. The spec must name exactly one package.
+    /// A broad spec such as `polars` exempts every future release too.
+    /// A channel must be a real channel name or URL, not a multichannel name.
     /// May be specified multiple times.
     #[clap(
-        long = "package-cutoff",
-        value_name = "PACKAGE=CUTOFF",
+        long = "exclude-newer-exemption",
+        value_name = "SPEC",
         requires = "exclude_newer"
     )]
-    package_cutoffs: Vec<NamedCutoff>,
+    exclude_newer_exemptions: Vec<String>,
 
     /// Policy for selecting package timestamps when using `--exclude-newer`.
     #[clap(long, default_value = "require-timestamp")]
@@ -304,17 +305,28 @@ impl SolverArgs {
         self.platform.map_or_else(crate::host_platform, Ok)
     }
 
-    /// The virtual packages to solve with, either as given on the command line
-    /// or detected from the current system.
+    /// Whether explicit CLI capabilities replace all automatic detection.
+    pub fn has_explicit_virtual_packages(&self) -> bool {
+        self.virtual_package.is_some()
+    }
+
+    /// Builtin host capabilities, with environment overrides, for detector solves.
+    pub fn builtin_virtual_packages(
+        platform: Subdir,
+    ) -> miette::Result<Vec<GenericVirtualPackage>> {
+        VirtualPackages::detect_for_platform(
+            platform,
+            &VirtualPackageOverrides::from_env(),
+            rattler::default_cache_dir().ok().as_deref(),
+        )
+        .map(|packages| packages.into_generic_virtual_packages().collect())
+        .into_diagnostic()
+    }
+
+    /// The explicitly supplied capabilities, or the target's builtin capabilities.
     pub fn virtual_packages(&self) -> miette::Result<Vec<GenericVirtualPackage>> {
         let Some(virtual_packages) = &self.virtual_package else {
-            return VirtualPackages::detect_for_platform(
-                self.platform()?,
-                &VirtualPackageOverrides::from_env(),
-                rattler::default_cache_dir().ok().as_deref(),
-            )
-            .map(|vpkgs| vpkgs.into_generic_virtual_packages().collect::<Vec<_>>())
-            .into_diagnostic();
+            return Self::builtin_virtual_packages(self.platform()?);
         };
 
         virtual_packages
@@ -370,18 +382,10 @@ impl SolverArgs {
                 .apply_to_channel(exclude_newer, channel, now);
         }
 
-        let mut packages = HashSet::new();
-        for override_ in &self.package_cutoffs {
-            let package = PackageName::from_str(&override_.name).into_diagnostic()?;
-            if !packages.insert(package.clone()) {
-                return Err(miette::miette!(
-                    "duplicate cutoff for package '{}'",
-                    override_.name
-                ));
-            }
-            exclude_newer = override_
-                .cutoff
-                .apply_to_package(exclude_newer, package, now);
+        for spec in &self.exclude_newer_exemptions {
+            let spec =
+                MatchSpec::from_str(spec, ParseMatchSpecOptions::strict()).into_diagnostic()?;
+            exclude_newer = exclude_newer.with_exemption(spec).into_diagnostic()?;
         }
 
         Ok(Some(

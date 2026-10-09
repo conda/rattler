@@ -120,13 +120,13 @@ pub fn create_windows_python_entry_point(
     let relative_path_script_py = ensure_entry_point_relative_path(
         &python_info
             .bin_dir
-            .join(format!("{}-script.py", &entry_point.command)),
+            .join(format!("{}-script.py", entry_point.command)),
         target_dir.path(),
     )?;
     let relative_path_script_exe = ensure_entry_point_relative_path(
         &python_info
             .bin_dir
-            .join(format!("{}.exe", &entry_point.command)),
+            .join(format!("{}.exe", entry_point.command)),
         target_dir.path(),
     )?;
 

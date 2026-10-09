@@ -1,7 +1,8 @@
 //! OAuth/OIDC authentication flows for the CLI.
 //!
-//! Supports authorization code grant with PKCE (primary) and device code
-//! flow (fallback for headless environments).
+//! Supports authorization code grant with PKCE (primary, RFC 6749 §4.1 and
+//! RFC 7636) and device code flow (fallback for headless environments,
+//! RFC 8628). Endpoints are found via `OpenID` Connect Discovery 1.0.
 
 use std::{
     collections::HashSet,
@@ -372,7 +373,8 @@ fn append_audience(url: &mut Url, audience: Option<&str>) -> Result<(), OAuthErr
     Ok(())
 }
 
-/// Perform OIDC discovery and extract all needed endpoints.
+/// Perform OIDC discovery (`OpenID` Connect Discovery 1.0) and extract all
+/// needed endpoints.
 ///
 /// Uses our custom `ExtendedCoreProviderMetadata` type so that the
 /// `revocation_endpoint` and `device_authorization_endpoint` fields are
@@ -407,7 +409,7 @@ async fn discover_endpoints(
     })
 }
 
-/// Authorization code flow with PKCE.
+/// Authorization code flow (RFC 6749 §4.1) with PKCE (RFC 7636).
 ///
 /// 1. Binds a local TCP listener for the redirect
 /// 2. Opens the browser to the authorization URL
@@ -939,7 +941,7 @@ fn display_name_from_claims(claims: &CoreIdTokenClaims) -> String {
     claims.subject().to_string()
 }
 
-/// Revoke OAuth tokens at the provider's revocation endpoint.
+/// Revoke OAuth tokens at the provider's revocation endpoint (RFC 7009 §2.1).
 ///
 /// Best-effort: logs warnings on failure but does not return errors.
 pub async fn revoke_tokens(
