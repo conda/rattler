@@ -123,7 +123,7 @@ class CacheIndex:
 
     def contains_record(self, record: RepoDataRecord) -> bool:
         """Returns whether the package described by `RepoDataRecord` is present in the cache."""
-        return self._inner.contains_record(record._inner)
+        return self._inner.contains_record(record._record)
 
     def is_empty(self) -> bool:
         """Returns True if the cache index contains no packages."""
