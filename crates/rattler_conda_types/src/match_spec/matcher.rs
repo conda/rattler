@@ -43,8 +43,16 @@ impl RegexMatcher {
 /// Matching is always case-insensitive (ASCII), per CEP-29.
 #[derive(Debug, Clone)]
 pub enum StringMatcher {
+    /// Match any string, including the empty string (`*`).
+    Any,
     /// Match the string exactly (case-insensitive, ASCII).
     Exact(String),
+    /// Match a literal prefix (case-insensitive, ASCII). The stored prefix
+    /// does not include the trailing wildcard.
+    Prefix(String),
+    /// Match a literal suffix (case-insensitive, ASCII). The stored suffix
+    /// does not include the leading wildcard.
+    Suffix(String),
     /// Match the string by glob. A glob uses a * to match any characters.
     /// For example, `*` matches any string, `py*` matches any string starting
     /// with `py`, `*37` matches any string ending with `37` and `py*37`
@@ -62,7 +70,12 @@ pub enum StringMatcher {
 impl Hash for StringMatcher {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
+            StringMatcher::Any => "*".hash(state),
             StringMatcher::Exact(s) => s.hash(state),
+            StringMatcher::Prefix(s) | StringMatcher::Suffix(s) => {
+                std::mem::discriminant(self).hash(state);
+                s.hash(state);
+            }
             StringMatcher::Glob(pattern) => pattern.hash(state),
             StringMatcher::Regex(regex) => regex.as_str().hash(state),
         }
@@ -72,7 +85,10 @@ impl Hash for StringMatcher {
 impl PartialEq for StringMatcher {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (StringMatcher::Exact(s1), StringMatcher::Exact(s2)) => s1 == s2,
+            (StringMatcher::Any, StringMatcher::Any) => true,
+            (StringMatcher::Exact(s1), StringMatcher::Exact(s2))
+            | (StringMatcher::Prefix(s1), StringMatcher::Prefix(s2))
+            | (StringMatcher::Suffix(s1), StringMatcher::Suffix(s2)) => s1 == s2,
             (StringMatcher::Glob(s1), StringMatcher::Glob(s2)) => s1.as_str() == s2.as_str(),
             (StringMatcher::Regex(s1), StringMatcher::Regex(s2)) => s1.as_str() == s2.as_str(),
             _ => false,
@@ -85,7 +101,17 @@ impl StringMatcher {
     /// always case-insensitive.
     pub fn matches(&self, other: &str) -> bool {
         match self {
+            StringMatcher::Any => true,
             StringMatcher::Exact(s) => s.eq_ignore_ascii_case(other),
+            StringMatcher::Prefix(prefix) => other
+                .as_bytes()
+                .get(..prefix.len())
+                .is_some_and(|start| start.eq_ignore_ascii_case(prefix.as_bytes())),
+            StringMatcher::Suffix(suffix) => other
+                .len()
+                .checked_sub(suffix.len())
+                .and_then(|start| other.as_bytes().get(start..))
+                .is_some_and(|end| end.eq_ignore_ascii_case(suffix.as_bytes())),
             StringMatcher::Glob(glob) => glob.matches_with(
                 other,
                 glob::MatchOptions {
@@ -98,6 +124,13 @@ impl StringMatcher {
             StringMatcher::Regex(regex) => regex.is_match(other).unwrap_or(false),
         }
     }
+}
+
+// Separators stay with glob because their matching is platform-dependent.
+// Non-ASCII literals are case-sensitive in glob too, so comparing their
+// UTF-8 bytes with ASCII-only case folding preserves that behavior.
+pub(crate) fn is_glob_literal(literal: &str) -> bool {
+    !literal.contains(['*', '?', '[', ']', '/', '\\'])
 }
 
 /// Error when parsing [`StringMatcher`]
@@ -128,6 +161,16 @@ impl FromStr for StringMatcher {
                     regex: s.to_string(),
                 })?,
             )))
+        } else if s == "*" {
+            Ok(StringMatcher::Any)
+        } else if let Some(prefix) = s.strip_suffix('*')
+            && is_glob_literal(prefix)
+        {
+            Ok(StringMatcher::Prefix(prefix.to_string()))
+        } else if let Some(suffix) = s.strip_prefix('*')
+            && is_glob_literal(suffix)
+        {
+            Ok(StringMatcher::Suffix(suffix.to_string()))
         } else if s.contains('*') {
             Ok(StringMatcher::Glob(Box::new(
                 glob::Pattern::new(s).map_err(|_err| StringMatcherParseError::InvalidGlob {
@@ -143,7 +186,10 @@ impl FromStr for StringMatcher {
 impl Display for StringMatcher {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            StringMatcher::Any => write!(f, "*"),
             StringMatcher::Exact(s) => write!(f, "{s}"),
+            StringMatcher::Prefix(s) => write!(f, "{s}*"),
+            StringMatcher::Suffix(s) => write!(f, "*{s}"),
             StringMatcher::Glob(s) => write!(f, "{}", s.as_str()),
             StringMatcher::Regex(s) => write!(f, "{}", s.as_str()),
         }
@@ -158,7 +204,9 @@ impl Serialize for StringMatcher {
         S: Serializer,
     {
         match self {
+            StringMatcher::Any => "*".serialize(serializer),
             StringMatcher::Exact(s) => s.serialize(serializer),
+            StringMatcher::Prefix(_) | StringMatcher::Suffix(_) => serializer.collect_str(self),
             StringMatcher::Glob(s) => s.as_str().serialize(serializer),
             StringMatcher::Regex(s) => s.as_str().serialize(serializer),
         }
@@ -188,7 +236,7 @@ mod tests {
             "foo".parse().unwrap()
         );
         assert_eq!(
-            StringMatcher::Glob(Box::new(glob::Pattern::new("foo*").unwrap())),
+            StringMatcher::Prefix("foo".to_string()),
             "foo*".parse().unwrap()
         );
         assert_eq!(
@@ -363,5 +411,85 @@ mod tests {
         assert!(!StringMatcher::from_str("foo").unwrap().matches(""));
         assert!(StringMatcher::from_str("^$").unwrap().matches(""));
         assert!(StringMatcher::from_str("*").unwrap().matches(""));
+    }
+
+    #[test]
+    fn test_build_glob_fast_paths_agree_with_glob() {
+        let patterns = [
+            "*", "py*", "*blas", "*a", "a*", "*a_0", "*é", "a*b", "*a*", "?a*", "[aA]*", "*a?",
+            "a/*", "**", "**/a", "[*]*", "a*b*c", "*.", "é*", "🦀*", "*🦀", "a:*", "*a:", "a\\*",
+            "*a/", "*a\\", "[]]*", "*\0", "\0*",
+        ];
+        let alphabet = ['a', 'A', '_', '.', '/', '\\', 'é', '🦀', '\0'];
+        let mut inputs = vec![
+            String::new(),
+            "py39_0".into(),
+            "PY39_0".into(),
+            "openblas".into(),
+            "x_OPENBLAS".into(),
+        ];
+        let mut state = 0x1234_5678_u64;
+        for length in 0..20 {
+            for _ in 0..250 {
+                let mut input = String::new();
+                for _ in 0..length {
+                    state ^= state << 13;
+                    state ^= state >> 7;
+                    state ^= state << 17;
+                    input.push(alphabet[state as usize % alphabet.len()]);
+                }
+                inputs.push(input);
+            }
+        }
+        for pattern in patterns {
+            let glob = glob::Pattern::new(pattern).unwrap();
+            let matcher = StringMatcher::from_str(pattern).unwrap();
+            for input in &inputs {
+                let expected = glob.matches_with(
+                    input,
+                    glob::MatchOptions {
+                        case_sensitive: false,
+                        ..glob::MatchOptions::default()
+                    },
+                );
+                assert_eq!(
+                    matcher.matches(input),
+                    expected,
+                    "{pattern:?} against {input:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_compiled_glob_variants_roundtrip() {
+        for (pattern, expected) in [
+            ("*", StringMatcher::Any),
+            ("py39*", StringMatcher::Prefix("py39".into())),
+            ("*openblas", StringMatcher::Suffix("openblas".into())),
+            ("é*", StringMatcher::Prefix("é".into())),
+            ("*é", StringMatcher::Suffix("é".into())),
+        ] {
+            let matcher = StringMatcher::from_str(pattern).unwrap();
+            assert_eq!(matcher, expected);
+            assert_eq!(matcher.to_string(), pattern);
+            let json = serde_json::to_string(&matcher).unwrap();
+            assert_eq!(serde_json::from_str::<String>(&json).unwrap(), pattern);
+            let roundtrip: StringMatcher = serde_json::from_str(&json).unwrap();
+            assert_eq!(matcher, roundtrip);
+            let hash = |matcher: &StringMatcher| {
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                matcher.hash(&mut hasher);
+                hasher.finish()
+            };
+            assert_eq!(hash(&matcher), hash(&roundtrip));
+        }
+        for pattern in ["py*39", "**", "[aA]*", "?a*", "a/*", "a\\*"] {
+            assert!(matches!(
+                StringMatcher::from_str(pattern).unwrap(),
+                StringMatcher::Glob(_)
+            ));
+        }
+        assert!(StringMatcher::from_str("[a*").is_err());
     }
 }
