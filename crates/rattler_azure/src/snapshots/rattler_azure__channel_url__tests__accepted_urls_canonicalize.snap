@@ -1,0 +1,14 @@
+---
+source: crates/rattler_azure/src/channel_url.rs
+expression: canonical
+---
+"az://acct.blob.core.windows.net/general/prefix": "az://acct.blob.core.windows.net/general/prefix"
+"az://acct.blob.core.windows.net/general/": "az://acct.blob.core.windows.net/general/"
+"az://acct.blob.core.windows.net/": "az://acct.blob.core.windows.net/"
+"az://acct.blob.core.windows.net": "az://acct.blob.core.windows.net/"
+"az://acct.blob.core.windows.net/general/p?sv=token#frag": "az://acct.blob.core.windows.net/general/p?sv=token#frag"
+"az://acct.blob.core.windows.net/general/..hidden/...": "az://acct.blob.core.windows.net/general/..hidden/..."
+"az://acct.blob.core.windows.net/general/café": "az://acct.blob.core.windows.net/general/caf%C3%A9"
+"az://acct.blob.core.windows.net/general/with space": "az://acct.blob.core.windows.net/general/with%20space"
+"az://acct.blob.core.windows.net/general/with%20space": "az://acct.blob.core.windows.net/general/with%20space"
+"az://acct.blob.core.windows.net/general/caf%C3%A9": "az://acct.blob.core.windows.net/general/caf%C3%A9"
