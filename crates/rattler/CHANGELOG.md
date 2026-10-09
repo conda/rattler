@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.54.0](https://github.com/conda/rattler/compare/rattler-v0.53.1...rattler-v0.54.0) - 2026-10-09
+
+### Added
+
+- *(auth)* expose OAuth audience through the login CLI ([#2921](https://github.com/conda/rattler/pull/2921))
+- *(auth)* [**breaking**] reuse host credentials for explicit API origins ([#2920](https://github.com/conda/rattler/pull/2920))
+
 ## [0.53.1](https://github.com/conda/rattler/compare/rattler-v0.53.0...rattler-v0.53.1) - 2026-10-07
 
 ### Other
