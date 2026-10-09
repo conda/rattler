@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.0](https://github.com/conda/rattler/compare/rattler_networking-v0.33.1...rattler_networking-v0.34.0) - 2026-10-09
+
+### Added
+
+- *(auth)* [**breaking**] reuse host credentials for explicit API origins ([#2920](https://github.com/conda/rattler/pull/2920))
+
 ## [0.33.1](https://github.com/conda/rattler/compare/rattler_networking-v0.33.0...rattler_networking-v0.33.1) - 2026-10-07
 
 ### Other

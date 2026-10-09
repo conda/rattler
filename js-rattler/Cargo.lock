@@ -2061,7 +2061,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.10.17"
+version = "0.10.18"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2189,7 +2189,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.33.1"
+version = "0.34.0"
 dependencies = [
  "ambient-id",
  "astral-reqwest-middleware",
@@ -2215,7 +2215,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.27.12"
+version = "0.27.13"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-tokio-tar",
@@ -2263,7 +2263,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.36.2"
+version = "0.36.3"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2330,7 +2330,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "11.2.0"
+version = "11.2.1"
 dependencies = [
  "futures",
  "hex",
