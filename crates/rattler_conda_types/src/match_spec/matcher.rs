@@ -86,18 +86,36 @@ impl StringMatcher {
     pub fn matches(&self, other: &str) -> bool {
         match self {
             StringMatcher::Exact(s) => s.eq_ignore_ascii_case(other),
-            StringMatcher::Glob(glob) => glob.matches_with(
-                other,
-                glob::MatchOptions {
-                    case_sensitive: false,
-                    ..glob::MatchOptions::default()
-                },
-            ),
+            StringMatcher::Glob(glob) => matches_glob(glob, other),
             // `fancy_regex` can fail on pathological backtracking cases.
             // Treat match errors as non-matches.
             StringMatcher::Regex(regex) => regex.is_match(other).unwrap_or(false),
         }
     }
+}
+
+// Keep glob specialization out of the common exact/version matching path.
+#[inline(never)]
+fn matches_glob(pattern: &glob::Pattern, other: &str) -> bool {
+    // A single leading wildcard is common in build pins such as `*openblas`.
+    // Leave complex syntax and non-ASCII literals to the glob implementation.
+    if let Some(suffix) = pattern.as_str().strip_prefix('*')
+        && suffix
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
+    {
+        return other
+            .as_bytes()
+            .get(other.len().saturating_sub(suffix.len())..)
+            .is_some_and(|end| end.eq_ignore_ascii_case(suffix.as_bytes()));
+    }
+    pattern.matches_with(
+        other,
+        glob::MatchOptions {
+            case_sensitive: false,
+            ..glob::MatchOptions::default()
+        },
+    )
 }
 
 /// Error when parsing [`StringMatcher`]
@@ -363,5 +381,52 @@ mod tests {
         assert!(!StringMatcher::from_str("foo").unwrap().matches(""));
         assert!(StringMatcher::from_str("^$").unwrap().matches(""));
         assert!(StringMatcher::from_str("*").unwrap().matches(""));
+    }
+
+    #[test]
+    fn test_build_glob_fast_paths_agree_with_glob() {
+        let patterns = [
+            "*", "py*", "*blas", "*a", "a*", "*a_0", "*é", "a*b", "*a*", "?a*", "[aA]*", "*a?",
+            "a/*", "**", "**/a", "[*]*", "a*b*c", "*.",
+        ];
+        let alphabet = ['a', 'A', '_', '.', '/', '\\', 'é', '🦀', '\0'];
+        let mut inputs = vec![
+            String::new(),
+            "py39_0".into(),
+            "PY39_0".into(),
+            "openblas".into(),
+            "x_OPENBLAS".into(),
+        ];
+        let mut state = 0x1234_5678_u64;
+        for length in 0..20 {
+            for _ in 0..250 {
+                let mut input = String::new();
+                for _ in 0..length {
+                    state ^= state << 13;
+                    state ^= state >> 7;
+                    state ^= state << 17;
+                    input.push(alphabet[state as usize % alphabet.len()]);
+                }
+                inputs.push(input);
+            }
+        }
+        for pattern in patterns {
+            let glob = glob::Pattern::new(pattern).unwrap();
+            let matcher = StringMatcher::Glob(Box::new(glob.clone()));
+            for input in &inputs {
+                let expected = glob.matches_with(
+                    input,
+                    glob::MatchOptions {
+                        case_sensitive: false,
+                        ..glob::MatchOptions::default()
+                    },
+                );
+                assert_eq!(
+                    matcher.matches(input),
+                    expected,
+                    "{pattern:?} against {input:?}"
+                );
+            }
+        }
     }
 }

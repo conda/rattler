@@ -8,7 +8,57 @@ use rattler_solve::{
     ChannelPriority,
     resolvo::{CondaDependencyProvider, NameType},
 };
-use resolvo::SolverCache;
+use resolvo::{DependencyProvider, SolverCache};
+
+fn bench_filter(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) {
+    let spec = MatchSpec::from_str(spec, rattler_conda_types::ParseStrictness::Lenient).unwrap();
+    let name = spec.name.as_exact().unwrap().clone();
+    let repodata = SparseRepoData::load_records_recursive(
+        [sparse_repo_data],
+        [name.clone()],
+        None,
+        PackageFormatSelection::default(),
+    )
+    .unwrap();
+    let provider = CondaDependencyProvider::new(
+        repodata.iter().map(|r| r.iter().collect()),
+        &[],
+        &[],
+        &[],
+        std::slice::from_ref(&spec),
+        None,
+        None,
+        ChannelPriority::default(),
+        None,
+        rattler_solve::SolveStrategy::Highest,
+        Vec::new(),
+        &HashMap::default(),
+    )
+    .unwrap();
+    let name_id = provider.pool.intern_package_name(NameType::from(&name));
+    let version_set = provider
+        .pool
+        .intern_version_set(name_id, spec.clone().into_nameless().1.into());
+    let candidates = provider
+        .get_candidates(name_id)
+        .now_or_never()
+        .unwrap()
+        .unwrap()
+        .candidates;
+    eprintln!("filter {spec}: {} candidates", candidates.len());
+    for inverse in [false, true] {
+        c.bench_function(&format!("filter {spec} inverse={inverse}"), |b| {
+            b.iter(|| {
+                black_box(
+                    provider
+                        .filter_candidates(black_box(&candidates), version_set, inverse)
+                        .now_or_never()
+                        .unwrap(),
+                )
+            });
+        });
+    }
+}
 
 fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) {
     let match_spec =
@@ -82,6 +132,15 @@ fn criterion_benchmark(c: &mut Criterion) {
     bench_sort(c, &sparse_repo_data, "pytorch");
     bench_sort(c, &sparse_repo_data, "python");
     bench_sort(c, &sparse_repo_data, "tensorflow");
+    for spec in [
+        "python >=3.9,<3.10",
+        "numpy >=1.20,<2",
+        "numpy >=1.20,<2 py39*",
+        "libblas * *openblas",
+        "python",
+    ] {
+        bench_filter(c, &sparse_repo_data, spec);
+    }
 }
 
 criterion_group!(benches, criterion_benchmark);
