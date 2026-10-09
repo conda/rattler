@@ -45,7 +45,6 @@ fn bench_filter(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str
         .unwrap()
         .unwrap()
         .candidates;
-    eprintln!("filter {spec}: {} candidates", candidates.len());
     for inverse in [false, true] {
         c.bench_function(&format!("filter {spec} inverse={inverse}"), |b| {
             b.iter(|| {
