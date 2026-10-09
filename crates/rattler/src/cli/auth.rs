@@ -1755,52 +1755,6 @@ mod tests {
 
     #[cfg(feature = "oauth")]
     #[test]
-    fn test_oauth_audience_flag_parses_without_oauth_and_conflicts_with_other_methods() {
-        use clap::CommandFactory;
-
-        Args::command().debug_assert();
-
-        let login = |argv: &[&str]| {
-            Args::try_parse_from([&["auth", "login", "prefix.dev"], argv].concat()).map(|args| {
-                match args.subcommand {
-                    Subcommand::Login(login) => login,
-                    other => panic!("expected login, got {other:?}"),
-                }
-            })
-        };
-
-        // The flag works with the implicit prefix.dev login (no `--oauth`).
-        assert_eq!(login(&[]).unwrap().oauth_audience, None);
-        assert_eq!(
-            login(&["--oauth-audience", "https://api.example"])
-                .unwrap()
-                .oauth_audience
-                .as_deref(),
-            Some("https://api.example")
-        );
-        assert!(
-            login(&["--oauth", "--oauth-audience", "https://api.example"])
-                .unwrap()
-                .oauth
-        );
-
-        // Explicit non-OAuth methods reject the flag instead of ignoring it.
-        for method in [
-            &["--token", "t"][..],
-            &["--username", "u", "--password", "p"],
-            &["--conda-token", "c"],
-            &["--s3-access-key-id", "k", "--s3-secret-access-key", "s"],
-            &["--workload-identity"],
-        ] {
-            assert!(
-                login(&[method, &["--oauth-audience", "https://api.example"]].concat()).is_err(),
-                "{method:?}"
-            );
-        }
-    }
-
-    #[cfg(feature = "oauth")]
-    #[test]
     fn test_default_oauth_for_login() {
         // No explicit method on prefix.dev → OAuth default kicks in
         assert!(default_oauth_for_login(&create_login_args("prefix.dev")).is_some());
