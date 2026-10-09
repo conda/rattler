@@ -418,9 +418,27 @@ pub trait Matches<T> {
     fn matches(&self, other: &T) -> bool;
 }
 
+/// Returns whether `record` declares every extra in `extras`.
+///
+/// `extra_depends` is the authoritative list of extras a record provides, so a
+/// record that does not declare a requested extra cannot satisfy a spec that
+/// asks for it. Without this check a consumer is free to pick a version that
+/// does not know the extra at all, which silently drops the extra's
+/// dependencies.
+fn record_declares_extras(extras: Option<&Vec<String>>, record: &PackageRecord) -> bool {
+    extras
+        .into_iter()
+        .flatten()
+        .all(|extra| record.extra_depends.contains_key(extra))
+}
+
 impl Matches<PackageRecord> for NamelessMatchSpec {
     /// Match a [`NamelessMatchSpec`] against a [`PackageRecord`]
     fn matches(&self, other: &PackageRecord) -> bool {
+        if !record_declares_extras(self.extras.as_ref(), other) {
+            return false;
+        }
+
         if let Some(spec) = self.version.as_ref()
             && !spec.matches(&other.version)
         {
@@ -491,6 +509,10 @@ impl Matches<PackageRecord> for MatchSpec {
     /// Match a [`MatchSpec`] against a [`PackageRecord`]
     fn matches(&self, other: &PackageRecord) -> bool {
         if !self.name.matches(&other.name) {
+            return false;
+        }
+
+        if !record_declares_extras(self.extras.as_ref(), other) {
             return false;
         }
 
@@ -699,6 +721,7 @@ mod tests {
         parse_mode::ParseStrictnessWithNameMatcher,
     };
     use insta::assert_snapshot;
+    use std::collections::BTreeMap;
     use std::hash::{Hash, Hasher};
 
     #[test]
@@ -908,6 +931,61 @@ mod tests {
             legacy_err,
             ParseMatchSpecError::InvalidBracketKey("flags".to_string())
         );
+    }
+
+    #[test]
+    fn test_extras_match() {
+        let options = ParseMatchSpecOptions::strict().with_repodata_revision(RepodataRevision::V3);
+        let spec = MatchSpec::from_str("mamba[extras=[json, yaml]]", options).unwrap();
+
+        let base_record = PackageRecord::new(
+            PackageName::new_unchecked("mamba"),
+            Version::from_str("1.0").unwrap(),
+            String::from("foo_bar_py310_1"),
+        );
+
+        // A record that declares both extras satisfies the spec. The contents
+        // of `extra_depends` do not matter, only that the extra is declared.
+        let matching_record = PackageRecord {
+            extra_depends: BTreeMap::from_iter([
+                (String::from("json"), vec![String::from("simdjson")]),
+                (String::from("yaml"), vec![]),
+            ]),
+            ..base_record.clone()
+        };
+        assert!(spec.matches(&matching_record));
+
+        // A record that only declares one of the requested extras does not.
+        let partial_record = PackageRecord {
+            extra_depends: BTreeMap::from_iter([(
+                String::from("json"),
+                vec![String::from("simdjson")],
+            )]),
+            ..base_record.clone()
+        };
+        assert!(!spec.matches(&partial_record));
+
+        // Neither does a record that does not know the extras at all. This is
+        // what keeps a version that dropped an extra from silently satisfying
+        // a request for it.
+        assert!(!spec.matches(&base_record));
+
+        // Without extras the very same records all match.
+        let nameless = MatchSpec::from_str("mamba", options)
+            .unwrap()
+            .into_nameless()
+            .1;
+        assert!(nameless.matches(&base_record));
+        assert!(nameless.matches(&partial_record));
+
+        // The nameless variant applies the same rule.
+        let nameless = MatchSpec::from_str("mamba[extras=[json, yaml]]", options)
+            .unwrap()
+            .into_nameless()
+            .1;
+        assert!(nameless.matches(&matching_record));
+        assert!(!nameless.matches(&partial_record));
+        assert!(!nameless.matches(&base_record));
     }
 
     #[test]

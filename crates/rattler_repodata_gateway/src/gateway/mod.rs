@@ -3082,6 +3082,66 @@ mod test {
         );
     }
 
+    /// An input spec filters the returned records by its extras just like it
+    /// filters by version: a record that does not declare the requested extra
+    /// cannot satisfy the spec, so it is not a candidate. The extra's deps are
+    /// still walked from the records that do declare it.
+    #[tokio::test]
+    async fn extras_input_filters_records_without_the_extra() {
+        let gateway = Gateway::new();
+        let (mut src, fetched) = RecordingSource::new();
+        // The newest version dropped the [d] extra.
+        src.add(
+            Subdir::Linux64,
+            make_test_record_full(
+                "black",
+                "25.0.0",
+                "linux-64",
+                &[],
+                &[("d", &["aiohttp >=3"])],
+            ),
+        );
+        src.add(
+            Subdir::Linux64,
+            make_test_record_full("black", "26.0.0", "linux-64", &[], &[]),
+        );
+        src.add(
+            Subdir::Linux64,
+            make_test_record_full("aiohttp", "3.0.0", "linux-64", &[], &[]),
+        );
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
+
+        let output = gateway
+            .query(
+                vec![super::Source::Custom(source)],
+                vec![Subdir::Linux64],
+                vec![MatchSpec::from_str("black[extras=[d]]", extras_options()).unwrap()],
+            )
+            .recursive(true)
+            .execute()
+            .await
+            .unwrap();
+
+        let black_versions = output
+            .repodata
+            .iter()
+            .flat_map(|repodata| repodata.iter())
+            .filter(|record| record.package_record.name.as_normalized() == "black")
+            .map(|record| record.package_record.version.as_str().to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            black_versions,
+            vec!["25.0.0".to_string()],
+            "only the version declaring [d] can satisfy the spec",
+        );
+
+        let names = fetched.lock().unwrap().clone();
+        assert!(
+            names.contains(&"aiohttp".to_string()),
+            "the [d] extra's deps must still be walked; got {names:?}",
+        );
+    }
+
     /// Pattern-expanded specs must still merge extras when another input spec
     /// already queued the same exact package name.
     #[tokio::test]
