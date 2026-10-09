@@ -1,0 +1,14 @@
+---
+source: crates/rattler_azure/src/names.rs
+expression: outcomes
+---
+"": "error: `` is not a valid Azure storage account name: account names are 3-24 characters of lowercase letters and digits only"
+ab: "error: `ab` is not a valid Azure storage account name: account names are 3-24 characters of lowercase letters and digits only"
+abc: "ok: abc"
+abcdefghijklmnopqrstuvwx: "ok: abcdefghijklmnopqrstuvwx"
+abcdefghijklmnopqrstuvwxy: "error: `abcdefghijklmnopqrstuvwxy` is not a valid Azure storage account name: account names are 3-24 characters of lowercase letters and digits only"
+acct1: "ok: acct1"
+Accta: "error: `Accta` is not a valid Azure storage account name: account names are 3-24 characters of lowercase letters and digits only"
+acc-ta: "error: `acc-ta` is not a valid Azure storage account name: account names are 3-24 characters of lowercase letters and digits only"
+acc%74a: "ok: accta"
+acc%41a: "error: `acc%41a` is not a valid Azure storage account name: account names are 3-24 characters of lowercase letters and digits only"

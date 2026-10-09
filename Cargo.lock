@@ -5048,6 +5048,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_azure"
+version = "0.1.0"
+dependencies = [
+ "indexmap 2.14.2",
+ "insta",
+ "percent-encoding",
+ "serde",
+ "thiserror 2.0.21",
+ "toml",
+ "url",
+]
+
+[[package]]
 name = "rattler_boot_id"
 version = "0.1.0"
 dependencies = [
