@@ -12,10 +12,10 @@ mod meta;
 mod nameless_match_spec;
 mod networking;
 mod no_arch_type;
+mod package_cache;
 mod package_name;
 mod package_name_matcher;
 mod package_streaming;
-mod package_cache;
 mod paths_json;
 mod prefix_paths;
 #[cfg(feature = "pty")]

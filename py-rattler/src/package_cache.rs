@@ -116,7 +116,10 @@ impl PyPackageCacheLayer {
     }
 
     fn __repr__(&self) -> String {
-        format!("PackageCacheLayer(path=\"{}\")", self.inner.path().display())
+        format!(
+            "PackageCacheLayer(path=\"{}\")",
+            self.inner.path().display()
+        )
     }
 }
 
