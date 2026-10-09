@@ -145,12 +145,12 @@ impl AuthenticationMiddleware {
     }
 
     /// Reuse the OAuth or bearer credential stored under `source_host` for
-    /// requests to `trusted_origin`. The host is looked up exactly, without
+    /// requests to any of `trusted_origins`. The host is looked up exactly, without
     /// wildcard fallback, and refreshed credentials are saved under that host.
     ///
-    /// Call this repeatedly to configure multiple origins. Reusing a host for
-    /// several origins does not copy its credentials. Configuring the same
-    /// origin again replaces its source host.
+    /// Pass multiple origins to share one stored credential, or call this
+    /// repeatedly to configure different source hosts. Configuring the same
+    /// origin again replaces its source host. An empty iterable changes nothing.
     ///
     /// Once configured, requests to unmapped origins remain anonymous, as do
     /// requests whose source credential is missing or unsupported. The receiving
@@ -163,10 +163,12 @@ impl AuthenticationMiddleware {
     pub fn with_credentials_from(
         mut self,
         source_host: url::Host<String>,
-        trusted_origin: url::Origin,
+        trusted_origins: impl IntoIterator<Item = url::Origin>,
     ) -> Self {
-        self.legacy_audience_credential = None;
-        self.credential_sources.insert(trusted_origin, source_host);
+        for origin in trusted_origins {
+            self.legacy_audience_credential = None;
+            self.credential_sources.insert(origin, source_host.clone());
+        }
         self
     }
 
@@ -658,9 +660,13 @@ mod tests {
             let mut middleware = AuthenticationMiddleware::from_auth_storage(storage.clone());
             if let Some(source_host) = source_host {
                 let host = url::Host::parse(source_host).unwrap();
-                middleware = middleware
-                    .with_credentials_from(host.clone(), Url::parse(&repo_url).unwrap().origin())
-                    .with_credentials_from(host, Url::parse(&second_url).unwrap().origin());
+                middleware = middleware.with_credentials_from(
+                    host,
+                    [
+                        Url::parse(&repo_url).unwrap().origin(),
+                        Url::parse(&second_url).unwrap().origin(),
+                    ],
+                );
             } else if let Some(audience) = audience {
                 middleware = middleware.with_oauth_audience(
                     "https://issuer.example",
@@ -901,13 +907,15 @@ mod tests {
         let second = url::Host::parse("second.example").unwrap();
         let origin = |value: &str| Url::parse(value).unwrap().origin();
         let middleware = AuthenticationMiddleware::from_auth_storage(storage)
-            .with_credentials_from(first.clone(), origin("https://one.example"))
-            .with_credentials_from(first.clone(), origin("https://two.example"))
-            .with_credentials_from(second.clone(), origin("https://three.example"))
-            .with_credentials_from(second, origin("https://one.example"))
+            .with_credentials_from(
+                first,
+                [origin("https://one.example"), origin("https://two.example")],
+            )
+            .with_credentials_from(second.clone(), [origin("https://three.example")])
+            .with_credentials_from(second, [origin("https://one.example")])
             .with_credentials_from(
                 url::Host::parse("missing.example").unwrap(),
-                origin("https://missing-api.example"),
+                [origin("https://missing-api.example")],
             );
         let (http, mut captured) = make_client_harness(middleware);
         for (url, expected) in [
@@ -933,6 +941,53 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(deprecated)]
+    async fn empty_origins_preserve_existing_credential_selection() {
+        let api = Url::parse("https://api.example").unwrap();
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::new(MemoryStorage::new()));
+        let legacy_key = AuthenticationStorage::oauth_audience_key(
+            "https://issuer.example",
+            "client",
+            "audience",
+        );
+        for (key, token) in [
+            ("api.example", "destination"),
+            ("issuer.example", "source"),
+            (legacy_key.as_str(), "legacy"),
+        ] {
+            storage
+                .store(key, &Authentication::BearerToken(token.into()))
+                .unwrap();
+        }
+        let base = AuthenticationMiddleware::from_auth_storage(storage);
+        let host = url::Host::parse("issuer.example").unwrap();
+        for (middleware, expected) in [
+            (base.clone(), "Bearer destination"),
+            (
+                base.clone()
+                    .with_credentials_from(host.clone(), [api.origin()]),
+                "Bearer source",
+            ),
+            (
+                base.with_oauth_audience(
+                    "https://issuer.example",
+                    "client",
+                    "audience",
+                    api.origin(),
+                ),
+                "Bearer legacy",
+            ),
+        ] {
+            let (http, mut captured) =
+                make_client_harness(middleware.with_credentials_from(host.clone(), []));
+            let _ = http.get(api.clone()).send().await;
+            let request = captured.recv().await.unwrap();
+            assert_eq!(request.headers().get("authorization").unwrap(), expected);
+        }
+    }
+
+    #[tokio::test]
     async fn source_hosts_use_canonical_domain_and_ip_storage_keys() {
         let api = Url::parse("https://api.example").unwrap();
         for (source, key) in [
@@ -946,7 +1001,7 @@ mod tests {
                 .store(key, &Authentication::BearerToken("fixture".into()))
                 .unwrap();
             let middleware = AuthenticationMiddleware::from_auth_storage(storage)
-                .with_credentials_from(url::Host::parse(source).unwrap(), api.origin());
+                .with_credentials_from(url::Host::parse(source).unwrap(), [api.origin()]);
             let (http, mut captured) = make_client_harness(middleware);
             let _ = http.get(api.clone()).send().await;
             let request = captured.recv().await.unwrap();
@@ -978,7 +1033,7 @@ mod tests {
             )
             .unwrap();
         let middleware = AuthenticationMiddleware::from_auth_storage(storage.clone())
-            .with_credentials_from(url::Host::parse(source).unwrap(), api.origin());
+            .with_credentials_from(url::Host::parse(source).unwrap(), [api.origin()]);
         let (http, mut captured) = make_client_harness(middleware);
         let lock = storage.oauth_refresh_lock(source);
         let guard = lock.lock().await;
@@ -1046,7 +1101,7 @@ mod tests {
         let mapped = AuthenticationMiddleware::from_auth_storage(storage.clone())
             .with_credentials_from(
                 url::Host::parse("issuer.example").unwrap(),
-                api_origin.clone(),
+                [api_origin.clone()],
             );
         for (url, expected) in [
             (format!("{API}/v1/audit"), Some("Bearer fixture.host.token")),
@@ -1074,7 +1129,7 @@ mod tests {
         let (http, mut captured) = make_client_harness(
             AuthenticationMiddleware::from_auth_storage(storage.clone()).with_credentials_from(
                 url::Host::parse("conda.example").unwrap(),
-                api_origin.clone(),
+                [api_origin.clone()],
             ),
         );
         let _ = http.post(format!("{API}/v1/audit")).send().await;
@@ -1085,7 +1140,7 @@ mod tests {
         // A source host with nothing stored stays anonymous.
         let (http, mut captured) = make_client_harness(
             AuthenticationMiddleware::from_auth_storage(storage)
-                .with_credentials_from(url::Host::parse("missing.example").unwrap(), api_origin),
+                .with_credentials_from(url::Host::parse("missing.example").unwrap(), [api_origin]),
         );
         let _ = http.post(API).send().await;
         assert_eq!(header(&captured.recv().await.unwrap()), None);
