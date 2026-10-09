@@ -1,6 +1,7 @@
 //! `reqwest` middleware that authenticates requests with data from the
 //! `AuthenticationStorage`
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     sync::OnceLock,
 };
@@ -19,9 +20,12 @@ use crate::{
 #[derive(Clone)]
 pub struct AuthenticationMiddleware {
     auth_storage: AuthenticationStorage,
-    // Use only the credential stored under this key, and only for this origin.
-    // Do not look up other host or wildcard credentials if it is unavailable.
-    pinned_credential: Option<(url::Origin, String)>,
+    // Each destination origin uses the credential stored under its source host.
+    // Explicit mappings do not fall back to other host or wildcard credentials.
+    credential_sources: HashMap<url::Origin, url::Host<String>>,
+    // Compatibility with the deprecated audience-specific storage-key API.
+    // This selection and the host mappings above are mutually exclusive.
+    legacy_audience_credential: Option<(url::Origin, String)>,
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
@@ -39,13 +43,26 @@ impl Middleware for AuthenticationMiddleware {
         }
 
         let url = req.url().clone();
-        let selected = if let Some((origin, key)) = &self.pinned_credential {
-            if &url.origin() != origin {
+        let explicit_source =
+            !self.credential_sources.is_empty() || self.legacy_audience_credential.is_some();
+        let selected = if explicit_source {
+            let origin = url.origin();
+            let key = self
+                .credential_sources
+                .get(&origin)
+                .map(ToString::to_string)
+                .or_else(|| {
+                    self.legacy_audience_credential
+                        .as_ref()
+                        .filter(|(trusted_origin, _)| *trusted_origin == origin)
+                        .map(|(_, key)| key.clone())
+                });
+            let Some(key) = key else {
                 return next.run(req, extensions).await;
-            }
+            };
             self.auth_storage
-                .get(key)
-                .map(|auth| (url, auth.map(|auth| (key.clone(), auth))))
+                .get(&key)
+                .map(|auth| (url, auth.map(|auth| (key, auth))))
                 .map_err(|_error| ())
         } else {
             self.auth_storage
@@ -58,26 +75,10 @@ impl Middleware for AuthenticationMiddleware {
                 next.run(req, extensions).await
             }
             Ok((url, auth_with_key)) => {
-                // If this is an OAuth token, attempt refresh if expired. The
-                // storage key is the policy: a grant stored under a host is
-                // sent to that host whether or not it carries an audience, and
-                // a pinned key is sent to its trusted origin as-is.
+                // Refresh the selected credential under its original storage
+                // key, so all mapped origins share the same refreshed login.
                 let auth = match auth_with_key {
                     Some((matched_key, auth)) => {
-                        if self.pinned_credential.is_some()
-                            && !matches!(
-                                auth,
-                                Authentication::OAuth { .. } | Authentication::BearerToken(_)
-                            )
-                        {
-                            // A pinned key only ever becomes a bearer header on
-                            // the foreign origin; never splice other credential
-                            // kinds (conda tokens, basic auth, S3) into it.
-                            tracing::warn!(
-                                "Credential stored under '{matched_key}' is not a bearer-style grant; not sending it to the pinned origin"
-                            );
-                            return next.run(req, extensions).await;
-                        }
                         let refresh_result = oauth_refresh::maybe_refresh_oauth(
                             &self.auth_storage,
                             auth,
@@ -93,6 +94,22 @@ impl Middleware for AuthenticationMiddleware {
                     }
                     None => None,
                 };
+
+                // Check after refresh: another login may have replaced
+                // the stored credential while this request waited to refresh.
+                if explicit_source
+                    && auth.as_ref().is_some_and(|auth| {
+                        !matches!(
+                            auth,
+                            Authentication::OAuth { .. } | Authentication::BearerToken(_)
+                        )
+                    })
+                {
+                    tracing::warn!(
+                        "Selected credential is not an OAuth or bearer token; not sending it to the configured origin"
+                    );
+                    return next.run(req, extensions).await;
+                }
 
                 let url = Self::authenticate_url(url, &auth);
 
@@ -112,7 +129,8 @@ impl AuthenticationMiddleware {
     pub fn from_auth_storage(auth_storage: AuthenticationStorage) -> Self {
         Self {
             auth_storage,
-            pinned_credential: None,
+            credential_sources: HashMap::new(),
+            legacy_audience_credential: None,
         }
     }
 
@@ -121,51 +139,61 @@ impl AuthenticationMiddleware {
     pub fn from_env_and_defaults() -> Result<Self, AuthenticationStorageError> {
         Ok(Self {
             auth_storage: AuthenticationStorage::from_env_and_defaults()?,
-            pinned_credential: None,
+            credential_sources: HashMap::new(),
+            legacy_audience_credential: None,
         })
     }
 
-    /// Send the credential stored under exactly `key`, and only to
-    /// `trusted_origin`. Requests to any other origin are left anonymous.
+    /// Reuse the OAuth or bearer credential stored under `source_host` for
+    /// requests to `trusted_origin`. The host is looked up exactly, without
+    /// wildcard fallback, and refreshed credentials are saved under that host.
     ///
-    /// This lets a client use a credential stored under a different host's
-    /// key without relying on host or wildcard lookup. The receiving API
-    /// must accept the credential; this method does not change its permissions.
-    /// The origin is chosen by the caller, never inferred from the key or a
-    /// server challenge. No channel/wildcard fallback or interactive login.
+    /// Call this repeatedly to configure multiple origins. Reusing a host for
+    /// several origins does not copy its credentials. Configuring the same
+    /// origin again replaces its source host.
+    ///
+    /// Once configured, requests to unmapped origins remain anonymous, as do
+    /// requests whose source credential is missing or unsupported. The receiving
+    /// API must accept the credential; this method does not change its permissions.
+    /// This replaces any legacy selection made with `with_oauth_audience`.
+    ///
     /// Use on a dedicated API client, not stacked with channel authentication.
     /// Disable redirects on the underlying client for credential-bearing requests.
-    /// OAuth refresh is supported on native targets only.
-    pub fn with_credential_key(
+    /// Audience-token refresh is supported on native targets only.
+    pub fn with_credentials_from(
         mut self,
-        key: impl Into<String>,
+        source_host: url::Host<String>,
         trusted_origin: url::Origin,
     ) -> Self {
-        self.pinned_credential = Some((trusted_origin, key.into()));
+        self.legacy_audience_credential = None;
+        self.credential_sources.insert(trusted_origin, source_host);
         self
     }
 
     /// Select an exact audience grant stored under
     /// [`AuthenticationStorage::oauth_audience_key`], and send it only to
-    /// `trusted_origin`. See [`Self::with_credential_key`] for the policy.
+    /// `trusted_origin`. This replaces any host mappings configured with
+    /// [`Self::with_credentials_from`]. Requests to other origins stay anonymous.
     ///
-    /// Storing a grant under a separate audience key next to its host entry
-    /// creates two copies of one rotating refresh token; the login CLI stores
-    /// each grant once, under its host, so prefer pinning that host key.
+    /// Prefer storing the grant once under its login host and reusing it with
+    /// [`Self::with_credentials_from`], rather than making a second copy of a
+    /// rotating refresh token under an audience-specific key.
     #[deprecated(
-        note = "store the grant once under its login host and pin that key with `with_credential_key`"
+        note = "store the grant once under its login host and reuse it with `with_credentials_from`"
     )]
     pub fn with_oauth_audience(
-        self,
+        mut self,
         issuer: &str,
         client_id: &str,
         audience: &str,
         trusted_origin: url::Origin,
     ) -> Self {
-        self.with_credential_key(
-            AuthenticationStorage::oauth_audience_key(issuer, client_id, audience),
+        self.credential_sources.clear();
+        self.legacy_audience_credential = Some((
             trusted_origin,
-        )
+            AuthenticationStorage::oauth_audience_key(issuer, client_id, audience),
+        ));
+        self
     }
 
     /// Authenticate the given URL with the given authentication information
@@ -576,7 +604,11 @@ mod tests {
             "ok"
         }
 
-        for audience in [None, Some("https://audit.example")] {
+        for (audience, source_host) in [
+            (None, None),
+            (Some("https://audit.example"), None),
+            (Some("https://audit.example"), Some("issuer.example")),
+        ] {
             let state = TestState {
                 audience,
                 refresh_count: Arc::new(AtomicUsize::new(0)),
@@ -590,16 +622,15 @@ mod tests {
             let addr = listener.local_addr().unwrap();
             tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
 
-            let host = audience.map_or_else(
-                || "127.0.0.1".to_owned(),
-                |audience| {
-                    AuthenticationStorage::oauth_audience_key(
-                        "https://issuer.example",
-                        "client-id",
-                        audience,
-                    )
-                },
-            );
+            let host = match (source_host, audience) {
+                (Some(host), _) => host.to_owned(),
+                (None, Some(audience)) => AuthenticationStorage::oauth_audience_key(
+                    "https://issuer.example",
+                    "client-id",
+                    audience,
+                ),
+                (None, None) => "127.0.0.1".to_owned(),
+            };
             let mut storage = AuthenticationStorage::empty();
             storage.add_backend(Arc::new(MemoryStorage::new()));
             storage
@@ -618,8 +649,19 @@ mod tests {
                 .unwrap();
 
             let repo_url = format!("http://{addr}/repo");
+            let second_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let second_url = format!("http://{}/repo", second_listener.local_addr().unwrap());
+            let second_router = Router::new()
+                .route("/repo", post(repo))
+                .with_state(state.clone());
+            tokio::spawn(async move { axum::serve(second_listener, second_router).await.unwrap() });
             let mut middleware = AuthenticationMiddleware::from_auth_storage(storage.clone());
-            if let Some(audience) = audience {
+            if let Some(source_host) = source_host {
+                let host = url::Host::parse(source_host).unwrap();
+                middleware = middleware
+                    .with_credentials_from(host.clone(), Url::parse(&repo_url).unwrap().origin())
+                    .with_credentials_from(host, Url::parse(&second_url).unwrap().origin());
+            } else if let Some(audience) = audience {
                 middleware = middleware.with_oauth_audience(
                     "https://issuer.example",
                     "client-id",
@@ -636,7 +678,15 @@ mod tests {
             .with(middleware)
             .build();
 
-            let responses = join_all((0..8).map(|_| client.post(&repo_url).send())).await;
+            let responses = join_all((0..8).map(|index| {
+                let url = if source_host.is_some() && index % 2 == 1 {
+                    &second_url
+                } else {
+                    &repo_url
+                };
+                client.post(url).send()
+            }))
+            .await;
             for response in responses {
                 assert_eq!(response.unwrap().status(), StatusCode::OK);
             }
@@ -834,11 +884,121 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pinned_credential_key_is_sent_only_to_trusted_origin() {
-        // `pixi auth login prefix.dev` stores one grant under the host key and
-        // requests an audience for the Basilisk API. The channel middleware
-        // keeps using it for prefix.dev; an API client pins the same key to
-        // the API origin, which host lookup would never resolve to.
+    async fn multiple_origins_select_their_source_hosts() {
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::new(MemoryStorage::new()));
+        for (host, token) in [
+            ("first.example", "first"),
+            ("second.example", "second"),
+            ("unmapped.example", "must-not-fallback"),
+            ("*.example", "must-not-use-wildcard"),
+        ] {
+            storage
+                .store(host, &Authentication::BearerToken(token.into()))
+                .unwrap();
+        }
+        let first = url::Host::parse("first.example").unwrap();
+        let second = url::Host::parse("second.example").unwrap();
+        let origin = |value: &str| Url::parse(value).unwrap().origin();
+        let middleware = AuthenticationMiddleware::from_auth_storage(storage)
+            .with_credentials_from(first.clone(), origin("https://one.example"))
+            .with_credentials_from(first.clone(), origin("https://two.example"))
+            .with_credentials_from(second.clone(), origin("https://three.example"))
+            .with_credentials_from(second, origin("https://one.example"))
+            .with_credentials_from(
+                url::Host::parse("missing.example").unwrap(),
+                origin("https://missing-api.example"),
+            );
+        let (http, mut captured) = make_client_harness(middleware);
+        for (url, expected) in [
+            ("https://one.example/path", Some("Bearer second")),
+            ("https://two.example/path", Some("Bearer first")),
+            ("https://three.example/path", Some("Bearer second")),
+            ("https://missing-api.example", None),
+            ("https://unmapped.example", None),
+            ("https://two.example:444/path", None),
+            ("http://two.example/path", None),
+        ] {
+            let _ = http.get(url).send().await;
+            let request = captured.recv().await.unwrap();
+            assert_eq!(
+                request
+                    .headers()
+                    .get("authorization")
+                    .map(|v| v.to_str().unwrap()),
+                expected,
+                "{url}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn source_hosts_use_canonical_domain_and_ip_storage_keys() {
+        let api = Url::parse("https://api.example").unwrap();
+        for (source, key) in [
+            ("ISSUER.EXAMPLE", "issuer.example"),
+            ("127.0.0.1", "127.0.0.1"),
+            ("[::1]", "[::1]"),
+        ] {
+            let mut storage = AuthenticationStorage::empty();
+            storage.add_backend(Arc::new(MemoryStorage::new()));
+            storage
+                .store(key, &Authentication::BearerToken("fixture".into()))
+                .unwrap();
+            let middleware = AuthenticationMiddleware::from_auth_storage(storage)
+                .with_credentials_from(url::Host::parse(source).unwrap(), api.origin());
+            let (http, mut captured) = make_client_harness(middleware);
+            let _ = http.get(api.clone()).send().await;
+            let request = captured.recv().await.unwrap();
+            assert_eq!(
+                request.headers().get("authorization").unwrap(),
+                "Bearer fixture"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn replacement_during_refresh_cannot_change_reused_credential_kind() {
+        let source = "issuer.example";
+        let api = Url::parse("https://api.example/v1/audit").unwrap();
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::new(MemoryStorage::new()));
+        storage
+            .store(
+                source,
+                &Authentication::OAuth {
+                    audience: Some(api.origin().ascii_serialization()),
+                    access_token: "expired".into(),
+                    refresh_token: Some("refresh".into()),
+                    expires_at: Some(0),
+                    token_endpoint: "http://127.0.0.1:1/token".into(),
+                    revocation_endpoint: None,
+                    client_id: "client".into(),
+                },
+            )
+            .unwrap();
+        let middleware = AuthenticationMiddleware::from_auth_storage(storage.clone())
+            .with_credentials_from(url::Host::parse(source).unwrap(), api.origin());
+        let (http, mut captured) = make_client_harness(middleware);
+        let lock = storage.oauth_refresh_lock(source);
+        let guard = lock.lock().await;
+        let request = http.post(api.clone()).send();
+        tokio::pin!(request);
+        assert!(futures::poll!(&mut request).is_pending());
+        storage
+            .store(source, &Authentication::CondaToken("must-not-leak".into()))
+            .unwrap();
+        drop(guard);
+        let _ = request.await;
+        let request = captured.recv().await.unwrap();
+        assert_eq!(request.url(), &api);
+        assert!(!request.headers().contains_key("authorization"));
+    }
+
+    #[tokio::test]
+    async fn reused_host_credential_is_sent_only_to_trusted_origin() {
+        // One login is stored under its host. An API client explicitly reuses
+        // that entry without changing how channel requests find it.
         const API: &str = "https://api.basilisk.example";
         let api_origin = Url::parse(API).unwrap().origin();
         let mut storage = AuthenticationStorage::empty();
@@ -882,16 +1042,19 @@ mod tests {
             Some("Bearer fixture-wildcard")
         );
 
-        // Pinned middleware: the host grant goes to the API origin only.
-        let pinned = AuthenticationMiddleware::from_auth_storage(storage.clone())
-            .with_credential_key("issuer.example", api_origin.clone());
+        // Explicit mapping: the host grant goes to the API origin only.
+        let mapped = AuthenticationMiddleware::from_auth_storage(storage.clone())
+            .with_credentials_from(
+                url::Host::parse("issuer.example").unwrap(),
+                api_origin.clone(),
+            );
         for (url, expected) in [
             (format!("{API}/v1/audit"), Some("Bearer fixture.host.token")),
             ("https://issuer.example/channel".to_string(), None),
             ("https://api.basilisk.example:444/".to_string(), None),
             ("http://api.basilisk.example/".to_string(), None),
         ] {
-            let (http, mut captured) = make_client_harness(pinned.clone());
+            let (http, mut captured) = make_client_harness(mapped.clone());
             let _ = http.post(&url).send().await;
             assert_eq!(
                 header(&captured.recv().await.unwrap()).as_deref(),
@@ -900,8 +1063,8 @@ mod tests {
             );
         }
 
-        // A pinned key only ever becomes a bearer header: other credential
-        // kinds are not spliced into the foreign origin's URL or headers.
+        // Reused credentials only become bearer headers: other credential
+        // kinds are not spliced into the destination URL or headers.
         storage
             .store(
                 "conda.example",
@@ -909,18 +1072,20 @@ mod tests {
             )
             .unwrap();
         let (http, mut captured) = make_client_harness(
-            AuthenticationMiddleware::from_auth_storage(storage.clone())
-                .with_credential_key("conda.example", api_origin.clone()),
+            AuthenticationMiddleware::from_auth_storage(storage.clone()).with_credentials_from(
+                url::Host::parse("conda.example").unwrap(),
+                api_origin.clone(),
+            ),
         );
         let _ = http.post(format!("{API}/v1/audit")).send().await;
         let request = captured.recv().await.unwrap();
         assert_eq!(header(&request), None);
         assert_eq!(request.url().path(), "/v1/audit");
 
-        // A pinned key with nothing stored stays anonymous.
+        // A source host with nothing stored stays anonymous.
         let (http, mut captured) = make_client_harness(
             AuthenticationMiddleware::from_auth_storage(storage)
-                .with_credential_key("missing", api_origin),
+                .with_credentials_from(url::Host::parse("missing.example").unwrap(), api_origin),
         );
         let _ = http.post(API).send().await;
         assert_eq!(header(&captured.recv().await.unwrap()), None);

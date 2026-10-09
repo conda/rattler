@@ -222,7 +222,7 @@ struct CallbackResult {
 /// storage.store("prefix.dev", &auth)?;
 /// // Send the host grant to the API origin only; never log the credentials.
 /// let middleware = AuthenticationMiddleware::from_auth_storage(storage)
-///     .with_credential_key("prefix.dev", api.origin());
+///     .with_credentials_from(url::Host::parse("prefix.dev")?, api.origin());
 /// let client = reqwest_middleware::ClientBuilder::new(
 ///     reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).build()?
 /// ).with(middleware).build();
