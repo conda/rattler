@@ -131,20 +131,17 @@ pub(crate) async fn maybe_refresh_oauth(
     let refresh_lock = storage.oauth_refresh_lock(matched_key);
     let _refresh_guard = refresh_lock.lock().await;
 
-    // Another request may have refreshed and stored credentials for this key
-    // while we were waiting for the per-key refresh lock. Re-read storage so we
-    // don't reuse a refresh token that has already been rotated.
-    let auth = match storage.get(matched_key) {
-        Ok(Some(current_auth)) => {
+    // Another client may have rotated the token while we waited.
+    let (auth, backend) = match storage.get_for_refresh(matched_key) {
+        Ok(Some((current_auth, backend))) => {
             if !matches!(current_auth, Authentication::OAuth { .. })
                 || !needs_refresh(&current_auth)
             {
                 return auth_outcome(current_auth);
             }
-            current_auth
+            (current_auth, backend)
         }
-        // Logout may have removed the entry while we waited for the lock.
-        // Never refresh the captured grant and recreate the deleted login.
+        // Do not recreate a deleted login.
         Ok(None) => {
             return OAuthRefreshOutcome {
                 authentication: None,
@@ -155,7 +152,12 @@ pub(crate) async fn maybe_refresh_oauth(
         }
         Err(e) => {
             tracing::warn!("Failed to re-read OAuth credentials before refresh: {e}");
-            auth
+            return stale_auth_fallback(
+                auth,
+                OAuthRefreshFailure::Transient {
+                    reason: "Failed to read current OAuth credentials".into(),
+                },
+            );
         }
     };
 
@@ -172,8 +174,7 @@ pub(crate) async fn maybe_refresh_oauth(
         return auth_outcome(auth);
     };
 
-    // Browser fetch follows redirects, and reqwest cannot disable that policy
-    // on wasm. Do not risk forwarding an audience grant's refresh token.
+    // The browser transport cannot enforce the no-redirect refresh policy.
     #[cfg(target_arch = "wasm32")]
     if audience.is_some() {
         return stale_auth_fallback(
@@ -192,8 +193,7 @@ pub(crate) async fn maybe_refresh_oauth(
 
     tracing::debug!("OAuth token expired, attempting refresh");
 
-    // Do not forward refresh-token bodies to a redirect target. The browser
-    // transport cannot disable redirects; audience refresh is blocked above.
+    // Never forward refresh tokens to redirect targets.
     let builder = reqwest::Client::builder();
     #[cfg(not(target_arch = "wasm32"))]
     let builder = builder.redirect(reqwest::redirect::Policy::none());
@@ -294,9 +294,6 @@ pub(crate) async fn maybe_refresh_oauth(
             }
         },
     };
-    // The grant is sent as `Authorization: Bearer`, so an empty or non-bearer
-    // access token is unusable. A missing `expires_in` is allowed (RFC 6749
-    // §5.1); such a token is simply never refreshed proactively.
     if token_response.access_token.is_empty()
         || token_response
             .token_type
@@ -324,9 +321,8 @@ pub(crate) async fn maybe_refresh_oauth(
         client_id: client_id.clone(),
     };
 
-    // The refreshed grant is valid even if it could not be persisted; the next
-    // process will fail its own refresh and ask for a new login.
-    if let Err(e) = storage.store(matched_key, &refreshed) {
+    // Use the new token even if persistence fails.
+    if let Err(e) = storage.store_refreshed(matched_key, &refreshed, backend) {
         tracing::warn!("Failed to store refreshed OAuth token: {e}");
     }
 
@@ -373,7 +369,8 @@ mod tests {
 
     use super::*;
     use crate::authentication_storage::{
-        AuthenticationStorageError, StorageBackend, backends::memory::MemoryStorage,
+        AuthenticationStorageError, StorageBackend,
+        backends::{file::FileStorage, memory::MemoryStorage},
     };
 
     fn expired_oauth(token_endpoint: String) -> Authentication {
@@ -642,8 +639,6 @@ mod tests {
         }
         auth
     }
-    /// An expired grant and the key it is stored under, with or without an
-    /// audience. Both kinds take the same refresh path.
     fn grant_for(audience: Option<&str>, endpoint: String) -> (Authentication, String) {
         let auth = if audience.is_some() {
             expired_audience_oauth(endpoint)
@@ -651,6 +646,86 @@ mod tests {
             expired_oauth(endpoint)
         };
         (auth, "repo.prefix.dev".into())
+    }
+
+    #[tokio::test]
+    async fn refresh_observes_changes_from_another_storage_instance() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let count = calls.clone();
+        let endpoint = spawn_token_endpoint(move || {
+            count.fetch_add(1, Ordering::SeqCst);
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "invalid_grant"})),
+            )
+        })
+        .await;
+        for audience in [None, Some(AUDIENCE)] {
+            for deleted in [false, true] {
+                let (old, key) = grant_for(audience, endpoint.clone());
+                let dir = tempfile::tempdir().unwrap();
+                let path = dir.path().join("credentials.json");
+                let mut reader = AuthenticationStorage::empty();
+                reader.add_backend(Arc::new(FileStorage::from_path(path.clone()).unwrap()));
+                reader.store(&key, &old).unwrap();
+                let mut writer = AuthenticationStorage::empty();
+                writer.add_backend(Arc::new(FileStorage::from_path(path).unwrap()));
+                let replacement = if deleted {
+                    writer.delete(&key).unwrap();
+                    None
+                } else {
+                    let mut fresh = old.clone();
+                    if let Authentication::OAuth {
+                        access_token,
+                        refresh_token,
+                        expires_at,
+                        ..
+                    } = &mut fresh
+                    {
+                        *access_token = "fresh-access".into();
+                        *refresh_token = Some("rotated-refresh".into());
+                        *expires_at = Some(i64::MAX);
+                    }
+                    writer.store(&key, &fresh).unwrap();
+                    Some(fresh)
+                };
+                let result = maybe_refresh_oauth(&reader, old, &key).await;
+                assert_eq!(result.into_authentication(), replacement);
+                assert_eq!(reader.get(&key).unwrap(), replacement);
+            }
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn refresh_updates_the_supplying_backend() {
+        let endpoint = spawn_token_endpoint(|| {
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "access_token": "fresh-access",
+                    "refresh_token": "rotated-refresh",
+                    "expires_in": 3600,
+                    "token_type": "Bearer"
+                })),
+            )
+        })
+        .await;
+        for audience in [None, Some(AUDIENCE)] {
+            let (old, key) = grant_for(audience, endpoint.clone());
+            let first = Arc::new(MemoryStorage::new());
+            let source = Arc::new(MemoryStorage::new());
+            source.store(&key, &old).unwrap();
+            let mut storage = AuthenticationStorage::empty();
+            storage.add_backend(first.clone());
+            storage.add_backend(source.clone());
+            let result = maybe_refresh_oauth(&storage, old, &key).await;
+            assert!(result.failure().is_none());
+            let fresh = result.into_authentication().unwrap();
+            assert_eq!(first.get(&key).unwrap(), None);
+            assert_eq!(source.get(&key).unwrap(), Some(fresh.clone()));
+            assert_eq!(storage.get(&key).unwrap(), Some(fresh));
+        }
     }
 
     #[tokio::test]
@@ -719,8 +794,6 @@ mod tests {
 
     #[tokio::test]
     async fn refresh_rejects_unusable_responses() {
-        // The grant is sent as `Authorization: Bearer`, so these responses can
-        // never produce a working credential, audience or not.
         for audience in [None, Some(AUDIENCE)] {
             for (field, value) in [
                 ("token_type", json!("MAC")),
@@ -746,8 +819,6 @@ mod tests {
     }
     #[tokio::test]
     async fn refresh_tolerates_optional_fields() {
-        // `expires_in` is optional (RFC 6749 §5.1) and an empty rotated
-        // refresh token means "keep the old one". Neither depends on audience.
         for audience in [None, Some(AUDIENCE)] {
             let endpoint = spawn_token_endpoint(|| {
                 (
@@ -773,8 +844,6 @@ mod tests {
     #[tokio::test]
     async fn refresh_does_not_follow_redirects() {
         use axum::http::{StatusCode, header::LOCATION};
-        // A token endpoint never legitimately redirects; following one would
-        // hand the refresh token to the redirect target. Applies to every grant.
         for audience in [None, Some(AUDIENCE)] {
             let calls = Arc::new(AtomicUsize::new(0));
             let count = calls.clone();
@@ -807,6 +876,7 @@ mod tests {
     #[derive(Debug)]
     struct FailedBackend {
         old: Authentication,
+        fail_read: bool,
     }
     fn storage_error() -> AuthenticationStorageError {
         AuthenticationStorageError::StoreFailed {
@@ -819,7 +889,11 @@ mod tests {
             "fixture".into()
         }
         fn get(&self, _key: &str) -> Result<Option<Authentication>, AuthenticationStorageError> {
-            Ok(Some(self.old.clone()))
+            if self.fail_read {
+                Err(storage_error())
+            } else {
+                Ok(Some(self.old.clone()))
+            }
         }
         fn store(
             &self,
@@ -831,6 +905,41 @@ mod tests {
         fn delete(&self, _key: &str) -> Result<(), AuthenticationStorageError> {
             Err(storage_error())
         }
+    }
+
+    #[tokio::test]
+    async fn failed_refresh_read_does_not_retry_cached_token() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let count = calls.clone();
+        let endpoint = spawn_token_endpoint(move || {
+            count.fetch_add(1, Ordering::SeqCst);
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "invalid_grant"})),
+            )
+        })
+        .await;
+        for audience in [None, Some(AUDIENCE)] {
+            for expired in [false, true] {
+                let (mut old, key) = grant_for(audience, endpoint.clone());
+                if !expired && let Authentication::OAuth { expires_at, .. } = &mut old {
+                    *expires_at = Some(now_unix_timestamp() + 60);
+                }
+                let mut storage = AuthenticationStorage::empty();
+                storage.add_backend(Arc::new(FailedBackend {
+                    old: old.clone(),
+                    fail_read: true,
+                }));
+                assert!(storage.store(&key, &old).is_err());
+                let result = maybe_refresh_oauth(&storage, old.clone(), &key).await;
+                assert!(matches!(
+                    result.failure(),
+                    Some(OAuthRefreshFailure::Transient { .. })
+                ));
+                assert_eq!(result.into_authentication(), (!expired).then_some(old));
+            }
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]
@@ -850,10 +959,14 @@ mod tests {
         for audience in [None, Some(AUDIENCE)] {
             let mut store = AuthenticationStorage::empty();
             let (old, key) = grant_for(audience, endpoint.clone());
-            let backend = Arc::new(FailedBackend { old: old.clone() });
+            let backend = Arc::new(FailedBackend {
+                old: old.clone(),
+                fail_read: false,
+            });
             store.add_backend(backend.clone());
+            let fallback = Arc::new(MemoryStorage::new());
+            store.add_backend(fallback.clone());
             let result = maybe_refresh_oauth(&store, old.clone(), &key).await;
-            // Failed persistence must not prevent using the refreshed token.
             assert!(result.failure().is_none());
             let refreshed = result.into_authentication().unwrap();
             assert!(matches!(
@@ -862,6 +975,7 @@ mod tests {
             ));
             assert_eq!(store.get(&key).unwrap(), Some(refreshed));
             assert_eq!(backend.get(&key).unwrap(), Some(old));
+            assert_eq!(fallback.get(&key).unwrap(), None);
         }
         assert_eq!(calls.load(Ordering::SeqCst), 2);
     }

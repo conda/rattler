@@ -153,6 +153,15 @@ impl StorageBackend for FileStorage {
         Ok(cache.content.get(host).cloned())
     }
 
+    fn get_uncached(
+        &self,
+        host: &str,
+    ) -> Result<Option<crate::Authentication>, AuthenticationStorageError> {
+        let mut cache = self.cache.write().unwrap();
+        cache.content = self.read_json()?;
+        Ok(cache.content.get(host).cloned())
+    }
+
     fn list(&self) -> Result<Vec<(String, crate::Authentication)>, AuthenticationStorageError> {
         let cache = self.cache.read().unwrap();
         Ok(cache

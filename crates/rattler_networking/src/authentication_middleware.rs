@@ -20,8 +20,6 @@ use crate::{
 #[derive(Clone)]
 pub struct AuthenticationMiddleware {
     auth_storage: AuthenticationStorage,
-    // Each destination origin uses the credential stored under its source host.
-    // Explicit mappings do not fall back to other host or wildcard credentials.
     credential_sources: HashMap<url::Origin, url::Host<String>>,
 }
 
@@ -61,8 +59,6 @@ impl Middleware for AuthenticationMiddleware {
                 next.run(req, extensions).await
             }
             Ok((url, auth_with_key)) => {
-                // Refresh the selected credential under its original storage
-                // key, so all mapped origins share the same refreshed login.
                 let auth = match auth_with_key {
                     Some((matched_key, auth)) => {
                         let refresh_result = oauth_refresh::maybe_refresh_oauth(
@@ -81,8 +77,7 @@ impl Middleware for AuthenticationMiddleware {
                     None => None,
                 };
 
-                // Check after refresh: another login may have replaced
-                // the stored credential while this request waited to refresh.
+                // Refresh may have picked up a different credential kind.
                 if explicit_source
                     && auth.as_ref().is_some_and(|auth| {
                         !matches!(
@@ -128,17 +123,12 @@ impl AuthenticationMiddleware {
         })
     }
 
-    /// Reuse the OAuth or bearer credential stored under `source_host` for
-    /// requests to any of `trusted_origins`. The host is looked up exactly, without
-    /// wildcard fallback, and refreshed credentials are saved under that host.
+    /// Reuse `source_host`'s OAuth or bearer credential for `trusted_origins`,
+    /// without wildcard fallback. Refresh updates the source credential.
     ///
-    /// Pass multiple origins to share one stored credential, or call this
-    /// repeatedly to configure different source hosts. Configuring the same
-    /// origin again replaces its source host. An empty iterable changes nothing.
-    ///
-    /// Once configured, requests to unmapped origins remain anonymous, as do
-    /// requests whose source credential is missing or unsupported. The receiving
-    /// API must accept the credential; this method does not change its permissions.
+    /// Calls add mappings; repeated origins replace their source. Empty input
+    /// changes nothing. Once configured, unmapped origins and missing or
+    /// unsupported credentials remain anonymous.
     ///
     /// Use on a dedicated API client, not stacked with channel authentication.
     /// Disable redirects on the underlying client for credential-bearing requests.
@@ -890,8 +880,6 @@ mod tests {
 
     #[tokio::test]
     async fn reused_host_credential_is_sent_only_to_trusted_origin() {
-        // One login is stored under its host. An API client explicitly reuses
-        // that entry without changing how channel requests find it.
         const API: &str = "https://api.basilisk.example";
         let api_origin = Url::parse(API).unwrap().origin();
         let mut storage = AuthenticationStorage::empty();
@@ -920,8 +908,7 @@ mod tests {
                 .map(|v| v.to_str().unwrap().to_owned())
         };
 
-        // Channel middleware: host lookup finds the grant for the issuer host
-        // and the wildcard for the API host; neither is cross-wired.
+        // Default host and wildcard lookup.
         let (http, mut captured) =
             make_client_harness(AuthenticationMiddleware::from_auth_storage(storage.clone()));
         let _ = http.post("https://issuer.example/channel").send().await;
@@ -935,7 +922,7 @@ mod tests {
             Some("Bearer fixture-wildcard")
         );
 
-        // Explicit mapping: the host grant goes to the API origin only.
+        // Explicit origin mapping.
         let mapped = AuthenticationMiddleware::from_auth_storage(storage.clone())
             .with_credentials_from(
                 url::Host::parse("issuer.example").unwrap(),
@@ -956,8 +943,6 @@ mod tests {
             );
         }
 
-        // Reused credentials only become bearer headers: other credential
-        // kinds are not spliced into the destination URL or headers.
         storage
             .store(
                 "conda.example",
@@ -975,7 +960,6 @@ mod tests {
         assert_eq!(header(&request), None);
         assert_eq!(request.url().path(), "/v1/audit");
 
-        // A source host with nothing stored stays anonymous.
         let (http, mut captured) = make_client_harness(
             AuthenticationMiddleware::from_auth_storage(storage)
                 .with_credentials_from(url::Host::parse("missing.example").unwrap(), [api_origin]),

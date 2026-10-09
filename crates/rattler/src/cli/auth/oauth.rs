@@ -207,12 +207,6 @@ struct CallbackResult {
 
 /// Perform an OAuth/OIDC login and return `Authentication::OAuth` without storing it.
 ///
-/// An `audience` identifies the intended recipient of the access token,
-/// subject to the authorization server's policy. Store the grant once under
-/// the login host, where channel requests and `auth logout` can find it.
-/// Keeping one entry avoids separate copies of a rotating refresh token.
-/// A dedicated API client can use that entry for an explicitly trusted origin.
-///
 /// ```no_run
 /// use rattler::cli::auth::oauth::{OAuthConfig, perform_oauth_login};
 /// use rattler_networking::{AuthenticationStorage, AuthenticationMiddleware};
@@ -220,7 +214,6 @@ struct CallbackResult {
 /// config.audience = Some(api.origin().ascii_serialization());
 /// let auth = perform_oauth_login(config).await?;
 /// storage.store("prefix.dev", &auth)?;
-/// // Send the host grant to the API origin only; never log the credentials.
 /// let middleware = AuthenticationMiddleware::from_auth_storage(storage)
 ///     .with_credentials_from(url::Host::parse("prefix.dev")?, [api.origin()]);
 /// let client = reqwest_middleware::ClientBuilder::new(
@@ -328,8 +321,6 @@ async fn perform_oauth_login_inner(mut config: OAuthConfig) -> Result<Authentica
     })
 }
 
-/// The grant is always sent as `Authorization: Bearer`, so any other token
-/// type is unusable regardless of audience.
 fn require_bearer_token_type(token_type: &CoreTokenType) -> Result<(), OAuthError> {
     if token_type != &CoreTokenType::Bearer {
         return Err(OAuthError::TokenExchange(
@@ -1066,7 +1057,6 @@ mod tests {
 
     #[test]
     fn login_requires_bearer_token_type() {
-        // The grant is sent as a bearer header, with or without an audience.
         let other = serde_json::from_str("\"MAC\"").unwrap();
         assert!(require_bearer_token_type(&other).is_err());
         assert!(require_bearer_token_type(&CoreTokenType::Bearer).is_ok());
@@ -1138,10 +1128,6 @@ mod tests {
             let result = perform_oauth_login(config(&issuer, audience)).await;
             if fail {
                 let error = result.unwrap_err();
-                // The provider's description is surfaced whether or not an
-                // audience was requested: an audience is part of ordinary
-                // logins now, and users need the real reason (e.g. an
-                // audience the client does not allowlist).
                 assert!(
                     error.to_string().contains("fixture-sensitive-detail"),
                     "{audience:?}: {error}"
