@@ -131,15 +131,15 @@ pub(crate) async fn maybe_refresh_oauth(
     let refresh_lock = storage.oauth_refresh_lock(matched_key);
     let _refresh_guard = refresh_lock.lock().await;
 
-    // Another client may have rotated the token while we waited.
-    let (auth, backend) = match storage.get_for_refresh(matched_key) {
-        Ok(Some((current_auth, backend))) => {
+    // Another request may have refreshed the token while we waited.
+    let auth = match storage.get(matched_key) {
+        Ok(Some(current_auth)) => {
             if !matches!(current_auth, Authentication::OAuth { .. })
                 || !needs_refresh(&current_auth)
             {
                 return auth_outcome(current_auth);
             }
-            (current_auth, backend)
+            current_auth
         }
         // Do not recreate a deleted login.
         Ok(None) => {
@@ -152,12 +152,7 @@ pub(crate) async fn maybe_refresh_oauth(
         }
         Err(e) => {
             tracing::warn!("Failed to re-read OAuth credentials before refresh: {e}");
-            return stale_auth_fallback(
-                auth,
-                OAuthRefreshFailure::Transient {
-                    reason: "Failed to read current OAuth credentials".into(),
-                },
-            );
+            auth
         }
     };
 
@@ -322,7 +317,7 @@ pub(crate) async fn maybe_refresh_oauth(
     };
 
     // Use the new token even if persistence fails.
-    if let Err(e) = storage.store_refreshed(matched_key, &refreshed, backend) {
+    if let Err(e) = storage.store(matched_key, &refreshed) {
         tracing::warn!("Failed to store refreshed OAuth token: {e}");
     }
 
@@ -369,8 +364,7 @@ mod tests {
 
     use super::*;
     use crate::authentication_storage::{
-        AuthenticationStorageError, StorageBackend,
-        backends::{file::FileStorage, memory::MemoryStorage},
+        AuthenticationStorageError, StorageBackend, backends::memory::MemoryStorage,
     };
 
     fn expired_oauth(token_endpoint: String) -> Authentication {
@@ -649,86 +643,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn refresh_observes_changes_from_another_storage_instance() {
-        let calls = Arc::new(AtomicUsize::new(0));
-        let count = calls.clone();
-        let endpoint = spawn_token_endpoint(move || {
-            count.fetch_add(1, Ordering::SeqCst);
-            (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"error": "invalid_grant"})),
-            )
-        })
-        .await;
-        for audience in [None, Some(AUDIENCE)] {
-            for deleted in [false, true] {
-                let (old, key) = grant_for(audience, endpoint.clone());
-                let dir = tempfile::tempdir().unwrap();
-                let path = dir.path().join("credentials.json");
-                let mut reader = AuthenticationStorage::empty();
-                reader.add_backend(Arc::new(FileStorage::from_path(path.clone()).unwrap()));
-                reader.store(&key, &old).unwrap();
-                let mut writer = AuthenticationStorage::empty();
-                writer.add_backend(Arc::new(FileStorage::from_path(path).unwrap()));
-                let replacement = if deleted {
-                    writer.delete(&key).unwrap();
-                    None
-                } else {
-                    let mut fresh = old.clone();
-                    if let Authentication::OAuth {
-                        access_token,
-                        refresh_token,
-                        expires_at,
-                        ..
-                    } = &mut fresh
-                    {
-                        *access_token = "fresh-access".into();
-                        *refresh_token = Some("rotated-refresh".into());
-                        *expires_at = Some(i64::MAX);
-                    }
-                    writer.store(&key, &fresh).unwrap();
-                    Some(fresh)
-                };
-                let result = maybe_refresh_oauth(&reader, old, &key).await;
-                assert_eq!(result.into_authentication(), replacement);
-                assert_eq!(reader.get(&key).unwrap(), replacement);
-            }
-        }
-        assert_eq!(calls.load(Ordering::SeqCst), 0);
-    }
-
-    #[tokio::test]
-    async fn refresh_updates_the_supplying_backend() {
-        let endpoint = spawn_token_endpoint(|| {
-            (
-                StatusCode::OK,
-                Json(json!({
-                    "access_token": "fresh-access",
-                    "refresh_token": "rotated-refresh",
-                    "expires_in": 3600,
-                    "token_type": "Bearer"
-                })),
-            )
-        })
-        .await;
-        for audience in [None, Some(AUDIENCE)] {
-            let (old, key) = grant_for(audience, endpoint.clone());
-            let first = Arc::new(MemoryStorage::new());
-            let source = Arc::new(MemoryStorage::new());
-            source.store(&key, &old).unwrap();
-            let mut storage = AuthenticationStorage::empty();
-            storage.add_backend(first.clone());
-            storage.add_backend(source.clone());
-            let result = maybe_refresh_oauth(&storage, old, &key).await;
-            assert!(result.failure().is_none());
-            let fresh = result.into_authentication().unwrap();
-            assert_eq!(first.get(&key).unwrap(), None);
-            assert_eq!(source.get(&key).unwrap(), Some(fresh.clone()));
-            assert_eq!(storage.get(&key).unwrap(), Some(fresh));
-        }
-    }
-
-    #[tokio::test]
     async fn queued_refresh_does_not_restore_deleted_credentials() {
         for audience in [None, Some(AUDIENCE)] {
             for seconds_to_expiry in [-60, 60] {
@@ -876,7 +790,6 @@ mod tests {
     #[derive(Debug)]
     struct FailedBackend {
         old: Authentication,
-        fail_read: bool,
     }
     fn storage_error() -> AuthenticationStorageError {
         AuthenticationStorageError::StoreFailed {
@@ -889,11 +802,7 @@ mod tests {
             "fixture".into()
         }
         fn get(&self, _key: &str) -> Result<Option<Authentication>, AuthenticationStorageError> {
-            if self.fail_read {
-                Err(storage_error())
-            } else {
-                Ok(Some(self.old.clone()))
-            }
+            Ok(Some(self.old.clone()))
         }
         fn store(
             &self,
@@ -905,41 +814,6 @@ mod tests {
         fn delete(&self, _key: &str) -> Result<(), AuthenticationStorageError> {
             Err(storage_error())
         }
-    }
-
-    #[tokio::test]
-    async fn failed_refresh_read_does_not_retry_cached_token() {
-        let calls = Arc::new(AtomicUsize::new(0));
-        let count = calls.clone();
-        let endpoint = spawn_token_endpoint(move || {
-            count.fetch_add(1, Ordering::SeqCst);
-            (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"error": "invalid_grant"})),
-            )
-        })
-        .await;
-        for audience in [None, Some(AUDIENCE)] {
-            for expired in [false, true] {
-                let (mut old, key) = grant_for(audience, endpoint.clone());
-                if !expired && let Authentication::OAuth { expires_at, .. } = &mut old {
-                    *expires_at = Some(now_unix_timestamp() + 60);
-                }
-                let mut storage = AuthenticationStorage::empty();
-                storage.add_backend(Arc::new(FailedBackend {
-                    old: old.clone(),
-                    fail_read: true,
-                }));
-                assert!(storage.store(&key, &old).is_err());
-                let result = maybe_refresh_oauth(&storage, old.clone(), &key).await;
-                assert!(matches!(
-                    result.failure(),
-                    Some(OAuthRefreshFailure::Transient { .. })
-                ));
-                assert_eq!(result.into_authentication(), (!expired).then_some(old));
-            }
-        }
-        assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]
@@ -959,13 +833,8 @@ mod tests {
         for audience in [None, Some(AUDIENCE)] {
             let mut store = AuthenticationStorage::empty();
             let (old, key) = grant_for(audience, endpoint.clone());
-            let backend = Arc::new(FailedBackend {
-                old: old.clone(),
-                fail_read: false,
-            });
+            let backend = Arc::new(FailedBackend { old: old.clone() });
             store.add_backend(backend.clone());
-            let fallback = Arc::new(MemoryStorage::new());
-            store.add_backend(fallback.clone());
             let result = maybe_refresh_oauth(&store, old.clone(), &key).await;
             assert!(result.failure().is_none());
             let refreshed = result.into_authentication().unwrap();
@@ -975,7 +844,6 @@ mod tests {
             ));
             assert_eq!(store.get(&key).unwrap(), Some(refreshed));
             assert_eq!(backend.get(&key).unwrap(), Some(old));
-            assert_eq!(fallback.get(&key).unwrap(), None);
         }
         assert_eq!(calls.load(Ordering::SeqCst), 2);
     }

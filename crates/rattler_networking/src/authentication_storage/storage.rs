@@ -135,38 +135,6 @@ impl AuthenticationStorage {
             .clone()
     }
 
-    /// Read current credentials and their backend without using the cache.
-    pub(crate) fn get_for_refresh(
-        &self,
-        host: &str,
-    ) -> Result<Option<(Authentication, usize)>, AuthenticationStorageError> {
-        for (index, backend) in self.backends.iter().enumerate() {
-            if let Some(auth) = backend.get_uncached(host)? {
-                self.cache
-                    .lock()
-                    .unwrap()
-                    .insert(host.to_owned(), Some(auth.clone()));
-                return Ok(Some((auth, index)));
-            }
-        }
-        self.cache.lock().unwrap().insert(host.to_owned(), None);
-        Ok(None)
-    }
-
-    /// Save to the supplying backend; keep the refreshed token cached even on failure.
-    pub(crate) fn store_refreshed(
-        &self,
-        host: &str,
-        authentication: &Authentication,
-        backend: usize,
-    ) -> Result<(), AuthenticationStorageError> {
-        self.cache
-            .lock()
-            .unwrap()
-            .insert(host.to_owned(), Some(authentication.clone()));
-        self.backends[backend].store(host, authentication)
-    }
-
     /// Store the given authentication information for the given host
     pub fn store(
         &self,

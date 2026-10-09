@@ -71,14 +71,6 @@ pub trait StorageBackend: std::fmt::Debug {
     /// Retrieve the authentication information for the given host
     fn get(&self, host: &str) -> Result<Option<Authentication>, AuthenticationStorageError>;
 
-    /// Retrieve current credentials; caching backends must override this.
-    fn get_uncached(
-        &self,
-        host: &str,
-    ) -> Result<Option<Authentication>, AuthenticationStorageError> {
-        self.get(host)
-    }
-
     /// List all authentication entries known to this backend.
     ///
     /// Some backends, such as platform keyrings, cannot enumerate arbitrary
