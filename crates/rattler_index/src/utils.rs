@@ -1,6 +1,7 @@
+use futures::{StreamExt, TryStreamExt};
 use opendal::Operator;
 
-use crate::RepodataFileMetadata;
+use crate::{RepodataFileMetadata, cache::PackageStream};
 
 /// Reads a file with conditional checks based on provided metadata.
 ///
@@ -43,6 +44,46 @@ pub async fn read_with_metadata_check(
     }
 
     reader.await
+}
+
+/// Opens a file as a stream of bytes, with the same conditional checks as
+/// [`read_with_metadata_check`].
+///
+/// `OpenDAL` only sends the read request once the stream is first polled, so
+/// this reads the first chunk up front. That way an unsupported or failed
+/// precondition is returned from this function, where callers can retry,
+/// instead of surfacing part-way through reading the stream.
+pub async fn open_stream_with_metadata_check(
+    op: &Operator,
+    path: &str,
+    metadata: &RepodataFileMetadata,
+) -> opendal::Result<PackageStream> {
+    let mut reader = op.reader_with(path);
+
+    // Same conditions as `read_with_metadata_check`.
+    if metadata.precondition_checks.is_enabled() {
+        if let Some(etag) = &metadata.etag {
+            reader = reader.if_match(etag);
+        } else if let Some(last_modified) = metadata.last_modified {
+            reader = reader.if_unmodified_since(last_modified);
+        }
+    }
+
+    let mut stream = reader.await?.into_bytes_stream(..).await?;
+    let first_chunk = stream.try_next().await.map_err(into_opendal_error)?;
+    Ok(futures::stream::iter(first_chunk.map(Ok))
+        .chain(stream)
+        .boxed())
+}
+
+/// Recovers the `OpenDAL` error from an I/O error returned by an `OpenDAL`
+/// stream, so its kind can still be inspected.
+fn into_opendal_error(err: std::io::Error) -> opendal::Error {
+    match err.downcast::<opendal::Error>() {
+        Ok(err) => err,
+        Err(err) => opendal::Error::new(opendal::ErrorKind::Unexpected, "failed to read file")
+            .set_source(err),
+    }
 }
 
 /// Writes a file with conditional checks based on provided metadata.
