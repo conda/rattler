@@ -143,11 +143,22 @@ pub trait Shell {
 
     /// Emits writing all current environment variables to stdout.
     ///
-    /// Records are NUL-separated (`env -0`) rather than newline-separated
-    /// so that values which themselves contain newlines survive the
-    /// round-trip through [`Shell::parse_env`].
+    /// Records are NUL-separated so that values which themselves contain
+    /// newlines survive the round-trip through [`Shell::parse_env`]. Older
+    /// macOS versions fall back to newline-separated records because their
+    /// `/usr/bin/env` does not support `-0`.
     fn print_env(&self, f: &mut impl Write) -> std::fmt::Result {
-        writeln!(f, "/usr/bin/env -0")
+        #[cfg(target_os = "macos")]
+        {
+            writeln!(
+                f,
+                r#"/bin/sh -c '/usr/bin/env -0 2>/dev/null || /usr/bin/env'"#
+            )
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            writeln!(f, "/usr/bin/env -0")
+        }
     }
 
     /// Write the script to the writer and do some post-processing for
@@ -158,11 +169,12 @@ pub trait Shell {
 
     /// Parses environment variables emitted by [`Shell::print_env`].
     ///
-    /// The default implementation expects NUL-separated `KEY=VALUE`
-    /// records (see [`Shell::print_env`]), so a value containing a
-    /// newline is kept intact instead of being cut at the newline.
+    /// NUL-separated records preserve values containing newlines. The
+    /// newline separator supports older macOS versions where `env -0` is
+    /// unavailable.
     fn parse_env<'i>(&self, env: &'i str) -> HashMap<&'i str, &'i str> {
-        env.split('\0')
+        let separator = if env.contains('\0') { '\0' } else { '\n' };
+        env.split(separator)
             .filter_map(|record| record.split_once('='))
             // A record can carry a leading newline echoed just before the
             // environment dump; variable names never do, so trimming the
@@ -1570,5 +1582,16 @@ mod tests {
                 .collect();
 
         assert_eq!(parsed_env, expected_env);
+    }
+
+    #[test]
+    fn test_parse_env_with_newline_separator() {
+        let input = "\nVAR1=value1\nVAR2=value2\n";
+        let parsed_env = Bash::default().parse_env(input);
+
+        assert_eq!(
+            parsed_env,
+            HashMap::from([("VAR1", "value1"), ("VAR2", "value2")])
+        );
     }
 }
