@@ -334,47 +334,78 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                 })
         };
 
-        // Sort the solvables by comparing the highest version of the shared
-        // dependencies in alphabetic order.
-        solvables.sort_by(|a, b| {
-            for &name in sorted_unique_names.iter() {
-                let a_version = id_and_deps
-                    .get(&(*a, name))
-                    .and_then(&mut find_best_selectable_version);
-                let b_version = id_and_deps
-                    .get(&(*b, name))
-                    .and_then(&mut find_best_selectable_version);
+        let compare_versions =
+            |a: Option<&TrackedFeatureVersion>, b: Option<&TrackedFeatureVersion>| match (a, b) {
+                (Some(a), Some(b)) => a.compare_with_strategy(b, self.dependency_strategy),
+                (Some(_), None) => Ordering::Less,
+                (None, Some(_)) => Ordering::Greater,
+                (None, None) => Ordering::Equal,
+            };
 
-                // Deal with the case where resolving the version set doesn't actually select a
-                // version
-                let (a_version, b_version) = match (a_version, b_version) {
-                    // If we have a version for either solvable, but not the other, the one with the
-                    // version is better.
-                    (Some(_), None) => return Ordering::Less,
-                    (None, Some(_)) => return Ordering::Greater,
-
-                    // If for neither solvable the version set doesn't select a version for the
-                    // dependency we skip it.
-                    (None, None) => continue,
-
-                    (Some(a), Some(b)) => (a, b),
-                };
-
-                // Compare the versions
-                match a_version.compare_with_strategy(&b_version, self.dependency_strategy) {
-                    Ordering::Equal => {
-                        // If this version is equal, we continue with the next
-                        // dependency
+        // A pair needs only one comparison; score caching cannot pay for itself.
+        // Avoid additional buffers when there are no shared dependency scores either.
+        if solvables.len() <= 2 || sorted_unique_names.is_empty() {
+            solvables.sort_by(|a, b| {
+                for &name in &sorted_unique_names {
+                    let a_version = id_and_deps
+                        .get(&(*a, name))
+                        .and_then(&mut find_best_selectable_version);
+                    let b_version = id_and_deps
+                        .get(&(*b, name))
+                        .and_then(&mut find_best_selectable_version);
+                    let ordering = compare_versions(a_version.as_ref(), b_version.as_ref());
+                    if ordering != Ordering::Equal {
+                        return ordering;
                     }
-                    ordering => return ordering,
                 }
-            }
-
-            // Otherwise sort by timestamp (in reverse, we want the highest timestamp first)
-            let a_record = self.solvable_record(*a);
-            let b_record = self.solvable_record(*b);
-            b_record.timestamp().cmp(&a_record.timestamp())
-        });
+                self.solvable_record(*b)
+                    .timestamp()
+                    .cmp(&self.solvable_record(*a).timestamp())
+            });
+        } else {
+            // Cache dependency scores lazily: later names are only evaluated if earlier
+            // names tie. Sort indices so scores can be borrowed without cloning versions
+            // on every comparison, while retaining the original order for exact ties.
+            let names_len = sorted_unique_names.len();
+            let mut scores = vec![None; solvables.len() * names_len];
+            let mut order = (0..solvables.len()).collect::<Vec<_>>();
+            order.sort_by(|&a, &b| {
+                for (name_idx, &name) in sorted_unique_names.iter().enumerate() {
+                    let a_idx = a * names_len + name_idx;
+                    let b_idx = b * names_len + name_idx;
+                    for (idx, id) in [(a_idx, solvables[a]), (b_idx, solvables[b])] {
+                        if scores[idx].is_none() {
+                            scores[idx] = Some(
+                                id_and_deps
+                                    .get(&(id, name))
+                                    .and_then(&mut find_best_selectable_version),
+                            );
+                        }
+                    }
+                    let ordering = compare_versions(
+                        scores[a_idx]
+                            .as_ref()
+                            .expect("score populated above")
+                            .as_ref(),
+                        scores[b_idx]
+                            .as_ref()
+                            .expect("score populated above")
+                            .as_ref(),
+                    );
+                    if ordering != Ordering::Equal {
+                        return ordering;
+                    }
+                }
+                self.solvable_record(solvables[b])
+                    .timestamp()
+                    .cmp(&self.solvable_record(solvables[a]).timestamp())
+            });
+            let sorted = order
+                .into_iter()
+                .map(|idx| solvables[idx])
+                .collect::<Vec<_>>();
+            solvables.copy_from_slice(&sorted);
+        }
 
         // Candidate matching reports cancellation as no matching version. Do not
         // retain the resulting partial/timestamp-biased ordering in that case.
