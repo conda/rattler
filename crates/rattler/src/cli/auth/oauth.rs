@@ -207,11 +207,11 @@ struct CallbackResult {
 
 /// Perform an OAuth/OIDC login and return `Authentication::OAuth` without storing it.
 ///
-/// Requesting an `audience` makes the grant acceptable to a sibling API as
-/// well. Store it once, under the login host: that key is what channel
-/// requests and `auth logout` use, and a single copy means a rotated refresh
-/// token is never raced by a second entry. A dedicated API client then pins
-/// that key to the API origin.
+/// An `audience` identifies the intended recipient of the access token,
+/// subject to the authorization server's policy. Store the grant once under
+/// the login host, where channel requests and `auth logout` can find it.
+/// Keeping one entry avoids separate copies of a rotating refresh token.
+/// A dedicated API client can use that entry for an explicitly trusted origin.
 ///
 /// ```no_run
 /// use rattler::cli::auth::oauth::{OAuthConfig, perform_oauth_login};

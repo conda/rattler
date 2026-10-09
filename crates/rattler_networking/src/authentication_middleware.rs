@@ -19,8 +19,8 @@ use crate::{
 #[derive(Clone)]
 pub struct AuthenticationMiddleware {
     auth_storage: AuthenticationStorage,
-    // A pinned storage key, sent only to the trusted origin. Pinning never
-    // falls back to host/wildcard credentials.
+    // Use only the credential stored under this key, and only for this origin.
+    // Do not look up other host or wildcard credentials if it is unavailable.
     pinned_credential: Option<(url::Origin, String)>,
 }
 
@@ -128,9 +128,9 @@ impl AuthenticationMiddleware {
     /// Send the credential stored under exactly `key`, and only to
     /// `trusted_origin`. Requests to any other origin are left anonymous.
     ///
-    /// This lets a grant obtained for one host (e.g. `prefix.dev`, whose
-    /// login requests an audience for a sibling API) be used against that
-    /// API's origin, which host/wildcard lookup would never resolve to.
+    /// This lets a client use a credential stored under a different host's
+    /// key without relying on host or wildcard lookup. The receiving API
+    /// must accept the credential; this method does not change its permissions.
     /// The origin is chosen by the caller, never inferred from the key or a
     /// server challenge. No channel/wildcard fallback or interactive login.
     /// Use on a dedicated API client, not stacked with channel authentication.
