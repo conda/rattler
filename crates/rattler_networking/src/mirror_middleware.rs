@@ -145,7 +145,8 @@ impl Middleware for MirrorMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> Result<Response> {
-        let url_str = req.url().to_string();
+        // Queries and fragments must not become part of the rewritten path.
+        let url_str = req.url()[..url::Position::AfterPath].to_owned();
 
         for (key, url) in self.keys() {
             if let Some(url_rest) = url_str.strip_prefix(key) {
@@ -166,6 +167,10 @@ impl Middleware for MirrorMiddleware {
                         u.set_path(&format!("{base_path}/"));
                     } else {
                         u.set_path(&format!("{base_path}/{url_rest}"));
+                    }
+                    // Preserve a configured mirror query when the request has none.
+                    if let Some(query) = req.url().query() {
+                        u.set_query(Some(query));
                     }
                     u
                 };
@@ -293,6 +298,101 @@ mod test {
             no_bz2: false,
             max_failures: Some(3),
         }
+    }
+
+    async fn echo_request_server() -> Url {
+        let router = Router::new().fallback(|uri: axum::http::Uri| async move { uri.to_string() });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(listener, router.into_make_service()).into_future());
+        format!("http://{addr}/channel/").parse().unwrap()
+    }
+
+    #[rstest::rstest]
+    #[case("count", None, "/channel/count")]
+    #[case("count?token=demo&v=1", None, "/channel/count?token=demo&v=1")]
+    #[case(
+        "count?token=a%2Fb%3Fc%23d&tag=one&tag=two",
+        None,
+        "/channel/count?token=a%2Fb%3Fc%23d&tag=one&tag=two"
+    )]
+    #[case("count%3Fname?token=demo", None, "/channel/count%3Fname?token=demo")]
+    #[case("count#fragment", None, "/channel/count")]
+    #[case("count?token=demo#fragment", None, "/channel/count?token=demo")]
+    #[case("count", Some("mirror=default"), "/channel/count?mirror=default")]
+    #[case(
+        "count?token=demo",
+        Some("mirror=default"),
+        "/channel/count?token=demo"
+    )]
+    #[case("count?", Some("mirror=default"), "/channel/count?")]
+    #[tokio::test]
+    async fn test_mirror_middleware_preserves_query(
+        #[case] resource: &str,
+        #[case] mirror_query: Option<&str>,
+        #[case] expected: &str,
+    ) {
+        let mut mirror_url = echo_request_server().await;
+        mirror_url.set_query(mirror_query);
+        let middleware = MirrorMiddleware::from_map(std::collections::HashMap::from([(
+            "https://origin.invalid/source/".parse().unwrap(),
+            vec![mirror_setting(mirror_url)],
+        )]));
+        let client = reqwest_middleware::ClientBuilder::new(
+            reqwest::Client::builder().no_proxy().build().unwrap(),
+        )
+        .with(middleware)
+        .build();
+
+        let response = client
+            .get(format!("https://origin.invalid/source/{resource}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.text().await.unwrap(), expected);
+    }
+
+    #[rstest::rstest]
+    #[case(
+        "repodata.json.zst?token=demo",
+        true,
+        false,
+        "Mirror does not support zstd"
+    )]
+    #[case(
+        "repodata.json.bz2?token=demo",
+        false,
+        true,
+        "Mirror does not support bz2"
+    )]
+    #[tokio::test]
+    async fn test_mirror_middleware_compression_with_query(
+        #[case] resource: &str,
+        #[case] no_zstd: bool,
+        #[case] no_bz2: bool,
+        #[case] expected: &str,
+    ) {
+        let mut mirror = mirror_setting(echo_request_server().await);
+        mirror.no_zstd = no_zstd;
+        mirror.no_bz2 = no_bz2;
+        let middleware = MirrorMiddleware::from_map(std::collections::HashMap::from([(
+            "https://origin.invalid/source/".parse().unwrap(),
+            vec![mirror],
+        )]));
+        let client = reqwest_middleware::ClientBuilder::new(
+            reqwest::Client::builder().no_proxy().build().unwrap(),
+        )
+        .with(middleware)
+        .build();
+
+        let response = client
+            .get(format!("https://origin.invalid/source/{resource}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(response.text().await.unwrap(), expected);
     }
 
     #[tokio::test]
