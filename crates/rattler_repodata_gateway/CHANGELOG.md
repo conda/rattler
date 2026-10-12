@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.4](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.36.3...rattler_repodata_gateway-v0.36.4) - 2026-10-12
+
+### Other
+
+- Add `BuildString` to rattler_conda_types ([#2430](https://github.com/conda/rattler/pull/2430))
+
 ## [0.36.3](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.36.2...rattler_repodata_gateway-v0.36.3) - 2026-10-09
 
 ### Other
