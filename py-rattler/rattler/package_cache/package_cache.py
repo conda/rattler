@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from rattler.match_spec import MatchSpec
 from rattler.rattler import (
     PyCacheIndex,
     PyPackageCache,
@@ -12,7 +13,7 @@ from rattler.rattler import (
 )
 
 if TYPE_CHECKING:
-    from rattler.repo_data import RepoDataRecord
+    from rattler.repo_data import PackageRecord, RepoDataRecord
 
     BasePathLike = os.PathLike[str]
 else:
@@ -24,15 +25,8 @@ class ValidationMode:
 
     _inner: PyValidationMode
 
-    def __init__(self, mode: str = "skip") -> None:
-        if mode == "skip":
-            self._inner = PyValidationMode.skip()
-        elif mode == "fast":
-            self._inner = PyValidationMode.fast()
-        elif mode == "full":
-            self._inner = PyValidationMode.full()
-        else:
-            raise ValueError(f"Invalid validation mode '{mode}', expected 'skip', 'fast', or 'full'")
+    def __init__(self) -> None:
+        raise NotImplementedError("Use ValidationMode.skip(), ValidationMode.fast(), or ValidationMode.full()")
 
     @classmethod
     def _from_py_validation_mode(cls, py_val_mode: PyValidationMode) -> ValidationMode:
@@ -70,6 +64,14 @@ class ValidationMode:
         """Returns True if this is full validation mode."""
         return self._inner.is_full
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ValidationMode):
+            return False
+        return self._inner == other._inner
+
+    def __hash__(self) -> int:
+        return hash(self._inner)
+
     def __repr__(self) -> str:
         return self._inner.__repr__()
 
@@ -94,14 +96,21 @@ class PackageCacheLayer:
         """Returns the root directory of this layer."""
         return Path(self._inner.path)
 
-    @property
     def is_readonly(self) -> bool:
         """Returns whether the layer is read-only on the filesystem."""
-        return self._inner.is_readonly
+        return self._inner.is_readonly()
 
     def with_validation_mode(self, validation_mode: ValidationMode) -> PackageCacheLayer:
         """Sets the validation mode used by this layer."""
         return PackageCacheLayer._from_py_layer(self._inner.with_validation_mode(validation_mode._inner))
+
+    def with_filter(self, spec: MatchSpec) -> PackageCacheLayer:
+        """Adds an inclusion MatchSpec to this layer."""
+        return PackageCacheLayer._from_py_layer(self._inner.with_filter(spec._match_spec))
+
+    def excluding(self, spec: MatchSpec) -> PackageCacheLayer:
+        """Excludes packages matching spec from this layer."""
+        return PackageCacheLayer._from_py_layer(self._inner.excluding(spec._match_spec))
 
     def __repr__(self) -> str:
         return self._inner.__repr__()
@@ -124,6 +133,14 @@ class CacheIndex:
     def contains_record(self, record: RepoDataRecord) -> bool:
         """Returns whether the package described by `RepoDataRecord` is present in the cache."""
         return self._inner.contains_record(record._record)
+
+    def contains_url(self, record: PackageRecord | RepoDataRecord, url: str) -> bool:
+        """Returns whether a package fetched from url is present in the cache."""
+        return self._inner.contains_url(record._record, url)
+
+    def contains_path(self, record: PackageRecord | RepoDataRecord, path: str | BasePathLike) -> bool:
+        """Returns whether a package fetched from path is present in the cache."""
+        return self._inner.contains_path(record._record, Path(path))
 
     def is_empty(self) -> bool:
         """Returns True if the cache index contains no packages."""
@@ -177,16 +194,18 @@ class PackageCache:
         """Prepends a configured layer to this cache."""
         return PackageCache._from_py_package_cache(self._inner.with_prepended_layer(layer._inner))
 
-    @property
+    def excluding_from_all_layers(self, spec: MatchSpec) -> PackageCache:
+        """Excludes packages matching spec from every existing layer."""
+        return PackageCache._from_py_package_cache(self._inner.excluding_from_all_layers(spec._match_spec))
+
     def first_writable(self) -> Path | None:
         """Returns the first writable directory in the package cache, if any."""
         path = self._inner.first_writable()
         return Path(path) if path is not None else None
 
-    @property
     def layers(self) -> list[PackageCacheLayer]:
-        """Returns the layers in this package cache."""
-        return [PackageCacheLayer._from_py_layer(layer) for layer in self._inner.layers]
+        """Returns the layers in this package cache in lookup order."""
+        return [PackageCacheLayer._from_py_layer(layer) for layer in self._inner.layers()]
 
     async def index(self) -> CacheIndex:
         """Takes an async snapshot of the packages present in the cache."""

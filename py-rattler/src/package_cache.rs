@@ -1,15 +1,20 @@
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
+use pyo3::basic::CompareOp;
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_cache::package_cache::{CacheIndex, PackageCache, PackageCacheLayer};
 use rattler_cache::validation::ValidationMode;
+use url::Url;
 
 use crate::error::PyRattlerError;
+use crate::match_spec::PyMatchSpec;
 use crate::record::PyRecord;
 
 #[pyclass(from_py_object)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PyValidationMode {
     pub(crate) inner: ValidationMode,
 }
@@ -64,6 +69,20 @@ impl PyValidationMode {
         self.inner == ValidationMode::Full
     }
 
+    fn __richcmp__(&self, other: &Self, op: CompareOp) -> PyResult<bool> {
+        match op {
+            CompareOp::Eq => Ok(self.inner == other.inner),
+            CompareOp::Ne => Ok(self.inner != other.inner),
+            _ => Err(PyTypeError::new_err("Comparison not supported")),
+        }
+    }
+
+    fn __hash__(&self) -> u64 {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.inner.hash(&mut hasher);
+        hasher.finish()
+    }
+
     fn __repr__(&self) -> String {
         format!("ValidationMode.{:?}", self.inner)
     }
@@ -102,7 +121,6 @@ impl PyPackageCacheLayer {
     }
 
     /// Determine if the layer is read-only in the filesystem.
-    #[getter]
     pub fn is_readonly(&self) -> bool {
         self.inner.is_readonly()
     }
@@ -115,11 +133,18 @@ impl PyPackageCacheLayer {
             .into()
     }
 
+    /// Adds an inclusion `MatchSpec` to this layer.
+    pub fn with_filter(&self, spec: PyMatchSpec) -> Self {
+        self.inner.clone().with_filter(spec.into()).into()
+    }
+
+    /// Excludes packages matching `spec` from this layer.
+    pub fn excluding(&self, spec: PyMatchSpec) -> Self {
+        self.inner.clone().excluding(spec.into()).into()
+    }
+
     fn __repr__(&self) -> String {
-        format!(
-            "PackageCacheLayer(path=\"{}\")",
-            self.inner.path().display()
-        )
+        format!("PackageCacheLayer(path=\"{}\")", self.inner.path().display())
     }
 }
 
@@ -149,9 +174,17 @@ impl PyCacheIndex {
         Ok(self.inner.contains_record(repo_data))
     }
 
-    /// Returns the number of packages in the snapshot.
-    pub fn len(&self) -> usize {
-        self.inner.len()
+    /// Returns whether a package fetched from `url` is present in the cache.
+    pub fn contains_url(&self, record: &PyRecord, url: String) -> PyResult<bool> {
+        let pkg = record.as_package_record();
+        let parsed_url = Url::parse(&url).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(self.inner.contains_url(pkg, &parsed_url))
+    }
+
+    /// Returns whether a package fetched from `path` is present in the cache.
+    pub fn contains_path(&self, record: &PyRecord, path: PathBuf) -> PyResult<bool> {
+        let pkg = record.as_package_record();
+        Ok(self.inner.contains_path(pkg, &path))
     }
 
     /// Returns true if the snapshot contains no packages.
@@ -224,7 +257,13 @@ impl PyPackageCache {
         self.inner.clone().with_prepended_layer(layer.into()).into()
     }
 
+    /// Excludes packages matching `spec` from every existing layer.
+    pub fn excluding_from_all_layers(&self, spec: PyMatchSpec) -> Self {
+        self.inner.clone().excluding_from_all_layers(spec.into()).into()
+    }
+
     /// Returns the first writable directory in the package cache, if any.
+    /// Note: Checks whether the layer directory is read-only.
     pub fn first_writable(&self) -> Option<PathBuf> {
         let (_, writable_layers) = self.inner.split_layers();
         writable_layers.first().map(|l| l.path().to_path_buf())
@@ -239,25 +278,13 @@ impl PyPackageCache {
         })
     }
 
-    /// Returns the writable and read-only layers in this package cache.
-    #[getter]
+    /// Returns the layers in this package cache in lookup order.
     pub fn layers(&self) -> Vec<PyPackageCacheLayer> {
-        let (readonly_layers, writable_layers) = self.inner.split_layers();
-        readonly_layers
-            .into_iter()
-            .chain(writable_layers)
-            .cloned()
-            .map(Into::into)
-            .collect()
+        self.inner.layers().iter().cloned().map(Into::into).collect()
     }
 
     fn __repr__(&self) -> String {
-        let (readonly_layers, writable_layers) = self.inner.split_layers();
-        let all_layers: Vec<_> = readonly_layers
-            .into_iter()
-            .chain(writable_layers)
-            .map(rattler_cache::package_cache::PackageCacheLayer::path)
-            .collect();
+        let all_layers: Vec<_> = self.inner.layers().iter().map(PackageCacheLayer::path).collect();
         format!("PackageCache(layers={all_layers:?})")
     }
 }
