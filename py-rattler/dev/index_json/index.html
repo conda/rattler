@@ -2158,6 +2158,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../build_string/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    BuildString
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../package_name/" class="md-nav__link">
         
   
@@ -4569,13 +4597,14 @@
 
     <div class="doc doc-contents ">
 
-        <p>The build string of the package.</p>
+        <p>The build string of the package. String assignments are validated against
+CEP26; pass <code>BuildString.new_unchecked(value)</code> to skip validation explicitly.</p>
 <h5 id="rattler.package.index_json.IndexJson.build--examples">Examples<a class="headerlink" href="#rattler.package.index_json.IndexJson.build--examples" title="Permanent link">#</a></h5>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span> <span class="o">=</span> <span class="n">IndexJson</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">...</span>     <span class="s2">&quot;../test-data/conda-22.11.1-py38haa244fe_1-index.json&quot;</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">...</span> <span class="p">)</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">idx_json</span><span class="o">.</span><span class="n">build</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="s1">&#39;py38haa244fe_1&#39;</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">BuildString</span><span class="p">(</span><span class="s1">&#39;py38haa244fe_1&#39;</span><span class="p">)</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
