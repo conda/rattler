@@ -6,7 +6,7 @@ from rattler.rattler import PyBuildString
 class BuildString:
     """An opaque conda build string, validated according to CEP26.
 
-    Values must contain 1–64 ASCII letters, digits, or ``_``, ``.``, ``+``.
+    Values must contain 1-64 ASCII letters, digits, or ``_``, ``.``, ``+``.
     Invalid values raise ``ValueError``. Use :meth:`new_unchecked` explicitly
     for legacy metadata or wheel tags that do not follow CEP26.
 
@@ -32,8 +32,12 @@ class BuildString:
         return result
 
     @staticmethod
-    def _to_py(value: str | BuildString) -> PyBuildString:
-        return value._build if isinstance(value, BuildString) else PyBuildString(value)
+    def _to_py(value: BuildString) -> PyBuildString:
+        if not isinstance(value, BuildString):
+            raise TypeError(
+                f"expected a BuildString, got {type(value).__name__}; wrap the value with BuildString({value!r})"
+            )
+        return value._build
 
     def __str__(self) -> str:
         return str(self._build)

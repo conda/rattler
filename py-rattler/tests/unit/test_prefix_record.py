@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 from rattler import (
+    BuildString,
     FileMode,
     PackageRecord,
     PrefixPaths,
@@ -75,7 +76,7 @@ def test_create_prefix_record() -> None:
         name="foobar",
         version="1.0",
         build_number=1,
-        build="foo_1",
+        build=BuildString("foo_1"),
         platform="win-64",
         subdir="win",
         arch="x86_64",
@@ -133,7 +134,7 @@ def test_repodata_record_setters_update_backend() -> None:
         name="foobar",
         version="1.0",
         build_number=1,
-        build="foo_1",
+        build=BuildString("foo_1"),
         platform="win-64",
         subdir="win",
         arch="x86_64",

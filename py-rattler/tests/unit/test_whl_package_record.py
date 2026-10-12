@@ -35,7 +35,7 @@ def test_whl_package_record_properties() -> None:
     record = PackageRecord(
         name="foo",
         version="1.0",
-        build="py_0",
+        build=BuildString("py_0"),
         build_number=0,
         subdir="noarch",
     )
@@ -54,7 +54,7 @@ def test_whl_package_record_repr() -> None:
     record = PackageRecord(
         name="pkg",
         version="1.0",
-        build="0",
+        build=BuildString("0"),
         build_number=0,
         subdir="noarch",
     )

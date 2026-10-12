@@ -164,7 +164,7 @@ class IndexJson:
         return BuildString._from_py_build_string(self._inner.build)
 
     @build.setter
-    def build(self, value: str | BuildString) -> None:
+    def build(self, value: BuildString) -> None:
         self._inner.build = BuildString._to_py(value)
 
     @property

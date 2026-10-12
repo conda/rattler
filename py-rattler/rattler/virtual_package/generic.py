@@ -8,7 +8,7 @@ from rattler.version import Version
 class GenericVirtualPackage:
     _generic_virtual_package: PyGenericVirtualPackage
 
-    def __init__(self, name: PackageName, version: Version, build_string: str | BuildString) -> None:
+    def __init__(self, name: PackageName, version: Version, build_string: BuildString) -> None:
         if not isinstance(name, PackageName):
             raise TypeError(
                 "GenericVirtualPackage constructor received unsupported type "
@@ -35,7 +35,7 @@ class GenericVirtualPackage:
         ```python
         >>> from rattler.package.package_name import PackageName
         >>> from rattler.version.version import Version
-        >>> gvp = GenericVirtualPackage(PackageName("__archspec"), Version("1"), "x86_64")
+        >>> gvp = GenericVirtualPackage(PackageName("__archspec"), Version("1"), BuildString("x86_64"))
         >>> gvp.name
         PackageName("__archspec")
         >>> gvp.name.source
@@ -57,7 +57,7 @@ class GenericVirtualPackage:
         ```python
         >>> from rattler.package.package_name import PackageName
         >>> from rattler.version.version import Version
-        >>> gvp = GenericVirtualPackage(PackageName("__archspec"), Version("1"), "x86_64")
+        >>> gvp = GenericVirtualPackage(PackageName("__archspec"), Version("1"), BuildString("x86_64"))
         >>> gvp.version
         Version("1")
         >>>
@@ -75,7 +75,7 @@ class GenericVirtualPackage:
         ```python
         >>> from rattler.package.package_name import PackageName
         >>> from rattler.version.version import Version
-        >>> gvp = GenericVirtualPackage(PackageName("__archspec"), Version("1"), "x86_64")
+        >>> gvp = GenericVirtualPackage(PackageName("__archspec"), Version("1"), BuildString("x86_64"))
         >>> gvp.build_string
         BuildString('x86_64')
         >>>
@@ -104,7 +104,7 @@ class GenericVirtualPackage:
         ```python
         >>> from rattler.package.package_name import PackageName
         >>> from rattler.version.version import Version
-        >>> gvp = GenericVirtualPackage(PackageName("__archspec"), Version("1"), "x86_64")
+        >>> gvp = GenericVirtualPackage(PackageName("__archspec"), Version("1"), BuildString("x86_64"))
         >>> str(gvp)
         '__archspec=1=x86_64'
         >>>
@@ -122,7 +122,7 @@ class GenericVirtualPackage:
         ```python
         >>> from rattler.package.package_name import PackageName
         >>> from rattler.version.version import Version
-        >>> gvp = GenericVirtualPackage(PackageName("__archspec"), Version("1"), "x86_64")
+        >>> gvp = GenericVirtualPackage(PackageName("__archspec"), Version("1"), BuildString("x86_64"))
         >>> gvp
         GenericVirtualPackage("__archspec=1=x86_64")
         >>>

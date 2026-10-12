@@ -185,7 +185,7 @@ class PackageRecord:
         self,
         name: str | PackageName,
         version: str | VersionWithSource,
-        build: str | BuildString,
+        build: BuildString,
         build_number: int,
         subdir: str | Subdir,
         arch: str | None = None,
@@ -315,7 +315,7 @@ class PackageRecord:
         ... )
         >>> record.build
         BuildString('hcfcfb64_0')
-        >>> record.build = "new_build_1"
+        >>> record.build = BuildString("new_build_1")
         >>> record.build
         BuildString('new_build_1')
         >>>
@@ -324,7 +324,7 @@ class PackageRecord:
         return BuildString._from_py_build_string(self._record.build)
 
     @build.setter
-    def build(self, value: str | BuildString) -> None:
+    def build(self, value: BuildString) -> None:
         self._record.build = BuildString._to_py(value)
 
     @property
@@ -482,7 +482,7 @@ class PackageRecord:
         Examples
         --------
         ```python
-        >>> record = PackageRecord("demo", "1.0", "0", 0, "noarch", flags=["optional", "future-flag"])
+        >>> record = PackageRecord("demo", "1.0", BuildString("0"), 0, "noarch", flags=["optional", "future-flag"])
         >>> record.flags
         ['optional', 'future-flag']
         >>> record.flags = ["another-future-flag"]
@@ -622,7 +622,7 @@ class PackageRecord:
         ```python
         >>> from rattler import PackageRecord
         >>> record = PackageRecord(
-        ...     name="foo", version="1.0", build="bar", build_number=0, subdir="linux-64"
+        ...     name="foo", version="1.0", build=BuildString("bar"), build_number=0, subdir="linux-64"
         ... )
         >>> record.md5 = bytes.fromhex("5e5a97795de72f8cc3baf3d9ea6327a2")
         >>> record.md5.hex()
@@ -738,7 +738,7 @@ class PackageRecord:
         ```python
         >>> from rattler import PackageRecord
         >>> record = PackageRecord(
-        ...     name="foo", version="1.0", build="bar", build_number=0, subdir="linux-64"
+        ...     name="foo", version="1.0", build=BuildString("bar"), build_number=0, subdir="linux-64"
         ... )
         >>> record.sha256 = bytes.fromhex("edd7dd24fc070fad8ca690a920d94b6312a376faa96b47c657f9ef5fe5a97dd1")
         >>> record.sha256.hex()
@@ -1022,8 +1022,8 @@ class PackageRecord:
         Examples
         --------
         ```python
-        >>> a = PackageRecord("foo", "1.0", "build_0", 0, "noarch")
-        >>> b = PackageRecord("foo", "2.0", "build_0", 0, "noarch")
+        >>> a = PackageRecord("foo", "1.0", BuildString("build_0"), 0, "noarch")
+        >>> b = PackageRecord("foo", "2.0", BuildString("build_0"), 0, "noarch")
         >>> a < b
         True
         >>>
@@ -1043,8 +1043,8 @@ class PackageRecord:
         Examples
         --------
         ```python
-        >>> a = PackageRecord("foo", "1.0", "build_0", 0, "noarch")
-        >>> b = PackageRecord("foo", "2.0", "build_0", 0, "noarch")
+        >>> a = PackageRecord("foo", "1.0", BuildString("build_0"), 0, "noarch")
+        >>> b = PackageRecord("foo", "2.0", BuildString("build_0"), 0, "noarch")
         >>> a <= b
         True
         >>>
@@ -1064,8 +1064,8 @@ class PackageRecord:
         Examples
         --------
         ```python
-        >>> a = PackageRecord("foo", "2.0", "build_0", 0, "noarch")
-        >>> b = PackageRecord("foo", "1.0", "build_0", 0, "noarch")
+        >>> a = PackageRecord("foo", "2.0", BuildString("build_0"), 0, "noarch")
+        >>> b = PackageRecord("foo", "1.0", BuildString("build_0"), 0, "noarch")
         >>> a > b
         True
         >>>
@@ -1085,8 +1085,8 @@ class PackageRecord:
         Examples
         --------
         ```python
-        >>> a = PackageRecord("foo", "2.0", "build_0", 0, "noarch")
-        >>> b = PackageRecord("foo", "1.0", "build_0", 0, "noarch")
+        >>> a = PackageRecord("foo", "2.0", BuildString("build_0"), 0, "noarch")
+        >>> b = PackageRecord("foo", "1.0", BuildString("build_0"), 0, "noarch")
         >>> a >= b
         True
         >>>
