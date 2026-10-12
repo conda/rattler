@@ -125,7 +125,8 @@ mod tests {
         let mut package_record = PackageRecord::new(
             PackageName::try_from(name).unwrap(),
             Version::from_str(version).unwrap(),
-            build.parse::<BuildString>().unwrap(),
+            // Digests must cover legacy builds that predate CEP26 validation.
+            BuildString::new_unchecked(build),
         );
         package_record.sha256 = sha256.map(|hex| parse_digest_from_hex::<Sha256>(hex).unwrap());
         RepoDataRecord {
