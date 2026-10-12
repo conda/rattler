@@ -4,7 +4,16 @@
         "formatComments": true,
         "braceSpacing": false,
     },
-    "excludes": [ "**/*-lock.json", "**/*.lock", "**/node_modules/", "dist/" ],
+    "excludes": [
+        "**/*-lock.json",
+        "**/*.lock",
+        "**/node_modules/",
+        "dist/",
+        // Verbatim copies of conda-lock output and the CEP-37 example; see
+        // crates/rattler_conda_lock/tests/compatibility.rs. Reformatting them
+        // would make those tests assert against our own spelling.
+        "test-data/cep37/",
+    ],
     "plugins": [
         "https://plugins.dprint.dev/g-plane/pretty_yaml-v0.5.1.wasm",
     ],

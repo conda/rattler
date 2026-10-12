@@ -1,16 +1,21 @@
 //! Command line options shared by every command that resolves an environment.
 
-use std::{collections::HashSet, str::FromStr, time::Duration};
+use std::{collections::HashSet, fmt, str::FromStr, time::Duration};
 
 use clap::ValueEnum;
 use miette::IntoDiagnostic;
 use rattler_conda_types::{
-    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
-    ParseMatchSpecOptions, Platform, RepoDataRecord, SolverResult, Version, package::BuildString,
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, ParseMatchSpecOptions,
+    RepoDataRecord, SolverResult, Subdir, Version, package::BuildString,
 };
-use rattler_solve::{IntoRepoData, SolveError, SolverImpl, SolverTask, libsolv_c, resolvo};
+use rattler_config::{ConfigBase, NoExtension};
+use rattler_repodata_gateway::{MultiSource, RepoData, Source};
+use rattler_solve::{
+    ChannelRepoData, IntoRepoData, SolveError, SolverImpl, SolverTask, libsolv_c, resolvo,
+};
 use rattler_virtual_packages::{VirtualPackageOverrides, VirtualPackages};
 
+use crate::commands::gateway::resolve_channels;
 use crate::exclude_newer::{ExcludeNewer, NamedCutoff};
 
 /// Options that configure how an environment is solved.
@@ -21,9 +26,13 @@ use crate::exclude_newer::{ExcludeNewer, NamedCutoff};
 pub struct SolverArgs {
     /// Channel to search for packages.
     ///
-    /// Example: -c conda-forge -c main
+    /// A value of the form `NAME=CHANNEL,CHANNEL,...` searches the
+    /// multichannel NAME instead, whose channels share a single channel
+    /// priority tier.
+    ///
+    /// Example: `-c conda-forge -c defaults=https://repo.anaconda.com/pkgs/main,https://repo.anaconda.com/pkgs/r`
     #[clap(short, long = "channel")]
-    channels: Option<Vec<String>>,
+    channels: Vec<ChannelArg>,
 
     /// Additional constraint that the solution must satisfy.
     ///
@@ -36,7 +45,7 @@ pub struct SolverArgs {
 
     /// The platform to solve for. Defaults to the platform of the current host.
     #[clap(long)]
-    platform: Option<Platform>,
+    platform: Option<Subdir>,
 
     /// Virtual packages to use for solving, e.g. __glibc=2.28.
     ///
@@ -86,16 +95,69 @@ pub struct SolverArgs {
     )]
     channel_cutoffs: Vec<NamedCutoff>,
 
-    /// Override the cutoff for a package, as `PACKAGE=CUTOFF`.
-    /// The cutoff accepts the same timestamp, date, and duration formats as
-    /// `--exclude-newer`.
+    /// Allow records matching this spec regardless of `--exclude-newer`, for
+    /// example `"polars ==1.43.1"`. The spec must name exactly one package.
+    /// A broad spec such as `polars` exempts every future release too.
+    /// A channel must be a real channel name or URL, not a multichannel name.
     /// May be specified multiple times.
     #[clap(
-        long = "package-cutoff",
-        value_name = "PACKAGE=CUTOFF",
+        long = "exclude-newer-exemption",
+        value_name = "SPEC",
         requires = "exclude_newer"
     )]
-    package_cutoffs: Vec<NamedCutoff>,
+    exclude_newer_exemptions: Vec<String>,
+
+    /// Policy for selecting package timestamps when using `--exclude-newer`.
+    #[clap(long, default_value = "require-timestamp")]
+    timestamp_policy: TimestampPolicy,
+}
+
+/// A `--channel` value: a single channel, or a multichannel given as
+/// `NAME=CHANNEL,CHANNEL,...`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ChannelArg {
+    /// A channel name, URL or path.
+    Channel(String),
+    /// A multichannel called `name` that consists of `channels`.
+    MultiChannel { name: String, channels: Vec<String> },
+}
+
+#[derive(Debug)]
+pub struct ParseMultiChannelArgError;
+
+impl fmt::Display for ParseMultiChannelArgError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "expected NAME=CHANNEL,CHANNEL,... (for example, defaults=pkgs/main,pkgs/r)"
+        )
+    }
+}
+
+impl std::error::Error for ParseMultiChannelArgError {}
+
+impl FromStr for ChannelArg {
+    type Err = ParseMultiChannelArgError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Only a plain name before the `=` makes a multichannel: URLs and
+        // Windows paths contain a `:` and other paths a separator, so a
+        // channel that happens to contain a `=` stays a channel.
+        let Some((name, channels)) = s
+            .split_once('=')
+            .filter(|(name, _)| !name.is_empty() && !name.contains(['/', '\\', ':']))
+        else {
+            return Ok(Self::Channel(s.to_string()));
+        };
+        let channels: Vec<String> = channels.split(',').map(str::to_string).collect();
+        if channels.iter().any(String::is_empty) {
+            return Err(ParseMultiChannelArgError);
+        }
+        Ok(Self::MultiChannel {
+            name: name.to_string(),
+            channels,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -117,6 +179,31 @@ impl From<SolveStrategy> for rattler_solve::SolveStrategy {
             SolveStrategy::Highest => rattler_solve::SolveStrategy::Highest,
             SolveStrategy::Lowest => rattler_solve::SolveStrategy::LowestVersion,
             SolveStrategy::LowestDirect => rattler_solve::SolveStrategy::LowestVersionDirect,
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, Copy, ValueEnum)]
+pub enum TimestampPolicy {
+    /// Prefer the indexed timestamp, then the build timestamp, and allow
+    /// packages that have neither.
+    AllowMissing,
+
+    /// Prefer the indexed timestamp, then the build timestamp, and reject
+    /// packages that have neither.
+    #[default]
+    RequireTimestamp,
+
+    /// Use only the indexed timestamp and reject packages without one.
+    RequireIndexedTimestamp,
+}
+
+impl From<TimestampPolicy> for rattler_solve::TimestampPolicy {
+    fn from(value: TimestampPolicy) -> Self {
+        match value {
+            TimestampPolicy::AllowMissing => Self::AllowMissing,
+            TimestampPolicy::RequireTimestamp => Self::RequireTimestamp,
+            TimestampPolicy::RequireIndexedTimestamp => Self::RequireIndexedTimestamp,
         }
     }
 }
@@ -172,34 +259,74 @@ impl SolverArgs {
         Self::parse_specs(&self.constraints)
     }
 
-    /// The channels to solve from, defaulting to `conda-forge`.
-    pub fn channels(&self, channel_config: &ChannelConfig) -> miette::Result<Vec<Channel>> {
+    /// The channels to solve from, in the order they were given, or the
+    /// configured channels if none were given, see [`resolve_channels`].
+    pub fn channels(
+        &self,
+        config: &ConfigBase<NoExtension>,
+        channel_config: &ChannelConfig,
+    ) -> miette::Result<Vec<Source>> {
+        if self.channels.is_empty() {
+            return Ok(resolve_channels(None, config, channel_config)?
+                .into_iter()
+                .map(Source::from)
+                .collect());
+        }
+
+        let mut names = HashSet::new();
         self.channels
-            .clone()
-            .unwrap_or_else(|| vec![String::from("conda-forge")])
-            .into_iter()
-            .map(|channel_str| Channel::from_str(channel_str, channel_config))
-            .collect::<Result<Vec<_>, _>>()
-            .into_diagnostic()
+            .iter()
+            .map(|channel| match channel {
+                ChannelArg::Channel(channel) => Channel::from_str(channel, channel_config)
+                    .map(Source::from)
+                    .into_diagnostic(),
+                ChannelArg::MultiChannel { name, channels } => {
+                    if !names.insert(name.as_str()) {
+                        return Err(miette::miette!(
+                            "multichannel '{name}' is given more than once"
+                        ));
+                    }
+                    let channels = channels
+                        .iter()
+                        .map(|channel| Channel::from_str(channel, channel_config).map(Source::from))
+                        .collect::<Result<_, _>>()
+                        .into_diagnostic()?;
+                    MultiSource::new(name.as_str(), channels)
+                        .map(Source::from)
+                        .into_diagnostic()
+                }
+            })
+            .collect()
     }
 
     /// The platform to solve for, either as given on the command line or the
     /// platform of the current host.
-    pub fn platform(&self) -> miette::Result<Platform> {
+    pub fn platform(&self) -> miette::Result<Subdir> {
         self.platform.map_or_else(crate::host_platform, Ok)
     }
 
-    /// The virtual packages to solve with, either as given on the command line
-    /// or detected from the current system.
+    /// Whether explicit CLI capabilities replace all automatic detection.
+    pub fn has_explicit_virtual_packages(&self) -> bool {
+        self.virtual_package.is_some()
+    }
+
+    /// Builtin host capabilities, with environment overrides, for detector solves.
+    pub fn builtin_virtual_packages(
+        platform: Subdir,
+    ) -> miette::Result<Vec<GenericVirtualPackage>> {
+        VirtualPackages::detect_for_platform(
+            platform,
+            &VirtualPackageOverrides::from_env(),
+            rattler::default_cache_dir().ok().as_deref(),
+        )
+        .map(|packages| packages.into_generic_virtual_packages().collect())
+        .into_diagnostic()
+    }
+
+    /// The explicitly supplied capabilities, or the target's builtin capabilities.
     pub fn virtual_packages(&self) -> miette::Result<Vec<GenericVirtualPackage>> {
         let Some(virtual_packages) = &self.virtual_package else {
-            return VirtualPackages::detect_for_platform(
-                self.platform()?,
-                &VirtualPackageOverrides::from_env(),
-                rattler::default_cache_dir().ok().as_deref(),
-            )
-            .map(|vpkgs| vpkgs.into_generic_virtual_packages().collect::<Vec<_>>())
-            .into_diagnostic();
+            return Self::builtin_virtual_packages(self.platform()?);
         };
 
         virtual_packages
@@ -259,21 +386,15 @@ impl SolverArgs {
                 .apply_to_channel(exclude_newer, channel, now);
         }
 
-        let mut packages = HashSet::new();
-        for override_ in &self.package_cutoffs {
-            let package = PackageName::from_str(&override_.name).into_diagnostic()?;
-            if !packages.insert(package.clone()) {
-                return Err(miette::miette!(
-                    "duplicate cutoff for package '{}'",
-                    override_.name
-                ));
-            }
-            exclude_newer = override_
-                .cutoff
-                .apply_to_package(exclude_newer, package, now);
+        for spec in &self.exclude_newer_exemptions {
+            let spec =
+                MatchSpec::from_str(spec, ParseMatchSpecOptions::strict()).into_diagnostic()?;
+            exclude_newer = exclude_newer.with_exemption(spec).into_diagnostic()?;
         }
 
-        Ok(Some(exclude_newer))
+        Ok(Some(
+            exclude_newer.with_timestamp_policy(self.timestamp_policy.into()),
+        ))
     }
 
     /// Solves the task with the selected backend.
@@ -297,6 +418,21 @@ impl SolverArgs {
             records.retain(|r| !specs.iter().any(|s| s.matches(&r.package_record)));
         }
     }
+}
+
+/// A solver task for `repo_data` that keeps track of the multichannel each
+/// channel was requested through, so the channels of a multichannel share a
+/// channel priority tier.
+pub fn task_for_repodata(
+    repo_data: &[RepoData],
+) -> SolverTask<'_, Vec<ChannelRepoData<'_, &RepoData>>> {
+    repo_data
+        .iter()
+        .map(|repo_data| ChannelRepoData {
+            records: repo_data,
+            multi_channel: repo_data.multi_channel(),
+        })
+        .collect()
 }
 
 #[cfg(test)]

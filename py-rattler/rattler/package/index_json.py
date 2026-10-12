@@ -1,8 +1,9 @@
 from __future__ import annotations
-import os
+
 import datetime
+import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Optional, Union
+from typing import TYPE_CHECKING
 
 from rattler.package.build_string import BuildString
 from rattler.package.no_arch_type import NoArchLiteral, NoArchType
@@ -73,7 +74,7 @@ class IndexJson:
         return IndexJson._from_py_index_json(PyIndexJson.from_str(string))
 
     @classmethod
-    async def from_remote_url(cls, client: Client, url: str) -> Optional[IndexJson]:
+    async def from_remote_url(cls, client: Client, url: str) -> IndexJson | None:
         """
         Fetches `info/index.json` from a remote package archive URL.
         """
@@ -119,7 +120,7 @@ class IndexJson:
         self._inner.version = (value._version, value._source)
 
     @property
-    def arch(self) -> Optional[str]:
+    def arch(self) -> str | None:
         """
         Optionally, the architecture the package is build for.
 
@@ -140,7 +141,7 @@ class IndexJson:
         return None
 
     @arch.setter
-    def arch(self, value: Optional[str]) -> None:
+    def arch(self, value: str | None) -> None:
         self._inner.arch = value
 
     @property
@@ -190,7 +191,7 @@ class IndexJson:
         self._inner.build_number = value
 
     @property
-    def constrains(self) -> List[str]:
+    def constrains(self) -> list[str]:
         """
         The package constraints of the package.
 
@@ -208,11 +209,11 @@ class IndexJson:
         return self._inner.constrains
 
     @constrains.setter
-    def constrains(self, value: List[str]) -> None:
+    def constrains(self, value: list[str]) -> None:
         self._inner.constrains = value
 
     @property
-    def depends(self) -> List[str]:
+    def depends(self) -> list[str]:
         """
         The dependencies of the package.
 
@@ -230,11 +231,11 @@ class IndexJson:
         return self._inner.depends
 
     @depends.setter
-    def depends(self, value: List[str]) -> None:
+    def depends(self, value: list[str]) -> None:
         self._inner.set_depends(value)
 
     @property
-    def extra_depends(self) -> Dict[str, List[str]]:
+    def extra_depends(self) -> dict[str, list[str]]:
         """
         Extra dependency groups that can be selected using `foobar[extras=["scientific"]]`.
         The implementation is specified in this CEP: <https://github.com/conda/ceps/pull/111>
@@ -256,11 +257,11 @@ class IndexJson:
         return self._inner.extra_depends
 
     @extra_depends.setter
-    def extra_depends(self, value: Dict[str, List[str]]) -> None:
+    def extra_depends(self, value: dict[str, list[str]]) -> None:
         self._inner.extra_depends = value
 
     @property
-    def features(self) -> Optional[str]:
+    def features(self) -> str | None:
         """
         Features are a deprecated way to specify different feature sets for the conda solver. This is not
         supported anymore and should not be used. Instead, `mutex` packages should be used to specify
@@ -282,11 +283,11 @@ class IndexJson:
         return None
 
     @features.setter
-    def features(self, value: Optional[str]) -> None:
+    def features(self, value: str | None) -> None:
         self._inner.set_features(value)
 
     @property
-    def flags(self) -> List[str]:
+    def flags(self) -> list[str]:
         """
         Plain string flags used to select package variants.
 
@@ -310,11 +311,11 @@ class IndexJson:
         return self._inner.flags
 
     @flags.setter
-    def flags(self, value: List[str]) -> None:
+    def flags(self, value: list[str]) -> None:
         self._inner.flags = value
 
     @property
-    def license(self) -> Optional[str]:
+    def license(self) -> str | None:
         """
         Optionally, the license.
 
@@ -335,11 +336,11 @@ class IndexJson:
         return None
 
     @license.setter
-    def license(self, value: Optional[str]) -> None:
+    def license(self, value: str | None) -> None:
         self._inner.set_license(value)
 
     @property
-    def license_family(self) -> Optional[str]:
+    def license_family(self) -> str | None:
         """
         Optionally, the license.
 
@@ -359,7 +360,7 @@ class IndexJson:
         return None
 
     @license_family.setter
-    def license_family(self, value: Optional[str]) -> None:
+    def license_family(self, value: str | None) -> None:
         self._inner.set_license_family(value)
 
     @property
@@ -421,7 +422,7 @@ class IndexJson:
         self._inner.noarch = value._noarch
 
     @property
-    def platform(self) -> Optional[str]:
+    def platform(self) -> str | None:
         """
         Optionally, the OS the package is build for.
 
@@ -442,11 +443,11 @@ class IndexJson:
         return None
 
     @platform.setter
-    def platform(self, value: Optional[str]) -> None:
+    def platform(self, value: str | None) -> None:
         self._inner.set_platform(value)
 
     @property
-    def purls(self) -> Optional[List[str]]:
+    def purls(self) -> list[str] | None:
         """
         A list of Package URLs identifying this package.
         See this CEP: <https://github.com/conda/ceps/pull/63>
@@ -471,11 +472,11 @@ class IndexJson:
         return self._inner.purls
 
     @purls.setter
-    def purls(self, value: Optional[List[str]]) -> None:
+    def purls(self, value: list[str] | None) -> None:
         self._inner.purls = value
 
     @property
-    def python_site_packages_path(self) -> Optional[str]:
+    def python_site_packages_path(self) -> str | None:
         """
         Optionally a path within the environment of the site-packages directory. This field is only
         present for python interpreter packages.
@@ -498,11 +499,11 @@ class IndexJson:
         return self._inner.python_site_packages_path
 
     @python_site_packages_path.setter
-    def python_site_packages_path(self, value: Optional[str]) -> None:
+    def python_site_packages_path(self, value: str | None) -> None:
         self._inner.python_site_packages_path = value
 
     @property
-    def repodata_revision(self) -> Optional[str]:
+    def repodata_revision(self) -> str | None:
         """
         The repodata revision required by this package, formatted as `vN` (e.g. `"v3"`).
 
@@ -533,11 +534,11 @@ class IndexJson:
         return self._inner.repodata_revision
 
     @repodata_revision.setter
-    def repodata_revision(self, value: Optional[Union[str, int]]) -> None:
+    def repodata_revision(self, value: str | int | None) -> None:
         self._inner.repodata_revision = None if value is None else str(value)
 
     @property
-    def subdir(self) -> Optional[str]:
+    def subdir(self) -> str | None:
         """
         The subdirectory that contains this package.
 
@@ -558,11 +559,11 @@ class IndexJson:
         return None
 
     @subdir.setter
-    def subdir(self, value: Optional[str]) -> None:
+    def subdir(self, value: str | None) -> None:
         self._inner.set_subdir(value)
 
     @property
-    def timestamp(self) -> Optional[datetime.datetime]:
+    def timestamp(self) -> datetime.datetime | None:
         """
         The timestamp when this package was created
 
@@ -586,7 +587,7 @@ class IndexJson:
         return None
 
     @timestamp.setter
-    def timestamp(self, value: Optional[datetime.datetime]) -> None:
+    def timestamp(self, value: datetime.datetime | None) -> None:
         if value is None:
             self._inner.timestamp = None
         else:
@@ -594,7 +595,7 @@ class IndexJson:
             self._inner.timestamp = int(value.timestamp() * 1000.0)
 
     @property
-    def track_features(self) -> List[str]:
+    def track_features(self) -> list[str]:
         """
         Track features are nowadays only used to downweight packages (ie. give them less priority). To
         that effect, the number of track features is counted (number of commas) and the package is downweighted
@@ -614,7 +615,7 @@ class IndexJson:
         return self._inner.track_features
 
     @track_features.setter
-    def track_features(self, value: List[str]) -> None:
+    def track_features(self, value: list[str]) -> None:
         self._inner.set_track_features(value)
 
     @classmethod

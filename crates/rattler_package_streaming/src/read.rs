@@ -164,9 +164,10 @@ fn unpack_tar_archive_sync<R: Read>(
 ) -> Result<(), ExtractError> {
     archive.set_preserve_mtime(false);
 
-    // `dunce` keeps Windows paths in their normal form instead of the `\\?\`
-    // verbatim form that `std::fs::canonicalize` returns.
-    let destination = dunce::canonicalize(destination).map_err(ExtractError::IoError)?;
+    // Canonicalized so the containment checks, which canonicalize each
+    // parent, compare paths of the same form. On Windows this is the `\\?\`
+    // verbatim form, which also lifts the MAX_PATH limit.
+    let destination = std::fs::canonicalize(destination).map_err(ExtractError::IoError)?;
     let mut validated_parents: HashSet<PathBuf> = HashSet::new();
 
     for entry in archive.entries().map_err(ExtractError::IoError)? {
@@ -321,9 +322,10 @@ fn ensure_dir_inside(destination: &Path, dir: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Errors when the canonical form of `path` is not inside `destination`.
+/// Errors when the canonical form of `path` is not inside `destination`,
+/// which must come from [`std::fs::canonicalize`].
 fn validate_inside(destination: &Path, path: &Path) -> std::io::Result<()> {
-    let canonical = dunce::canonicalize(path)?;
+    let canonical = std::fs::canonicalize(path)?;
     if canonical.starts_with(destination) {
         Ok(())
     } else {

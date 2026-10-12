@@ -1,6 +1,8 @@
 use std::{path::Path, sync::Arc};
 
-use rattler_conda_types::{Channel, ChannelRelations, PackageName, RepodataRevisions};
+use rattler_conda_types::{
+    Channel, ChannelRelations, DetectorRegistrationMetadata, PackageName, RepodataRevisions,
+};
 
 use crate::{
     Reporter,
@@ -125,5 +127,9 @@ impl SubdirClient for LocalSubdirClient {
 
     fn channel_relations(&self) -> Option<&ChannelRelations> {
         self.sparse.channel_relations()
+    }
+
+    fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
+        self.sparse.virtual_package_detectors()
     }
 }

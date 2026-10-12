@@ -6,7 +6,7 @@ use crate::{
     package_cache::PackageCache,
 };
 use futures::TryFutureExt;
-use rattler_conda_types::{Platform, PrefixRecord, RepoDataRecord, Version, prefix::Prefix};
+use rattler_conda_types::{PrefixRecord, RepoDataRecord, Subdir, Version, prefix::Prefix};
 use rattler_networking::LazyClient;
 use rattler_networking::retry_policies::default_retry_policy;
 use transaction::{Transaction, TransactionOperation};
@@ -170,7 +170,7 @@ pub async fn download_and_get_prefix_record(
     rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
     let py_info =
-        PythonInfo::from_version(&Version::from_str("3.10").unwrap(), None, Platform::Linux64)
+        PythonInfo::from_version(&Version::from_str("3.10").unwrap(), None, Subdir::Linux64)
             .unwrap();
     let install_options = InstallOptions {
         python_info: Some(py_info),

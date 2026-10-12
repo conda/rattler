@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use miette::IntoDiagnostic;
-use rattler_conda_types::{GenericVirtualPackage, Platform};
+use rattler_conda_types::{GenericVirtualPackage, Subdir};
 use rattler_virtual_packages::{VirtualPackageOverrides, VirtualPackages};
 use serde::Serialize;
 
@@ -53,7 +53,7 @@ fn detect(cache_dir: Option<&std::path::Path>) -> miette::Result<Vec<String>> {
 #[derive(Debug, Serialize)]
 struct Info {
     version: &'static str,
-    platform: Option<Platform>,
+    platform: Option<Subdir>,
     tls_backend: Vec<&'static str>,
     cache_dir: Option<PathBuf>,
     auth_storage: Option<PathBuf>,
@@ -91,7 +91,7 @@ pub fn info(opt: Opt) -> miette::Result<()> {
 
     let info = Info {
         version: env!("CARGO_PKG_VERSION"),
-        platform: Platform::current(),
+        platform: Subdir::current(),
         tls_backend: tls_backend(),
         cache_dir,
         auth_storage: auth_storage_path(),

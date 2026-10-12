@@ -7,6 +7,10 @@ use url::Url;
 
 /// Download an arbitrary file.
 #[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler download https://conda.anaconda.org/conda-forge/noarch/repodata.json
+  rattler download https://example.com/file.tar.gz -o ./file.tar.gz
+  rattler download https://example.com/index.json -o - | jq .    # stream to stdout"#)]
 pub struct Opt {
     /// URL of the file to download
     #[clap(required = true)]
@@ -53,15 +57,14 @@ pub async fn download(opt: Opt, offline: bool) -> miette::Result<()> {
             let chunk = chunk
                 .into_diagnostic()
                 .with_context(|| format!("failed to read response body from {}", opt.url))?;
-            stdout
-                .write_all(&chunk)
-                .into_diagnostic()
-                .context("failed to write to stdout")?;
+            // Stop downloading when whatever reads our stdout went away.
+            if !super::ignore_broken_pipe(stdout.write_all(&chunk))
+                .context("failed to write to stdout")?
+            {
+                return Ok(());
+            }
         }
-        stdout
-            .flush()
-            .into_diagnostic()
-            .context("failed to flush stdout")?;
+        super::ignore_broken_pipe(stdout.flush()).context("failed to flush stdout")?;
     } else {
         // Download into a temporary file next to the output and only move it
         // into place once the download completed. An interrupted download

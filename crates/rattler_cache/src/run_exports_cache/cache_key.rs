@@ -58,7 +58,7 @@ impl CacheKey {
         };
         let segment = format!(
             "{}-{}-{}{}{}",
-            &self.name, &self.version, &self.build_string, hash, self.extension
+            self.name, self.version, self.build_string, hash, self.extension
         );
         ensure_safe_path_component(&segment)?;
         Ok(segment)

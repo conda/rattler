@@ -23,7 +23,7 @@ use super::{
 use crate::match_spec::condition::parse_condition_with_options;
 use crate::{
     Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError, ParseMatchSpecOptions,
-    ParseStrictness, ParseVersionError, Platform, VersionSpec,
+    ParseStrictness, ParseVersionError, Subdir, VersionSpec,
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
     flags::is_valid_matchspec_flag,
     match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError},
@@ -175,7 +175,7 @@ fn starts_bracket_fields(input: &str) -> bool {
     // Any identifier followed by `=` marks a field section; unknown keys are
     // rejected later with a precise error. A key whitelist here would leave
     // quotes untracked for unknown keys, so a `#` inside a quoted value would
-    // be stripped as a comment. Platform selectors (`[linux-64]`) and glob
+    // be stripped as a comment. Subdir selectors (`[linux-64]`) and glob
     // character classes have no `=` and still fall through.
     !key.is_empty() && contents[key_end..].trim_start().starts_with('=')
 }
@@ -1023,6 +1023,13 @@ impl NamelessMatchSpec {
 fn parse_channel_and_subdir(
     input: &str,
 ) -> Result<(Option<Channel>, Option<String>), ParseMatchSpecError> {
+    // An empty matchspec (such as caused by ::some-package)
+    // does not have channel or namespace. See https://github.com/conda/rattler/issues/2736
+    let input = input.trim();
+    if input.is_empty() {
+        return Ok((None, None));
+    }
+
     // The root directory only resolves relative path channels. With an
     // empty-root fallback those fail with a parse error instead of panicking
     // when the current directory is unavailable.
@@ -1031,7 +1038,7 @@ fn parse_channel_and_subdir(
 
     if let Some((channel, subdir)) = input.rsplit_once('/') {
         // If the subdir is a platform, we assume the channel has a subdir
-        if Platform::from_str(subdir).is_ok() {
+        if Subdir::from_str(subdir).is_ok() {
             return Ok((
                 Some(Channel::from_str(channel, &channel_config)?),
                 Some(subdir.to_string()),
@@ -1737,6 +1744,27 @@ mod tests {
     fn test_empty_namespace() {
         let spec = MatchSpec::from_str("conda-forge::foo", Strict).unwrap();
         assert!(spec.namespace.is_none());
+    }
+
+    /// An empty channel component (e.g. the leading `::` in `::foo`) means no
+    /// channel was specified at all, mirroring how an empty namespace
+    /// component is handled above. Regression tests for <https://github.com/conda/rattler/issues/2736>
+    #[test]
+    fn test_empty_channel() {
+        let spec = MatchSpec::from_str("::foo", Strict).unwrap();
+        assert!(spec.channel.is_none());
+        assert!(spec.namespace.is_none());
+
+        let spec = MatchSpec::from_str(":ns:foo", Strict).unwrap();
+        assert!(spec.channel.is_none());
+        assert_eq!(spec.namespace.as_deref(), Some("ns"));
+
+        let nameless = NamelessMatchSpec::from_str("::", Strict).unwrap();
+        assert!(nameless.channel.is_none());
+
+        // The bracket form `[channel=""]` must behave the same way.
+        let spec = MatchSpec::from_str("foo[channel=\"\"]", Strict).unwrap();
+        assert!(spec.channel.is_none());
     }
 
     #[test]

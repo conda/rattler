@@ -1,15 +1,16 @@
 from __future__ import annotations
-from typing import Optional, TYPE_CHECKING
+
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from rattler.lock.channel import LockChannel
 
-from rattler.rattler import PyChannel
 from rattler.channel.channel_config import ChannelConfig
+from rattler.rattler import PyChannel
 
 
 class Channel:
-    def __init__(self, name: str, channel_configuration: Optional[ChannelConfig] = None) -> None:
+    def __init__(self, name: str, channel_configuration: ChannelConfig | None = None) -> None:
         """
         Create a new channel.
 
@@ -47,7 +48,7 @@ class Channel:
         return LockChannel(self.base_url)
 
     @property
-    def name(self) -> Optional[str]:
+    def name(self) -> str | None:
         """
         Return the name of this channel.
 

@@ -348,6 +348,28 @@ impl LockFileBuilder {
         Ok(self)
     }
 
+    /// Records that an environment targets a platform, even when no package is
+    /// selected for it. Adding packages does this implicitly; call this to keep
+    /// a platform that resolves to an empty package set.
+    pub fn add_environment_platform(
+        &mut self,
+        environment: impl Into<String>,
+        platform_name: &str,
+    ) -> Result<&mut Self, ParseCondaLockError> {
+        let environment = environment.into();
+        let platform_index = self.find_platform_index(platform_name).map_err(|_e| {
+            ParseCondaLockError::UnknownPlatform {
+                environment: environment.clone(),
+                platform: platform_name.to_string(),
+            }
+        })?;
+        self.environment_data(environment)
+            .packages
+            .entry(platform_index)
+            .or_default();
+        Ok(self)
+    }
+
     /// Registers a conda package into the lockfile's package list (with
     /// deduplication/merging) without adding it to any environment. Returns
     /// a [`PackageHandle`] that can be inserted into an
@@ -576,7 +598,7 @@ mod test {
     use rattler_conda_types::{
         MatchSpec, PackageName, PackageRecord, ParseMatchSpecOptions,
         ParseStrictness::Strict,
-        Platform, RepodataRevision, Version,
+        RepodataRevision, Subdir, Version,
         package::{BuildString, DistArchiveIdentifier},
     };
     use url::Url;
@@ -609,7 +631,7 @@ mod test {
         let lock_file = LockFile::builder()
             .with_platforms(vec![PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: rattler_conda_types::Platform::Linux64,
+                subdir: rattler_conda_types::Subdir::Linux64,
                 virtual_packages: Vec::new(),
             }])
             .unwrap()
@@ -720,7 +742,7 @@ mod test {
     fn linux_64_platform() -> PlatformData {
         PlatformData {
             name: PlatformName::try_from("linux-64").unwrap(),
-            subdir: rattler_conda_types::Platform::Linux64,
+            subdir: rattler_conda_types::Subdir::Linux64,
             virtual_packages: Vec::new(),
         }
     }
@@ -957,7 +979,7 @@ mod test {
         let lock_file = LockFile::builder()
             .with_platforms(vec![PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: Platform::Linux64,
+                subdir: Subdir::Linux64,
                 virtual_packages: Vec::new(),
             }])
             .unwrap()
@@ -990,7 +1012,7 @@ mod test {
         let lock_file = LockFile::builder()
             .with_platforms(vec![PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: rattler_conda_types::Platform::Linux64,
+                subdir: rattler_conda_types::Subdir::Linux64,
                 virtual_packages: Vec::new(),
             }])
             .unwrap()
@@ -1045,7 +1067,7 @@ mod test {
             let lock_file = LockFile::builder()
                 .with_platforms(vec![PlatformData {
                     name: PlatformName::try_from("linux-64").unwrap(),
-                    subdir: rattler_conda_types::Platform::Linux64,
+                    subdir: rattler_conda_types::Subdir::Linux64,
                     virtual_packages: Vec::new(),
                 }])
                 .unwrap()
@@ -1267,7 +1289,7 @@ mod test {
         let mut builder = LockFile::builder()
             .with_platforms(vec![PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: rattler_conda_types::Platform::Linux64,
+                subdir: rattler_conda_types::Subdir::Linux64,
                 virtual_packages: Vec::new(),
             }])
             .unwrap();

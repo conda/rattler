@@ -1,7 +1,8 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Optional
-from rattler.channel.channel import Channel
 
+from typing import TYPE_CHECKING
+
+from rattler.channel.channel import Channel
 from rattler.rattler import PyNamelessMatchSpec
 
 if TYPE_CHECKING:
@@ -57,35 +58,35 @@ class NamelessMatchSpec:
             )
 
     @property
-    def version(self) -> Optional[str]:
+    def version(self) -> str | None:
         """
         The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
         """
         return self._nameless_match_spec.version
 
     @property
-    def build(self) -> Optional[str]:
+    def build(self) -> str | None:
         """
         The build string of the package (e.g. `py37_0`, `py37h6de7cb9_0`, `py*`)
         """
         return self._nameless_match_spec.build
 
     @property
-    def build_number(self) -> Optional[str]:
+    def build_number(self) -> str | None:
         """
         The build number of the package.
         """
         return self._nameless_match_spec.build_number
 
     @property
-    def file_name(self) -> Optional[str]:
+    def file_name(self) -> str | None:
         """
         Match the specific filename of the package.
         """
         return self._nameless_match_spec.file_name
 
     @property
-    def channel(self) -> Optional[Channel]:
+    def channel(self) -> Channel | None:
         """
         The channel of the package.
         """
@@ -93,40 +94,40 @@ class NamelessMatchSpec:
         return channel and Channel._from_py_channel(channel)
 
     @property
-    def subdir(self) -> Optional[str]:
+    def subdir(self) -> str | None:
         """
         The subdir of the channel.
         """
         return self._nameless_match_spec.subdir
 
     @property
-    def namespace(self) -> Optional[str]:
+    def namespace(self) -> str | None:
         """
         The namespace of the package.
         """
         return self._nameless_match_spec.namespace
 
     @property
-    def md5(self) -> Optional[bytes]:
+    def md5(self) -> bytes | None:
         """
         The md5 hash of the package.
         """
         return self._nameless_match_spec.md5
 
     @property
-    def sha256(self) -> Optional[bytes]:
+    def sha256(self) -> bytes | None:
         """
         The sha256 hash of the package.
         """
         return self._nameless_match_spec.sha256
 
     @property
-    def extras(self) -> Optional[list[str]]:
+    def extras(self) -> list[str] | None:
         """The extras (optional dependencies) of the package."""
         return self._nameless_match_spec.extras
 
     @property
-    def condition(self) -> Optional[str]:
+    def condition(self) -> str | None:
         """The condition under which this match spec applies."""
         return self._nameless_match_spec.condition
 

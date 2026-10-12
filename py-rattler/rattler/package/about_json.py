@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from rattler.rattler import PyAboutJson
 
@@ -78,7 +78,7 @@ class AboutJson:
         return AboutJson._from_py_about_json(PyAboutJson.from_str(string))
 
     @classmethod
-    async def from_remote_url(cls, client: Client, url: str) -> Optional[AboutJson]:
+    async def from_remote_url(cls, client: Client, url: str) -> AboutJson | None:
         """
         Fetches `info/about.json` from a remote package archive URL.
         """
@@ -106,7 +106,7 @@ class AboutJson:
         return PyAboutJson.package_path()
 
     @property
-    def channels(self) -> List[str]:
+    def channels(self) -> list[str]:
         """
         A list of channels that where used during the build.
 
@@ -125,11 +125,11 @@ class AboutJson:
         return self._inner.channels
 
     @channels.setter
-    def channels(self, value: List[str]) -> None:
+    def channels(self, value: list[str]) -> None:
         self._inner.channels = value
 
     @property
-    def description(self) -> Optional[str]:
+    def description(self) -> str | None:
         """
         Description of the package.
 
@@ -151,11 +151,11 @@ class AboutJson:
         return None
 
     @description.setter
-    def description(self, value: Optional[str]) -> None:
+    def description(self, value: str | None) -> None:
         self._inner.description = value
 
     @property
-    def dev_url(self) -> List[str]:
+    def dev_url(self) -> list[str]:
         """
         A list of URLs to the development page of the package.
 
@@ -174,11 +174,11 @@ class AboutJson:
         return self._inner.dev_url
 
     @dev_url.setter
-    def dev_url(self, value: List[str]) -> None:
+    def dev_url(self, value: list[str]) -> None:
         self._inner.dev_url = value
 
     @property
-    def doc_url(self) -> List[str]:
+    def doc_url(self) -> list[str]:
         """
         A list of URLs to the documentation of the package.
 
@@ -197,11 +197,11 @@ class AboutJson:
         return self._inner.doc_url
 
     @doc_url.setter
-    def doc_url(self, value: List[str]) -> None:
+    def doc_url(self, value: list[str]) -> None:
         self._inner.doc_url = value
 
     @property
-    def home(self) -> List[str]:
+    def home(self) -> list[str]:
         """
         A list URL to the homepage of the package.
 
@@ -220,7 +220,7 @@ class AboutJson:
         return self._inner.home
 
     @home.setter
-    def home(self, value: List[str]) -> None:
+    def home(self, value: list[str]) -> None:
         self._inner.home = value
 
     @property
@@ -247,7 +247,7 @@ class AboutJson:
         self._inner.extra = value
 
     @property
-    def license(self) -> Optional[str]:
+    def license(self) -> str | None:
         """
         The license of the package.
 
@@ -269,11 +269,11 @@ class AboutJson:
         return None
 
     @license.setter
-    def license(self, value: Optional[str]) -> None:
+    def license(self, value: str | None) -> None:
         self._inner.license = value
 
     @property
-    def license_family(self) -> Optional[str]:
+    def license_family(self) -> str | None:
         """
         The license family of the package.
 
@@ -296,11 +296,11 @@ class AboutJson:
         return None
 
     @license_family.setter
-    def license_family(self, value: Optional[str]) -> None:
+    def license_family(self, value: str | None) -> None:
         self._inner.license_family = value
 
     @property
-    def source_url(self) -> Optional[str]:
+    def source_url(self) -> str | None:
         """
         The URL to the latest source code of the package.
 
@@ -322,11 +322,11 @@ class AboutJson:
         return None
 
     @source_url.setter
-    def source_url(self, value: Optional[str]) -> None:
+    def source_url(self, value: str | None) -> None:
         self._inner.source_url = value
 
     @property
-    def summary(self) -> Optional[str]:
+    def summary(self) -> str | None:
         """
         A Short summary description.
 
@@ -348,7 +348,7 @@ class AboutJson:
         return None
 
     @summary.setter
-    def summary(self, value: Optional[str]) -> None:
+    def summary(self, value: str | None) -> None:
         self._inner.summary = value
 
     @classmethod

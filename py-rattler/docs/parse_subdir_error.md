@@ -1,0 +1,3 @@
+# ParseSubdirError
+
+::: rattler.exceptions.ParseSubdirError

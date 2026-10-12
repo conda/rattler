@@ -3,7 +3,6 @@ use std::io::Write;
 use clap::{CommandFactory, Parser, ValueEnum};
 use clap_complete::{Generator, shells};
 use clap_complete_nushell::Nushell;
-use miette::IntoDiagnostic;
 
 use crate::Opt as CommandArgs;
 
@@ -62,6 +61,5 @@ pub fn completion(args: Opt) -> miette::Result<()> {
     let mut buf = Vec::new();
     clap_complete::generate(args.shell, &mut CommandArgs::command(), "rattler", &mut buf);
 
-    std::io::stdout().write_all(&buf).into_diagnostic()?;
-    Ok(())
+    super::write_all_to_stdout(&buf)
 }

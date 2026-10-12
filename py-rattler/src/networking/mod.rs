@@ -10,8 +10,8 @@ use url::Url;
 use std::{path::PathBuf, str::FromStr, sync::Arc};
 
 use crate::{
-    channel::PyChannel, error::PyRattlerError, platform::PyPlatform,
-    repo_data::gateway::PyFetchRepoDataOptions, repo_data::sparse::PySparseRepoData,
+    channel::PyChannel, error::PyRattlerError, repo_data::gateway::PyFetchRepoDataOptions,
+    repo_data::sparse::PySparseRepoData, subdir::PySubdir,
 };
 use client::PyClientWithMiddleware;
 use rattler_repodata_gateway::{DownloadReporter, Reporter};
@@ -27,7 +27,7 @@ pub mod middleware;
 pub fn py_fetch_repo_data<'a>(
     py: Python<'a>,
     channels: Vec<PyChannel>,
-    platforms: Vec<PyPlatform>,
+    platforms: Vec<PySubdir>,
     cache_path: PathBuf,
     callback: Option<Bound<'a, PyAny>>,
     client: Option<PyClientWithMiddleware>,
@@ -108,8 +108,8 @@ impl Reporter for ProgressReporter {
 /// Creates a subdir urls out of channels and channels.
 fn get_subdir_urls(
     channels: Vec<PyChannel>,
-    platforms: Vec<PyPlatform>,
-) -> PyResult<Vec<(Url, PyChannel, PyPlatform)>> {
+    platforms: Vec<PySubdir>,
+) -> PyResult<Vec<(Url, PyChannel, PySubdir)>> {
     let mut urls = Vec::new();
 
     for c in channels {

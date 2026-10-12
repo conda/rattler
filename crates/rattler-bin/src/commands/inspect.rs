@@ -1,21 +1,48 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use indicatif::HumanBytes;
 use miette::{Context, IntoDiagnostic};
-use rattler_conda_types::NoArchKind;
-use rattler_conda_types::package::{AboutJson, IndexJson, PackageFile, PathsJson, RunExportsJson};
+use rattler_conda_types::package::{
+    AboutJson, CondaArchiveType, IndexJson, PackageFile, PathsJson, RunExportsJson,
+};
+use rattler_conda_types::{
+    ChannelConfig, MatchSpec, NoArchKind, ParseMatchSpecOptions, RepoDataRecord, Subdir,
+};
+use rattler_repodata_gateway::RepoData;
 use serde::Serialize;
 use url::Url;
 
+use super::gateway::{build_gateway, load_config, resolve_channels};
 use super::package_source::{PackageSource, client_for};
 
-/// Inspect package metadata from a local or remote conda package.
+/// Inspect package metadata from a local or remote conda package, or a matchspec.
 #[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler inspect ./numpy-2.1.0-py312h1234_0.conda     # metadata and the first 10 files
+  rattler inspect https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda
+  rattler inspect ./pkg.conda --json                    # machine-readable metadata
+  rattler inspect ./pkg.conda --limit -1                # list all files
+  rattler inspect numpy                                 # newest numpy on conda-forge
+  rattler inspect 'python 3.12.*' -c conda-forge -p linux-64"#)]
 pub struct Opt {
-    /// Path or URL of the conda package to inspect (.conda or .tar.bz2 archive)
+    /// Path or URL of the conda package to inspect (.conda or .tar.bz2
+    /// archive), or a matchspec.
+    ///
+    /// Anything that is not a URL, an existing file or a path ending in
+    /// `.conda` or `.tar.bz2` is treated as a matchspec: the channels are
+    /// searched and the newest matching package is inspected. The matchspec
+    /// must name exactly one package, globs and regexes are not supported.
     #[clap(required = true)]
     package: String,
+
+    /// Channels to search in when inspecting a matchspec.
+    #[clap(short, long)]
+    channels: Option<Vec<String>>,
+
+    /// Subdir to search in when inspecting a matchspec.
+    #[clap(short, long)]
+    platform: Option<Subdir>,
 
     /// Number of files to print (a negative value prints all files)
     #[clap(long, default_value_t = 10, allow_hyphen_values = true)]
@@ -40,7 +67,18 @@ struct Metadata {
 }
 
 pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
-    let source = PackageSource::parse(&opt.package);
+    let source = if is_package_location(&opt.package) {
+        if opt.channels.is_some() || opt.platform.is_some() {
+            miette::bail!(
+                "--channels and --platform can only be used when inspecting a matchspec, not a package path or URL"
+            );
+        }
+        PackageSource::parse(&opt.package)
+    } else {
+        let record = find_newest_record(&opt, offline).await?;
+        eprintln!("Inspecting {}", record.url);
+        PackageSource::Url(record.url)
+    };
     let client = client_for([&source], offline)?;
     let archive = source.open(client.as_ref()).await?;
 
@@ -82,6 +120,60 @@ pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
         print_human(&metadata, opt.limit);
     }
     Ok(())
+}
+
+/// Whether `package` refers to a package archive (a URL or a local file)
+/// rather than a matchspec.
+///
+/// URLs must have a host: `conda-forge::numpy` parses as a URL with the
+/// scheme `conda-forge` but is a matchspec with a channel.
+fn is_package_location(package: &str) -> bool {
+    matches!(PackageSource::parse(package), PackageSource::Url(url) if url.has_host())
+        || CondaArchiveType::try_from(Path::new(package)).is_some()
+        || Path::new(package).is_file()
+}
+
+/// Searches the channels for records matching the matchspec in `opt.package`
+/// and returns the newest one.
+async fn find_newest_record(opt: &Opt, offline: bool) -> miette::Result<RepoDataRecord> {
+    // Extras and flags are rejected: they select optional dependencies or
+    // variants when solving, which doesn't make much sense for a search-style
+    // query that picks a single package.
+    let matchspec = MatchSpec::from_str(&opt.package, ParseMatchSpecOptions::strict())
+    .into_diagnostic()
+    .with_context(|| {
+        format!(
+            "'{}' is not an existing file, a URL or a valid matchspec with an exact package name",
+            opt.package
+        )
+    })?;
+
+    let config = load_config()?;
+    let channel_config =
+        ChannelConfig::default_with_root_dir(std::env::current_dir().into_diagnostic()?);
+    let channels = resolve_channels(opt.channels.as_deref(), &config, &channel_config)?;
+    let platform = opt.platform.map_or_else(crate::host_platform, Ok)?;
+
+    let client = super::client::create_client_with_middleware(offline)?;
+    let gateway = build_gateway(client, &config, offline, true)?;
+    let repo_data = gateway
+        .query(channels, [platform, Subdir::NoArch], [matchspec])
+        .recursive(false)
+        .await
+        .into_diagnostic()
+        .context("failed to query repodata")?;
+
+    repo_data
+        .iter()
+        .flat_map(RepoData::iter)
+        .max()
+        .cloned()
+        .ok_or_else(|| {
+            miette::miette!(
+                "no packages found matching '{}' on {platform} or noarch",
+                opt.package
+            )
+        })
 }
 
 /// Takes a file out of a batched `read_files` result and parses it, or `None`
@@ -274,6 +366,31 @@ fn print_urls(label: &str, urls: &[Url]) {
             for url in urls {
                 println!("  - {url}");
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_package_location() {
+        for package in [
+            "https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda",
+            "./numpy-2.1.0-py312h1234_0.conda",
+            "missing-1.0-0.tar.bz2",
+        ] {
+            assert!(
+                is_package_location(package),
+                "{package} should be a package"
+            );
+        }
+        for matchspec in ["numpy", "python 3.12.*", "conda-forge::numpy >=2"] {
+            assert!(
+                !is_package_location(matchspec),
+                "{matchspec} should be a matchspec"
+            );
         }
     }
 }

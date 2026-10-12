@@ -1,0 +1,117 @@
+---
+source: crates/rattler_conda_lock/tests/error_messages.rs
+expression: report_all
+---
+# invalid package name
+kind: InvalidPackageName { manager: Conda }
+  × package[0].name: invalid conda package name
+    ╭─[conda-lock.yml:11:11]
+ 10 │ package:
+ 11 │   - name: 'py thon'
+    ·           ────┬────
+    ·               ╰── invalid conda package name
+ 12 │     version: '3.13.1'
+    ╰────
+
+# invalid version
+kind: InvalidVersion { manager: Conda }
+  × package[0].version: invalid resolved conda package version
+    ╭─[conda-lock.yml:12:14]
+ 11 │   - name: python
+ 12 │     version: 'not a version'
+    ·              ───────┬───────
+    ·                     ╰── invalid resolved conda package version
+ 13 │     manager: conda
+    ╰────
+
+# undeclared package platform
+kind: UndeclaredPackagePlatform
+  × package[0].platform: package target is not declared in metadata.platforms
+    ╭─[conda-lock.yml:8:14]
+  7 │       used_env_vars: []
+  8 │   platforms: [linux-64]
+    ·              ┬
+    ·              ╰── declared targets
+  9 │   sources: []
+ 10 │ package:
+ 11 │   - name: python
+ 12 │     version: '3.13.1'
+ 13 │     manager: conda
+ 14 │     platform: osx-64
+    ·               ───┬──
+    ·                  ╰── package target is not declared in metadata.platforms
+ 15 │     url: https://conda.anaconda.org/conda-forge/linux-64/python-3.13.1-h9e4cc4f_0.conda
+    ╰────
+
+# empty category
+kind: EmptyCategory
+  × package[0].category: package category must not be empty
+    ╭─[conda-lock.yml:19:15]
+ 18 │     optional: false
+ 19 │     category: ''
+    ·               ─┬
+    ·                ╰── package category must not be empty
+    ╰────
+
+# duplicate package identity
+kind: DuplicatePackageIdentity
+  × package[1]: duplicate (name, manager, platform, category) package identity
+    ╭─[conda-lock.yml:11:5]
+ 10 │ package:
+ 11 │   - name: python
+    ·     ▲
+    ·     ╰── first declared here
+ 12 │     version: '3.13.1'
+ 13 │     manager: conda
+ 14 │     platform: linux-64
+ 15 │     url: https://conda.anaconda.org/conda-forge/linux-64/python-3.13.1-h9e4cc4f_0.conda
+ 16 │     hash:
+ 17 │       sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+ 18 │     optional: false
+ 19 │   - name: python
+    ·     ▲
+    ·     ╰── duplicate (name, manager, platform, category) package identity
+ 20 │     version: '3.13.1'
+    ╰────
+
+# invalid url
+kind: InvalidUrl
+  × package[0].url: expected an absolute URL without whitespace
+    ╭─[conda-lock.yml:15:10]
+ 14 │     platform: linux-64
+ 15 │     url: ./python.conda
+    ·          ───────┬──────
+    ·                 ╰── expected an absolute URL without whitespace
+ 16 │     hash:
+    ╰────
+
+# invalid build string
+kind: InvalidBuildString
+  × package[0].build: invalid conda build string
+    ╭─[conda-lock.yml:19:12]
+ 18 │     optional: false
+ 19 │     build: 'h9e4cc4f 0'
+    ·            ──────┬─────
+    ·                  ╰── invalid conda build string
+    ╰────
+
+# invalid dependency constraint
+kind: InvalidDependencyConstraint { manager: Conda }
+  × package[0].dependencies.libgcc: invalid conda dependency constraint
+    ╭─[conda-lock.yml:20:15]
+ 19 │     dependencies:
+ 20 │       libgcc: '>= <'
+    ·               ───┬──
+    ·                  ╰── invalid conda dependency constraint
+    ╰────
+
+# invalid revision on a source package
+kind: InvalidRevision
+  × package[0].hash.sha256: expected up to 64 hexadecimal digits
+    ╭─[conda-lock.yml:17:15]
+ 16 │     hash:
+ 17 │       sha256: not-a-revision
+    ·               ───────┬──────
+    ·                      ╰── expected up to 64 hexadecimal digits
+ 18 │     optional: false
+    ╰────

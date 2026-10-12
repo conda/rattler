@@ -1,6 +1,6 @@
 //! This should take a `serde_json` file, render it with all variables and then load it as a `MenuInst` struct
 
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::Path};
 
@@ -19,7 +19,7 @@ pub struct BaseMenuItemPlaceholders {
 }
 
 impl BaseMenuItemPlaceholders {
-    pub fn new(base_prefix: &Path, prefix: &Path, platform: Platform) -> Self {
+    pub fn new(base_prefix: &Path, prefix: &Path, platform: Subdir) -> Self {
         let dist_name = |p: &Path| {
             p.file_name()
                 .map_or_else(|| "empty".to_string(), |s| s.to_string_lossy().to_string())

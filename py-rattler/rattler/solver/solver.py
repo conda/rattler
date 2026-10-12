@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING, List, Literal, Optional, Sequence, Union
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Literal
 
 from rattler.channel.channel import Channel
 from rattler.channel.channel_priority import ChannelPriority
 from rattler.match_spec.match_spec import MatchSpec
-from rattler.platform.platform import Platform, PlatformLiteral
+from rattler.platform.subdir import Subdir, SubdirLiteral
 from rattler.rattler import PyMatchSpec, py_solve, py_solve_with_sparse_repodata
 from rattler.repo_data.gateway import ChannelRelationsMode, Gateway, _convert_sources
+from rattler.repo_data.multi_source import MultiSource
 from rattler.repo_data.record import RepoDataRecord
-from rattler.repo_data.sparse import SparseRepoData, PackageFormatSelection
+from rattler.repo_data.sparse import PackageFormatSelection, SparseRepoData
 from rattler.virtual_package.generic import GenericVirtualPackage
 from rattler.virtual_package.virtual_package import VirtualPackage
 
@@ -21,30 +23,36 @@ SolveStrategy = Literal["highest", "lowest", "lowest-direct"]
 """Defines the strategy to use when multiple versions of a package are available during solving."""
 
 
+TimestampPolicy = Literal["allow-missing", "require-timestamp", "require-indexed-timestamp"]
+"""Timestamp selection and missing metadata policy for cutoff filtering."""
+
+
 async def solve(
-    sources: Sequence[Union[Channel, str, RepoDataSource, SparseRepoData]],
+    sources: Sequence[Channel | MultiSource | str | RepoDataSource | SparseRepoData],
     specs: Sequence[MatchSpec | str],
-    gateway: Gateway = Gateway(),
-    platforms: Optional[Sequence[Platform | PlatformLiteral]] = None,
-    locked_packages: Optional[Sequence[RepoDataRecord]] = None,
-    pinned_packages: Optional[Sequence[RepoDataRecord]] = None,
-    virtual_packages: Optional[Sequence[GenericVirtualPackage | VirtualPackage]] = None,
-    timeout: Optional[datetime.timedelta] = None,
+    gateway: Gateway | None = None,
+    platforms: Sequence[Subdir | SubdirLiteral] | None = None,
+    locked_packages: Sequence[RepoDataRecord] | None = None,
+    pinned_packages: Sequence[RepoDataRecord] | None = None,
+    virtual_packages: Sequence[GenericVirtualPackage | VirtualPackage] | None = None,
+    timeout: datetime.timedelta | None = None,
     channel_priority: ChannelPriority = ChannelPriority.Strict,
-    exclude_newer: Optional[datetime.datetime | datetime.timedelta] = None,
+    exclude_newer: datetime.datetime | datetime.timedelta | None = None,
     strategy: SolveStrategy = "highest",
-    constraints: Optional[Sequence[MatchSpec | str]] = None,
-    channel_relations: Optional[ChannelRelationsMode] = None,
-    channel_relations_max_depth: Optional[int] = None,
+    constraints: Sequence[MatchSpec | str] | None = None,
+    channel_relations: ChannelRelationsMode | None = None,
+    channel_relations_max_depth: int | None = None,
     add_pip_as_python_dependency: bool = False,
-) -> List[RepoDataRecord]:
+    timestamp_policy: TimestampPolicy = "require-timestamp",
+) -> list[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
     that should be present in the environment.
 
     Arguments:
         sources: The sources to query for the packages. Can be channels (by name, URL,
-                 or Channel object), custom RepoDataSource implementations or SparseRepoData objects.
+                 or Channel object), `MultiSource` groups, custom RepoDataSource implementations or
+                 SparseRepoData objects.
         specs: A list of matchspec to solve.
         platforms: The platforms to query for the packages. If `None` the current platform and
                 `noarch` is used.
@@ -72,6 +80,12 @@ async def solve(
         timeout:    The maximum time the solver is allowed to run.
         exclude_newer: Exclude any record that is newer than the given datetime,
             or newer than the cutoff produced by subtracting a timedelta from now.
+            Records exactly at the cutoff are included.
+        timestamp_policy: Applies when `exclude_newer` is set. `"require-timestamp"`
+            (default) prefers `indexed_timestamp`, falls back to build `timestamp`,
+            and rejects records missing both. `"allow-missing"` uses the same
+            precedence but includes missing timestamps. `"require-indexed-timestamp"`
+            uses only `indexed_timestamp` and rejects records without it.
         strategy: The strategy to use when multiple versions of a package are available.
 
             * `"highest"`: Select the highest compatible version of all packages.
@@ -96,16 +110,17 @@ async def solve(
     Returns:
         Resolved list of `RepoDataRecord`s.
     """
+    if gateway is None:
+        gateway = Gateway()
 
-    platforms = platforms if platforms is not None else [Platform.current(), Platform("noarch")]
+    platforms = platforms if platforms is not None else [Subdir.current(), Subdir("noarch")]
 
     return [
         RepoDataRecord._from_py_record(solved_package)
         for solved_package in await py_solve(
             sources=_convert_sources(sources),
             platforms=[
-                platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
-                for platform in platforms
+                platform._inner if isinstance(platform, Subdir) else Subdir(platform)._inner for platform in platforms
             ],
             specs=[
                 spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True, True)
@@ -129,6 +144,7 @@ async def solve(
             if isinstance(exclude_newer, datetime.timedelta)
             else None,
             strategy=strategy,
+            timestamp_policy=timestamp_policy,
             constraints=[
                 constraint._match_spec
                 if isinstance(constraint, MatchSpec)
@@ -146,18 +162,19 @@ async def solve(
 
 async def solve_with_sparse_repodata(
     specs: Sequence[MatchSpec | str],
-    sparse_repodata: Sequence[SparseRepoData],
-    locked_packages: Optional[Sequence[RepoDataRecord]] = None,
-    pinned_packages: Optional[Sequence[RepoDataRecord]] = None,
-    virtual_packages: Optional[Sequence[GenericVirtualPackage | VirtualPackage]] = None,
-    timeout: Optional[datetime.timedelta] = None,
+    sparse_repodata: Sequence[SparseRepoData | MultiSource],
+    locked_packages: Sequence[RepoDataRecord] | None = None,
+    pinned_packages: Sequence[RepoDataRecord] | None = None,
+    virtual_packages: Sequence[GenericVirtualPackage | VirtualPackage] | None = None,
+    timeout: datetime.timedelta | None = None,
     channel_priority: ChannelPriority = ChannelPriority.Strict,
-    exclude_newer: Optional[datetime.datetime | datetime.timedelta] = None,
+    exclude_newer: datetime.datetime | datetime.timedelta | None = None,
     strategy: SolveStrategy = "highest",
-    constraints: Optional[Sequence[MatchSpec | str]] = None,
+    constraints: Sequence[MatchSpec | str] | None = None,
     package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA,
     add_pip_as_python_dependency: bool = False,
-) -> List[RepoDataRecord]:
+    timestamp_policy: TimestampPolicy = "require-timestamp",
+) -> list[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
     that should be present in the environment.
@@ -168,7 +185,8 @@ async def solve_with_sparse_repodata(
 
     Arguments:
         specs: A list of matchspec to solve.
-        sparse_repodata: The repodata to query for the packages.
+        sparse_repodata: The repodata to query for the packages. A `MultiSource` of
+            `SparseRepoData` makes its repodata share a single channel priority tier.
         locked_packages: Records of packages that are previously selected.
                  If the solver encounters multiple variants of a single
                  package (identified by its name), it will sort the records
@@ -192,6 +210,12 @@ async def solve_with_sparse_repodata(
         timeout:    The maximum time the solver is allowed to run.
         exclude_newer: Exclude any record that is newer than the given datetime,
             or newer than the cutoff produced by subtracting a timedelta from now.
+            Records exactly at the cutoff are included.
+        timestamp_policy: Applies when `exclude_newer` is set. `"require-timestamp"`
+            (default) prefers `indexed_timestamp`, falls back to build `timestamp`,
+            and rejects records missing both. `"allow-missing"` uses the same
+            precedence but includes missing timestamps. `"require-indexed-timestamp"`
+            uses only `indexed_timestamp` and rejects records without it.
         strategy: The strategy to use when multiple versions of a package are available.
 
             * `"highest"`: Select the highest compatible version of all packages.
@@ -209,6 +233,22 @@ async def solve_with_sparse_repodata(
     Returns:
         Resolved list of `RepoDataRecord`s.
     """
+    # Flatten the groups, remembering the group of every repodata.
+    flat_repodata: list[SparseRepoData] = []
+    multi_sources: list[str | None] = []
+    for entry in sparse_repodata:
+        if isinstance(entry, MultiSource):
+            for source in entry.sources:
+                if not isinstance(source, SparseRepoData):
+                    raise TypeError(
+                        f"MultiSource '{entry.name}' can only contain SparseRepoData here, got {type(source).__name__}"
+                    )
+                flat_repodata.append(source)
+                multi_sources.append(entry.name)
+        else:
+            flat_repodata.append(entry)
+            multi_sources.append(None)
+
     return [
         RepoDataRecord._from_py_record(solved_package)
         for solved_package in await py_solve_with_sparse_repodata(
@@ -216,7 +256,8 @@ async def solve_with_sparse_repodata(
                 spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True, True)
                 for spec in specs
             ],
-            sparse_repodata=[package._sparse for package in sparse_repodata],
+            sparse_repodata=[package._sparse for package in flat_repodata],
+            multi_sources=multi_sources,
             locked_packages=[package._record for package in locked_packages or []],
             pinned_packages=[package._record for package in pinned_packages or []],
             virtual_packages=[
@@ -235,6 +276,7 @@ async def solve_with_sparse_repodata(
             if isinstance(exclude_newer, datetime.timedelta)
             else None,
             strategy=strategy,
+            timestamp_policy=timestamp_policy,
             add_pip_as_python_dependency=add_pip_as_python_dependency,
             constraints=[
                 constraint._match_spec

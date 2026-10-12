@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.0](https://github.com/conda/rattler/compare/rattler_networking-v0.33.1...rattler_networking-v0.34.0) - 2026-10-09
+
+### Added
+
+- *(auth)* [**breaking**] reuse host credentials for explicit API origins ([#2920](https://github.com/conda/rattler/pull/2920))
+
+## [0.33.1](https://github.com/conda/rattler/compare/rattler_networking-v0.33.0...rattler_networking-v0.33.1) - 2026-10-07
+
+### Other
+
+- bump rust to 1.98.1 ([#2906](https://github.com/conda/rattler/pull/2906))
+
+## [0.33.0](https://github.com/conda/rattler/compare/rattler_networking-v0.32.1...rattler_networking-v0.33.0) - 2026-10-06
+
+### Added
+
+- *(auth)* [**breaking**] Add RFC 8693 workload-identity login ([#2897](https://github.com/conda/rattler/pull/2897))
+
+## [0.32.1](https://github.com/conda/rattler/compare/rattler_networking-v0.32.0...rattler_networking-v0.32.1) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+
+## [0.32.0](https://github.com/conda/rattler/compare/rattler_networking-v0.31.0...rattler_networking-v0.32.0) - 2026-10-05
+
+### Added
+
+- *(auth)* support audiences in existing OAuth flows ([#2880](https://github.com/conda/rattler/pull/2880))
+
+## [0.31.0](https://github.com/conda/rattler/compare/rattler_networking-v0.30.10...rattler_networking-v0.31.0) - 2026-09-29
+
+### Added
+
+- *(networking)* [**breaking**] let the S3 middleware sign with a credential provider ([#2848](https://github.com/conda/rattler/pull/2848))
+
+### Fixed
+
+- *(rattler_networking)* report sharded repodata as a 404 instead of erroring ([#2733](https://github.com/conda/rattler/pull/2733))
+
+### Other
+
+- *(networking)* [**breaking**] replace anyhow with typed thiserror ([#2869](https://github.com/conda/rattler/pull/2869))
+- *(s3)* [**breaking**] replace force_path_style with addressing_style ([#2843](https://github.com/conda/rattler/pull/2843))
+
+## [0.30.10](https://github.com/conda/rattler/compare/rattler_networking-v0.30.9...rattler_networking-v0.30.10) - 2026-09-23
+
+### Added
+
+- add standalone Sigstore attestation verification ([#2794](https://github.com/conda/rattler/pull/2794))
+
 ## [0.30.9](https://github.com/conda/rattler/compare/rattler_networking-v0.30.8...rattler_networking-v0.30.9) - 2026-09-17
 
 ### Other

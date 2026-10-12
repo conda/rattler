@@ -6,7 +6,7 @@ use rattler::install::TransactionError;
 use rattler_conda_types::{
     CanonicalMatchSpecError, ConvertSubdirError, InvalidPackageNameError,
     PackageNameMatcherParseError, ParseArchError, ParseChannelError, ParseMatchSpecError,
-    ParsePlatformError, ParseVersionError, ValidatePackageRecordsError, VersionBumpError,
+    ParseSubdirError, ParseVersionError, ValidatePackageRecordsError, VersionBumpError,
     VersionExtendError, version_spec::ParseVersionSpecError,
 };
 use rattler_lock::{ConversionError, ParseCondaLockError};
@@ -41,7 +41,7 @@ pub enum PyRattlerError {
     #[error(transparent)]
     ActivationError(#[from] ActivationError),
     #[error(transparent)]
-    ParsePlatformError(#[from] ParsePlatformError),
+    ParseSubdirError(#[from] ParseSubdirError),
     #[error(transparent)]
     ParseArchError(#[from] ParseArchError),
     #[error(transparent)]
@@ -85,6 +85,8 @@ pub enum PyRattlerError {
     #[error(transparent)]
     InstallerError(#[from] rattler::install::InstallerError),
     #[error(transparent)]
+    AttestationError(#[from] rattler_sigstore::SigstoreError),
+    #[error(transparent)]
     ParseExplicitEnvironmentSpecError(
         #[from] rattler_conda_types::ParseExplicitEnvironmentSpecError,
     ),
@@ -102,6 +104,8 @@ pub enum PyRattlerError {
     FromSdkError(#[from] rattler_s3::FromSDKError),
     #[error(transparent)]
     ConfigLoadError(#[from] rattler_config::config::LoadError),
+    #[error(transparent)]
+    VirtualPackageOverrideError(#[from] rattler_virtual_package_detectors::OverrideError),
 }
 
 fn pretty_print_error(mut err: &dyn Error) -> String {
@@ -143,8 +147,8 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::ActivationError(err) => {
                 crate::exceptions::ActivationError::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::ParsePlatformError(err) => {
-                crate::exceptions::ParsePlatformError::new_err(pretty_print_error(&err))
+            PyRattlerError::ParseSubdirError(err) => {
+                crate::exceptions::ParseSubdirError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::ParseArchError(err) => {
                 crate::exceptions::ParseArchError::new_err(pretty_print_error(&err))
@@ -202,6 +206,9 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::InstallerError(err) => {
                 crate::exceptions::InstallerError::new_err(pretty_print_error(&err))
             }
+            PyRattlerError::AttestationError(err) => {
+                crate::exceptions::AttestationError::new_err(pretty_print_error(&err))
+            }
             PyRattlerError::ParseExplicitEnvironmentSpecError(err) => {
                 crate::exceptions::ParseExplicitEnvironmentSpecError::new_err(pretty_print_error(
                     &err,
@@ -226,6 +233,9 @@ impl From<PyRattlerError> for PyErr {
                 crate::exceptions::InvalidHeaderValueError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::FromSdkError(err) => PyValueError::new_err(pretty_print_error(&err)),
+            PyRattlerError::VirtualPackageOverrideError(err) => {
+                crate::exceptions::VirtualPackageOverrideError::new_err(pretty_print_error(&err))
+            }
             PyRattlerError::ConfigLoadError(err) => {
                 crate::exceptions::ConfigError::new_err(pretty_print_error(&err))
             }

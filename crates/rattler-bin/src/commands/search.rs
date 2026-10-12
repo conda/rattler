@@ -5,11 +5,11 @@ use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::{
-    Channel, ChannelConfig, MatchSpec, ParseMatchSpecOptions, Platform, RepoDataRecord,
+    Channel, ChannelConfig, MatchSpec, ParseMatchSpecOptions, RepoDataRecord, Subdir,
 };
 use rattler_repodata_gateway::RepoData;
 
-use crate::commands::gateway::{build_gateway, load_config};
+use crate::commands::gateway::{build_gateway, load_config, resolve_channels};
 
 use super::{QueryOutputFormat, print_url_lines};
 
@@ -29,12 +29,12 @@ pub struct Opt {
     matchspec: String,
 
     /// Channels to search in
-    #[clap(short, long, default_value = "conda-forge")]
-    channels: Vec<String>,
-
-    /// Platform to search for. Defaults to the platform of the current host.
     #[clap(short, long)]
-    platform: Option<Platform>,
+    channels: Option<Vec<String>>,
+
+    /// Subdir to search for. Defaults to the platform of the current host.
+    #[clap(short, long)]
+    platform: Option<Subdir>,
 
     /// Maximum number of packages to display
     #[clap(long, default_value = "3")]
@@ -76,12 +76,8 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
     .context("failed to parse pattern as matchspec")?;
 
     // Determine the channels
-    let channels = opt
-        .channels
-        .into_iter()
-        .map(|channel_str| Channel::from_str(channel_str, &channel_config))
-        .collect::<Result<Vec<_>, _>>()
-        .into_diagnostic()?;
+    let config = load_config()?;
+    let channels = resolve_channels(opt.channels.as_deref(), &config, &channel_config)?;
 
     eprintln!(
         "Channels: {}",
@@ -92,7 +88,6 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
     let download_client = super::client::create_client_with_middleware(offline)?;
 
     // Create gateway
-    let config = load_config()?;
     let gateway = build_gateway(download_client, &config, offline, opt.sharded)?;
 
     // Show progress while loading repodata
@@ -105,7 +100,7 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
     let repo_data = gateway
         .query(
             channels,
-            [platform, Platform::NoArch],
+            [platform, Subdir::NoArch],
             vec![matchspec.clone()],
         )
         .recursive(false) // Don't fetch dependencies for search
