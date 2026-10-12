@@ -1,0 +1,76 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/rattler_azure/src/error.rs`."><title>error.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-1ed95124.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="rattler_azure" data-themes="" data-resource-suffix="" data-rustdoc-version="1.98.1 (48a229cea 2026-09-01)" data-channel="1.98.1" data-search-js="search-9944d736.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"><meta name="robots" content="noindex">
+
+</head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">rattler_azure/</div>error.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-2"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">/// Why a channel URL, host or container name failed to parse.
+<a href=#2 id=2 data-nosnippet>2</a></span><span class="attr">#[derive(Debug, thiserror::Error)]
+<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">pub enum </span>AzureUrlError {
+<a href=#4 id=4 data-nosnippet>4</a>    <span class="attr">#[error(<span class="string">"no host in Azure blob URL"</span>)]
+<a href=#5 id=5 data-nosnippet>5</a>    </span>NoHost,
+<a href=#6 id=6 data-nosnippet>6</a>
+<a href=#7 id=7 data-nosnippet>7</a>    <span class="attr">#[error(
+<a href=#8 id=8 data-nosnippet>8</a>        <span class="string">"Azure blob URL must not contain userinfo (`user:pass@host`), userinfo is invalid in blob URLs"
+<a href=#9 id=9 data-nosnippet>9</a>    </span>)]
+<a href=#10 id=10 data-nosnippet>10</a>    </span>UserInfoNotAllowed,
+<a href=#11 id=11 data-nosnippet>11</a>
+<a href=#12 id=12 data-nosnippet>12</a>    <span class="attr">#[error(<span class="string">"`{authority}` is not a valid Azure host: {reason}; expected `host` or `host:port`"</span>)]
+<a href=#13 id=13 data-nosnippet>13</a>    </span>InvalidHostAuthority { authority: String, reason: String },
+<a href=#14 id=14 data-nosnippet>14</a>
+<a href=#15 id=15 data-nosnippet>15</a>    <span class="attr">#[error(
+<a href=#16 id=16 data-nosnippet>16</a>        <span class="string">"`{0}` is not a valid Azure blob container name: container names are 3-63 characters of \
+<a href=#17 id=17 data-nosnippet>17</a>         lowercase letters, digits and hyphens, must start and end with a letter or digit, and \
+<a href=#18 id=18 data-nosnippet>18</a>         must not contain consecutive hyphens"
+<a href=#19 id=19 data-nosnippet>19</a>    </span>)]
+<a href=#20 id=20 data-nosnippet>20</a>    </span>InvalidContainerName(String),
+<a href=#21 id=21 data-nosnippet>21</a>
+<a href=#22 id=22 data-nosnippet>22</a>    <span class="attr">#[error(<span class="string">"`{value}` is not a valid URL"</span>)]
+<a href=#23 id=23 data-nosnippet>23</a>    </span>InvalidUrl {
+<a href=#24 id=24 data-nosnippet>24</a>        value: String,
+<a href=#25 id=25 data-nosnippet>25</a>        <span class="attr">#[source]
+<a href=#26 id=26 data-nosnippet>26</a>        </span>source: url::ParseError,
+<a href=#27 id=27 data-nosnippet>27</a>    },
+<a href=#28 id=28 data-nosnippet>28</a>
+<a href=#29 id=29 data-nosnippet>29</a>    <span class="attr">#[error(
+<a href=#30 id=30 data-nosnippet>30</a>        <span class="string">"Azure blob channel URL segment `{0}` is a relative path segment; a channel URL must name \
+<a href=#31 id=31 data-nosnippet>31</a>         the container it addresses directly, so write the path without `.` or `..`"
+<a href=#32 id=32 data-nosnippet>32</a>    </span>)]
+<a href=#33 id=33 data-nosnippet>33</a>    </span>DotSegmentInPath(String),
+<a href=#34 id=34 data-nosnippet>34</a>
+<a href=#35 id=35 data-nosnippet>35</a>    <span class="attr">#[error(
+<a href=#36 id=36 data-nosnippet>36</a>        <span class="string">"Azure blob channel URL segment `{0}` percent-decodes to a path separator; write `/` \
+<a href=#37 id=37 data-nosnippet>37</a>         unencoded between segments"
+<a href=#38 id=38 data-nosnippet>38</a>    </span>)]
+<a href=#39 id=39 data-nosnippet>39</a>    </span>EncodedSeparatorInPath(String),
+<a href=#40 id=40 data-nosnippet>40</a>
+<a href=#41 id=41 data-nosnippet>41</a>    <span class="attr">#[error(
+<a href=#42 id=42 data-nosnippet>42</a>        <span class="string">"Azure blob channel URL path `{path}` has an empty segment; a doubled `/` names nothing, \
+<a href=#43 id=43 data-nosnippet>43</a>         so write the path with single separators"
+<a href=#44 id=44 data-nosnippet>44</a>    </span>)]
+<a href=#45 id=45 data-nosnippet>45</a>    </span>EmptyPathSegment { path: String },
+<a href=#46 id=46 data-nosnippet>46</a>
+<a href=#47 id=47 data-nosnippet>47</a>    <span class="attr">#[error(
+<a href=#48 id=48 data-nosnippet>48</a>        <span class="string">"Azure blob channel URL segment `{segment}` contains `{escape}`, which is not a valid \
+<a href=#49 id=49 data-nosnippet>49</a>         percent-escape; write a literal `%` as `%25`"
+<a href=#50 id=50 data-nosnippet>50</a>    </span>)]
+<a href=#51 id=51 data-nosnippet>51</a>    </span>MalformedPercentEscape { segment: String, escape: String },
+<a href=#52 id=52 data-nosnippet>52</a>
+<a href=#53 id=53 data-nosnippet>53</a>    <span class="doccomment">/// Blob names are UTF-8. Decoding lossily would substitute U+FFFD and silently
+<a href=#54 id=54 data-nosnippet>54</a>    /// address a different blob than the URL names.
+<a href=#55 id=55 data-nosnippet>55</a>    </span><span class="attr">#[error(
+<a href=#56 id=56 data-nosnippet>56</a>        <span class="string">"Azure blob channel URL segment `{segment}` percent-decodes to bytes that are not UTF-8, \
+<a href=#57 id=57 data-nosnippet>57</a>         so it cannot name a blob"
+<a href=#58 id=58 data-nosnippet>58</a>    </span>)]
+<a href=#59 id=59 data-nosnippet>59</a>    </span>NonUtf8Path {
+<a href=#60 id=60 data-nosnippet>60</a>        segment: String,
+<a href=#61 id=61 data-nosnippet>61</a>        <span class="attr">#[source]
+<a href=#62 id=62 data-nosnippet>62</a>        </span>source: std::str::Utf8Error,
+<a href=#63 id=63 data-nosnippet>63</a>    },
+<a href=#64 id=64 data-nosnippet>64</a>
+<a href=#65 id=65 data-nosnippet>65</a>    <span class="attr">#[error(<span class="string">"Azure blob channel URL must use the `az://` scheme, got `{0}`"</span>)]
+<a href=#66 id=66 data-nosnippet>66</a>    </span>InvalidScheme(String),
+<a href=#67 id=67 data-nosnippet>67</a>
+<a href=#68 id=68 data-nosnippet>68</a>    <span class="attr">#[error(
+<a href=#69 id=69 data-nosnippet>69</a>        <span class="string">"{0:?} contains a control character or a leading or trailing space, which URL parsing \
+<a href=#70 id=70 data-nosnippet>70</a>         would silently drop; remove it"
+<a href=#71 id=71 data-nosnippet>71</a>    </span>)]
+<a href=#72 id=72 data-nosnippet>72</a>    </span>StrippedCharacter(String),
+<a href=#73 id=73 data-nosnippet>73</a>}
+</code></pre></div></section></main></body></html>

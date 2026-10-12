@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AzureUrlError"],"mod":["options"],"struct":["AzureChannelUrl","AzureHost","ContainerName"]};
