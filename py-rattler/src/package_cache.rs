@@ -144,7 +144,10 @@ impl PyPackageCacheLayer {
     }
 
     fn __repr__(&self) -> String {
-        format!("PackageCacheLayer(path=\"{}\")", self.inner.path().display())
+        format!(
+            "PackageCacheLayer(path=\"{}\")",
+            self.inner.path().display()
+        )
     }
 }
 
@@ -259,7 +262,10 @@ impl PyPackageCache {
 
     /// Excludes packages matching `spec` from every existing layer.
     pub fn excluding_from_all_layers(&self, spec: PyMatchSpec) -> Self {
-        self.inner.clone().excluding_from_all_layers(spec.into()).into()
+        self.inner
+            .clone()
+            .excluding_from_all_layers(spec.into())
+            .into()
     }
 
     /// Returns the first writable directory in the package cache, if any.
@@ -280,11 +286,21 @@ impl PyPackageCache {
 
     /// Returns the layers in this package cache in lookup order.
     pub fn layers(&self) -> Vec<PyPackageCacheLayer> {
-        self.inner.layers().iter().cloned().map(Into::into).collect()
+        self.inner
+            .layers()
+            .iter()
+            .cloned()
+            .map(Into::into)
+            .collect()
     }
 
     fn __repr__(&self) -> String {
-        let all_layers: Vec<_> = self.inner.layers().iter().map(PackageCacheLayer::path).collect();
+        let all_layers: Vec<_> = self
+            .inner
+            .layers()
+            .iter()
+            .map(PackageCacheLayer::path)
+            .collect();
         format!("PackageCache(layers={all_layers:?})")
     }
 }

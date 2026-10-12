@@ -29,7 +29,7 @@ def test_validation_mode() -> None:
     assert d[ValidationMode.skip()] == "skip"
 
     with pytest.raises(NotImplementedError):
-        ValidationMode()  # type: ignore[call-arg]
+        ValidationMode()
 
 
 def test_package_cache_layer(tmp_path: Path) -> None:
