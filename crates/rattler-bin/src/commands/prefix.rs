@@ -459,7 +459,7 @@ mod tests {
     use super::*;
     use std::{fs::File, str::FromStr};
 
-    use rattler_conda_types::{Version, compression_level::CompressionLevel};
+    use rattler_conda_types::{Version, compression_level::CompressionLevel, package::BuildString};
     use rattler_package_streaming::write::write_tar_bz2_package;
 
     #[tokio::test]
@@ -628,7 +628,7 @@ mod tests {
         let mut record = PackageRecord::new(
             PackageName::new_unchecked("win-only-noarch-package"),
             Version::from_str("0.0.1").unwrap(),
-            "h123456".to_string(),
+            "h123456".parse::<BuildString>().unwrap(),
         );
         record.subdir = Subdir::NoArch.to_string();
         record.depends = vec!["__win".to_string()];
@@ -647,7 +647,7 @@ mod tests {
                 package_record: PackageRecord::new(
                     PackageName::new_unchecked("my-package"),
                     Version::from_str("0.0.1").unwrap(),
-                    "h123456".to_string(),
+                    "h123456".parse::<BuildString>().unwrap(),
                 ),
                 identifier: "my-package-0.0.1-h123456.conda".parse().unwrap(),
                 url: Url::parse("https://example.com/my-package-0.0.1-h123456.conda").unwrap(),

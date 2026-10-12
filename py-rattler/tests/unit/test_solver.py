@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from rattler import (
+    BuildString,
     Channel,
     ChannelPriority,
     Gateway,
@@ -391,7 +392,7 @@ async def test_conditional_root_requirement_satisfied(gateway: Gateway, dummy_ch
         [MatchSpec('foo[when="__unix"]')],
         platforms=["linux-64"],
         gateway=gateway,
-        virtual_packages=[GenericVirtualPackage(PackageName("__unix"), Version("0"), "0")],
+        virtual_packages=[GenericVirtualPackage(PackageName("__unix"), Version("0"), BuildString("0"))],
     )
 
     assert isinstance(solved_data, list)
@@ -411,7 +412,7 @@ async def test_conditional_root_requirement_not_satisfied(gateway: Gateway, dumm
         [MatchSpec('foo[when="__win"]')],
         platforms=["linux-64"],
         gateway=gateway,
-        virtual_packages=[GenericVirtualPackage(PackageName("__unix"), Version("0"), "0")],
+        virtual_packages=[GenericVirtualPackage(PackageName("__unix"), Version("0"), BuildString("0"))],
     )
 
     assert isinstance(solved_data, list)
@@ -431,8 +432,8 @@ async def test_conditional_root_requirement_with_logic(gateway: Gateway, dummy_c
         platforms=["linux-64"],
         gateway=gateway,
         virtual_packages=[
-            GenericVirtualPackage(PackageName("__unix"), Version("0"), "0"),
-            GenericVirtualPackage(PackageName("__linux"), Version("0"), "0"),
+            GenericVirtualPackage(PackageName("__unix"), Version("0"), BuildString("0")),
+            GenericVirtualPackage(PackageName("__linux"), Version("0"), BuildString("0")),
         ],
     )
 
@@ -467,7 +468,7 @@ async def test_solve_with_sparse_repodata_conditional_dependencies() -> None:
         [MatchSpec("package")],
         [noarch_data],
         virtual_packages=[
-            GenericVirtualPackage(PackageName("__linux"), Version("0"), "0"),
+            GenericVirtualPackage(PackageName("__linux"), Version("0"), BuildString("0")),
         ],
     )
 
@@ -505,7 +506,7 @@ async def test_solve_with_sparse_repodata_version_conditional_dependencies() -> 
         [MatchSpec("conditional-dependency"), MatchSpec("side-dependency=0.2")],
         [noarch_data],
         virtual_packages=[
-            GenericVirtualPackage(PackageName("__linux"), Version("0"), "0"),
+            GenericVirtualPackage(PackageName("__linux"), Version("0"), BuildString("0")),
         ],
     )
 
@@ -548,8 +549,8 @@ async def test_solve_with_sparse_repodata_with_wheels() -> None:
         [MatchSpec("starlette")],
         [noarch_data, linux_64_data],
         virtual_packages=[
-            GenericVirtualPackage(PackageName("__unix"), Version("15"), "0"),
-            GenericVirtualPackage(PackageName("__linux"), Version("0"), "0"),
+            GenericVirtualPackage(PackageName("__unix"), Version("15"), BuildString("0")),
+            GenericVirtualPackage(PackageName("__linux"), Version("0"), BuildString("0")),
         ],
         package_format_selection=PackageFormatSelection.PREFER_CONDA_WITH_WHL,
     )

@@ -101,3 +101,7 @@ harness = false
 [[bench]]
 name = "matchspec_parse"
 harness = false
+
+[[bench]]
+name = "string_matcher"
+harness = false

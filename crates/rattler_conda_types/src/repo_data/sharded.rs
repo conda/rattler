@@ -79,7 +79,7 @@ mod tests {
     use crate::virtual_package_detector::{
         ChannelDetectorRegistrations, SubdirDetectorRegistrations,
     };
-    use crate::{PackageName, Version, VirtualPackageName};
+    use crate::{PackageName, Version, VirtualPackageName, package::BuildString};
 
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -101,7 +101,7 @@ mod tests {
             let record = PackageRecord::new(
                 PackageName::new_unchecked("multi"),
                 Version::major(1),
-                format!("h_{n}"),
+                format!("h_{n}").parse::<BuildString>().unwrap(),
             );
             (key, record)
         };

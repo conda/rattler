@@ -23,6 +23,7 @@ from rattler.match_spec import MatchSpec, NamelessMatchSpec
 from rattler.networking import Client, fetch_repo_data
 from rattler.package import (
     AboutJson,
+    BuildString,
     FileMode,
     IndexJson,
     NoArchLiteral,
@@ -95,6 +96,7 @@ del _get_rattler_version
 
 __all__ = [
     "AboutJson",
+    "BuildString",
     "CertificateClaims",
     "Channel",
     "ChannelCheck",

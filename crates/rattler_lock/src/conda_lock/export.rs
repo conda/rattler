@@ -164,7 +164,7 @@ fn convert(
                     CondaLockErrorKind::SubdirDisagreement,
                 ));
             }
-            if record.noarch != derive_noarch_type(reconstructed_subdir, &record.build) {
+            if record.noarch != derive_noarch_type(reconstructed_subdir, record.build.as_str()) {
                 return Err(CondaLockError::new(
                     url_path,
                     CondaLockErrorKind::NoarchMismatch,
@@ -186,7 +186,7 @@ fn convert(
             // and licenses are solver/repodata information, not artifact identity.
             package.name = record.name.as_source().to_owned();
             package.version = record.version.as_str().into_owned();
-            package.build = Some(record.build.clone());
+            package.build = Some(record.build.to_string());
             package.url = url.as_str().to_owned();
             package.hash.md5 = record.md5.map(hex::encode);
             package.hash.sha256 = record.sha256.map(hex::encode);
