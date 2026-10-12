@@ -8,7 +8,7 @@
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>rattler_conda_types::{
 <a href=#7 id=7 data-nosnippet>7</a>    BuildNumber, ChannelUrl, Flag, NoArchType, PackageName, PackageRecord, PackageUrl,
 <a href=#8 id=8 data-nosnippet>8</a>    VersionWithSource,
-<a href=#9 id=9 data-nosnippet>9</a>    package::{DistArchiveIdentifier, RunExportsJson},
+<a href=#9 id=9 data-nosnippet>9</a>    package::{BuildString, DistArchiveIdentifier, RunExportsJson},
 <a href=#10 id=10 data-nosnippet>10</a>};
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>serde::{Deserialize, Serialize};
@@ -61,7 +61,7 @@
 <a href=#59 id=59 data-nosnippet>59</a>    <span class="attr">#[serde(default, skip_serializing_if = <span class="string">"Option::is_none"</span>)]
 <a href=#60 id=60 data-nosnippet>60</a>    </span><span class="kw">pub </span>version: <span class="prelude-ty">Option</span>&lt;Cow&lt;<span class="lifetime">'a</span>, VersionWithSource&gt;&gt;,
 <a href=#61 id=61 data-nosnippet>61</a>    <span class="attr">#[serde(default, skip_serializing_if = <span class="string">"Option::is_none"</span>)]
-<a href=#62 id=62 data-nosnippet>62</a>    </span><span class="kw">pub </span>build: <span class="prelude-ty">Option</span>&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;,
+<a href=#62 id=62 data-nosnippet>62</a>    </span><span class="kw">pub </span>build: <span class="prelude-ty">Option</span>&lt;Cow&lt;<span class="lifetime">'a</span>, BuildString&gt;&gt;,
 <a href=#63 id=63 data-nosnippet>63</a>    <span class="attr">#[serde(default, skip_serializing_if = <span class="string">"Option::is_none"</span>)]
 <a href=#64 id=64 data-nosnippet>64</a>    </span><span class="kw">pub </span>build_number: <span class="prelude-ty">Option</span>&lt;BuildNumber&gt;,
 <a href=#65 id=65 data-nosnippet>65</a>    <span class="attr">#[serde(default, skip_serializing_if = <span class="string">"Option::is_none"</span>)]
@@ -146,212 +146,235 @@
 <a href=#144 id=144 data-nosnippet>144</a>
 <a href=#145 id=145 data-nosnippet>145</a>    <span class="kw">fn </span>try_from(value: CondaPackageDataModel&lt;<span class="lifetime">'a</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Error&gt; {
 <a href=#146 id=146 data-nosnippet>146</a>        <span class="kw">let </span>derived = LocationDerivedFields::new(<span class="kw-2">&amp;</span>value.location);
-<a href=#147 id=147 data-nosnippet>147</a>        <span class="kw">let </span>build = value
-<a href=#148 id=148 data-nosnippet>148</a>            .build
-<a href=#149 id=149 data-nosnippet>149</a>            .map(Cow::into_owned)
-<a href=#150 id=150 data-nosnippet>150</a>            .or_else(|| derived.build.clone())
-<a href=#151 id=151 data-nosnippet>151</a>            .unwrap_or_default();
-<a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">let </span>build_number = value
-<a href=#153 id=153 data-nosnippet>153</a>            .build_number
-<a href=#154 id=154 data-nosnippet>154</a>            .or_else(|| derived_fields::derive_build_number_from_build(<span class="kw-2">&amp;</span>build))
-<a href=#155 id=155 data-nosnippet>155</a>            .unwrap_or(<span class="number">0</span>);
-<a href=#156 id=156 data-nosnippet>156</a>        <span class="kw">let </span>subdir = value
-<a href=#157 id=157 data-nosnippet>157</a>            .subdir
-<a href=#158 id=158 data-nosnippet>158</a>            .map(Cow::into_owned)
-<a href=#159 id=159 data-nosnippet>159</a>            .or_else(|| derived.subdir.clone())
-<a href=#160 id=160 data-nosnippet>160</a>            .ok_or_else(|| ConversionError::Missing(<span class="string">"subdir"</span>.to_string()))<span class="question-mark">?</span>;
-<a href=#161 id=161 data-nosnippet>161</a>        <span class="kw">let </span>noarch = value.noarch.map_or_else(
-<a href=#162 id=162 data-nosnippet>162</a>            || {
-<a href=#163 id=163 data-nosnippet>163</a>                derived_fields::derive_noarch_type(
-<a href=#164 id=164 data-nosnippet>164</a>                    derived.subdir.as_deref().unwrap_or(<span class="kw-2">&amp;</span>subdir),
-<a href=#165 id=165 data-nosnippet>165</a>                    derived.build.as_deref().unwrap_or(<span class="kw-2">&amp;</span>build),
-<a href=#166 id=166 data-nosnippet>166</a>                )
-<a href=#167 id=167 data-nosnippet>167</a>            },
-<a href=#168 id=168 data-nosnippet>168</a>            Cow::into_owned,
-<a href=#169 id=169 data-nosnippet>169</a>        );
-<a href=#170 id=170 data-nosnippet>170</a>        <span class="kw">let </span>(derived_arch, derived_platform) = derived_fields::derive_arch_and_platform(<span class="kw-2">&amp;</span>subdir);
-<a href=#171 id=171 data-nosnippet>171</a>
-<a href=#172 id=172 data-nosnippet>172</a>        <span class="kw">let </span>package_record = PackageRecord {
-<a href=#173 id=173 data-nosnippet>173</a>            attestations_sha256: value.attestations_sha256,
-<a href=#174 id=174 data-nosnippet>174</a>            build,
-<a href=#175 id=175 data-nosnippet>175</a>            build_number,
-<a href=#176 id=176 data-nosnippet>176</a>            constrains: value.constrains.into_owned(),
-<a href=#177 id=177 data-nosnippet>177</a>            depends: value.depends.into_owned(),
-<a href=#178 id=178 data-nosnippet>178</a>            extra_depends: value.extra_depends.into_owned(),
-<a href=#179 id=179 data-nosnippet>179</a>            features: value.features.into_owned(),
-<a href=#180 id=180 data-nosnippet>180</a>            flags: value.flags.into_owned(),
-<a href=#181 id=181 data-nosnippet>181</a>            legacy_bz2_md5: value.legacy_bz2_md5,
-<a href=#182 id=182 data-nosnippet>182</a>            legacy_bz2_size: value.legacy_bz2_size.into_owned(),
-<a href=#183 id=183 data-nosnippet>183</a>            license: value.license.into_owned(),
-<a href=#184 id=184 data-nosnippet>184</a>            license_family: value.license_family.into_owned(),
-<a href=#185 id=185 data-nosnippet>185</a>            md5: value.md5,
-<a href=#186 id=186 data-nosnippet>186</a>            name: value
-<a href=#187 id=187 data-nosnippet>187</a>                .name
-<a href=#188 id=188 data-nosnippet>188</a>                .map(Cow::into_owned)
-<a href=#189 id=189 data-nosnippet>189</a>                .or(derived.name)
-<a href=#190 id=190 data-nosnippet>190</a>                .ok_or_else(|| ConversionError::Missing(<span class="string">"name"</span>.to_string()))<span class="question-mark">?</span>,
-<a href=#191 id=191 data-nosnippet>191</a>            noarch,
-<a href=#192 id=192 data-nosnippet>192</a>            arch: derived_arch,
-<a href=#193 id=193 data-nosnippet>193</a>            platform: derived_platform,
-<a href=#194 id=194 data-nosnippet>194</a>            purls: value.purls.into_owned(),
-<a href=#195 id=195 data-nosnippet>195</a>            sha256: value.sha256,
-<a href=#196 id=196 data-nosnippet>196</a>            size: value.size.into_owned(),
-<a href=#197 id=197 data-nosnippet>197</a>            subdir,
-<a href=#198 id=198 data-nosnippet>198</a>            timestamp: value.timestamp.map(Into::into),
-<a href=#199 id=199 data-nosnippet>199</a>            indexed_timestamp: value.indexed_timestamp.map(Into::into),
-<a href=#200 id=200 data-nosnippet>200</a>            track_features: value.track_features.into_owned(),
-<a href=#201 id=201 data-nosnippet>201</a>            version: value
-<a href=#202 id=202 data-nosnippet>202</a>                .version
-<a href=#203 id=203 data-nosnippet>203</a>                .map(Cow::into_owned)
-<a href=#204 id=204 data-nosnippet>204</a>                .or(derived.version)
-<a href=#205 id=205 data-nosnippet>205</a>                .ok_or_else(|| ConversionError::Missing(<span class="string">"version"</span>.to_string()))<span class="question-mark">?</span>,
-<a href=#206 id=206 data-nosnippet>206</a>            run_exports: value.run_exports.map(Cow::into_owned),
-<a href=#207 id=207 data-nosnippet>207</a>            python_site_packages_path: value.python_site_packages_path.into_owned(),
-<a href=#208 id=208 data-nosnippet>208</a>        };
-<a href=#209 id=209 data-nosnippet>209</a>
-<a href=#210 id=210 data-nosnippet>210</a>        <span class="comment">// Binary packages require a valid archive filename
-<a href=#211 id=211 data-nosnippet>211</a>        </span><span class="kw">if </span>value
-<a href=#212 id=212 data-nosnippet>212</a>            .location
-<a href=#213 id=213 data-nosnippet>213</a>            .file_name()
-<a href=#214 id=214 data-nosnippet>214</a>            .is_none_or(|name| DistArchiveIdentifier::try_from_filename(name).is_none())
-<a href=#215 id=215 data-nosnippet>215</a>        {
-<a href=#216 id=216 data-nosnippet>216</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ConversionError::InvalidBinaryPackageLocation);
-<a href=#217 id=217 data-nosnippet>217</a>        }
-<a href=#218 id=218 data-nosnippet>218</a>
-<a href=#219 id=219 data-nosnippet>219</a>        <span class="kw">let </span>file_name = {
-<a href=#220 id=220 data-nosnippet>220</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(value) = value.file_name.map(Cow::into_owned) {
-<a href=#221 id=221 data-nosnippet>221</a>                <span class="prelude-val">Ok</span>(value)
-<a href=#222 id=222 data-nosnippet>222</a>            } <span class="kw">else if let </span><span class="prelude-val">Some</span>(value) = derived.identifier {
+<a href=#147 id=147 data-nosnippet>147</a>        <span class="comment">// Only derive omitted builds; preserve explicit legacy values verbatim.
+<a href=#148 id=148 data-nosnippet>148</a>        </span><span class="kw">let </span>build = value
+<a href=#149 id=149 data-nosnippet>149</a>            .build
+<a href=#150 id=150 data-nosnippet>150</a>            .map(Cow::into_owned)
+<a href=#151 id=151 data-nosnippet>151</a>            .or_else(|| derived.build.clone().map(BuildString::new_unchecked))
+<a href=#152 id=152 data-nosnippet>152</a>            .ok_or_else(|| ConversionError::Missing(<span class="string">"build"</span>.to_string()))<span class="question-mark">?</span>;
+<a href=#153 id=153 data-nosnippet>153</a>        <span class="kw">let </span>build_str = build.as_str();
+<a href=#154 id=154 data-nosnippet>154</a>        <span class="kw">let </span>build_number = value
+<a href=#155 id=155 data-nosnippet>155</a>            .build_number
+<a href=#156 id=156 data-nosnippet>156</a>            .or_else(|| derived_fields::derive_build_number_from_build(build_str))
+<a href=#157 id=157 data-nosnippet>157</a>            .unwrap_or(<span class="number">0</span>);
+<a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">let </span>subdir = value
+<a href=#159 id=159 data-nosnippet>159</a>            .subdir
+<a href=#160 id=160 data-nosnippet>160</a>            .map(Cow::into_owned)
+<a href=#161 id=161 data-nosnippet>161</a>            .or_else(|| derived.subdir.clone())
+<a href=#162 id=162 data-nosnippet>162</a>            .ok_or_else(|| ConversionError::Missing(<span class="string">"subdir"</span>.to_string()))<span class="question-mark">?</span>;
+<a href=#163 id=163 data-nosnippet>163</a>        <span class="kw">let </span>noarch = value.noarch.map_or_else(
+<a href=#164 id=164 data-nosnippet>164</a>            || {
+<a href=#165 id=165 data-nosnippet>165</a>                derived_fields::derive_noarch_type(
+<a href=#166 id=166 data-nosnippet>166</a>                    derived.subdir.as_deref().unwrap_or(<span class="kw-2">&amp;</span>subdir),
+<a href=#167 id=167 data-nosnippet>167</a>                    derived.build.as_deref().unwrap_or(build_str),
+<a href=#168 id=168 data-nosnippet>168</a>                )
+<a href=#169 id=169 data-nosnippet>169</a>            },
+<a href=#170 id=170 data-nosnippet>170</a>            Cow::into_owned,
+<a href=#171 id=171 data-nosnippet>171</a>        );
+<a href=#172 id=172 data-nosnippet>172</a>        <span class="kw">let </span>(derived_arch, derived_platform) = derived_fields::derive_arch_and_platform(<span class="kw-2">&amp;</span>subdir);
+<a href=#173 id=173 data-nosnippet>173</a>
+<a href=#174 id=174 data-nosnippet>174</a>        <span class="kw">let </span>package_record = PackageRecord {
+<a href=#175 id=175 data-nosnippet>175</a>            attestations_sha256: value.attestations_sha256,
+<a href=#176 id=176 data-nosnippet>176</a>            build,
+<a href=#177 id=177 data-nosnippet>177</a>            build_number,
+<a href=#178 id=178 data-nosnippet>178</a>            constrains: value.constrains.into_owned(),
+<a href=#179 id=179 data-nosnippet>179</a>            depends: value.depends.into_owned(),
+<a href=#180 id=180 data-nosnippet>180</a>            extra_depends: value.extra_depends.into_owned(),
+<a href=#181 id=181 data-nosnippet>181</a>            features: value.features.into_owned(),
+<a href=#182 id=182 data-nosnippet>182</a>            flags: value.flags.into_owned(),
+<a href=#183 id=183 data-nosnippet>183</a>            legacy_bz2_md5: value.legacy_bz2_md5,
+<a href=#184 id=184 data-nosnippet>184</a>            legacy_bz2_size: value.legacy_bz2_size.into_owned(),
+<a href=#185 id=185 data-nosnippet>185</a>            license: value.license.into_owned(),
+<a href=#186 id=186 data-nosnippet>186</a>            license_family: value.license_family.into_owned(),
+<a href=#187 id=187 data-nosnippet>187</a>            md5: value.md5,
+<a href=#188 id=188 data-nosnippet>188</a>            name: value
+<a href=#189 id=189 data-nosnippet>189</a>                .name
+<a href=#190 id=190 data-nosnippet>190</a>                .map(Cow::into_owned)
+<a href=#191 id=191 data-nosnippet>191</a>                .or(derived.name)
+<a href=#192 id=192 data-nosnippet>192</a>                .ok_or_else(|| ConversionError::Missing(<span class="string">"name"</span>.to_string()))<span class="question-mark">?</span>,
+<a href=#193 id=193 data-nosnippet>193</a>            noarch,
+<a href=#194 id=194 data-nosnippet>194</a>            arch: derived_arch,
+<a href=#195 id=195 data-nosnippet>195</a>            platform: derived_platform,
+<a href=#196 id=196 data-nosnippet>196</a>            purls: value.purls.into_owned(),
+<a href=#197 id=197 data-nosnippet>197</a>            sha256: value.sha256,
+<a href=#198 id=198 data-nosnippet>198</a>            size: value.size.into_owned(),
+<a href=#199 id=199 data-nosnippet>199</a>            subdir,
+<a href=#200 id=200 data-nosnippet>200</a>            timestamp: value.timestamp.map(Into::into),
+<a href=#201 id=201 data-nosnippet>201</a>            indexed_timestamp: value.indexed_timestamp.map(Into::into),
+<a href=#202 id=202 data-nosnippet>202</a>            track_features: value.track_features.into_owned(),
+<a href=#203 id=203 data-nosnippet>203</a>            version: value
+<a href=#204 id=204 data-nosnippet>204</a>                .version
+<a href=#205 id=205 data-nosnippet>205</a>                .map(Cow::into_owned)
+<a href=#206 id=206 data-nosnippet>206</a>                .or(derived.version)
+<a href=#207 id=207 data-nosnippet>207</a>                .ok_or_else(|| ConversionError::Missing(<span class="string">"version"</span>.to_string()))<span class="question-mark">?</span>,
+<a href=#208 id=208 data-nosnippet>208</a>            run_exports: value.run_exports.map(Cow::into_owned),
+<a href=#209 id=209 data-nosnippet>209</a>            python_site_packages_path: value.python_site_packages_path.into_owned(),
+<a href=#210 id=210 data-nosnippet>210</a>        };
+<a href=#211 id=211 data-nosnippet>211</a>
+<a href=#212 id=212 data-nosnippet>212</a>        <span class="comment">// Binary packages require a valid archive filename
+<a href=#213 id=213 data-nosnippet>213</a>        </span><span class="kw">if </span>value
+<a href=#214 id=214 data-nosnippet>214</a>            .location
+<a href=#215 id=215 data-nosnippet>215</a>            .file_name()
+<a href=#216 id=216 data-nosnippet>216</a>            .is_none_or(|name| DistArchiveIdentifier::try_from_filename(name).is_none())
+<a href=#217 id=217 data-nosnippet>217</a>        {
+<a href=#218 id=218 data-nosnippet>218</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ConversionError::InvalidBinaryPackageLocation);
+<a href=#219 id=219 data-nosnippet>219</a>        }
+<a href=#220 id=220 data-nosnippet>220</a>
+<a href=#221 id=221 data-nosnippet>221</a>        <span class="kw">let </span>file_name = {
+<a href=#222 id=222 data-nosnippet>222</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(value) = value.file_name.map(Cow::into_owned) {
 <a href=#223 id=223 data-nosnippet>223</a>                <span class="prelude-val">Ok</span>(value)
-<a href=#224 id=224 data-nosnippet>224</a>            } <span class="kw">else </span>{
-<a href=#225 id=225 data-nosnippet>225</a>                <span class="prelude-val">Err</span>(ConversionError::Missing(<span class="string">"file_name"</span>.to_string()))
-<a href=#226 id=226 data-nosnippet>226</a>            }
-<a href=#227 id=227 data-nosnippet>227</a>        }<span class="question-mark">?</span>;
-<a href=#228 id=228 data-nosnippet>228</a>
-<a href=#229 id=229 data-nosnippet>229</a>        <span class="prelude-val">Ok</span>(CondaBinaryData {
-<a href=#230 id=230 data-nosnippet>230</a>            location: value.location,
-<a href=#231 id=231 data-nosnippet>231</a>            file_name,
-<a href=#232 id=232 data-nosnippet>232</a>            channel: value
-<a href=#233 id=233 data-nosnippet>233</a>                .channel
-<a href=#234 id=234 data-nosnippet>234</a>                .map(Cow::into_owned)
-<a href=#235 id=235 data-nosnippet>235</a>                .map(|m| m.map(ChannelUrl::from))
-<a href=#236 id=236 data-nosnippet>236</a>                .unwrap_or(derived.channel),
-<a href=#237 id=237 data-nosnippet>237</a>            package_record,
-<a href=#238 id=238 data-nosnippet>238</a>        })
-<a href=#239 id=239 data-nosnippet>239</a>    }
-<a href=#240 id=240 data-nosnippet>240</a>}
-<a href=#241 id=241 data-nosnippet>241</a>
-<a href=#242 id=242 data-nosnippet>242</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; TryFrom&lt;CondaPackageDataModel&lt;<span class="lifetime">'a</span>&gt;&gt; <span class="kw">for </span>CondaPackageData {
-<a href=#243 id=243 data-nosnippet>243</a>    <span class="kw">type </span>Error = ConversionError;
-<a href=#244 id=244 data-nosnippet>244</a>
-<a href=#245 id=245 data-nosnippet>245</a>    <span class="kw">fn </span>try_from(value: CondaPackageDataModel&lt;<span class="lifetime">'a</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Error&gt; {
-<a href=#246 id=246 data-nosnippet>246</a>        <span class="prelude-val">Ok</span>(CondaPackageData::Binary(Box::new(value.try_into()<span class="question-mark">?</span>)))
-<a href=#247 id=247 data-nosnippet>247</a>    }
-<a href=#248 id=248 data-nosnippet>248</a>}
-<a href=#249 id=249 data-nosnippet>249</a>
-<a href=#250 id=250 data-nosnippet>250</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; From&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>CondaBinaryData&gt; <span class="kw">for </span>CondaPackageDataModel&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#251 id=251 data-nosnippet>251</a>    <span class="kw">fn </span>from(value: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>CondaBinaryData) -&gt; <span class="self">Self </span>{
-<a href=#252 id=252 data-nosnippet>252</a>        <span class="kw">let </span>package_record = <span class="kw-2">&amp;</span>value.package_record;
-<a href=#253 id=253 data-nosnippet>253</a>        <span class="kw">let </span>derived = LocationDerivedFields::new(<span class="kw-2">&amp;</span>value.location);
-<a href=#254 id=254 data-nosnippet>254</a>        <span class="kw">let </span>derived_build_number =
-<a href=#255 id=255 data-nosnippet>255</a>            derived_fields::derive_build_number_from_build(<span class="kw-2">&amp;</span>package_record.build).unwrap_or(<span class="number">0</span>);
-<a href=#256 id=256 data-nosnippet>256</a>        <span class="kw">let </span>derived_noarch = derived_fields::derive_noarch_type(
-<a href=#257 id=257 data-nosnippet>257</a>            derived.subdir.as_deref().unwrap_or(<span class="kw-2">&amp;</span>package_record.subdir),
-<a href=#258 id=258 data-nosnippet>258</a>            derived.build.as_deref().unwrap_or(<span class="kw-2">&amp;</span>package_record.build),
-<a href=#259 id=259 data-nosnippet>259</a>        );
-<a href=#260 id=260 data-nosnippet>260</a>
-<a href=#261 id=261 data-nosnippet>261</a>        <span class="kw">let </span>normalized_channel = value
-<a href=#262 id=262 data-nosnippet>262</a>            .channel
-<a href=#263 id=263 data-nosnippet>263</a>            .as_ref()
-<a href=#264 id=264 data-nosnippet>264</a>            .map(|channel| strip_trailing_slash(channel.as_ref()))
-<a href=#265 id=265 data-nosnippet>265</a>            .map(Cow::into_owned);
-<a href=#266 id=266 data-nosnippet>266</a>
-<a href=#267 id=267 data-nosnippet>267</a>        <span class="self">Self </span>{
-<a href=#268 id=268 data-nosnippet>268</a>            location: value.location.clone(),
-<a href=#269 id=269 data-nosnippet>269</a>            name: (<span class="prelude-val">Some</span>(package_record.name.as_source())
-<a href=#270 id=270 data-nosnippet>270</a>                != derived.name.as_ref().map(PackageName::as_source))
-<a href=#271 id=271 data-nosnippet>271</a>            .then_some(Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.name)),
-<a href=#272 id=272 data-nosnippet>272</a>            version: (<span class="prelude-val">Some</span>(package_record.version.as_str())
-<a href=#273 id=273 data-nosnippet>273</a>                != derived.version.as_ref().map(VersionWithSource::as_str))
-<a href=#274 id=274 data-nosnippet>274</a>            .then_some(Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.version)),
-<a href=#275 id=275 data-nosnippet>275</a>            build: (package_record.build.as_str()
-<a href=#276 id=276 data-nosnippet>276</a>                != derived.build.as_ref().map_or(<span class="string">""</span>, |s| s.as_str()))
-<a href=#277 id=277 data-nosnippet>277</a>            .then_some(Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.build)),
-<a href=#278 id=278 data-nosnippet>278</a>            build_number: (package_record.build_number != derived_build_number)
-<a href=#279 id=279 data-nosnippet>279</a>                .then_some(package_record.build_number),
-<a href=#280 id=280 data-nosnippet>280</a>            subdir: (<span class="prelude-val">Some</span>(package_record.subdir.as_str()) != derived.subdir.as_deref())
-<a href=#281 id=281 data-nosnippet>281</a>                .then_some(Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.subdir)),
-<a href=#282 id=282 data-nosnippet>282</a>            noarch: (package_record.noarch != derived_noarch)
-<a href=#283 id=283 data-nosnippet>283</a>                .then_some(Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.noarch)),
-<a href=#284 id=284 data-nosnippet>284</a>            channel: (value.channel.as_ref() != derived.channel.as_ref())
-<a href=#285 id=285 data-nosnippet>285</a>                .then_some(Cow::Owned(normalized_channel)),
-<a href=#286 id=286 data-nosnippet>286</a>            file_name: (<span class="prelude-val">Some</span>(value.file_name.to_file_name())
-<a href=#287 id=287 data-nosnippet>287</a>                != derived.identifier.map(|i| i.to_file_name()))
-<a href=#288 id=288 data-nosnippet>288</a>            .then_some(Cow::Owned(value.file_name.clone())),
-<a href=#289 id=289 data-nosnippet>289</a>            purls: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.purls),
-<a href=#290 id=290 data-nosnippet>290</a>            depends: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.depends),
-<a href=#291 id=291 data-nosnippet>291</a>            constrains: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.constrains),
-<a href=#292 id=292 data-nosnippet>292</a>            extra_depends: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.extra_depends),
-<a href=#293 id=293 data-nosnippet>293</a>            md5: package_record.md5,
-<a href=#294 id=294 data-nosnippet>294</a>            legacy_bz2_md5: package_record.legacy_bz2_md5,
-<a href=#295 id=295 data-nosnippet>295</a>            sha256: package_record.sha256,
-<a href=#296 id=296 data-nosnippet>296</a>            attestations_sha256: package_record.attestations_sha256,
-<a href=#297 id=297 data-nosnippet>297</a>            size: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.size),
-<a href=#298 id=298 data-nosnippet>298</a>            legacy_bz2_size: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.legacy_bz2_size),
-<a href=#299 id=299 data-nosnippet>299</a>            timestamp: package_record.timestamp.map(|ts| ts.jiff_timestamp()),
-<a href=#300 id=300 data-nosnippet>300</a>            indexed_timestamp: package_record
-<a href=#301 id=301 data-nosnippet>301</a>                .indexed_timestamp
-<a href=#302 id=302 data-nosnippet>302</a>                .map(|ts| ts.jiff_timestamp()),
-<a href=#303 id=303 data-nosnippet>303</a>            features: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.features),
-<a href=#304 id=304 data-nosnippet>304</a>            flags: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.flags),
-<a href=#305 id=305 data-nosnippet>305</a>            track_features: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.track_features),
-<a href=#306 id=306 data-nosnippet>306</a>            license: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.license),
-<a href=#307 id=307 data-nosnippet>307</a>            license_family: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.license_family),
-<a href=#308 id=308 data-nosnippet>308</a>            python_site_packages_path: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.python_site_packages_path),
-<a href=#309 id=309 data-nosnippet>309</a>            run_exports: package_record.run_exports.as_ref().map(Cow::Borrowed),
-<a href=#310 id=310 data-nosnippet>310</a>            variants: <span class="prelude-val">None</span>,
-<a href=#311 id=311 data-nosnippet>311</a>        }
-<a href=#312 id=312 data-nosnippet>312</a>    }
-<a href=#313 id=313 data-nosnippet>313</a>}
-<a href=#314 id=314 data-nosnippet>314</a>
-<a href=#315 id=315 data-nosnippet>315</a><span class="kw">fn </span>strip_trailing_slash(url: <span class="kw-2">&amp;</span>Url) -&gt; Cow&lt;<span class="lifetime">'_</span>, Url&gt; {
-<a href=#316 id=316 data-nosnippet>316</a>    <span class="kw">let </span>path = url.path();
-<a href=#317 id=317 data-nosnippet>317</a>    <span class="kw">if </span>path.ends_with(<span class="string">"/"</span>) {
-<a href=#318 id=318 data-nosnippet>318</a>        <span class="kw">let </span><span class="kw-2">mut </span>updated_url = url.clone();
-<a href=#319 id=319 data-nosnippet>319</a>        updated_url.set_path(path.trim_end_matches(<span class="string">'/'</span>));
-<a href=#320 id=320 data-nosnippet>320</a>        Cow::Owned(updated_url)
-<a href=#321 id=321 data-nosnippet>321</a>    } <span class="kw">else </span>{
-<a href=#322 id=322 data-nosnippet>322</a>        Cow::Borrowed(url)
-<a href=#323 id=323 data-nosnippet>323</a>    }
-<a href=#324 id=324 data-nosnippet>324</a>}
-<a href=#325 id=325 data-nosnippet>325</a>
-<a href=#326 id=326 data-nosnippet>326</a><span class="attr">#[cfg(test)]
-<a href=#327 id=327 data-nosnippet>327</a></span><span class="kw">mod </span>tests {
-<a href=#328 id=328 data-nosnippet>328</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#329 id=329 data-nosnippet>329</a>
-<a href=#330 id=330 data-nosnippet>330</a>    <span class="attr">#[rstest::rstest]
-<a href=#331 id=331 data-nosnippet>331</a>    #[case(<span class="number">0</span>)]
-<a href=#332 id=332 data-nosnippet>332</a>    #[case(<span class="number">1</span>)]
-<a href=#333 id=333 data-nosnippet>333</a>    #[case(-<span class="number">1</span>)]
-<a href=#334 id=334 data-nosnippet>334</a>    #[case(<span class="number">1_789_300_800_123</span>)]
-<a href=#335 id=335 data-nosnippet>335</a>    </span><span class="kw">fn </span>indexed_timestamp_roundtrip(<span class="attr">#[case] </span>millis: i64) {
-<a href=#336 id=336 data-nosnippet>336</a>        <span class="kw">let </span>input = <span class="macro">format!</span>(
-<a href=#337 id=337 data-nosnippet>337</a>            <span class="string">"conda: https://example.com/linux-64/demo-1.0-0.conda\nindexed_timestamp: {millis}\n"
-<a href=#338 id=338 data-nosnippet>338</a>        </span>);
-<a href=#339 id=339 data-nosnippet>339</a>        <span class="kw">let </span>model: CondaPackageDataModel&lt;<span class="lifetime">'_</span>&gt; = serde_yaml::from_str(<span class="kw-2">&amp;</span>input).unwrap();
-<a href=#340 id=340 data-nosnippet>340</a>        <span class="kw">let </span>binary = CondaBinaryData::try_from(model).unwrap();
-<a href=#341 id=341 data-nosnippet>341</a>        <span class="kw">let </span>indexed = binary.package_record.indexed_timestamp.unwrap();
-<a href=#342 id=342 data-nosnippet>342</a>        <span class="macro">assert_eq!</span>(indexed.timestamp_millis(), millis);
-<a href=#343 id=343 data-nosnippet>343</a>        <span class="kw">let </span>model = CondaPackageDataModel::from(<span class="kw-2">&amp;</span>binary);
-<a href=#344 id=344 data-nosnippet>344</a>        <span class="kw">let </span>yaml = serde_yaml::to_string(<span class="kw-2">&amp;</span>model).unwrap();
-<a href=#345 id=345 data-nosnippet>345</a>        <span class="kw">let </span>decoded: CondaPackageDataModel&lt;<span class="lifetime">'_</span>&gt; = serde_yaml::from_str(<span class="kw-2">&amp;</span>yaml).unwrap();
-<a href=#346 id=346 data-nosnippet>346</a>        <span class="macro">assert_eq!</span>(
-<a href=#347 id=347 data-nosnippet>347</a>            CondaBinaryData::try_from(decoded)
-<a href=#348 id=348 data-nosnippet>348</a>                .unwrap()
-<a href=#349 id=349 data-nosnippet>349</a>                .package_record
-<a href=#350 id=350 data-nosnippet>350</a>                .indexed_timestamp,
-<a href=#351 id=351 data-nosnippet>351</a>            <span class="prelude-val">Some</span>(indexed)
-<a href=#352 id=352 data-nosnippet>352</a>        );
-<a href=#353 id=353 data-nosnippet>353</a>    }
-<a href=#354 id=354 data-nosnippet>354</a>}
+<a href=#224 id=224 data-nosnippet>224</a>            } <span class="kw">else if let </span><span class="prelude-val">Some</span>(value) = derived.identifier {
+<a href=#225 id=225 data-nosnippet>225</a>                <span class="prelude-val">Ok</span>(value)
+<a href=#226 id=226 data-nosnippet>226</a>            } <span class="kw">else </span>{
+<a href=#227 id=227 data-nosnippet>227</a>                <span class="prelude-val">Err</span>(ConversionError::Missing(<span class="string">"file_name"</span>.to_string()))
+<a href=#228 id=228 data-nosnippet>228</a>            }
+<a href=#229 id=229 data-nosnippet>229</a>        }<span class="question-mark">?</span>;
+<a href=#230 id=230 data-nosnippet>230</a>
+<a href=#231 id=231 data-nosnippet>231</a>        <span class="prelude-val">Ok</span>(CondaBinaryData {
+<a href=#232 id=232 data-nosnippet>232</a>            location: value.location,
+<a href=#233 id=233 data-nosnippet>233</a>            file_name,
+<a href=#234 id=234 data-nosnippet>234</a>            channel: value
+<a href=#235 id=235 data-nosnippet>235</a>                .channel
+<a href=#236 id=236 data-nosnippet>236</a>                .map(Cow::into_owned)
+<a href=#237 id=237 data-nosnippet>237</a>                .map(|m| m.map(ChannelUrl::from))
+<a href=#238 id=238 data-nosnippet>238</a>                .unwrap_or(derived.channel),
+<a href=#239 id=239 data-nosnippet>239</a>            package_record,
+<a href=#240 id=240 data-nosnippet>240</a>        })
+<a href=#241 id=241 data-nosnippet>241</a>    }
+<a href=#242 id=242 data-nosnippet>242</a>}
+<a href=#243 id=243 data-nosnippet>243</a>
+<a href=#244 id=244 data-nosnippet>244</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; TryFrom&lt;CondaPackageDataModel&lt;<span class="lifetime">'a</span>&gt;&gt; <span class="kw">for </span>CondaPackageData {
+<a href=#245 id=245 data-nosnippet>245</a>    <span class="kw">type </span>Error = ConversionError;
+<a href=#246 id=246 data-nosnippet>246</a>
+<a href=#247 id=247 data-nosnippet>247</a>    <span class="kw">fn </span>try_from(value: CondaPackageDataModel&lt;<span class="lifetime">'a</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Error&gt; {
+<a href=#248 id=248 data-nosnippet>248</a>        <span class="prelude-val">Ok</span>(CondaPackageData::Binary(Box::new(value.try_into()<span class="question-mark">?</span>)))
+<a href=#249 id=249 data-nosnippet>249</a>    }
+<a href=#250 id=250 data-nosnippet>250</a>}
+<a href=#251 id=251 data-nosnippet>251</a>
+<a href=#252 id=252 data-nosnippet>252</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; From&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>CondaBinaryData&gt; <span class="kw">for </span>CondaPackageDataModel&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#253 id=253 data-nosnippet>253</a>    <span class="kw">fn </span>from(value: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>CondaBinaryData) -&gt; <span class="self">Self </span>{
+<a href=#254 id=254 data-nosnippet>254</a>        <span class="kw">let </span>package_record = <span class="kw-2">&amp;</span>value.package_record;
+<a href=#255 id=255 data-nosnippet>255</a>        <span class="kw">let </span>derived = LocationDerivedFields::new(<span class="kw-2">&amp;</span>value.location);
+<a href=#256 id=256 data-nosnippet>256</a>        <span class="kw">let </span>build_str = package_record.build.as_str();
+<a href=#257 id=257 data-nosnippet>257</a>        <span class="kw">let </span>derived_build_number =
+<a href=#258 id=258 data-nosnippet>258</a>            derived_fields::derive_build_number_from_build(build_str).unwrap_or(<span class="number">0</span>);
+<a href=#259 id=259 data-nosnippet>259</a>        <span class="kw">let </span>derived_noarch = derived_fields::derive_noarch_type(
+<a href=#260 id=260 data-nosnippet>260</a>            derived.subdir.as_deref().unwrap_or(<span class="kw-2">&amp;</span>package_record.subdir),
+<a href=#261 id=261 data-nosnippet>261</a>            derived.build.as_deref().unwrap_or(build_str),
+<a href=#262 id=262 data-nosnippet>262</a>        );
+<a href=#263 id=263 data-nosnippet>263</a>
+<a href=#264 id=264 data-nosnippet>264</a>        <span class="kw">let </span>normalized_channel = value
+<a href=#265 id=265 data-nosnippet>265</a>            .channel
+<a href=#266 id=266 data-nosnippet>266</a>            .as_ref()
+<a href=#267 id=267 data-nosnippet>267</a>            .map(|channel| strip_trailing_slash(channel.as_ref()))
+<a href=#268 id=268 data-nosnippet>268</a>            .map(Cow::into_owned);
+<a href=#269 id=269 data-nosnippet>269</a>
+<a href=#270 id=270 data-nosnippet>270</a>        <span class="self">Self </span>{
+<a href=#271 id=271 data-nosnippet>271</a>            location: value.location.clone(),
+<a href=#272 id=272 data-nosnippet>272</a>            name: (<span class="prelude-val">Some</span>(package_record.name.as_source())
+<a href=#273 id=273 data-nosnippet>273</a>                != derived.name.as_ref().map(PackageName::as_source))
+<a href=#274 id=274 data-nosnippet>274</a>            .then_some(Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.name)),
+<a href=#275 id=275 data-nosnippet>275</a>            version: (<span class="prelude-val">Some</span>(package_record.version.as_str())
+<a href=#276 id=276 data-nosnippet>276</a>                != derived.version.as_ref().map(VersionWithSource::as_str))
+<a href=#277 id=277 data-nosnippet>277</a>            .then_some(Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.version)),
+<a href=#278 id=278 data-nosnippet>278</a>            build: (package_record.build.as_str() != derived.build.as_deref().unwrap_or(<span class="string">""</span>))
+<a href=#279 id=279 data-nosnippet>279</a>                .then_some(Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.build)),
+<a href=#280 id=280 data-nosnippet>280</a>            build_number: (package_record.build_number != derived_build_number)
+<a href=#281 id=281 data-nosnippet>281</a>                .then_some(package_record.build_number),
+<a href=#282 id=282 data-nosnippet>282</a>            subdir: (<span class="prelude-val">Some</span>(package_record.subdir.as_str()) != derived.subdir.as_deref())
+<a href=#283 id=283 data-nosnippet>283</a>                .then_some(Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.subdir)),
+<a href=#284 id=284 data-nosnippet>284</a>            noarch: (package_record.noarch != derived_noarch)
+<a href=#285 id=285 data-nosnippet>285</a>                .then_some(Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.noarch)),
+<a href=#286 id=286 data-nosnippet>286</a>            channel: (value.channel.as_ref() != derived.channel.as_ref())
+<a href=#287 id=287 data-nosnippet>287</a>                .then_some(Cow::Owned(normalized_channel)),
+<a href=#288 id=288 data-nosnippet>288</a>            file_name: (<span class="prelude-val">Some</span>(value.file_name.to_file_name())
+<a href=#289 id=289 data-nosnippet>289</a>                != derived.identifier.map(|i| i.to_file_name()))
+<a href=#290 id=290 data-nosnippet>290</a>            .then_some(Cow::Owned(value.file_name.clone())),
+<a href=#291 id=291 data-nosnippet>291</a>            purls: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.purls),
+<a href=#292 id=292 data-nosnippet>292</a>            depends: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.depends),
+<a href=#293 id=293 data-nosnippet>293</a>            constrains: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.constrains),
+<a href=#294 id=294 data-nosnippet>294</a>            extra_depends: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.extra_depends),
+<a href=#295 id=295 data-nosnippet>295</a>            md5: package_record.md5,
+<a href=#296 id=296 data-nosnippet>296</a>            legacy_bz2_md5: package_record.legacy_bz2_md5,
+<a href=#297 id=297 data-nosnippet>297</a>            sha256: package_record.sha256,
+<a href=#298 id=298 data-nosnippet>298</a>            attestations_sha256: package_record.attestations_sha256,
+<a href=#299 id=299 data-nosnippet>299</a>            size: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.size),
+<a href=#300 id=300 data-nosnippet>300</a>            legacy_bz2_size: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.legacy_bz2_size),
+<a href=#301 id=301 data-nosnippet>301</a>            timestamp: package_record.timestamp.map(|ts| ts.jiff_timestamp()),
+<a href=#302 id=302 data-nosnippet>302</a>            indexed_timestamp: package_record
+<a href=#303 id=303 data-nosnippet>303</a>                .indexed_timestamp
+<a href=#304 id=304 data-nosnippet>304</a>                .map(|ts| ts.jiff_timestamp()),
+<a href=#305 id=305 data-nosnippet>305</a>            features: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.features),
+<a href=#306 id=306 data-nosnippet>306</a>            flags: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.flags),
+<a href=#307 id=307 data-nosnippet>307</a>            track_features: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.track_features),
+<a href=#308 id=308 data-nosnippet>308</a>            license: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.license),
+<a href=#309 id=309 data-nosnippet>309</a>            license_family: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.license_family),
+<a href=#310 id=310 data-nosnippet>310</a>            python_site_packages_path: Cow::Borrowed(<span class="kw-2">&amp;</span>package_record.python_site_packages_path),
+<a href=#311 id=311 data-nosnippet>311</a>            run_exports: package_record.run_exports.as_ref().map(Cow::Borrowed),
+<a href=#312 id=312 data-nosnippet>312</a>            variants: <span class="prelude-val">None</span>,
+<a href=#313 id=313 data-nosnippet>313</a>        }
+<a href=#314 id=314 data-nosnippet>314</a>    }
+<a href=#315 id=315 data-nosnippet>315</a>}
+<a href=#316 id=316 data-nosnippet>316</a>
+<a href=#317 id=317 data-nosnippet>317</a><span class="kw">fn </span>strip_trailing_slash(url: <span class="kw-2">&amp;</span>Url) -&gt; Cow&lt;<span class="lifetime">'_</span>, Url&gt; {
+<a href=#318 id=318 data-nosnippet>318</a>    <span class="kw">let </span>path = url.path();
+<a href=#319 id=319 data-nosnippet>319</a>    <span class="kw">if </span>path.ends_with(<span class="string">"/"</span>) {
+<a href=#320 id=320 data-nosnippet>320</a>        <span class="kw">let </span><span class="kw-2">mut </span>updated_url = url.clone();
+<a href=#321 id=321 data-nosnippet>321</a>        updated_url.set_path(path.trim_end_matches(<span class="string">'/'</span>));
+<a href=#322 id=322 data-nosnippet>322</a>        Cow::Owned(updated_url)
+<a href=#323 id=323 data-nosnippet>323</a>    } <span class="kw">else </span>{
+<a href=#324 id=324 data-nosnippet>324</a>        Cow::Borrowed(url)
+<a href=#325 id=325 data-nosnippet>325</a>    }
+<a href=#326 id=326 data-nosnippet>326</a>}
+<a href=#327 id=327 data-nosnippet>327</a>
+<a href=#328 id=328 data-nosnippet>328</a><span class="attr">#[cfg(test)]
+<a href=#329 id=329 data-nosnippet>329</a></span><span class="kw">mod </span>tests {
+<a href=#330 id=330 data-nosnippet>330</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#331 id=331 data-nosnippet>331</a>
+<a href=#332 id=332 data-nosnippet>332</a>    <span class="attr">#[test]
+<a href=#333 id=333 data-nosnippet>333</a>    </span><span class="kw">fn </span>explicit_builds_roundtrip() {
+<a href=#334 id=334 data-nosnippet>334</a>        <span class="kw">for </span>build <span class="kw">in </span>[<span class="string">""</span>, <span class="string">"0"</span>, <span class="string">"py_0"</span>] {
+<a href=#335 id=335 data-nosnippet>335</a>            <span class="kw">let </span>input = <span class="macro">format!</span>(
+<a href=#336 id=336 data-nosnippet>336</a>                <span class="string">"conda: https://example.com/noarch/demo-1.0-py_0.conda\nbuild: {build:?}\n"
+<a href=#337 id=337 data-nosnippet>337</a>            </span>);
+<a href=#338 id=338 data-nosnippet>338</a>            <span class="kw">let </span>model: CondaPackageDataModel&lt;<span class="lifetime">'_</span>&gt; = serde_yaml::from_str(<span class="kw-2">&amp;</span>input).unwrap();
+<a href=#339 id=339 data-nosnippet>339</a>            <span class="kw">let </span>binary = CondaBinaryData::try_from(model).unwrap();
+<a href=#340 id=340 data-nosnippet>340</a>            <span class="macro">assert_eq!</span>(binary.package_record.build, build);
+<a href=#341 id=341 data-nosnippet>341</a>            <span class="kw">let </span>yaml = serde_yaml::to_string(<span class="kw-2">&amp;</span>CondaPackageDataModel::from(<span class="kw-2">&amp;</span>binary)).unwrap();
+<a href=#342 id=342 data-nosnippet>342</a>            <span class="kw">let </span>model: CondaPackageDataModel&lt;<span class="lifetime">'_</span>&gt; = serde_yaml::from_str(<span class="kw-2">&amp;</span>yaml).unwrap();
+<a href=#343 id=343 data-nosnippet>343</a>            <span class="macro">assert_eq!</span>(
+<a href=#344 id=344 data-nosnippet>344</a>                CondaBinaryData::try_from(model)
+<a href=#345 id=345 data-nosnippet>345</a>                    .unwrap()
+<a href=#346 id=346 data-nosnippet>346</a>                    .package_record
+<a href=#347 id=347 data-nosnippet>347</a>                    .build,
+<a href=#348 id=348 data-nosnippet>348</a>                build
+<a href=#349 id=349 data-nosnippet>349</a>            );
+<a href=#350 id=350 data-nosnippet>350</a>        }
+<a href=#351 id=351 data-nosnippet>351</a>    }
+<a href=#352 id=352 data-nosnippet>352</a>
+<a href=#353 id=353 data-nosnippet>353</a>    <span class="attr">#[rstest::rstest]
+<a href=#354 id=354 data-nosnippet>354</a>    #[case(<span class="number">0</span>)]
+<a href=#355 id=355 data-nosnippet>355</a>    #[case(<span class="number">1</span>)]
+<a href=#356 id=356 data-nosnippet>356</a>    #[case(-<span class="number">1</span>)]
+<a href=#357 id=357 data-nosnippet>357</a>    #[case(<span class="number">1_789_300_800_123</span>)]
+<a href=#358 id=358 data-nosnippet>358</a>    </span><span class="kw">fn </span>indexed_timestamp_roundtrip(<span class="attr">#[case] </span>millis: i64) {
+<a href=#359 id=359 data-nosnippet>359</a>        <span class="kw">let </span>input = <span class="macro">format!</span>(
+<a href=#360 id=360 data-nosnippet>360</a>            <span class="string">"conda: https://example.com/linux-64/demo-1.0-0.conda\nindexed_timestamp: {millis}\n"
+<a href=#361 id=361 data-nosnippet>361</a>        </span>);
+<a href=#362 id=362 data-nosnippet>362</a>        <span class="kw">let </span>model: CondaPackageDataModel&lt;<span class="lifetime">'_</span>&gt; = serde_yaml::from_str(<span class="kw-2">&amp;</span>input).unwrap();
+<a href=#363 id=363 data-nosnippet>363</a>        <span class="kw">let </span>binary = CondaBinaryData::try_from(model).unwrap();
+<a href=#364 id=364 data-nosnippet>364</a>        <span class="kw">let </span>indexed = binary.package_record.indexed_timestamp.unwrap();
+<a href=#365 id=365 data-nosnippet>365</a>        <span class="macro">assert_eq!</span>(indexed.timestamp_millis(), millis);
+<a href=#366 id=366 data-nosnippet>366</a>        <span class="kw">let </span>model = CondaPackageDataModel::from(<span class="kw-2">&amp;</span>binary);
+<a href=#367 id=367 data-nosnippet>367</a>        <span class="kw">let </span>yaml = serde_yaml::to_string(<span class="kw-2">&amp;</span>model).unwrap();
+<a href=#368 id=368 data-nosnippet>368</a>        <span class="kw">let </span>decoded: CondaPackageDataModel&lt;<span class="lifetime">'_</span>&gt; = serde_yaml::from_str(<span class="kw-2">&amp;</span>yaml).unwrap();
+<a href=#369 id=369 data-nosnippet>369</a>        <span class="macro">assert_eq!</span>(
+<a href=#370 id=370 data-nosnippet>370</a>            CondaBinaryData::try_from(decoded)
+<a href=#371 id=371 data-nosnippet>371</a>                .unwrap()
+<a href=#372 id=372 data-nosnippet>372</a>                .package_record
+<a href=#373 id=373 data-nosnippet>373</a>                .indexed_timestamp,
+<a href=#374 id=374 data-nosnippet>374</a>            <span class="prelude-val">Some</span>(indexed)
+<a href=#375 id=375 data-nosnippet>375</a>        );
+<a href=#376 id=376 data-nosnippet>376</a>    }
+<a href=#377 id=377 data-nosnippet>377</a>}
 </code></pre></div></section></main></body></html>

@@ -480,7 +480,7 @@
 <a href=#478 id=478 data-nosnippet>478</a>        <span class="kw">let </span>cuda = rattler_conda_types::GenericVirtualPackage {
 <a href=#479 id=479 data-nosnippet>479</a>            name: PackageName::from_str(<span class="string">"__cuda"</span>).unwrap(),
 <a href=#480 id=480 data-nosnippet>480</a>            version: rattler_conda_types::Version::from_str(<span class="string">"12.5"</span>).unwrap(),
-<a href=#481 id=481 data-nosnippet>481</a>            build_string: <span class="string">"0"</span>.to_string(),
+<a href=#481 id=481 data-nosnippet>481</a>            build_string: <span class="string">"0"</span>.parse().unwrap(),
 <a href=#482 id=482 data-nosnippet>482</a>        };
 <a href=#483 id=483 data-nosnippet>483</a>        <span class="macro">insta::assert_snapshot!</span>(
 <a href=#484 id=484 data-nosnippet>484</a>            who_needs_dummy(<span class="string">"dummy"</span>, Subdir::Linux64, cuda.into()).<span class="kw">await</span>,

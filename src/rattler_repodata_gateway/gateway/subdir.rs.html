@@ -265,7 +265,7 @@
 <a href=#263 id=263 data-nosnippet>263</a>
 <a href=#264 id=264 data-nosnippet>264</a>    <span class="kw">use </span>rattler_conda_types::{
 <a href=#265 id=265 data-nosnippet>265</a>        NoArchType, PackageRecord, RepoDataRecord, VersionWithSource,
-<a href=#266 id=266 data-nosnippet>266</a>        package::DistArchiveIdentifier,
+<a href=#266 id=266 data-nosnippet>266</a>        package::{BuildString, DistArchiveIdentifier},
 <a href=#267 id=267 data-nosnippet>267</a>    };
 <a href=#268 id=268 data-nosnippet>268</a>    <span class="kw">use </span>url::Url;
 <a href=#269 id=269 data-nosnippet>269</a>
@@ -283,7 +283,7 @@
 <a href=#281 id=281 data-nosnippet>281</a>        <span class="kw">let </span>package_record = PackageRecord {
 <a href=#282 id=282 data-nosnippet>282</a>            attestations_sha256: <span class="prelude-val">None</span>,
 <a href=#283 id=283 data-nosnippet>283</a>            arch: <span class="prelude-val">None</span>,
-<a href=#284 id=284 data-nosnippet>284</a>            build: <span class="string">"0"</span>.to_string(),
+<a href=#284 id=284 data-nosnippet>284</a>            build: <span class="string">"0"</span>.parse::&lt;BuildString&gt;().unwrap(),
 <a href=#285 id=285 data-nosnippet>285</a>            build_number: <span class="number">0</span>,
 <a href=#286 id=286 data-nosnippet>286</a>            constrains: Vec::new(),
 <a href=#287 id=287 data-nosnippet>287</a>            depends: deps.iter().map(|s| (<span class="kw-2">*</span>s).to_string()).collect(),

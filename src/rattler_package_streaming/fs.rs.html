@@ -131,7 +131,7 @@
 <a href=#129 id=129 data-nosnippet>129</a>            ArchiveIdentifier {
 <a href=#130 id=130 data-nosnippet>130</a>                name: index_json.name.as_source().to_string(),
 <a href=#131 id=131 data-nosnippet>131</a>                version: index_json.version.to_string(),
-<a href=#132 id=132 data-nosnippet>132</a>                build_string: index_json.build.clone(),
+<a href=#132 id=132 data-nosnippet>132</a>                build_string: index_json.build.to_string(),
 <a href=#133 id=133 data-nosnippet>133</a>            },
 <a href=#134 id=134 data-nosnippet>134</a>            archive_type,
 <a href=#135 id=135 data-nosnippet>135</a>        );
@@ -219,8 +219,13 @@
 <a href=#217 id=217 data-nosnippet>217</a>            .<span class="kw">await
 <a href=#218 id=218 data-nosnippet>218</a>            </span>.unwrap();
 <a href=#219 id=219 data-nosnippet>219</a>
-<a href=#220 id=220 data-nosnippet>220</a>        <span class="macro">assert_eq!</span>(record.package_record.name.as_normalized(), <span class="string">"clobber-fd-1"</span>);
-<a href=#221 id=221 data-nosnippet>221</a>        <span class="macro">assert_eq!</span>(record.channel, <span class="prelude-val">None</span>);
-<a href=#222 id=222 data-nosnippet>222</a>    }
-<a href=#223 id=223 data-nosnippet>223</a>}
+<a href=#220 id=220 data-nosnippet>220</a>        <span class="macro">assert_eq!</span>(
+<a href=#221 id=221 data-nosnippet>221</a>            record.identifier.to_string(),
+<a href=#222 id=222 data-nosnippet>222</a>            <span class="string">"clobber-fd-1-0.1.0-h4616a5c_0.conda"
+<a href=#223 id=223 data-nosnippet>223</a>        </span>);
+<a href=#224 id=224 data-nosnippet>224</a>        <span class="macro">assert_eq!</span>(record.package_record.build, <span class="string">"h4616a5c_0"</span>);
+<a href=#225 id=225 data-nosnippet>225</a>        <span class="macro">assert_eq!</span>(record.package_record.name.as_normalized(), <span class="string">"clobber-fd-1"</span>);
+<a href=#226 id=226 data-nosnippet>226</a>        <span class="macro">assert_eq!</span>(record.channel, <span class="prelude-val">None</span>);
+<a href=#227 id=227 data-nosnippet>227</a>    }
+<a href=#228 id=228 data-nosnippet>228</a>}
 </code></pre></div></section></main></body></html>

@@ -401,7 +401,7 @@
 <a href=#399 id=399 data-nosnippet>399</a>        routing::get,
 <a href=#400 id=400 data-nosnippet>400</a>    };
 <a href=#401 id=401 data-nosnippet>401</a>
-<a href=#402 id=402 data-nosnippet>402</a>    <span class="kw">use </span>rattler_conda_types::{PackageName, PackageRecord, Version};
+<a href=#402 id=402 data-nosnippet>402</a>    <span class="kw">use </span>rattler_conda_types::{PackageName, PackageRecord, Version, package::BuildString};
 <a href=#403 id=403 data-nosnippet>403</a>    <span class="kw">use </span>rattler_digest::{Sha256, parse_digest_from_hex};
 <a href=#404 id=404 data-nosnippet>404</a>    <span class="kw">use </span>rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
 <a href=#405 id=405 data-nosnippet>405</a>    <span class="kw">use </span>reqwest::Client;
@@ -429,7 +429,7 @@
 <a href=#427 id=427 data-nosnippet>427</a>        <span class="kw">let </span><span class="kw-2">mut </span>pkg_record = PackageRecord::new(
 <a href=#428 id=428 data-nosnippet>428</a>            PackageName::from_str(<span class="string">"ros-noetic-rosbridge-suite"</span>).unwrap(),
 <a href=#429 id=429 data-nosnippet>429</a>            Version::from_str(<span class="string">"0.11.14"</span>).unwrap(),
-<a href=#430 id=430 data-nosnippet>430</a>            <span class="string">"py39h6fdeb60_14"</span>.to_string(),
+<a href=#430 id=430 data-nosnippet>430</a>            <span class="string">"py39h6fdeb60_14"</span>.parse::&lt;BuildString&gt;().unwrap(),
 <a href=#431 id=431 data-nosnippet>431</a>        );
 <a href=#432 id=432 data-nosnippet>432</a>        pkg_record.sha256 = <span class="prelude-val">Some</span>(
 <a href=#433 id=433 data-nosnippet>433</a>            parse_digest_from_hex::&lt;Sha256&gt;(
@@ -473,7 +473,7 @@
 <a href=#471 id=471 data-nosnippet>471</a>        <span class="kw">let </span>pkg_record = PackageRecord::new(
 <a href=#472 id=472 data-nosnippet>472</a>            PackageName::from_str(<span class="string">"zlib"</span>).unwrap(),
 <a href=#473 id=473 data-nosnippet>473</a>            Version::from_str(<span class="string">"1.3.1"</span>).unwrap(),
-<a href=#474 id=474 data-nosnippet>474</a>            <span class="string">"hb9d3cd8_2"</span>.to_string(),
+<a href=#474 id=474 data-nosnippet>474</a>            <span class="string">"hb9d3cd8_2"</span>.parse::&lt;BuildString&gt;().unwrap(),
 <a href=#475 id=475 data-nosnippet>475</a>        );
 <a href=#476 id=476 data-nosnippet>476</a>
 <a href=#477 id=477 data-nosnippet>477</a>        <span class="kw">let </span>cache_key = CacheKey::create(<span class="kw-2">&amp;</span>pkg_record, <span class="string">"zlib-1.3.1-hb9d3cd8_2.conda"</span>).unwrap();
@@ -615,13 +615,13 @@
 <a href=#613 id=613 data-nosnippet>613</a>        <span class="kw">let </span>tar_record = PackageRecord::new(
 <a href=#614 id=614 data-nosnippet>614</a>            PackageName::from_str(<span class="string">"conda"</span>).unwrap(),
 <a href=#615 id=615 data-nosnippet>615</a>            Version::from_str(<span class="string">"22.9.0"</span>).unwrap(),
-<a href=#616 id=616 data-nosnippet>616</a>            <span class="string">"py310h5588dad_2"</span>.to_string(),
+<a href=#616 id=616 data-nosnippet>616</a>            <span class="string">"py310h5588dad_2"</span>.parse::&lt;BuildString&gt;().unwrap(),
 <a href=#617 id=617 data-nosnippet>617</a>        );
 <a href=#618 id=618 data-nosnippet>618</a>
 <a href=#619 id=619 data-nosnippet>619</a>        <span class="kw">let </span>conda_record = PackageRecord::new(
 <a href=#620 id=620 data-nosnippet>620</a>            PackageName::from_str(<span class="string">"conda"</span>).unwrap(),
 <a href=#621 id=621 data-nosnippet>621</a>            Version::from_str(<span class="string">"22.11.1"</span>).unwrap(),
-<a href=#622 id=622 data-nosnippet>622</a>            <span class="string">"py38haa244fe_1"</span>.to_string(),
+<a href=#622 id=622 data-nosnippet>622</a>            <span class="string">"py38haa244fe_1"</span>.parse::&lt;BuildString&gt;().unwrap(),
 <a href=#623 id=623 data-nosnippet>623</a>        );
 <a href=#624 id=624 data-nosnippet>624</a>
 <a href=#625 id=625 data-nosnippet>625</a>        test_flaky_package_cache(tar_bz2, <span class="kw-2">&amp;</span>tar_record, Middleware::FailTheFirstTwoRequests).<span class="kw">await</span>;
@@ -637,7 +637,7 @@
 <a href=#635 id=635 data-nosnippet>635</a>        <span class="kw">let </span><span class="kw-2">mut </span>pkg_record = PackageRecord::new(
 <a href=#636 id=636 data-nosnippet>636</a>            PackageName::from_str(<span class="string">"ros-noetic-rosbridge-suite"</span>).unwrap(),
 <a href=#637 id=637 data-nosnippet>637</a>            Version::from_str(<span class="string">"0.11.14"</span>).unwrap(),
-<a href=#638 id=638 data-nosnippet>638</a>            <span class="string">"py39h6fdeb60_14"</span>.to_string(),
+<a href=#638 id=638 data-nosnippet>638</a>            <span class="string">"py39h6fdeb60_14"</span>.parse::&lt;BuildString&gt;().unwrap(),
 <a href=#639 id=639 data-nosnippet>639</a>        );
 <a href=#640 id=640 data-nosnippet>640</a>        pkg_record.sha256 = <span class="prelude-val">Some</span>(
 <a href=#641 id=641 data-nosnippet>641</a>            parse_digest_from_hex::&lt;Sha256&gt;(
@@ -715,7 +715,7 @@
 <a href=#713 id=713 data-nosnippet>713</a>        <span class="kw">let </span>pkg_record = PackageRecord::new(
 <a href=#714 id=714 data-nosnippet>714</a>            PackageName::from_str(<span class="string">"zlib"</span>).unwrap(),
 <a href=#715 id=715 data-nosnippet>715</a>            Version::from_str(<span class="string">"1.3.1"</span>).unwrap(),
-<a href=#716 id=716 data-nosnippet>716</a>            <span class="string">"hb9d3cd8_2"</span>.to_string(),
+<a href=#716 id=716 data-nosnippet>716</a>            <span class="string">"hb9d3cd8_2"</span>.parse::&lt;BuildString&gt;().unwrap(),
 <a href=#717 id=717 data-nosnippet>717</a>        );
 <a href=#718 id=718 data-nosnippet>718</a>
 <a href=#719 id=719 data-nosnippet>719</a>        <span class="kw">let </span>cache_key = CacheKey::create(<span class="kw-2">&amp;</span>pkg_record, <span class="string">"zlib-1.3.1-hb9d3cd8_2.conda"</span>).unwrap();

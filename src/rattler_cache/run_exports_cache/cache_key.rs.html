@@ -74,7 +74,7 @@
 <a href=#72 id=72 data-nosnippet>72</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
 <a href=#73 id=73 data-nosnippet>73</a>            name: record.name.as_normalized().to_string(),
 <a href=#74 id=74 data-nosnippet>74</a>            version: record.version.to_string(),
-<a href=#75 id=75 data-nosnippet>75</a>            build_string: record.build.clone(),
+<a href=#75 id=75 data-nosnippet>75</a>            build_string: record.build.to_string(),
 <a href=#76 id=76 data-nosnippet>76</a>            sha256: record.sha256,
 <a href=#77 id=77 data-nosnippet>77</a>            md5: record.md5,
 <a href=#78 id=78 data-nosnippet>78</a>            extension: archive_identifier.archive_type.extension().to_string(),
@@ -91,28 +91,30 @@
 <a href=#89 id=89 data-nosnippet>89</a><span class="attr">#[cfg(test)]
 <a href=#90 id=90 data-nosnippet>90</a></span><span class="kw">mod </span>tests {
 <a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">use </span><span class="kw">super</span>::CacheKey;
-<a href=#92 id=92 data-nosnippet>92</a>    <span class="kw">use </span>rattler_conda_types::{PackageName, PackageRecord, VersionWithSource};
-<a href=#93 id=93 data-nosnippet>93</a>
-<a href=#94 id=94 data-nosnippet>94</a>    <span class="attr">#[test]
-<a href=#95 id=95 data-nosnippet>95</a>    </span><span class="kw">fn </span>to_path_segment_rejects_path_traversal() {
-<a href=#96 id=96 data-nosnippet>96</a>        <span class="kw">let </span>record = PackageRecord::new(
-<a href=#97 id=97 data-nosnippet>97</a>            PackageName::new_unchecked(<span class="string">"demo"</span>),
-<a href=#98 id=98 data-nosnippet>98</a>            <span class="string">"1.0"</span>.parse::&lt;VersionWithSource&gt;().unwrap(),
-<a href=#99 id=99 data-nosnippet>99</a>            <span class="string">r"x\..\..\..\project\.git\hooks"</span>.to_string(),
-<a href=#100 id=100 data-nosnippet>100</a>        );
-<a href=#101 id=101 data-nosnippet>101</a>        <span class="kw">let </span>key = CacheKey::create(<span class="kw-2">&amp;</span>record, <span class="string">"demo-1.0-0.tar.bz2"</span>).unwrap();
-<a href=#102 id=102 data-nosnippet>102</a>        <span class="macro">assert!</span>(key.to_path_segment().is_err());
-<a href=#103 id=103 data-nosnippet>103</a>    }
-<a href=#104 id=104 data-nosnippet>104</a>
-<a href=#105 id=105 data-nosnippet>105</a>    <span class="attr">#[test]
-<a href=#106 id=106 data-nosnippet>106</a>    </span><span class="kw">fn </span>to_path_segment_accepts_well_formed_key() {
-<a href=#107 id=107 data-nosnippet>107</a>        <span class="kw">let </span>record = PackageRecord::new(
-<a href=#108 id=108 data-nosnippet>108</a>            PackageName::new_unchecked(<span class="string">"demo"</span>),
-<a href=#109 id=109 data-nosnippet>109</a>            <span class="string">"1.0"</span>.parse::&lt;VersionWithSource&gt;().unwrap(),
-<a href=#110 id=110 data-nosnippet>110</a>            <span class="string">"py39h6fdeb60_14"</span>.to_string(),
-<a href=#111 id=111 data-nosnippet>111</a>        );
-<a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">let </span>key = CacheKey::create(<span class="kw-2">&amp;</span>record, <span class="string">"demo-1.0-0.tar.bz2"</span>).unwrap();
-<a href=#113 id=113 data-nosnippet>113</a>        <span class="macro">assert!</span>(key.to_path_segment().is_ok());
-<a href=#114 id=114 data-nosnippet>114</a>    }
-<a href=#115 id=115 data-nosnippet>115</a>}
+<a href=#92 id=92 data-nosnippet>92</a>    <span class="kw">use </span>rattler_conda_types::{
+<a href=#93 id=93 data-nosnippet>93</a>        PackageName, PackageRecord, VersionWithSource, package::BuildString,
+<a href=#94 id=94 data-nosnippet>94</a>    };
+<a href=#95 id=95 data-nosnippet>95</a>
+<a href=#96 id=96 data-nosnippet>96</a>    <span class="attr">#[test]
+<a href=#97 id=97 data-nosnippet>97</a>    </span><span class="kw">fn </span>to_path_segment_rejects_path_traversal() {
+<a href=#98 id=98 data-nosnippet>98</a>        <span class="kw">let </span>record = PackageRecord::new(
+<a href=#99 id=99 data-nosnippet>99</a>            PackageName::new_unchecked(<span class="string">"demo"</span>),
+<a href=#100 id=100 data-nosnippet>100</a>            <span class="string">"1.0"</span>.parse::&lt;VersionWithSource&gt;().unwrap(),
+<a href=#101 id=101 data-nosnippet>101</a>            BuildString::new_unchecked(<span class="string">r"x\..\..\..\project\.git\hooks"</span>),
+<a href=#102 id=102 data-nosnippet>102</a>        );
+<a href=#103 id=103 data-nosnippet>103</a>        <span class="kw">let </span>key = CacheKey::create(<span class="kw-2">&amp;</span>record, <span class="string">"demo-1.0-0.tar.bz2"</span>).unwrap();
+<a href=#104 id=104 data-nosnippet>104</a>        <span class="macro">assert!</span>(key.to_path_segment().is_err());
+<a href=#105 id=105 data-nosnippet>105</a>    }
+<a href=#106 id=106 data-nosnippet>106</a>
+<a href=#107 id=107 data-nosnippet>107</a>    <span class="attr">#[test]
+<a href=#108 id=108 data-nosnippet>108</a>    </span><span class="kw">fn </span>to_path_segment_accepts_well_formed_key() {
+<a href=#109 id=109 data-nosnippet>109</a>        <span class="kw">let </span>record = PackageRecord::new(
+<a href=#110 id=110 data-nosnippet>110</a>            PackageName::new_unchecked(<span class="string">"demo"</span>),
+<a href=#111 id=111 data-nosnippet>111</a>            <span class="string">"1.0"</span>.parse::&lt;VersionWithSource&gt;().unwrap(),
+<a href=#112 id=112 data-nosnippet>112</a>            <span class="string">"py39h6fdeb60_14"</span>.parse::&lt;BuildString&gt;().unwrap(),
+<a href=#113 id=113 data-nosnippet>113</a>        );
+<a href=#114 id=114 data-nosnippet>114</a>        <span class="kw">let </span>key = CacheKey::create(<span class="kw-2">&amp;</span>record, <span class="string">"demo-1.0-0.tar.bz2"</span>).unwrap();
+<a href=#115 id=115 data-nosnippet>115</a>        <span class="macro">assert!</span>(key.to_path_segment().is_ok());
+<a href=#116 id=116 data-nosnippet>116</a>    }
+<a href=#117 id=117 data-nosnippet>117</a>}
 </code></pre></div></section></main></body></html>

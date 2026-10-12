@@ -338,7 +338,7 @@
 <a href=#336 id=336 data-nosnippet>336</a></span><span class="kw">mod </span>tests {
 <a href=#337 id=337 data-nosnippet>337</a>    <span class="kw">use </span>rattler_conda_types::{
 <a href=#338 id=338 data-nosnippet>338</a>        Version,
-<a href=#339 id=339 data-nosnippet>339</a>        package::{DistArchiveIdentifier, RunExportsJson},
+<a href=#339 id=339 data-nosnippet>339</a>        package::{BuildString, DistArchiveIdentifier, RunExportsJson},
 <a href=#340 id=340 data-nosnippet>340</a>    };
 <a href=#341 id=341 data-nosnippet>341</a>    <span class="kw">use </span>url::Url;
 <a href=#342 id=342 data-nosnippet>342</a>
@@ -362,7 +362,7 @@
 <a href=#360 id=360 data-nosnippet>360</a>        <span class="kw">let </span><span class="kw-2">mut </span>package_record = PackageRecord::new(
 <a href=#361 id=361 data-nosnippet>361</a>            name.parse().unwrap(),
 <a href=#362 id=362 data-nosnippet>362</a>            version.parse::&lt;Version&gt;().unwrap(),
-<a href=#363 id=363 data-nosnippet>363</a>            build.to_string(),
+<a href=#363 id=363 data-nosnippet>363</a>            BuildString::new_unchecked(build),
 <a href=#364 id=364 data-nosnippet>364</a>        );
 <a href=#365 id=365 data-nosnippet>365</a>        package_record.depends = depends.into_iter().map(String::from).collect();
 <a href=#366 id=366 data-nosnippet>366</a>        package_record.constrains = constrains.into_iter().map(String::from).collect();
@@ -434,7 +434,7 @@
 <a href=#432 id=432 data-nosnippet>432</a>        PackageRecord::new(
 <a href=#433 id=433 data-nosnippet>433</a>            name.parse().unwrap(),
 <a href=#434 id=434 data-nosnippet>434</a>            version.parse::&lt;Version&gt;().unwrap(),
-<a href=#435 id=435 data-nosnippet>435</a>            build.to_string(),
+<a href=#435 id=435 data-nosnippet>435</a>            BuildString::new_unchecked(build),
 <a href=#436 id=436 data-nosnippet>436</a>        )
 <a href=#437 id=437 data-nosnippet>437</a>    }
 <a href=#438 id=438 data-nosnippet>438</a>
@@ -572,7 +572,7 @@
 <a href=#570 id=570 data-nosnippet>570</a>        </span><span class="kw">let </span>cuda = |version: <span class="kw-2">&amp;</span>str| GenericVirtualPackage {
 <a href=#571 id=571 data-nosnippet>571</a>            name: <span class="string">"__cuda"</span>.parse().unwrap(),
 <a href=#572 id=572 data-nosnippet>572</a>            version: version.parse().unwrap(),
-<a href=#573 id=573 data-nosnippet>573</a>            build_string: <span class="string">"0"</span>.to_string(),
+<a href=#573 id=573 data-nosnippet>573</a>            build_string: <span class="string">"0"</span>.parse::&lt;BuildString&gt;().unwrap(),
 <a href=#574 id=574 data-nosnippet>574</a>        };
 <a href=#575 id=575 data-nosnippet>575</a>        <span class="kw">let </span>result = dependents(<span class="kw-2">&amp;</span>records, cuda(<span class="string">"12.4"</span>));
 <a href=#576 id=576 data-nosnippet>576</a>        <span class="macro">assert_eq!</span>(names(<span class="kw-2">&amp;</span>result), <span class="macro">vec!</span>[<span class="string">"cuda-tool"</span>]);

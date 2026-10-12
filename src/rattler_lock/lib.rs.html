@@ -2189,7 +2189,7 @@
 <a href=#2187 id=2187 data-nosnippet>2187</a>    </span><span class="kw">fn </span>builder_deduplicates_conda_source_packages() {
 <a href=#2188 id=2188 data-nosnippet>2188</a>        <span class="kw">use </span>std::collections::BTreeMap;
 <a href=#2189 id=2189 data-nosnippet>2189</a>
-<a href=#2190 id=2190 data-nosnippet>2190</a>        <span class="kw">use </span>rattler_conda_types::{PackageName, PackageRecord};
+<a href=#2190 id=2190 data-nosnippet>2190</a>        <span class="kw">use </span>rattler_conda_types::{PackageName, PackageRecord, package::BuildString};
 <a href=#2191 id=2191 data-nosnippet>2191</a>
 <a href=#2192 id=2192 data-nosnippet>2192</a>        <span class="kw">use crate</span>::{
 <a href=#2193 id=2193 data-nosnippet>2193</a>            CondaPackageData, CondaSourceData, PlatformData, SourceData, SourceMetadata, UrlOrPath,
@@ -2210,7 +2210,7 @@
 <a href=#2208 id=2208 data-nosnippet>2208</a>                <span class="kw">let </span><span class="kw-2">mut </span>r = PackageRecord::new(
 <a href=#2209 id=2209 data-nosnippet>2209</a>                    PackageName::new_unchecked(<span class="string">"my-source-pkg"</span>),
 <a href=#2210 id=2210 data-nosnippet>2210</a>                    version,
-<a href=#2211 id=2211 data-nosnippet>2211</a>                    <span class="string">"py_0"</span>.to_string(),
+<a href=#2211 id=2211 data-nosnippet>2211</a>                    <span class="string">"py_0"</span>.parse::&lt;BuildString&gt;().unwrap(),
 <a href=#2212 id=2212 data-nosnippet>2212</a>                );
 <a href=#2213 id=2213 data-nosnippet>2213</a>                r.subdir = <span class="string">"noarch"</span>.to_string();
 <a href=#2214 id=2214 data-nosnippet>2214</a>                r
@@ -2394,133 +2394,134 @@
 <a href=#2392 id=2392 data-nosnippet>2392</a>        };
 <a href=#2393 id=2393 data-nosnippet>2393</a>
 <a href=#2394 id=2394 data-nosnippet>2394</a>        <span class="kw">use </span>rattler_conda_types::{
-<a href=#2395 id=2395 data-nosnippet>2395</a>            PackageName, PackageRecord, Version, package::DistArchiveIdentifier,
-<a href=#2396 id=2396 data-nosnippet>2396</a>        };
-<a href=#2397 id=2397 data-nosnippet>2397</a>        <span class="kw">use </span>url::Url;
-<a href=#2398 id=2398 data-nosnippet>2398</a>
-<a href=#2399 id=2399 data-nosnippet>2399</a>        <span class="kw">use crate</span>::{
-<a href=#2400 id=2400 data-nosnippet>2400</a>            CondaBinaryData, CondaPackageData, EnvironmentPackages, LockedPackage, PackageHandle,
-<a href=#2401 id=2401 data-nosnippet>2401</a>            PackageIndex,
-<a href=#2402 id=2402 data-nosnippet>2402</a>        };
-<a href=#2403 id=2403 data-nosnippet>2403</a>
-<a href=#2404 id=2404 data-nosnippet>2404</a>        <span class="kw">fn </span>hash_of(value: <span class="kw-2">&amp;</span><span class="kw">impl </span>Hash) -&gt; u64 {
-<a href=#2405 id=2405 data-nosnippet>2405</a>            <span class="kw">let </span><span class="kw-2">mut </span>hasher = std::collections::hash_map::DefaultHasher::new();
-<a href=#2406 id=2406 data-nosnippet>2406</a>            value.hash(<span class="kw-2">&amp;mut </span>hasher);
-<a href=#2407 id=2407 data-nosnippet>2407</a>            hasher.finish()
-<a href=#2408 id=2408 data-nosnippet>2408</a>        }
-<a href=#2409 id=2409 data-nosnippet>2409</a>
-<a href=#2410 id=2410 data-nosnippet>2410</a>        <span class="kw">fn </span>make_package(name: <span class="kw-2">&amp;</span>str, version: <span class="kw-2">&amp;</span>str) -&gt; LockedPackage {
-<a href=#2411 id=2411 data-nosnippet>2411</a>            LockedPackage::Conda(CondaPackageData::Binary(Box::new(CondaBinaryData {
-<a href=#2412 id=2412 data-nosnippet>2412</a>                package_record: PackageRecord {
-<a href=#2413 id=2413 data-nosnippet>2413</a>                    subdir: <span class="string">"linux-64"</span>.into(),
-<a href=#2414 id=2414 data-nosnippet>2414</a>                    ..PackageRecord::new(
-<a href=#2415 id=2415 data-nosnippet>2415</a>                        PackageName::new_unchecked(name),
-<a href=#2416 id=2416 data-nosnippet>2416</a>                        Version::from_str(version).unwrap(),
-<a href=#2417 id=2417 data-nosnippet>2417</a>                        <span class="string">"build0"</span>.into(),
-<a href=#2418 id=2418 data-nosnippet>2418</a>                    )
-<a href=#2419 id=2419 data-nosnippet>2419</a>                },
-<a href=#2420 id=2420 data-nosnippet>2420</a>                location: Url::parse(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
-<a href=#2421 id=2421 data-nosnippet>2421</a>                    <span class="string">"https://example.com/{name}-{version}-build0.tar.bz2"
-<a href=#2422 id=2422 data-nosnippet>2422</a>                </span>))
-<a href=#2423 id=2423 data-nosnippet>2423</a>                .unwrap()
-<a href=#2424 id=2424 data-nosnippet>2424</a>                .into(),
-<a href=#2425 id=2425 data-nosnippet>2425</a>                file_name: <span class="macro">format!</span>(<span class="string">"{name}-{version}-build0.tar.bz2"</span>)
-<a href=#2426 id=2426 data-nosnippet>2426</a>                    .parse::&lt;DistArchiveIdentifier&gt;()
-<a href=#2427 id=2427 data-nosnippet>2427</a>                    .unwrap(),
-<a href=#2428 id=2428 data-nosnippet>2428</a>                channel: <span class="prelude-val">None</span>,
-<a href=#2429 id=2429 data-nosnippet>2429</a>            })))
-<a href=#2430 id=2430 data-nosnippet>2430</a>        }
-<a href=#2431 id=2431 data-nosnippet>2431</a>
-<a href=#2432 id=2432 data-nosnippet>2432</a>        <span class="kw">fn </span>packages() -&gt; Vec&lt;LockedPackage&gt; {
-<a href=#2433 id=2433 data-nosnippet>2433</a>            <span class="macro">vec!</span>[
-<a href=#2434 id=2434 data-nosnippet>2434</a>                make_package(<span class="string">"alpha"</span>, <span class="string">"1.0.0"</span>),
-<a href=#2435 id=2435 data-nosnippet>2435</a>                make_package(<span class="string">"beta"</span>, <span class="string">"2.0.0"</span>),
-<a href=#2436 id=2436 data-nosnippet>2436</a>                make_package(<span class="string">"gamma"</span>, <span class="string">"3.0.0"</span>),
-<a href=#2437 id=2437 data-nosnippet>2437</a>            ]
-<a href=#2438 id=2438 data-nosnippet>2438</a>        }
-<a href=#2439 id=2439 data-nosnippet>2439</a>
-<a href=#2440 id=2440 data-nosnippet>2440</a>        <span class="kw">fn </span>env_with(indices: <span class="kw-2">&amp;</span>[usize], packages: <span class="kw-2">&amp;</span>[LockedPackage]) -&gt; EnvironmentPackages {
-<a href=#2441 id=2441 data-nosnippet>2441</a>            EnvironmentPackages::from_indices(
-<a href=#2442 id=2442 data-nosnippet>2442</a>                indices.iter().map(|<span class="kw-2">&amp;</span>index| PackageIndex(index)),
-<a href=#2443 id=2443 data-nosnippet>2443</a>                packages,
-<a href=#2444 id=2444 data-nosnippet>2444</a>            )
-<a href=#2445 id=2445 data-nosnippet>2445</a>            .unwrap()
-<a href=#2446 id=2446 data-nosnippet>2446</a>        }
-<a href=#2447 id=2447 data-nosnippet>2447</a>
-<a href=#2448 id=2448 data-nosnippet>2448</a>        <span class="attr">#[test]
-<a href=#2449 id=2449 data-nosnippet>2449</a>        </span><span class="kw">fn </span>empty_sets_are_equal() {
-<a href=#2450 id=2450 data-nosnippet>2450</a>            <span class="kw">let </span>packages = packages();
-<a href=#2451 id=2451 data-nosnippet>2451</a>            <span class="kw">let </span>a = env_with(<span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>packages);
-<a href=#2452 id=2452 data-nosnippet>2452</a>            <span class="kw">let </span>b = env_with(<span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>packages);
-<a href=#2453 id=2453 data-nosnippet>2453</a>            <span class="macro">assert_eq!</span>(a, b);
-<a href=#2454 id=2454 data-nosnippet>2454</a>            <span class="macro">assert_eq!</span>(hash_of(<span class="kw-2">&amp;</span>a), hash_of(<span class="kw-2">&amp;</span>b));
-<a href=#2455 id=2455 data-nosnippet>2455</a>        }
-<a href=#2456 id=2456 data-nosnippet>2456</a>
-<a href=#2457 id=2457 data-nosnippet>2457</a>        <span class="attr">#[test]
-<a href=#2458 id=2458 data-nosnippet>2458</a>        </span><span class="kw">fn </span>same_packages_same_order() {
-<a href=#2459 id=2459 data-nosnippet>2459</a>            <span class="kw">let </span>packages = packages();
-<a href=#2460 id=2460 data-nosnippet>2460</a>            <span class="kw">let </span>a = env_with(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">1</span>], <span class="kw-2">&amp;</span>packages);
-<a href=#2461 id=2461 data-nosnippet>2461</a>            <span class="kw">let </span>b = env_with(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">1</span>], <span class="kw-2">&amp;</span>packages);
-<a href=#2462 id=2462 data-nosnippet>2462</a>            <span class="macro">assert_eq!</span>(a, b);
-<a href=#2463 id=2463 data-nosnippet>2463</a>            <span class="macro">assert_eq!</span>(hash_of(<span class="kw-2">&amp;</span>a), hash_of(<span class="kw-2">&amp;</span>b));
-<a href=#2464 id=2464 data-nosnippet>2464</a>        }
-<a href=#2465 id=2465 data-nosnippet>2465</a>
-<a href=#2466 id=2466 data-nosnippet>2466</a>        <span class="attr">#[test]
-<a href=#2467 id=2467 data-nosnippet>2467</a>        </span><span class="kw">fn </span>same_packages_different_order() {
-<a href=#2468 id=2468 data-nosnippet>2468</a>            <span class="kw">let </span>packages = packages();
-<a href=#2469 id=2469 data-nosnippet>2469</a>            <span class="kw">let </span>a = env_with(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">1</span>], <span class="kw-2">&amp;</span>packages);
-<a href=#2470 id=2470 data-nosnippet>2470</a>            <span class="kw">let </span>b = env_with(<span class="kw-2">&amp;</span>[<span class="number">1</span>, <span class="number">0</span>], <span class="kw-2">&amp;</span>packages);
-<a href=#2471 id=2471 data-nosnippet>2471</a>            <span class="macro">assert_eq!</span>(a, b);
-<a href=#2472 id=2472 data-nosnippet>2472</a>            <span class="macro">assert_eq!</span>(hash_of(<span class="kw-2">&amp;</span>a), hash_of(<span class="kw-2">&amp;</span>b));
-<a href=#2473 id=2473 data-nosnippet>2473</a>        }
-<a href=#2474 id=2474 data-nosnippet>2474</a>
-<a href=#2475 id=2475 data-nosnippet>2475</a>        <span class="attr">#[test]
-<a href=#2476 id=2476 data-nosnippet>2476</a>        </span><span class="kw">fn </span>different_packages_differ() {
-<a href=#2477 id=2477 data-nosnippet>2477</a>            <span class="kw">let </span>packages = packages();
-<a href=#2478 id=2478 data-nosnippet>2478</a>            <span class="kw">let </span>a = env_with(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">1</span>], <span class="kw-2">&amp;</span>packages);
-<a href=#2479 id=2479 data-nosnippet>2479</a>            <span class="kw">let </span>b = env_with(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">2</span>], <span class="kw-2">&amp;</span>packages);
-<a href=#2480 id=2480 data-nosnippet>2480</a>            <span class="macro">assert_ne!</span>(a, b);
-<a href=#2481 id=2481 data-nosnippet>2481</a>            <span class="macro">assert_ne!</span>(hash_of(<span class="kw-2">&amp;</span>a), hash_of(<span class="kw-2">&amp;</span>b));
-<a href=#2482 id=2482 data-nosnippet>2482</a>        }
-<a href=#2483 id=2483 data-nosnippet>2483</a>
-<a href=#2484 id=2484 data-nosnippet>2484</a>        <span class="attr">#[test]
-<a href=#2485 id=2485 data-nosnippet>2485</a>        </span><span class="kw">fn </span>duplicates_are_deduplicated() {
-<a href=#2486 id=2486 data-nosnippet>2486</a>            <span class="kw">let </span>packages = packages();
-<a href=#2487 id=2487 data-nosnippet>2487</a>            <span class="kw">let </span>a = env_with(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>], <span class="kw-2">&amp;</span>packages);
-<a href=#2488 id=2488 data-nosnippet>2488</a>            <span class="kw">let </span>b = env_with(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">1</span>], <span class="kw-2">&amp;</span>packages);
-<a href=#2489 id=2489 data-nosnippet>2489</a>            <span class="macro">assert_eq!</span>(a, b);
-<a href=#2490 id=2490 data-nosnippet>2490</a>            <span class="macro">assert_eq!</span>(hash_of(<span class="kw-2">&amp;</span>a), hash_of(<span class="kw-2">&amp;</span>b));
-<a href=#2491 id=2491 data-nosnippet>2491</a>        }
-<a href=#2492 id=2492 data-nosnippet>2492</a>
-<a href=#2493 id=2493 data-nosnippet>2493</a>        <span class="attr">#[test]
-<a href=#2494 id=2494 data-nosnippet>2494</a>        </span><span class="kw">fn </span>insert_preserves_sorted_invariant() {
-<a href=#2495 id=2495 data-nosnippet>2495</a>            <span class="kw">let </span>packages = packages();
-<a href=#2496 id=2496 data-nosnippet>2496</a>            <span class="kw">let </span><span class="kw-2">mut </span>env = env_with(<span class="kw-2">&amp;</span>[<span class="number">2</span>], <span class="kw-2">&amp;</span>packages);
-<a href=#2497 id=2497 data-nosnippet>2497</a>            env.insert(PackageHandle::new(PackageIndex(<span class="number">0</span>), <span class="kw-2">&amp;</span>packages[<span class="number">0</span>]))
-<a href=#2498 id=2498 data-nosnippet>2498</a>                .unwrap();
-<a href=#2499 id=2499 data-nosnippet>2499</a>            <span class="kw">let </span>ids = env.to_selector_ids();
-<a href=#2500 id=2500 data-nosnippet>2500</a>            <span class="kw">let </span><span class="kw-2">mut </span>sorted = ids.clone();
-<a href=#2501 id=2501 data-nosnippet>2501</a>            sorted.sort();
-<a href=#2502 id=2502 data-nosnippet>2502</a>            <span class="macro">assert_eq!</span>(ids, sorted);
-<a href=#2503 id=2503 data-nosnippet>2503</a>        }
-<a href=#2504 id=2504 data-nosnippet>2504</a>
-<a href=#2505 id=2505 data-nosnippet>2505</a>        <span class="attr">#[test]
-<a href=#2506 id=2506 data-nosnippet>2506</a>        </span><span class="kw">fn </span>insert_duplicate_pair_returns_false() {
-<a href=#2507 id=2507 data-nosnippet>2507</a>            <span class="kw">let </span>packages = packages();
-<a href=#2508 id=2508 data-nosnippet>2508</a>            <span class="kw">let </span><span class="kw-2">mut </span>env = env_with(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">1</span>], <span class="kw-2">&amp;</span>packages);
-<a href=#2509 id=2509 data-nosnippet>2509</a>            <span class="macro">assert!</span>(
-<a href=#2510 id=2510 data-nosnippet>2510</a>                !env.insert(PackageHandle::new(PackageIndex(<span class="number">0</span>), <span class="kw-2">&amp;</span>packages[<span class="number">0</span>]))
-<a href=#2511 id=2511 data-nosnippet>2511</a>                    .unwrap()
-<a href=#2512 id=2512 data-nosnippet>2512</a>            );
-<a href=#2513 id=2513 data-nosnippet>2513</a>        }
-<a href=#2514 id=2514 data-nosnippet>2514</a>
-<a href=#2515 id=2515 data-nosnippet>2515</a>        <span class="attr">#[test]
-<a href=#2516 id=2516 data-nosnippet>2516</a>        </span><span class="kw">fn </span>insert_reused_selector_with_different_index_errors() {
-<a href=#2517 id=2517 data-nosnippet>2517</a>            <span class="kw">let </span>packages = packages();
-<a href=#2518 id=2518 data-nosnippet>2518</a>            <span class="kw">let </span><span class="kw-2">mut </span>env = env_with(<span class="kw-2">&amp;</span>[<span class="number">0</span>], <span class="kw-2">&amp;</span>packages);
-<a href=#2519 id=2519 data-nosnippet>2519</a>            <span class="kw">let </span>result = env.insert(PackageHandle::new(PackageIndex(<span class="number">1</span>), <span class="kw-2">&amp;</span>packages[<span class="number">0</span>]));
-<a href=#2520 id=2520 data-nosnippet>2520</a>            <span class="macro">assert!</span>(result.is_err());
-<a href=#2521 id=2521 data-nosnippet>2521</a>        }
-<a href=#2522 id=2522 data-nosnippet>2522</a>    }
-<a href=#2523 id=2523 data-nosnippet>2523</a>}
+<a href=#2395 id=2395 data-nosnippet>2395</a>            PackageName, PackageRecord, Version,
+<a href=#2396 id=2396 data-nosnippet>2396</a>            package::{BuildString, DistArchiveIdentifier},
+<a href=#2397 id=2397 data-nosnippet>2397</a>        };
+<a href=#2398 id=2398 data-nosnippet>2398</a>        <span class="kw">use </span>url::Url;
+<a href=#2399 id=2399 data-nosnippet>2399</a>
+<a href=#2400 id=2400 data-nosnippet>2400</a>        <span class="kw">use crate</span>::{
+<a href=#2401 id=2401 data-nosnippet>2401</a>            CondaBinaryData, CondaPackageData, EnvironmentPackages, LockedPackage, PackageHandle,
+<a href=#2402 id=2402 data-nosnippet>2402</a>            PackageIndex,
+<a href=#2403 id=2403 data-nosnippet>2403</a>        };
+<a href=#2404 id=2404 data-nosnippet>2404</a>
+<a href=#2405 id=2405 data-nosnippet>2405</a>        <span class="kw">fn </span>hash_of(value: <span class="kw-2">&amp;</span><span class="kw">impl </span>Hash) -&gt; u64 {
+<a href=#2406 id=2406 data-nosnippet>2406</a>            <span class="kw">let </span><span class="kw-2">mut </span>hasher = std::collections::hash_map::DefaultHasher::new();
+<a href=#2407 id=2407 data-nosnippet>2407</a>            value.hash(<span class="kw-2">&amp;mut </span>hasher);
+<a href=#2408 id=2408 data-nosnippet>2408</a>            hasher.finish()
+<a href=#2409 id=2409 data-nosnippet>2409</a>        }
+<a href=#2410 id=2410 data-nosnippet>2410</a>
+<a href=#2411 id=2411 data-nosnippet>2411</a>        <span class="kw">fn </span>make_package(name: <span class="kw-2">&amp;</span>str, version: <span class="kw-2">&amp;</span>str) -&gt; LockedPackage {
+<a href=#2412 id=2412 data-nosnippet>2412</a>            LockedPackage::Conda(CondaPackageData::Binary(Box::new(CondaBinaryData {
+<a href=#2413 id=2413 data-nosnippet>2413</a>                package_record: PackageRecord {
+<a href=#2414 id=2414 data-nosnippet>2414</a>                    subdir: <span class="string">"linux-64"</span>.into(),
+<a href=#2415 id=2415 data-nosnippet>2415</a>                    ..PackageRecord::new(
+<a href=#2416 id=2416 data-nosnippet>2416</a>                        PackageName::new_unchecked(name),
+<a href=#2417 id=2417 data-nosnippet>2417</a>                        Version::from_str(version).unwrap(),
+<a href=#2418 id=2418 data-nosnippet>2418</a>                        <span class="string">"build0"</span>.parse::&lt;BuildString&gt;().unwrap(),
+<a href=#2419 id=2419 data-nosnippet>2419</a>                    )
+<a href=#2420 id=2420 data-nosnippet>2420</a>                },
+<a href=#2421 id=2421 data-nosnippet>2421</a>                location: Url::parse(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
+<a href=#2422 id=2422 data-nosnippet>2422</a>                    <span class="string">"https://example.com/{name}-{version}-build0.tar.bz2"
+<a href=#2423 id=2423 data-nosnippet>2423</a>                </span>))
+<a href=#2424 id=2424 data-nosnippet>2424</a>                .unwrap()
+<a href=#2425 id=2425 data-nosnippet>2425</a>                .into(),
+<a href=#2426 id=2426 data-nosnippet>2426</a>                file_name: <span class="macro">format!</span>(<span class="string">"{name}-{version}-build0.tar.bz2"</span>)
+<a href=#2427 id=2427 data-nosnippet>2427</a>                    .parse::&lt;DistArchiveIdentifier&gt;()
+<a href=#2428 id=2428 data-nosnippet>2428</a>                    .unwrap(),
+<a href=#2429 id=2429 data-nosnippet>2429</a>                channel: <span class="prelude-val">None</span>,
+<a href=#2430 id=2430 data-nosnippet>2430</a>            })))
+<a href=#2431 id=2431 data-nosnippet>2431</a>        }
+<a href=#2432 id=2432 data-nosnippet>2432</a>
+<a href=#2433 id=2433 data-nosnippet>2433</a>        <span class="kw">fn </span>packages() -&gt; Vec&lt;LockedPackage&gt; {
+<a href=#2434 id=2434 data-nosnippet>2434</a>            <span class="macro">vec!</span>[
+<a href=#2435 id=2435 data-nosnippet>2435</a>                make_package(<span class="string">"alpha"</span>, <span class="string">"1.0.0"</span>),
+<a href=#2436 id=2436 data-nosnippet>2436</a>                make_package(<span class="string">"beta"</span>, <span class="string">"2.0.0"</span>),
+<a href=#2437 id=2437 data-nosnippet>2437</a>                make_package(<span class="string">"gamma"</span>, <span class="string">"3.0.0"</span>),
+<a href=#2438 id=2438 data-nosnippet>2438</a>            ]
+<a href=#2439 id=2439 data-nosnippet>2439</a>        }
+<a href=#2440 id=2440 data-nosnippet>2440</a>
+<a href=#2441 id=2441 data-nosnippet>2441</a>        <span class="kw">fn </span>env_with(indices: <span class="kw-2">&amp;</span>[usize], packages: <span class="kw-2">&amp;</span>[LockedPackage]) -&gt; EnvironmentPackages {
+<a href=#2442 id=2442 data-nosnippet>2442</a>            EnvironmentPackages::from_indices(
+<a href=#2443 id=2443 data-nosnippet>2443</a>                indices.iter().map(|<span class="kw-2">&amp;</span>index| PackageIndex(index)),
+<a href=#2444 id=2444 data-nosnippet>2444</a>                packages,
+<a href=#2445 id=2445 data-nosnippet>2445</a>            )
+<a href=#2446 id=2446 data-nosnippet>2446</a>            .unwrap()
+<a href=#2447 id=2447 data-nosnippet>2447</a>        }
+<a href=#2448 id=2448 data-nosnippet>2448</a>
+<a href=#2449 id=2449 data-nosnippet>2449</a>        <span class="attr">#[test]
+<a href=#2450 id=2450 data-nosnippet>2450</a>        </span><span class="kw">fn </span>empty_sets_are_equal() {
+<a href=#2451 id=2451 data-nosnippet>2451</a>            <span class="kw">let </span>packages = packages();
+<a href=#2452 id=2452 data-nosnippet>2452</a>            <span class="kw">let </span>a = env_with(<span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>packages);
+<a href=#2453 id=2453 data-nosnippet>2453</a>            <span class="kw">let </span>b = env_with(<span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>packages);
+<a href=#2454 id=2454 data-nosnippet>2454</a>            <span class="macro">assert_eq!</span>(a, b);
+<a href=#2455 id=2455 data-nosnippet>2455</a>            <span class="macro">assert_eq!</span>(hash_of(<span class="kw-2">&amp;</span>a), hash_of(<span class="kw-2">&amp;</span>b));
+<a href=#2456 id=2456 data-nosnippet>2456</a>        }
+<a href=#2457 id=2457 data-nosnippet>2457</a>
+<a href=#2458 id=2458 data-nosnippet>2458</a>        <span class="attr">#[test]
+<a href=#2459 id=2459 data-nosnippet>2459</a>        </span><span class="kw">fn </span>same_packages_same_order() {
+<a href=#2460 id=2460 data-nosnippet>2460</a>            <span class="kw">let </span>packages = packages();
+<a href=#2461 id=2461 data-nosnippet>2461</a>            <span class="kw">let </span>a = env_with(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">1</span>], <span class="kw-2">&amp;</span>packages);
+<a href=#2462 id=2462 data-nosnippet>2462</a>            <span class="kw">let </span>b = env_with(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">1</span>], <span class="kw-2">&amp;</span>packages);
+<a href=#2463 id=2463 data-nosnippet>2463</a>            <span class="macro">assert_eq!</span>(a, b);
+<a href=#2464 id=2464 data-nosnippet>2464</a>            <span class="macro">assert_eq!</span>(hash_of(<span class="kw-2">&amp;</span>a), hash_of(<span class="kw-2">&amp;</span>b));
+<a href=#2465 id=2465 data-nosnippet>2465</a>        }
+<a href=#2466 id=2466 data-nosnippet>2466</a>
+<a href=#2467 id=2467 data-nosnippet>2467</a>        <span class="attr">#[test]
+<a href=#2468 id=2468 data-nosnippet>2468</a>        </span><span class="kw">fn </span>same_packages_different_order() {
+<a href=#2469 id=2469 data-nosnippet>2469</a>            <span class="kw">let </span>packages = packages();
+<a href=#2470 id=2470 data-nosnippet>2470</a>            <span class="kw">let </span>a = env_with(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">1</span>], <span class="kw-2">&amp;</span>packages);
+<a href=#2471 id=2471 data-nosnippet>2471</a>            <span class="kw">let </span>b = env_with(<span class="kw-2">&amp;</span>[<span class="number">1</span>, <span class="number">0</span>], <span class="kw-2">&amp;</span>packages);
+<a href=#2472 id=2472 data-nosnippet>2472</a>            <span class="macro">assert_eq!</span>(a, b);
+<a href=#2473 id=2473 data-nosnippet>2473</a>            <span class="macro">assert_eq!</span>(hash_of(<span class="kw-2">&amp;</span>a), hash_of(<span class="kw-2">&amp;</span>b));
+<a href=#2474 id=2474 data-nosnippet>2474</a>        }
+<a href=#2475 id=2475 data-nosnippet>2475</a>
+<a href=#2476 id=2476 data-nosnippet>2476</a>        <span class="attr">#[test]
+<a href=#2477 id=2477 data-nosnippet>2477</a>        </span><span class="kw">fn </span>different_packages_differ() {
+<a href=#2478 id=2478 data-nosnippet>2478</a>            <span class="kw">let </span>packages = packages();
+<a href=#2479 id=2479 data-nosnippet>2479</a>            <span class="kw">let </span>a = env_with(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">1</span>], <span class="kw-2">&amp;</span>packages);
+<a href=#2480 id=2480 data-nosnippet>2480</a>            <span class="kw">let </span>b = env_with(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">2</span>], <span class="kw-2">&amp;</span>packages);
+<a href=#2481 id=2481 data-nosnippet>2481</a>            <span class="macro">assert_ne!</span>(a, b);
+<a href=#2482 id=2482 data-nosnippet>2482</a>            <span class="macro">assert_ne!</span>(hash_of(<span class="kw-2">&amp;</span>a), hash_of(<span class="kw-2">&amp;</span>b));
+<a href=#2483 id=2483 data-nosnippet>2483</a>        }
+<a href=#2484 id=2484 data-nosnippet>2484</a>
+<a href=#2485 id=2485 data-nosnippet>2485</a>        <span class="attr">#[test]
+<a href=#2486 id=2486 data-nosnippet>2486</a>        </span><span class="kw">fn </span>duplicates_are_deduplicated() {
+<a href=#2487 id=2487 data-nosnippet>2487</a>            <span class="kw">let </span>packages = packages();
+<a href=#2488 id=2488 data-nosnippet>2488</a>            <span class="kw">let </span>a = env_with(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>], <span class="kw-2">&amp;</span>packages);
+<a href=#2489 id=2489 data-nosnippet>2489</a>            <span class="kw">let </span>b = env_with(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">1</span>], <span class="kw-2">&amp;</span>packages);
+<a href=#2490 id=2490 data-nosnippet>2490</a>            <span class="macro">assert_eq!</span>(a, b);
+<a href=#2491 id=2491 data-nosnippet>2491</a>            <span class="macro">assert_eq!</span>(hash_of(<span class="kw-2">&amp;</span>a), hash_of(<span class="kw-2">&amp;</span>b));
+<a href=#2492 id=2492 data-nosnippet>2492</a>        }
+<a href=#2493 id=2493 data-nosnippet>2493</a>
+<a href=#2494 id=2494 data-nosnippet>2494</a>        <span class="attr">#[test]
+<a href=#2495 id=2495 data-nosnippet>2495</a>        </span><span class="kw">fn </span>insert_preserves_sorted_invariant() {
+<a href=#2496 id=2496 data-nosnippet>2496</a>            <span class="kw">let </span>packages = packages();
+<a href=#2497 id=2497 data-nosnippet>2497</a>            <span class="kw">let </span><span class="kw-2">mut </span>env = env_with(<span class="kw-2">&amp;</span>[<span class="number">2</span>], <span class="kw-2">&amp;</span>packages);
+<a href=#2498 id=2498 data-nosnippet>2498</a>            env.insert(PackageHandle::new(PackageIndex(<span class="number">0</span>), <span class="kw-2">&amp;</span>packages[<span class="number">0</span>]))
+<a href=#2499 id=2499 data-nosnippet>2499</a>                .unwrap();
+<a href=#2500 id=2500 data-nosnippet>2500</a>            <span class="kw">let </span>ids = env.to_selector_ids();
+<a href=#2501 id=2501 data-nosnippet>2501</a>            <span class="kw">let </span><span class="kw-2">mut </span>sorted = ids.clone();
+<a href=#2502 id=2502 data-nosnippet>2502</a>            sorted.sort();
+<a href=#2503 id=2503 data-nosnippet>2503</a>            <span class="macro">assert_eq!</span>(ids, sorted);
+<a href=#2504 id=2504 data-nosnippet>2504</a>        }
+<a href=#2505 id=2505 data-nosnippet>2505</a>
+<a href=#2506 id=2506 data-nosnippet>2506</a>        <span class="attr">#[test]
+<a href=#2507 id=2507 data-nosnippet>2507</a>        </span><span class="kw">fn </span>insert_duplicate_pair_returns_false() {
+<a href=#2508 id=2508 data-nosnippet>2508</a>            <span class="kw">let </span>packages = packages();
+<a href=#2509 id=2509 data-nosnippet>2509</a>            <span class="kw">let </span><span class="kw-2">mut </span>env = env_with(<span class="kw-2">&amp;</span>[<span class="number">0</span>, <span class="number">1</span>], <span class="kw-2">&amp;</span>packages);
+<a href=#2510 id=2510 data-nosnippet>2510</a>            <span class="macro">assert!</span>(
+<a href=#2511 id=2511 data-nosnippet>2511</a>                !env.insert(PackageHandle::new(PackageIndex(<span class="number">0</span>), <span class="kw-2">&amp;</span>packages[<span class="number">0</span>]))
+<a href=#2512 id=2512 data-nosnippet>2512</a>                    .unwrap()
+<a href=#2513 id=2513 data-nosnippet>2513</a>            );
+<a href=#2514 id=2514 data-nosnippet>2514</a>        }
+<a href=#2515 id=2515 data-nosnippet>2515</a>
+<a href=#2516 id=2516 data-nosnippet>2516</a>        <span class="attr">#[test]
+<a href=#2517 id=2517 data-nosnippet>2517</a>        </span><span class="kw">fn </span>insert_reused_selector_with_different_index_errors() {
+<a href=#2518 id=2518 data-nosnippet>2518</a>            <span class="kw">let </span>packages = packages();
+<a href=#2519 id=2519 data-nosnippet>2519</a>            <span class="kw">let </span><span class="kw-2">mut </span>env = env_with(<span class="kw-2">&amp;</span>[<span class="number">0</span>], <span class="kw-2">&amp;</span>packages);
+<a href=#2520 id=2520 data-nosnippet>2520</a>            <span class="kw">let </span>result = env.insert(PackageHandle::new(PackageIndex(<span class="number">1</span>), <span class="kw-2">&amp;</span>packages[<span class="number">0</span>]));
+<a href=#2521 id=2521 data-nosnippet>2521</a>            <span class="macro">assert!</span>(result.is_err());
+<a href=#2522 id=2522 data-nosnippet>2522</a>        }
+<a href=#2523 id=2523 data-nosnippet>2523</a>    }
+<a href=#2524 id=2524 data-nosnippet>2524</a>}
 </code></pre></div></section></main></body></html>

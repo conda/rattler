@@ -166,7 +166,7 @@
 <a href=#164 id=164 data-nosnippet>164</a>                    CondaLockErrorKind::SubdirDisagreement,
 <a href=#165 id=165 data-nosnippet>165</a>                ));
 <a href=#166 id=166 data-nosnippet>166</a>            }
-<a href=#167 id=167 data-nosnippet>167</a>            <span class="kw">if </span>record.noarch != derive_noarch_type(reconstructed_subdir, <span class="kw-2">&amp;</span>record.build) {
+<a href=#167 id=167 data-nosnippet>167</a>            <span class="kw">if </span>record.noarch != derive_noarch_type(reconstructed_subdir, record.build.as_str()) {
 <a href=#168 id=168 data-nosnippet>168</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(CondaLockError::new(
 <a href=#169 id=169 data-nosnippet>169</a>                    url_path,
 <a href=#170 id=170 data-nosnippet>170</a>                    CondaLockErrorKind::NoarchMismatch,
@@ -188,7 +188,7 @@
 <a href=#186 id=186 data-nosnippet>186</a>            // and licenses are solver/repodata information, not artifact identity.
 <a href=#187 id=187 data-nosnippet>187</a>            </span>package.name = record.name.as_source().to_owned();
 <a href=#188 id=188 data-nosnippet>188</a>            package.version = record.version.as_str().into_owned();
-<a href=#189 id=189 data-nosnippet>189</a>            package.build = <span class="prelude-val">Some</span>(record.build.clone());
+<a href=#189 id=189 data-nosnippet>189</a>            package.build = <span class="prelude-val">Some</span>(record.build.to_string());
 <a href=#190 id=190 data-nosnippet>190</a>            package.url = url.as_str().to_owned();
 <a href=#191 id=191 data-nosnippet>191</a>            package.hash.md5 = record.md5.map(hex::encode);
 <a href=#192 id=192 data-nosnippet>192</a>            package.hash.sha256 = record.sha256.map(hex::encode);

@@ -571,7 +571,7 @@
 <a href=#569 id=569 data-nosnippet>569</a>        GenericVirtualPackage {
 <a href=#570 id=570 data-nosnippet>570</a>            name: PackageName::try_from(name).unwrap(),
 <a href=#571 id=571 data-nosnippet>571</a>            version: Version::from_str(version).unwrap(),
-<a href=#572 id=572 data-nosnippet>572</a>            build_string: <span class="string">"0"</span>.to_string(),
+<a href=#572 id=572 data-nosnippet>572</a>            build_string: <span class="string">"0"</span>.parse().unwrap(),
 <a href=#573 id=573 data-nosnippet>573</a>        }
 <a href=#574 id=574 data-nosnippet>574</a>    }
 <a href=#575 id=575 data-nosnippet>575</a>
@@ -582,7 +582,7 @@
 <a href=#580 id=580 data-nosnippet>580</a>                <span class="prelude-val">None </span>=&gt; DetectedValue::Absent,
 <a href=#581 id=581 data-nosnippet>581</a>                <span class="prelude-val">Some</span>(version) =&gt; DetectedValue::Present(DetectedVersion {
 <a href=#582 id=582 data-nosnippet>582</a>                    version: Version::from_str(version).unwrap(),
-<a href=#583 id=583 data-nosnippet>583</a>                    build_string: <span class="string">"0"</span>.to_string(),
+<a href=#583 id=583 data-nosnippet>583</a>                    build_string: <span class="string">"0"</span>.parse().unwrap(),
 <a href=#584 id=584 data-nosnippet>584</a>                }),
 <a href=#585 id=585 data-nosnippet>585</a>            },
 <a href=#586 id=586 data-nosnippet>586</a>            source: DetectionSource::Override {

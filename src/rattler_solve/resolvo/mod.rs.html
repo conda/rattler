@@ -1074,7 +1074,7 @@
 <a href=#1072 id=1072 data-nosnippet>1072</a>                                }
 <a href=#1073 id=1073 data-nosnippet>1073</a>
 <a href=#1074 id=1074 data-nosnippet>1074</a>                                <span class="kw">if let </span><span class="prelude-val">Some</span>(build_match) = spec.build.as_ref()
-<a href=#1075 id=1075 data-nosnippet>1075</a>                                    &amp;&amp; !build_match.matches(build_string)
+<a href=#1075 id=1075 data-nosnippet>1075</a>                                    &amp;&amp; !build_match.matches(build_string.as_str())
 <a href=#1076 id=1076 data-nosnippet>1076</a>                                {
 <a href=#1077 id=1077 data-nosnippet>1077</a>                                    <span class="kw">return </span>inverse;
 <a href=#1078 id=1078 data-nosnippet>1078</a>                                }

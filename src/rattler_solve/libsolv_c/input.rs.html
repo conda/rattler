@@ -258,7 +258,7 @@
 <a href=#256 id=256 data-nosnippet>256</a>        </span>data.add_poolstr_array(
 <a href=#257 id=257 data-nosnippet>257</a>            solvable_id,
 <a href=#258 id=258 data-nosnippet>258</a>            solvable_buildflavor_id,
-<a href=#259 id=259 data-nosnippet>259</a>            <span class="kw-2">&amp;</span>c_string(<span class="kw-2">&amp;</span>record.build),
+<a href=#259 id=259 data-nosnippet>259</a>            <span class="kw-2">&amp;</span>c_string(record.build.as_str()),
 <a href=#260 id=260 data-nosnippet>260</a>        );
 <a href=#261 id=261 data-nosnippet>261</a>
 <a href=#262 id=262 data-nosnippet>262</a>        <span class="comment">// Build number
@@ -398,7 +398,7 @@
 <a href=#396 id=396 data-nosnippet>396</a>        </span>data.add_poolstr_array(
 <a href=#397 id=397 data-nosnippet>397</a>            solvable_id,
 <a href=#398 id=398 data-nosnippet>398</a>            solvable_buildflavor_id,
-<a href=#399 id=399 data-nosnippet>399</a>            <span class="kw-2">&amp;</span>c_string(<span class="kw-2">&amp;</span>package.build_string),
+<a href=#399 id=399 data-nosnippet>399</a>            <span class="kw-2">&amp;</span>c_string(package.build_string.as_str()),
 <a href=#400 id=400 data-nosnippet>400</a>        );
 <a href=#401 id=401 data-nosnippet>401</a>    }
 <a href=#402 id=402 data-nosnippet>402</a>}
