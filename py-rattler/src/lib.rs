@@ -1,4 +1,5 @@
 mod about_json;
+mod build_string;
 mod channel;
 mod config;
 mod error;
@@ -38,6 +39,7 @@ mod run_exports_json;
 use std::ops::Deref;
 
 use about_json::PyAboutJson;
+use build_string::PyBuildString;
 use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
 use config::PyConfig;
 use error::PyRattlerError;
@@ -125,6 +127,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyMatchSpec>()?;
     m.add_class::<PyNamelessMatchSpec>()?;
 
+    m.add_class::<PyBuildString>()?;
     m.add_class::<PyPackageName>()?;
     m.add_class::<PyPackageNameMatcher>()?;
 

@@ -34,4 +34,4 @@ def test_overrides() -> None:
 
     # archspec uses build_string rather than version
     archspec_pkg = next(i for i in r if i.name == PackageName("__archspec"))
-    assert archspec_pkg.build_string == "m4"
+    assert str(archspec_pkg.build_string) == "m4"

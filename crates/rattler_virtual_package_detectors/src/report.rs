@@ -13,7 +13,7 @@ use std::{path::PathBuf, str::FromStr};
 use indexmap::IndexMap;
 use rattler_conda_types::{
     GenericVirtualPackage, InvalidPackageNameError, PackageName, ParseVersionError, Version,
-    virtual_package_detector::DetectorRegistration,
+    package::BuildString, virtual_package_detector::DetectorRegistration,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -38,7 +38,8 @@ impl DetectedVersion {
         GenericVirtualPackage {
             name,
             version: self.version,
-            build_string: self.build_string,
+            // Validated against CEP26 when the report was parsed.
+            build_string: BuildString::new_unchecked(self.build_string),
         }
     }
 }
@@ -293,7 +294,7 @@ fn parse_result(
     let build_string = match fields.get("build_string") {
         None => "0".to_string(),
         Some(serde_json::Value::String(build_string)) => {
-            if build_string.is_empty()
+            if build_string.parse::<BuildString>().is_err()
                 || !build_string
                     .chars()
                     .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')

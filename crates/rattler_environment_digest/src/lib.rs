@@ -70,7 +70,7 @@ impl<'a> DigestLine<'a> {
         Self {
             name: record.name().as_normalized(),
             version: record.version().as_str(),
-            build: record.build(),
+            build: record.build().as_str(),
             artifact,
         }
     }
@@ -107,7 +107,8 @@ mod tests {
     use std::str::FromStr;
 
     use rattler_conda_types::{
-        PackageName, PackageRecord, RepoDataRecord, Version, package::DistArchiveIdentifier,
+        PackageName, PackageRecord, RepoDataRecord, Version,
+        package::{BuildString, DistArchiveIdentifier},
     };
     use rattler_digest::{Md5, compute_bytes_digest, parse_digest_from_hex};
     use url::Url;
@@ -124,7 +125,8 @@ mod tests {
         let mut package_record = PackageRecord::new(
             PackageName::try_from(name).unwrap(),
             Version::from_str(version).unwrap(),
-            build.to_string(),
+            // Digests must cover legacy builds that predate CEP26 validation.
+            BuildString::new_unchecked(build),
         );
         package_record.sha256 = sha256.map(|hex| parse_digest_from_hex::<Sha256>(hex).unwrap());
         RepoDataRecord {

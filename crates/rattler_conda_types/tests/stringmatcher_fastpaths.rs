@@ -3,6 +3,7 @@ use std::str::FromStr;
 use rattler_conda_types::{
     CanonicalMatchSpecError, Flag, GenericVirtualPackage, MatchSpec, Matches, PackageName,
     PackageRecord, ParseMatchSpecOptions, RepodataRevision, StringMatcher, Version,
+    package::BuildString,
 };
 
 fn options() -> ParseMatchSpecOptions {
@@ -23,7 +24,7 @@ fn parsed_matchspec_fastpaths_end_to_end() {
         let record = PackageRecord::new(
             PackageName::new_unchecked("python"),
             Version::from_str("1.0").unwrap(),
-            matching.into(),
+            BuildString::new_unchecked(matching),
         );
         assert!(spec.matches(&record), "{pattern:?} against {matching:?}");
         let nameless = spec.clone().into_nameless().1;
@@ -36,7 +37,7 @@ fn parsed_matchspec_fastpaths_end_to_end() {
         assert!(spec.matches(&virtual_package));
         if let Some(rejected) = rejected {
             let record = PackageRecord {
-                build: rejected.into(),
+                build: BuildString::new_unchecked(rejected),
                 ..record
             };
             assert!(!spec.matches(&record));
@@ -75,7 +76,7 @@ fn flags_fastpaths_end_to_end() {
     let mut record = PackageRecord::new(
         PackageName::new_unchecked("python"),
         Version::from_str("1.0").unwrap(),
-        "".into(),
+        "0".parse::<BuildString>().unwrap(),
     );
     record.flags = vec![
         Flag::new_unchecked("CUDA12"),
