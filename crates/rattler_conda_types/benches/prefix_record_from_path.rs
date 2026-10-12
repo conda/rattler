@@ -132,15 +132,12 @@ fn criterion_benchmark(c: &mut Criterion) {
         super_long_file.files.extend(files.clone());
     }
 
+    let record = &super_long_file.repodata_record.package_record;
     let filename = format!(
         "{}-{}-{}.json",
-        super_long_file
-            .repodata_record
-            .package_record
-            .name
-            .as_normalized(),
-        super_long_file.repodata_record.package_record.version,
-        super_long_file.repodata_record.package_record.build
+        record.name.as_normalized(),
+        record.version,
+        record.build
     );
     let new_long_file_path = temp_dir.path().join(filename);
     serde_json::to_writer(File::create(&new_long_file_path).unwrap(), &super_long_file).unwrap();

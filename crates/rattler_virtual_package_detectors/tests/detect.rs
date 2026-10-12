@@ -166,7 +166,7 @@ fn write_package(fixture: &Fixture, subdir: &Path, staging: &Path) {
 
     let index = IndexJson {
         arch: None,
-        build: "0".to_string(),
+        build: "0".parse().unwrap(),
         build_number: 0,
         constrains: Vec::new(),
         depends: fixture.depends.iter().map(ToString::to_string).collect(),
@@ -678,7 +678,7 @@ async fn results_merge_over_client_virtual_packages() {
     let client = vec![GenericVirtualPackage {
         name: PackageName::try_from("__test_good").unwrap(),
         version: "0.1".parse().unwrap(),
-        build_string: "0".to_string(),
+        build_string: "0".parse().unwrap(),
     }];
     let merged = rattler_virtual_package_detectors::merge_results(client, &outcome.results);
     assert_eq!(merged.len(), 1);

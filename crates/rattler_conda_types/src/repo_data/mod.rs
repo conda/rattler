@@ -29,8 +29,8 @@ use crate::{
     ParseMatchSpecError, ParseStrictness, RepoDataRecord, Subdir, VersionWithSource,
     build_spec::BuildNumber,
     package::{
-        ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, IndexJson, RunExportsJson,
-        WheelArchiveType,
+        ArchiveIdentifier, BuildString, CondaArchiveType, DistArchiveIdentifier, IndexJson,
+        RunExportsJson, WheelArchiveType,
     },
     utils::{
         TimestampMs, UrlWithTrailingSlash,
@@ -573,8 +573,9 @@ pub struct PackageRecord {
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
     pub attestations_sha256: Option<Sha256Hash>,
 
-    /// The build string of the package
-    pub build: String,
+    /// The build string of the package. The field is always serialized and
+    /// required when deserializing, including empty values in existing data.
+    pub build: BuildString,
 
     /// The build number of the package
     pub build_number: BuildNumber,
@@ -789,7 +790,7 @@ impl FromStr for UrlOrPath {
 impl Display for PackageRecord {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.build.is_empty() {
-            write!(f, "{} {}", self.name.as_normalized(), self.version,)
+            write!(f, "{} {}", self.name.as_normalized(), self.version)
         } else {
             write!(
                 f,
@@ -948,7 +949,11 @@ impl AsRef<PackageRecord> for PackageRecord {
 impl PackageRecord {
     /// A simple helper method that constructs a `PackageRecord` with the bare
     /// minimum values.
-    pub fn new(name: PackageName, version: impl Into<VersionWithSource>, build: String) -> Self {
+    pub fn new(
+        name: PackageName,
+        version: impl Into<VersionWithSource>,
+        build: BuildString,
+    ) -> Self {
         Self {
             attestations_sha256: None,
             arch: None,
@@ -1251,7 +1256,7 @@ mod test {
     use crate::{
         Channel, ChannelConfig, ChannelInfo, ChannelRelations, PackageRecord, RepoData,
         RepodataRevision, V3Extensions, V3Packages,
-        package::DistArchiveIdentifier,
+        package::{BuildString, DistArchiveIdentifier},
         repo_data::{compute_package_url, determine_subdir},
         virtual_package_detector::{
             ChannelDetectorRegistrations, RegistrationError, SubdirDetectorRegistrations,
@@ -1797,7 +1802,7 @@ mod test {
         let mut record = PackageRecord::new(
             crate::PackageName::new_unchecked("demo"),
             crate::Version::major(1),
-            "0".into(),
+            "0".parse::<BuildString>().unwrap(),
         );
         assert!(
             serde_json::to_value(&record)
@@ -2011,7 +2016,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("zebra"),
                 Version::major(1),
-                "h123".to_string(),
+                "h123".parse::<BuildString>().unwrap(),
             ),
         );
         packages.insert(
@@ -2019,7 +2024,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("apple"),
                 Version::major(2),
-                "h456".to_string(),
+                "h456".parse::<BuildString>().unwrap(),
             ),
         );
         packages.insert(
@@ -2027,7 +2032,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("mango"),
                 Version::major(1),
-                "h789".to_string(),
+                "h789".parse::<BuildString>().unwrap(),
             ),
         );
         packages.insert(
@@ -2035,7 +2040,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("banana"),
                 Version::major(3),
-                "habc".to_string(),
+                "habc".parse::<BuildString>().unwrap(),
             ),
         );
 
@@ -2045,7 +2050,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("xray"),
                 Version::major(1),
-                "h111".to_string(),
+                "h111".parse::<BuildString>().unwrap(),
             ),
         );
         conda_packages.insert(
@@ -2053,7 +2058,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("alpha"),
                 Version::major(2),
-                "h222".to_string(),
+                "h222".parse::<BuildString>().unwrap(),
             ),
         );
         conda_packages.insert(
@@ -2061,7 +2066,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("omega"),
                 Version::major(3),
-                "h333".to_string(),
+                "h333".parse::<BuildString>().unwrap(),
             ),
         );
 
@@ -2117,7 +2122,7 @@ mod test {
             let mut r = PackageRecord::new(
                 PackageName::new_unchecked(name),
                 version.parse::<Version>().unwrap(),
-                format!("{build}_{build_number}"),
+                BuildString::new_unchecked(format!("{build}_{build_number}")),
             );
             r.build_number = build_number;
             r.subdir = subdir.to_string();
@@ -2159,13 +2164,12 @@ mod test {
         let formatted: Vec<String> = records
             .iter()
             .map(|r| {
-                format!(
-                    "{}/{}-{}-{}",
-                    r.subdir,
-                    r.name.as_normalized(),
-                    r.version,
-                    r.build
-                )
+                let name = r.name.as_normalized();
+                if r.build.is_empty() {
+                    format!("{}/{name}-{}", r.subdir, r.version)
+                } else {
+                    format!("{}/{name}-{}-{}", r.subdir, r.version, r.build)
+                }
             })
             .collect();
         insta::assert_snapshot!(formatted.join("\n"));
@@ -2180,7 +2184,7 @@ mod test {
                 let mut r = PackageRecord::new(
                     PackageName::new_unchecked("polars"),
                     version.parse::<Version>().unwrap(),
-                    format!("{build}_{build_number}"),
+                    BuildString::new_unchecked(format!("{build}_{build_number}")),
                 );
                 r.build_number = build_number;
                 r.subdir = "linux-64".to_string();

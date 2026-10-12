@@ -5,7 +5,9 @@ use std::{
 
 use pep508_rs::Requirement;
 use rattler_conda_lock::{Document, LockFile as CepLockFile, Manager, NodePath, Package};
-use rattler_conda_types::{PackageName, PackageRecord, Subdir, VersionWithSource};
+use rattler_conda_types::{
+    PackageName, PackageRecord, Subdir, VersionWithSource, package::BuildString,
+};
 use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 
 use super::dependencies::{conda_spec, python_spec};
@@ -318,6 +320,7 @@ fn convert(package: &Package, path: &NodePath) -> Result<LockedPackage, CondaLoc
             let build = package.build.clone().or(derived.build).ok_or_else(|| {
                 CondaLockError::new(path.field("build"), CondaLockErrorKind::MissingBuildString)
             })?;
+            let build = BuildString::new_unchecked(build);
             let name = PackageName::from_str(&package.name).map_err(|error| {
                 CondaLockError::new(
                     path.field("name"),
@@ -333,7 +336,8 @@ fn convert(package: &Package, path: &NodePath) -> Result<LockedPackage, CondaLoc
             let mut record = PackageRecord::new(name, version, build);
             // Matches the historical importer: a build string without a trailing
             // number carries no build number, and CEP-37 never stores one.
-            record.build_number = derive_build_number_from_build(&record.build).unwrap_or(0);
+            record.build_number =
+                derive_build_number_from_build(record.build.as_str()).unwrap_or(0);
             record.subdir = derived.subdir.unwrap_or_else(|| package.platform.clone());
             if record.subdir != "noarch" && record.subdir != package.platform {
                 return Err(
@@ -342,7 +346,7 @@ fn convert(package: &Package, path: &NodePath) -> Result<LockedPackage, CondaLoc
                 );
             }
             (record.arch, record.platform) = derive_arch_and_platform(&record.subdir);
-            record.noarch = derive_noarch_type(&record.subdir, &record.build);
+            record.noarch = derive_noarch_type(&record.subdir, record.build.as_str());
             record.md5 = md5;
             record.sha256 = sha256;
             let mut normalized = BTreeMap::new();

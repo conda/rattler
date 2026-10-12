@@ -1,0 +1,9 @@
+---
+source: crates/rattler_azure/src/options.rs
+expression: written
+---
+scheme = "http"
+
+[auth]
+releases = true
+public = false

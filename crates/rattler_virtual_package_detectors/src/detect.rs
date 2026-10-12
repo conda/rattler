@@ -569,7 +569,7 @@ mod tests {
         GenericVirtualPackage {
             name: PackageName::try_from(name).unwrap(),
             version: Version::from_str(version).unwrap(),
-            build_string: "0".to_string(),
+            build_string: "0".parse().unwrap(),
         }
     }
 
@@ -580,7 +580,7 @@ mod tests {
                 None => DetectedValue::Absent,
                 Some(version) => DetectedValue::Present(DetectedVersion {
                     version: Version::from_str(version).unwrap(),
-                    build_string: "0".to_string(),
+                    build_string: "0".parse().unwrap(),
                 }),
             },
             source: DetectionSource::Override {

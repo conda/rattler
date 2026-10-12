@@ -176,7 +176,7 @@ fn write_package(package: &Package, subdir: &Path, staging: &Path) {
 
     let index = IndexJson {
         arch: None,
-        build: package.build.clone(),
+        build: package.build.parse().unwrap(),
         build_number: 0,
         constrains: Vec::new(),
         depends: package.depends.clone(),

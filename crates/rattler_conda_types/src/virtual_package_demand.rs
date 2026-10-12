@@ -50,7 +50,7 @@ pub fn referenced_virtual_packages<'a>(
 mod tests {
     use std::str::FromStr;
 
-    use crate::Version;
+    use crate::{Version, package::BuildString};
 
     use super::*;
 
@@ -58,7 +58,7 @@ mod tests {
         let mut record = PackageRecord::new(
             PackageName::try_from("pkg").unwrap(),
             Version::from_str("1").unwrap(),
-            "0".to_string(),
+            "0".parse::<BuildString>().unwrap(),
         );
         record.depends = depends.iter().map(ToString::to_string).collect();
         record.constrains = constrains.iter().map(ToString::to_string).collect();

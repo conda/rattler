@@ -11,7 +11,8 @@ use crate::{
 use rattler_conda_types::package::DistArchiveIdentifier;
 use rattler_conda_types::{
     BuildNumber, ChannelUrl, Flag, NoArchType, PackageName, PackageRecord, PackageUrl,
-    VersionWithSource, package::CondaArchiveIdentifier,
+    VersionWithSource,
+    package::{BuildString, CondaArchiveIdentifier},
 };
 use rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
 use serde::Deserialize;
@@ -171,7 +172,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for LegacyCondaPackageData {
 
         let package_record = PackageRecord {
             attestations_sha256: None,
-            build,
+            build: BuildString::new_unchecked(build),
             build_number,
             constrains: value.constrains.into_owned(),
             depends: value.depends.into_owned(),
