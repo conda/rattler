@@ -81,6 +81,18 @@ pub struct PackageCacheLayerFilter {
 }
 
 impl PackageCacheLayerFilter {
+    /// Returns the inclusion specifications of this filter.
+    ///
+    /// An empty list means every package is included.
+    pub fn includes(&self) -> &[MatchSpec] {
+        &self.includes
+    }
+
+    /// Returns the exclusion specifications of this filter.
+    pub fn excludes(&self) -> &[MatchSpec] {
+        &self.excludes
+    }
+
     fn accepts(&self, cache_key: &CacheKey) -> bool {
         let included = self.includes.is_empty()
             || self
@@ -356,6 +368,16 @@ impl PackageCacheLayer {
         &self.path
     }
 
+    /// Returns the validation mode used by this layer.
+    pub fn validation_mode(&self) -> ValidationMode {
+        self.validation_mode
+    }
+
+    /// Returns the filter that controls which packages this layer accepts.
+    pub fn filter(&self) -> &PackageCacheLayerFilter {
+        &self.filter
+    }
+
     /// Returns whether this layer accepts `cache_key`.
     pub fn accepts(&self, cache_key: &CacheKey) -> bool {
         self.filter.accepts(cache_key)
@@ -621,6 +643,19 @@ impl PackageCache {
             entries,
             cache_origin,
         })
+    }
+
+    /// Returns the layers of this cache in the order they are queried.
+    ///
+    /// Unlike [`Self::split_layers`], this does not touch the filesystem.
+    pub fn layers(&self) -> &[PackageCacheLayer] {
+        &self.inner.layers
+    }
+
+    /// Returns whether the origin (url or path) of a package is part of its
+    /// cache key. See [`Self::with_cached_origin`].
+    pub fn cache_origin(&self) -> bool {
+        self.cache_origin
     }
 
     /// Returns a tuple containing two sets of layers:
@@ -1892,6 +1927,57 @@ mod test {
                 .join(other_metadata.path().file_name().unwrap())
                 .exists()
         );
+    }
+
+    #[test]
+    fn test_layer_accessors_preserve_configuration_and_order() {
+        let readonly = tempdir().unwrap();
+        let writable = tempdir().unwrap();
+        let overlay = tempdir().unwrap();
+        let spec = clobber_python_spec();
+
+        // A read-only first layer is where `split_layers` reorders; `layers`
+        // must keep the configured query order.
+        let mut permissions = std::fs::metadata(readonly.path()).unwrap().permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(readonly.path(), permissions.clone()).unwrap();
+
+        let cache = PackageCache::new_layered(
+            [readonly.path(), writable.path()],
+            false,
+            ValidationMode::Full,
+        )
+        .with_cached_origin()
+        .excluding_from_all_layers(spec.clone())
+        .with_prepended_layer(
+            PackageCacheLayer::new(overlay.path())
+                .with_filter(spec.clone())
+                .with_validation_mode(ValidationMode::Skip),
+        );
+
+        let paths: Vec<_> = cache.layers().iter().map(PackageCacheLayer::path).collect();
+        assert_eq!(paths, [overlay.path(), readonly.path(), writable.path()]);
+        assert!(cache.cache_origin());
+
+        let [overlay_layer, readonly_layer, writable_layer] = cache.layers() else {
+            panic!("expected three layers");
+        };
+        assert_eq!(overlay_layer.validation_mode(), ValidationMode::Skip);
+        assert_eq!(
+            overlay_layer.filter().includes(),
+            std::slice::from_ref(&spec)
+        );
+        assert!(overlay_layer.filter().excludes().is_empty());
+        for layer in [readonly_layer, writable_layer] {
+            assert_eq!(layer.validation_mode(), ValidationMode::Full);
+            assert!(layer.filter().includes().is_empty());
+            assert_eq!(layer.filter().excludes(), std::slice::from_ref(&spec));
+        }
+        assert!(!PackageCache::new(writable.path()).cache_origin());
+
+        #[allow(clippy::permissions_set_readonly_false)]
+        permissions.set_readonly(false);
+        std::fs::set_permissions(readonly.path(), permissions).unwrap();
     }
 
     #[tokio::test]
