@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [11.2.2](https://github.com/conda/rattler/compare/rattler_solve-v11.2.1...rattler_solve-v11.2.2) - 2026-10-13
+
+### Fixed
+
+- *(rattler_solve)* apply exclude_newer to locked and pinned packages ([#2940](https://github.com/conda/rattler/pull/2940))
+
+### Other
+
+- *(solve)* cache dependency scores while sorting candidates ([#2923](https://github.com/conda/rattler/pull/2923))
+- Add `BuildString` to rattler_conda_types ([#2430](https://github.com/conda/rattler/pull/2430))
+
 ## [11.2.1](https://github.com/conda/rattler/compare/rattler_solve-v11.2.0...rattler_solve-v11.2.1) - 2026-10-09
 
 ### Other
