@@ -545,241 +545,247 @@
 <a href=#543 id=543 data-nosnippet>543</a>    ///   behavior; or
 <a href=#544 id=544 data-nosnippet>544</a>    /// - a relative duration, equivalent to the historical `min_age`
 <a href=#545 id=545 data-nosnippet>545</a>    ///   behavior.
-<a href=#546 id=546 data-nosnippet>546</a>    </span><span class="kw">pub </span>exclude_newer: <span class="prelude-ty">Option</span>&lt;ExcludeNewer&gt;,
-<a href=#547 id=547 data-nosnippet>547</a>
-<a href=#548 id=548 data-nosnippet>548</a>    <span class="doccomment">/// The solve strategy.
-<a href=#549 id=549 data-nosnippet>549</a>    </span><span class="kw">pub </span>strategy: SolveStrategy,
-<a href=#550 id=550 data-nosnippet>550</a>
-<a href=#551 id=551 data-nosnippet>551</a>    <span class="doccomment">/// Dependency overrides that replace dependencies of matching packages.
-<a href=#552 id=552 data-nosnippet>552</a>    </span><span class="kw">pub </span>dependency_overrides: Vec&lt;(MatchSpec, MatchSpec)&gt;,
+<a href=#546 id=546 data-nosnippet>546</a>    ///
+<a href=#547 id=547 data-nosnippet>547</a>    /// The cutoff applies to `locked_packages` and `pinned_packages` as well.
+<a href=#548 id=548 data-nosnippet>548</a>    /// A locked record newer than the cutoff is not favored, so the solver
+<a href=#549 id=549 data-nosnippet>549</a>    /// picks a record the cutoff allows instead. With the `resolvo` backend,
+<a href=#550 id=550 data-nosnippet>550</a>    /// a pinned record newer than the cutoff makes the solve unsatisfiable
+<a href=#551 id=551 data-nosnippet>551</a>    /// when the package is needed, the same as with `excluded_candidates`.
+<a href=#552 id=552 data-nosnippet>552</a>    </span><span class="kw">pub </span>exclude_newer: <span class="prelude-ty">Option</span>&lt;ExcludeNewer&gt;,
 <a href=#553 id=553 data-nosnippet>553</a>
-<a href=#554 id=554 data-nosnippet>554</a>    <span class="doccomment">/// Candidates the solver may not select, keyed by the record's URL and
-<a href=#555 id=555 data-nosnippet>555</a>    /// mapped to the reason they were ruled out.
-<a href=#556 id=556 data-nosnippet>556</a>    ///
-<a href=#557 id=557 data-nosnippet>557</a>    /// The reason is reported back as part of the error when the solve fails
-<a href=#558 id=558 data-nosnippet>558</a>    /// because of it, so it should read as an explanation to a user, e.g.
-<a href=#559 id=559 data-nosnippet>559</a>    /// "not available locally".
-<a href=#560 id=560 data-nosnippet>560</a>    ///
-<a href=#561 id=561 data-nosnippet>561</a>    /// This is meant for restrictions the caller derives from outside the
-<a href=#562 id=562 data-nosnippet>562</a>    /// repodata, such as what is present in a local package cache. Records
-<a href=#563 id=563 data-nosnippet>563</a>    /// that are simply irrelevant should be left out of `available_packages`
-<a href=#564 id=564 data-nosnippet>564</a>    /// instead; excluding a record keeps it visible to error reporting, which
-<a href=#565 id=565 data-nosnippet>565</a>    /// is the whole point of using this rather than filtering up front.
+<a href=#554 id=554 data-nosnippet>554</a>    <span class="doccomment">/// The solve strategy.
+<a href=#555 id=555 data-nosnippet>555</a>    </span><span class="kw">pub </span>strategy: SolveStrategy,
+<a href=#556 id=556 data-nosnippet>556</a>
+<a href=#557 id=557 data-nosnippet>557</a>    <span class="doccomment">/// Dependency overrides that replace dependencies of matching packages.
+<a href=#558 id=558 data-nosnippet>558</a>    </span><span class="kw">pub </span>dependency_overrides: Vec&lt;(MatchSpec, MatchSpec)&gt;,
+<a href=#559 id=559 data-nosnippet>559</a>
+<a href=#560 id=560 data-nosnippet>560</a>    <span class="doccomment">/// Candidates the solver may not select, keyed by the record's URL and
+<a href=#561 id=561 data-nosnippet>561</a>    /// mapped to the reason they were ruled out.
+<a href=#562 id=562 data-nosnippet>562</a>    ///
+<a href=#563 id=563 data-nosnippet>563</a>    /// The reason is reported back as part of the error when the solve fails
+<a href=#564 id=564 data-nosnippet>564</a>    /// because of it, so it should read as an explanation to a user, e.g.
+<a href=#565 id=565 data-nosnippet>565</a>    /// "not available locally".
 <a href=#566 id=566 data-nosnippet>566</a>    ///
-<a href=#567 id=567 data-nosnippet>567</a>    /// The reason is shared rather than owned per entry, because callers
-<a href=#568 id=568 data-nosnippet>568</a>    /// typically rule out thousands of records for the same handful of reasons.
-<a href=#569 id=569 data-nosnippet>569</a>    ///
-<a href=#570 id=570 data-nosnippet>570</a>    /// A record that is both excluded and pinned through `pinned_packages`
-<a href=#571 id=571 data-nosnippet>571</a>    /// makes the solve unsatisfiable when the package is needed, and a record
-<a href=#572 id=572 data-nosnippet>572</a>    /// that is excluded and favored through `locked_packages` stays excluded:
-<a href=#573 id=573 data-nosnippet>573</a>    /// an exclusion is never overruled by a preference.
-<a href=#574 id=574 data-nosnippet>574</a>    ///
-<a href=#575 id=575 data-nosnippet>575</a>    /// Only the `resolvo` backend supports this. Other backends reject a task
-<a href=#576 id=576 data-nosnippet>576</a>    /// that sets it rather than silently solving without the restriction.
-<a href=#577 id=577 data-nosnippet>577</a>    </span><span class="kw">pub </span>excluded_candidates: HashMap&lt;Url, Arc&lt;str&gt;&gt;,
-<a href=#578 id=578 data-nosnippet>578</a>
-<a href=#579 id=579 data-nosnippet>579</a>    <span class="doccomment">/// An optional token that can be used to cancel an in-flight solve.
+<a href=#567 id=567 data-nosnippet>567</a>    /// This is meant for restrictions the caller derives from outside the
+<a href=#568 id=568 data-nosnippet>568</a>    /// repodata, such as what is present in a local package cache. Records
+<a href=#569 id=569 data-nosnippet>569</a>    /// that are simply irrelevant should be left out of `available_packages`
+<a href=#570 id=570 data-nosnippet>570</a>    /// instead; excluding a record keeps it visible to error reporting, which
+<a href=#571 id=571 data-nosnippet>571</a>    /// is the whole point of using this rather than filtering up front.
+<a href=#572 id=572 data-nosnippet>572</a>    ///
+<a href=#573 id=573 data-nosnippet>573</a>    /// The reason is shared rather than owned per entry, because callers
+<a href=#574 id=574 data-nosnippet>574</a>    /// typically rule out thousands of records for the same handful of reasons.
+<a href=#575 id=575 data-nosnippet>575</a>    ///
+<a href=#576 id=576 data-nosnippet>576</a>    /// A record that is both excluded and pinned through `pinned_packages`
+<a href=#577 id=577 data-nosnippet>577</a>    /// makes the solve unsatisfiable when the package is needed, and a record
+<a href=#578 id=578 data-nosnippet>578</a>    /// that is excluded and favored through `locked_packages` stays excluded:
+<a href=#579 id=579 data-nosnippet>579</a>    /// an exclusion is never overruled by a preference.
 <a href=#580 id=580 data-nosnippet>580</a>    ///
-<a href=#581 id=581 data-nosnippet>581</a>    /// When the token's [`CancellationToken::cancel`] method is invoked from
-<a href=#582 id=582 data-nosnippet>582</a>    /// another thread, the solver stops as soon as possible and returns
-<a href=#583 id=583 data-nosnippet>583</a>    /// [`SolveError::Cancelled`].
-<a href=#584 id=584 data-nosnippet>584</a>    ///
-<a href=#585 id=585 data-nosnippet>585</a>    /// Only the `resolvo` backend observes this token. Other backends
-<a href=#586 id=586 data-nosnippet>586</a>    /// ignore it.
-<a href=#587 id=587 data-nosnippet>587</a>    </span><span class="kw">pub </span>cancellation_token: <span class="prelude-ty">Option</span>&lt;CancellationToken&gt;,
-<a href=#588 id=588 data-nosnippet>588</a>}
-<a href=#589 id=589 data-nosnippet>589</a>
-<a href=#590 id=590 data-nosnippet>590</a><span class="kw">impl</span>&lt;<span class="lifetime">'r</span>, T&gt; SolverTask&lt;<span class="lifetime">'r</span>, T&gt; {
-<a href=#591 id=591 data-nosnippet>591</a>    <span class="doccomment">/// Creates a task that solves against `available_packages` with default
-<a href=#592 id=592 data-nosnippet>592</a>    /// settings for everything else.
-<a href=#593 id=593 data-nosnippet>593</a>    </span><span class="kw">fn </span>with_available_packages(available_packages: T) -&gt; <span class="self">Self </span>{
-<a href=#594 id=594 data-nosnippet>594</a>        <span class="self">Self </span>{
-<a href=#595 id=595 data-nosnippet>595</a>            available_packages,
-<a href=#596 id=596 data-nosnippet>596</a>            locked_packages: Vec::new(),
-<a href=#597 id=597 data-nosnippet>597</a>            pinned_packages: Vec::new(),
-<a href=#598 id=598 data-nosnippet>598</a>            virtual_packages: Vec::new(),
-<a href=#599 id=599 data-nosnippet>599</a>            specs: Vec::new(),
-<a href=#600 id=600 data-nosnippet>600</a>            constraints: Vec::new(),
-<a href=#601 id=601 data-nosnippet>601</a>            timeout: <span class="prelude-val">None</span>,
-<a href=#602 id=602 data-nosnippet>602</a>            channel_priority: ChannelPriority::default(),
-<a href=#603 id=603 data-nosnippet>603</a>            exclude_newer: <span class="prelude-val">None</span>,
-<a href=#604 id=604 data-nosnippet>604</a>            strategy: SolveStrategy::default(),
-<a href=#605 id=605 data-nosnippet>605</a>            dependency_overrides: Vec::new(),
-<a href=#606 id=606 data-nosnippet>606</a>            excluded_candidates: HashMap::new(),
-<a href=#607 id=607 data-nosnippet>607</a>            cancellation_token: <span class="prelude-val">None</span>,
-<a href=#608 id=608 data-nosnippet>608</a>        }
-<a href=#609 id=609 data-nosnippet>609</a>    }
-<a href=#610 id=610 data-nosnippet>610</a>}
-<a href=#611 id=611 data-nosnippet>611</a>
-<a href=#612 id=612 data-nosnippet>612</a><span class="kw">impl</span>&lt;<span class="lifetime">'r</span>, I: IntoIterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'r </span>RepoDataRecord&gt;&gt; FromIterator&lt;I&gt;
-<a href=#613 id=613 data-nosnippet>613</a>    <span class="kw">for </span>SolverTask&lt;<span class="lifetime">'r</span>, Vec&lt;RepoDataIter&lt;I&gt;&gt;&gt;
-<a href=#614 id=614 data-nosnippet>614</a>{
-<a href=#615 id=615 data-nosnippet>615</a>    <span class="kw">fn </span>from_iter&lt;T: IntoIterator&lt;Item = I&gt;&gt;(iter: T) -&gt; <span class="self">Self </span>{
-<a href=#616 id=616 data-nosnippet>616</a>        <span class="self">Self</span>::with_available_packages(iter.into_iter().map(|iter| RepoDataIter(iter)).collect())
-<a href=#617 id=617 data-nosnippet>617</a>    }
-<a href=#618 id=618 data-nosnippet>618</a>}
-<a href=#619 id=619 data-nosnippet>619</a>
-<a href=#620 id=620 data-nosnippet>620</a><span class="kw">impl</span>&lt;<span class="lifetime">'r</span>, I: IntoIterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'r </span>RepoDataRecord&gt;&gt; FromIterator&lt;ChannelRepoData&lt;<span class="lifetime">'r</span>, I&gt;&gt;
-<a href=#621 id=621 data-nosnippet>621</a>    <span class="kw">for </span>SolverTask&lt;<span class="lifetime">'r</span>, Vec&lt;ChannelRepoData&lt;<span class="lifetime">'r</span>, I&gt;&gt;&gt;
-<a href=#622 id=622 data-nosnippet>622</a>{
-<a href=#623 id=623 data-nosnippet>623</a>    <span class="kw">fn </span>from_iter&lt;T: IntoIterator&lt;Item = ChannelRepoData&lt;<span class="lifetime">'r</span>, I&gt;&gt;&gt;(iter: T) -&gt; <span class="self">Self </span>{
-<a href=#624 id=624 data-nosnippet>624</a>        <span class="self">Self</span>::with_available_packages(iter.into_iter().collect())
-<a href=#625 id=625 data-nosnippet>625</a>    }
-<a href=#626 id=626 data-nosnippet>626</a>}
-<a href=#627 id=627 data-nosnippet>627</a>
-<a href=#628 id=628 data-nosnippet>628</a><span class="doccomment">/// Represents the strategy to use when solving dependencies
-<a href=#629 id=629 data-nosnippet>629</a></span><span class="attr">#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash)]
-<a href=#630 id=630 data-nosnippet>630</a>#[cfg_attr(feature = <span class="string">"serde"</span>, derive(serde::Serialize, serde::Deserialize))]
-<a href=#631 id=631 data-nosnippet>631</a>#[cfg_attr(feature = <span class="string">"serde"</span>, serde(rename_all = <span class="string">"kebab-case"</span>))]
-<a href=#632 id=632 data-nosnippet>632</a></span><span class="kw">pub enum </span>SolveStrategy {
-<a href=#633 id=633 data-nosnippet>633</a>    <span class="doccomment">/// Resolve the highest version of each package.
-<a href=#634 id=634 data-nosnippet>634</a>    </span><span class="attr">#[default]
-<a href=#635 id=635 data-nosnippet>635</a>    </span>Highest,
-<a href=#636 id=636 data-nosnippet>636</a>
-<a href=#637 id=637 data-nosnippet>637</a>    <span class="doccomment">/// Resolve the lowest compatible version for each package.
-<a href=#638 id=638 data-nosnippet>638</a>    ///
-<a href=#639 id=639 data-nosnippet>639</a>    /// All candidates with the same version are still ordered the same as
-<a href=#640 id=640 data-nosnippet>640</a>    /// with `Default`. This ensures that the candidate with the highest build
-<a href=#641 id=641 data-nosnippet>641</a>    /// number is used and down-prioritization still works.
-<a href=#642 id=642 data-nosnippet>642</a>    </span>LowestVersion,
-<a href=#643 id=643 data-nosnippet>643</a>
-<a href=#644 id=644 data-nosnippet>644</a>    <span class="doccomment">/// Resolve the lowest compatible version for direct dependencies but the
-<a href=#645 id=645 data-nosnippet>645</a>    /// highest for transitive dependencies. This is similar to `LowestVersion`
-<a href=#646 id=646 data-nosnippet>646</a>    /// but only for direct dependencies.
-<a href=#647 id=647 data-nosnippet>647</a>    </span>LowestVersionDirect,
-<a href=#648 id=648 data-nosnippet>648</a>}
+<a href=#581 id=581 data-nosnippet>581</a>    /// Only the `resolvo` backend supports this. Other backends reject a task
+<a href=#582 id=582 data-nosnippet>582</a>    /// that sets it rather than silently solving without the restriction.
+<a href=#583 id=583 data-nosnippet>583</a>    </span><span class="kw">pub </span>excluded_candidates: HashMap&lt;Url, Arc&lt;str&gt;&gt;,
+<a href=#584 id=584 data-nosnippet>584</a>
+<a href=#585 id=585 data-nosnippet>585</a>    <span class="doccomment">/// An optional token that can be used to cancel an in-flight solve.
+<a href=#586 id=586 data-nosnippet>586</a>    ///
+<a href=#587 id=587 data-nosnippet>587</a>    /// When the token's [`CancellationToken::cancel`] method is invoked from
+<a href=#588 id=588 data-nosnippet>588</a>    /// another thread, the solver stops as soon as possible and returns
+<a href=#589 id=589 data-nosnippet>589</a>    /// [`SolveError::Cancelled`].
+<a href=#590 id=590 data-nosnippet>590</a>    ///
+<a href=#591 id=591 data-nosnippet>591</a>    /// Only the `resolvo` backend observes this token. Other backends
+<a href=#592 id=592 data-nosnippet>592</a>    /// ignore it.
+<a href=#593 id=593 data-nosnippet>593</a>    </span><span class="kw">pub </span>cancellation_token: <span class="prelude-ty">Option</span>&lt;CancellationToken&gt;,
+<a href=#594 id=594 data-nosnippet>594</a>}
+<a href=#595 id=595 data-nosnippet>595</a>
+<a href=#596 id=596 data-nosnippet>596</a><span class="kw">impl</span>&lt;<span class="lifetime">'r</span>, T&gt; SolverTask&lt;<span class="lifetime">'r</span>, T&gt; {
+<a href=#597 id=597 data-nosnippet>597</a>    <span class="doccomment">/// Creates a task that solves against `available_packages` with default
+<a href=#598 id=598 data-nosnippet>598</a>    /// settings for everything else.
+<a href=#599 id=599 data-nosnippet>599</a>    </span><span class="kw">fn </span>with_available_packages(available_packages: T) -&gt; <span class="self">Self </span>{
+<a href=#600 id=600 data-nosnippet>600</a>        <span class="self">Self </span>{
+<a href=#601 id=601 data-nosnippet>601</a>            available_packages,
+<a href=#602 id=602 data-nosnippet>602</a>            locked_packages: Vec::new(),
+<a href=#603 id=603 data-nosnippet>603</a>            pinned_packages: Vec::new(),
+<a href=#604 id=604 data-nosnippet>604</a>            virtual_packages: Vec::new(),
+<a href=#605 id=605 data-nosnippet>605</a>            specs: Vec::new(),
+<a href=#606 id=606 data-nosnippet>606</a>            constraints: Vec::new(),
+<a href=#607 id=607 data-nosnippet>607</a>            timeout: <span class="prelude-val">None</span>,
+<a href=#608 id=608 data-nosnippet>608</a>            channel_priority: ChannelPriority::default(),
+<a href=#609 id=609 data-nosnippet>609</a>            exclude_newer: <span class="prelude-val">None</span>,
+<a href=#610 id=610 data-nosnippet>610</a>            strategy: SolveStrategy::default(),
+<a href=#611 id=611 data-nosnippet>611</a>            dependency_overrides: Vec::new(),
+<a href=#612 id=612 data-nosnippet>612</a>            excluded_candidates: HashMap::new(),
+<a href=#613 id=613 data-nosnippet>613</a>            cancellation_token: <span class="prelude-val">None</span>,
+<a href=#614 id=614 data-nosnippet>614</a>        }
+<a href=#615 id=615 data-nosnippet>615</a>    }
+<a href=#616 id=616 data-nosnippet>616</a>}
+<a href=#617 id=617 data-nosnippet>617</a>
+<a href=#618 id=618 data-nosnippet>618</a><span class="kw">impl</span>&lt;<span class="lifetime">'r</span>, I: IntoIterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'r </span>RepoDataRecord&gt;&gt; FromIterator&lt;I&gt;
+<a href=#619 id=619 data-nosnippet>619</a>    <span class="kw">for </span>SolverTask&lt;<span class="lifetime">'r</span>, Vec&lt;RepoDataIter&lt;I&gt;&gt;&gt;
+<a href=#620 id=620 data-nosnippet>620</a>{
+<a href=#621 id=621 data-nosnippet>621</a>    <span class="kw">fn </span>from_iter&lt;T: IntoIterator&lt;Item = I&gt;&gt;(iter: T) -&gt; <span class="self">Self </span>{
+<a href=#622 id=622 data-nosnippet>622</a>        <span class="self">Self</span>::with_available_packages(iter.into_iter().map(|iter| RepoDataIter(iter)).collect())
+<a href=#623 id=623 data-nosnippet>623</a>    }
+<a href=#624 id=624 data-nosnippet>624</a>}
+<a href=#625 id=625 data-nosnippet>625</a>
+<a href=#626 id=626 data-nosnippet>626</a><span class="kw">impl</span>&lt;<span class="lifetime">'r</span>, I: IntoIterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'r </span>RepoDataRecord&gt;&gt; FromIterator&lt;ChannelRepoData&lt;<span class="lifetime">'r</span>, I&gt;&gt;
+<a href=#627 id=627 data-nosnippet>627</a>    <span class="kw">for </span>SolverTask&lt;<span class="lifetime">'r</span>, Vec&lt;ChannelRepoData&lt;<span class="lifetime">'r</span>, I&gt;&gt;&gt;
+<a href=#628 id=628 data-nosnippet>628</a>{
+<a href=#629 id=629 data-nosnippet>629</a>    <span class="kw">fn </span>from_iter&lt;T: IntoIterator&lt;Item = ChannelRepoData&lt;<span class="lifetime">'r</span>, I&gt;&gt;&gt;(iter: T) -&gt; <span class="self">Self </span>{
+<a href=#630 id=630 data-nosnippet>630</a>        <span class="self">Self</span>::with_available_packages(iter.into_iter().collect())
+<a href=#631 id=631 data-nosnippet>631</a>    }
+<a href=#632 id=632 data-nosnippet>632</a>}
+<a href=#633 id=633 data-nosnippet>633</a>
+<a href=#634 id=634 data-nosnippet>634</a><span class="doccomment">/// Represents the strategy to use when solving dependencies
+<a href=#635 id=635 data-nosnippet>635</a></span><span class="attr">#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash)]
+<a href=#636 id=636 data-nosnippet>636</a>#[cfg_attr(feature = <span class="string">"serde"</span>, derive(serde::Serialize, serde::Deserialize))]
+<a href=#637 id=637 data-nosnippet>637</a>#[cfg_attr(feature = <span class="string">"serde"</span>, serde(rename_all = <span class="string">"kebab-case"</span>))]
+<a href=#638 id=638 data-nosnippet>638</a></span><span class="kw">pub enum </span>SolveStrategy {
+<a href=#639 id=639 data-nosnippet>639</a>    <span class="doccomment">/// Resolve the highest version of each package.
+<a href=#640 id=640 data-nosnippet>640</a>    </span><span class="attr">#[default]
+<a href=#641 id=641 data-nosnippet>641</a>    </span>Highest,
+<a href=#642 id=642 data-nosnippet>642</a>
+<a href=#643 id=643 data-nosnippet>643</a>    <span class="doccomment">/// Resolve the lowest compatible version for each package.
+<a href=#644 id=644 data-nosnippet>644</a>    ///
+<a href=#645 id=645 data-nosnippet>645</a>    /// All candidates with the same version are still ordered the same as
+<a href=#646 id=646 data-nosnippet>646</a>    /// with `Default`. This ensures that the candidate with the highest build
+<a href=#647 id=647 data-nosnippet>647</a>    /// number is used and down-prioritization still works.
+<a href=#648 id=648 data-nosnippet>648</a>    </span>LowestVersion,
 <a href=#649 id=649 data-nosnippet>649</a>
-<a href=#650 id=650 data-nosnippet>650</a><span class="doccomment">/// A representation of a collection of [`RepoDataRecord`] usable by a
-<a href=#651 id=651 data-nosnippet>651</a>/// [`SolverImpl`] implementation.
-<a href=#652 id=652 data-nosnippet>652</a>///
-<a href=#653 id=653 data-nosnippet>653</a>/// Some solvers might be able to cache the collection between different runs of
-<a href=#654 id=654 data-nosnippet>654</a>/// the solver which could potentially eliminate some overhead. This trait
-<a href=#655 id=655 data-nosnippet>655</a>/// enables creating a representation of the repodata that is most suitable for
-<a href=#656 id=656 data-nosnippet>656</a>/// a specific backend.
-<a href=#657 id=657 data-nosnippet>657</a>///
-<a href=#658 id=658 data-nosnippet>658</a>/// Some solvers may add additional functionality to their specific
-<a href=#659 id=659 data-nosnippet>659</a>/// implementation that enables caching the repodata to disk in an efficient way
-<a href=#660 id=660 data-nosnippet>660</a>/// (see [`crate::libsolv_c::RepoData`] for an example).
-<a href=#661 id=661 data-nosnippet>661</a></span><span class="kw">pub trait </span>SolverRepoData&lt;<span class="lifetime">'a</span>&gt;: FromIterator&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>RepoDataRecord&gt; {
-<a href=#662 id=662 data-nosnippet>662</a>    <span class="doccomment">/// Places these records in the multichannel called `name`.
-<a href=#663 id=663 data-nosnippet>663</a>    ///
-<a href=#664 id=664 data-nosnippet>664</a>    /// See [`ChannelRepoData`] for how a multichannel affects the solve.
-<a href=#665 id=665 data-nosnippet>665</a>    </span><span class="kw">fn </span>set_multi_channel(<span class="kw-2">&amp;mut </span><span class="self">self</span>, name: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str);
-<a href=#666 id=666 data-nosnippet>666</a>}
-<a href=#667 id=667 data-nosnippet>667</a>
-<a href=#668 id=668 data-nosnippet>668</a><span class="doccomment">/// Defines the ability to convert a type into [`SolverRepoData`].
-<a href=#669 id=669 data-nosnippet>669</a></span><span class="kw">pub trait </span>IntoRepoData&lt;<span class="lifetime">'a</span>, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; {
-<a href=#670 id=670 data-nosnippet>670</a>    <span class="doccomment">/// Converts this instance into an instance of [`SolverRepoData`] which is
-<a href=#671 id=671 data-nosnippet>671</a>    /// consumable by a specific [`SolverImpl`] implementation.
-<a href=#672 id=672 data-nosnippet>672</a>    </span><span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S;
-<a href=#673 id=673 data-nosnippet>673</a>}
-<a href=#674 id=674 data-nosnippet>674</a>
-<a href=#675 id=675 data-nosnippet>675</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; IntoRepoData&lt;<span class="lifetime">'a</span>, S&gt; <span class="kw">for </span><span class="kw-2">&amp;</span><span class="lifetime">'a </span>Vec&lt;RepoDataRecord&gt; {
-<a href=#676 id=676 data-nosnippet>676</a>    <span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S {
-<a href=#677 id=677 data-nosnippet>677</a>        <span class="self">self</span>.iter().collect()
-<a href=#678 id=678 data-nosnippet>678</a>    }
+<a href=#650 id=650 data-nosnippet>650</a>    <span class="doccomment">/// Resolve the lowest compatible version for direct dependencies but the
+<a href=#651 id=651 data-nosnippet>651</a>    /// highest for transitive dependencies. This is similar to `LowestVersion`
+<a href=#652 id=652 data-nosnippet>652</a>    /// but only for direct dependencies.
+<a href=#653 id=653 data-nosnippet>653</a>    </span>LowestVersionDirect,
+<a href=#654 id=654 data-nosnippet>654</a>}
+<a href=#655 id=655 data-nosnippet>655</a>
+<a href=#656 id=656 data-nosnippet>656</a><span class="doccomment">/// A representation of a collection of [`RepoDataRecord`] usable by a
+<a href=#657 id=657 data-nosnippet>657</a>/// [`SolverImpl`] implementation.
+<a href=#658 id=658 data-nosnippet>658</a>///
+<a href=#659 id=659 data-nosnippet>659</a>/// Some solvers might be able to cache the collection between different runs of
+<a href=#660 id=660 data-nosnippet>660</a>/// the solver which could potentially eliminate some overhead. This trait
+<a href=#661 id=661 data-nosnippet>661</a>/// enables creating a representation of the repodata that is most suitable for
+<a href=#662 id=662 data-nosnippet>662</a>/// a specific backend.
+<a href=#663 id=663 data-nosnippet>663</a>///
+<a href=#664 id=664 data-nosnippet>664</a>/// Some solvers may add additional functionality to their specific
+<a href=#665 id=665 data-nosnippet>665</a>/// implementation that enables caching the repodata to disk in an efficient way
+<a href=#666 id=666 data-nosnippet>666</a>/// (see [`crate::libsolv_c::RepoData`] for an example).
+<a href=#667 id=667 data-nosnippet>667</a></span><span class="kw">pub trait </span>SolverRepoData&lt;<span class="lifetime">'a</span>&gt;: FromIterator&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>RepoDataRecord&gt; {
+<a href=#668 id=668 data-nosnippet>668</a>    <span class="doccomment">/// Places these records in the multichannel called `name`.
+<a href=#669 id=669 data-nosnippet>669</a>    ///
+<a href=#670 id=670 data-nosnippet>670</a>    /// See [`ChannelRepoData`] for how a multichannel affects the solve.
+<a href=#671 id=671 data-nosnippet>671</a>    </span><span class="kw">fn </span>set_multi_channel(<span class="kw-2">&amp;mut </span><span class="self">self</span>, name: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str);
+<a href=#672 id=672 data-nosnippet>672</a>}
+<a href=#673 id=673 data-nosnippet>673</a>
+<a href=#674 id=674 data-nosnippet>674</a><span class="doccomment">/// Defines the ability to convert a type into [`SolverRepoData`].
+<a href=#675 id=675 data-nosnippet>675</a></span><span class="kw">pub trait </span>IntoRepoData&lt;<span class="lifetime">'a</span>, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; {
+<a href=#676 id=676 data-nosnippet>676</a>    <span class="doccomment">/// Converts this instance into an instance of [`SolverRepoData`] which is
+<a href=#677 id=677 data-nosnippet>677</a>    /// consumable by a specific [`SolverImpl`] implementation.
+<a href=#678 id=678 data-nosnippet>678</a>    </span><span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S;
 <a href=#679 id=679 data-nosnippet>679</a>}
 <a href=#680 id=680 data-nosnippet>680</a>
-<a href=#681 id=681 data-nosnippet>681</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; IntoRepoData&lt;<span class="lifetime">'a</span>, S&gt; <span class="kw">for </span><span class="kw-2">&amp;</span><span class="lifetime">'a </span>[RepoDataRecord] {
+<a href=#681 id=681 data-nosnippet>681</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; IntoRepoData&lt;<span class="lifetime">'a</span>, S&gt; <span class="kw">for </span><span class="kw-2">&amp;</span><span class="lifetime">'a </span>Vec&lt;RepoDataRecord&gt; {
 <a href=#682 id=682 data-nosnippet>682</a>    <span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S {
 <a href=#683 id=683 data-nosnippet>683</a>        <span class="self">self</span>.iter().collect()
 <a href=#684 id=684 data-nosnippet>684</a>    }
 <a href=#685 id=685 data-nosnippet>685</a>}
 <a href=#686 id=686 data-nosnippet>686</a>
-<a href=#687 id=687 data-nosnippet>687</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; IntoRepoData&lt;<span class="lifetime">'a</span>, S&gt; <span class="kw">for </span>S {
+<a href=#687 id=687 data-nosnippet>687</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; IntoRepoData&lt;<span class="lifetime">'a</span>, S&gt; <span class="kw">for </span><span class="kw-2">&amp;</span><span class="lifetime">'a </span>[RepoDataRecord] {
 <a href=#688 id=688 data-nosnippet>688</a>    <span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S {
-<a href=#689 id=689 data-nosnippet>689</a>        <span class="self">self
-<a href=#690 id=690 data-nosnippet>690</a>    </span>}
+<a href=#689 id=689 data-nosnippet>689</a>        <span class="self">self</span>.iter().collect()
+<a href=#690 id=690 data-nosnippet>690</a>    }
 <a href=#691 id=691 data-nosnippet>691</a>}
 <a href=#692 id=692 data-nosnippet>692</a>
-<a href=#693 id=693 data-nosnippet>693</a><span class="doccomment">/// A helper struct that implements `IntoRepoData` for anything that can
-<a href=#694 id=694 data-nosnippet>694</a>/// iterate over `RepoDataRecord`s.
-<a href=#695 id=695 data-nosnippet>695</a></span><span class="kw">pub struct </span>RepoDataIter&lt;T&gt;(<span class="kw">pub </span>T);
-<a href=#696 id=696 data-nosnippet>696</a>
-<a href=#697 id=697 data-nosnippet>697</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, T: IntoIterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'a </span>RepoDataRecord&gt;, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; IntoRepoData&lt;<span class="lifetime">'a</span>, S&gt;
-<a href=#698 id=698 data-nosnippet>698</a>    <span class="kw">for </span>RepoDataIter&lt;T&gt;
-<a href=#699 id=699 data-nosnippet>699</a>{
-<a href=#700 id=700 data-nosnippet>700</a>    <span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S {
-<a href=#701 id=701 data-nosnippet>701</a>        <span class="self">self</span>.<span class="number">0</span>.into_iter().collect()
-<a href=#702 id=702 data-nosnippet>702</a>    }
-<a href=#703 id=703 data-nosnippet>703</a>}
-<a href=#704 id=704 data-nosnippet>704</a>
-<a href=#705 id=705 data-nosnippet>705</a><span class="doccomment">/// The records of a single channel subdirectory, together with the
-<a href=#706 id=706 data-nosnippet>706</a>/// multichannel the channel was requested through, if any.
-<a href=#707 id=707 data-nosnippet>707</a>///
-<a href=#708 id=708 data-nosnippet>708</a>/// All channels of one multichannel form a single channel priority tier, like
-<a href=#709 id=709 data-nosnippet>709</a>/// conda treats them. With [`ChannelPriority::Strict`] a package is not
-<a href=#710 id=710 data-nosnippet>710</a>/// excluded from a later member just because an earlier member also provides
-<a href=#711 id=711 data-nosnippet>711</a>/// that package, while channels outside the multichannel are still excluded.
-<a href=#712 id=712 data-nosnippet>712</a>/// With [`ChannelPriority::Flexible`] the solver does not prefer an earlier
-<a href=#713 id=713 data-nosnippet>713</a>/// member over a later one. The order of the members only breaks ties between
-<a href=#714 id=714 data-nosnippet>714</a>/// otherwise identical candidates.
-<a href=#715 id=715 data-nosnippet>715</a>///
-<a href=#716 id=716 data-nosnippet>716</a>/// For backends that support channel-specific match specs, a spec whose
-<a href=#717 id=717 data-nosnippet>717</a>/// channel name equals the name of the multichannel (e.g. `defaults::python`)
-<a href=#718 id=718 data-nosnippet>718</a>/// accepts records from every member.
-<a href=#719 id=719 data-nosnippet>719</a></span><span class="kw">pub struct </span>ChannelRepoData&lt;<span class="lifetime">'a</span>, T&gt; {
-<a href=#720 id=720 data-nosnippet>720</a>    <span class="doccomment">/// The records of the channel subdirectory.
-<a href=#721 id=721 data-nosnippet>721</a>    </span><span class="kw">pub </span>records: T,
-<a href=#722 id=722 data-nosnippet>722</a>
-<a href=#723 id=723 data-nosnippet>723</a>    <span class="doccomment">/// The name of the multichannel this channel belongs to, or `None` if the
-<a href=#724 id=724 data-nosnippet>724</a>    /// channel was requested on its own.
-<a href=#725 id=725 data-nosnippet>725</a>    </span><span class="kw">pub </span>multi_channel: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str&gt;,
-<a href=#726 id=726 data-nosnippet>726</a>}
-<a href=#727 id=727 data-nosnippet>727</a>
-<a href=#728 id=728 data-nosnippet>728</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, T: IntoIterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'a </span>RepoDataRecord&gt;, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; IntoRepoData&lt;<span class="lifetime">'a</span>, S&gt;
-<a href=#729 id=729 data-nosnippet>729</a>    <span class="kw">for </span>ChannelRepoData&lt;<span class="lifetime">'a</span>, T&gt;
-<a href=#730 id=730 data-nosnippet>730</a>{
-<a href=#731 id=731 data-nosnippet>731</a>    <span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S {
-<a href=#732 id=732 data-nosnippet>732</a>        <span class="kw">let </span><span class="kw-2">mut </span>repo_data: S = <span class="self">self</span>.records.into_iter().collect();
-<a href=#733 id=733 data-nosnippet>733</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(name) = <span class="self">self</span>.multi_channel {
-<a href=#734 id=734 data-nosnippet>734</a>            repo_data.set_multi_channel(name);
-<a href=#735 id=735 data-nosnippet>735</a>        }
-<a href=#736 id=736 data-nosnippet>736</a>        repo_data
-<a href=#737 id=737 data-nosnippet>737</a>    }
-<a href=#738 id=738 data-nosnippet>738</a>}
-<a href=#739 id=739 data-nosnippet>739</a>
-<a href=#740 id=740 data-nosnippet>740</a><span class="attr">#[cfg(test)]
-<a href=#741 id=741 data-nosnippet>741</a></span><span class="kw">mod </span>tests {
-<a href=#742 id=742 data-nosnippet>742</a>    <span class="kw">use </span>rattler_conda_types::ParseMatchSpecOptions;
-<a href=#743 id=743 data-nosnippet>743</a>
-<a href=#744 id=744 data-nosnippet>744</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#693 id=693 data-nosnippet>693</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; IntoRepoData&lt;<span class="lifetime">'a</span>, S&gt; <span class="kw">for </span>S {
+<a href=#694 id=694 data-nosnippet>694</a>    <span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S {
+<a href=#695 id=695 data-nosnippet>695</a>        <span class="self">self
+<a href=#696 id=696 data-nosnippet>696</a>    </span>}
+<a href=#697 id=697 data-nosnippet>697</a>}
+<a href=#698 id=698 data-nosnippet>698</a>
+<a href=#699 id=699 data-nosnippet>699</a><span class="doccomment">/// A helper struct that implements `IntoRepoData` for anything that can
+<a href=#700 id=700 data-nosnippet>700</a>/// iterate over `RepoDataRecord`s.
+<a href=#701 id=701 data-nosnippet>701</a></span><span class="kw">pub struct </span>RepoDataIter&lt;T&gt;(<span class="kw">pub </span>T);
+<a href=#702 id=702 data-nosnippet>702</a>
+<a href=#703 id=703 data-nosnippet>703</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, T: IntoIterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'a </span>RepoDataRecord&gt;, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; IntoRepoData&lt;<span class="lifetime">'a</span>, S&gt;
+<a href=#704 id=704 data-nosnippet>704</a>    <span class="kw">for </span>RepoDataIter&lt;T&gt;
+<a href=#705 id=705 data-nosnippet>705</a>{
+<a href=#706 id=706 data-nosnippet>706</a>    <span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S {
+<a href=#707 id=707 data-nosnippet>707</a>        <span class="self">self</span>.<span class="number">0</span>.into_iter().collect()
+<a href=#708 id=708 data-nosnippet>708</a>    }
+<a href=#709 id=709 data-nosnippet>709</a>}
+<a href=#710 id=710 data-nosnippet>710</a>
+<a href=#711 id=711 data-nosnippet>711</a><span class="doccomment">/// The records of a single channel subdirectory, together with the
+<a href=#712 id=712 data-nosnippet>712</a>/// multichannel the channel was requested through, if any.
+<a href=#713 id=713 data-nosnippet>713</a>///
+<a href=#714 id=714 data-nosnippet>714</a>/// All channels of one multichannel form a single channel priority tier, like
+<a href=#715 id=715 data-nosnippet>715</a>/// conda treats them. With [`ChannelPriority::Strict`] a package is not
+<a href=#716 id=716 data-nosnippet>716</a>/// excluded from a later member just because an earlier member also provides
+<a href=#717 id=717 data-nosnippet>717</a>/// that package, while channels outside the multichannel are still excluded.
+<a href=#718 id=718 data-nosnippet>718</a>/// With [`ChannelPriority::Flexible`] the solver does not prefer an earlier
+<a href=#719 id=719 data-nosnippet>719</a>/// member over a later one. The order of the members only breaks ties between
+<a href=#720 id=720 data-nosnippet>720</a>/// otherwise identical candidates.
+<a href=#721 id=721 data-nosnippet>721</a>///
+<a href=#722 id=722 data-nosnippet>722</a>/// For backends that support channel-specific match specs, a spec whose
+<a href=#723 id=723 data-nosnippet>723</a>/// channel name equals the name of the multichannel (e.g. `defaults::python`)
+<a href=#724 id=724 data-nosnippet>724</a>/// accepts records from every member.
+<a href=#725 id=725 data-nosnippet>725</a></span><span class="kw">pub struct </span>ChannelRepoData&lt;<span class="lifetime">'a</span>, T&gt; {
+<a href=#726 id=726 data-nosnippet>726</a>    <span class="doccomment">/// The records of the channel subdirectory.
+<a href=#727 id=727 data-nosnippet>727</a>    </span><span class="kw">pub </span>records: T,
+<a href=#728 id=728 data-nosnippet>728</a>
+<a href=#729 id=729 data-nosnippet>729</a>    <span class="doccomment">/// The name of the multichannel this channel belongs to, or `None` if the
+<a href=#730 id=730 data-nosnippet>730</a>    /// channel was requested on its own.
+<a href=#731 id=731 data-nosnippet>731</a>    </span><span class="kw">pub </span>multi_channel: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str&gt;,
+<a href=#732 id=732 data-nosnippet>732</a>}
+<a href=#733 id=733 data-nosnippet>733</a>
+<a href=#734 id=734 data-nosnippet>734</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, T: IntoIterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'a </span>RepoDataRecord&gt;, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; IntoRepoData&lt;<span class="lifetime">'a</span>, S&gt;
+<a href=#735 id=735 data-nosnippet>735</a>    <span class="kw">for </span>ChannelRepoData&lt;<span class="lifetime">'a</span>, T&gt;
+<a href=#736 id=736 data-nosnippet>736</a>{
+<a href=#737 id=737 data-nosnippet>737</a>    <span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S {
+<a href=#738 id=738 data-nosnippet>738</a>        <span class="kw">let </span><span class="kw-2">mut </span>repo_data: S = <span class="self">self</span>.records.into_iter().collect();
+<a href=#739 id=739 data-nosnippet>739</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(name) = <span class="self">self</span>.multi_channel {
+<a href=#740 id=740 data-nosnippet>740</a>            repo_data.set_multi_channel(name);
+<a href=#741 id=741 data-nosnippet>741</a>        }
+<a href=#742 id=742 data-nosnippet>742</a>        repo_data
+<a href=#743 id=743 data-nosnippet>743</a>    }
+<a href=#744 id=744 data-nosnippet>744</a>}
 <a href=#745 id=745 data-nosnippet>745</a>
-<a href=#746 id=746 data-nosnippet>746</a>    <span class="attr">#[test]
-<a href=#747 id=747 data-nosnippet>747</a>    </span><span class="kw">fn </span>exemption_requires_exact_name() {
-<a href=#748 id=748 data-nosnippet>748</a>        <span class="kw">let </span>config = ExcludeNewer::from_datetime(Timestamp::UNIX_EPOCH);
-<a href=#749 id=749 data-nosnippet>749</a>        <span class="kw">let </span>options = ParseMatchSpecOptions::lenient().with_exact_names_only(<span class="bool-val">false</span>);
-<a href=#750 id=750 data-nosnippet>750</a>        <span class="kw">for </span>spec <span class="kw">in </span>[<span class="string">"pkg-*"</span>, <span class="string">"*"</span>, <span class="string">"^pkg-.*$"</span>] {
-<a href=#751 id=751 data-nosnippet>751</a>            <span class="kw">let </span>spec = MatchSpec::from_str(spec, options).unwrap();
-<a href=#752 id=752 data-nosnippet>752</a>            <span class="macro">assert!</span>(
-<a href=#753 id=753 data-nosnippet>753</a>                <span class="macro">matches!</span>(
-<a href=#754 id=754 data-nosnippet>754</a>                    config.clone().with_exemption(spec.clone()),
-<a href=#755 id=755 data-nosnippet>755</a>                    <span class="prelude-val">Err</span>(InvalidExemptionError::NotExactName(<span class="kw">_</span>))
-<a href=#756 id=756 data-nosnippet>756</a>                ),
-<a href=#757 id=757 data-nosnippet>757</a>                <span class="string">"expected '{spec}' to be rejected"
-<a href=#758 id=758 data-nosnippet>758</a>            </span>);
-<a href=#759 id=759 data-nosnippet>759</a>        }
-<a href=#760 id=760 data-nosnippet>760</a>        <span class="kw">let </span>options = ParseMatchSpecOptions::strict()
-<a href=#761 id=761 data-nosnippet>761</a>            .with_extras(<span class="bool-val">true</span>)
-<a href=#762 id=762 data-nosnippet>762</a>            .with_conditionals(<span class="bool-val">true</span>);
-<a href=#763 id=763 data-nosnippet>763</a>        <span class="kw">for </span>spec <span class="kw">in </span>[<span class="string">"pkg[extras=[foo]]"</span>, <span class="string">r#"pkg[when="other"]"#</span>] {
-<a href=#764 id=764 data-nosnippet>764</a>            <span class="kw">let </span>spec = MatchSpec::from_str(spec, options).unwrap();
-<a href=#765 id=765 data-nosnippet>765</a>            <span class="macro">assert!</span>(
-<a href=#766 id=766 data-nosnippet>766</a>                <span class="macro">matches!</span>(
-<a href=#767 id=767 data-nosnippet>767</a>                    config.clone().with_exemption(spec.clone()),
-<a href=#768 id=768 data-nosnippet>768</a>                    <span class="prelude-val">Err</span>(InvalidExemptionError::UnsupportedField(<span class="kw">_</span>))
-<a href=#769 id=769 data-nosnippet>769</a>                ),
-<a href=#770 id=770 data-nosnippet>770</a>                <span class="string">"expected '{spec}' to be rejected"
-<a href=#771 id=771 data-nosnippet>771</a>            </span>);
-<a href=#772 id=772 data-nosnippet>772</a>        }
-<a href=#773 id=773 data-nosnippet>773</a>
-<a href=#774 id=774 data-nosnippet>774</a>        <span class="kw">let </span><span class="kw-2">mut </span>spec = MatchSpec::from_str(<span class="string">"pkg ==1.0"</span>, ParseMatchSpecOptions::strict()).unwrap();
-<a href=#775 id=775 data-nosnippet>775</a>        <span class="macro">assert!</span>(config.clone().with_exemption(spec.clone()).is_ok());
-<a href=#776 id=776 data-nosnippet>776</a>        spec.namespace = <span class="prelude-val">Some</span>(<span class="string">"ns"</span>.to_string());
-<a href=#777 id=777 data-nosnippet>777</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#778 id=778 data-nosnippet>778</a>            config.with_exemption(spec),
-<a href=#779 id=779 data-nosnippet>779</a>            <span class="prelude-val">Err</span>(InvalidExemptionError::UnsupportedField(<span class="kw">_</span>))
-<a href=#780 id=780 data-nosnippet>780</a>        ));
-<a href=#781 id=781 data-nosnippet>781</a>    }
-<a href=#782 id=782 data-nosnippet>782</a>}
+<a href=#746 id=746 data-nosnippet>746</a><span class="attr">#[cfg(test)]
+<a href=#747 id=747 data-nosnippet>747</a></span><span class="kw">mod </span>tests {
+<a href=#748 id=748 data-nosnippet>748</a>    <span class="kw">use </span>rattler_conda_types::ParseMatchSpecOptions;
+<a href=#749 id=749 data-nosnippet>749</a>
+<a href=#750 id=750 data-nosnippet>750</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#751 id=751 data-nosnippet>751</a>
+<a href=#752 id=752 data-nosnippet>752</a>    <span class="attr">#[test]
+<a href=#753 id=753 data-nosnippet>753</a>    </span><span class="kw">fn </span>exemption_requires_exact_name() {
+<a href=#754 id=754 data-nosnippet>754</a>        <span class="kw">let </span>config = ExcludeNewer::from_datetime(Timestamp::UNIX_EPOCH);
+<a href=#755 id=755 data-nosnippet>755</a>        <span class="kw">let </span>options = ParseMatchSpecOptions::lenient().with_exact_names_only(<span class="bool-val">false</span>);
+<a href=#756 id=756 data-nosnippet>756</a>        <span class="kw">for </span>spec <span class="kw">in </span>[<span class="string">"pkg-*"</span>, <span class="string">"*"</span>, <span class="string">"^pkg-.*$"</span>] {
+<a href=#757 id=757 data-nosnippet>757</a>            <span class="kw">let </span>spec = MatchSpec::from_str(spec, options).unwrap();
+<a href=#758 id=758 data-nosnippet>758</a>            <span class="macro">assert!</span>(
+<a href=#759 id=759 data-nosnippet>759</a>                <span class="macro">matches!</span>(
+<a href=#760 id=760 data-nosnippet>760</a>                    config.clone().with_exemption(spec.clone()),
+<a href=#761 id=761 data-nosnippet>761</a>                    <span class="prelude-val">Err</span>(InvalidExemptionError::NotExactName(<span class="kw">_</span>))
+<a href=#762 id=762 data-nosnippet>762</a>                ),
+<a href=#763 id=763 data-nosnippet>763</a>                <span class="string">"expected '{spec}' to be rejected"
+<a href=#764 id=764 data-nosnippet>764</a>            </span>);
+<a href=#765 id=765 data-nosnippet>765</a>        }
+<a href=#766 id=766 data-nosnippet>766</a>        <span class="kw">let </span>options = ParseMatchSpecOptions::strict()
+<a href=#767 id=767 data-nosnippet>767</a>            .with_extras(<span class="bool-val">true</span>)
+<a href=#768 id=768 data-nosnippet>768</a>            .with_conditionals(<span class="bool-val">true</span>);
+<a href=#769 id=769 data-nosnippet>769</a>        <span class="kw">for </span>spec <span class="kw">in </span>[<span class="string">"pkg[extras=[foo]]"</span>, <span class="string">r#"pkg[when="other"]"#</span>] {
+<a href=#770 id=770 data-nosnippet>770</a>            <span class="kw">let </span>spec = MatchSpec::from_str(spec, options).unwrap();
+<a href=#771 id=771 data-nosnippet>771</a>            <span class="macro">assert!</span>(
+<a href=#772 id=772 data-nosnippet>772</a>                <span class="macro">matches!</span>(
+<a href=#773 id=773 data-nosnippet>773</a>                    config.clone().with_exemption(spec.clone()),
+<a href=#774 id=774 data-nosnippet>774</a>                    <span class="prelude-val">Err</span>(InvalidExemptionError::UnsupportedField(<span class="kw">_</span>))
+<a href=#775 id=775 data-nosnippet>775</a>                ),
+<a href=#776 id=776 data-nosnippet>776</a>                <span class="string">"expected '{spec}' to be rejected"
+<a href=#777 id=777 data-nosnippet>777</a>            </span>);
+<a href=#778 id=778 data-nosnippet>778</a>        }
+<a href=#779 id=779 data-nosnippet>779</a>
+<a href=#780 id=780 data-nosnippet>780</a>        <span class="kw">let </span><span class="kw-2">mut </span>spec = MatchSpec::from_str(<span class="string">"pkg ==1.0"</span>, ParseMatchSpecOptions::strict()).unwrap();
+<a href=#781 id=781 data-nosnippet>781</a>        <span class="macro">assert!</span>(config.clone().with_exemption(spec.clone()).is_ok());
+<a href=#782 id=782 data-nosnippet>782</a>        spec.namespace = <span class="prelude-val">Some</span>(<span class="string">"ns"</span>.to_string());
+<a href=#783 id=783 data-nosnippet>783</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#784 id=784 data-nosnippet>784</a>            config.with_exemption(spec),
+<a href=#785 id=785 data-nosnippet>785</a>            <span class="prelude-val">Err</span>(InvalidExemptionError::UnsupportedField(<span class="kw">_</span>))
+<a href=#786 id=786 data-nosnippet>786</a>        ));
+<a href=#787 id=787 data-nosnippet>787</a>    }
+<a href=#788 id=788 data-nosnippet>788</a>}
 </code></pre></div></section></main></body></html>
