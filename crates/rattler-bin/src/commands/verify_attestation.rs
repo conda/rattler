@@ -18,11 +18,7 @@ use serde::Serialize;
 use tokio::io::AsyncWriteExt;
 use url::Url;
 
-use super::{
-    client::create_client_with_middleware,
-    hyperlink::{self, Stream},
-    package_source::PackageSource,
-};
+use super::{client::create_client_with_middleware, hyperlink, package_source::PackageSource};
 use crate::publisher_args::PublisherArgs;
 
 /// A GitHub workflow's file page, pinned to its build-config revision.
@@ -51,42 +47,6 @@ fn github_slug(url: &Url) -> Option<String> {
     let owner = segments.next().filter(|s| !s.is_empty())?;
     let repo = segments.next().filter(|s| !s.is_empty())?;
     Some(format!("{owner}/{repo}"))
-}
-
-/// Compact labels are used only when the full destination is clickable.
-fn compact_link(url: Option<Url>, label: &str, fallback: &str) -> String {
-    if url.is_some() && hyperlink::enabled(Stream::Stdout) {
-        hyperlink::maybe_link(url, label)
-    } else {
-        fallback.to_string()
-    }
-}
-
-fn run_label(url: &Url) -> Option<String> {
-    github_slug(url)?;
-    let segments: Vec<_> = url.path_segments()?.collect();
-    match segments.as_slice() {
-        [_, _, "actions", "runs", id] => Some(format!("run {id}")),
-        [_, _, "actions", "runs", id, "attempts", attempt] => {
-            Some(format!("run {id}, attempt {attempt}"))
-        }
-        _ => None,
-    }
-}
-
-fn sidecar_label(url: &Url) -> String {
-    let name = url
-        .path_segments()
-        .and_then(|mut s| s.next_back())
-        .unwrap_or(url.as_str());
-    match name.rsplit_once('.') {
-        Some((head, digest))
-            if digest.len() == 64 && digest.bytes().all(|b| b.is_ascii_hexdigit()) =>
-        {
-            format!("{head}.{}…", &digest[..10])
-        }
-        _ => name.to_string(),
-    }
 }
 
 /// The sidecar `url` itself, if it can be opened from a terminal.
@@ -492,12 +452,8 @@ fn print_report(report: &Report) {
     field("SHA-256", &report.sha256);
     field(
         "Attestation",
-        &compact_link(
+        &hyperlink::maybe_link(
             attestation_link(&report.attestation_url),
-            &Url::parse(&report.attestation_url).map_or_else(
-                |_| report.attestation_url.clone(),
-                |url| sidecar_label(&url),
-            ),
             &report.attestation_url,
         ),
     );
@@ -539,15 +495,11 @@ fn print_bundle(bundle: &BundleReport) {
             }
             // Only the repository URL is linked, not the annotations that
             // follow it, so that what the link covers is what it points at.
-            let link = compact_link(
+            let link = hyperlink::maybe_link(
                 Url::parse(repository)
                     .ok()
                     .as_ref()
                     .and_then(hyperlink::web),
-                &Url::parse(repository)
-                    .ok()
-                    .and_then(|url| github_slug(&url))
-                    .unwrap_or_else(|| repository.clone()),
                 repository,
             );
             if annotations.is_empty() {
@@ -574,13 +526,10 @@ fn print_bundle(bundle: &BundleReport) {
             );
         }
         if let Some(uri) = &claims.build_config_uri {
-            // The text is shortened to the path in the repository, so the link
-            // is what restores the full URI the claim carried.
-            let workflow = compact_link(
-                workflow_url(uri, claims),
-                &shorten_build_config(uri, claims),
-                uri,
-            );
+            // The text is the path in the repository; the link opens that file
+            // at the revision the claim names.
+            let workflow =
+                hyperlink::maybe_link(workflow_url(uri, claims), shorten_build_config(uri, claims));
             indented(
                 "Workflow",
                 &claims.build_trigger.as_ref().map_or_else(
@@ -601,15 +550,7 @@ fn print_bundle(bundle: &BundleReport) {
         if let Some(run) = &claims.run_invocation_uri {
             indented(
                 "Build",
-                &compact_link(
-                    Url::parse(run).ok().as_ref().and_then(hyperlink::web),
-                    &Url::parse(run)
-                        .ok()
-                        .as_ref()
-                        .and_then(run_label)
-                        .unwrap_or_else(|| run.clone()),
-                    run,
-                ),
+                &hyperlink::maybe_link(Url::parse(run).ok().as_ref().and_then(hyperlink::web), run),
             );
         }
         indented("Signed at", &certificate.not_before);
@@ -624,20 +565,18 @@ fn print_bundle(bundle: &BundleReport) {
             || format!("index {}", log.log_index),
             |origin| format!("index {} on {}", log.log_index, log_host(origin)),
         );
-        let url = log
+        let link = log
             .url
             .as_deref()
             .and_then(|url| Url::parse(url).ok())
             .as_ref()
             .and_then(hyperlink::web);
-        let linked = url.is_some() && hyperlink::enabled(Stream::Stdout);
-        indented("Transparency log", &hyperlink::maybe_link(url, &entry));
-        // The URL only needs a line of its own where the entry above it is not
-        // already clickable.
-        if let Some(url) = &log.url
-            && !linked
-        {
-            continuation(url);
+        indented(
+            "Transparency log",
+            &hyperlink::maybe_link(link.clone(), &entry),
+        );
+        if let Some(url) = &log.url {
+            continuation(&hyperlink::maybe_link(link, url));
         }
     }
 
@@ -844,19 +783,6 @@ mod tests {
         );
         assert!(workflow_url("https://example.com/org/repo/workflow@main", &claims).is_none());
         assert!(workflow_url("someone@example.com", &claims).is_none());
-    }
-
-    #[test]
-    fn compact_attestation_labels() {
-        let run = Url::parse("https://github.com/org/repo/actions/runs/123/attempts/2").unwrap();
-        assert_eq!(run_label(&run).as_deref(), Some("run 123, attempt 2"));
-        assert!(run_label(&Url::parse("https://example.com/actions/runs/123").unwrap()).is_none());
-        let sidecar = Url::parse(&format!(
-            "https://example.com/pkg.conda.sigs.{}",
-            "a".repeat(64)
-        ))
-        .unwrap();
-        assert_eq!(sidecar_label(&sidecar), "pkg.conda.sigs.aaaaaaaaaa…");
     }
 
     #[test]

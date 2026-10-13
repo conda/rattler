@@ -98,6 +98,11 @@ fn test_list_json() {
 /// The start of an OSC 8 hyperlink.
 const OSC8: &str = "\u{1b}]8;;";
 
+/// `text` as rattler writes it when it links to `url`.
+fn linked(url: &str, text: &str) -> String {
+    format!("{OSC8}{url}\u{1b}\\{text}{OSC8}\u{1b}\\")
+}
+
 /// Whatever else the output carries, a consumer that cannot render hyperlinks
 /// must not receive any. Since stdout is a pipe here, this is the default for
 /// every command.
@@ -126,13 +131,11 @@ fn test_hyperlinks_can_be_forced() {
         &["list", "-p", FIXTURE_PREFIX, "--full-name", "bzip2"],
         &[("FORCE_HYPERLINK", "1")],
     );
-    // The package name links to its page on prefix.dev, which mirrors the
-    // conda-forge channel the fixture records come from, and the name itself is
-    // still there in full.
+    // The package name links to its page on the host that serves the
+    // conda-forge channel the fixture records come from, and the name itself
+    // is still there in full.
     assert!(
-        output.contains(&format!(
-            "{OSC8}https://prefix.dev/channels/conda-forge/packages/bzip2\u{1b}\\\u{1b}[4mbzip2\u{1b}[24m\u{1b}]8;;\u{1b}\\"
-        )),
+        output.contains(&linked("https://anaconda.org/conda-forge/bzip2", "bzip2")),
         "expected a hyperlinked package name, got:\n{output}"
     );
     // Machine-readable output stays plain even then.
@@ -149,7 +152,6 @@ fn test_hyperlinks_can_be_forced() {
     assert!(!json.contains(OSC8));
     let plain = run_rattler_with_env(&["list", "-p", FIXTURE_PREFIX], &[("FORCE_HYPERLINK", "0")]);
     assert!(!plain.contains(OSC8));
-    assert!(!plain.contains("\u{1b}[4m"));
 }
 
 /// Local package archives given on the command line link to their `file://`
@@ -163,7 +165,7 @@ fn test_local_package_sources_link_to_their_file() {
     let left = output.lines().find(|line| line.contains("left:")).unwrap();
     assert!(left.contains(&format!("{OSC8}file://")), "got:\n{left}");
     assert!(left.contains(&format!(
-        "empty-0.1.0-h4616a5c_0.conda\u{1b}\\\u{1b}[4m{EMPTY_PACKAGE}\u{1b}[24m"
+        "empty-0.1.0-h4616a5c_0.conda\u{1b}\\{EMPTY_PACKAGE}{OSC8}"
     )));
     // A local archive comes from no channel, so the package name in `inspect`
     // has no page to link to and stays plain.
@@ -328,14 +330,20 @@ mod attestation {
             .find(|line| line.trim_start().starts_with("Identity:"))
             .unwrap();
         assert!(!identity.contains(super::OSC8));
+        // The text of every field is the same as without links; only the
+        // workflow path gets a destination it does not spell out itself.
         let workflow = output
             .lines()
             .find(|line| line.trim_start().starts_with("Workflow:"))
             .unwrap();
-        assert!(workflow.contains("https://github.com/pavelzw/skill-forge/blob/"));
-        assert!(workflow.contains("\u{1b}[4m.github/workflows/package.yml\u{1b}[24m"));
-        assert!(output.contains("\u{1b}[4mrun 36007002754, attempt 1\u{1b}[24m"));
-        assert!(output.contains("\u{1b}[4mpavelzw/skill-forge\u{1b}[24m"));
+        assert!(workflow.contains(&super::linked(
+            "https://github.com/pavelzw/skill-forge/blob/8a96d273f7245383c451499fb65375ec408ca042/.github/workflows/package.yml",
+            ".github/workflows/package.yml"
+        )));
+        let run = "https://github.com/pavelzw/skill-forge/actions/runs/36007002754/attempts/1";
+        assert!(output.contains(&super::linked(run, run)));
+        let repository = "https://github.com/pavelzw/skill-forge";
+        assert!(output.contains(&super::linked(repository, repository)));
     }
 
     /// The JSON output carries every claim of the signing certificate and the

@@ -11,7 +11,7 @@
 //! renderer) and `FORCE_HYPERLINK=0` turns them off, following the convention
 //! of the crate that does the detection.
 
-use std::{fmt::Display, path::Path, str::FromStr};
+use std::{fmt::Display, path::Path, str::FromStr, sync::OnceLock};
 
 use rattler_conda_types::Subdir;
 pub use supports_hyperlinks::Stream;
@@ -19,34 +19,28 @@ use url::Url;
 
 use super::package_source::PackageSource;
 
-/// Channels that are mirrored on prefix.dev, which serves a nicer package page
-/// than the channel host itself. Anything else keeps pointing at its origin.
-const PREFIX_DEV_MIRRORS: &[&str] = &[
-    "bioconda",
-    "conda-forge",
-    "nvidia",
-    "pytorch",
-    "rapidsai",
-    "robostack",
-    "robostack-staging",
-];
-
 /// Whether hyperlinks should be written to `stream`.
 ///
 /// Each stream is decided on its own, so redirecting only stdout keeps the
-/// links in the progress messages on stderr.
-///
-/// Public so that output which would otherwise print a URL on a line of its own
-/// can leave it out when the text above it is already clickable.
+/// links in the progress messages on stderr. The answer cannot change while
+/// the process runs, so it is computed once per stream rather than for every
+/// cell of a table.
 pub fn enabled(stream: Stream) -> bool {
-    supports_hyperlinks::on(stream)
+    static STDOUT: OnceLock<bool> = OnceLock::new();
+    static STDERR: OnceLock<bool> = OnceLock::new();
+    let cell = match stream {
+        Stream::Stdout => &STDOUT,
+        Stream::Stderr => &STDERR,
+    };
+    *cell.get_or_init(|| supports_hyperlinks::on(stream))
 }
 
 /// Wraps `text` in an OSC 8 escape sequence pointing at `url`.
+///
+/// The text is left unstyled: how a link is shown (underlined on hover, say)
+/// is the terminal's decision, like it is for cargo, uv and gh.
 fn osc8(url: &Url, text: &str) -> String {
-    // Underline marks the clickable span without replacing its color or bold
-    // styling. Reset only underline, leaving surrounding styles intact.
-    format!("\x1b]8;;{url}\x1b\\\x1b[4m{text}\x1b[24m\x1b]8;;\x1b\\")
+    format!("\x1b]8;;{url}\x1b\\{text}\x1b]8;;\x1b\\")
 }
 
 /// Renders `text` on stdout as a hyperlink to `url`, or unchanged when there is
@@ -120,7 +114,7 @@ pub fn channel_of_package_url(url: &Url) -> Option<String> {
 enum Host {
     /// A channel served by prefix.dev.
     PrefixDev,
-    /// A channel served by Anaconda, which prefix.dev may mirror.
+    /// A channel served by Anaconda.
     Anaconda,
 }
 
@@ -166,15 +160,13 @@ fn parse_channel(channel: &str) -> Option<(Host, String)> {
 
 /// The URL of the web page of `channel`, if it has a known one.
 ///
-/// Channels that are not served by a host with a package index (a self-hosted
-/// channel, a local directory) have no page and yield `None`.
+/// The page is always on the host that serves the channel. Channels that are
+/// not served by a host with a package index (a self-hosted channel, a local
+/// directory) have no page and yield `None`.
 pub fn channel_page(channel: &str) -> Option<Url> {
     let (host, name) = parse_channel(channel)?;
     let url = match host {
         Host::PrefixDev => format!("https://prefix.dev/channels/{name}"),
-        Host::Anaconda if PREFIX_DEV_MIRRORS.contains(&name.as_str()) => {
-            format!("https://prefix.dev/channels/{name}")
-        }
         Host::Anaconda => format!("https://anaconda.org/{name}"),
     };
     Url::parse(&url).ok()
@@ -185,9 +177,6 @@ pub fn package_page(channel: Option<&str>, package: &str) -> Option<Url> {
     let (host, name) = parse_channel(channel?)?;
     let url = match host {
         Host::PrefixDev => format!("https://prefix.dev/channels/{name}/packages/{package}"),
-        Host::Anaconda if PREFIX_DEV_MIRRORS.contains(&name.as_str()) => {
-            format!("https://prefix.dev/channels/{name}/packages/{package}")
-        }
         Host::Anaconda => format!("https://anaconda.org/{name}/{package}"),
     };
     Url::parse(&url).ok()
@@ -206,13 +195,13 @@ mod tests {
         let url = Url::parse("https://prefix.dev/channels/conda-forge").unwrap();
         assert_eq!(
             osc8(&url, "conda-forge"),
-            "\u{1b}]8;;https://prefix.dev/channels/conda-forge\u{1b}\\\u{1b}[4mconda-forge\u{1b}[24m\u{1b}]8;;\u{1b}\\"
+            "\u{1b}]8;;https://prefix.dev/channels/conda-forge\u{1b}\\conda-forge\u{1b}]8;;\u{1b}\\"
         );
     }
 
     #[test]
-    fn test_mirrored_channels_link_to_prefix_dev() {
-        let expected = Some("https://prefix.dev/channels/conda-forge/packages/xtensor".to_string());
+    fn test_anaconda_channels_link_to_anaconda_org() {
+        let expected = Some("https://anaconda.org/conda-forge/xtensor".to_string());
         // As a channel URL, as a bare name resolved against the default alias,
         // and as one of its subdirs.
         assert_eq!(page("https://conda.anaconda.org/conda-forge/"), expected);
@@ -221,15 +210,10 @@ mod tests {
             page("https://conda.anaconda.org/conda-forge/osx-arm64"),
             expected
         );
-    }
-
-    #[test]
-    fn test_other_anaconda_channels_link_to_anaconda_org() {
         assert_eq!(
             page("https://conda.anaconda.org/some-user/"),
             Some("https://anaconda.org/some-user/xtensor".to_string())
         );
-        // The `defaults` channels are not mirrored on prefix.dev.
         assert_eq!(
             page("https://repo.anaconda.com/pkgs/main"),
             Some("https://anaconda.org/main/xtensor".to_string())
@@ -266,7 +250,7 @@ mod tests {
         assert_eq!(channel, "https://conda.anaconda.org/conda-forge");
         assert_eq!(
             package_page(Some(&channel), "tzdata").map(Url::into),
-            Some("https://prefix.dev/channels/conda-forge/packages/tzdata".to_string())
+            Some("https://anaconda.org/conda-forge/tzdata".to_string())
         );
         // A local package has no channel page.
         let url =
@@ -305,6 +289,10 @@ mod tests {
     fn test_channel_page() {
         assert_eq!(
             channel_page("https://conda.anaconda.org/conda-forge/").map(Url::into),
+            Some("https://anaconda.org/conda-forge".to_string())
+        );
+        assert_eq!(
+            channel_page("https://prefix.dev/conda-forge").map(Url::into),
             Some("https://prefix.dev/channels/conda-forge".to_string())
         );
         assert_eq!(
