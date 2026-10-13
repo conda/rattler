@@ -368,21 +368,25 @@ impl<'a> CondaDependencyProvider<'a> {
         let pool = Pool::default();
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
 
-        // Applies the caller's exclusions to a solvable that was just interned,
-        // reporting whether the record is excluded.
+        // Applies the caller's exclusions and `exclude_newer` to a solvable
+        // that was just interned, reporting whether the record is excluded.
         //
         // Every site that interns a record has to go through this. The same
         // record is interned once from the repodata and again when it is
         // favored or locked, so an exclusion missed at any one of them lets the
         // record back into the solve through that other door.
         let exclude_if_requested =
-            |candidates: &mut Candidates, solvable: SolvableId, url: &Url| -> bool {
-                let Some(reason) = excluded_candidates.get(url) else {
+            |candidates: &mut Candidates, solvable: SolvableId, record: &RepoDataRecord| -> bool {
+                let reason = if let Some(reason) = excluded_candidates.get(&record.url) {
+                    pool.intern_string(&**reason)
+                } else if let Some(reason) =
+                    exclude_newer.and_then(|config| config.exclusion_reason(record))
+                {
+                    pool.intern_string(reason.to_string())
+                } else {
                     return false;
                 };
-                candidates
-                    .excluded
-                    .push((solvable, pool.intern_string(&**reason)));
+                candidates.excluded.push((solvable, reason));
                 true
             };
 
@@ -522,15 +526,9 @@ impl<'a> CondaDependencyProvider<'a> {
                 }
 
                 // Exclusions the caller derived from outside the repodata, for
-                // example from what a local package cache holds.
-                exclude_if_requested(candidates, solvable_id, &record.url);
-
-                if let Some(config) = &exclude_newer
-                    && let Some(reason) = config.exclusion_reason(record)
-                {
-                    let reason = pool.intern_string(reason.to_string());
-                    candidates.excluded.push((solvable_id, reason));
-                }
+                // example from what a local package cache holds, and records
+                // newer than the `exclude_newer` cutoff.
+                exclude_if_requested(candidates, solvable_id, record);
 
                 // Add to excluded when package is not in the specified channel.
                 if !channel_specific_specs.is_empty()
@@ -629,7 +627,7 @@ impl<'a> CondaDependencyProvider<'a> {
             let candidates = records.entry(name).or_default();
             candidates.candidates.push(solvable);
 
-            if !exclude_if_requested(candidates, solvable, &favored_record.url) {
+            if !exclude_if_requested(candidates, solvable, favored_record) {
                 candidates.favored = Some(solvable);
             }
         }
@@ -646,7 +644,7 @@ impl<'a> CondaDependencyProvider<'a> {
             // solver quietly select a different version of a deliberately
             // pinned package. The conflict report names the pin as the
             // culprit together with the exclusion reason.
-            exclude_if_requested(candidates, solvable, &locked_record.url);
+            exclude_if_requested(candidates, solvable, locked_record);
             candidates.locked = Some(solvable);
         }
 
