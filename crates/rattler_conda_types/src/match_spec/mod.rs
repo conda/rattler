@@ -439,6 +439,12 @@ impl Matches<PackageRecord> for NamelessMatchSpec {
             return false;
         }
 
+        if let Some(subdir) = self.subdir.as_ref()
+            && subdir != &other.subdir
+        {
+            return false;
+        }
+
         if let Some(md5_spec) = self.md5.as_ref()
             && Some(md5_spec) != other.md5.as_ref()
         {
@@ -512,6 +518,12 @@ impl Matches<PackageRecord> for MatchSpec {
             return false;
         }
 
+        if let Some(subdir) = self.subdir.as_ref()
+            && subdir != &other.subdir
+        {
+            return false;
+        }
+
         if let Some(md5_spec) = self.md5.as_ref()
             && Some(md5_spec) != other.md5.as_ref()
         {
@@ -569,6 +581,18 @@ impl Matches<RepoDataRecord> for MatchSpec {
             return false;
         }
 
+        if let Some(file_name) = self.file_name.as_ref()
+            && file_name != &other.identifier.to_file_name()
+        {
+            return false;
+        }
+
+        if let Some(channel) = self.channel.as_ref()
+            && !channel_matches(channel, other.channel.as_deref())
+        {
+            return false;
+        }
+
         if !self.matches(&other.package_record) {
             return false;
         }
@@ -586,12 +610,34 @@ impl Matches<RepoDataRecord> for NamelessMatchSpec {
             return false;
         }
 
+        if let Some(file_name) = self.file_name.as_ref()
+            && file_name != &other.identifier.to_file_name()
+        {
+            return false;
+        }
+
+        if let Some(channel) = self.channel.as_ref()
+            && !channel_matches(channel, other.channel.as_deref())
+        {
+            return false;
+        }
+
         if !self.matches(&other.package_record) {
             return false;
         }
 
         true
     }
+}
+
+/// Returns true if a record from `record_channel` belongs to `channel`.
+///
+/// Channels are compared by their canonical URL, so a multichannel name (e.g.
+/// `defaults`) only matches records whose channel has that exact URL. The `*`
+/// channel matches records from any channel.
+fn channel_matches(channel: &Channel, record_channel: Option<&str>) -> bool {
+    channel.name.as_deref() == Some("*")
+        || record_channel == Some(channel.canonical_name().as_str())
 }
 
 impl Matches<GenericVirtualPackage> for MatchSpec {

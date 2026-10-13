@@ -383,24 +383,7 @@ impl ExcludeNewer {
 
     /// Returns whether a record matches one of the exemptions.
     fn is_exempt(&self, record: &RepoDataRecord) -> bool {
-        self.exemptions.iter().any(|spec| {
-            // `MatchSpec::matches` ignores the channel, subdir, and file name,
-            // so check them here.
-            // TODO: these checks may belong in `MatchSpec::matches` itself,
-            // which the solver also uses for ordinary specs.
-            spec.matches(record)
-                && spec
-                    .subdir
-                    .as_ref()
-                    .is_none_or(|subdir| *subdir == record.package_record.subdir)
-                && spec
-                    .file_name
-                    .as_ref()
-                    .is_none_or(|file_name| *file_name == record.identifier.to_file_name())
-                && spec.channel.as_ref().is_none_or(|channel| {
-                    record.channel.as_deref() == Some(channel.canonical_name().as_str())
-                })
-        })
+        self.exemptions.iter().any(|spec| spec.matches(record))
     }
 
     /// Sets the global timestamp policy. Cutoff overrides do not change it.
