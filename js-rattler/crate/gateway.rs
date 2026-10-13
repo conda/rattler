@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
 use rattler_conda_types::{
     Channel, ChannelNoticeLevel, GenericVirtualPackage, MatchSpec, PackageName, PackageRecord,
-    Subdir, Version,
+    Subdir, Version, package::BuildString,
 };
 use rattler_repodata_gateway::{
     CacheClearMode, ChannelConfig, Gateway, GatewayWarning, SourceConfig, SubdirSelection,
@@ -365,7 +365,7 @@ impl JsGateway {
         let virtual_package = GenericVirtualPackage {
             name: PackageName::try_from(name)?,
             version: Version::from_str(&version)?,
-            build_string,
+            build_string: build_string.parse::<BuildString>()?,
         };
         self.who_needs(channels, platforms, virtual_package.into())
     }

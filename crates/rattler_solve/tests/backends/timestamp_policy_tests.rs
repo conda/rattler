@@ -78,6 +78,7 @@ pub fn indexed_timestamp_cutoffs<T: SolverImpl + Default>() {
     }
 }
 
+#[allow(deprecated)] // Tests the deprecated package cutoff overrides.
 pub fn timestamp_overrides<T: SolverImpl + Default>() {
     let config = ExcludeNewer::from_datetime(CUTOFF.parse().unwrap())
         .with_timestamp_policy(TimestampPolicy::RequireIndexedTimestamp)
@@ -140,6 +141,38 @@ pub fn timestamp_archive_fallback<T: SolverImpl + Default>() {
     }
 }
 
+/// A locked package only expresses a preference, so it must not bring a
+/// record newer than the cutoff back into the solve. The solver falls back to
+/// the newest record that the cutoff allows instead.
+pub fn locked_package_newer_than_cutoff<T: SolverImpl + Default>() {
+    let mut old = PackageBuilder::new("foo").version("1").build();
+    old.package_record.indexed_timestamp = Some(OLD.parse::<Timestamp>().unwrap().into());
+    let mut new = PackageBuilder::new("foo").version("2").build();
+    new.package_record.indexed_timestamp = Some(NEW.parse::<Timestamp>().unwrap().into());
+    let records = vec![old, new.clone()];
+
+    let solve = |exclude_newer: Option<ExcludeNewer>| {
+        T::default()
+            .solve(SolverTask {
+                specs: vec!["foo".parse().unwrap()],
+                locked_packages: vec![&new],
+                exclude_newer,
+                ..SolverTask::from_iter([&records])
+            })
+            .unwrap()
+            .records[0]
+            .package_record
+            .version
+            .to_string()
+    };
+
+    assert_eq!(solve(None), "2");
+    assert_eq!(
+        solve(Some(ExcludeNewer::from_datetime(CUTOFF.parse().unwrap()))),
+        "1"
+    );
+}
+
 #[test]
 fn default_timestamp_policy() {
     let config = ExcludeNewer::from_datetime(CUTOFF.parse().unwrap());
@@ -189,4 +222,33 @@ fn resolvo_timestamp_diagnostics() {
             .unwrap_err();
         assert!(error.to_string().contains(message), "{error}");
     }
+}
+
+/// A pinned package that is newer than the cutoff makes the solve
+/// unsatisfiable, the same way as a pinned package that is excluded through
+/// `excluded_candidates`. Dropping the pin would let the solver quietly pick
+/// a different version of a package that was pinned on purpose.
+#[cfg(feature = "resolvo")]
+#[test]
+fn resolvo_pinned_package_newer_than_cutoff() {
+    let mut old = PackageBuilder::new("foo").version("1").build();
+    old.package_record.indexed_timestamp = Some(OLD.parse::<Timestamp>().unwrap().into());
+    let mut new = PackageBuilder::new("foo").version("2").build();
+    new.package_record.indexed_timestamp = Some(NEW.parse::<Timestamp>().unwrap().into());
+    let records = vec![old, new.clone()];
+
+    let error = rattler_solve::resolvo::Solver
+        .solve(SolverTask {
+            specs: vec!["foo".parse().unwrap()],
+            pinned_packages: vec![&new],
+            exclude_newer: Some(ExcludeNewer::from_datetime(CUTOFF.parse().unwrap())),
+            ..SolverTask::from_iter([&records])
+        })
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("the package is uploaded after the cutoff date"),
+        "{error}"
+    );
 }

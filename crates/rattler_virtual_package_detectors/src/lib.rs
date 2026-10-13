@@ -37,6 +37,10 @@
 //! host environment explicitly with [`EnvironmentSnapshot::from_system`] when
 //! desired, or construct an isolated snapshot without modifying process globals.
 //!
+//! [`DetectionOutcome::diagnostics`] retains nonempty stderr once per successful
+//! invocation, including cache hits. Each entry identifies the origin, detector,
+//! environment digest and cache provenance for clients that reject results later.
+//!
 //! Failed report validation preserves captured diagnostics. Concurrent result
 //! publications are atomic, and watched environment variable names follow the
 //! host's case-sensitivity rules. Cancelling an active detection terminates its
@@ -57,8 +61,9 @@ pub use activation::{ActivationError, activated_environment};
 pub use cache::{CacheClock, CacheError, CacheKey, CachedResult, ResultCache};
 pub use consent::{AllowAll, ConfiguredConsent, Consent, ConsentRequest, DenyAll, DetectorConsent};
 pub use detect::{
-    DetectError, DetectOptions, DetectedValue, DetectionOutcome, DetectionSource, DetectorFailure,
-    DetectorResult, SkipReason, SkippedRegistration, WantedNames, detect, merge_results,
+    DetectError, DetectOptions, DetectedValue, DetectionOutcome, DetectionSource,
+    DetectorDiagnostics, DetectorFailure, DetectorResult, SkipReason, SkippedRegistration,
+    WantedNames, detect, merge_results,
 };
 pub use environment::{
     DetectorEnvironment, DetectorEnvironmentProvider, EnvironmentError, EnvironmentOptions,

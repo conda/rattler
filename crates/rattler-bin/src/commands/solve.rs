@@ -284,7 +284,7 @@ fn print_records(
         let mut row = vec![
             name_cell,
             Cell::plain(record.package_record.version.to_string()),
-            dim(record.package_record.build.clone()),
+            dim(record.package_record.build.to_string()),
             channel_cell,
         ];
         if !constraints.is_empty() {

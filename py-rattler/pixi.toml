@@ -50,8 +50,8 @@ pytest-xprocess = ">=1.0.2,<2"
 # used in examples
 typer = "*"
 # for rust-analyzer
-rust = "~=1.95.0"
-rust-src = "~=1.95.0"
+rust = "~=1.98.1"
+rust-src = "~=1.98.1"
 
 [feature.test.tasks]
 test = "pytest --doctest-modules --ignore=rattler/pty/pty_process.py --ignore=rattler/pty/pty_session.py"

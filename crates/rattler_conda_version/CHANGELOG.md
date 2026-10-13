@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/conda/rattler/compare/rattler_conda_version-v0.1.3...rattler_conda_version-v0.2.0) - 2026-10-07
+
+### Fixed
+
+- *(Version)* [**breaking**] fix hash collisions for non-trailing `0` segments ([#2901](https://github.com/conda/rattler/pull/2901))
+
+### Other
+
+- bump rust to 1.98.1 ([#2906](https://github.com/conda/rattler/pull/2906))
+
 ## [0.1.3](https://github.com/conda/rattler/compare/rattler_conda_version-v0.1.2...rattler_conda_version-v0.1.3) - 2026-10-05
 
 ### Added

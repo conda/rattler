@@ -5,8 +5,8 @@ use std::{collections::HashSet, fmt, str::FromStr, time::Duration};
 use clap::ValueEnum;
 use miette::IntoDiagnostic;
 use rattler_conda_types::{
-    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
-    ParseMatchSpecOptions, RepoDataRecord, SolverResult, Subdir, Version,
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, ParseMatchSpecOptions,
+    RepoDataRecord, SolverResult, Subdir, Version, package::BuildString,
 };
 use rattler_config::{ConfigBase, NoExtension};
 use rattler_repodata_gateway::{MultiSource, RepoData, Source};
@@ -95,16 +95,17 @@ pub struct SolverArgs {
     )]
     channel_cutoffs: Vec<NamedCutoff>,
 
-    /// Override the cutoff for a package, as `PACKAGE=CUTOFF`.
-    /// The cutoff accepts the same timestamp, date, and duration formats as
-    /// `--exclude-newer`.
+    /// Allow records matching this spec regardless of `--exclude-newer`, for
+    /// example `"polars ==1.43.1"`. The spec must name exactly one package.
+    /// A broad spec such as `polars` exempts every future release too.
+    /// A channel must be a real channel name or URL, not a multichannel name.
     /// May be specified multiple times.
     #[clap(
-        long = "package-cutoff",
-        value_name = "PACKAGE=CUTOFF",
+        long = "exclude-newer-exemption",
+        value_name = "SPEC",
         requires = "exclude_newer"
     )]
-    package_cutoffs: Vec<NamedCutoff>,
+    exclude_newer_exemptions: Vec<String>,
 
     /// Policy for selecting package timestamps when using `--exclude-newer`.
     #[clap(long, default_value = "require-timestamp")]
@@ -338,7 +339,11 @@ impl SolverArgs {
                         .get(1)
                         .map_or(Version::from_str("0"), |s| Version::from_str(s))
                         .into_diagnostic()?,
-                    build_string: (*elems.get(2).unwrap_or(&"")).to_string(),
+                    build_string: elems
+                        .get(2)
+                        .unwrap_or(&"0")
+                        .parse::<BuildString>()
+                        .into_diagnostic()?,
                 })
             })
             .collect()
@@ -381,18 +386,10 @@ impl SolverArgs {
                 .apply_to_channel(exclude_newer, channel, now);
         }
 
-        let mut packages = HashSet::new();
-        for override_ in &self.package_cutoffs {
-            let package = PackageName::from_str(&override_.name).into_diagnostic()?;
-            if !packages.insert(package.clone()) {
-                return Err(miette::miette!(
-                    "duplicate cutoff for package '{}'",
-                    override_.name
-                ));
-            }
-            exclude_newer = override_
-                .cutoff
-                .apply_to_package(exclude_newer, package, now);
+        for spec in &self.exclude_newer_exemptions {
+            let spec =
+                MatchSpec::from_str(spec, ParseMatchSpecOptions::strict()).into_diagnostic()?;
+            exclude_newer = exclude_newer.with_exemption(spec).into_diagnostic()?;
         }
 
         Ok(Some(
@@ -436,4 +433,29 @@ pub fn task_for_repodata(
             multi_channel: repo_data.multi_channel(),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[derive(Parser)]
+    struct Opt {
+        #[clap(flatten)]
+        solver: SolverArgs,
+    }
+
+    #[test]
+    fn virtual_package_build_strings() {
+        for (input, expected) in [("__cuda=12", "0"), ("__archspec=1=x86_64", "x86_64")] {
+            let opt = Opt::parse_from(["rattler", "--virtual-package", input]);
+            let packages = opt.solver.virtual_packages().unwrap();
+            assert_eq!(packages[0].build_string, expected);
+        }
+        for input in ["__cuda=12=", "__cuda=12=invalid-build"] {
+            let opt = Opt::parse_from(["rattler", "--virtual-package", input]);
+            assert!(opt.solver.virtual_packages().is_err());
+        }
+    }
 }

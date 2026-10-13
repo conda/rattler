@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.7](https://github.com/conda/rattler/compare/rattler_lock-v0.34.6...rattler_lock-v0.34.7) - 2026-10-13
+
+### Other
+
+- Add `BuildString` to rattler_conda_types ([#2430](https://github.com/conda/rattler/pull/2430))
+
+## [0.34.6](https://github.com/conda/rattler/compare/rattler_lock-v0.34.5...rattler_lock-v0.34.6) - 2026-10-09
+
+### Other
+
+- updated the following local packages: rattler_solve
+
+## [0.34.5](https://github.com/conda/rattler/compare/rattler_lock-v0.34.4...rattler_lock-v0.34.5) - 2026-10-07
+
+### Other
+
+- updated the following local packages: rattler_solve
+
+## [0.34.4](https://github.com/conda/rattler/compare/rattler_lock-v0.34.3...rattler_lock-v0.34.4) - 2026-10-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve, rattler_conda_lock
+
 ## [0.34.3](https://github.com/conda/rattler/compare/rattler_lock-v0.34.2...rattler_lock-v0.34.3) - 2026-10-06
 
 ### Other

@@ -1,6 +1,7 @@
 from rattler.virtual_package.detectors import (
     ConsentRequest,
     DetectionOutcome,
+    DetectorDiagnostics,
     DetectorFailure,
     DetectorRegistration,
     DetectorRegistrations,
@@ -15,6 +16,7 @@ from rattler.virtual_package.virtual_package import Override, VirtualPackage, Vi
 __all__ = [
     "ConsentRequest",
     "DetectionOutcome",
+    "DetectorDiagnostics",
     "DetectorFailure",
     "DetectorRegistration",
     "DetectorRegistrations",

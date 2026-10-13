@@ -383,7 +383,7 @@ impl PackageFingerprint {
         Self {
             name: record.package_record.name.as_normalized().to_string(),
             version: record.package_record.version.as_str().to_string(),
-            build: record.package_record.build.clone(),
+            build: record.package_record.build.to_string(),
             build_number: record.package_record.build_number,
             channel: record.channel.clone(),
             subdir: record.package_record.subdir.clone(),
@@ -392,9 +392,10 @@ impl PackageFingerprint {
     }
 
     fn matches(&self, record: &RepoDataRecord) -> bool {
+        let record_build = record.package_record.build.as_str();
         self.name == record.package_record.name.as_normalized()
             && self.version == record.package_record.version.as_str()
-            && self.build == record.package_record.build
+            && self.build == record_build
             && self.build_number == record.package_record.build_number
             && self.channel == record.channel
             && self.subdir == record.package_record.subdir

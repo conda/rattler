@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.14](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.13...rattler_package_streaming-v0.27.14) - 2026-10-13
+
+### Fixed
+
+- *(rattler_package_streaming)* remove num_cpus crate ([#2911](https://github.com/conda/rattler/pull/2911))
+
+### Other
+
+- Add `BuildString` to rattler_conda_types ([#2430](https://github.com/conda/rattler/pull/2430))
+
+## [0.27.13](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.12...rattler_package_streaming-v0.27.13) - 2026-10-09
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.27.12](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.11...rattler_package_streaming-v0.27.12) - 2026-10-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking
+
 ## [0.27.11](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.10...rattler_package_streaming-v0.27.11) - 2026-10-06
 
 ### Other

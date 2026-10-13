@@ -6,6 +6,7 @@ from typing import Protocol, runtime_checkable
 from rattler.config import Config
 from rattler.match_spec import MatchSpec
 from rattler.networking.client import Client
+from rattler.package_cache import PackageCache
 from rattler.platform.subdir import Subdir
 from rattler.prefix.prefix_record import PrefixRecord
 from rattler.rattler import py_install
@@ -293,6 +294,7 @@ async def install(
     alternative_target_prefix: str | os.PathLike[str] | None = None,
     config: Config | None = None,
     attestation_policy: VerificationPolicy | None = None,
+    package_cache: PackageCache | None = None,
 ) -> None:
     """
     Create an environment by downloading and linking the `dependencies` in
@@ -366,6 +368,9 @@ async def install(
         attestation_policy: Sigstore policy for packages installed, replaced, or relinked by
                 this transaction. Required verification runs before package metadata or files
                 are changed. Unchanged and removal-only packages are not verified.
+        package_cache: An optional :class:`PackageCache` to use for finding and caching
+                extracted packages. When provided, layering and validation modes are applied.
+                Takes precedence over `cache_dir`.
     """
 
     if config is not None and client is None:
@@ -387,4 +392,5 @@ async def install(
         alternative_target_prefix=str(alternative_target_prefix) if alternative_target_prefix is not None else None,
         config=config._inner if config is not None else None,
         attestation_policy=attestation_policy._inner if attestation_policy is not None else None,
+        package_cache=package_cache._inner if package_cache is not None else None,
     )

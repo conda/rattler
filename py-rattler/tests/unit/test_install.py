@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from rattler import Channel, Config, Gateway, install, solve
+from rattler import Channel, Config, Gateway, PackageCache, install, solve
 
 
 @pytest.mark.asyncio
@@ -18,6 +18,12 @@ async def test_install_accepts_config(tmp_path: Path) -> None:
     """)
 
     await install([], tmp_path / "env", config=config, show_progress=False)
+
+
+@pytest.mark.asyncio
+async def test_install_accepts_package_cache(tmp_path: Path) -> None:
+    cache = PackageCache(tmp_path / "cache")
+    await install([], tmp_path / "env", package_cache=cache, show_progress=False)
 
 
 @pytest.mark.asyncio
