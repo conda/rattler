@@ -45,6 +45,10 @@
          <lastmod>2026-10-13</lastmod>
     </url>
     <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/cache_index/</loc>
+         <lastmod>2026-10-13</lastmod>
+    </url>
+    <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/channel/</loc>
          <lastmod>2026-10-13</lastmod>
     </url>
@@ -193,6 +197,14 @@
          <lastmod>2026-10-13</lastmod>
     </url>
     <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/package_cache/</loc>
+         <lastmod>2026-10-13</lastmod>
+    </url>
+    <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/package_cache_layer/</loc>
+         <lastmod>2026-10-13</lastmod>
+    </url>
+    <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/package_hashes/</loc>
          <lastmod>2026-10-13</lastmod>
     </url>
@@ -314,6 +326,10 @@
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/transaction_error/</loc>
+         <lastmod>2026-10-13</lastmod>
+    </url>
+    <url>
+         <loc>https://conda.github.io/rattler/py-rattler/dev/validation_mode/</loc>
          <lastmod>2026-10-13</lastmod>
     </url>
     <url>
