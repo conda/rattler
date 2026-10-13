@@ -445,10 +445,24 @@ struct OCIUrl {
 }
 
 /// Media type of the sharded repodata index layer in `repodata.json:latest`.
-const REPODATA_SHARDS_MEDIA_TYPE: &str = "application/vnd.conda.repodata.shards.v1+msgpack+zstd";
+const REPODATA_SHARDS_MEDIA_TYPE: &str = "application/vnd.conda.repodata.shards.v1+msgpack+zst";
 
 /// Media type of a single repodata shard.
-const REPODATA_SHARD_MEDIA_TYPE: &str = "application/vnd.conda.repodata.shard.v1+msgpack+zstd";
+const REPODATA_SHARD_MEDIA_TYPE: &str = "application/vnd.conda.repodata.shard.v1+msgpack+zst";
+
+/// Returns whether a layer's media type matches the one we are looking for.
+///
+/// Mirrors have published zstd layers with both a `+zst` and a `+zstd`
+/// suffix, so the two are treated as equivalent.
+fn media_type_matches(layer: &str, wanted: &str) -> bool {
+    fn normalize(media_type: &str) -> &str {
+        media_type
+            .strip_suffix('d')
+            .filter(|m| m.ends_with("+zst"))
+            .unwrap_or(media_type)
+    }
+    normalize(layer) == normalize(wanted)
+}
 
 /// The shard hash if the last two path segments of a URL, `parent` and
 /// `filename`, name a repodata shard: `shards/<sha256>.msgpack.zst`.
@@ -626,7 +640,7 @@ impl OCIUrl {
             let layer = if let Some(layer) = manifest
                 .layers
                 .iter()
-                .find(|l| l.media_type == self.media_type)
+                .find(|l| media_type_matches(&l.media_type, &self.media_type))
             {
                 layer
             } else {
@@ -747,7 +761,7 @@ mod tests {
 
     use super::{
         Authentication, OCIUrl, OciAction, REPODATA_SHARD_MEDIA_TYPE, REPODATA_SHARDS_MEDIA_TYPE,
-        RegistryAuth, StatusCode, credentials_header, parse_challenges,
+        RegistryAuth, StatusCode, credentials_header, media_type_matches, parse_challenges,
         registry_auth_from_challenges, registry_auth_from_probe, shard_sha256, token_url,
     };
     use crate::{Challenge, OciMiddleware};
@@ -934,6 +948,26 @@ mod tests {
         assert_eq!(url.tag, hash);
         assert_eq!(url.media_type, REPODATA_SHARD_MEDIA_TYPE);
         assert_eq!(url.sha256.as_deref(), Some(hash));
+    }
+
+    #[test]
+    fn zst_and_zstd_media_types_are_equivalent() {
+        assert!(media_type_matches(
+            "application/vnd.conda.repodata.shard.v1+msgpack+zstd",
+            REPODATA_SHARD_MEDIA_TYPE
+        ));
+        assert!(media_type_matches(
+            "application/vnd.conda.repodata.shards.v1+msgpack+zst",
+            REPODATA_SHARDS_MEDIA_TYPE
+        ));
+        assert!(!media_type_matches(
+            "application/vnd.conda.repodata.shard.v1+msgpack+zst",
+            REPODATA_SHARDS_MEDIA_TYPE
+        ));
+        assert!(!media_type_matches(
+            "application/vnd.conda.repodata.v1+json",
+            "application/vnd.conda.repodata.v1+json+zst"
+        ));
     }
 
     /// Only a hash under `shards/` is a shard.
