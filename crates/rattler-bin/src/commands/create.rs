@@ -1,9 +1,9 @@
 use std::{collections::HashMap, env, path::PathBuf, time::Instant};
 
 use itertools::Itertools;
-use miette::{Context, IntoDiagnostic};
+use miette::IntoDiagnostic;
 use rattler::install::{IndicatifReporter, Installer, Transaction, TransactionOperation};
-use rattler_conda_types::{ChannelConfig, PackageName, PrefixRecord, RepoDataRecord, Subdir};
+use rattler_conda_types::{ChannelConfig, PackageName, PrefixRecord, RepoDataRecord};
 use rattler_repodata_gateway::RepoData;
 use rattler_solve::SolverTask;
 
@@ -11,7 +11,7 @@ use crate::{
     commands::{
         detectors::{DetectorContext, detect_virtual_packages},
         gateway::{build_gateway, load_config},
-        progress::{wrap_in_async_progress, wrap_in_progress},
+        progress::wrap_in_progress,
     },
     global_multi_progress,
     solver_args::{SolverArgs, task_for_repodata},
@@ -26,7 +26,9 @@ use crate::{
   rattler create python numpy                          # install into ./.prefix from conda-forge
   rattler create -p ./env -c conda-forge python=3.12   # choose the prefix and the channel
   rattler create python --dry-run --platform linux-64  # show the transaction without installing
-  rattler create python --constraint "numpy<2"         # constrain a package without requiring it"#)]
+  rattler create python --constraint "numpy<2"         # constrain a package without requiring it
+  rattler create -p ./env scipy --pin ./env            # add scipy without changing installed packages
+  rattler create -p ./env scipy --no-favor-installed   # also update the installed packages"#)]
 pub struct Opt {
     /// Package specs to install
     #[clap(required = true)]
@@ -42,6 +44,11 @@ pub struct Opt {
     #[cfg(feature = "sigstore")]
     #[clap(flatten)]
     attestations: crate::attestation_args::AttestationPolicyArgs,
+
+    /// Do not favor the packages that are already installed in the target
+    /// prefix, so they are updated to the best versions the specs allow.
+    #[clap(long)]
+    no_favor_installed: bool,
 
     /// Target prefix (environment path) for package installation
     #[clap(
@@ -90,28 +97,55 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     // records that we need.
     let gateway = build_gateway(download_client.clone(), &config, offline, true)?;
 
-    let start_load_repo_data = Instant::now();
-    let mut query = gateway
-        .query(
-            channels.iter().cloned(),
-            [install_platform, Subdir::NoArch],
-            specs.clone(),
-        )
-        .recursive(true);
-    if !opt.solver.has_explicit_virtual_packages() {
-        query = query
-            .virtual_package_detectors(install_platform)
-            .constraints(constraints.iter().cloned());
+    // The records to favor and pin are read first, because the repodata has
+    // to cover their dependencies too.
+    let mut selected = opt.solver.selected_records()?;
+    if !opt.no_favor_installed && !installed_packages.is_empty() {
+        eprintln!(
+            "Favoring the {} installed package{} of {}",
+            installed_packages.len(),
+            if installed_packages.len() == 1 {
+                ""
+            } else {
+                "s"
+            },
+            target_prefix.display()
+        );
+        selected.favor_after(
+            installed_packages
+                .iter()
+                .map(|record| record.repodata_record.clone())
+                .collect(),
+        );
     }
-    let mut repo_data = wrap_in_async_progress("loading repodata", query)
-        .await
-        .into_diagnostic()
-        .context("failed to load repodata")?;
 
-    // Surface any non-fatal CEP-42 channel-relation problems.
-    for warning in &repo_data.warnings {
-        eprintln!("warning: {warning}");
+    let start_load_repo_data = Instant::now();
+    let mut repo_data = opt
+        .solver
+        .query_repodata(
+            &gateway,
+            &channels,
+            &specs,
+            &constraints,
+            selected.query_names(),
+        )
+        .await?;
+    if selected
+        .resolve_remote(&repo_data, &download_client)
+        .await?
+    {
+        repo_data = opt
+            .solver
+            .query_repodata(
+                &gateway,
+                &channels,
+                &specs,
+                &constraints,
+                selected.query_names(),
+            )
+            .await?;
     }
+    let (favored_packages, pinned_packages) = selected.finish(&repo_data)?;
 
     // Determine the number of records
     let total_records: usize = repo_data.iter().map(RepoData::len).sum();
@@ -152,13 +186,9 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     // problem that we need to solve. We do this by constructing a
     // `SolverProblem`. This encapsulates all the information required to be
     // able to solve the problem.
-    let locked_packages: Vec<&RepoDataRecord> = installed_packages
-        .iter()
-        .map(|record| &record.repodata_record)
-        .collect();
-
     let solver_task = SolverTask {
-        locked_packages,
+        locked_packages: favored_packages.iter().collect(),
+        pinned_packages: pinned_packages.iter().collect(),
         virtual_packages,
         specs: specs.clone(),
         constraints,

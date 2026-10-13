@@ -1,0 +1,24 @@
+{
+  "build": "0",
+  "build_number": 0,
+  "depends": [
+    "bar"
+  ],
+  "license": "MIT",
+  "name": "foo",
+  "noarch": "generic",
+  "md5": "82c48ea23ab11f48965482fe3b00995f",
+  "sha256": "4944aafc8a7a39fbf0eee7a6c443b6504ec56051381c57c4982a9a497e6837a4",
+  "size": 100,
+  "subdir": "noarch",
+  "timestamp": 1700000000000,
+  "version": "1.0",
+  "fn": "foo-1.0-0.tar.bz2",
+  "url": "https://example.com/installed/noarch/foo-1.0-0.tar.bz2",
+  "channel": "https://example.com/installed/",
+  "files": [],
+  "paths_data": {
+    "paths_version": 1,
+    "paths": []
+  }
+}

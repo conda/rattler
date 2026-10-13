@@ -1,0 +1,6 @@
+---
+source: crates/rattler-bin/tests/cli.rs
+expression: resolvo
+---
+file:///[ROOT]/test-data/channels/favor/noarch/bar-1.0-0.tar.bz2
+file:///[ROOT]/test-data/channels/favor/noarch/foo-1.0-0.tar.bz2

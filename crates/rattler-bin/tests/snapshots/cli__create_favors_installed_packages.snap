@@ -1,0 +1,6 @@
+---
+source: crates/rattler-bin/tests/cli.rs
+expression: "create(&[\"--no-favor-installed\"])"
+---
+~ foo 1.0 0 https://example.com/installed/ -> foo 2.0 0 file:///[ROOT]/test-data/channels/favor/
+~ bar 1.0 0 https://example.com/installed/ -> bar 2.0 0 file:///[ROOT]/test-data/channels/favor/

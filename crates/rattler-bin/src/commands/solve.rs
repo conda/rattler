@@ -5,8 +5,8 @@ use std::{
 };
 
 use itertools::Itertools;
-use miette::{Context, IntoDiagnostic};
-use rattler_conda_types::{ChannelConfig, MatchSpec, Matches, PackageName, RepoDataRecord, Subdir};
+use miette::IntoDiagnostic;
+use rattler_conda_types::{ChannelConfig, MatchSpec, Matches, PackageName, RepoDataRecord};
 use rattler_repodata_gateway::RepoData;
 use rattler_solve::SolverTask;
 use url::Url;
@@ -17,7 +17,7 @@ use crate::{
         detectors::{DetectorContext, detect_virtual_packages},
         gateway::{build_gateway, load_config},
         print_url_lines,
-        progress::{wrap_in_async_progress, wrap_in_progress},
+        progress::wrap_in_progress,
         table::{Cell, Table},
     },
     solver_args::{SolverArgs, task_for_repodata},
@@ -32,6 +32,7 @@ const EXAMPLES: &str = r#"Examples:
   rattler solve python numpy                 # print the solved environment as a table
   rattler solve python --format json         # print the solved records as JSON
   rattler solve python --format urls         # print only the urls of the solved packages
+  rattler solve numpy=2 --favor pixi.lock    # change the locked packages as little as possible
   rattler solve python --verify-attestations require --issuer github --identity 'https://github.com/org/*'"#;
 
 /// The examples shown by `rattler solve --help` and in `rattler skill`.
@@ -39,7 +40,8 @@ const EXAMPLES: &str = r#"Examples:
 const EXAMPLES: &str = r#"Examples:
   rattler solve python numpy                 # print the solved environment as a table
   rattler solve python --format json         # print the solved records as JSON
-  rattler solve python --format urls         # print only the urls of the solved packages"#;
+  rattler solve python --format urls         # print only the urls of the solved packages
+  rattler solve numpy=2 --favor pixi.lock    # change the locked packages as little as possible"#;
 
 /// Solve a conda environment without installing it.
 ///
@@ -84,28 +86,37 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
 
     let gateway = build_gateway(download_client.clone(), &config, offline, true)?;
 
-    let start_load_repo_data = Instant::now();
-    let mut query = gateway
-        .query(
-            channels.iter().cloned(),
-            [platform, Subdir::NoArch],
-            specs.clone(),
-        )
-        .recursive(true);
-    if !opt.solver.has_explicit_virtual_packages() {
-        query = query
-            .virtual_package_detectors(platform)
-            .constraints(constraints.iter().cloned());
-    }
-    let mut repo_data = wrap_in_async_progress("loading repodata", query)
-        .await
-        .into_diagnostic()
-        .context("failed to load repodata")?;
+    // The records to favor and pin are read first, because the repodata has
+    // to cover their dependencies too.
+    let mut selected = opt.solver.selected_records()?;
 
-    // Surface any non-fatal CEP-42 channel-relation problems.
-    for warning in &repo_data.warnings {
-        eprintln!("warning: {warning}");
+    let start_load_repo_data = Instant::now();
+    let mut repo_data = opt
+        .solver
+        .query_repodata(
+            &gateway,
+            &channels,
+            &specs,
+            &constraints,
+            selected.query_names(),
+        )
+        .await?;
+    if selected
+        .resolve_remote(&repo_data, &download_client)
+        .await?
+    {
+        repo_data = opt
+            .solver
+            .query_repodata(
+                &gateway,
+                &channels,
+                &specs,
+                &constraints,
+                selected.query_names(),
+            )
+            .await?;
     }
+    let (favored_packages, pinned_packages) = selected.finish(&repo_data)?;
 
     let total_records: usize = repo_data.iter().map(RepoData::len).sum();
     eprintln!(
@@ -142,6 +153,8 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
     }
 
     let solver_task = SolverTask {
+        locked_packages: favored_packages.iter().collect(),
+        pinned_packages: pinned_packages.iter().collect(),
         virtual_packages,
         specs: specs.clone(),
         constraints: constraints.clone(),
