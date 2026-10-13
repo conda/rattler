@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.4](https://github.com/conda/rattler/compare/rattler_shell-v0.29.3...rattler_shell-v0.29.4) - 2026-10-13
+
+### Fixed
+
+- *(shell)* support activation on older macOS ([#2866](https://github.com/conda/rattler/pull/2866))
+
 ## [0.29.3](https://github.com/conda/rattler/compare/rattler_shell-v0.29.2...rattler_shell-v0.29.3) - 2026-10-07
 
 ### Other
