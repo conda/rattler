@@ -1071,7 +1071,7 @@
 <a href=#1069 id=1069 data-nosnippet>1069</a></span><span class="attr">#[cfg(windows)]
 <a href=#1070 id=1070 data-nosnippet>1070</a></span><span class="kw">fn </span>is_transient_rename_error(err: <span class="kw-2">&amp;</span>std::io::Error) -&gt; bool {
 <a href=#1071 id=1071 data-nosnippet>1071</a>    <span class="comment">// 5 = ERROR_ACCESS_DENIED, 32 = ERROR_SHARING_VIOLATION.
-<a href=#1072 id=1072 data-nosnippet>1072</a>    </span><span class="macro">matches!</span>(err.raw_os_error(), <span class="prelude-val">Some</span>(<span class="number">5</span>) | <span class="prelude-val">Some</span>(<span class="number">32</span>))
+<a href=#1072 id=1072 data-nosnippet>1072</a>    </span><span class="macro">matches!</span>(err.raw_os_error(), <span class="prelude-val">Some</span>(<span class="number">5 </span>| <span class="number">32</span>))
 <a href=#1073 id=1073 data-nosnippet>1073</a>}
 <a href=#1074 id=1074 data-nosnippet>1074</a>
 <a href=#1075 id=1075 data-nosnippet>1075</a><span class="doccomment">/// Shared logic for validating a package.
