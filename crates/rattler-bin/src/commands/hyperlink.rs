@@ -17,6 +17,8 @@ use rattler_conda_types::Subdir;
 pub use supports_hyperlinks::Stream;
 use url::Url;
 
+use super::package_source::PackageSource;
+
 /// Channels that are mirrored on prefix.dev, which serves a nicer package page
 /// than the channel host itself. Anything else keeps pointing at its origin.
 const PREFIX_DEV_MIRRORS: &[&str] = &[
@@ -81,6 +83,36 @@ pub fn file(path: &Path) -> Option<Url> {
 /// The `file://` URL of the directory `path`, if it can be expressed as one.
 pub fn directory(path: &Path) -> Option<Url> {
     file_url::directory_path_to_url(path.to_str()?).ok()
+}
+
+/// The URL to link a package archive given on the command line to: the URL
+/// itself for a remote package, a `file://` URL for a local one.
+///
+/// A relative path is resolved against the current directory so that the link
+/// works wherever the output is opened.
+pub fn package_source(source: &PackageSource) -> Option<Url> {
+    match source {
+        PackageSource::Url(url) => web(url),
+        PackageSource::Path(path) => std::path::absolute(path)
+            .ok()
+            .and_then(|absolute| file(&absolute)),
+    }
+}
+
+/// The channel a package archive URL belongs to, as a string that
+/// [`package_page`] understands.
+///
+/// A package lives at `<channel>/<subdir>/<filename>`, so the channel is the
+/// URL with the last two segments removed. Anything else yields `None`.
+pub fn channel_of_package_url(url: &Url) -> Option<String> {
+    let mut channel = url.clone();
+    {
+        let mut segments = channel.path_segments_mut().ok()?;
+        segments.pop_if_empty().pop().pop();
+    }
+    channel.set_query(None);
+    channel.set_fragment(None);
+    Some(channel.to_string())
 }
 
 /// The channel host, as far as it matters for building web page URLs.
@@ -222,6 +254,51 @@ mod tests {
         // A host we know, but not a path we can interpret.
         assert_eq!(page("https://conda.anaconda.org/"), None);
         assert_eq!(page("https://repo.anaconda.com/pkgs/main/extra"), None);
+    }
+
+    #[test]
+    fn test_channel_of_package_url() {
+        let url = Url::parse(
+            "https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda",
+        )
+        .unwrap();
+        let channel = channel_of_package_url(&url).unwrap();
+        assert_eq!(channel, "https://conda.anaconda.org/conda-forge");
+        assert_eq!(
+            package_page(Some(&channel), "tzdata").map(Url::into),
+            Some("https://prefix.dev/channels/conda-forge/packages/tzdata".to_string())
+        );
+        // A local package has no channel page.
+        let url =
+            Url::parse("file:///home/user/pkgs/noarch/tzdata-2024a-h0c530f3_0.conda").unwrap();
+        assert_eq!(
+            package_page(channel_of_package_url(&url).as_deref(), "tzdata"),
+            None
+        );
+    }
+
+    #[test]
+    fn test_package_source_links() {
+        let remote = PackageSource::parse(
+            "https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda",
+        );
+        assert_eq!(
+            package_source(&remote).map(Url::into),
+            Some(
+                "https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda"
+                    .to_string()
+            )
+        );
+        let local = PackageSource::parse("test-data/packages/empty-0.1.0-h4616a5c_0.conda");
+        let url = package_source(&local).unwrap();
+        assert_eq!(url.scheme(), "file");
+        assert!(
+            url.path()
+                .ends_with("/test-data/packages/empty-0.1.0-h4616a5c_0.conda")
+        );
+        // Only web URLs are linked; a package should not get to pick the scheme.
+        let odd = PackageSource::parse("ftp://example.com/pkgs/noarch/x-1-0.conda");
+        assert_eq!(package_source(&odd), None);
     }
 
     #[test]

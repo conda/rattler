@@ -107,6 +107,7 @@ fn test_no_hyperlinks_when_stdout_is_not_a_terminal() {
         vec!["list", "-p", FIXTURE_PREFIX],
         vec!["list", "-p", FIXTURE_PREFIX, "--format", "urls"],
         vec!["inspect", EMPTY_PACKAGE],
+        vec!["compare-packages", EMPTY_PACKAGE, EMPTY_PACKAGE],
         vec!["info"],
     ] {
         let output = run_rattler(&args);
@@ -149,6 +150,29 @@ fn test_hyperlinks_can_be_forced() {
     let plain = run_rattler_with_env(&["list", "-p", FIXTURE_PREFIX], &[("FORCE_HYPERLINK", "0")]);
     assert!(!plain.contains(OSC8));
     assert!(!plain.contains("\u{1b}[4m"));
+}
+
+/// Local package archives given on the command line link to their `file://`
+/// URL, resolved to an absolute path so the link works from anywhere.
+#[test]
+fn test_local_package_sources_link_to_their_file() {
+    let output = run_rattler_with_env(
+        &["compare-packages", EMPTY_PACKAGE, CLOBBER_PACKAGE],
+        &[("FORCE_HYPERLINK", "1")],
+    );
+    let left = output.lines().find(|line| line.contains("left:")).unwrap();
+    assert!(left.contains(&format!("{OSC8}file://")), "got:\n{left}");
+    assert!(left.contains(&format!(
+        "empty-0.1.0-h4616a5c_0.conda\u{1b}\\\u{1b}[4m{EMPTY_PACKAGE}\u{1b}[24m"
+    )));
+    // A local archive comes from no channel, so the package name in `inspect`
+    // has no page to link to and stays plain.
+    let inspect = run_rattler_with_env(&["inspect", EMPTY_PACKAGE], &[("FORCE_HYPERLINK", "1")]);
+    let name = inspect
+        .lines()
+        .find(|line| line.starts_with("name:"))
+        .unwrap();
+    assert_eq!(name, "name: empty");
 }
 
 /// A `--channel NAME=CHANNEL,...` is a multichannel, whose channels share a

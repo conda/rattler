@@ -91,6 +91,12 @@ pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
         );
         PackageSource::Url(record.url)
     };
+    // A remote archive lives at `<channel>/<subdir>/<file>`, which tells us
+    // which package page to link the name to. A local file has no page.
+    let channel = match &source {
+        PackageSource::Url(url) => hyperlink::channel_of_package_url(url),
+        PackageSource::Path(_) => None,
+    };
     let client = client_for([&source], offline)?;
     let archive = source.open(client.as_ref()).await?;
 
@@ -129,7 +135,7 @@ pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
             serde_json::to_string_pretty(&metadata).into_diagnostic()?
         );
     } else {
-        print_human(&metadata, opt.limit);
+        print_human(&metadata, channel.as_deref(), opt.limit);
     }
     Ok(())
 }
@@ -204,8 +210,8 @@ fn parse_from_batch<P: PackageFile>(
         .transpose()
 }
 
-fn print_human(metadata: &Metadata, limit: i64) {
-    print_index(&metadata.index, metadata.size);
+fn print_human(metadata: &Metadata, channel: Option<&str>, limit: i64) {
+    print_index(&metadata.index, channel, metadata.size);
     if let Some(about) = &metadata.about {
         print_about(about);
     }
@@ -215,8 +221,12 @@ fn print_human(metadata: &Metadata, limit: i64) {
     print_paths(&metadata.paths, limit);
 }
 
-fn print_index(index: &IndexJson, size: u64) {
-    println!("name: {}", index.name.as_normalized());
+fn print_index(index: &IndexJson, channel: Option<&str>, size: u64) {
+    let name = index.name.as_normalized();
+    println!(
+        "name: {}",
+        hyperlink::maybe_link(hyperlink::package_page(channel, name), name)
+    );
     println!("version: {}", index.version);
     println!("build: {}", index.build);
     println!("build number: {}", index.build_number);
