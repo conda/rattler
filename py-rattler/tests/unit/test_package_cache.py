@@ -28,6 +28,10 @@ def test_validation_mode() -> None:
     assert d[ValidationMode.full()] == "full"
     assert d[ValidationMode.skip()] == "skip"
 
+    assert ValidationMode.full() != "full"
+    with pytest.raises(TypeError):
+        ValidationMode.full() < ValidationMode.skip()  # type: ignore[operator]  # noqa: B015
+
     with pytest.raises(NotImplementedError):
         ValidationMode()
 
@@ -77,11 +81,7 @@ async def test_package_cache_from_layers(tmp_path: Path) -> None:
     dir2.mkdir()
 
     # Make dir2 read-only to ensure ordering is preserved even with mixed permissions
-    try:
-        os.chmod(dir2, stat.S_IREAD | stat.S_IEXEC)
-    except Exception:
-        pass
-
+    os.chmod(dir2, stat.S_IREAD | stat.S_IEXEC)
     try:
         layer1 = PackageCacheLayer(dir1)
         layer2 = PackageCacheLayer(dir2)
@@ -96,10 +96,7 @@ async def test_package_cache_from_layers(tmp_path: Path) -> None:
         assert index.is_empty()
         assert len(index) == 0
     finally:
-        try:
-            os.chmod(dir2, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
-        except Exception:
-            pass
+        os.chmod(dir2, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
 
 
 def test_package_cache_new_layered(tmp_path: Path) -> None:

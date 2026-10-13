@@ -1,8 +1,7 @@
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
-use pyo3::basic::CompareOp;
-use pyo3::exceptions::{PyTypeError, PyValueError};
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_cache::package_cache::{CacheIndex, PackageCache, PackageCacheLayer};
@@ -69,12 +68,8 @@ impl PyValidationMode {
         self.inner == ValidationMode::Full
     }
 
-    fn __richcmp__(&self, other: &Self, op: CompareOp) -> PyResult<bool> {
-        match op {
-            CompareOp::Eq => Ok(self.inner == other.inner),
-            CompareOp::Ne => Ok(self.inner != other.inner),
-            _ => Err(PyTypeError::new_err("Comparison not supported")),
-        }
+    fn __eq__(&self, other: &Self) -> bool {
+        self.inner == other.inner
     }
 
     fn __hash__(&self) -> u64 {
@@ -268,8 +263,9 @@ impl PyPackageCache {
             .into()
     }
 
-    /// Returns the first writable directory in the package cache, if any.
-    /// Note: Checks whether the layer directory is read-only.
+    /// Returns the path of the first layer that is not read-only, if any.
+    ///
+    /// This checks the filesystem permissions of each layer directory.
     pub fn first_writable(&self) -> Option<PathBuf> {
         let (_, writable_layers) = self.inner.split_layers();
         writable_layers.first().map(|l| l.path().to_path_buf())
