@@ -9,6 +9,7 @@ use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 use rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::sync::Arc;
@@ -574,7 +575,23 @@ impl Matches<PackageRecord> for MatchSpec {
 
 impl Matches<RepoDataRecord> for MatchSpec {
     /// Match a [`MatchSpec`] against a [`RepoDataRecord`]
+    ///
+    /// A channel is compared by its canonical URL, so a multichannel name never
+    /// matches. Use [`MatchSpec::matches_with_multi_channels`] to match those.
     fn matches(&self, other: &RepoDataRecord) -> bool {
+        self.matches_with_multi_channels(other, &MultiChannels::default())
+    }
+}
+
+impl MatchSpec {
+    /// Match a [`MatchSpec`] against a [`RepoDataRecord`], where a channel
+    /// that names one of `multi_channels` matches records from any of its
+    /// channels.
+    pub fn matches_with_multi_channels(
+        &self,
+        other: &RepoDataRecord,
+        multi_channels: &MultiChannels,
+    ) -> bool {
         if let Some(url_spec) = self.url.as_ref()
             && url_spec != &other.url
         {
@@ -588,7 +605,7 @@ impl Matches<RepoDataRecord> for MatchSpec {
         }
 
         if let Some(channel) = self.channel.as_ref()
-            && !channel_matches(channel, other.channel.as_deref())
+            && !multi_channels.channel_matches(channel, other.channel.as_deref())
         {
             return false;
         }
@@ -603,7 +620,24 @@ impl Matches<RepoDataRecord> for MatchSpec {
 
 impl Matches<RepoDataRecord> for NamelessMatchSpec {
     /// Match a [`NamelessMatchSpec`] against a [`RepoDataRecord`]
+    ///
+    /// A channel is compared by its canonical URL, so a multichannel name never
+    /// matches. Use [`NamelessMatchSpec::matches_with_multi_channels`] to match
+    /// those.
     fn matches(&self, other: &RepoDataRecord) -> bool {
+        self.matches_with_multi_channels(other, &MultiChannels::default())
+    }
+}
+
+impl NamelessMatchSpec {
+    /// Match a [`NamelessMatchSpec`] against a [`RepoDataRecord`], where a
+    /// channel that names one of `multi_channels` matches records from any of
+    /// its channels.
+    pub fn matches_with_multi_channels(
+        &self,
+        other: &RepoDataRecord,
+        multi_channels: &MultiChannels,
+    ) -> bool {
         if let Some(url_spec) = self.url.as_ref()
             && url_spec != &other.url
         {
@@ -617,7 +651,7 @@ impl Matches<RepoDataRecord> for NamelessMatchSpec {
         }
 
         if let Some(channel) = self.channel.as_ref()
-            && !channel_matches(channel, other.channel.as_deref())
+            && !multi_channels.channel_matches(channel, other.channel.as_deref())
         {
             return false;
         }
@@ -630,14 +664,49 @@ impl Matches<RepoDataRecord> for NamelessMatchSpec {
     }
 }
 
-/// Returns true if a record from `record_channel` belongs to `channel`.
+/// The multichannels a channel-specific match spec can name, such as
+/// `defaults` or the `custom_multichannels` of conda.
 ///
-/// Channels are compared by their canonical URL, so a multichannel name (e.g.
-/// `defaults`) only matches records whose channel has that exact URL. The `*`
-/// channel matches records from any channel.
-fn channel_matches(channel: &Channel, record_channel: Option<&str>) -> bool {
-    channel.name.as_deref() == Some("*")
-        || record_channel == Some(channel.canonical_name().as_str())
+/// A multichannel groups several channels under one name. A record only knows
+/// the URL of the channel it comes from, so matching a spec like
+/// `defaults::numpy` needs to know which channels belong to `defaults`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MultiChannels {
+    /// Maps the name of each multichannel to the canonical URLs of its
+    /// channels.
+    members: HashMap<String, HashSet<String>>,
+}
+
+impl MultiChannels {
+    /// Adds the channel with the canonical URL `channel` to the multichannel
+    /// `name`.
+    pub fn insert(&mut self, name: impl Into<String>, channel: impl Into<String>) {
+        self.members
+            .entry(name.into())
+            .or_default()
+            .insert(channel.into());
+    }
+
+    /// Returns true if there are no multichannels.
+    pub fn is_empty(&self) -> bool {
+        self.members.is_empty()
+    }
+
+    /// Returns true if a record from `record_channel` belongs to `channel`.
+    ///
+    /// A channel named after one of these multichannels matches records from
+    /// any of its channels. Any other channel is compared by its canonical
+    /// URL. The `*` channel matches records from any channel.
+    pub fn channel_matches(&self, channel: &Channel, record_channel: Option<&str>) -> bool {
+        let name = channel.name.as_deref();
+        if name == Some("*") {
+            return true;
+        }
+        match name.and_then(|name| self.members.get(name)) {
+            Some(members) => record_channel.is_some_and(|channel| members.contains(channel)),
+            None => record_channel == Some(channel.canonical_name().as_str()),
+        }
+    }
 }
 
 impl Matches<GenericVirtualPackage> for MatchSpec {
@@ -739,10 +808,10 @@ mod tests {
     use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 
     use crate::{
-        Flag, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord, ParseMatchSpecError,
-        ParseMatchSpecOptions, ParseStrictness::*, RepoDataRecord, RepodataRevision, StringMatcher,
-        Version, match_spec::Matches, package::DistArchiveIdentifier,
-        parse_mode::ParseStrictnessWithNameMatcher,
+        Flag, MatchSpec, MultiChannels, NamelessMatchSpec, PackageName, PackageRecord,
+        ParseMatchSpecError, ParseMatchSpecOptions, ParseStrictness::*, RepoDataRecord,
+        RepodataRevision, StringMatcher, Version, match_spec::Matches,
+        package::DistArchiveIdentifier, parse_mode::ParseStrictnessWithNameMatcher,
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
@@ -1015,6 +1084,55 @@ mod tests {
                 .to_string()
                 .contains("multiple values for: build")
         );
+    }
+
+    #[test]
+    fn test_channel_matches() {
+        let record = |channel: &str| RepoDataRecord {
+            package_record: PackageRecord::new(
+                PackageName::new_unchecked("mamba"),
+                Version::from_str("1.0").unwrap(),
+                String::from(""),
+            ),
+            identifier: "mamba-1.0-py37_0.conda"
+                .parse::<DistArchiveIdentifier>()
+                .unwrap(),
+            url: url::Url::parse("https://mamba.io/mamba-1.0-py37_0.conda").unwrap(),
+            channel: Some(format!("https://conda.anaconda.org/{channel}/")),
+        };
+        let chan_a = record("chan-a");
+        let chan_b = record("chan-b");
+        let other = record("other");
+
+        let mut multi_channels = MultiChannels::default();
+        multi_channels.insert("grp", "https://conda.anaconda.org/chan-a/");
+        multi_channels.insert("grp", "https://conda.anaconda.org/chan-b/");
+
+        let matches = |spec: &str, record: &RepoDataRecord| {
+            let spec = MatchSpec::from_str(spec, Strict).unwrap();
+            let nameless_spec = spec.clone().into_nameless().1;
+            let plain = spec.matches(record);
+            let with_multi_channels = spec.matches_with_multi_channels(record, &multi_channels);
+            assert_eq!(plain, nameless_spec.matches(record));
+            assert_eq!(
+                with_multi_channels,
+                nameless_spec.matches_with_multi_channels(record, &multi_channels)
+            );
+            (plain, with_multi_channels)
+        };
+
+        // A plain channel only matches records from exactly that channel.
+        assert_eq!(matches("chan-a::mamba", &chan_a), (true, true));
+        assert_eq!(matches("chan-a::mamba", &chan_b), (false, false));
+
+        // A multichannel name matches all of its channels, but only when the
+        // multichannel is known.
+        assert_eq!(matches("grp::mamba", &chan_a), (false, true));
+        assert_eq!(matches("grp::mamba", &chan_b), (false, true));
+        assert_eq!(matches("grp::mamba", &other), (false, false));
+
+        // `*` matches any channel.
+        assert_eq!(matches("*::mamba", &other), (true, true));
     }
 
     #[test]

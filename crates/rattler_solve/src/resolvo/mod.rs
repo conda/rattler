@@ -13,7 +13,7 @@ use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::MatchSpecCondition;
 use rattler_conda_types::{
-    Channel, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec, PackageName,
+    GenericVirtualPackage, MatchSpec, Matches, MultiChannels, NamelessMatchSpec, PackageName,
     PackageNameMatcher, ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord,
     RepodataRevision, SolverResult,
     package::{ArchiveIdentifier, DistArchiveType},
@@ -346,6 +346,10 @@ pub struct CondaDependencyProvider<'a> {
     /// This is only populated (and consulted) for
     /// [`ChannelPriority::Flexible`].
     channel_order: HashMap<Option<String>, u32>,
+
+    /// The multichannels of this solve. A channel-specific spec that names one
+    /// of them matches records from every channel of that multichannel.
+    multi_channels: MultiChannels,
 }
 
 impl<'a> CondaDependencyProvider<'a> {
@@ -420,10 +424,20 @@ impl<'a> CondaDependencyProvider<'a> {
         // A channel-specific spec that names one of these multichannels accepts
         // records from every channel of that multichannel.
         let repodata: Vec<RepoData<'a>> = repodata.into_iter().collect();
-        let multi_channels: HashSet<&'a str> = repodata
-            .iter()
-            .filter_map(|repo_data| repo_data.multi_channel)
-            .collect();
+        let mut multi_channels = MultiChannels::default();
+        for repo_data in &repodata {
+            let Some(name) = repo_data.multi_channel else {
+                continue;
+            };
+            for channel in repo_data
+                .records
+                .iter()
+                .filter_map(|record| record.channel.as_deref())
+                .dedup()
+            {
+                multi_channels.insert(name, channel);
+            }
+        }
 
         // Add additional records
         for repo_data in repodata {
@@ -545,12 +559,7 @@ impl<'a> CondaDependencyProvider<'a> {
                     // Check if the spec has a channel, and compare it to the repodata
                     // channel
                     if let Some(spec_channel) = &spec.channel
-                        && !is_in_requested_channel(
-                            spec_channel,
-                            record,
-                            multi_channel,
-                            &multi_channels,
-                        )
+                        && !multi_channels.channel_matches(spec_channel, record.channel.as_deref())
                     {
                         tracing::debug!(
                             "Ignoring {} {} because it was not requested from that channel.",
@@ -685,6 +694,7 @@ impl<'a> CondaDependencyProvider<'a> {
             dependency_overrides: override_map,
             channel_priority,
             channel_order,
+            multi_channels,
         })
     }
 
@@ -726,26 +736,6 @@ impl<'a> CondaDependencyProvider<'a> {
             }
         }
         None
-    }
-}
-
-/// Returns true if `record`, which was requested through `multi_channel`,
-/// comes from the channel that a match spec asked for. A channel named after
-/// one of the multichannels of the solve refers to every channel of that
-/// multichannel.
-fn is_in_requested_channel(
-    spec_channel: &Channel,
-    record: &RepoDataRecord,
-    multi_channel: Option<&str>,
-    multi_channels: &HashSet<&str>,
-) -> bool {
-    match spec_channel
-        .name
-        .as_deref()
-        .filter(|name| multi_channels.contains(name))
-    {
-        Some(requested) => multi_channel == Some(requested),
-        None => record.channel.as_ref() == Some(&spec_channel.canonical_name()),
     }
 }
 
@@ -1058,7 +1048,8 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                         match record {
                             SolverPackageRecord::Record(rec) => {
                                 // Base package matches if spec matches and no features are required
-                                spec.matches(*rec) != inverse
+                                spec.matches_with_multi_channels(rec, &self.multi_channels)
+                                    != inverse
                             }
                             SolverPackageRecord::VirtualPackage(GenericVirtualPackage {
                                 version,

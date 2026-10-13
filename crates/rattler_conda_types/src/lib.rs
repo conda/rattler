@@ -53,7 +53,8 @@ pub use generic_virtual_package::GenericVirtualPackage;
 pub use match_spec::condition::MatchSpecCondition;
 pub use match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError};
 pub use match_spec::{
-    CanonicalMatchSpecError, MatchSpec, MatchSpecUrlError, Matches, NamelessMatchSpec,
+    CanonicalMatchSpecError, MatchSpec, MatchSpecUrlError, Matches, MultiChannels,
+    NamelessMatchSpec,
     matcher::{StringMatcher, StringMatcherParseError},
     parse::ParseMatchSpecError,
 };
