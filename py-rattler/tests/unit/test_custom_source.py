@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 
 from rattler import (
+    BuildString,
     Channel,
     Gateway,
     PackageName,
@@ -44,7 +45,7 @@ def create_test_record(name: str, version: str, platform: str) -> RepoDataRecord
     pkg_record = PackageRecord(
         name=name,
         version=version,
-        build="test_0",
+        build=BuildString("test_0"),
         build_number=0,
         subdir=platform,
     )

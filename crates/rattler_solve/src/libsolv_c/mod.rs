@@ -270,9 +270,17 @@ impl super::SolverImpl for Solver {
         }
 
         // Create a special pool for records that are already installed or locked.
+        //
+        // These records are favored, so a record newer than the cutoff is left
+        // out here as well. Otherwise the solver would prefer it over its
+        // excluded copy from the repodata.
         let repo = Repo::new(&pool, "locked", highest_priority);
-        let installed_solvables =
-            add_repodata_records(&pool, &repo, task.locked_packages.iter().copied(), None)?;
+        let installed_solvables = add_repodata_records(
+            &pool,
+            &repo,
+            task.locked_packages.iter().copied(),
+            task.exclude_newer.as_ref(),
+        )?;
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());

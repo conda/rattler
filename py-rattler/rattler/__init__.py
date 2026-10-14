@@ -23,6 +23,7 @@ from rattler.match_spec import MatchSpec, NamelessMatchSpec
 from rattler.networking import Client, fetch_repo_data
 from rattler.package import (
     AboutJson,
+    BuildString,
     FileMode,
     IndexJson,
     NoArchLiteral,
@@ -34,6 +35,7 @@ from rattler.package import (
     PrefixPlaceholder,
     RunExportsJson,
 )
+from rattler.package_cache import CacheIndex, PackageCache, PackageCacheLayer, ValidationMode
 from rattler.platform import Subdir
 from rattler.prefix import Link, LinkType, PrefixPaths, PrefixPathsEntry, PrefixPathType, PrefixRecord
 from rattler.repo_data import (
@@ -95,6 +97,8 @@ del _get_rattler_version
 
 __all__ = [
     "AboutJson",
+    "BuildString",
+    "CacheIndex",
     "CertificateClaims",
     "Channel",
     "ChannelCheck",
@@ -137,6 +141,8 @@ __all__ = [
     "NoArchLiteral",
     "NoArchType",
     "Override",
+    "PackageCache",
+    "PackageCacheLayer",
     "PackageFormatSelection",
     "PackageHashes",
     "PackageName",
@@ -167,6 +173,7 @@ __all__ = [
     "Subdir",
     "TlsRootCerts",
     "TrustedRoot",
+    "ValidationMode",
     "VerificationMode",
     "VerificationOutcome",
     "VerificationPolicy",

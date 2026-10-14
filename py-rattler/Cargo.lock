@@ -233,9 +233,9 @@ dependencies = [
 
 [[package]]
 name = "astral_async_zip"
-version = "0.0.21"
+version = "0.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13f4a9bc6289d907c8e883d25026a54751d686da9926af271d0fc4cbe58a7f4d"
+checksum = "0f8508d09c6bc6abd42767d1d43c7702891691484875ce94f7997da1301d95e9"
 dependencies = [
  "async-compression",
  "crc32fast",
@@ -1567,7 +1567,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1714,7 +1714,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2225,12 +2225,6 @@ name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
-
-[[package]]
-name = "hermit-abi"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
 
 [[package]]
 name = "hex"
@@ -2865,7 +2859,7 @@ version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a1886916523694cd6ea3d175f03a1e5010699a2a4cc13696d83d7bea1d80638"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3192,16 +3186,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "num_cpus"
-version = "1.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91df4bbde75afed763b708b7eee1e8e7651e02d97f6d5dd763e89367e957b23b"
-dependencies = [
- "hermit-abi",
- "libc",
 ]
 
 [[package]]
@@ -3881,7 +3865,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4001,7 +3985,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.53.1"
+version = "0.54.1"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -4059,7 +4043,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.10.17"
+version = "0.10.19"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4092,7 +4076,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.56.2"
+version = "0.57.0"
 dependencies = [
  "ahash",
  "core-foundation 0.10.1",
@@ -4144,7 +4128,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "dirs",
  "fs-err",
@@ -4178,7 +4162,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_environment_digest"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "hex",
  "rattler_conda_types",
@@ -4187,7 +4171,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.33.2"
+version = "0.33.4"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4225,7 +4209,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.34.5"
+version = "0.34.7"
 dependencies = [
  "ahash",
  "file_url",
@@ -4261,7 +4245,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "configparser",
  "dirs",
@@ -4290,7 +4274,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.33.1"
+version = "0.34.1"
 dependencies = [
  "ambient-id",
  "apple-native-keyring-store",
@@ -4329,7 +4313,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.27.12"
+version = "0.27.14"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-tokio-tar",
@@ -4347,7 +4331,6 @@ dependencies = [
  "hex",
  "http 1.5.0",
  "jiff",
- "num_cpus",
  "rattler_conda_types",
  "rattler_digest",
  "rattler_networking",
@@ -4399,7 +4382,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.36.2"
+version = "0.36.4"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4467,7 +4450,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.3.4"
+version = "0.3.6"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4485,7 +4468,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.29.3"
+version = "0.29.4"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4506,7 +4489,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_sigstore"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "astral-reqwest-middleware",
  "futures",
@@ -4528,7 +4511,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "11.2.0"
+version = "11.2.2"
 dependencies = [
  "futures",
  "hex",
@@ -4546,7 +4529,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_package_detectors"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "async-trait",
  "fs-err",
@@ -4576,7 +4559,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "8.1.1"
+version = "8.1.2"
 dependencies = [
  "archspec",
  "libloading",
@@ -4933,14 +4916,14 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "rustls"
-version = "0.23.43"
+version = "0.23.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0283386ce02abc0151e1761d08802dfe86c173b0b494af5cbc086574e453da06"
+checksum = "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634"
 dependencies = [
  "aws-lc-rs",
  "log",
@@ -4991,7 +4974,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5810,10 +5793,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6517,7 +6500,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from rattler import (
+    BuildString,
     Channel,
     Config,
     ConsentRequest,
@@ -243,7 +244,7 @@ async def test_detects_with_a_consent_callback(tmp_path: Path) -> None:
     assert cached_diagnostics.from_cache is True
     assert cached_diagnostics.stderr == diagnostics.stderr
 
-    merged = outcome.merge([GenericVirtualPackage(PackageName("__test_good"), Version("0.1"), "0")])
+    merged = outcome.merge([GenericVirtualPackage(PackageName("__test_good"), Version("0.1"), BuildString("0"))])
     assert [str(package.version) for package in merged] == ["1.2.3"]
 
     # Denying consent skips the detector without asking again for the cache.

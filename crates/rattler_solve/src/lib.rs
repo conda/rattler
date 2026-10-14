@@ -542,6 +542,12 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     ///   behavior; or
     /// - a relative duration, equivalent to the historical `min_age`
     ///   behavior.
+    ///
+    /// The cutoff applies to `locked_packages` and `pinned_packages` as well.
+    /// A locked record newer than the cutoff is not favored, so the solver
+    /// picks a record the cutoff allows instead. With the `resolvo` backend,
+    /// a pinned record newer than the cutoff makes the solve unsatisfiable
+    /// when the package is needed, the same as with `excluded_candidates`.
     pub exclude_newer: Option<ExcludeNewer>,
 
     /// The solve strategy.

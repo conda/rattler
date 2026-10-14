@@ -211,14 +211,11 @@ struct CallbackResult {
 /// use rattler::cli::auth::oauth::{OAuthConfig, perform_oauth_login};
 /// use rattler_networking::{AuthenticationStorage, AuthenticationMiddleware};
 /// # async fn example(mut config: OAuthConfig, storage: AuthenticationStorage, api: url::Url) -> Result<(), Box<dyn std::error::Error>> {
-/// let audience = "https://api.example.test";
-/// config.audience = Some(audience.into());
-/// let key = AuthenticationStorage::oauth_audience_key(&config.issuer_url, &config.client_id, audience);
-/// let middleware = AuthenticationMiddleware::from_auth_storage(storage.clone())
-///     .with_oauth_audience(&config.issuer_url, &config.client_id, audience, api.origin());
+/// config.audience = Some(api.origin().ascii_serialization());
 /// let auth = perform_oauth_login(config).await?;
-/// storage.store(&key, &auth)?;
-/// // Reuse this middleware on the API client; never log the returned credentials.
+/// storage.store("prefix.dev", &auth)?;
+/// let middleware = AuthenticationMiddleware::from_auth_storage(storage)
+///     .with_credentials_from(url::Host::parse("prefix.dev")?, [api.origin()]);
 /// let client = reqwest_middleware::ClientBuilder::new(
 ///     reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).build()?
 /// ).with(middleware).build();
@@ -227,18 +224,8 @@ struct CallbackResult {
 /// # }
 /// ```
 pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, OAuthError> {
-    let has_audience = config.audience.is_some();
     validate_audience(config.audience.as_deref())?;
-    let result = perform_oauth_login_inner(config).await;
-    if has_audience {
-        // IMPORTANT: do not format _error here. OAuth error Display includes the
-        // provider's error_description, whose contents we cannot control.
-        result.map_err(|_error| {
-            OAuthError::Authorization("Audience authorization did not complete".into())
-        })
-    } else {
-        result
-    }
+    perform_oauth_login_inner(config).await
 }
 
 fn validate_audience(audience: Option<&str>) -> Result<(), OAuthError> {
@@ -276,18 +263,7 @@ async fn perform_oauth_login_inner(mut config: OAuthConfig) -> Result<Authentica
         callback_page_renderer(CallbackPageTemplate::default(), &config.issuer_url)
     });
     let audience = config.audience.as_deref();
-    // Audience login uses a fixed failure message in the browser too: `detail`
-    // can include a provider error_description or a token-exchange error.
-    let callback_page = |success, detail: &str| {
-        renderer(
-            success,
-            if audience.is_some() && !success {
-                "Authorization did not complete."
-            } else {
-                detail
-            },
-        )
-    };
+    let callback_page = |success, detail: &str| renderer(success, detail);
 
     // 2. Run the appropriate flow
     let tokens = match config.flow {
@@ -310,11 +286,9 @@ async fn perform_oauth_login_inner(mut config: OAuthConfig) -> Result<Authentica
     };
 
     // 3. Display authenticated identity
-    if audience.is_none() {
-        match &tokens.authenticated_as {
-            Some(identity) => eprintln!("Authenticated as: {identity}"),
-            None => eprintln!("Authentication successful."),
-        }
+    match &tokens.authenticated_as {
+        Some(identity) => eprintln!("Authenticated as: {identity}"),
+        None => eprintln!("Authentication successful."),
     }
 
     // 4. Build the Authentication::OAuth value
@@ -330,11 +304,9 @@ async fn perform_oauth_login_inner(mut config: OAuthConfig) -> Result<Authentica
                 .ok_or_else(|| OAuthError::Authorization("Invalid token expiration".into()))
         })
         .transpose()?;
-    if audience.is_some()
-        && (tokens.access_token.is_empty() || expires_at.is_none_or(|expiry| expiry <= now as i64))
-    {
-        return Err(OAuthError::Authorization(
-            "Audience token requires a valid expires_in".into(),
+    if tokens.access_token.is_empty() {
+        return Err(OAuthError::TokenExchange(
+            "token response contained an empty access token".into(),
         ));
     }
 
@@ -349,11 +321,8 @@ async fn perform_oauth_login_inner(mut config: OAuthConfig) -> Result<Authentica
     })
 }
 
-fn require_resource_bearer(
-    audience: Option<&str>,
-    token_type: &CoreTokenType,
-) -> Result<(), OAuthError> {
-    if audience.is_some() && token_type != &CoreTokenType::Bearer {
+fn require_bearer_token_type(token_type: &CoreTokenType) -> Result<(), OAuthError> {
+    if token_type != &CoreTokenType::Bearer {
         return Err(OAuthError::TokenExchange(
             "Resource requires a bearer access token".into(),
         ));
@@ -514,7 +483,7 @@ async fn auth_code_flow(
         .await
     {
         Ok(response) => {
-            require_resource_bearer(audience, response.token_type()).inspect_err(|_| {
+            require_bearer_token_type(response.token_type()).inspect_err(|_| {
                 send_callback_response(
                     &callback.stream,
                     false,
@@ -532,18 +501,15 @@ async fn auth_code_flow(
         }
     };
 
-    let authenticated_as = token_response
-        .id_token()
-        .filter(|_| audience.is_none())
-        .and_then(
-            |id_token| match id_token.claims(&client.id_token_verifier(), &nonce) {
-                Ok(claims) => Some(display_name_from_claims(claims)),
-                Err(e) => {
-                    tracing::debug!("ID token verification failed: {e}");
-                    None
-                }
-            },
-        );
+    let authenticated_as = token_response.id_token().and_then(|id_token| {
+        match id_token.claims(&client.id_token_verifier(), &nonce) {
+            Ok(claims) => Some(display_name_from_claims(claims)),
+            Err(e) => {
+                tracing::debug!("ID token verification failed: {e}");
+                None
+            }
+        }
+    });
 
     Ok(OAuthTokens {
         access_token: token_response.access_token().secret().clone(),
@@ -899,21 +865,18 @@ async fn device_code_flow(
         .await
         .map_err(|e| OAuthError::TokenExchange(e.to_string()))?;
 
-    require_resource_bearer(audience, token_response.token_type())?;
+    require_bearer_token_type(token_response.token_type())?;
 
     // Device flow has no nonce (RFC 8628), so skip nonce verification
-    let authenticated_as = token_response
-        .id_token()
-        .filter(|_| audience.is_none())
-        .and_then(|id_token| {
-            match id_token.claims(&client.id_token_verifier(), |_: Option<&Nonce>| Ok(())) {
-                Ok(claims) => Some(display_name_from_claims(claims)),
-                Err(e) => {
-                    tracing::debug!("ID token verification failed: {e}");
-                    None
-                }
+    let authenticated_as = token_response.id_token().and_then(|id_token| {
+        match id_token.claims(&client.id_token_verifier(), |_: Option<&Nonce>| Ok(())) {
+            Ok(claims) => Some(display_name_from_claims(claims)),
+            Err(e) => {
+                tracing::debug!("ID token verification failed: {e}");
+                None
             }
-        });
+        }
+    });
 
     Ok(OAuthTokens {
         access_token: token_response.access_token().secret().clone(),
@@ -1009,7 +972,7 @@ mod tests {
         CallbackPageTemplate, DEFAULT_POWERED_BY, OAuthConfig, OAuthFlow, append_audience,
         callback_page_domain_from_issuer, default_callback_page,
         default_callback_page_with_template, html_escape, perform_oauth_login,
-        require_resource_bearer,
+        require_bearer_token_type,
     };
     use openidconnect::core::CoreTokenType;
     use rattler_networking::Authentication;
@@ -1093,11 +1056,10 @@ mod tests {
     }
 
     #[test]
-    fn resource_flow_requires_bearer_token_type() {
+    fn login_requires_bearer_token_type() {
         let other = serde_json::from_str("\"MAC\"").unwrap();
-        assert!(require_resource_bearer(Some("audit"), &other).is_err());
-        assert!(require_resource_bearer(Some("audit"), &CoreTokenType::Bearer).is_ok());
-        assert!(require_resource_bearer(None, &other).is_ok());
+        assert!(require_bearer_token_type(&other).is_err());
+        assert!(require_bearer_token_type(&CoreTokenType::Bearer).is_ok());
     }
 
     #[test]
@@ -1129,7 +1091,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn device_login_forwards_audience_and_redacts_provider_errors() {
+    async fn device_login_forwards_audience_and_surfaces_provider_errors() {
         use axum::http::StatusCode;
         use axum::{
             Json, Router,
@@ -1166,14 +1128,10 @@ mod tests {
             let result = perform_oauth_login(config(&issuer, audience)).await;
             if fail {
                 let error = result.unwrap_err();
-                // Control: the ordinary flow includes the provider description;
-                // the audience flow strips it from both Display and Debug.
-                for message in [error.to_string(), format!("{error:?}")] {
-                    assert_eq!(
-                        message.contains("fixture-sensitive-detail"),
-                        audience.is_none()
-                    );
-                }
+                assert!(
+                    error.to_string().contains("fixture-sensitive-detail"),
+                    "{audience:?}: {error}"
+                );
             } else {
                 assert!(
                     matches!(result.unwrap(), Authentication::OAuth { audience: value, access_token, .. }

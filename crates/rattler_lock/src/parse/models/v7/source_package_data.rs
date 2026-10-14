@@ -5,7 +5,7 @@ use std::{
 
 use rattler_conda_types::{
     BuildNumber, Flag, NoArchType, PackageRecord, PackageUrl, VersionWithSource,
-    package::RunExportsJson,
+    package::{BuildString, RunExportsJson},
 };
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -48,8 +48,8 @@ pub(crate) struct SourcePackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<Cow<'a, VersionWithSource>>,
 
-    #[serde(default, skip_serializing_if = "str::is_empty")]
-    pub build: Cow<'a, str>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build: Option<Cow<'a, BuildString>>,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub build_number: BuildNumber,
 
@@ -135,7 +135,9 @@ impl<'a> SourcePackageDataModel<'a> {
         // Only build a PackageRecord when version (and subdir) are present.
         let metadata = if let (Some(version), Some(subdir)) = (self.version, self.subdir) {
             let subdir = subdir.into_owned();
-            let build = self.build.into_owned();
+            let build = self
+                .build
+                .map_or_else(|| BuildString::new_unchecked(""), Cow::into_owned);
             let (arch, platform) = derived_fields::derive_arch_and_platform(&subdir);
             SourceMetadata::Full(Box::new(PackageRecord {
                 name: name.clone(),
@@ -212,7 +214,8 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 conda_source: identifier,
                 version: Some(Cow::Borrowed(&full.version)),
                 subdir: Some(Cow::Borrowed(&full.subdir)),
-                build: Cow::Borrowed(&full.build),
+                // Preserve legacy empty builds; an explicit "0" is not an empty build.
+                build: (!full.build.is_empty()).then_some(Cow::Borrowed(&full.build)),
                 build_number: full.build_number,
                 noarch: full.noarch,
                 variants,
@@ -241,7 +244,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 conda_source: identifier,
                 version: None,
                 subdir: None,
-                build: Cow::Borrowed(""),
+                build: None,
                 build_number: 0,
                 noarch: NoArchType::default(),
                 variants,
@@ -266,6 +269,34 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 build_packages: Vec::new(),
                 host_packages: Vec::new(),
             },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_builds_roundtrip() {
+        for build in [None, Some(""), Some("0"), Some("py_0")] {
+            let mut input = String::from(
+                "conda_source: 'demo[abcd1234] @ .'\nversion: '1.0'\nsubdir: noarch\n",
+            );
+            if let Some(build) = build {
+                input.push_str(&format!("build: {build:?}\n"));
+            }
+            let model: SourcePackageDataModel<'_> = serde_yaml::from_str(&input).unwrap();
+            let (_, source) = model.into_parts().unwrap();
+            assert_eq!(source.record().unwrap().build, build.unwrap_or(""));
+            let yaml = serde_yaml::to_string(&SourcePackageDataModel::from(&source)).unwrap();
+            let model: SourcePackageDataModel<'_> = serde_yaml::from_str(&yaml).unwrap();
+            let (_, decoded) = model.into_parts().unwrap();
+            assert_eq!(
+                decoded.record().unwrap().build,
+                source.record().unwrap().build
+            );
+            assert_eq!(decoded.identifier_hash, source.identifier_hash);
         }
     }
 }

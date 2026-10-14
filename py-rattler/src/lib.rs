@@ -1,4 +1,5 @@
 mod about_json;
+mod build_string;
 mod channel;
 mod config;
 mod error;
@@ -12,6 +13,7 @@ mod meta;
 mod nameless_match_spec;
 mod networking;
 mod no_arch_type;
+mod package_cache;
 mod package_name;
 mod package_name_matcher;
 mod package_streaming;
@@ -38,6 +40,7 @@ mod run_exports_json;
 use std::ops::Deref;
 
 use about_json::PyAboutJson;
+use build_string::PyBuildString;
 use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
 use config::PyConfig;
 use error::PyRattlerError;
@@ -70,6 +73,7 @@ use networking::middleware::{
 };
 use networking::{client::PyClientWithMiddleware, py_fetch_repo_data};
 use no_arch_type::PyNoArchType;
+use package_cache::{PyCacheIndex, PyPackageCache, PyPackageCacheLayer, PyValidationMode};
 use package_name::PyPackageName;
 use package_name_matcher::PyPackageNameMatcher;
 use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
@@ -125,6 +129,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyMatchSpec>()?;
     m.add_class::<PyNamelessMatchSpec>()?;
 
+    m.add_class::<PyBuildString>()?;
     m.add_class::<PyPackageName>()?;
     m.add_class::<PyPackageNameMatcher>()?;
 
@@ -244,6 +249,12 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     // Explicit environment specification
     m.add_class::<PyExplicitEnvironmentSpec>()?;
     m.add_class::<PyExplicitEnvironmentEntry>()?;
+
+    // Package cache
+    m.add_class::<PyPackageCache>()?;
+    m.add_class::<PyPackageCacheLayer>()?;
+    m.add_class::<PyCacheIndex>()?;
+    m.add_class::<PyValidationMode>()?;
 
     // Exceptions
     m.add("InvalidVersionError", py.get_type::<InvalidVersionError>())?;
