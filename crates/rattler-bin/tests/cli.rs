@@ -14,8 +14,15 @@ const WORKSPACE_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
 /// be addressed with stable relative paths) and returns its stdout. Styling is
 /// disabled automatically because stdout is not a terminal.
 fn run_rattler(args: &[&str]) -> String {
+    run_rattler_with_env(args, &[])
+}
+
+/// [`run_rattler`] with extra environment variables set for the run.
+fn run_rattler_with_env(args: &[&str], env: &[(&str, &str)]) -> String {
     let output = Command::new(env!("CARGO_BIN_EXE_rattler"))
         .args(args)
+        .env_remove("FORCE_HYPERLINK")
+        .envs(env.iter().copied())
         .current_dir(WORKSPACE_ROOT)
         .output()
         .expect("failed to run the rattler binary");
@@ -86,6 +93,88 @@ fn test_list_json() {
         "--format",
         "json"
     ]));
+}
+
+/// The start of an OSC 8 hyperlink.
+const OSC8: &str = "\u{1b}]8;;";
+
+/// `text` as rattler writes it when it links to `url`.
+fn linked(url: &str, text: &str) -> String {
+    format!("{OSC8}{url}\u{1b}\\{text}{OSC8}\u{1b}\\")
+}
+
+/// Whatever else the output carries, a consumer that cannot render hyperlinks
+/// must not receive any. Since stdout is a pipe here, this is the default for
+/// every command.
+#[test]
+fn test_no_hyperlinks_when_stdout_is_not_a_terminal() {
+    for args in [
+        vec!["list", "-p", FIXTURE_PREFIX],
+        vec!["list", "-p", FIXTURE_PREFIX, "--format", "urls"],
+        vec!["inspect", EMPTY_PACKAGE],
+        vec!["compare-packages", EMPTY_PACKAGE, EMPTY_PACKAGE],
+        vec!["info"],
+    ] {
+        let output = run_rattler(&args);
+        assert!(
+            !output.contains(OSC8),
+            "rattler {args:?} wrote a hyperlink to a piped stdout"
+        );
+    }
+}
+
+/// `FORCE_HYPERLINK` opts a non-terminal stdout in, which is also the only way
+/// to observe the links in a test.
+#[test]
+fn test_hyperlinks_can_be_forced() {
+    let output = run_rattler_with_env(
+        &["list", "-p", FIXTURE_PREFIX, "--full-name", "bzip2"],
+        &[("FORCE_HYPERLINK", "1")],
+    );
+    // The package name links to its page on the host that serves the
+    // conda-forge channel the fixture records come from, and the name itself
+    // is still there in full.
+    assert!(
+        output.contains(&linked("https://anaconda.org/conda-forge/bzip2", "bzip2")),
+        "expected a hyperlinked package name, got:\n{output}"
+    );
+    // Machine-readable output stays plain even then.
+    let urls = run_rattler_with_env(
+        &["list", "-p", FIXTURE_PREFIX, "--format", "urls"],
+        &[("FORCE_HYPERLINK", "1")],
+    );
+    assert!(!urls.contains(OSC8), "got hyperlinks in --format urls");
+    let json = run_rattler_with_env(
+        &["list", "-p", FIXTURE_PREFIX, "--format", "json"],
+        &[("FORCE_HYPERLINK", "1")],
+    );
+    serde_json::from_str::<serde_json::Value>(&json).expect("plain JSON with forced links");
+    assert!(!json.contains(OSC8));
+    let plain = run_rattler_with_env(&["list", "-p", FIXTURE_PREFIX], &[("FORCE_HYPERLINK", "0")]);
+    assert!(!plain.contains(OSC8));
+}
+
+/// Local package archives given on the command line link to their `file://`
+/// URL, resolved to an absolute path so the link works from anywhere.
+#[test]
+fn test_local_package_sources_link_to_their_file() {
+    let output = run_rattler_with_env(
+        &["compare-packages", EMPTY_PACKAGE, CLOBBER_PACKAGE],
+        &[("FORCE_HYPERLINK", "1")],
+    );
+    let left = output.lines().find(|line| line.contains("left:")).unwrap();
+    assert!(left.contains(&format!("{OSC8}file://")), "got:\n{left}");
+    assert!(left.contains(&format!(
+        "empty-0.1.0-h4616a5c_0.conda\u{1b}\\{EMPTY_PACKAGE}{OSC8}"
+    )));
+    // A local archive comes from no channel, so the package name in `inspect`
+    // has no page to link to and stays plain.
+    let inspect = run_rattler_with_env(&["inspect", EMPTY_PACKAGE], &[("FORCE_HYPERLINK", "1")]);
+    let name = inspect
+        .lines()
+        .find(|line| line.starts_with("name:"))
+        .unwrap();
+    assert_eq!(name, "name: empty");
 }
 
 /// A `--channel NAME=CHANNEL,...` is a multichannel, whose channels share a
@@ -220,6 +309,41 @@ mod attestation {
     #[test]
     fn test_verify_attestation() {
         insta::assert_snapshot!(run_verify_attestation(&[]));
+    }
+
+    #[test]
+    fn test_verify_attestation_links() {
+        let output = super::run_rattler_with_env(
+            &[
+                "--offline",
+                "verify-attestation",
+                "--attestation",
+                SIDECAR,
+                PACKAGE,
+                "--channel",
+                CHANNEL,
+            ],
+            &[("FORCE_HYPERLINK", "1")],
+        );
+        let identity = output
+            .lines()
+            .find(|line| line.trim_start().starts_with("Identity:"))
+            .unwrap();
+        assert!(!identity.contains(super::OSC8));
+        // The text of every field is the same as without links; only the
+        // workflow path gets a destination it does not spell out itself.
+        let workflow = output
+            .lines()
+            .find(|line| line.trim_start().starts_with("Workflow:"))
+            .unwrap();
+        assert!(workflow.contains(&super::linked(
+            "https://github.com/pavelzw/skill-forge/blob/8a96d273f7245383c451499fb65375ec408ca042/.github/workflows/package.yml",
+            ".github/workflows/package.yml"
+        )));
+        let run = "https://github.com/pavelzw/skill-forge/actions/runs/36007002754/attempts/1";
+        assert!(output.contains(&super::linked(run, run)));
+        let repository = "https://github.com/pavelzw/skill-forge";
+        assert!(output.contains(&super::linked(repository, repository)));
     }
 
     /// The JSON output carries every claim of the signing certificate and the

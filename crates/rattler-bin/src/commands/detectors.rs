@@ -16,7 +16,7 @@ use rattler_virtual_package_detectors::{
 };
 use reqwest_middleware::ClientWithMiddleware;
 
-use crate::solver_args::SolverArgs;
+use crate::{commands::hyperlink, solver_args::SolverArgs};
 
 pub(super) struct DetectorContext<'a> {
     pub gateway: &'a Gateway,
@@ -154,9 +154,14 @@ fn channel_consent(channel: &Channel) -> miette::Result<DetectorDecision> {
         return Ok(DetectorDecision::Deny);
     }
 
+    // The user is about to decide whether to trust this channel, so make it
+    // easy to look at: its web page if it has one, the raw URL otherwise.
+    let base_url = channel.base_url.to_string();
+    let channel_link =
+        hyperlink::channel_page(&base_url).or_else(|| hyperlink::web(channel.base_url.as_ref()));
     eprintln!(
         "Channel {} registers virtual package detectors. Trusting it allows installing and executing all its current and future detectors and their resolved dependencies in isolated environments. This decision is shared with other rattler-based tools, not limited to the target prefix.",
-        channel.base_url,
+        hyperlink::maybe_link_on(hyperlink::Stream::Stderr, channel_link, &base_url),
     );
     eprint!("Trust this channel's detectors? [y/N] ");
     std::io::stderr().flush().into_diagnostic()?;
