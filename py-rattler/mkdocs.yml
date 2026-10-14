@@ -130,6 +130,11 @@ nav:
           - BuildString: build_string.md
           - PackageName: package_name.md
           - PackageNameMatcher: package_name_matcher.md
+      - package_cache:
+          - PackageCache: package_cache.md
+          - PackageCacheLayer: package_cache_layer.md
+          - CacheIndex: cache_index.md
+          - ValidationMode: validation_mode.md
       - package_streaming:
           - download & extract: package_streaming.md
           - PackageArchive: package_archive.md

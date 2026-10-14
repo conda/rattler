@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.1](https://github.com/conda/rattler/compare/rattler_networking-v0.34.0...rattler_networking-v0.34.1) - 2026-10-13
+
+### Added
+
+- *(rattler_networking)* fetch sharded repodata from OCI mirrors ([#2855](https://github.com/conda/rattler/pull/2855))
+
 ## [0.34.0](https://github.com/conda/rattler/compare/rattler_networking-v0.33.1...rattler_networking-v0.34.0) - 2026-10-09
 
 ### Added

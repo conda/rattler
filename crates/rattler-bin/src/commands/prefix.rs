@@ -12,7 +12,10 @@ use reqwest_middleware::ClientWithMiddleware;
 use tokio::io::AsyncWriteExt;
 use url::Url;
 
-use super::package_source::{PackageSource, client_for};
+use super::{
+    hyperlink,
+    package_source::{PackageSource, client_for},
+};
 
 const PIXI_ENVIRONMENT_FINGERPRINT_FILE: &str = ".pixi-environment-fingerprint";
 
@@ -135,12 +138,13 @@ pub async fn inject(opt: InjectOpt, offline: bool) -> miette::Result<()> {
 
     invalidate_pixi_environment_fingerprint(&target_prefix)?;
 
+    let prefix_url = hyperlink::directory(&target_prefix);
     for package_record in injected_package_records {
         println!(
             "{} Injected {} into {}",
             console::style(console::Emoji("✔", "")).green(),
             package_record,
-            target_prefix.display()
+            hyperlink::maybe_link(prefix_url.clone(), target_prefix.display())
         );
     }
 

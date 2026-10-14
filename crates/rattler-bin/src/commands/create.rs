@@ -11,6 +11,7 @@ use crate::{
     commands::{
         detectors::{DetectorContext, detect_virtual_packages},
         gateway::{build_gateway, load_config},
+        hyperlink,
         progress::wrap_in_progress,
     },
     global_multi_progress,
@@ -276,28 +277,23 @@ fn print_transaction(
     features: HashMap<PackageName, Vec<String>>,
 ) {
     let format_record = |r: &RepoDataRecord| {
-        let direct_url_print = if let Some(channel) = &r.channel {
-            channel.clone()
-        } else {
-            String::new()
-        };
+        let name = r.package_record.name.as_normalized();
+        let name = hyperlink::maybe_link(hyperlink::package_page(r.channel.as_deref(), name), name);
+        let channel = r.channel.as_deref().map_or_else(String::new, |channel| {
+            hyperlink::maybe_link(hyperlink::channel_page(channel), channel)
+        });
 
         if let Some(features) = features.get(&r.package_record.name) {
             format!(
-                "{}[{}] {} {} {}",
-                r.package_record.name.as_normalized(),
+                "{name}[{}] {} {} {channel}",
                 features.join(", "),
                 r.package_record.version,
                 r.package_record.build,
-                direct_url_print,
             )
         } else {
             format!(
-                "{} {} {} {}",
-                r.package_record.name.as_normalized(),
-                r.package_record.version,
-                r.package_record.build,
-                direct_url_print,
+                "{name} {} {} {channel}",
+                r.package_record.version, r.package_record.build,
             )
         }
     };

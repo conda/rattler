@@ -697,6 +697,11 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
+        fn test_locked_package_newer_than_cutoff() {
+            crate::timestamp_policy_tests::locked_package_newer_than_cutoff::<$T>();
+        }
+
+        #[test]
         fn test_solver_case_exclude_newer() {
             crate::solver_case_tests::solve_exclude_newer::<$T>();
         }
