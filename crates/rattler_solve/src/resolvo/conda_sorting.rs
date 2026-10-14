@@ -509,7 +509,7 @@ impl<'repo> TrackedFeatureVersion<'repo> {
     }
 }
 
-pub(super) fn find_highest_version<'repo>(
+fn find_highest_version<'repo>(
     match_spec_id: VersionSetId,
     solver: &SolverCache<CondaDependencyProvider<'repo>>,
     highest_version_cache: &mut HashMap<VersionSetId, Option<(&'repo Version, bool)>>,
