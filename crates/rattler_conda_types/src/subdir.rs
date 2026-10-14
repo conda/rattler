@@ -29,6 +29,8 @@ pub enum Subdir {
     FreeBsd32,
     FreeBsd64,
     FreeBsdArm64,
+    FreeBsdPpc64le,
+    FreeBsdPpc64,
 
     Osx64,
     OsxArm64,
@@ -185,7 +187,18 @@ impl Subdir {
             #[cfg(target_arch = "aarch64")]
             return Some(Subdir::FreeBsdArm64);
 
-            #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64")))]
+            #[cfg(all(target_arch = "powerpc64", target_endian = "little"))]
+            return Some(Subdir::FreeBsdPpc64le);
+
+            #[cfg(all(target_arch = "powerpc64", target_endian = "big"))]
+            return Some(Subdir::FreeBsdPpc64);
+
+            #[cfg(not(any(
+                target_arch = "x86",
+                target_arch = "x86_64",
+                target_arch = "aarch64",
+                target_arch = "powerpc64"
+            )))]
             compile_error!("unsupported freebsd architecture");
         }
         #[cfg(windows)]
@@ -319,6 +332,8 @@ impl Subdir {
                     | Subdir::FreeBsd32
                     | Subdir::FreeBsd64
                     | Subdir::FreeBsdArm64
+                    | Subdir::FreeBsdPpc64le
+                    | Subdir::FreeBsdPpc64
             )
     }
 
@@ -381,7 +396,11 @@ impl Subdir {
             | Subdir::LinuxS390X
             | Subdir::LinuxRiscv32
             | Subdir::LinuxRiscv64 => Some("linux"),
-            Subdir::FreeBsd32 | Subdir::FreeBsd64 | Subdir::FreeBsdArm64 => Some("freebsd"),
+            Subdir::FreeBsd32
+            | Subdir::FreeBsd64
+            | Subdir::FreeBsdArm64
+            | Subdir::FreeBsdPpc64le
+            | Subdir::FreeBsdPpc64 => Some("freebsd"),
             Subdir::Osx64 | Subdir::OsxArm64 => Some("osx"),
             Subdir::IosArm64 => Some("ios"),
             Subdir::IosSimulatorArm64 | Subdir::IosSimulator64 => Some("iossimulator"),
@@ -465,6 +484,8 @@ impl FromStr for Subdir {
             "freebsd-32" => Subdir::FreeBsd32,
             "freebsd-64" => Subdir::FreeBsd64,
             "freebsd-arm64" => Subdir::FreeBsdArm64,
+            "freebsd-ppc64le" => Subdir::FreeBsdPpc64le,
+            "freebsd-ppc64" => Subdir::FreeBsdPpc64,
             "osx-64" => Subdir::Osx64,
             "osx-arm64" => Subdir::OsxArm64,
             "ios-arm64" => Subdir::IosArm64,
@@ -520,6 +541,8 @@ impl From<Subdir> for &'static str {
             Subdir::FreeBsd32 => "freebsd-32",
             Subdir::FreeBsd64 => "freebsd-64",
             Subdir::FreeBsdArm64 => "freebsd-arm64",
+            Subdir::FreeBsdPpc64le => "freebsd-ppc64le",
+            Subdir::FreeBsdPpc64 => "freebsd-ppc64",
             Subdir::Osx64 => "osx-64",
             Subdir::OsxArm64 => "osx-arm64",
             Subdir::IosArm64 => "ios-arm64",
@@ -551,8 +574,8 @@ impl Subdir {
             Subdir::LinuxArmV6l => Some(Arch::ArmV6l),
             Subdir::LinuxArmV7l => Some(Arch::ArmV7l),
             Subdir::LinuxLoongArch64 => Some(Arch::LoongArch64),
-            Subdir::LinuxPpc64le => Some(Arch::Ppc64le),
-            Subdir::LinuxPpc64 => Some(Arch::Ppc64),
+            Subdir::LinuxPpc64le | Subdir::FreeBsdPpc64le => Some(Arch::Ppc64le),
+            Subdir::LinuxPpc64 | Subdir::FreeBsdPpc64 => Some(Arch::Ppc64),
             Subdir::LinuxPpc => Some(Arch::Ppc),
             Subdir::LinuxS390X => Some(Arch::S390X),
             Subdir::LinuxRiscv32 => Some(Arch::Riscv32),
@@ -732,6 +755,14 @@ mod tests {
             "freebsd-arm64".parse::<Subdir>().unwrap(),
             Subdir::FreeBsdArm64
         );
+        assert_eq!(
+            "freebsd-ppc64le".parse::<Subdir>().unwrap(),
+            Subdir::FreeBsdPpc64le
+        );
+        assert_eq!(
+            "freebsd-ppc64".parse::<Subdir>().unwrap(),
+            Subdir::FreeBsdPpc64
+        );
         assert_eq!("win-arm64".parse::<Subdir>().unwrap(), Subdir::WinArm64);
         assert_eq!(
             "emscripten-wasm32".parse::<Subdir>().unwrap(),
@@ -843,6 +874,8 @@ mod tests {
         assert_eq!(Subdir::FreeBsd32.arch(), Some(Arch::X86));
         assert_eq!(Subdir::FreeBsd64.arch(), Some(Arch::X86_64));
         assert_eq!(Subdir::FreeBsdArm64.arch(), Some(Arch::Arm64));
+        assert_eq!(Subdir::FreeBsdPpc64le.arch(), Some(Arch::Ppc64le));
+        assert_eq!(Subdir::FreeBsdPpc64.arch(), Some(Arch::Ppc64));
         assert_eq!(Subdir::Osx64.arch(), Some(Arch::X86_64));
         assert_eq!(Subdir::OsxArm64.arch(), Some(Arch::Arm64));
         assert_eq!(Subdir::Win32.arch(), Some(Arch::X86));

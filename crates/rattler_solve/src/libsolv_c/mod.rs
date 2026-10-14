@@ -21,7 +21,10 @@ use wrapper::{
     solve_goal::SolveGoal,
 };
 
-use crate::{ChannelPriority, IntoRepoData, SolveError, SolveStrategy, SolverRepoData, SolverTask};
+use crate::{
+    ChannelPriority, IntoRepoData, SolveError, SolveStrategy, SolverRepoData, SolverTask,
+    priority_tier::PriorityTier,
+};
 
 mod input;
 mod libc_byte_slice;
@@ -37,6 +40,10 @@ pub struct RepoData<'a> {
 
     /// The in-memory .solv file built from the records (if available)
     pub solv_file: Option<&'a LibcByteSlice>,
+
+    /// The multichannel the channel of these records belongs to, see
+    /// [`crate::ChannelRepoData`].
+    pub multi_channel: Option<&'a str>,
 }
 
 impl<'a> FromIterator<&'a RepoDataRecord> for RepoData<'a> {
@@ -44,6 +51,7 @@ impl<'a> FromIterator<&'a RepoDataRecord> for RepoData<'a> {
         Self {
             records: Vec::from_iter(iter),
             solv_file: None,
+            multi_channel: None,
         }
     }
 }
@@ -55,11 +63,25 @@ impl<'a> RepoData<'a> {
         Self {
             records: records.into(),
             solv_file: None,
+            multi_channel: None,
         }
+    }
+
+    /// Returns the channel priority tier of these records.
+    fn priority_tier(&self) -> Option<PriorityTier<'a>> {
+        let first = self.records.first()?;
+        Some(PriorityTier::new(
+            self.multi_channel,
+            first.channel.as_deref(),
+        ))
     }
 }
 
-impl<'a> SolverRepoData<'a> for RepoData<'a> {}
+impl<'a> SolverRepoData<'a> for RepoData<'a> {
+    fn set_multi_channel(&mut self, name: &'a str) {
+        self.multi_channel = Some(name);
+    }
+}
 
 /// Convenience method that converts a string reference to a `CString`,
 /// replacing NUL characters with whitespace (`b' '`)
@@ -164,45 +186,41 @@ impl super::SolverImpl for Solver {
             .map(IntoRepoData::into)
             .collect();
 
-        // Determine the channel priority for each channel in the repodata in the order
-        // in which the repodatas are passed, where the first channel will have
-        // the highest priority value and each successive channel will descend
-        // in priority value. If not strict, the highest priority value will be
-        // 0 and the channel priority map will not be populated as it will
-        // not be used.
+        // Determine the channel priority for each priority tier in the repodata in the
+        // order in which the repodatas are passed, where the first tier will have
+        // the highest priority value and each successive tier will descend
+        // in priority value. A tier is either a single channel or all channels of
+        // a multichannel, which therefore share one priority. If not strict, the
+        // highest priority value will be 0 and the channel priority map will not
+        // be populated as it will not be used.
         // Both `Strict` and `Flexible` channel priority assign descending
-        // priorities to the channels in order. The difference is only in the
+        // priorities to the tiers in order. The difference is only in the
         // `SOLVER_FLAG_STRICT_REPO_PRIORITY` flag set below: with it enabled
-        // the solver never crosses channel boundaries, while with it
-        // disabled the solver prefers higher-priority channels but
+        // the solver never crosses tier boundaries, while with it
+        // disabled the solver prefers higher-priority tiers but
         // falls back to lower-priority ones when required to find a solution.
         let use_channel_priority = matches!(
             task.channel_priority,
             ChannelPriority::Strict | ChannelPriority::Flexible
         );
         let mut highest_priority: i32 = 0;
-        let channel_priority = if use_channel_priority {
-            let mut seen_channels = HashSet::new();
-            let mut channel_order = Vec::new();
-            for channel in repodatas
-                .iter()
-                .filter(|&r| !r.records.is_empty())
-                .map(|r| r.records[0].channel.clone())
-            {
-                if !seen_channels.contains(&channel) {
-                    channel_order.push(channel.clone());
-                    seen_channels.insert(channel);
+        let tier_priority = if use_channel_priority {
+            let mut seen_tiers = HashSet::new();
+            let mut tier_order = Vec::new();
+            for tier in repodatas.iter().filter_map(RepoData::priority_tier) {
+                if seen_tiers.insert(tier) {
+                    tier_order.push(tier);
                 }
             }
-            let mut channel_priority = HashMap::new();
-            for (index, channel) in channel_order.iter().enumerate() {
-                let reverse_index = channel_order.len() - index;
+            let mut tier_priority = HashMap::new();
+            for (index, tier) in tier_order.iter().enumerate() {
+                let reverse_index = tier_order.len() - index;
                 if index == 0 {
                     highest_priority = reverse_index as i32;
                 }
-                channel_priority.insert(channel.clone(), reverse_index as i32);
+                tier_priority.insert(*tier, reverse_index as i32);
             }
-            channel_priority
+            tier_priority
         } else {
             HashMap::new()
         };
@@ -218,14 +236,14 @@ impl super::SolverImpl for Solver {
         let mut repo_mapping = HashMap::new();
         let mut all_repodata_records = Vec::new();
         for repodata in repodatas.iter() {
-            if repodata.records.is_empty() {
+            let Some(tier) = repodata.priority_tier() else {
                 continue;
-            }
+            };
             let channel_name = &repodata.records[0].channel;
 
             // We dont want to drop the Repo, its stored in the pool anyway.
             let priority: i32 = if use_channel_priority {
-                *channel_priority.get(channel_name).unwrap()
+                *tier_priority.get(&tier).unwrap()
             } else {
                 0
             };

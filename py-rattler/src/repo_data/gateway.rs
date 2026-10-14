@@ -6,13 +6,13 @@ use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyAnyMethods;
 use pyo3::{
-    Borrowed, Bound, FromPyObject, PyAny, PyErr, PyRef, PyResult, Python, pyclass, pymethods,
+    Borrowed, Bound, FromPyObject, Py, PyAny, PyErr, PyRef, PyResult, Python, pyclass, pymethods,
 };
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::{CacheAction, FetchRepoDataOptions, Variant};
 use rattler_repodata_gateway::{
     CacheClearMode, ChannelConfig, ChannelNoticeResult, ChannelRelationsMode, Gateway,
-    GatewayWarning, RemovedPackage, Source, SourceConfig, SubdirSelection,
+    GatewayWarning, MultiSource, RemovedPackage, Source, SourceConfig, SubdirSelection,
 };
 use url::Url;
 
@@ -26,6 +26,7 @@ use crate::repo_data::PyChannelRelations;
 use crate::repo_data::source::PyRepoDataSource;
 use crate::repo_data::sparse::PySparseRepoData;
 use crate::subdir::PySubdir;
+use crate::virtual_package_detectors::{PyDetectorRegistration, PyRejectedDetectorRegistration};
 use crate::{PyChannel, Wrap};
 
 #[pyclass(from_py_object)]
@@ -173,10 +174,54 @@ pub(crate) fn emit_gateway_warnings(warnings: Vec<GatewayWarning>) -> PyResult<(
     })
 }
 
+/// A named group of Python sources that share a channel priority tier, see
+/// [`MultiSource`].
+///
+/// The members are kept as the Python objects they were given as and are
+/// converted with [`py_object_to_source`] whenever the group is used, so
+/// closing a `SparseRepoData` member still releases its file.
+#[pyclass]
+pub struct PyMultiSource {
+    name: String,
+    sources: Vec<Py<PyAny>>,
+}
+
+impl PyMultiSource {
+    /// Returns the group as a [`MultiSource`], or an error if it is invalid
+    /// or one of its members cannot be used.
+    pub(crate) fn as_source(&self, py: Python<'_>) -> PyResult<MultiSource> {
+        let sources = self
+            .sources
+            .iter()
+            .map(|source| py_object_to_source(source.bind(py).clone()))
+            .collect::<PyResult<Vec<_>>>()?;
+        MultiSource::new(self.name.as_str(), sources)
+            .map_err(|err| PyValueError::new_err(err.to_string()))
+    }
+}
+
+#[pymethods]
+impl PyMultiSource {
+    #[new]
+    pub fn new(py: Python<'_>, name: String, sources: Vec<Py<PyAny>>) -> PyResult<Self> {
+        let multi_source = Self { name, sources };
+        // Validate the group right away so mistakes surface where it is created.
+        multi_source.as_source(py)?;
+        Ok(multi_source)
+    }
+
+    /// Returns the name of the group.
+    #[getter]
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+}
+
 /// Convert a Python object to a Rust Source.
 ///
 /// Accepts either:
 /// - A `PyChannel` object (wrapped Channel)
+/// - A `PyMultiSource` object
 /// - A `PySparseRepoData` object
 /// - Any object implementing the `RepoDataSource` protocol
 ///   (has `fetch_package_records` and `package_names` methods)
@@ -184,6 +229,10 @@ pub fn py_object_to_source(obj: Bound<'_, PyAny>) -> PyResult<Source> {
     // First try to extract as PyChannel
     if let Ok(channel) = obj.extract::<PyChannel>() {
         return Ok(Source::from(channel.inner));
+    }
+
+    if let Ok(multi_source) = obj.extract::<PyRef<'_, PyMultiSource>>() {
+        return Ok(Source::from(multi_source.as_source(obj.py())?));
     }
 
     // Then try to extract as SparseRepoData
@@ -200,8 +249,8 @@ pub fn py_object_to_source(obj: Bound<'_, PyAny>) -> PyResult<Source> {
     }
 
     Err(PyTypeError::new_err(
-        "Expected Channel, SparseRepoData, or object implementing RepoDataSource protocol \
-         (with fetch_package_records and package_names methods)",
+        "Expected Channel, MultiSource, SparseRepoData, or object implementing RepoDataSource \
+         protocol (with fetch_package_records and package_names methods)",
     ))
 }
 
@@ -340,6 +389,8 @@ impl PyGateway {
         channel_relations=None,
         channel_relations_max_depth=None,
         channel_notices=false,
+        detector_target=None,
+        constraints=Vec::new(),
     ))]
     #[allow(clippy::too_many_arguments)]
     pub fn query<'a>(
@@ -352,6 +403,8 @@ impl PyGateway {
         channel_relations: Option<Wrap<ChannelRelationsMode>>,
         channel_relations_max_depth: Option<usize>,
         channel_notices: bool,
+        detector_target: Option<PySubdir>,
+        constraints: Vec<PyMatchSpec>,
     ) -> PyResult<Bound<'a, PyAny>> {
         // Convert Python sources to Rust Source enum
         let rust_sources: Vec<Source> = sources
@@ -366,6 +419,11 @@ impl PyGateway {
                 .query(rust_sources, platforms.into_iter().map(|p| p.inner), specs)
                 .recursive(recursive)
                 .channel_notices(channel_notices);
+            if let Some(target) = detector_target {
+                query = query
+                    .virtual_package_detectors(target.inner)
+                    .constraints(constraints.into_iter().map(Into::into));
+            }
 
             if let Some(mode) = channel_relations {
                 query = query.channel_relations(mode.0);
@@ -407,7 +465,27 @@ impl PyGateway {
                 .into_iter()
                 .map(PyChannelNotice::from)
                 .collect::<Vec<_>>();
-            Ok((records, removed, notices))
+            let detectors = output.virtual_package_detectors.map(|detectors| {
+                (
+                    PySubdir::from(detectors.target_platform),
+                    detectors
+                        .wanted_names
+                        .into_iter()
+                        .map(PyPackageName::from)
+                        .collect::<Vec<_>>(),
+                    detectors
+                        .registrations
+                        .into_iter()
+                        .map(PyDetectorRegistration::from)
+                        .collect::<Vec<_>>(),
+                    detectors
+                        .rejected
+                        .into_iter()
+                        .map(PyRejectedDetectorRegistration::from)
+                        .collect::<Vec<_>>(),
+                )
+            });
+            Ok((records, removed, notices, detectors))
         })
     }
 
@@ -447,6 +525,58 @@ impl PyGateway {
         })
     }
 
+    /// Collects the virtual package detectors registered by `channels` and
+    /// their related channels for the supplied subdirs, in CEP 42 channel order.
+    #[pyo3(signature = (
+        channels,
+        subdirs,
+        channel_relations=None,
+        channel_relations_max_depth=None,
+    ))]
+    pub fn virtual_package_detectors<'a>(
+        &self,
+        py: Python<'a>,
+        channels: Vec<PyChannel>,
+        subdirs: Vec<PySubdir>,
+        channel_relations: Option<Wrap<ChannelRelationsMode>>,
+        channel_relations_max_depth: Option<usize>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let gateway = self.inner.clone();
+        let channels: Vec<rattler_conda_types::Channel> =
+            channels.into_iter().map(|channel| channel.inner).collect();
+        let show_progress = self.show_progress;
+        future_into_py(py, async move {
+            let mut query = gateway.virtual_package_detectors(
+                channels,
+                subdirs.into_iter().map(|subdir| subdir.inner),
+            );
+            if let Some(mode) = channel_relations {
+                query = query.channel_relations(mode.0);
+            }
+            if let Some(depth) = channel_relations_max_depth {
+                query = query.channel_relations_max_depth(depth);
+            }
+            if show_progress {
+                query = query
+                    .with_reporter(rattler_repodata_gateway::IndicatifReporter::builder().finish());
+            }
+            let output = query.execute().await.map_err(PyRattlerError::from)?;
+            emit_gateway_warnings(output.warnings)?;
+            Ok((
+                output
+                    .registrations
+                    .into_iter()
+                    .map(PyDetectorRegistration::from)
+                    .collect::<Vec<_>>(),
+                output
+                    .rejected
+                    .into_iter()
+                    .map(PyRejectedDetectorRegistration::from)
+                    .collect::<Vec<_>>(),
+            ))
+        })
+    }
+
     #[pyo3(signature = (
         sources,
         platforms,
@@ -476,11 +606,12 @@ impl PyGateway {
             Vec::new();
 
         for source in rust_sources {
-            match source {
-                Source::Channel(channel) => channels.push(channel),
-                Source::Custom(custom) => custom_sources.push(custom),
-                Source::SparseRepoData(sparse) => sparse_sources.extend(sparse),
-            }
+            split_source(
+                source,
+                &mut channels,
+                &mut custom_sources,
+                &mut sparse_sources,
+            );
         }
 
         let platforms_vec: Vec<rattler_conda_types::Subdir> =
@@ -539,6 +670,26 @@ impl PyGateway {
                 notices,
             ))
         })
+    }
+}
+
+/// Splits `source` into channels, custom sources and sparse repodata. The
+/// sources of a group are split like sources that are passed on their own.
+fn split_source(
+    source: Source,
+    channels: &mut Vec<rattler_conda_types::Channel>,
+    custom_sources: &mut Vec<Arc<dyn rattler_repodata_gateway::RepoDataSource>>,
+    sparse_sources: &mut Vec<Arc<rattler_repodata_gateway::sparse::SparseRepoData>>,
+) {
+    match source {
+        Source::Channel(channel) => channels.push(channel),
+        Source::Custom(custom) => custom_sources.push(custom),
+        Source::SparseRepoData(sparse) => sparse_sources.extend(sparse),
+        Source::Multi(multi_source) => {
+            for member in multi_source.sources() {
+                split_source(member.clone(), channels, custom_sources, sparse_sources);
+            }
+        }
     }
 }
 

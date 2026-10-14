@@ -21,6 +21,7 @@ mod driver;
 mod entry_point;
 pub mod link;
 pub mod link_script;
+mod prefix_replacement;
 mod python;
 mod transaction;
 pub mod unlink;

@@ -88,7 +88,7 @@ impl VersionWithSource {
     pub fn as_str(&self) -> Cow<'_, str> {
         match &self.source {
             Some(source) => Cow::Borrowed(source.as_ref()),
-            None => Cow::Owned(format!("{}", &self.version)),
+            None => Cow::Owned(format!("{}", self.version)),
         }
     }
 
@@ -143,7 +143,7 @@ impl Display for VersionWithSource {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.source {
             Some(source) => write!(f, "{}", source.as_ref()),
-            None => write!(f, "{}", &self.version),
+            None => write!(f, "{}", self.version),
         }
     }
 }

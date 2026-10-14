@@ -20,8 +20,17 @@ export const platformNames = [
     "freebsd-32",
     "freebsd-64",
     "freebsd-arm64",
+    "freebsd-ppc64le",
+    "freebsd-ppc64",
     "osx-64",
     "osx-arm64",
+    "ios-arm64",
+    "iossimulator-arm64",
+    "iossimulator-64",
+    "android-aarch64",
+    "android-armv7a",
+    "android-64",
+    "android-32",
     "win-32",
     "win-64",
     "win-arm64",
@@ -62,6 +71,7 @@ export const archNames = [
     "arm64",
     "armv6l",
     "armv7l",
+    "armv7a",
     "loongarch64",
     "ppc64le",
     "ppc64",
@@ -86,7 +96,7 @@ export type Arch = (typeof archNames)[number];
  *
  * @public
  */
-export function isArch(maybeArch: unknown): maybeArch is Platform {
+export function isArch(maybeArch: unknown): maybeArch is Arch {
     return (
         typeof maybeArch === "string" && archNames.includes(maybeArch as Arch)
     );
@@ -132,10 +142,28 @@ export function platformArch(platform: Platform): Arch | null {
             return "x86_64";
         case "freebsd-arm64":
             return "arm64";
+        case "freebsd-ppc64le":
+            return "ppc64le";
+        case "freebsd-ppc64":
+            return "ppc64";
         case "osx-64":
             return "x86_64";
         case "osx-arm64":
             return "arm64";
+        case "ios-arm64":
+            return "arm64";
+        case "iossimulator-arm64":
+            return "arm64";
+        case "iossimulator-64":
+            return "x86_64";
+        case "android-aarch64":
+            return "aarch64";
+        case "android-armv7a":
+            return "armv7a";
+        case "android-64":
+            return "x86_64";
+        case "android-32":
+            return "x86";
         case "win-32":
             return "x86";
         case "win-64":

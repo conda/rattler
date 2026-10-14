@@ -24,6 +24,8 @@ SubdirLiteral = Literal[
     "freebsd-32",
     "freebsd-64",
     "freebsd-arm64",
+    "freebsd-ppc64le",
+    "freebsd-ppc64",
     "osx-64",
     "osx-arm64",
     "ios-arm64",
@@ -125,7 +127,7 @@ class Subdir(metaclass=SubdirSingleton):
         >>> next(Subdir.all())
         Subdir(noarch)
         >>> len(list(Subdir.all()))
-        32
+        34
         >>>
         """
         return (cls._from_py_subdir(p) for p in PySubdir.all())

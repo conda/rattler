@@ -68,9 +68,9 @@ impl CacheKey {
         let segment = match &self.origin_hash {
             Some(url_hash) => format!(
                 "{}-{}-{}-{}",
-                &self.name, &self.version, &self.build_string, url_hash
+                self.name, self.version, self.build_string, url_hash
             ),
-            None => format!("{}-{}-{}", &self.name, &self.version, &self.build_string),
+            None => format!("{}-{}-{}", self.name, self.version, self.build_string),
         };
         ensure_safe_path_component(&segment)?;
         Ok(segment)

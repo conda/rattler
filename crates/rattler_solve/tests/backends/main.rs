@@ -21,6 +21,7 @@ mod conditional_tests;
 mod extras_tests;
 mod helpers;
 mod min_age_tests;
+mod multichannel_tests;
 mod solver_case_tests;
 mod sorting_tests;
 mod strategy_tests;
@@ -533,7 +534,7 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
-        fn test_min_age_with_exemption() {
+        fn test_min_age_with_package_override() {
             crate::min_age_tests::solve_min_age_with_package_override::<$T>();
         }
 
@@ -543,7 +544,7 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
-        fn test_min_age_exempt_dependency() {
+        fn test_min_age_package_override_dependency() {
             crate::min_age_tests::solve_min_age_package_override_dependency::<$T>();
         }
 
@@ -558,13 +559,43 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
-        fn test_min_age_exempt_no_timestamp() {
+        fn test_min_age_package_override_no_timestamp() {
             crate::min_age_tests::solve_min_age_package_override_no_timestamp::<$T>();
         }
 
         #[test]
         fn test_min_age_per_channel() {
             crate::min_age_tests::solve_min_age_per_channel::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exemption() {
+            crate::min_age_tests::solve_min_age_exemption::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exemption_build() {
+            crate::min_age_tests::solve_min_age_exemption_build::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exemption_not_transitive() {
+            crate::min_age_tests::solve_min_age_exemption_not_transitive::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exemption_no_timestamp() {
+            crate::min_age_tests::solve_min_age_exemption_no_timestamp::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exemption_channel() {
+            crate::min_age_tests::solve_min_age_exemption_channel::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exemption_subdir_and_file_name() {
+            crate::min_age_tests::solve_min_age_exemption_subdir_and_file_name::<$T>();
         }
 
         #[test]
@@ -743,6 +774,41 @@ macro_rules! solver_backend_tests {
         fn test_solve_with_unparsable_dependency() {
             crate::solver_case_tests::solve_with_unparsable_dependency::<$T>();
         }
+
+        #[test]
+        fn test_multichannel_channel_priority() {
+            crate::multichannel_tests::multichannel_channel_priority::<$T>();
+        }
+
+        #[test]
+        fn test_multichannel_strict_priority_is_per_package() {
+            crate::multichannel_tests::multichannel_strict_priority_is_per_package::<$T>();
+        }
+
+        #[test]
+        fn test_multichannel_after_channel() {
+            crate::multichannel_tests::multichannel_after_channel::<$T>();
+        }
+
+        #[test]
+        fn test_multichannel_multiple_multichannels() {
+            crate::multichannel_tests::multichannel_multiple_multichannels::<$T>();
+        }
+
+        #[test]
+        fn test_multichannel_members_apart() {
+            crate::multichannel_tests::multichannel_members_apart::<$T>();
+        }
+
+        #[test]
+        fn test_multichannel_dependency_from_other_member() {
+            crate::multichannel_tests::multichannel_dependency_from_other_member::<$T>();
+        }
+
+        #[test]
+        fn test_multichannel_ties() {
+            crate::multichannel_tests::multichannel_ties::<$T>();
+        }
     };
 }
 
@@ -808,6 +874,7 @@ mod libsolv_c {
         let libsolv_repodata = rattler_solve::libsolv_c::RepoData {
             records: repo_data.iter().collect(),
             solv_file: Some(&cached_repo_data),
+            multi_channel: None,
         };
 
         let specs: Vec<MatchSpec> = vec!["foo<4".parse().unwrap()];
@@ -894,6 +961,13 @@ mod resolvo {
     };
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);
+
+    #[test]
+    fn test_multichannel_channel_specific_specs() {
+        crate::multichannel_tests::multichannel_channel_specific_specs::<
+            rattler_solve::resolvo::Solver,
+        >();
+    }
 
     /// When a single node in the conflict merges many versions, the version list
     /// is abbreviated with an ellipsis instead of printing every version.

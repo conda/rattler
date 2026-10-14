@@ -3,6 +3,7 @@ mod boxed;
 mod builder;
 mod channel_config;
 mod channel_expander;
+mod channel_expansion;
 mod channel_notices;
 mod channel_relations;
 #[cfg(not(target_arch = "wasm32"))]
@@ -19,6 +20,7 @@ mod sharded_subdir;
 mod source;
 mod subdir;
 mod subdir_builder;
+mod virtual_package_detectors_query;
 mod warning;
 mod who_needs_query;
 
@@ -37,7 +39,9 @@ use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use error::GatewayError;
 #[cfg(feature = "indicatif")]
 pub use indicatif::{IndicatifReporter, IndicatifReporterBuilder};
-pub use query::{NamesQuery, NamesQueryOutput, RepoDataQuery, RepoDataQueryOutput};
+pub use query::{
+    NamesQuery, NamesQueryOutput, QueryVirtualPackageDetectors, RepoDataQuery, RepoDataQueryOutput,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, ChannelRelations, MatchSpec, RepoDataRecord, Subdir};
@@ -45,9 +49,14 @@ use rattler_networking::LazyClient;
 pub use repo_data::{RemovedPackages, RepoData};
 use run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
 pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
-pub use source::{RepoDataSource, Source};
+pub use source::{MultiSource, MultiSourceError, RepoDataSource, Source};
 use subdir::SubdirState;
 use tracing::{Level, instrument};
+pub use virtual_package_detectors_query::{
+    AcceptedDetectorRegistration, RegistrationConflict, RegistrationConflictKind,
+    RejectedDetectorRegistration, VirtualPackageDetectorWarning, VirtualPackageDetectorsOutput,
+    VirtualPackageDetectorsQuery,
+};
 pub use warning::GatewayWarning;
 pub use who_needs_query::WhoNeedsQuery;
 
@@ -128,6 +137,8 @@ impl Gateway {
     /// The `sources` parameter accepts any type that implements `Into<Source>`.
     /// This includes:
     /// - `Channel` - traditional conda channels
+    /// - `MultiSource` - a named group of sources, each queried as if it was
+    ///   passed on its own; see [`RepoData::multi_channel`]
     /// - `Arc<dyn RepoDataSource>` - custom repodata sources
     /// - `Source` - the enum itself
     ///
@@ -191,6 +202,38 @@ impl Gateway {
             self.inner.clone(),
             channels.into_iter().map(Into::into).collect(),
             platforms.into_iter().collect(),
+        )
+    }
+
+    /// The package cache this gateway shares with the installers it feeds.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn package_cache(&self) -> &PackageCache {
+        &self.inner.package_cache
+    }
+
+    /// Collects the virtual package detectors that `channels` and the
+    /// channels they relate to register for the supplied `subdirs`.
+    ///
+    /// Registrations of these subdirs are combined per channel and accepted
+    /// or rejected in CEP 42 channel order. Duplicate subdirs are ignored,
+    /// and no subdirs are added implicitly. To include platform-independent
+    /// registrations, pass `Subdir::NoArch` explicitly alongside the target.
+    /// See [`VirtualPackageDetectorsQuery`] for the options and output.
+    pub fn virtual_package_detectors<AsChannel, ChannelIter, SubdirIter>(
+        &self,
+        channels: ChannelIter,
+        subdirs: SubdirIter,
+    ) -> VirtualPackageDetectorsQuery
+    where
+        AsChannel: Into<Channel>,
+        ChannelIter: IntoIterator<Item = AsChannel>,
+        SubdirIter: IntoIterator<Item = Subdir>,
+    {
+        VirtualPackageDetectorsQuery::new(
+            self.inner.clone(),
+            channels.into_iter().map(Into::into).collect(),
+            subdirs.into_iter().collect(),
+            None,
         )
     }
 
@@ -2291,6 +2334,117 @@ mod test {
             "should have custom-pkg from mock source"
         );
         assert_eq!(custom_records[0].package_record.version.as_str(), "1.0.0");
+    }
+
+    fn multichannel_test_channel(name: &str) -> Channel {
+        Channel::try_from_directory(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../test-data/channels/{name}")),
+        )
+        .unwrap()
+    }
+
+    fn multichannel_test_sparse_repo_data(name: &str) -> Arc<crate::sparse::SparseRepoData> {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
+            "../../test-data/channels/{name}/noarch/repodata.json"
+        ));
+        Arc::new(
+            crate::sparse::SparseRepoData::from_file(
+                multichannel_test_channel(name),
+                "noarch",
+                path,
+                None,
+            )
+            .unwrap(),
+        )
+    }
+
+    /// One line per bucket: the multichannel it is marked with and the
+    /// channel its records refer to.
+    fn render_multichannel_buckets(output: &[RepoData]) -> String {
+        output
+            .iter()
+            .map(|repo_data| {
+                let channels = repo_data
+                    .iter()
+                    .filter_map(|record| record.channel.as_deref())
+                    .map(|channel| channel.trim_end_matches('/').rsplit('/').next().unwrap())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{} | {channels}", repo_data.multi_channel().unwrap_or("-"))
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Every source of a group is queried as if it was passed on its own, and
+    /// its records end up in their own bucket, in the order of the group,
+    /// marked with the name of the group.
+    #[rstest]
+    #[case::channels(false)]
+    #[case::sparse_repo_data(true)]
+    #[tokio::test]
+    async fn test_multi_source(#[case] sparse: bool) {
+        let source = |name: &str| {
+            if sparse {
+                super::Source::from(multichannel_test_sparse_repo_data(name))
+            } else {
+                super::Source::from(multichannel_test_channel(name))
+            }
+        };
+        let multi_source = super::MultiSource::new(
+            "grp",
+            vec![source("multichannel-b"), source("multichannel-a")],
+        )
+        .unwrap();
+
+        let output = Gateway::new()
+            .query(
+                vec![super::Source::from(multi_source), source("multichannel-c")],
+                vec![Subdir::NoArch],
+                vec![PackageName::from_str("pkg").unwrap()],
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        insta::allow_duplicates! {
+            insta::assert_snapshot!(render_multichannel_buckets(&output), @r"
+            grp | multichannel-b
+            grp | multichannel-a
+            - | multichannel-c
+            ");
+        }
+    }
+
+    #[test]
+    fn test_invalid_multi_source() {
+        let channel = || super::Source::from(multichannel_test_channel("multichannel-a"));
+        let sparse = || super::Source::from(multichannel_test_sparse_repo_data("multichannel-a"));
+        let nested = super::MultiSource::new("inner", vec![channel()]).unwrap();
+
+        let errors = [
+            super::MultiSource::new("grp", Vec::new()),
+            super::MultiSource::new("grp", vec![channel(), super::Source::from(nested)]),
+            super::MultiSource::new("grp", vec![channel(), channel()]),
+            super::MultiSource::new("grp", vec![sparse(), sparse()]),
+        ]
+        .into_iter()
+        .map(|result| {
+            result.err().unwrap().to_string().replace(
+                &multichannel_test_channel("multichannel-a")
+                    .base_url
+                    .to_string(),
+                "[CHANNEL]",
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+        insta::assert_snapshot!(errors, @r"
+        multichannel 'grp' does not contain any sources
+        multichannel 'grp' cannot contain another multichannel ('inner')
+        multichannel 'grp' contains '[CHANNEL]' more than once
+        multichannel 'grp' contains 'noarch' of '[CHANNEL]' more than once
+        ");
     }
 
     /// Test that ensures `run_exports` fallback works when `run_exports.json` exists
@@ -4475,6 +4629,49 @@ mod test {
         }
     }
 
+    /// The channels of a multichannel share one priority tier, so a channel
+    /// that a member relates to must outrank or be outranked by the whole
+    /// multichannel: a `base` of any member comes before the first member and
+    /// an `overrides` target comes after the last one. The related channels
+    /// do not join the multichannel.
+    #[tokio::test]
+    async fn test_cep42_relations_of_multichannel_members_surround_the_multichannel() {
+        let dir = tempfile::tempdir().unwrap();
+        write_test_subdir(&dir.path().join("a"), "shared", "1.0.0", None, Some("../y"));
+        write_test_subdir(&dir.path().join("b"), "shared", "2.0.0", Some("../x"), None);
+        write_test_subdir(&dir.path().join("x"), "shared", "3.0.0", None, None);
+        write_test_subdir(&dir.path().join("y"), "shared", "4.0.0", None, None);
+        write_test_subdir(&dir.path().join("c"), "shared", "5.0.0", None, None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let channel = |name: &str| {
+            super::Source::from(Channel::from_url(
+                server.url().join(&format!("{name}/")).unwrap(),
+            ))
+        };
+        let multi_source =
+            super::MultiSource::new("grp", vec![channel("a"), channel("b")]).unwrap();
+
+        let output = Gateway::new()
+            .query(
+                vec![super::Source::from(multi_source), channel("c")],
+                vec![Subdir::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+
+        insta::assert_snapshot!(render_multichannel_buckets(&output.repodata), @r"
+        - | x
+        grp | a
+        grp | b
+        - | y
+        - | c
+        ");
+    }
+
     /// One malformed declaration must produce ONE warning, not one
     /// per queried platform.
     #[tokio::test]
@@ -4572,6 +4769,147 @@ mod test {
             )),
             "expected UserOrderConflict warning; got {:?}",
             output.warnings,
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn package_fetches_run_while_channel_discovery_is_pending() {
+        use axum::{Router, routing::get};
+        use std::time::Duration;
+        use tokio::{net::TcpListener, sync::Notify, time::timeout};
+
+        struct UnblockingSource(Arc<Notify>);
+
+        #[async_trait::async_trait]
+        impl super::RepoDataSource for UnblockingSource {
+            async fn fetch_package_records(
+                &self,
+                _platform: Subdir,
+                _name: &PackageName,
+            ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
+                self.0.notify_one();
+                Ok(vec![Arc::new(make_test_record(
+                    "shared", "9.0.0", "linux-64",
+                ))])
+            }
+
+            fn package_names(&self, _platform: Subdir) -> Vec<String> {
+                vec!["shared".to_string()]
+            }
+        }
+
+        // Discovery cannot finish until an independent package fetch runs.
+        let package_fetched = Arc::new(Notify::new());
+        let wait_for_package = package_fetched.clone();
+        let app = Router::new().route(
+            "/linux-64/repodata.json",
+            get(move || {
+                let wait_for_package = wait_for_package.clone();
+                async move {
+                    wait_for_package.notified().await;
+                    r#"{"info":{"subdir":"linux-64"},"packages":{},"packages.conda":{}}"#
+                }
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let channel = Channel::from_url(Url::parse(&format!("http://{address}/")).unwrap());
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(UnblockingSource(package_fetched));
+        let gateway = Gateway::new();
+        let result = timeout(
+            Duration::from_secs(5),
+            gateway
+                .query(
+                    [
+                        super::Source::Channel(channel),
+                        super::Source::Custom(source),
+                    ],
+                    [Subdir::Linux64],
+                    [PackageName::try_from("shared").unwrap()],
+                )
+                .execute(),
+        )
+        .await;
+        server.abort();
+        let output = result
+            .expect("discovery blocked independent package fetching")
+            .unwrap();
+        assert!(output[0].is_empty());
+        assert_eq!(
+            output[1]
+                .iter()
+                .map(|record| record.package_record.version.as_str())
+                .collect::<Vec<_>>(),
+            ["9.0.0"],
+        );
+    }
+
+    #[tokio::test]
+    async fn custom_source_records_contribute_detector_demand_without_registration_origins() {
+        let dir = tempfile::tempdir().unwrap();
+        for platform in [Subdir::Linux64, Subdir::NoArch] {
+            let subdir = dir.path().join(platform.as_str());
+            std::fs::create_dir_all(&subdir).unwrap();
+            let registrations = if platform == Subdir::NoArch {
+                serde_json::json!({"custom-detect": ["__custom"], "extra-detect": ["__extra"]})
+            } else {
+                serde_json::json!({})
+            };
+            std::fs::write(subdir.join("repodata.json"), serde_json::to_vec(&serde_json::json!({
+                "info": {"subdir": platform.as_str(), "virtual_package_detectors": registrations},
+                "packages": {}, "packages.conda": {},
+            })).unwrap()).unwrap();
+        }
+        let channel = Channel::from_url(Url::from_directory_path(dir.path()).unwrap());
+        let mut source = MockRepoDataSource::new();
+        let mut record = make_test_record("consumer", "1", "linux-64");
+        record.package_record.depends = vec!["__custom >=1".to_string()];
+        source.add_record(Subdir::Linux64, record);
+        let output = Gateway::new()
+            .query(
+                [
+                    super::Source::Custom(Arc::new(source)),
+                    super::Source::Channel(channel.clone()),
+                ],
+                [Subdir::Linux64],
+                [PackageName::new_unchecked("consumer")],
+            )
+            .virtual_package_detectors(Subdir::Linux64)
+            .constraints([MatchSpec::from_str("__extra >=1", Lenient).unwrap()])
+            .await
+            .unwrap();
+        assert_eq!(
+            output.repodata[0]
+                .iter()
+                .map(|r| r.package_record.name.as_normalized())
+                .collect::<Vec<_>>(),
+            ["consumer"]
+        );
+        assert!(output.repodata[1].is_empty());
+        let detectors = output.virtual_package_detectors.unwrap();
+        assert_eq!(
+            detectors
+                .wanted_names
+                .iter()
+                .map(PackageName::as_normalized)
+                .collect::<Vec<_>>(),
+            ["__custom", "__extra"]
+        );
+        assert!(
+            detectors
+                .registrations
+                .iter()
+                .all(|r| r.origin() == &channel.base_url)
+        );
+        assert_eq!(
+            detectors
+                .registrations
+                .iter()
+                .map(|r| r.registration.detector.as_normalized())
+                .collect::<Vec<_>>(),
+            ["custom-detect", "extra-detect"]
         );
     }
 }

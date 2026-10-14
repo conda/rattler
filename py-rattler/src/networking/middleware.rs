@@ -183,6 +183,9 @@ impl From<PyS3Config> for S3Config {
                 endpoint_url: custom.endpoint_url,
                 region: custom.region,
                 addressing_style: custom.addressing_style,
+                // Python callers configure credentials through the
+                // authentication storage, not through a provider.
+                credentials_provider: None,
             },
         }
     }

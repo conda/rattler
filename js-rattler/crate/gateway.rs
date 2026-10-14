@@ -1,11 +1,13 @@
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
 use rattler_conda_types::{
-    Channel, ChannelNoticeLevel, MatchSpec, ParseMatchSpecOptions, RepoDataRecord,
-    RepodataRevision, Subdir,
+    Channel, ChannelNoticeLevel, GenericVirtualPackage, MatchSpec, PackageName, PackageRecord,
+    Subdir, Version,
 };
 use rattler_repodata_gateway::{
-    ChannelConfig, Gateway, GatewayWarning, SourceConfig, fetch::CacheAction,
+    CacheClearMode, ChannelConfig, Gateway, GatewayWarning, SourceConfig, SubdirSelection,
+    fetch::CacheAction,
+    who_needs::{DependencyKind, Dependent, RunExportKind, WhoNeedsTarget},
 };
 use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
@@ -30,7 +32,78 @@ pub(crate) fn emit_gateway_warnings(warnings: Vec<GatewayWarning>) {
     }
 }
 
-use crate::JsResult;
+use crate::{
+    JsResult, match_spec::JsMatchSpec, package_record::JsPackageRecord,
+    repo_data_record::JsRepoDataRecord,
+};
+
+/// Parses channel names or urls the way every gateway method does.
+fn parse_channels(channels: Vec<String>) -> JsResult<Vec<Channel>> {
+    // TODO: Dont hardcode
+    let channel_config =
+        rattler_conda_types::ChannelConfig::default_with_root_dir(PathBuf::from(""));
+    Ok(channels
+        .into_iter()
+        .map(|s| Channel::from_str(&s, &channel_config))
+        .collect::<Result<Vec<_>, _>>()?)
+}
+
+fn parse_platforms(platforms: Vec<String>) -> JsResult<Vec<Subdir>> {
+    Ok(platforms
+        .into_iter()
+        .map(|p| Subdir::from_str(&p))
+        .collect::<Result<Vec<_>, _>>()?)
+}
+
+/// Sets `key` on a plain JS object.
+fn set_property(object: &js_sys::Object, key: &str, value: &JsValue) {
+    js_sys::Reflect::set(object, &JsValue::from_str(key), value)
+        .expect("setting a property on a plain object cannot fail");
+}
+
+/// Converts a [`Dependent`] into the plain object shape of the TypeScript
+/// `Dependent` type: the record, the dependency string, the `kind`, and
+/// either `extra` or `runExportKind` depending on the kind.
+fn dependent_to_js(dependent: Dependent) -> JsValue {
+    let object = js_sys::Object::new();
+    set_property(
+        &object,
+        "record",
+        &JsValue::from(JsRepoDataRecord::from(std::sync::Arc::unwrap_or_clone(
+            dependent.record,
+        ))),
+    );
+    set_property(
+        &object,
+        "dependency",
+        &JsValue::from_str(&dependent.dependency),
+    );
+    let kind = match dependent.kind {
+        DependencyKind::Depends => "depends",
+        DependencyKind::Constrains => "constrains",
+        DependencyKind::ExtraDepends(extra) => {
+            set_property(&object, "extra", &JsValue::from_str(&extra));
+            "extra_depends"
+        }
+        DependencyKind::RunExport(run_export_kind) => {
+            let run_export_kind = match run_export_kind {
+                RunExportKind::Weak => "weak",
+                RunExportKind::Strong => "strong",
+                RunExportKind::Noarch => "noarch",
+                RunExportKind::WeakConstrains => "weak_constrains",
+                RunExportKind::StrongConstrains => "strong_constrains",
+            };
+            set_property(
+                &object,
+                "runExportKind",
+                &JsValue::from_str(run_export_kind),
+            );
+            "run_export"
+        }
+    };
+    set_property(&object, "kind", &JsValue::from_str(kind));
+    object.into()
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -199,13 +272,106 @@ impl JsGateway {
         })
     }
 
+    /// Clears the in-memory repodata cache of `channel` for the given
+    /// platforms, or for every platform when none are given. Subsequent
+    /// queries fetch the repodata again.
+    #[wasm_bindgen(js_name = "clearRepodataCache")]
+    pub fn clear_repodata_cache(
+        &self,
+        #[wasm_bindgen(param_description = "The channel name or url")] channel: String,
+        #[wasm_bindgen(
+            param_description = "The platforms to clear, all platforms when omitted",
+            unchecked_param_type = "string[] | undefined"
+        )]
+        platforms: Option<Vec<String>>,
+    ) -> JsResult<()> {
+        let channel = parse_channels(vec![channel])?
+            .pop()
+            .expect("one channel in, one channel out");
+        let subdirs = match platforms {
+            Some(platforms) => SubdirSelection::Some(
+                parse_platforms(platforms)?
+                    .into_iter()
+                    .map(|platform| platform.to_string())
+                    .collect(),
+            ),
+            None => SubdirSelection::All,
+        };
+        // Only the in-memory cache exists on wasm, so this cannot fail.
+        self.inner
+            .clear_repodata_cache(&channel, subdirs, CacheClearMode::InMemoryOnly)
+            .expect("clearing the in-memory cache cannot fail");
+        Ok(())
+    }
+
+    /// Finds the records that depend on the package `name`.
+    #[wasm_bindgen(js_name = "whoNeedsName", unchecked_return_type = "Promise<unknown[]>")]
+    pub fn who_needs_name(
+        &self,
+        channels: Vec<String>,
+        platforms: Vec<String>,
+        name: String,
+    ) -> JsResult<js_sys::Promise> {
+        let name = PackageName::try_from(name)?;
+        self.who_needs(channels, platforms, name.into())
+    }
+
+    /// Finds the records with a dependency whose match spec matches
+    /// `record`.
+    #[wasm_bindgen(
+        js_name = "whoNeedsRecord",
+        unchecked_return_type = "Promise<unknown[]>"
+    )]
+    pub fn who_needs_record(
+        &self,
+        channels: Vec<String>,
+        platforms: Vec<String>,
+        record: &JsPackageRecord,
+    ) -> JsResult<js_sys::Promise> {
+        let record: &PackageRecord = record.as_ref();
+        self.who_needs(channels, platforms, record.clone().into())
+    }
+
+    /// Finds the records with a dependency whose match spec matches
+    /// `record`.
+    #[wasm_bindgen(
+        js_name = "whoNeedsRepoDataRecord",
+        unchecked_return_type = "Promise<unknown[]>"
+    )]
+    pub fn who_needs_repo_data_record(
+        &self,
+        channels: Vec<String>,
+        platforms: Vec<String>,
+        record: &JsRepoDataRecord,
+    ) -> JsResult<js_sys::Promise> {
+        let record: &PackageRecord = record.as_ref();
+        self.who_needs(channels, platforms, record.clone().into())
+    }
+
+    /// Finds the records with a dependency whose match spec matches the
+    /// virtual package `name`, `version` and `build_string` (e.g. `__cuda`).
+    #[wasm_bindgen(
+        js_name = "whoNeedsVirtualPackage",
+        unchecked_return_type = "Promise<unknown[]>"
+    )]
+    pub fn who_needs_virtual_package(
+        &self,
+        channels: Vec<String>,
+        platforms: Vec<String>,
+        name: String,
+        version: String,
+        build_string: String,
+    ) -> JsResult<js_sys::Promise> {
+        let virtual_package = GenericVirtualPackage {
+            name: PackageName::try_from(name)?,
+            version: Version::from_str(&version)?,
+            build_string,
+        };
+        self.who_needs(channels, platforms, virtual_package.into())
+    }
+
     pub async fn channel_notices(&self, channels: Vec<String>) -> Result<JsValue, JsError> {
-        let channel_config =
-            rattler_conda_types::ChannelConfig::default_with_root_dir(PathBuf::from(""));
-        let channels = channels
-            .into_iter()
-            .map(|channel| Channel::from_str(&channel, &channel_config))
-            .collect::<Result<Vec<_>, _>>()?;
+        let channels = parse_channels(channels)?;
         let notices: Vec<_> = self
             .inner
             .channel_notices(channels.iter())
@@ -214,6 +380,28 @@ impl JsGateway {
             .map(Notice::from)
             .collect();
         Ok(serde_wasm_bindgen::to_value(&notices)?)
+    }
+
+    /// Runs a reverse dependency query. The inputs are parsed synchronously,
+    /// so the borrowed target can be cloned before the returned promise
+    /// outlives the call.
+    fn who_needs(
+        &self,
+        channels: Vec<String>,
+        platforms: Vec<String>,
+        target: WhoNeedsTarget,
+    ) -> JsResult<js_sys::Promise> {
+        let channels = parse_channels(channels)?;
+        let platforms = parse_platforms(platforms)?;
+        let query = self.inner.who_needs(channels, platforms, target);
+        Ok(wasm_bindgen_futures::future_to_promise(async move {
+            let dependents = query.execute().await.map_err(JsError::from)?;
+            Ok(dependents
+                .into_iter()
+                .map(dependent_to_js)
+                .collect::<js_sys::Array>()
+                .into())
+        }))
     }
 
     /// Forward each [`GatewayWarning`] to the configured warning callback,
@@ -238,18 +426,8 @@ impl JsGateway {
         platforms: Vec<String>,
         channel_notices: bool,
     ) -> JsResult<JsValue> {
-        // TODO: Dont hardcode
-        let channel_config =
-            rattler_conda_types::ChannelConfig::default_with_root_dir(PathBuf::from(""));
-
-        let channels = channels
-            .into_iter()
-            .map(|s| Channel::from_str(&s, &channel_config))
-            .collect::<Result<Vec<_>, _>>()?;
-        let platforms = platforms
-            .into_iter()
-            .map(|p| Subdir::from_str(&p))
-            .collect::<Result<Vec<_>, _>>()?;
+        let channels = parse_channels(channels)?;
+        let platforms = parse_platforms(platforms)?;
 
         let output = self
             .inner
@@ -284,33 +462,18 @@ impl JsGateway {
         &self,
         channels: Vec<String>,
         platforms: Vec<String>,
-        specs: Vec<String>,
+        #[wasm_bindgen(
+            param_description = "The match specs to query for. They are consumed by the call."
+        )]
+        specs: Vec<JsMatchSpec>,
         #[wasm_bindgen(
             param_description = "Whether to recursively fetch the records of dependencies as well"
         )]
         recursive: bool,
     ) -> JsResult<JsValue> {
-        // TODO: Dont hardcode
-        let channel_config =
-            rattler_conda_types::ChannelConfig::default_with_root_dir(PathBuf::from(""));
-
-        let channels = channels
-            .into_iter()
-            .map(|s| Channel::from_str(&s, &channel_config))
-            .collect::<Result<Vec<_>, _>>()?;
-        let platforms = platforms
-            .into_iter()
-            .map(|p| Subdir::from_str(&p))
-            .collect::<Result<Vec<_>, _>>()?;
-        let specs = specs
-            .into_iter()
-            .map(|s| {
-                MatchSpec::from_str(
-                    &s,
-                    ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3),
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let channels = parse_channels(channels)?;
+        let platforms = parse_platforms(platforms)?;
+        let specs = specs.into_iter().map(MatchSpec::from).collect::<Vec<_>>();
 
         let output = self
             .inner
@@ -325,18 +488,21 @@ impl JsGateway {
             .collect::<Vec<_>>();
         self.emit_warnings(output.warnings);
 
-        #[derive(Serialize)]
-        struct QueryOutput<'a> {
-            records: Vec<&'a RepoDataRecord>,
-            warnings: Vec<String>,
-        }
-
         let records = output
             .repodata
             .iter()
             .flat_map(|repodata| repodata.iter())
-            .collect::<Vec<_>>();
-        let serializer = serde_wasm_bindgen::Serializer::json_compatible();
-        Ok(QueryOutput { records, warnings }.serialize(&serializer)?)
+            .map(|record| JsValue::from(JsRepoDataRecord::from(record.clone())))
+            .collect::<js_sys::Array>();
+        let result = js_sys::Object::new();
+        js_sys::Reflect::set(&result, &JsValue::from_str("records"), &records)
+            .expect("setting a property on a plain object cannot fail");
+        js_sys::Reflect::set(
+            &result,
+            &JsValue::from_str("warnings"),
+            &serde_wasm_bindgen::to_value(&warnings)?,
+        )
+        .expect("setting a property on a plain object cannot fail");
+        Ok(result.into())
     }
 }

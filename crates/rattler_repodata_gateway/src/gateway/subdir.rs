@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use ahash::HashMap;
-use rattler_conda_types::{ChannelRelations, PackageName, RepoDataRecord, RepodataRevisions};
+use rattler_conda_types::{
+    ChannelRelations, DetectorRegistrationMetadata, PackageName, RepoDataRecord, RepodataRevisions,
+};
 
 use super::GatewayError;
 use crate::Reporter;
@@ -118,6 +120,15 @@ impl SubdirState {
             SubdirState::NotFound => None,
         }
     }
+
+    /// Detector registration metadata, or `None` if absent or not found.
+    /// Names and registration semantics are validated during discovery.
+    pub fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
+        match self {
+            SubdirState::Found(subdir) => subdir.virtual_package_detectors(),
+            SubdirState::NotFound => None,
+        }
+    }
 }
 
 /// Fetches and caches repodata records by package name for a specific
@@ -203,6 +214,11 @@ impl SubdirData {
     pub fn channel_relations(&self) -> Option<&ChannelRelations> {
         self.client.channel_relations()
     }
+
+    /// Detector registration metadata, if any, before semantic validation.
+    pub fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
+        self.client.virtual_package_detectors()
+    }
 }
 
 /// A client that can be used to fetch repodata for a specific subdirectory.
@@ -230,6 +246,12 @@ pub trait SubdirClient: Send + Sync {
     ///
     /// [CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
     fn channel_relations(&self) -> Option<&ChannelRelations> {
+        None
+    }
+
+    /// Detector registration metadata, before semantic validation.
+    /// Sources without repodata metadata keep the default.
+    fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
         None
     }
 }

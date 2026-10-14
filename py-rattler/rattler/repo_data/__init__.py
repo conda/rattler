@@ -5,6 +5,7 @@ from rattler.repo_data.gateway import (
     GatewayQueryResult,
     SourceConfig,
 )
+from rattler.repo_data.multi_source import MultiSource
 from rattler.repo_data.package_record import PackageRecord
 from rattler.repo_data.patch_instructions import PatchInstructions
 from rattler.repo_data.record import RepoDataRecord
@@ -24,6 +25,7 @@ __all__ = [
     "Gateway",
     "GatewayNamesResult",
     "GatewayQueryResult",
+    "MultiSource",
     "PackageFormatSelection",
     "PackageRecord",
     "PatchInstructions",

@@ -19,11 +19,11 @@ pub struct GenericVirtualPackage {
 
 impl Display for GenericVirtualPackage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}={}", &self.name.as_normalized(), &self.version)?;
+        write!(f, "{}={}", self.name.as_normalized(), self.version)?;
         if self.build_string.is_empty() {
             return Ok(());
         }
-        write!(f, "={}", &self.build_string)
+        write!(f, "={}", self.build_string)
     }
 }
 

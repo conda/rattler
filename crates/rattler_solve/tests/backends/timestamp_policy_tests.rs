@@ -78,6 +78,7 @@ pub fn indexed_timestamp_cutoffs<T: SolverImpl + Default>() {
     }
 }
 
+#[allow(deprecated)] // Tests the deprecated package cutoff overrides.
 pub fn timestamp_overrides<T: SolverImpl + Default>() {
     let config = ExcludeNewer::from_datetime(CUTOFF.parse().unwrap())
         .with_timestamp_policy(TimestampPolicy::RequireIndexedTimestamp)

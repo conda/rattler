@@ -100,6 +100,7 @@ async fn test_r2_download_repodata(r2_host: String, r2_credentials: Option<(Stri
                 endpoint_url: Url::parse(&r2_host).unwrap(),
                 region: "auto".into(),
                 addressing_style: S3AddressingStyle::Path,
+                credentials_provider: None,
             },
         )]),
         auth_storage.clone(),
