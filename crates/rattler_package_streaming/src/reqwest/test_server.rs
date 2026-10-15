@@ -194,3 +194,94 @@ fn range_start(req: &Request) -> Option<u64> {
         .parse()
         .ok()
 }
+
+/// How a [`serve_file_overwritten`] server behaves.
+#[derive(Clone, Copy)]
+pub struct ObjectStore {
+    /// Whether responses carry the headers that identify S3.
+    pub s3: bool,
+    /// Whether a request whose `If-Match` no longer matches gets a 412.
+    pub honors_if_match: bool,
+}
+
+/// Spawn a local file server whose file is replaced by one with another entity
+/// tag once the first request has been answered. The bytes served stay the
+/// same, so only the tag reveals the change.
+pub async fn serve_file_overwritten(file_path: impl AsRef<Path>, store: ObjectStore) -> Url {
+    serve_etagged(file_path.as_ref(), store, true).await.0
+}
+
+/// Spawn a local file server that answers like S3, with an entity tag that
+/// never changes and `If-Match` enforced. Also returns how many requests
+/// carried a matching `If-Match`.
+pub async fn serve_file_from_s3(
+    file_path: impl AsRef<Path>,
+) -> (Url, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+    let store = ObjectStore {
+        s3: true,
+        honors_if_match: true,
+    };
+    serve_etagged(file_path.as_ref(), store, false).await
+}
+
+#[derive(Clone)]
+struct EtaggedObject {
+    store: ObjectStore,
+    overwritten: bool,
+    requests: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    matched: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+
+async fn serve_etagged(
+    file_path: &Path,
+    store: ObjectStore,
+    overwritten: bool,
+) -> (Url, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+    let object = EtaggedObject {
+        store,
+        overwritten,
+        requests: std::sync::Arc::default(),
+        matched: std::sync::Arc::default(),
+    };
+    let matched = object.matched.clone();
+    let url = serve(file_path, |router| {
+        router.layer(middleware::from_fn_with_state(object, etag_object))
+    })
+    .await;
+    (url, matched)
+}
+
+async fn etag_object(
+    State(object): State<EtaggedObject>,
+    mut req: Request,
+    next: Next,
+) -> Response {
+    use std::sync::atomic::Ordering;
+
+    let first = object.requests.fetch_add(1, Ordering::SeqCst) == 0;
+    let etag = if first || !object.overwritten {
+        "\"v1\""
+    } else {
+        "\"v2\""
+    };
+    // This server checks `If-Match` against its own ETag, not `ServeDir`.
+    let if_match = req.headers_mut().remove(http::header::IF_MATCH);
+    if if_match.as_ref().is_some_and(|value| value == etag) {
+        object.matched.fetch_add(1, Ordering::SeqCst);
+    }
+    let mut response =
+        if object.store.honors_if_match && if_match.is_some_and(|value| value != etag) {
+            Response::builder()
+                .status(http::StatusCode::PRECONDITION_FAILED)
+                .body(axum::body::Body::empty())
+                .unwrap()
+        } else {
+            next.run(req).await
+        };
+    let headers = response.headers_mut();
+    headers.insert(http::header::ETAG, etag.parse().unwrap());
+    if object.store.s3 {
+        headers.insert("x-amz-request-id", "test".parse().unwrap());
+    }
+    response
+}

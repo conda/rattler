@@ -12,7 +12,7 @@ use futures_util::{
     StreamExt, TryStreamExt,
     stream::{self, BoxStream},
 };
-use http::{StatusCode, header};
+use http::{HeaderValue, StatusCode, header};
 use rattler_digest::Sha256Hash;
 use reqwest::Response;
 use reqwest_middleware::ClientWithMiddleware;
@@ -64,6 +64,8 @@ enum RangeError {
         expected: u64,
         got: u64,
     },
+    #[error("the object changed while it was downloading (expected ETag {etag})")]
+    Changed { etag: String },
 }
 
 impl From<RangeError> for std::io::Error {
@@ -114,6 +116,7 @@ pub(crate) async fn download(
         });
     }
 
+    let etag = s3_etag(&first);
     let mut first = Some(first);
     let parts = part_ranges(first_range.end, total, config.part_size).map(move |range| {
         let task = match first.take() {
@@ -122,6 +125,7 @@ pub(crate) async fn download(
                 get(&client, url.clone(), expected_sha256),
                 range,
                 total,
+                etag.clone(),
             )),
         };
         // Dropping the stream stops the parts that are still downloading.
@@ -156,11 +160,32 @@ fn whole(response: Response) -> reqwest_middleware::Result<Download> {
     })
 }
 
+/// The entity tag every part must carry, when the server is S3.
+///
+/// S3 entity tags identify an object's content, so a part with another tag is
+/// from an object overwritten mid-download. Other servers may compute tags per
+/// replica, so only S3's are compared.
+fn s3_etag(response: &Response) -> Option<HeaderValue> {
+    let headers = response.headers();
+    let is_s3 = headers.contains_key("x-amz-request-id")
+        || headers
+            .get(header::SERVER)
+            .is_some_and(|server| server == "AmazonS3");
+    headers
+        .get(header::ETAG)
+        .filter(|etag| is_s3 && !etag.as_bytes().starts_with(b"W/"))
+        .cloned()
+}
+
 async fn fetch_part(
-    request: reqwest_middleware::RequestBuilder,
+    mut request: reqwest_middleware::RequestBuilder,
     range: Range<u64>,
     total: u64,
+    etag: Option<HeaderValue>,
 ) -> std::io::Result<Bytes> {
+    if let Some(etag) = &etag {
+        request = request.header(header::IF_MATCH, etag.clone());
+    }
     let response = request
         .header(header::RANGE, range_header(&range))
         .send()
@@ -168,9 +193,20 @@ async fn fetch_part(
         .map_err(|err| match err {
             reqwest_middleware::Error::Reqwest(err) => to_io_error(err),
             reqwest_middleware::Error::Middleware(err) => std::io::Error::other(err),
-        })?
-        .error_for_status()
-        .map_err(to_io_error)?;
+        })?;
+    if let Some(etag) = etag {
+        // An error response carries no ETag, so it is reported as itself.
+        let changed = response.status() == StatusCode::PRECONDITION_FAILED
+            || (response.status().is_success()
+                && response.headers().get(header::ETAG) != Some(&etag));
+        if changed {
+            return Err(RangeError::Changed {
+                etag: String::from_utf8_lossy(etag.as_bytes()).into_owned(),
+            }
+            .into());
+        }
+    }
+    let response = response.error_for_status().map_err(to_io_error)?;
     read_part(response, range, total).await
 }
 
@@ -410,6 +446,66 @@ mod tests {
 
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
         assert!(err.to_string().contains("expected a 206"), "{err}");
+    }
+
+    async fn download_overwritten(store: test_server::ObjectStore) -> std::io::Result<Vec<u8>> {
+        let url = test_server::serve_file_overwritten(conda_file(), store).await;
+        download_bytes(url, config()).await
+    }
+
+    fn assert_changed(result: std::io::Result<Vec<u8>>) {
+        let err = result.unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        assert!(
+            err.to_string().contains("changed while it was downloading"),
+            "{err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_s3_object_overwritten_mid_download_fails() {
+        assert_changed(
+            download_overwritten(test_server::ObjectStore {
+                s3: true,
+                honors_if_match: true,
+            })
+            .await,
+        );
+    }
+
+    #[tokio::test]
+    async fn a_part_with_another_s3_etag_fails_when_if_match_is_ignored() {
+        assert_changed(
+            download_overwritten(test_server::ObjectStore {
+                s3: true,
+                honors_if_match: false,
+            })
+            .await,
+        );
+    }
+
+    #[tokio::test]
+    async fn etags_from_servers_other_than_s3_are_not_compared() {
+        // Replicas behind a mirror may compute different ETags for one file.
+        let bytes = download_overwritten(test_server::ObjectStore {
+            s3: false,
+            honors_if_match: false,
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(bytes, std::fs::read(conda_file()).unwrap());
+    }
+
+    #[tokio::test]
+    async fn an_unchanged_s3_object_downloads_in_parts() {
+        let (url, matched) = test_server::serve_file_from_s3(conda_file()).await;
+
+        let bytes = download_bytes(url, config()).await.unwrap();
+
+        assert_eq!(bytes, std::fs::read(conda_file()).unwrap());
+        // Every part after the first is pinned to the first part's ETag.
+        assert_eq!(matched.load(Ordering::SeqCst), parts_of(&conda_file()) - 1);
     }
 
     #[test]
