@@ -105,6 +105,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     bench_solve_environment(c, vec!["tensorflow"]);
     bench_solve_environment(c, vec!["quetz"]);
     bench_solve_environment(c, vec!["tensorboard=2.1.1", "grpc-cpp=1.39.1"]);
+    bench_solve_environment(c, vec!["pyarrow"]);
+    bench_solve_environment(c, vec!["geopandas"]);
+    bench_solve_environment(c, vec!["boto3"]);
 }
 
 criterion_group!(benches, criterion_benchmark);
