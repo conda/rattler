@@ -167,6 +167,7 @@ Rattler consists of several crates that provide different functionalities.
 
 * **rattler_conda_types**: foundational types for all datastructures used within the conda eco-system.
 * **rattler_boot_id**: identifies boot sessions for reboot-sensitive caches.
+* **rattler_shared_tempfile**: creates temporary files that are renamed into directories shared with other users.
 * **rattler_environment_digest**: computes stable environment fingerprints from package artifact traits.
 * **rattler_package_streaming**: provides functionality to download, extract and create conda package archives.
 * **rattler_repodata_gateway**: downloads, reads and processes information about existing conda packages from an index.
