@@ -88,6 +88,13 @@ pub fn parse_condition(condition: &MatchSpecCondition, pool: &Pool) -> super::wr
     }
 }
 
+/// The name of the internal capability that every record declaring `extra` for
+/// `package` provides. The synthetic `package[extra]` solvable requires it. The
+/// `[` makes the name impossible to collide with a real package name.
+fn extra_provider_name(package: &str, extra: &str) -> String {
+    format!("__extra_provider__{package}[{extra}]")
+}
+
 /// Adds [`RepoDataRecord`] to `repo`
 ///
 /// Panics if the repo does not belong to the pool
@@ -207,6 +214,14 @@ pub fn add_repodata_records<'a>(
             // Track this extra for synthetic solvable creation
             extras.insert((record.name.as_normalized().to_string(), extra_name.clone()));
 
+            // This record declares the extra, so it can provide it. The
+            // synthetic `package[extra]` solvable requires this capability,
+            // which keeps records that do not declare the extra from
+            // satisfying a request for it.
+            let provider_name =
+                extra_provider_name(record.name.as_normalized(), extra_name.as_str());
+            repo.add_provides(solvable, pool.intern_str(provider_name.as_str()).into());
+
             // Create conditional dependencies: dep[when="package[extra]"]
             for dep_str in deps.iter() {
                 parse_libsolv_match_spec(dep_str)?;
@@ -314,6 +329,13 @@ pub fn add_repodata_records<'a>(
         // Add self-provides so the solver can find it
         let rel_eq = pool.rel_eq(solvable.name, solvable.evr);
         repo.add_provides(solvable, rel_eq);
+
+        // Activating the extra requires a record of the package that actually
+        // declares it. Because only one solvable per package name can be
+        // installed, this forces the selected record to declare the extra
+        // instead of silently dropping the extra's dependencies.
+        let provider_name = extra_provider_name(package_name.as_str(), extra_name.as_str());
+        repo.add_requires(solvable, pool.intern_str(provider_name.as_str()).into());
 
         // Store extra info so we can retrieve it from the transaction
         let package_name_interned = pool.intern_str(package_name.as_str());
