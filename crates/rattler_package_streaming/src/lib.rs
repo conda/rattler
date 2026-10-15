@@ -18,8 +18,12 @@ pub mod seek;
 
 #[cfg(feature = "reqwest")]
 pub mod reqwest;
+#[cfg(feature = "reqwest")]
+mod section;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub mod fs;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod tokio;
 pub mod write;
 
@@ -79,7 +83,7 @@ pub enum ExtractError {
     #[error(transparent)]
     ReqwestError(::reqwest_middleware::Error),
 
-    #[cfg(feature = "reqwest")]
+    #[cfg(all(feature = "reqwest", not(target_arch = "wasm32")))]
     #[error("an error occurred during a range request: {0}")]
     AsyncHttpRangeReaderError(#[from] async_http_range_reader::AsyncHttpRangeReaderError),
 
@@ -126,9 +130,13 @@ impl ExtractError {
             ExtractError::ReqwestError(err) => {
                 // Check if this is a connection error (includes broken pipe during connection)
                 match err {
+                    // `is_connect` is not available on wasm.
+                    #[cfg(not(target_arch = "wasm32"))]
                     ::reqwest_middleware::Error::Reqwest(reqwest_err) => {
                         reqwest_err.is_connect() || reqwest_err.is_timeout()
                     }
+                    #[cfg(target_arch = "wasm32")]
+                    ::reqwest_middleware::Error::Reqwest(reqwest_err) => reqwest_err.is_timeout(),
                     ::reqwest_middleware::Error::Middleware(_) => false,
                 }
             }

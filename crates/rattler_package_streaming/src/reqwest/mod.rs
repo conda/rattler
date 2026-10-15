@@ -4,6 +4,7 @@ pub mod fetch;
 pub mod full_download;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod sparse;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod tokio;
 
 #[cfg(test)]

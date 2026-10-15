@@ -189,6 +189,8 @@ syn = "2"
 sysinfo = "0.39"
 tar = "0.4"
 astral-tokio-tar = "0.6"
+# TODO: switch to a crates.io release once https://github.com/astral-sh/astral-codec gains the `fs` feature
+tar-codec = { git = "https://github.com/pavelzw/astral-codec", rev = "429e058e130e8a098490d222b115d389b24c005d", default-features = false }
 tempfile = "3"
 temp-env = { version = "0.3", features = ["async_closure"] }
 test-log = "0.2"
