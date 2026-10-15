@@ -87,8 +87,13 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         if solvables.len() < 2 {
             return;
         }
-        // The solvables are all candidates of the same package.
         let package = self.pool().resolve_solvable(solvables[0]).name;
+        debug_assert!(
+            solvables
+                .iter()
+                .all(|&id| self.pool().resolve_solvable(id).name == package),
+            "sort expects candidates of a single package"
+        );
         self.rank_candidates(package);
         self.sort_by_tracked_version_build(solvables);
         self.sort_by_highest_dependency_versions(solvables, version_cache);
