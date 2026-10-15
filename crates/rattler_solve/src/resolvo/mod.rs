@@ -319,8 +319,12 @@ pub struct CondaDependencyProvider<'a> {
     /// Caches the dependency-based ordering of equivalent package variants.
     dependency_tiebreak_cache: RefCell<DependencyTiebreakCache>,
 
+    /// The rank of each candidate's version among the versions of its package,
+    /// indexed by solvable. `None` if its package has not been sorted yet.
+    version_ranks: RefCell<Vec<Option<u32>>>,
+
     matchspec_to_highest_version:
-        RefCell<HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>>,
+        RefCell<HashMap<VersionSetId, Option<(&'a rattler_conda_types::Version, bool)>>>,
 
     parse_match_spec_cache: RefCell<MatchSpecParseCache>,
 
@@ -674,6 +678,7 @@ impl<'a> CondaDependencyProvider<'a> {
             name_to_condition: RefCell::default(),
             records,
             dependency_tiebreak_cache: RefCell::default(),
+            version_ranks: RefCell::default(),
             matchspec_to_highest_version: RefCell::default(),
             parse_match_spec_cache: RefCell::default(),
             stop_time,

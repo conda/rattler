@@ -7,7 +7,8 @@ use futures::future::FutureExt;
 use itertools::Itertools;
 use rattler_conda_types::Version;
 use resolvo::{
-    Dependencies, NameId, Requirement, SolvableId, SolverCache, VersionSetId, utils::Pool,
+    DenseIndex, Dependencies, NameId, Requirement, SolvableId, SolverCache, VersionSetId,
+    utils::Pool,
 };
 
 use super::{NameType, SolverMatchSpec, SolverPackageRecord};
@@ -61,6 +62,12 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         }
     }
 
+    /// The rank of a solvable's version among the versions of its package.
+    fn version_rank(&self, id: SolvableId) -> u32 {
+        self.solver.provider().version_ranks.borrow()[id.to_index()]
+            .expect("candidates are ranked before they are sorted")
+    }
+
     /// Reference to the pool
     fn pool(&self) -> &Pool<SolverMatchSpec<'repo>, NameType> {
         &self.solver.provider().pool
@@ -74,10 +81,52 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
     pub fn sort(
         self,
         solvables: &mut [SolvableId],
-        version_cache: &mut HashMap<VersionSetId, Option<(Version, bool)>>,
+        version_cache: &mut HashMap<VersionSetId, Option<(&'repo Version, bool)>>,
     ) {
+        // Fewer than two candidates need no ordering.
+        if solvables.len() < 2 {
+            return;
+        }
+        let package = self.pool().resolve_solvable(solvables[0]).name;
+        debug_assert!(
+            solvables
+                .iter()
+                .all(|&id| self.pool().resolve_solvable(id).name == package),
+            "sort expects candidates of a single package"
+        );
+        self.rank_candidates(package);
         self.sort_by_tracked_version_build(solvables);
         self.sort_by_highest_dependency_versions(solvables, version_cache);
+    }
+
+    /// Ranks the versions of all candidates of `package`, not only the ones
+    /// being sorted, so that ranks stored by one sort stay comparable in any
+    /// later sort of the package.
+    fn rank_candidates(&self, package: NameId) {
+        let provider = self.solver.provider();
+        let candidates = &provider.records[&package].candidates;
+        let mut ranks = provider.version_ranks.borrow_mut();
+
+        // The candidates are ranked together, so if one is, all are.
+        if let Some(Some(_)) = ranks.get(candidates[0].to_index()) {
+            return;
+        }
+
+        let versions = candidates
+            .iter()
+            .map(|&candidate| {
+                self.solvable_record(candidate)
+                    .version()
+                    .expect("only extras lack a version")
+            })
+            .collect_vec();
+        for (&candidate, rank) in candidates.iter().zip(rank_versions(&versions)) {
+            let index = candidate.to_index();
+            if index >= ranks.len() {
+                ranks.resize(index + 1, None);
+            }
+            ranks[index] = Some(rank);
+        }
     }
 
     /// This function can be used for the initial sorting of the candidates.
@@ -116,7 +165,10 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         }
 
         // Otherwise, select the variant with the highest version
-        match (self.strategy, a_record.version().cmp(&b_record.version())) {
+        match (
+            self.strategy,
+            self.version_rank(a).cmp(&self.version_rank(b)),
+        ) {
             (CompareStrategy::Default, Ordering::Greater)
             | (CompareStrategy::LowestVersion, Ordering::Less) => return Ordering::Less,
             (CompareStrategy::Default, Ordering::Less)
@@ -131,7 +183,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
     fn sort_by_highest_dependency_versions(
         &self,
         solvables: &mut [SolvableId],
-        version_cache: &mut HashMap<VersionSetId, Option<(Version, bool)>>,
+        version_cache: &mut HashMap<VersionSetId, Option<(&'repo Version, bool)>>,
     ) {
         // Because the list can contain multiple versions, tracked features, and builds
         // of the same package we need to create sub list of solvables that have
@@ -207,7 +259,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
     fn sort_subset_by_highest_dependency_versions(
         &self,
         solvables: &mut [SolvableId],
-        version_cache: &mut HashMap<VersionSetId, Option<(Version, bool)>>,
+        version_cache: &mut HashMap<VersionSetId, Option<(&'repo Version, bool)>>,
     ) -> bool {
         // Get the dependencies for each solvable
         let dependencies = solvables
@@ -335,7 +387,9 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         };
 
         let compare_versions =
-            |a: Option<&TrackedFeatureVersion>, b: Option<&TrackedFeatureVersion>| match (a, b) {
+            |a: Option<&TrackedFeatureVersion<'_>>, b: Option<&TrackedFeatureVersion<'_>>| match (
+                a, b,
+            ) {
                 (Some(a), Some(b)) => a.compare_with_strategy(b, self.dependency_strategy),
                 (Some(_), None) => Ordering::Less,
                 (None, Some(_)) => Ordering::Greater,
@@ -418,15 +472,30 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
     }
 }
 
+/// Ranks versions so that the ranks compare like the versions: versions that
+/// compare `Equal` (`1.0` and `1.0.0`) share a rank.
+fn rank_versions(versions: &[&Version]) -> Vec<u32> {
+    let mut by_version = (0..versions.len()).collect_vec();
+    by_version.sort_unstable_by(|&a, &b| versions[a].cmp(versions[b]));
+
+    let mut ranks = vec![0; versions.len()];
+    for pair in by_version.windows(2) {
+        let (lower, higher) = (pair[0], pair[1]);
+        // `<` rather than `!=`: `1.0_` and `1.0-` compare `Equal` but are not `==`.
+        ranks[higher] = ranks[lower] + u32::from(versions[lower] < versions[higher]);
+    }
+    ranks
+}
+
 /// Couples the version with the tracked features, for easier ordering
 #[derive(PartialEq, Eq, Clone, Debug)]
-struct TrackedFeatureVersion {
-    version: Version,
+struct TrackedFeatureVersion<'repo> {
+    version: &'repo Version,
     tracked_features: bool,
 }
 
-impl TrackedFeatureVersion {
-    fn new(version: Version, tracked_features: bool) -> Self {
+impl<'repo> TrackedFeatureVersion<'repo> {
+    fn new(version: &'repo Version, tracked_features: bool) -> Self {
         Self {
             version,
             tracked_features,
@@ -439,18 +508,18 @@ impl TrackedFeatureVersion {
         match (self.tracked_features, other.tracked_features) {
             (true, false) => Ordering::Greater,
             (false, true) => Ordering::Less,
-            _ if compare_strategy == CompareStrategy::Default => other.version.cmp(&self.version),
-            _ => self.version.cmp(&other.version),
+            _ if compare_strategy == CompareStrategy::Default => other.version.cmp(self.version),
+            _ => self.version.cmp(other.version),
         }
     }
 }
 
-pub(super) fn find_highest_version(
+fn find_highest_version<'repo>(
     match_spec_id: VersionSetId,
-    solver: &SolverCache<CondaDependencyProvider<'_>>,
-    highest_version_cache: &mut HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>,
-) -> Option<(Version, bool)> {
-    highest_version_cache
+    solver: &SolverCache<CondaDependencyProvider<'repo>>,
+    highest_version_cache: &mut HashMap<VersionSetId, Option<(&'repo Version, bool)>>,
+) -> Option<(&'repo Version, bool)> {
+    *highest_version_cache
         .entry(match_spec_id)
         .or_insert_with(|| {
             let candidates = solver
@@ -481,10 +550,10 @@ pub(super) fn find_highest_version(
                     SolverPackageRecord::Extra { .. } => continue,
                 };
                 highest_version = highest_version.map_or_else(
-                    || Some((version.clone(), has_tracked_features)),
+                    || Some((version, has_tracked_features)),
                     |(highest_version, current_has_tracked_features)| {
-                        if version > &highest_version {
-                            Some((version.clone(), has_tracked_features))
+                        if version > highest_version {
+                            Some((version, has_tracked_features))
                         } else {
                             Some((highest_version, current_has_tracked_features))
                         }
@@ -494,5 +563,26 @@ pub(super) fn find_highest_version(
 
             highest_version
         })
-        .clone()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rank_versions_follows_version_cmp() {
+        let versions =
+            ["1.0", "2.0", "0.9", "1.0.0"].map(|version| version.parse::<Version>().unwrap());
+        let versions = versions.iter().collect_vec();
+        assert_eq!(rank_versions(&versions), [1, 2, 0, 1]);
+    }
+
+    #[test]
+    fn rank_versions_ranks_by_cmp_not_eq() {
+        let underscore: Version = "1.0_".parse().unwrap();
+        let dash: Version = "1.0-".parse().unwrap();
+        assert_ne!(underscore, dash);
+        assert_eq!(underscore.cmp(&dash), Ordering::Equal);
+        assert_eq!(rank_versions(&[&underscore, &dash]), [0, 0]);
+    }
 }
