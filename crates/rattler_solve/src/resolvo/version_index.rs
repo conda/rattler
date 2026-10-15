@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    hash::{Hash, Hasher},
-    ops::Range,
-};
+use std::{collections::HashMap, ops::Range};
 
 use rattler_conda_types::{
     GenericVirtualPackage, Matches, NamelessMatchSpec, Version, VersionSpec,
@@ -11,7 +7,7 @@ use resolvo::{Candidates, DenseIndex, NameId, SolvableId, utils::Pool};
 
 use super::{NameType, SolverMatchSpec, SolverPackageRecord};
 
-/// The records of each package, grouped by the [`Structure`] of their version
+/// The records of each package, grouped by their [Version]
 /// on first use.
 #[derive(Default)]
 pub(super) struct VersionIndex<'a> {
@@ -73,18 +69,16 @@ impl<'a> VersionIndex<'a> {
         }
 
         let first_group = self.versions.len() as u32;
-        let mut group_of_structure = HashMap::new();
+        let mut group_of_versions = HashMap::new();
         for &solvable in records.get(&name).map_or(&[][..], |c| &c.candidates) {
             let SolverPackageRecord::Record(record) = pool.resolve_solvable(solvable).record else {
                 continue;
             };
             let version = record.package_record.version.version();
-            let group = *group_of_structure
-                .entry(Structure(version))
-                .or_insert_with(|| {
-                    self.versions.push(version);
-                    self.versions.len() as u32 - 1
-                });
+            let group = *group_of_versions.entry(version).or_insert_with(|| {
+                self.versions.push(version);
+                self.versions.len() as u32 - 1
+            });
 
             let index = solvable.to_index();
             if index >= self.group_of_solvable.len() {
@@ -120,49 +114,5 @@ fn matches_one_by_one(
         SolverPackageRecord::Extra { .. } => {
             unreachable!("extras should never be compared to matchspecs")
         }
-    }
-}
-
-/// Compares versions by everything a version spec looks at. `Version` equality
-/// isn't enough: `1.1c.1 == 1.1c0.1`, but only the first matches `1.1c.1.*`.
-/// Nor is the source text, which may not match the parsed version.
-struct Structure<'a>(&'a Version);
-
-impl PartialEq for Structure<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        let (a, b) = (self.0, other.0);
-        a.epoch() == b.epoch()
-            && a.segments().len() == b.segments().len()
-            && a.local_segments().len() == b.local_segments().len()
-            && a.segments()
-                .zip(b.segments())
-                .chain(a.local_segments().zip(b.local_segments()))
-                .all(|(a_segment, b_segment)| a_segment.components().eq(b_segment.components()))
-    }
-}
-
-impl Eq for Structure<'_> {}
-
-impl Hash for Structure<'_> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        // Versions with the same structure are equal, so they hash alike.
-        self.0.hash(state);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn structure_is_stricter_than_version_equality() {
-        let version = |source: &str| source.parse::<Version>().unwrap();
-        let (a, b) = (version("1.1c.1"), version("1.1c0.1"));
-        assert_eq!(a, b);
-        let spec: VersionSpec = "1.1c.1.*".parse().unwrap();
-        assert!(spec.matches(&a));
-        assert!(!spec.matches(&b));
-        assert!(Structure(&a) != Structure(&b));
-        assert!(Structure(&a) == Structure(&version("1.1c.1")));
     }
 }
