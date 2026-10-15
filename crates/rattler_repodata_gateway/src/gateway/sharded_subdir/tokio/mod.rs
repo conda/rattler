@@ -341,7 +341,7 @@ async fn write_shard_to_cache(
         let shard_cache_parent_path = shard_cache_path
             .parent()
             .expect("file path must have a parent");
-        let mut temp_file = tempfile::Builder::new()
+        let mut temp_file = rattler_shared_tempfile::builder()
             .tempfile_in(
                 shard_cache_path
                     .parent()
