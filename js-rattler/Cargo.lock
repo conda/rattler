@@ -66,6 +66,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
+name = "archive-trait"
+version = "0.0.15"
+source = "git+https://github.com/pavelzw/astral-codec?rev=07c57bc71923696e5b5dec2c0cd177a786399351#07c57bc71923696e5b5dec2c0cd177a786399351"
+dependencies = [
+ "thiserror 2.0.20",
+ "tokio",
+]
+
+[[package]]
 name = "astral-reqwest-middleware"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2213,6 +2222,7 @@ dependencies = [
  "futures",
  "futures-util",
  "getrandom 0.2.17",
+ "getrandom 0.3.4",
  "getrandom 0.4.3",
  "hex",
  "http",
@@ -2225,6 +2235,7 @@ dependencies = [
  "serde_json",
  "simple_spawn_blocking",
  "tar",
+ "tar-codec",
  "tempfile",
  "thiserror 2.0.20",
  "tokio",
@@ -3088,6 +3099,26 @@ dependencies = [
  "filetime",
  "libc",
  "xattr",
+]
+
+[[package]]
+name = "tar-codec"
+version = "0.0.15"
+source = "git+https://github.com/pavelzw/astral-codec?rev=07c57bc71923696e5b5dec2c0cd177a786399351#07c57bc71923696e5b5dec2c0cd177a786399351"
+dependencies = [
+ "archive-trait",
+ "tar-framing",
+ "thiserror 2.0.20",
+ "tokio",
+]
+
+[[package]]
+name = "tar-framing"
+version = "0.0.15"
+source = "git+https://github.com/pavelzw/astral-codec?rev=07c57bc71923696e5b5dec2c0cd177a786399351#07c57bc71923696e5b5dec2c0cd177a786399351"
+dependencies = [
+ "thiserror 2.0.20",
+ "tokio",
 ]
 
 [[package]]
