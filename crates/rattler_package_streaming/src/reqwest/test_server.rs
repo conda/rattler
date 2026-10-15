@@ -103,3 +103,94 @@ async fn clamp_suffix_range(
     }
     next.run(req).await
 }
+
+/// What a [`serve_file_observed`] server saw.
+#[derive(Default)]
+pub struct Observed {
+    /// Requests currently being answered.
+    in_flight: std::sync::atomic::AtomicUsize,
+    /// The most requests answered at once.
+    pub max_in_flight: std::sync::atomic::AtomicUsize,
+    /// The first byte of each range requested, in the order answered.
+    pub finished: std::sync::Mutex<Vec<u64>>,
+}
+
+/// Spawn a local file server with range-request support that holds every
+/// response for `delay`, or for `slow_delay` when the range starts at
+/// `slow_start`, so that requests overlap and finish out of order.
+pub async fn serve_file_observed(
+    file_path: impl AsRef<Path>,
+    delay: std::time::Duration,
+    slow_start: u64,
+    slow_delay: std::time::Duration,
+) -> (Url, std::sync::Arc<Observed>) {
+    let observed = std::sync::Arc::new(Observed::default());
+    let state = (observed.clone(), delay, slow_start, slow_delay);
+    let url = serve(file_path.as_ref(), |router| {
+        router.layer(middleware::from_fn_with_state(state, observe))
+    })
+    .await;
+    (url, observed)
+}
+
+async fn observe(
+    State((observed, delay, slow_start, slow_delay)): State<(
+        std::sync::Arc<Observed>,
+        std::time::Duration,
+        u64,
+        std::time::Duration,
+    )>,
+    req: Request,
+    next: Next,
+) -> Response {
+    use std::sync::atomic::Ordering;
+
+    let start = range_start(&req);
+    let in_flight = observed.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+    observed
+        .max_in_flight
+        .fetch_max(in_flight, Ordering::SeqCst);
+    let delay = if start == Some(slow_start) {
+        slow_delay
+    } else {
+        delay
+    };
+    tokio::time::sleep(delay).await;
+    let response = next.run(req).await;
+    observed.in_flight.fetch_sub(1, Ordering::SeqCst);
+    observed.finished.lock().unwrap().extend(start);
+    response
+}
+
+/// Spawn a local file server that honors a `Range` header on the first
+/// request only, and answers every later one with the whole file.
+pub async fn serve_file_ranges_once(file_path: impl AsRef<Path>) -> Url {
+    let served = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    serve(file_path.as_ref(), |router| {
+        router.layer(middleware::from_fn_with_state(served, range_once))
+    })
+    .await
+}
+
+async fn range_once(
+    State(served): State<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    if served.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return strip_range(req, next).await;
+    }
+    next.run(req).await
+}
+
+fn range_start(req: &Request) -> Option<u64> {
+    req.headers()
+        .get(http::header::RANGE)?
+        .to_str()
+        .ok()?
+        .strip_prefix("bytes=")?
+        .split_once('-')?
+        .0
+        .parse()
+        .ok()
+}

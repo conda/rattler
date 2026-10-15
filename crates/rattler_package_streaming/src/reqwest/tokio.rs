@@ -3,8 +3,10 @@
 
 use std::{path::Path, sync::Arc};
 
+use bytes::Bytes;
 use fs_err::tokio as tokio_fs;
-use futures_util::stream::TryStreamExt;
+use futures_util::stream::BoxStream;
+use futures_util::stream::{StreamExt, TryStreamExt};
 use rattler_conda_types::package::CondaArchiveType;
 use rattler_digest::Sha256Hash;
 use reqwest::Response;
@@ -14,6 +16,8 @@ use tracing;
 use url::Url;
 use zip::result::ZipError;
 
+#[cfg(not(target_arch = "wasm32"))]
+use super::ranged::{self, RangedDownload};
 use crate::{DownloadReporter, ExtractError, ExtractResult};
 
 /// zip files may use data descriptors to signal that the decompressor needs to
@@ -28,6 +32,41 @@ fn error_for_status(response: reqwest::Response) -> reqwest_middleware::Result<R
     response
         .error_for_status()
         .map_err(reqwest_middleware::Error::Reqwest)
+}
+
+/// The body of a remote file, in order.
+pub(crate) struct Download {
+    /// The size of the file, if the server reported it.
+    pub total_bytes: Option<u64>,
+    /// The bytes of the file.
+    pub body: BoxStream<'static, std::io::Result<Bytes>>,
+}
+
+/// Classify a failure reading a body so the caller can tell a dropped
+/// connection, which is worth retrying, from corrupt data.
+pub(crate) fn to_io_error(err: reqwest::Error) -> std::io::Error {
+    if err.is_body() {
+        std::io::Error::new(std::io::ErrorKind::Interrupted, err)
+    } else if err.is_decode() {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, err)
+    } else {
+        std::io::Error::other(err)
+    }
+}
+
+/// A GET request for `url`.
+pub(crate) fn get(
+    client: &reqwest_middleware::ClientWithMiddleware,
+    url: Url,
+    expected_sha256: Option<Sha256Hash>,
+) -> reqwest_middleware::RequestBuilder {
+    let request = client.get(url);
+    match expected_sha256 {
+        // The OCI registry middleware looks the blob up by its sha256, including
+        // when a mirror rewrites a URL to point at a registry.
+        Some(sha256) => request.header("X-Expected-Sha256", hex::encode(sha256)),
+        None => request,
+    }
 }
 
 async fn get_reader(
@@ -48,43 +87,61 @@ async fn get_reader(
 
         Ok(Either::Left(BufReader::new(file)))
     } else {
-        // Send the request for the file
-        let mut request = client.get(url.clone());
-
-        if let Some(sha256) = expected_sha256 {
-            // This is used by the OCI registry middleware to verify the sha256 of the
-            // response
-            request = request.header("X-Expected-Sha256", hex::encode(sha256));
-        }
-
-        let response = request
-            .send()
-            .await
-            .and_then(error_for_status)
-            .map_err(ExtractError::ReqwestError)?;
-
-        let total_bytes = response.content_length();
+        let download = send(url, client, expected_sha256).await?;
+        let total_bytes = download.total_bytes;
         let mut bytes_received = Box::new(0);
-        let byte_stream = response.bytes_stream().inspect_ok(move |frame| {
+        let byte_stream = download.body.inspect_ok(move |frame| {
             *bytes_received += frame.len() as u64;
             if let Some(reporter) = &reporter {
                 reporter.on_download_progress(*bytes_received, total_bytes);
             }
         });
 
-        // Get the response as a stream
-        Ok(Either::Right(StreamReader::new(byte_stream.map_err(
-            |err| {
-                if err.is_body() {
-                    std::io::Error::new(std::io::ErrorKind::Interrupted, err)
-                } else if err.is_decode() {
-                    std::io::Error::new(std::io::ErrorKind::InvalidData, err)
-                } else {
-                    std::io::Error::other(err)
-                }
-            },
-        ))))
+        Ok(Either::Right(StreamReader::new(byte_stream)))
     }
+}
+
+/// Request a remote file, in parallel ranges where its scheme allows it.
+#[cfg(not(target_arch = "wasm32"))]
+async fn send(
+    url: Url,
+    client: reqwest_middleware::ClientWithMiddleware,
+    expected_sha256: Option<Sha256Hash>,
+) -> Result<Download, ExtractError> {
+    // Each OCI request resolves the blob through the registry first, which
+    // ranged requests would repeat once per part.
+    if matches!(url.scheme(), "http" | "https" | "s3" | "gcs") {
+        return ranged::download(client, url, expected_sha256, RangedDownload::default())
+            .await
+            .map_err(ExtractError::ReqwestError);
+    }
+    send_whole(url, client, expected_sha256).await
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn send(
+    url: Url,
+    client: reqwest_middleware::ClientWithMiddleware,
+    expected_sha256: Option<Sha256Hash>,
+) -> Result<Download, ExtractError> {
+    send_whole(url, client, expected_sha256).await
+}
+
+async fn send_whole(
+    url: Url,
+    client: reqwest_middleware::ClientWithMiddleware,
+    expected_sha256: Option<Sha256Hash>,
+) -> Result<Download, ExtractError> {
+    let response = get(&client, url, expected_sha256)
+        .send()
+        .await
+        .and_then(error_for_status)
+        .map_err(ExtractError::ReqwestError)?;
+
+    Ok(Download {
+        total_bytes: response.content_length(),
+        body: response.bytes_stream().map_err(to_io_error).boxed(),
+    })
 }
 
 /// Extracts the contents a `.tar.bz2` package archive from the specified remote
