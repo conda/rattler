@@ -319,7 +319,8 @@ impl ResultCache {
         let bytes = serde_json::to_vec_pretty(&entry)?;
         // Written next to the entry and renamed into place, so a reader never
         // sees a partial file.
-        let (file, temporary) = tempfile::NamedTempFile::new_in(&self.root)
+        let (file, temporary) = rattler_shared_tempfile::builder()
+            .tempfile_in(&self.root)
             .map_err(io_error)?
             .into_parts();
         let mut file = tokio::fs::File::from_std(file);

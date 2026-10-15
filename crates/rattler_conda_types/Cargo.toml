@@ -35,6 +35,7 @@ rattler_digest = { workspace = true, default-features = false, features = [
 rattler_conda_version = { workspace = true }
 rattler_macros = { workspace = true, default-features = false }
 rattler_redaction = { workspace = true, default-features = false }
+rattler_shared_tempfile = { workspace = true }
 fancy-regex = { workspace = true }
 regex = { workspace = true }
 simd-json = { workspace = true, features = ["serde_impl"] }

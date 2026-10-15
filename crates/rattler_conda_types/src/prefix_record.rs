@@ -12,7 +12,6 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::serde_as;
-use tempfile::NamedTempFile;
 
 use crate::utils::serde::is_none_or_empty_string;
 use crate::{
@@ -302,13 +301,16 @@ impl PrefixRecord {
         })?;
 
         // Use a temporary file in the same directory for atomic writes
-        let temp_file = NamedTempFile::with_prefix_in("prefix_record_", parent).map_err(|e| {
-            std::io::Error::other(format!(
-                "Failed to create temporary file in '{}': {}",
-                parent.display(),
-                e
-            ))
-        })?;
+        let temp_file = rattler_shared_tempfile::builder()
+            .prefix("prefix_record_")
+            .tempfile_in(parent)
+            .map_err(|e| {
+                std::io::Error::other(format!(
+                    "Failed to create temporary file in '{}': {}",
+                    parent.display(),
+                    e
+                ))
+            })?;
 
         // Write to temp file with buffered writer
         let writer = BufWriter::with_capacity(64 * 1024, &temp_file);
