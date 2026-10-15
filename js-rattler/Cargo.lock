@@ -1534,7 +1534,9 @@ name = "js-rattler"
 version = "0.1.1"
 dependencies = [
  "astral-reqwest-middleware",
+ "bytes",
  "console_error_panic_hook",
+ "futures-util",
  "getrandom 0.2.17",
  "getrandom 0.3.4",
  "getrandom 0.4.3",
@@ -1544,6 +1546,7 @@ dependencies = [
  "rattler_conda_types",
  "rattler_config",
  "rattler_digest",
+ "rattler_package_streaming",
  "rattler_repodata_gateway",
  "rattler_solve",
  "reqwest",
@@ -1551,6 +1554,7 @@ dependencies = [
  "serde-wasm-bindgen",
  "serde_ignored",
  "serde_json",
+ "tar",
  "thiserror 2.0.20",
  "url",
  "wasm-bindgen",
