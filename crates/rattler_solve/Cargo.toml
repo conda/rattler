@@ -36,7 +36,7 @@ rattler_cache = { workspace = true }
 rattler_digest = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 rattler_repodata_gateway = { path = "../rattler_repodata_gateway", default-features = false, features = [
-    "sparse",
+    "sparse", "gateway",
 ] }
 rstest = { workspace = true }
 serde_json = { workspace = true }
