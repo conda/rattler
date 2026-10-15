@@ -13,12 +13,20 @@ use async_zip::base::read::stream::ZipFileReader;
 use futures_util::stream::TryStreamExt;
 use rattler_conda_types::package::{CondaArchiveType, PackageFile};
 use reqwest_middleware::ClientWithMiddleware;
+use tar_codec::{
+    Archive as _, DecodePolicy, Member, MemberPayload as _, PaxDecodePolicy,
+    PaxVendorExtensionPolicy, TarArchive,
+};
+use tokio::io::AsyncRead;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tokio_util::io::StreamReader;
 use url::Url;
 
 use crate::ExtractError;
-use crate::tokio::async_read::get_file_from_tar_archive;
+use crate::section::{MAX_PREALLOC, Section, normalize};
+
+/// Size of the chunks requested from a tar member payload.
+const PAYLOAD_CHUNK_SIZE: usize = 64 * 1024;
 
 /// Stream the full package response and extract a single file by path.
 ///
@@ -55,8 +63,7 @@ pub async fn fetch_file_from_remote_full_download(
         CondaArchiveType::TarBz2 => {
             let buf_reader = tokio::io::BufReader::new(stream_reader);
             let decoder = BzDecoder::new(buf_reader);
-            let mut archive = tokio_tar::Archive::new(decoder);
-            get_file_from_tar_archive(&mut archive, target_path).await?
+            get_file_from_tar_archive(decoder, target_path).await?
         }
         CondaArchiveType::Conda => {
             // async_zip uses futures IO traits, so bridge tokio → futures
@@ -65,7 +72,7 @@ pub async fn fetch_file_from_remote_full_download(
             let mut zip_reader = ZipFileReader::new(&mut buf_reader);
 
             let mut found: Option<Vec<u8>> = None;
-            let prefix = crate::archive::Section::containing(target_path).zip_prefix();
+            let prefix = Section::containing(target_path).zip_prefix();
 
             while let Some(mut entry) = zip_reader
                 .next_with_entry()
@@ -81,8 +88,7 @@ pub async fn fetch_file_from_remote_full_download(
                     let compat_entry = entry.reader_mut().compat();
                     let buf_entry = tokio::io::BufReader::new(compat_entry);
                     let decoder = ZstdDecoder::new(buf_entry);
-                    let mut archive = tokio_tar::Archive::new(decoder);
-                    found = get_file_from_tar_archive(&mut archive, target_path).await?;
+                    found = get_file_from_tar_archive(decoder, target_path).await?;
                     break;
                 }
 
@@ -111,4 +117,75 @@ pub async fn fetch_package_file_full_download<P: PackageFile>(
         .ok_or(ExtractError::MissingComponent)?;
     P::from_slice(&content)
         .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
+}
+
+/// The tar decode policy used for conda package sections.
+///
+/// Conda packages are produced by many different tar writers, so this accepts
+/// unknown vendor pax records (e.g. `SCHILY.*` and `LIBARCHIVE.*` written by
+/// bsdtar) and unterminated `uname`/`gname` header fields.
+fn conda_decode_policy() -> DecodePolicy {
+    DecodePolicy::default()
+        .allow_header_uname_and_gname_without_terminator(true)
+        .pax_policy(
+            PaxDecodePolicy::default()
+                .vendor_extension_policy(PaxVendorExtensionPolicy::AllowUnknown),
+        )
+}
+
+fn decode_error(err: tar_codec::DecodeError) -> ExtractError {
+    ExtractError::IoError(std::io::Error::new(std::io::ErrorKind::InvalidData, err))
+}
+
+/// Async equivalent of [`crate::seek::get_file_from_archive`].
+///
+/// Iterates the members of a tar stream, returning the contents of the first
+/// regular file whose path matches `file_name`. Because the reader is
+/// streaming, only the bytes up to (and including) the target member are
+/// consumed.
+async fn get_file_from_tar_archive<R: AsyncRead + Unpin>(
+    reader: R,
+    file_name: &Path,
+) -> Result<Option<Vec<u8>>, ExtractError> {
+    let target = normalize(file_name)?;
+    let mut members = TarArchive::new(reader)
+        .with_policy(conda_decode_policy())
+        .members();
+    while let Some(member) = members.next().await.map_err(decode_error)? {
+        // Normalized comparison, matching the sparse path in `crate::archive`.
+        if normalize(Path::new(&member.metadata().path))? != target {
+            continue;
+        }
+        match member {
+            Member::File {
+                size, mut payload, ..
+            } => {
+                let mut contents = Vec::with_capacity(size.min(MAX_PREALLOC) as usize);
+                let mut chunk = Vec::new();
+                while payload
+                    .next_chunk(&mut chunk, PAYLOAD_CHUNK_SIZE)
+                    .await
+                    .map_err(decode_error)?
+                {
+                    contents.extend_from_slice(&chunk);
+                }
+                return Ok(Some(contents));
+            }
+            Member::SymbolicLink {
+                target: link_target,
+                ..
+            }
+            | Member::HardLink {
+                target: link_target,
+                ..
+            } => {
+                return Err(ExtractError::LinksNotFollowed(vec![format!(
+                    "'{}' (links to '{link_target}')",
+                    target.display()
+                )]));
+            }
+            Member::Directory { .. } | Member::Special { .. } => {}
+        }
+    }
+    Ok(None)
 }

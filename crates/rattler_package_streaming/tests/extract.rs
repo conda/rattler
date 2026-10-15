@@ -1674,3 +1674,123 @@ impl AsyncRead for FailingReader<'_> {
         Poll::Ready(Ok(()))
     }
 }
+
+/// Serves the directory containing `file` over HTTP and returns the URL of `file`.
+#[cfg(feature = "reqwest")]
+async fn serve_package(file: &Path) -> Url {
+    use tower_http::services::ServeDir;
+
+    let app = axum::Router::new().fallback_service(ServeDir::new(file.parent().unwrap()));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    Url::parse(&format!(
+        "http://{addr}/{}",
+        file.file_name().unwrap().to_string_lossy()
+    ))
+    .unwrap()
+}
+
+/// The streaming full-download path returns the same `info/` files as the
+/// synchronous reader.
+#[cfg(feature = "reqwest")]
+async fn assert_full_download_matches_sync_reader(input: Url, sha256: &str) {
+    use rattler_conda_types::package::CondaArchiveType;
+    use rattler_package_streaming::{
+        reqwest::fetch::fetch_file_from_remote_full_download, seek::read_package_file_content,
+    };
+
+    let file_path = tools::download_and_cache_file_async(input, sha256)
+        .await
+        .unwrap();
+    let archive_type = CondaArchiveType::try_from(file_path.as_path()).unwrap();
+    let url = serve_package(&file_path).await;
+    let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+
+    // The full-download path normalizes `./` prefixes, the sync reader does not.
+    for (package_path, sync_path) in [
+        ("info/index.json", "info/index.json"),
+        ("info/paths.json", "info/paths.json"),
+        ("info/about.json", "info/about.json"),
+        ("./info/index.json", "info/index.json"),
+        ("info/does-not-exist", "info/does-not-exist"),
+    ] {
+        let expected = match read_package_file_content(
+            File::open(&file_path).unwrap(),
+            archive_type,
+            sync_path,
+        ) {
+            Ok(bytes) => Some(bytes),
+            Err(ExtractError::MissingComponent) => None,
+            Err(err) => panic!("sync read of {package_path} failed: {err}"),
+        };
+        let actual = tokio::time::timeout(
+            TEST_TIMEOUT,
+            fetch_file_from_remote_full_download(&client, &url, Path::new(package_path)),
+        )
+        .await
+        .expect("hung")
+        .unwrap_or_else(|err| panic!("full download of {package_path} failed: {err}"));
+        assert_eq!(actual, expected, "{package_path} differs");
+    }
+}
+
+#[cfg(feature = "reqwest")]
+#[apply(conda_archives)]
+#[tokio::test]
+async fn full_download_matches_sync_reader_conda(
+    #[case] input: Url,
+    #[case] sha256: &str,
+    #[case] _md5: &str,
+) {
+    assert_full_download_matches_sync_reader(input, sha256).await;
+}
+
+#[cfg(feature = "reqwest")]
+#[apply(tar_bz2_archives)]
+#[tokio::test]
+async fn full_download_matches_sync_reader_tar_bz2(
+    #[case] input: Url,
+    #[case] sha256: &str,
+    #[case] _md5: &str,
+) {
+    assert_full_download_matches_sync_reader(input, sha256).await;
+}
+
+/// The full-download path reads regular files from the content section and
+/// refuses to follow links.
+#[cfg(feature = "reqwest")]
+#[rstest]
+#[case::tar_bz2(
+    "https://conda.anaconda.org/conda-forge/linux-64/bzip2-1.0.8-h7f98852_4.tar.bz2",
+    "cb521319804640ff2ad6a9f118d972ed76d86bea44e5626c09a13d38f562e1fa"
+)]
+#[case::conda(
+    "https://conda.anaconda.org/conda-forge/linux-64/bzip2-1.0.8-hd590300_5.conda",
+    "242c0c324507ee172c0e0dd2045814e746bb303d1eb78870d182ceb0abc726a8"
+)]
+#[tokio::test]
+async fn full_download_does_not_follow_links(#[case] input: Url, #[case] sha256: &str) {
+    use rattler_package_streaming::reqwest::fetch::fetch_file_from_remote_full_download;
+
+    let file_path = tools::download_and_cache_file_async(input, sha256)
+        .await
+        .unwrap();
+    let url = serve_package(&file_path).await;
+    let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+
+    let file = fetch_file_from_remote_full_download(&client, &url, Path::new("bin/bzgrep"))
+        .await
+        .unwrap()
+        .expect("bin/bzgrep should exist");
+    assert!(file.starts_with(b"#!"), "bin/bzgrep should be a script");
+
+    let link = fetch_file_from_remote_full_download(&client, &url, Path::new("bin/bzfgrep")).await;
+    assert_matches::assert_matches!(
+        link,
+        Err(ExtractError::LinksNotFollowed(links))
+            if links == ["'bin/bzfgrep' (links to 'bzgrep')"]
+    );
+}
