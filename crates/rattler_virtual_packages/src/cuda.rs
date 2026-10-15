@@ -1516,6 +1516,24 @@ mod test {
         )
     }
 
+    /// The cache is written so that every user the cache directory is shared
+    /// with can read it.
+    #[cfg(unix)]
+    #[rstest::rstest]
+    #[case::umask(tools::shared_cache::SharedAccess::Umask)]
+    #[case::default_acl(tools::shared_cache::SharedAccess::DefaultAcl)]
+    fn cache_is_readable_by_group(#[case] access: tools::shared_cache::SharedAccess) {
+        let Some(cache_dir) = tools::shared_cache::SharedCacheDir::new(access) else {
+            return;
+        };
+        let env = fake_env("boot-1", Some("driver-1"), Some("dev-1"), 1_000);
+        let (info, sources) = full_info();
+
+        cache::write_with_env(&env, cache_dir.path(), &info, sources);
+
+        cache_dir.assert_group_readable();
+    }
+
     #[test]
     fn test_cache_roundtrip() {
         let dir = tempfile::tempdir().unwrap();

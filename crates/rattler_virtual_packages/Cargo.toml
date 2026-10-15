@@ -35,4 +35,6 @@ windows-sys = { workspace = true, features = [
 ] }
 
 [dev-dependencies]
+rstest = { workspace = true }
 temp-env = { workspace = true }
+tools = { path = "../tools" }

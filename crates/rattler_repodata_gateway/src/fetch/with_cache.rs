@@ -1134,6 +1134,36 @@ mod test {
         );
     }
 
+    /// The repodata and its cache state are written so that every user the
+    /// cache directory is shared with can read them.
+    #[cfg(unix)]
+    #[rstest::rstest]
+    #[case::umask(tools::shared_cache::SharedAccess::Umask)]
+    #[case::default_acl(tools::shared_cache::SharedAccess::DefaultAcl)]
+    #[tokio::test]
+    async fn repodata_cache_is_readable_by_group(
+        #[case] access: tools::shared_cache::SharedAccess,
+    ) {
+        let Some(cache_dir) = tools::shared_cache::SharedCacheDir::new(access) else {
+            return;
+        };
+        let subdir_path = TempDir::new().unwrap();
+        std::fs::write(subdir_path.path().join("repodata.json"), FAKE_REPO_DATA).unwrap();
+        let server = SimpleChannelServer::new(subdir_path.path()).await;
+
+        fetch_repo_data(
+            server.url(),
+            LazyClient::default(),
+            cache_dir.path().to_path_buf(),
+            FetchRepoDataOptions::default(),
+            None,
+        )
+        .await
+        .unwrap();
+
+        cache_dir.assert_group_readable();
+    }
+
     #[tracing_test::traced_test]
     #[tokio::test]
     pub async fn test_cache_works() {

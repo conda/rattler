@@ -405,7 +405,10 @@ mod test {
         routing::get,
     };
 
-    use rattler_conda_types::{PackageName, PackageRecord, Version, package::BuildString};
+    use rattler_conda_types::{
+        PackageName, PackageRecord, Version, compression_level::CompressionLevel,
+        package::BuildString,
+    };
     use rattler_digest::{Sha256, parse_digest_from_hex};
     use rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
     use reqwest::Client;
@@ -494,6 +497,56 @@ mod test {
             .unwrap();
 
         assert!(cached_run_exports.run_exports.is_some());
+    }
+
+    /// The run exports are written so that every user the cache directory is
+    /// shared with can read them.
+    #[cfg(unix)]
+    #[rstest::rstest]
+    #[case::umask(tools::shared_cache::SharedAccess::Umask)]
+    #[case::default_acl(tools::shared_cache::SharedAccess::DefaultAcl)]
+    #[tokio::test]
+    async fn run_exports_cache_is_readable_by_group(
+        #[case] access: tools::shared_cache::SharedAccess,
+    ) {
+        let Some(cache_dir) = tools::shared_cache::SharedCacheDir::new(access) else {
+            return;
+        };
+
+        // A package that only contains `info/run_exports.json`.
+        let package_dir = tempdir().unwrap();
+        let run_exports = package_dir.path().join("info/run_exports.json");
+        fs_err::create_dir_all(package_dir.path().join("info")).unwrap();
+        fs_err::write(&run_exports, r#"{"weak": ["foo"]}"#).unwrap();
+        let package = package_dir.path().join("foo-1.0-0.tar.bz2");
+        rattler_package_streaming::write::write_tar_bz2_package(
+            fs_err::File::create(&package).unwrap(),
+            package_dir.path(),
+            &[run_exports],
+            CompressionLevel::Default,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let record = PackageRecord::new(
+            PackageName::from_str("foo").unwrap(),
+            Version::from_str("1.0").unwrap(),
+            "0".parse::<BuildString>().unwrap(),
+        );
+        let cache_key = CacheKey::create(&record, "foo-1.0-0.tar.bz2").unwrap();
+        let entry = RunExportsCache::new(cache_dir.path())
+            .get_or_fetch_from_url(
+                &cache_key,
+                Url::from_file_path(&package).unwrap(),
+                ClientWithMiddleware::from(Client::new()),
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(entry.run_exports.is_some());
+
+        cache_dir.assert_group_readable();
     }
 
     /// A helper middleware function that fails the first two requests.

@@ -529,6 +529,36 @@ mod tests {
         cache.clear().await.unwrap();
     }
 
+    /// Results are written so that every user the cache directory is shared
+    /// with can read them.
+    #[cfg(unix)]
+    #[rstest::rstest]
+    #[case::umask(tools::shared_cache::SharedAccess::Umask)]
+    #[case::default_acl(tools::shared_cache::SharedAccess::DefaultAcl)]
+    #[tokio::test]
+    async fn results_are_readable_by_group(#[case] access: tools::shared_cache::SharedAccess) {
+        let Some(cache_dir) = tools::shared_cache::SharedCacheDir::new(access) else {
+            return;
+        };
+        let cache = ResultCache::new(cache_dir.path().join("results"));
+        cache
+            .write(
+                &key(),
+                &report(CacheHints {
+                    ttl: Some(CacheLifetime::Seconds(100)),
+                    watch_paths: Vec::new(),
+                    watch_env: Vec::new(),
+                }),
+                None,
+                &clock(1_000),
+                &env(),
+            )
+            .await
+            .unwrap();
+
+        cache_dir.assert_group_readable();
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn concurrent_publications_leave_one_complete_report() {
         const WRITERS: usize = 64;
