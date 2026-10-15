@@ -45,3 +45,4 @@ rattler_package_streaming = { workspace = true, default-features = false }
 rattler_repodata_gateway = { workspace = true, default-features = false, features = ["gateway", "rustls"] }
 rstest = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
+tools = { path = "../tools" }

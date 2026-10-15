@@ -290,3 +290,23 @@ fn failed_rebuild_keeps_the_existing_database() {
         .count();
     assert_eq!(leftovers, 0, "a failed rebuild leaves no staging directory");
 }
+
+/// The git database and checkout are written so that every user the cache
+/// directory is shared with can read them.
+#[cfg(unix)]
+#[rstest::rstest]
+#[case::umask(tools::shared_cache::SharedAccess::Umask)]
+#[case::default_acl(tools::shared_cache::SharedAccess::DefaultAcl)]
+fn cache_is_readable_by_group(#[case] access: tools::shared_cache::SharedAccess) {
+    let Some(cache) = tools::shared_cache::SharedCacheDir::new(access) else {
+        return;
+    };
+    let (_fixture, repository, _) = fixture();
+    let git = GitUrl::from_reference(repository, GitReference::from_rev("v1.0.0".to_string()));
+
+    GitSource::new(git, panic_client(), cache.path())
+        .fetch()
+        .unwrap();
+
+    cache.assert_group_readable();
+}

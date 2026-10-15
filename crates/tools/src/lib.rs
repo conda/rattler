@@ -1,4 +1,6 @@
 pub mod libsolv_bindings;
+#[cfg(unix)]
+pub mod shared_cache;
 mod test_files;
 
 pub use test_files::{

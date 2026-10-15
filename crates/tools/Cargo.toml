@@ -27,6 +27,9 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
 [package.metadata.release]
 # Dont publish the binary
 release = false
