@@ -26,6 +26,40 @@ When `--config` is omitted, `rattler-index` falls back to its built-in defaults
 (`write-zst = true`, `write-shards = true`, no advertised repodata revisions,
 `from-index-json` revision assignment, no channel metadata).
 
+## Indexing large channels
+
+Indexing a channel means downloading every package that is not yet in
+`repodata.json`, hashing it and reading its `info/index.json`. For a channel of
+conda-forge's size this is a long job, so `rattler-index` is built to be
+interrupted and resumed:
+
+- **Broken packages do not abort the run.** A package that cannot be read or
+  parsed is left out of the repodata, reported at the end, and makes the
+  process exit with status 1. Everything else in the subdir is still indexed.
+- **`--cache`** persists the parsed metadata of every package in the channel
+  itself, as one small object per package under `<subdir>/.cache/`. A package
+  is only downloaded again when its `ETag`, modification time or size changed,
+  and packages that failed to parse are not retried until the file changes.
+  This is what makes a run resumable: after a crash or an interrupt, the next
+  run continues from the cache. Because the cache lives next to the packages
+  and needs no coordination, several machines can index the same channel at
+  the same time, for example one per subdir with `--target-platform`.
+- **Ctrl-C finishes cleanly.** The first `SIGINT` stops starting new packages,
+  lets the ones in flight finish, saves them to the cache and exits with status
+  130. The repodata of the interrupted subdir is left untouched; the next run
+  continues from the cache. A second `SIGINT` aborts immediately.
+- **`--max-parallel <N>`** and **`--max-in-flight-bytes <SIZE>`** bound the
+  memory used for packages in flight: at most `N` packages and roughly `SIZE`
+  package bytes (default `2GiB`) are held at once. A single package larger than
+  `SIZE` is still processed, on its own.
+
+```shell
+rattler-index --cache --max-parallel 16 --max-in-flight-bytes 4GiB \
+  s3 s3://my-bucket/my-channel
+```
+
+Subdirs are indexed one after another in alphabetical order.
+
 ## Per-channel index configuration
 
 Index options live in `[index-config]` and follow the same shape as
