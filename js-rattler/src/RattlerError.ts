@@ -5,6 +5,7 @@
  */
 export type RattlerErrorCode =
     | "PARSE_VERSION"
+    | "PARSE_BUILD_STRING"
     | "VERSION_EXTEND"
     | "VERSION_BUMP"
     | "PARSE_VERSION_SPEC"

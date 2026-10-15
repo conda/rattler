@@ -478,7 +478,7 @@ fn legacy_package_matches_selector(
     let record = package.record();
     name.is_none_or(|n| n == &record.name)
         && version.is_none_or(|v| v == &record.version)
-        && build.is_none_or(|b| b == record.build)
+        && build.is_none_or(|b| record.build == b)
         && subdir.is_none_or(|s| s == record.subdir)
 }
 

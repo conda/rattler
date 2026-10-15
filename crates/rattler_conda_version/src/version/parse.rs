@@ -36,7 +36,7 @@ impl Display for ParseVersionError {
         write!(
             f,
             "malformed version string '{}': {}",
-            &self.version, &self.kind
+            self.version, self.kind
         )
     }
 }

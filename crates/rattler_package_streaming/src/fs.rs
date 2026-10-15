@@ -129,7 +129,7 @@ pub async fn repodata_record_from_package_archive(
             ArchiveIdentifier {
                 name: index_json.name.as_source().to_string(),
                 version: index_json.version.to_string(),
-                build_string: index_json.build.clone(),
+                build_string: index_json.build.to_string(),
             },
             archive_type,
         );
@@ -217,6 +217,11 @@ mod test {
             .await
             .unwrap();
 
+        assert_eq!(
+            record.identifier.to_string(),
+            "clobber-fd-1-0.1.0-h4616a5c_0.conda"
+        );
+        assert_eq!(record.package_record.build, "h4616a5c_0");
         assert_eq!(record.package_record.name.as_normalized(), "clobber-fd-1");
         assert_eq!(record.channel, None);
     }

@@ -12,7 +12,10 @@ use reqwest_middleware::ClientWithMiddleware;
 use tokio::io::AsyncWriteExt;
 use url::Url;
 
-use super::package_source::{PackageSource, client_for};
+use super::{
+    hyperlink,
+    package_source::{PackageSource, client_for},
+};
 
 const PIXI_ENVIRONMENT_FINGERPRINT_FILE: &str = ".pixi-environment-fingerprint";
 
@@ -135,12 +138,13 @@ pub async fn inject(opt: InjectOpt, offline: bool) -> miette::Result<()> {
 
     invalidate_pixi_environment_fingerprint(&target_prefix)?;
 
+    let prefix_url = hyperlink::directory(&target_prefix);
     for package_record in injected_package_records {
         println!(
             "{} Injected {} into {}",
             console::style(console::Emoji("✔", "")).green(),
             package_record,
-            target_prefix.display()
+            hyperlink::maybe_link(prefix_url.clone(), target_prefix.display())
         );
     }
 
@@ -459,7 +463,7 @@ mod tests {
     use super::*;
     use std::{fs::File, str::FromStr};
 
-    use rattler_conda_types::{Version, compression_level::CompressionLevel};
+    use rattler_conda_types::{Version, compression_level::CompressionLevel, package::BuildString};
     use rattler_package_streaming::write::write_tar_bz2_package;
 
     #[tokio::test]
@@ -628,7 +632,7 @@ mod tests {
         let mut record = PackageRecord::new(
             PackageName::new_unchecked("win-only-noarch-package"),
             Version::from_str("0.0.1").unwrap(),
-            "h123456".to_string(),
+            "h123456".parse::<BuildString>().unwrap(),
         );
         record.subdir = Subdir::NoArch.to_string();
         record.depends = vec!["__win".to_string()];
@@ -647,7 +651,7 @@ mod tests {
                 package_record: PackageRecord::new(
                     PackageName::new_unchecked("my-package"),
                     Version::from_str("0.0.1").unwrap(),
-                    "h123456".to_string(),
+                    "h123456".parse::<BuildString>().unwrap(),
                 ),
                 identifier: "my-package-0.0.1-h123456.conda".parse().unwrap(),
                 url: Url::parse("https://example.com/my-package-0.0.1-h123456.conda").unwrap(),

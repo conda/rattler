@@ -39,8 +39,8 @@ use rattler_conda_types::{
     ParseMatchSpecOptions, PatchInstructions, RepoData, Shard, ShardedRepodata, ShardedSubdirInfo,
     Subdir, UrlOrPath, V3Extensions, V3Packages, Version, WhlPackageRecord,
     package::{
-        CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
-        RunExportsJson, ValidatedMatchSpecs, WheelArchiveType,
+        BuildString, CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson,
+        PackageFile, RunExportsJson, ValidatedMatchSpecs, WheelArchiveType,
     },
     virtual_package_detector::DetectorRegistrationMetadata,
 };
@@ -1391,7 +1391,7 @@ fn validate_patch_instructions(instructions: &PatchInstructions) -> Result<(), R
         let mut record = PackageRecord::new(
             PackageName::new_unchecked("patch"),
             Version::major(0),
-            String::new(),
+            BuildString::new_unchecked("0"),
         );
         record.apply_patch(patch);
         render_record_matchspecs_for_revision(&mut record, None, revision)
@@ -2319,7 +2319,7 @@ mod tests {
         let package_record = PackageRecord::new(
             PackageName::new_unchecked("demo"),
             Version::from_str("1.0").unwrap(),
-            "py_0".to_string(),
+            "py_0".parse::<BuildString>().unwrap(),
         );
         let wheel_url = UrlOrPath::Path("demo-1.0-py_0.whl".to_string());
 
@@ -2539,7 +2539,7 @@ mod tests {
             PackageRecord::new(
                 PackageName::new_unchecked("v3-demo"),
                 Version::from_str("1.0").unwrap(),
-                "0".to_string(),
+                "0".parse::<BuildString>().unwrap(),
             ),
         );
         let patch = serde_json::from_value::<PatchInstructions>(serde_json::json!({
@@ -2628,7 +2628,7 @@ mod tests {
             record: PackageRecord::new(
                 PackageName::new_unchecked("demo"),
                 Version::from_str("1.0").unwrap(),
-                "0".to_string(),
+                "0".parse::<BuildString>().unwrap(),
             ),
             repodata_revision: RepodataRevision::from(4),
             matchspecs: None,
@@ -2654,7 +2654,7 @@ mod tests {
             record: PackageRecord::new(
                 PackageName::new_unchecked("demo"),
                 Version::from_str("1.0").unwrap(),
-                "0".to_string(),
+                "0".parse::<BuildString>().unwrap(),
             ),
             repodata_revision: RepodataRevision::V3,
             matchspecs: None,
@@ -2687,7 +2687,7 @@ mod tests {
         let mut record = PackageRecord::new(
             PackageName::new_unchecked("demo"),
             Version::from_str("1.0").unwrap(),
-            "0".to_string(),
+            "0".parse::<BuildString>().unwrap(),
         );
         record.depends = vec!["python[extras=[\"test\"]]".to_string()];
         repodata.packages.insert(
@@ -2741,7 +2741,7 @@ mod tests {
         let mut record = PackageRecord::new(
             PackageName::new_unchecked("demo"),
             Version::from_str("1.0").unwrap(),
-            "0".to_string(),
+            "0".parse::<BuildString>().unwrap(),
         );
         let patch = serde_json::from_value(serde_json::json!({
             "depends": ["python >=3.10"],
@@ -2776,7 +2776,7 @@ mod tests {
         let mut record = PackageRecord::new(
             PackageName::new_unchecked("demo"),
             Version::from_str("1.0").unwrap(),
-            "0".to_string(),
+            "0".parse::<BuildString>().unwrap(),
         );
         record.depends = vec!["python >=3.10".to_string()];
         record.constrains = vec!["python >=3.10".to_string()];
@@ -2813,7 +2813,7 @@ mod tests {
             record: PackageRecord::new(
                 PackageName::new_unchecked("demo"),
                 Version::from_str("1.0").unwrap(),
-                "0".to_string(),
+                "0".parse::<BuildString>().unwrap(),
             ),
             repodata_revision: revision,
             matchspecs: None,

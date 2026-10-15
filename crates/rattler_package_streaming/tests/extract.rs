@@ -153,7 +153,7 @@ fn test_stream_info(#[case] input: Url, #[case] sha256: &str, #[case] _md5: &str
 
     let target_dir = temp_dir.join(format!(
         "{}-info",
-        &file_path.file_stem().unwrap().to_string_lossy()
+        file_path.file_stem().unwrap().to_string_lossy()
     ));
 
     info_stream.unpack(target_dir).unwrap();

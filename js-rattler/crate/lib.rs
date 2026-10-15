@@ -1,3 +1,4 @@
+mod build_string;
 mod channel;
 mod config;
 mod error;

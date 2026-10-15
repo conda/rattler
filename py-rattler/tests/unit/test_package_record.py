@@ -3,11 +3,11 @@ import json
 import random
 from pathlib import Path
 
-from rattler import Channel, NoArchType, PackageName, PackageRecord, RepoData, VersionWithSource
+from rattler import BuildString, Channel, NoArchType, PackageName, PackageRecord, RepoData, VersionWithSource
 
 
 def test_indexed_timestamp() -> None:
-    record = PackageRecord(name="x", version="1", build="0", build_number=0, subdir="linux-64")
+    record = PackageRecord(name="x", version="1", build=BuildString("0"), build_number=0, subdir="linux-64")
     assert record.indexed_timestamp is None
     epoch = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
     record.indexed_timestamp = epoch
@@ -17,26 +17,28 @@ def test_indexed_timestamp() -> None:
 
 
 def test_platform_arch() -> None:
-    record = PackageRecord(name="x", version="1", build="0", build_number=0, subdir="linux-64")
+    record = PackageRecord(name="x", version="1", build=BuildString("0"), build_number=0, subdir="linux-64")
     assert record.platform == "linux"
     assert record.arch == "x86_64"
 
 
 def test_platform_explicit() -> None:
-    record = PackageRecord(name="x", version="1", build="0", build_number=0, subdir="linux-64", platform="windows")
+    record = PackageRecord(
+        name="x", version="1", build=BuildString("0"), build_number=0, subdir="linux-64", platform="windows"
+    )
     assert record.platform == "windows"
     assert record.arch == "x86_64"
 
 
 def test_platform_arch_unknown_subdir() -> None:
-    record = PackageRecord(name="x", version="1", build="0", build_number=0, subdir="doesntexist")
+    record = PackageRecord(name="x", version="1", build=BuildString("0"), build_number=0, subdir="doesntexist")
     assert record.platform is None
     assert record.arch is None
 
 
 def test_noarch_python() -> None:
     record = PackageRecord(
-        name="x", version="1", build="0", build_number=0, subdir="noarch", noarch=NoArchType("python")
+        name="x", version="1", build=BuildString("0"), build_number=0, subdir="noarch", noarch=NoArchType("python")
     )
     assert record.noarch.python
     assert not record.noarch.generic
@@ -44,21 +46,23 @@ def test_noarch_python() -> None:
 
 
 def test_noarch_none() -> None:
-    record = PackageRecord(name="x", version="1", build="0", build_number=0, subdir="noarch", noarch=None)
+    record = PackageRecord(name="x", version="1", build=BuildString("0"), build_number=0, subdir="noarch", noarch=None)
     assert record.noarch.none
     assert not record.noarch.python
     assert not record.noarch.generic
 
 
 def test_noarch_literal_python() -> None:
-    record = PackageRecord(name="x", version="1", build="0", build_number=0, subdir="noarch", noarch="python")
+    record = PackageRecord(
+        name="x", version="1", build=BuildString("0"), build_number=0, subdir="noarch", noarch="python"
+    )
     assert record.noarch.python
     assert not record.noarch.generic
     assert not record.noarch.none
 
 
 def test_noarch_literal_true() -> None:
-    record = PackageRecord(name="x", version="1", build="0", build_number=0, subdir="noarch", noarch=True)
+    record = PackageRecord(name="x", version="1", build=BuildString("0"), build_number=0, subdir="noarch", noarch=True)
     assert not record.noarch.python
     assert record.noarch.generic
     assert not record.noarch.none
@@ -72,13 +76,13 @@ def test_package_record_setters_and_serialization() -> None:
     record = PackageRecord(
         name="test-pkg",
         version="1.0.0",
-        build="py_0",
+        build=BuildString("py_0"),
         build_number=0,
         subdir="linux-64",
     )
 
     record.arch = "x86_64"
-    record.build = "py_1"
+    record.build = BuildString("py_1")
     record.build_number = 1
     record.constrains = ["scipy >1.0"]
     record.depends = ["python >=3.9", "numpy"]
@@ -133,7 +137,7 @@ def test_attestations_sha256_constructor_and_setter() -> None:
     record = PackageRecord(
         name="x",
         version="1",
-        build="0",
+        build=BuildString("0"),
         build_number=0,
         subdir="noarch",
         attestations_sha256=digest,
@@ -146,7 +150,7 @@ def test_attestations_sha256_constructor_and_setter() -> None:
 
 def test_flags_roundtrip_preserves_unknown_strings(tmp_path: Path) -> None:
     flags = ["optional", "future-flag"]
-    constructed = PackageRecord("demo", "1.0", "0", 0, "noarch", flags=flags)
+    constructed = PackageRecord("demo", "1.0", BuildString("0"), 0, "noarch", flags=flags)
     assert constructed.flags == flags
 
     repodata_path = tmp_path / "repodata.json"
@@ -177,7 +181,9 @@ def test_flags_roundtrip_preserves_unknown_strings(tmp_path: Path) -> None:
 
 
 def test_extra_depends_default_empty() -> None:
-    record = PackageRecord(name="requests", version="2.28.0", build="py3-none-any", build_number=0, subdir="noarch")
+    record = PackageRecord(
+        name="requests", version="2.28.0", build=BuildString("py_0"), build_number=0, subdir="noarch"
+    )
     assert record.extra_depends == {}
 
 
@@ -185,7 +191,7 @@ def test_extra_depends_via_init() -> None:
     record = PackageRecord(
         name="requests",
         version="2.28.0",
-        build="py3-none-any",
+        build=BuildString("py_0"),
         build_number=0,
         subdir="noarch",
         extra_depends={"security": ["cryptography >=3.0", "pyOpenSSL >=0.14"]},
@@ -194,13 +200,17 @@ def test_extra_depends_via_init() -> None:
 
 
 def test_extra_depends_setter() -> None:
-    record = PackageRecord(name="requests", version="2.28.0", build="py3-none-any", build_number=0, subdir="noarch")
+    record = PackageRecord(
+        name="requests", version="2.28.0", build=BuildString("py_0"), build_number=0, subdir="noarch"
+    )
     record.extra_depends = {"socks": ["PySocks >=1.5.6"]}
     assert record.extra_depends == {"socks": ["PySocks >=1.5.6"]}
 
 
 def test_extra_depends_multiple_conditions() -> None:
-    record = PackageRecord(name="requests", version="2.28.0", build="py3-none-any", build_number=0, subdir="noarch")
+    record = PackageRecord(
+        name="requests", version="2.28.0", build=BuildString("py_0"), build_number=0, subdir="noarch"
+    )
     record.extra_depends = {
         "security": ["cryptography >=3.0"],
         "socks": ["PySocks >=1.5.6"],
@@ -214,7 +224,7 @@ def test_extra_depends_serialization() -> None:
     record = PackageRecord(
         name="requests",
         version="2.28.0",
-        build="py3-none-any",
+        build=BuildString("py_0"),
         build_number=0,
         subdir="noarch",
         extra_depends={"security": ["cryptography >=3.0"]},
@@ -224,17 +234,17 @@ def test_extra_depends_serialization() -> None:
 
 
 def test_extra_depends_not_in_json_when_empty() -> None:
-    record = PackageRecord(name="pkg", version="1.0", build="py_0", build_number=0, subdir="noarch")
+    record = PackageRecord(name="pkg", version="1.0", build=BuildString("py_0"), build_number=0, subdir="noarch")
     json_data = json.loads(record.to_json())
     assert "extra_depends" not in json_data
 
 
 def test_package_record_to_graph() -> None:
-    dependency = PackageRecord(name="dependency", version="1", build="0", build_number=0, subdir="noarch")
+    dependency = PackageRecord(name="dependency", version="1", build=BuildString("0"), build_number=0, subdir="noarch")
     package = PackageRecord(
         name="package",
         version="1",
-        build="0",
+        build=BuildString("0"),
         build_number=0,
         subdir="noarch",
         depends=["dependency >=1"],
@@ -252,15 +262,23 @@ def test_package_record_topological_sort_robust() -> None:
     Chain: pkg_e -> pkg_d -> pkg_c -> pkg_b -> pkg_a
     """
     # Making a chain of records
-    pkg_a = PackageRecord(name="pkg_a", version="1", build="0", build_number=0, subdir="noarch")
+    pkg_a = PackageRecord(name="pkg_a", version="1", build=BuildString("0"), build_number=0, subdir="noarch")
 
-    pkg_b = PackageRecord(name="pkg_b", version="1", build="0", build_number=0, subdir="noarch", depends=["pkg_a"])
+    pkg_b = PackageRecord(
+        name="pkg_b", version="1", build=BuildString("0"), build_number=0, subdir="noarch", depends=["pkg_a"]
+    )
 
-    pkg_c = PackageRecord(name="pkg_c", version="1", build="0", build_number=0, subdir="noarch", depends=["pkg_b"])
+    pkg_c = PackageRecord(
+        name="pkg_c", version="1", build=BuildString("0"), build_number=0, subdir="noarch", depends=["pkg_b"]
+    )
 
-    pkg_d = PackageRecord(name="pkg_d", version="1", build="0", build_number=0, subdir="noarch", depends=["pkg_c"])
+    pkg_d = PackageRecord(
+        name="pkg_d", version="1", build=BuildString("0"), build_number=0, subdir="noarch", depends=["pkg_c"]
+    )
 
-    pkg_e = PackageRecord(name="pkg_e", version="1", build="0", build_number=0, subdir="noarch", depends=["pkg_d"])
+    pkg_e = PackageRecord(
+        name="pkg_e", version="1", build=BuildString("0"), build_number=0, subdir="noarch", depends=["pkg_d"]
+    )
 
     # Expected order: A (no deps), B (needs A), C (needs B)...
     expected_order = ["pkg_a", "pkg_b", "pkg_c", "pkg_d", "pkg_e"]

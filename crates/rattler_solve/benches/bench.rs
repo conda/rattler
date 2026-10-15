@@ -56,13 +56,19 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
     ];
 
     let names = specs.iter().map(|s| s.name.as_exact().unwrap().clone());
-    let available_packages = SparseRepoData::load_records_recursive(
+    let mut available_packages = SparseRepoData::load_records_recursive(
         &sparse_repo_data,
         names,
         None,
         PackageFormatSelection::default(),
     )
     .unwrap();
+
+    // Recursive loading seeds its queue from a HashSet. Keep package-name
+    // interning order identical across baseline and optimized processes.
+    for records in &mut available_packages {
+        records.sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
+    }
 
     #[cfg(feature = "libsolv_c")]
     group.bench_function("libsolv_c", |b| {
@@ -93,6 +99,8 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
 
 fn criterion_benchmark(c: &mut Criterion) {
     bench_solve_environment(c, vec!["python=3.9"]);
+    bench_solve_environment(c, vec!["python=3.9", "numpy"]);
+    bench_solve_environment(c, vec!["pytorch"]);
     bench_solve_environment(c, vec!["xtensor", "xsimd"]);
     bench_solve_environment(c, vec!["tensorflow"]);
     bench_solve_environment(c, vec!["quetz"]);

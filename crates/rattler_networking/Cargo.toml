@@ -1,7 +1,7 @@
 [package]
 exclude = ["tests/**", "**/snapshots/**"]
 name = "rattler_networking"
-version = "0.32.1"
+version = "0.34.1"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "Authenticated requests in the conda ecosystem"
@@ -96,6 +96,9 @@ reqwest = { workspace = true, features = ["json", "form", "stream"] }
 axum = { workspace = true, features = ["json", "form"] }
 reqwest-retry = { workspace = true }
 hex = { workspace = true }
+rmp-serde = { workspace = true }
+serde_bytes = { workspace = true }
+zstd = { workspace = true }
 temp-env = { workspace = true }
 rstest = { workspace = true }
 tracing-test = { workspace = true }

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [8.1.2](https://github.com/conda/rattler/compare/rattler_virtual_packages-v8.1.1...rattler_virtual_packages-v8.1.2) - 2026-10-13
+
+### Other
+
+- Add `BuildString` to rattler_conda_types ([#2430](https://github.com/conda/rattler/pull/2430))
+
+## [8.1.1](https://github.com/conda/rattler/compare/rattler_virtual_packages-v8.1.0...rattler_virtual_packages-v8.1.1) - 2026-10-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
 ## [8.1.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v8.0.1...rattler_virtual_packages-v8.1.0) - 2026-10-05
 
 ### Added

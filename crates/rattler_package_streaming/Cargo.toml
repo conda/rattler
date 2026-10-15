@@ -1,7 +1,7 @@
 [package]
 exclude = ["tests/**", "benches/**", "**/snapshots/**"]
 name = "rattler_package_streaming"
-version = "0.27.10"
+version = "0.27.14"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Extract and stream of Conda package archives"
@@ -54,7 +54,6 @@ zstd = { workspace = true, default-features = false }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Needs tokio's `fs` feature, which wasm32 does not support.
 astral-tokio-tar = { workspace = true }
-num_cpus = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
 zstd = { workspace = true, features = ["zstdmt"] }
 

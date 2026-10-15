@@ -22,7 +22,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rayon::prelude::IndexedParallelIterator;
 
 /// The mode in which the validation should be performed.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Default, Hash)]
 pub enum ValidationMode {
     /// Only check if the package directory exists and contains a valid index.json.
     /// Does not validate individual files or paths.json. This is the fastest validation

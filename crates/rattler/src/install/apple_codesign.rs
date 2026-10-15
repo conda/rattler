@@ -18,7 +18,8 @@ pub enum AppleCodeSignBehavior {
 
 /// Sign a binary using the `codesign` tool with an ad-hoc certificate on macOS.
 /// This is required for binaries to run on macOS when their signature has been invalidated
-/// by prefix replacement (modifying binary content). The function preserves existing entitlements.
+/// by prefix replacement (modifying binary content). The function preserves the existing identifier,
+/// entitlements and requirements.
 pub(crate) fn codesign(destination_path: &Path) -> Result<(), LinkFileError> {
     let status = std::process::Command::new("/usr/bin/codesign")
         .arg("--sign")
@@ -26,8 +27,8 @@ pub(crate) fn codesign(destination_path: &Path) -> Result<(), LinkFileError> {
         .arg("-")
         // replace any existing signature
         .arg("--force")
-        // preserve entitlements from the original binary
-        .arg("--preserve-metadata=entitlements")
+        // preserve identifier, entitlements and requirements from the original binary
+        .arg("--preserve-metadata=identifier,entitlements,requirements")
         .arg(destination_path)
         .stdout(std::process::Stdio::null()) // Suppress stdout
         .stderr(std::process::Stdio::null()) // Suppress stderr
