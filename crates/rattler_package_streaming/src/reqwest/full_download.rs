@@ -13,10 +13,7 @@ use async_zip::base::read::stream::ZipFileReader;
 use futures_util::stream::TryStreamExt;
 use rattler_conda_types::package::{CondaArchiveType, PackageFile};
 use reqwest_middleware::ClientWithMiddleware;
-use tar_codec::{
-    Archive as _, DecodePolicy, Member, MemberPayload as _, PaxDecodePolicy,
-    PaxVendorExtensionPolicy, TarArchive,
-};
+use tar_codec::{DecodePolicy, Member, PaxDecodePolicy, PaxVendorExtensionPolicy, TarArchive};
 use tokio::io::AsyncRead;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tokio_util::io::StreamReader;
@@ -143,15 +140,19 @@ fn decode_error(err: tar_codec::DecodeError) -> ExtractError {
 /// regular file whose path matches `file_name`. Because the reader is
 /// streaming, only the bytes up to (and including) the target member are
 /// consumed.
+///
 async fn get_file_from_tar_archive<R: AsyncRead + Unpin>(
     reader: R,
     file_name: &Path,
 ) -> Result<Option<Vec<u8>>, ExtractError> {
     let target = normalize(file_name)?;
-    let mut members = TarArchive::new(reader)
-        .with_policy(conda_decode_policy())
-        .members();
-    while let Some(member) = members.next().await.map_err(decode_error)? {
+    // Use the inherent `TarArchive`/`TarMemberPayload` methods rather than the
+    // lending `Archive::members` cursor: rustc currently cannot prove futures
+    // driving the latter `Send` when the reader borrows (as the `.conda` zip
+    // entry reader does), and callers spawn these futures on multi-threaded
+    // runtimes.
+    let mut archive = TarArchive::new(reader).with_policy(conda_decode_policy());
+    while let Some(member) = archive.next_member().await.map_err(decode_error)? {
         // Normalized comparison, matching the sparse path in `crate::archive`.
         if normalize(Path::new(&member.metadata().path))? != target {
             continue;
@@ -188,4 +189,21 @@ async fn get_file_from_tar_archive<R: AsyncRead + Unpin>(
         }
     }
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_send<T: Send>(_: &T) {}
+
+    /// Callers (e.g. py-rattler) spawn these futures on multi-threaded
+    /// runtimes, so they must stay `Send`.
+    #[allow(dead_code)]
+    fn futures_are_send(client: &ClientWithMiddleware, url: &Url, path: &Path) {
+        assert_send(&fetch_file_from_remote_full_download(client, url, path));
+        assert_send(&fetch_package_file_full_download::<
+            rattler_conda_types::package::IndexJson,
+        >(client, url));
+    }
 }

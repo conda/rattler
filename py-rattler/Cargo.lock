@@ -149,7 +149,7 @@ dependencies = [
 [[package]]
 name = "archive-trait"
 version = "0.0.15"
-source = "git+https://github.com/pavelzw/astral-codec?rev=07c57bc71923696e5b5dec2c0cd177a786399351#07c57bc71923696e5b5dec2c0cd177a786399351"
+source = "git+https://github.com/pavelzw/astral-codec?rev=429e058e130e8a098490d222b115d389b24c005d#429e058e130e8a098490d222b115d389b24c005d"
 dependencies = [
  "thiserror 2.0.20",
  "tokio",
@@ -1576,7 +1576,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1723,7 +1723,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2870,7 +2870,7 @@ version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a1886916523694cd6ea3d175f03a1e5010699a2a4cc13696d83d7bea1d80638"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3876,7 +3876,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4929,7 +4929,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4987,7 +4987,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5796,7 +5796,7 @@ dependencies = [
 [[package]]
 name = "tar-codec"
 version = "0.0.15"
-source = "git+https://github.com/pavelzw/astral-codec?rev=07c57bc71923696e5b5dec2c0cd177a786399351#07c57bc71923696e5b5dec2c0cd177a786399351"
+source = "git+https://github.com/pavelzw/astral-codec?rev=429e058e130e8a098490d222b115d389b24c005d#429e058e130e8a098490d222b115d389b24c005d"
 dependencies = [
  "archive-trait",
  "tar-framing",
@@ -5807,7 +5807,7 @@ dependencies = [
 [[package]]
 name = "tar-framing"
 version = "0.0.15"
-source = "git+https://github.com/pavelzw/astral-codec?rev=07c57bc71923696e5b5dec2c0cd177a786399351#07c57bc71923696e5b5dec2c0cd177a786399351"
+source = "git+https://github.com/pavelzw/astral-codec?rev=429e058e130e8a098490d222b115d389b24c005d#429e058e130e8a098490d222b115d389b24c005d"
 dependencies = [
  "thiserror 2.0.20",
  "tokio",
@@ -5829,7 +5829,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6533,7 +6533,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

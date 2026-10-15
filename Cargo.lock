@@ -184,7 +184,7 @@ dependencies = [
 [[package]]
 name = "archive-trait"
 version = "0.0.15"
-source = "git+https://github.com/pavelzw/astral-codec?rev=07c57bc71923696e5b5dec2c0cd177a786399351#07c57bc71923696e5b5dec2c0cd177a786399351"
+source = "git+https://github.com/pavelzw/astral-codec?rev=429e058e130e8a098490d222b115d389b24c005d#429e058e130e8a098490d222b115d389b24c005d"
 dependencies = [
  "thiserror 2.0.21",
  "tokio",
@@ -7375,7 +7375,7 @@ dependencies = [
 [[package]]
 name = "tar-codec"
 version = "0.0.15"
-source = "git+https://github.com/pavelzw/astral-codec?rev=07c57bc71923696e5b5dec2c0cd177a786399351#07c57bc71923696e5b5dec2c0cd177a786399351"
+source = "git+https://github.com/pavelzw/astral-codec?rev=429e058e130e8a098490d222b115d389b24c005d#429e058e130e8a098490d222b115d389b24c005d"
 dependencies = [
  "archive-trait",
  "tar-framing",
@@ -7386,7 +7386,7 @@ dependencies = [
 [[package]]
 name = "tar-framing"
 version = "0.0.15"
-source = "git+https://github.com/pavelzw/astral-codec?rev=07c57bc71923696e5b5dec2c0cd177a786399351#07c57bc71923696e5b5dec2c0cd177a786399351"
+source = "git+https://github.com/pavelzw/astral-codec?rev=429e058e130e8a098490d222b115d389b24c005d#429e058e130e8a098490d222b115d389b24c005d"
 dependencies = [
  "thiserror 2.0.21",
  "tokio",
