@@ -26,6 +26,7 @@ use resolvo::{
     utils::{Pool, VersionSet},
 };
 use url::Url;
+use version_index::VersionIndex;
 
 use crate::{
     CancellationToken, ChannelPriority, ExcludeNewer, IntoRepoData, SolveError, SolveStrategy,
@@ -34,6 +35,7 @@ use crate::{
 };
 
 mod conda_sorting;
+mod version_index;
 
 type MatchSpecParseCache = HashMap<String, (Vec<VersionSetId>, Option<ConditionId>)>;
 
@@ -315,6 +317,10 @@ pub struct CondaDependencyProvider<'a> {
 
     /// Holds all the cached candidates for each package name.
     records: HashMap<NameId, Candidates>,
+
+    /// Caches the records of each package grouped by version, so a version spec
+    /// is tested once per version.
+    version_index: RefCell<VersionIndex<'a>>,
 
     /// Caches the dependency-based ordering of equivalent package variants.
     dependency_tiebreak_cache: RefCell<DependencyTiebreakCache>,
@@ -673,6 +679,7 @@ impl<'a> CondaDependencyProvider<'a> {
             pool,
             name_to_condition: RefCell::default(),
             records,
+            version_index: RefCell::default(),
             dependency_tiebreak_cache: RefCell::default(),
             matchspec_to_highest_version: RefCell::default(),
             parse_match_spec_cache: RefCell::default(),
@@ -1047,43 +1054,14 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
     ) -> Vec<SolvableId> {
         let spec = self.pool.resolve_version_set(version_set);
         match spec {
-            SolverMatchSpec::MatchSpec(spec) => {
-                candidates
-                    .iter()
-                    .copied()
-                    .filter(|c| {
-                        let record = &self.pool.resolve_solvable(*c).record;
-                        match record {
-                            SolverPackageRecord::Record(rec) => {
-                                // Base package matches if spec matches and no features are required
-                                spec.matches(*rec) != inverse
-                            }
-                            SolverPackageRecord::VirtualPackage(GenericVirtualPackage {
-                                version,
-                                build_string,
-                                ..
-                            }) => {
-                                if let Some(spec) = spec.version.as_ref()
-                                    && !spec.matches(version)
-                                {
-                                    return inverse;
-                                }
-
-                                if let Some(build_match) = spec.build.as_ref()
-                                    && !build_match.matches(build_string.as_str())
-                                {
-                                    return inverse;
-                                }
-
-                                !inverse
-                            }
-                            SolverPackageRecord::Extra { .. } => {
-                                unreachable!("extras should never be compared to matchspecs")
-                            }
-                        }
-                    })
-                    .collect()
-            }
+            SolverMatchSpec::MatchSpec(spec) => self.version_index.borrow_mut().filter(
+                &self.pool,
+                &self.records,
+                self.pool.resolve_version_set_package_name(version_set),
+                candidates,
+                spec,
+                inverse,
+            ),
             SolverMatchSpec::Extra => {
                 // Extras are already filtered by name.
                 if inverse {
