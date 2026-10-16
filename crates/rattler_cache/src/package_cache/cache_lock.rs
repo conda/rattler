@@ -44,11 +44,12 @@ pub(crate) fn peek_sha256(cache_path: &Path) -> Option<Sha256Hash> {
 /// Whether a cache entry recorded with `cached` can serve a request for
 /// `wanted`.
 ///
-/// Only two known hashes can contradict each other: an entry that predates
-/// hash recording, or a request that carries no hash of its own, is treated as
-/// a match.
+/// A request that carries no hash of its own accepts any entry. A request
+/// with a hash only accepts an entry recorded with the same hash: an entry
+/// without one (e.g. one that predates hash recording) may hold a different
+/// package with the same name, version and build string.
 pub(crate) fn sha256_satisfies(wanted: Option<&Sha256Hash>, cached: Option<&Sha256Hash>) -> bool {
-    !matches!((wanted, cached), (Some(wanted), Some(cached)) if wanted != cached)
+    wanted.is_none_or(|wanted| cached == Some(wanted))
 }
 
 /// A validated cache entry with its associated metadata.

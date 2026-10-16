@@ -123,9 +123,9 @@ pub struct CacheIndex {
     /// Directory names as produced by [`CacheKey::to_path_segment`], mapped to
     /// the sha256 and filter of each layer holding that entry. A sha256 is
     /// absent when the entry predates hash recording or its metadata could not
-    /// be read. Every layer holding the name contributes, in layer order:
-    /// lookup walks past a filtered or hash-mismatching layer, so the index
-    /// must too.
+    /// be read; such an entry only matches requests without a sha256. Every
+    /// layer holding the name contributes, in layer order: lookup walks past a
+    /// filtered or hash-mismatching layer, so the index must too.
     entries: HashMap<String, Vec<CacheIndexEntry>>,
     cache_origin: bool,
 }
@@ -2280,14 +2280,11 @@ mod test {
         assert!(!index.contains_path(identifier, Path::new("/somewhere/else.conda")));
     }
 
-    /// An entry whose metadata is unreadable stays present in the index.
-    ///
-    /// Entries written before hashes were recorded have no readable hash
-    /// either, and kicking those out would remove every older cache from
-    /// offline availability. Presence has never promised validity: the entry
-    /// is validated on use, exactly as `get_or_fetch` would.
+    /// An entry whose hash is unreadable is not reported as present for a
+    /// record that carries a sha256, because `get_or_fetch` would re-fetch it.
+    /// It still counts for a record without a sha256.
     #[tokio::test]
-    async fn test_cache_index_keeps_entries_with_unreadable_metadata() {
+    async fn test_cache_index_entries_with_unreadable_metadata() {
         let packages_dir = tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
         let package_path = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
@@ -2315,9 +2312,11 @@ mod test {
 
         let index = cache.index().await.unwrap();
         assert!(
-            index.contains_path(&record, &package_path),
-            "an unreadable hash must not remove the entry from the index"
+            !index.contains_path(&record, &package_path),
+            "an entry without a hash cannot vouch for a record with one"
         );
+        record.sha256 = None;
+        assert!(index.contains_path(&record, &package_path));
     }
 
     /// A `file:` record on an origin-keyed cache is stored through
@@ -3027,6 +3026,40 @@ mod test {
                 .join("clobber-python-0.1.0-cpython")
                 .exists()
         );
+    }
+
+    #[tokio::test]
+    // An entry recorded without a sha256 cannot vouch for any particular
+    // package, so a request with a known sha256 re-fetches it.
+    async fn test_entry_without_sha_is_refetched_when_sha_is_wanted() {
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+        let key: CacheKey =
+            CondaArchiveIdentifier::try_from_filename("clobber-python-0.1.0-cpython.conda")
+                .unwrap()
+                .into();
+
+        let fetch = |destination: PathBuf| async move {
+            let archive = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+            rattler_package_streaming::tokio::fs::extract(&archive, &destination)
+                .await
+                .map(|_| ())
+        };
+
+        let cache_metadata = cache.get_or_fetch(key.clone(), fetch, None).await.unwrap();
+        assert_eq!(cache_metadata.sha256, None);
+        drop(cache_metadata);
+
+        let sha = compute_file_digest::<Sha256>(
+            get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda"),
+        )
+        .unwrap();
+        let cache_metadata = cache
+            .get_or_fetch(key.with_sha256(sha), fetch, None)
+            .await
+            .unwrap();
+        assert_eq!(cache_metadata.revision(), 2);
+        assert_eq!(cache_metadata.sha256, Some(sha));
     }
 
     /// Verify that a fully-exhausted semaphore does not block a cache hit.
