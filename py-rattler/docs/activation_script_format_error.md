@@ -1,0 +1,3 @@
+# ActivationScriptFormatError
+
+::: rattler.exceptions.ActivationScriptFormatError

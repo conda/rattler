@@ -176,22 +176,45 @@ nav:
           - PathModificationBehavior: path_modification_behavior.md
       - exceptions:
           - ActivationError: activation_error.md
+          - ActivationScriptFormatError: activation_script_format_error.md
           - AttestationError: attestation_error.md
+          - AuthenticationStorageError: authentication_storage_error.md
           - CacheDirError: cache_dir_error.md
+          - CanonicalMatchSpecError: canonical_match_spec_error.md
+          - ConfigError: config_error.md
+          - ConversionError: conversion_error.md
+          - ConvertSubdirError: convert_subdir_error.md
           - DetectVirtualPackageError: detect_virtual_package_error.md
           - EnvironmentCreationError: environment_creation_error.md
+          - ExtractError: extract_error.md
           - FetchRepoDataError: fetch_repo_data_error.md
+          - GatewayError: gateway_error.md
+          - GatewayWarning: gateway_warning.md
+          - InstallerError: installer_error.md
           - InvalidChannelError: invalid_channel_error.md
+          - InvalidHeaderNameError: invalid_header_name_error.md
+          - InvalidHeaderValueError: invalid_header_value_error.md
           - InvalidMatchSpecError: invalid_match_spec_error.md
           - InvalidPackageNameError: invalid_package_name_error.md
           - InvalidUrlError: invalid_url_error.md
           - InvalidVersionError: invalid_version_error.md
+          - InvalidVersionSpecError: invalid_version_spec_error.md
           - IoError: io_error.md
           - LinkError: link_error.md
+          - LockFileError: lock_file_error.md
+          - PackageNameMatcherParseError: package_name_matcher_parse_error.md
           - ParseArchError: parse_arch_error.md
+          - ParseCondaLockError: parse_conda_lock_error.md
+          - ParseExplicitEnvironmentSpecError: parse_explicit_environment_spec_error.md
           - ParseSubdirError: parse_subdir_error.md
+          - RequirementError: requirement_error.md
+          - ShellError: shell_error.md
           - SolverError: solver_error.md
           - TransactionError: transaction_error.md
+          - ValidatePackageRecordsError: validate_package_records_error.md
+          - VersionBumpError: version_bump_error.md
+          - VersionExtendError: version_extend_error.md
+          - VirtualPackageOverrideError: virtual_package_override_error.md
 
 extra:
   version:

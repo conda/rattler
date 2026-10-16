@@ -1,0 +1,3 @@
+# VersionExtendError
+
+::: rattler.exceptions.VersionExtendError

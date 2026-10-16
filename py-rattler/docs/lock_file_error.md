@@ -1,0 +1,3 @@
+# LockFileError
+
+::: rattler.exceptions.LockFileError

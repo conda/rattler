@@ -1,0 +1,3 @@
+# VersionBumpError
+
+::: rattler.exceptions.VersionBumpError

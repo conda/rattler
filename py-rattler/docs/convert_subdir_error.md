@@ -1,0 +1,3 @@
+# ConvertSubdirError
+
+::: rattler.exceptions.ConvertSubdirError

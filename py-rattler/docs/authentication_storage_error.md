@@ -1,0 +1,3 @@
+# AuthenticationStorageError
+
+::: rattler.exceptions.AuthenticationStorageError

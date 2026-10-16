@@ -1,0 +1,3 @@
+# ValidatePackageRecordsError
+
+::: rattler.exceptions.ValidatePackageRecordsError

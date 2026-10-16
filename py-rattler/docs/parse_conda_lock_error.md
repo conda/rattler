@@ -1,0 +1,3 @@
+# ParseCondaLockError
+
+::: rattler.exceptions.ParseCondaLockError

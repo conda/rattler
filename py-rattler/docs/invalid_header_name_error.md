@@ -1,0 +1,3 @@
+# InvalidHeaderNameError
+
+::: rattler.exceptions.InvalidHeaderNameError

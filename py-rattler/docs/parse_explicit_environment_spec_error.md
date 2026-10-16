@@ -1,0 +1,3 @@
+# ParseExplicitEnvironmentSpecError
+
+::: rattler.exceptions.ParseExplicitEnvironmentSpecError

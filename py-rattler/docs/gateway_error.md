@@ -1,0 +1,3 @@
+# GatewayError
+
+::: rattler.exceptions.GatewayError

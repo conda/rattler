@@ -1,0 +1,3 @@
+# ShellError
+
+::: rattler.exceptions.ShellError

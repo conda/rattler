@@ -1,0 +1,3 @@
+# CanonicalMatchSpecError
+
+::: rattler.exceptions.CanonicalMatchSpecError

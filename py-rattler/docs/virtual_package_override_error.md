@@ -1,0 +1,3 @@
+# VirtualPackageOverrideError
+
+::: rattler.exceptions.VirtualPackageOverrideError

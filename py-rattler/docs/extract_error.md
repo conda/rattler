@@ -1,0 +1,3 @@
+# ExtractError
+
+::: rattler.exceptions.ExtractError

@@ -1,0 +1,3 @@
+# ConversionError
+
+::: rattler.exceptions.ConversionError

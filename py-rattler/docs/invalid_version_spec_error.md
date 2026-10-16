@@ -1,0 +1,3 @@
+# InvalidVersionSpecError
+
+::: rattler.exceptions.InvalidVersionSpecError

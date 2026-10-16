@@ -1,0 +1,3 @@
+# RequirementError
+
+::: rattler.exceptions.RequirementError

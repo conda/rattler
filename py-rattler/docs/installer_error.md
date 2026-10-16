@@ -1,0 +1,3 @@
+# InstallerError
+
+::: rattler.exceptions.InstallerError

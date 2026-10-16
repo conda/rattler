@@ -1,0 +1,3 @@
+# ConfigError
+
+::: rattler.exceptions.ConfigError

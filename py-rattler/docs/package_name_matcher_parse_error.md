@@ -1,0 +1,3 @@
+# PackageNameMatcherParseError
+
+::: rattler.exceptions.PackageNameMatcherParseError
