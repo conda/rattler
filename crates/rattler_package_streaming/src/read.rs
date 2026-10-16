@@ -129,7 +129,7 @@ fn extract_zipfile<R: std::io::Read>(
     let mut file = ManuallyDrop::new(zip_file);
 
     if file
-        .mangled_name()
+        .mangled_name()?
         .file_name()
         .map(OsStr::to_string_lossy)
         .is_some_and(|file_name| file_name.ends_with(".tar.zst"))
