@@ -1,0 +1,53 @@
+version: 6
+environments:
+  default:
+    channels:
+      - url: ./
+    packages:
+      linux-64:
+        - conda: ./noarch/bar-1.0-0.tar.bz2
+        - conda: ./noarch/foo-1.0-0.tar.bz2
+  new:
+    channels:
+      - url: ./
+    packages:
+      linux-64:
+        - conda: ./noarch/bar-2.0-0.tar.bz2
+        - conda: ./noarch/foo-2.0-0.tar.bz2
+  old:
+    channels:
+      - url: ./
+    packages:
+      linux-64:
+        - conda: ./noarch/bar-1.0-0.tar.bz2
+        - conda: https://example.com/old/noarch/foo-0.5-0.tar.bz2
+packages:
+  - conda: ./noarch/bar-1.0-0.tar.bz2
+    depends: []
+    license: MIT
+    subdir: noarch
+    size: 100
+  - conda: ./noarch/bar-2.0-0.tar.bz2
+    depends: []
+    license: MIT
+    subdir: noarch
+    size: 100
+  - conda: ./noarch/foo-1.0-0.tar.bz2
+    depends:
+      - bar
+    license: MIT
+    subdir: noarch
+    size: 100
+  - conda: ./noarch/foo-2.0-0.tar.bz2
+    depends:
+      - bar >=2
+    license: MIT
+    subdir: noarch
+    size: 100
+  - conda: https://example.com/old/noarch/foo-0.5-0.tar.bz2
+    depends:
+      - bar
+      - qux
+    license: MIT
+    subdir: noarch
+    size: 100

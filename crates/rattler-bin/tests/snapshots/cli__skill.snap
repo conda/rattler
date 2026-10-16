@@ -137,6 +137,8 @@ rattler create python numpy                          # install into ./.prefix fr
 rattler create -p ./env -c conda-forge python=3.12   # choose the prefix and the channel
 rattler create python --dry-run --platform linux-64  # show the transaction without installing
 rattler create python --constraint "numpy<2"         # constrain a package without requiring it
+rattler create -p ./env scipy --pin ./env            # add scipy without changing installed packages
+rattler create -p ./env scipy --no-favor-installed   # also update the installed packages
 ```
 
 ### `rattler download`
@@ -187,6 +189,7 @@ rattler search xtensor --format urls  # print only the package urls
 rattler solve python numpy                 # print the solved environment as a table
 rattler solve python --format json         # print the solved records as JSON
 rattler solve python --format urls         # print only the urls of the solved packages
+rattler solve numpy=2 --favor pixi.lock    # change the locked packages as little as possible
 rattler solve python --verify-attestations require --issuer github --identity 'https://github.com/org/*'
 ```
 
