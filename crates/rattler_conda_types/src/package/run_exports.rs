@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
 use super::PackageFile;
+use crate::Flag;
 
 /// A representation of the `run_exports.json` file found in package archives.
 ///
@@ -33,6 +34,11 @@ pub struct RunExportsJson {
     /// run
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub strong_constrains: Vec<String>,
+    /// flags that are added to the flags of any package that has this
+    /// package as a direct build or host dependency. For example, a debug
+    /// compiler can export a `debug` flag.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub flags: Vec<Flag>,
 }
 
 impl PackageFile for RunExportsJson {
@@ -62,6 +68,7 @@ impl RunExportsJson {
             && self.noarch.is_empty()
             && self.weak_constrains.is_empty()
             && self.strong_constrains.is_empty()
+            && self.flags.is_empty()
     }
 }
 
@@ -86,5 +93,31 @@ mod test {
         println!("{}", package_dir.display());
 
         insta::assert_yaml_snapshot!(RunExportsJson::from_package_directory(&package_dir).unwrap());
+    }
+}
+
+#[cfg(test)]
+mod flags_test {
+    use super::{PackageFile, RunExportsJson};
+
+    #[test]
+    fn flags_round_trip() {
+        let run_exports =
+            RunExportsJson::from_str(r#"{"strong": ["libgcc >=15"], "flags": ["debug"]}"#).unwrap();
+        assert_eq!(run_exports.flags.len(), 1);
+        assert_eq!(run_exports.flags[0].as_str(), "debug");
+        assert!(!run_exports.is_empty());
+        assert_eq!(
+            serde_json::to_string(&run_exports).unwrap(),
+            r#"{"strong":["libgcc >=15"],"flags":["debug"]}"#
+        );
+
+        // Files without flags don't serialize the key.
+        let run_exports = RunExportsJson::from_str(r#"{"weak": ["zlib"]}"#).unwrap();
+        assert!(run_exports.flags.is_empty());
+        assert_eq!(
+            serde_json::to_string(&run_exports).unwrap(),
+            r#"{"weak":["zlib"]}"#
+        );
     }
 }
