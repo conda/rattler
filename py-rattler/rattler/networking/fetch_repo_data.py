@@ -106,6 +106,9 @@ async def fetch_repo_data(
 
     Returns:
         A list of `SparseRepoData` for requested channels and platforms.
+
+    Raises:
+        FetchRepoDataError: If the repodata cannot be fetched or cached.
     """
     fetch_options = fetch_options or FetchRepoDataOptions()
     repo_data_list = await py_fetch_repo_data(

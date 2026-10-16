@@ -109,6 +109,13 @@ async def solve(
 
     Returns:
         Resolved list of `RepoDataRecord`s.
+
+    Raises:
+        SolverError: If the dependencies cannot be resolved.
+        GatewayError: If repodata acquisition fails (missing channels, cache, or
+            network errors; fetch-level failures surface here, never as ``FetchRepoDataError``).
+        TypeError: If a source does not implement the required interface.
+        ValueError: If `timestamp_policy` holds an invalid value.
     """
     if gateway is None:
         gateway = Gateway()
