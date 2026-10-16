@@ -285,3 +285,82 @@ async fn etag_object(
     }
     response
 }
+
+/// How a [`serve_file_breaking_part`] server breaks one part.
+#[derive(Clone, Copy)]
+pub enum Breakage {
+    /// The connection drops partway through the first answer.
+    CutOnce,
+    /// The body holds one byte more than the range.
+    Overlong,
+}
+
+/// Spawn a local file server with range-request support that breaks the
+/// answers to ranges starting at `start`. Also returns how many such ranges
+/// were requested.
+pub async fn serve_file_breaking_part(
+    file_path: impl AsRef<Path>,
+    start: u64,
+    breakage: Breakage,
+) -> (Url, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+    let requests = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let state = (requests.clone(), start, breakage);
+    let url = serve(file_path.as_ref(), |router| {
+        router.layer(middleware::from_fn_with_state(state, break_part))
+    })
+    .await;
+    (url, requests)
+}
+
+async fn break_part(
+    State((requests, start, breakage)): State<(
+        std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        u64,
+        Breakage,
+    )>,
+    req: Request,
+    next: Next,
+) -> Response {
+    if range_start(&req) != Some(start) {
+        return next.run(req).await;
+    }
+    let first = requests.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0;
+    let (mut parts, body) = next.run(req).await.into_parts();
+    let bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+    parts.headers.remove(http::header::CONTENT_LENGTH);
+    let body = match breakage {
+        Breakage::CutOnce if first => {
+            use futures::StreamExt;
+            let half = bytes.slice(..bytes.len() / 2);
+            // The drop comes after the headers, as a body read error.
+            let drop = async {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                Err(std::io::Error::other("connection dropped"))
+            };
+            axum::body::Body::from_stream(
+                futures::stream::once(async { Ok(half) }).chain(futures::stream::once(drop)),
+            )
+        }
+        Breakage::CutOnce => axum::body::Body::from(bytes),
+        Breakage::Overlong => axum::body::Body::from([&bytes[..], b"x"].concat()),
+    };
+    Response::from_parts(parts, body)
+}
+
+/// Spawn a local file server that answers at most `max_len` bytes of any
+/// range, like a server or proxy with its own part size.
+pub async fn serve_file_capping_ranges(file_path: impl AsRef<Path>, max_len: u64) -> Url {
+    serve(file_path.as_ref(), |router| {
+        router.layer(middleware::from_fn_with_state(max_len, cap_range))
+    })
+    .await
+}
+
+async fn cap_range(State(max_len): State<u64>, mut req: Request, next: Next) -> Response {
+    if let Some(start) = range_start(&req) {
+        let range = format!("bytes={start}-{}", start + max_len - 1);
+        req.headers_mut()
+            .insert(http::header::RANGE, range.parse().unwrap());
+    }
+    next.run(req).await
+}

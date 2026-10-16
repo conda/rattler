@@ -5,15 +5,16 @@
 //! bytes are requested as concurrent ranges. The parts are yielded in order, so
 //! callers can keep streaming the result into an extractor.
 
-use std::ops::Range;
+use std::{io::ErrorKind, ops::Range, time::Duration};
 
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use futures_util::{
-    StreamExt, TryStreamExt,
+    StreamExt, TryStreamExt, future,
     stream::{self, BoxStream},
 };
 use http::{HeaderValue, StatusCode, header};
 use rattler_digest::Sha256Hash;
+use rattler_networking::mirror_middleware::Mirrored;
 use reqwest::Response;
 use reqwest_middleware::ClientWithMiddleware;
 use tokio_util::task::AbortOnDropHandle;
@@ -27,8 +28,9 @@ pub(crate) struct RangedDownload {
     /// The number of bytes requested per range.
     pub part_size: u64,
     /// The number of parts requested at once. Parts that arrive ahead of an
-    /// earlier one are held in memory and count against this limit, so at most
-    /// `parts_in_flight * part_size` bytes are buffered per download.
+    /// earlier one are held in memory and count against this limit, so with
+    /// the part the reader holds, at most `(parts_in_flight + 1) * part_size`
+    /// bytes are buffered per download.
     pub parts_in_flight: usize,
 }
 
@@ -68,6 +70,9 @@ enum RangeError {
     Changed { etag: String },
 }
 
+/// How many times a part is requested before a dropped connection fails it.
+const PART_ATTEMPTS: u32 = 3;
+
 impl From<RangeError> for std::io::Error {
     fn from(err: RangeError) -> Self {
         std::io::Error::new(std::io::ErrorKind::InvalidData, err)
@@ -98,6 +103,12 @@ pub(crate) async fn download(
     if first.status() != StatusCode::PARTIAL_CONTENT {
         return whole(first);
     }
+    // A mirror is chosen per request, so the parts could come from different
+    // mirrors, or each repeat an OCI registry lookup.
+    if first.extensions().get::<Mirrored>().is_some() {
+        drop(first);
+        return whole(get(&client, url, expected_sha256).send().await?);
+    }
 
     let Some((first_range, total)) = content_range(&first)
         .filter(|(range, total)| range.start == 0 && range.end > 0 && range.end <= *total)
@@ -116,30 +127,47 @@ pub(crate) async fn download(
         });
     }
 
-    let etag = s3_etag(&first);
+    // A server may return less than asked for, and the same for every range.
+    let part_size = first_range.end.min(config.part_size);
+    let parts = Parts {
+        client,
+        url,
+        expected_sha256,
+        total,
+        etag: s3_etag(&first),
+    };
     let mut first = Some(first);
-    let parts = part_ranges(first_range.end, total, config.part_size).map(move |range| {
-        let task = match first.take() {
-            Some(first) => tokio::spawn(read_part(first, range, total)),
-            None => tokio::spawn(fetch_part(
-                get(&client, url.clone(), expected_sha256),
-                range,
-                total,
-                etag.clone(),
-            )),
-        };
+    let tasks = part_ranges(first_range.end, total, part_size).map(move |range| {
+        let parts = parts.clone();
         // Dropping the stream stops the parts that are still downloading.
+        let task = AbortOnDropHandle::new(match first.take() {
+            Some(first) => tokio::spawn(async move {
+                match read_part(first, range.clone(), parts.total).await {
+                    Err(err) if err.kind() == ErrorKind::Interrupted => parts.fetch(range).await,
+                    result => result,
+                }
+            }),
+            None => tokio::spawn(async move { parts.fetch(range).await }),
+        });
         async move {
-            AbortOnDropHandle::new(task)
-                .await
-                .map_err(std::io::Error::other)?
+            match task.await {
+                Ok(result) => result,
+                Err(err) if err.is_panic() => std::panic::resume_unwind(err.into_panic()),
+                Err(err) => Err(std::io::Error::other(err)),
+            }
         }
     });
 
     Ok(Download {
         total_bytes: Some(total),
-        body: stream::iter(parts)
+        body: stream::iter(tasks)
             .buffered(config.parts_in_flight.max(1))
+            // A reader may retry an `Interrupted` read, which must not skip
+            // the part that failed.
+            .scan(false, |failed, part| {
+                let ended = std::mem::replace(failed, part.is_err());
+                future::ready((!ended).then_some(part))
+            })
             .boxed(),
     })
 }
@@ -177,42 +205,69 @@ fn s3_etag(response: &Response) -> Option<HeaderValue> {
         .cloned()
 }
 
-async fn fetch_part(
-    mut request: reqwest_middleware::RequestBuilder,
-    range: Range<u64>,
+/// What the requests for the parts after the first share.
+#[derive(Clone)]
+struct Parts {
+    client: ClientWithMiddleware,
+    url: Url,
+    expected_sha256: Option<Sha256Hash>,
     total: u64,
     etag: Option<HeaderValue>,
-) -> std::io::Result<Bytes> {
-    if let Some(etag) = &etag {
-        request = request.header(header::IF_MATCH, etag.clone());
+}
+
+impl Parts {
+    /// Fetch `range`, requesting it again when the connection drops.
+    async fn fetch(&self, range: Range<u64>) -> std::io::Result<Bytes> {
+        let mut attempt = 1;
+        loop {
+            match self.fetch_once(range.clone()).await {
+                Err(err) if err.kind() == ErrorKind::Interrupted && attempt < PART_ATTEMPTS => {
+                    tracing::debug!("retrying bytes {range:?} of {}: {err}", self.url);
+                    tokio::time::sleep(Duration::from_millis(100 << attempt)).await;
+                    attempt += 1;
+                }
+                result => return result,
+            }
+        }
     }
-    let response = request
-        .header(header::RANGE, range_header(&range))
-        .send()
-        .await
-        .map_err(|err| match err {
+
+    async fn fetch_once(&self, range: Range<u64>) -> std::io::Result<Bytes> {
+        let mut request = get(&self.client, self.url.clone(), self.expected_sha256)
+            .header(header::RANGE, range_header(&range));
+        if let Some(etag) = &self.etag {
+            request = request.header(header::IF_MATCH, etag.clone());
+        }
+        let response = request.send().await.map_err(|err| match err {
+            reqwest_middleware::Error::Reqwest(err) if err.is_connect() || err.is_timeout() => {
+                std::io::Error::new(ErrorKind::Interrupted, err)
+            }
             reqwest_middleware::Error::Reqwest(err) => to_io_error(err),
             reqwest_middleware::Error::Middleware(err) => std::io::Error::other(err),
         })?;
-    if let Some(etag) = etag {
-        // An error response carries no ETag, so it is reported as itself.
-        let changed = response.status() == StatusCode::PRECONDITION_FAILED
-            || (response.status().is_success()
-                && response.headers().get(header::ETAG) != Some(&etag));
-        if changed {
-            return Err(RangeError::Changed {
-                etag: String::from_utf8_lossy(etag.as_bytes()).into_owned(),
+        if let Some(etag) = &self.etag {
+            // An error response carries no ETag, so it is reported as itself.
+            let changed = response.status() == StatusCode::PRECONDITION_FAILED
+                || (response.status().is_success()
+                    && response.headers().get(header::ETAG) != Some(etag));
+            if changed {
+                return Err(RangeError::Changed {
+                    etag: String::from_utf8_lossy(etag.as_bytes()).into_owned(),
+                }
+                .into());
             }
-            .into());
         }
+        let response = response.error_for_status().map_err(to_io_error)?;
+        read_part(response, range, self.total).await
     }
-    let response = response.error_for_status().map_err(to_io_error)?;
-    read_part(response, range, total).await
 }
 
 /// Read the body of a response to a range request after checking it holds
 /// exactly the bytes asked for.
-async fn read_part(response: Response, range: Range<u64>, total: u64) -> std::io::Result<Bytes> {
+async fn read_part(
+    mut response: Response,
+    range: Range<u64>,
+    total: u64,
+) -> std::io::Result<Bytes> {
     let (start, end) = (range.start, range.end - 1);
     if response.status() != StatusCode::PARTIAL_CONTENT {
         return Err(RangeError::NotPartial {
@@ -234,18 +289,36 @@ async fn read_part(response: Response, range: Range<u64>, total: u64) -> std::io
         }
         .into());
     }
-    let bytes = response.bytes().await.map_err(to_io_error)?;
     let expected = range.end - range.start;
-    if bytes.len() as u64 != expected {
-        return Err(RangeError::WrongLength {
-            start,
-            end,
-            expected,
-            got: bytes.len() as u64,
+    let wrong_length = |got| RangeError::WrongLength {
+        start,
+        end,
+        expected,
+        got,
+    };
+    // Stop reading a body as soon as it is longer than the range.
+    let mut bytes = BytesMut::new();
+    while let Some(chunk) = response.chunk().await.map_err(dropped)? {
+        let got = (bytes.len() + chunk.len()) as u64;
+        if got > expected {
+            return Err(wrong_length(got).into());
         }
-        .into());
+        bytes.extend_from_slice(&chunk);
     }
-    Ok(bytes)
+    if bytes.len() as u64 != expected {
+        return Err(wrong_length(bytes.len() as u64).into());
+    }
+    Ok(bytes.freeze())
+}
+
+/// An error reading a part's body, which reqwest reports as a decode error
+/// when the connection drops.
+fn dropped(err: reqwest::Error) -> std::io::Error {
+    if err.is_body() || err.is_decode() || err.is_timeout() {
+        std::io::Error::new(ErrorKind::Interrupted, err)
+    } else {
+        to_io_error(err)
+    }
 }
 
 fn range_header(range: &Range<u64>) -> String {
@@ -281,7 +354,7 @@ mod tests {
         time::Duration,
     };
 
-    use futures_util::TryStreamExt;
+    use futures_util::{StreamExt, TryStreamExt};
     use rattler_digest::Sha256;
     use tokio_util::io::StreamReader;
 
@@ -506,6 +579,93 @@ mod tests {
         assert_eq!(bytes, std::fs::read(conda_file()).unwrap());
         // Every part after the first is pinned to the first part's ETag.
         assert_eq!(matched.load(Ordering::SeqCst), parts_of(&conda_file()) - 1);
+    }
+
+    #[tokio::test]
+    async fn a_part_whose_connection_drops_is_requested_again() {
+        for start in [0, PART_SIZE] {
+            let (url, requests) = test_server::serve_file_breaking_part(
+                conda_file(),
+                start,
+                test_server::Breakage::CutOnce,
+            )
+            .await;
+
+            let bytes = download_bytes(url, config()).await.unwrap();
+
+            assert_eq!(bytes, std::fs::read(conda_file()).unwrap(), "{start}");
+            assert_eq!(requests.load(Ordering::SeqCst), 2, "{start}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_part_longer_than_its_range_is_an_error() {
+        let (url, _) = test_server::serve_file_breaking_part(
+            conda_file(),
+            PART_SIZE,
+            test_server::Breakage::Overlong,
+        )
+        .await;
+
+        let err = download_bytes(url, config()).await.unwrap_err();
+
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        assert!(err.to_string().contains("expected 256 bytes"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn a_server_returning_shorter_ranges_is_read_in_its_part_size() {
+        let url = test_server::serve_file_capping_ranges(conda_file(), PART_SIZE / 2).await;
+
+        let bytes = download_bytes(url, config()).await.unwrap();
+
+        assert_eq!(bytes, std::fs::read(conda_file()).unwrap());
+    }
+
+    #[tokio::test]
+    async fn a_failed_part_ends_the_stream() {
+        let url = test_server::serve_file_ranges_once(conda_file()).await;
+        let mut body = download(
+            ClientWithMiddleware::from(reqwest::Client::new()),
+            url,
+            None,
+            config(),
+        )
+        .await
+        .unwrap()
+        .body;
+
+        assert!(body.next().await.unwrap().is_ok());
+        assert!(body.next().await.unwrap().is_err());
+        assert!(body.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn a_mirrored_file_is_downloaded_whole() {
+        let (file_url, observed) =
+            test_server::serve_file_observed(conda_file(), Duration::ZERO, 0, Duration::ZERO).await;
+        let channel: Url = "https://channel.invalid/".parse().unwrap();
+        let mirror = rattler_networking::mirror_middleware::Mirror {
+            url: file_url.join(".").unwrap(),
+            no_zstd: false,
+            no_bz2: false,
+            max_failures: None,
+        };
+        let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+            .with(rattler_networking::MirrorMiddleware::from_map(
+                [(channel.clone(), vec![mirror])].into(),
+            ))
+            .build();
+        let url = channel
+            .join(file_url.path_segments().unwrap().next_back().unwrap())
+            .unwrap();
+
+        let download = download(client, url, None, config()).await.unwrap();
+        let parts: Vec<Bytes> = download.body.try_collect().await.unwrap();
+
+        assert_eq!(parts.concat(), std::fs::read(conda_file()).unwrap());
+        // Only the first request asked for a range.
+        assert_eq!(*observed.finished.lock().unwrap(), vec![0]);
     }
 
     #[test]

@@ -54,7 +54,7 @@ async-compression = { workspace = true }
 zstd = { workspace = true, default-features = false }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { workspace = true, features = ["fs", "rt"] }
+tokio = { workspace = true, features = ["fs", "rt", "time"] }
 tokio-util = { workspace = true, features = ["rt"] }
 zstd = { workspace = true, features = ["zstdmt"] }
 

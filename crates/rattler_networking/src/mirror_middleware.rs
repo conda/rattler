@@ -119,6 +119,13 @@ impl MirrorMiddleware {
     }
 }
 
+/// Marks a response to a request that [`MirrorMiddleware`] sent to a mirror.
+///
+/// The mirror is chosen per request, so related requests, like the byte
+/// ranges of one file, may each be answered by a different mirror.
+#[derive(Debug, Clone, Copy)]
+pub struct Mirrored;
+
 fn select_mirror(mirrors: &[MirrorState]) -> Option<&MirrorState> {
     let mut min_failures = usize::MAX;
     let mut min_failures_index = usize::MAX;
@@ -185,7 +192,10 @@ impl Middleware for MirrorMiddleware {
                 }
 
                 *req.url_mut() = selected_url;
-                let res = next.run(req, extensions).await;
+                let mut res = next.run(req, extensions).await;
+                if let Ok(res) = &mut res {
+                    res.extensions_mut().insert(Mirrored);
+                }
 
                 // record a failure if the request failed so we can avoid the mirror in the future
                 match res.as_ref() {
