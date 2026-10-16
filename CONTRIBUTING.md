@@ -33,3 +33,9 @@ As below,
 cd py-rattler
 pixi run fmt
 ```
+
+### Documenting raised exceptions (py-rattler)
+Public py-rattler APIs document the exceptions they raise with a Google-style `Raises:` section
+(`Name: description`, one per line). Every covered API must also be registered in `COVERED_APIS`
+in `py-rattler/tests/unit/test_exception_docs.py` with offline `pytest.raises` negative tests that
+trigger each documented name, so the docs cannot go stale.
