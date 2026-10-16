@@ -25,6 +25,7 @@ fn bench_filter(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str
         &[],
         &[],
         &[],
+        &[],
         std::slice::from_ref(&spec),
         None,
         None,
@@ -81,6 +82,7 @@ fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) 
                 // Construct dependency provider
                 let dependency_provider = CondaDependencyProvider::new(
                     repodata.iter().map(|r| r.iter().collect()),
+                    &[],
                     &[],
                     &[],
                     &[],
