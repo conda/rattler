@@ -373,8 +373,8 @@ async def install(
                 Takes precedence over `cache_dir`.
 
     Raises:
-        InstallerError: If the prefix cannot be created or packages cannot be linked.
-        TransactionError: If planning or executing the install transaction fails.
+        InstallerError: If the prefix cannot be created, the transaction cannot be planned,
+            or packages cannot be linked.
         TypeError: If a record or package name cannot be converted to its expected type.
     """
 

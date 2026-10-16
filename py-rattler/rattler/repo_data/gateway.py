@@ -637,6 +637,7 @@ class Gateway:
 
         Raises:
             InvalidChannelError: If the channel string is not a valid channel.
+            ParseSubdirError: If a subdir string is not a valid subdir.
             TypeError: If the channel is not a string or a `Channel`.
 
         Examples

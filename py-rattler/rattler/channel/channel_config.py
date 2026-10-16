@@ -24,6 +24,7 @@ class ChannelConfig:
 
         Raises:
             InvalidUrlError: If the channel alias URL cannot be parsed.
+            TypeError: If `channel_alias` or `root_dir` is not a string.
         """
         if root_dir is None:
             # Use the current working directory as the root directory.

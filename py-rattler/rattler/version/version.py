@@ -212,6 +212,7 @@ class Version:
 
         Raises:
             VersionExtendError: If the version cannot be extended to the requested length.
+            OverflowError: If `length` is negative.
         """
         return Version._from_py_version(self._version.extend_to_length(length))
 
@@ -353,6 +354,7 @@ class Version:
 
         Raises:
             InvalidVersionError: If the operation leaves no valid segments.
+            OverflowError: If `n` is negative.
 
         Examples
         --------
@@ -382,6 +384,7 @@ class Version:
 
         Raises:
             InvalidVersionError: If the provided range is invalid.
+            OverflowError: If `start` or `stop` is negative.
 
         Examples
         --------

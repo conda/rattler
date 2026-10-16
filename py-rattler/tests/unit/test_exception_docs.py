@@ -23,6 +23,7 @@ from __future__ import annotations
 import builtins
 import inspect
 import json
+import os
 import re
 import warnings
 from collections.abc import Callable, Coroutine
@@ -63,6 +64,7 @@ BUILTIN_ALLOWLIST = frozenset(
         "NotImplementedError",
         "FileNotFoundError",
         "StopAsyncIteration",
+        "OverflowError",
     }
 )
 
@@ -274,6 +276,11 @@ def _trigger_clear_bad_type(tmp_path: Path) -> None:
     Gateway().clear_repodata_cache(123)  # type: ignore[arg-type]
 
 
+def _trigger_clear_bad_subdir(tmp_path: Path) -> None:
+    del tmp_path
+    Gateway().clear_repodata_cache("conda-forge", ["not-a-subdir"])  # type: ignore[list-item]
+
+
 def _trigger_matchspec_bad_type(tmp_path: Path) -> None:
     del tmp_path
     MatchSpec(123)  # type: ignore[arg-type]
@@ -297,6 +304,16 @@ def _trigger_matchspec_from_url_bad_digest(tmp_path: Path) -> None:
 def _trigger_matchspec_from_nameless_bad_name(tmp_path: Path) -> None:
     del tmp_path
     MatchSpec.from_nameless(NamelessMatchSpec("3.4"), "$foo")
+
+
+def _trigger_matchspec_from_nameless_bad_type(tmp_path: Path) -> None:
+    del tmp_path
+    MatchSpec.from_nameless(NamelessMatchSpec("3.4"), 123)  # type: ignore[arg-type]
+
+
+def _trigger_matchspec_from_url_bad_type(tmp_path: Path) -> None:
+    del tmp_path
+    MatchSpec.from_url(123)  # type: ignore[arg-type]
 
 
 def _trigger_version_bad_type(tmp_path: Path) -> None:
@@ -324,6 +341,26 @@ def _trigger_version_bad_range(tmp_path: Path) -> None:
     Version("1.0").with_segments(3, 1)
 
 
+def _trigger_version_extend_too_long(tmp_path: Path) -> None:
+    del tmp_path
+    Version("1.0+3.4").extend_to_length(128)
+
+
+def _trigger_version_extend_negative(tmp_path: Path) -> None:
+    del tmp_path
+    Version("1.0").extend_to_length(-1)
+
+
+def _trigger_version_pop_negative(tmp_path: Path) -> None:
+    del tmp_path
+    Version("1.0").pop_segments(-1)
+
+
+def _trigger_version_with_negative(tmp_path: Path) -> None:
+    del tmp_path
+    Version("1.0").with_segments(-1, 2)
+
+
 def _trigger_channel_bad_name(tmp_path: Path) -> None:
     del tmp_path
     Channel("::::")
@@ -337,6 +374,11 @@ def _trigger_channel_bad_type(tmp_path: Path) -> None:
 def _trigger_channel_config_bad_url(tmp_path: Path) -> None:
     del tmp_path
     ChannelConfig("http://[::1")
+
+
+def _trigger_channel_config_bad_type(tmp_path: Path) -> None:
+    del tmp_path
+    ChannelConfig(123)  # type: ignore[arg-type]
 
 
 COVERED_APIS: dict[str, APICoverage] = {
@@ -379,13 +421,6 @@ COVERED_APIS: dict[str, APICoverage] = {
             "InstallerError": _trigger_install_prefix_is_file,
             "TypeError": _trigger_install_bad_record,
         },
-        documented_but_untriggerable=(
-            Untriggerable(
-                name="TransactionError",
-                reason="needs downloadable packages and link planning; prefix failures surface as InstallerError",
-                call_site="py-rattler/src/error.rs:171-173",
-            ),
-        ),
     ),
     "rattler.repo_data.gateway.Gateway.query": APICoverage(
         pinned=frozenset(
@@ -442,9 +477,10 @@ COVERED_APIS: dict[str, APICoverage] = {
         },
     ),
     "rattler.repo_data.gateway.Gateway.clear_repodata_cache": APICoverage(
-        pinned=frozenset({"InvalidChannelError", "TypeError"}),
+        pinned=frozenset({"InvalidChannelError", "ParseSubdirError", "TypeError"}),
         triggers={
             "InvalidChannelError": _trigger_clear_bad_channel,
+            "ParseSubdirError": _trigger_clear_bad_subdir,
             "TypeError": _trigger_clear_bad_type,
         },
     ),
@@ -456,16 +492,18 @@ COVERED_APIS: dict[str, APICoverage] = {
         },
     ),
     "rattler.match_spec.match_spec.MatchSpec.from_url": APICoverage(
-        pinned=frozenset({"InvalidMatchSpecError", "InvalidUrlError"}),
+        pinned=frozenset({"InvalidMatchSpecError", "InvalidUrlError", "TypeError"}),
         triggers={
             "InvalidMatchSpecError": _trigger_matchspec_from_url_bad_digest,
             "InvalidUrlError": _trigger_matchspec_from_url_bad_url,
+            "TypeError": _trigger_matchspec_from_url_bad_type,
         },
     ),
     "rattler.match_spec.match_spec.MatchSpec.from_nameless": APICoverage(
-        pinned=frozenset({"PackageNameMatcherParseError"}),
+        pinned=frozenset({"PackageNameMatcherParseError", "TypeError"}),
         triggers={
             "PackageNameMatcherParseError": _trigger_matchspec_from_nameless_bad_name,
+            "TypeError": _trigger_matchspec_from_nameless_bad_type,
         },
     ),
     "rattler.match_spec.match_spec.MatchSpec.to_canonical_string": APICoverage(
@@ -492,25 +530,24 @@ COVERED_APIS: dict[str, APICoverage] = {
         },
     ),
     "rattler.version.version.Version.extend_to_length": APICoverage(
-        pinned=frozenset({"VersionExtendError"}),
-        documented_but_untriggerable=(
-            Untriggerable(
-                name="VersionExtendError",
-                reason="only raised for internal length-limit violations; every invalid-input shaping succeeds",
-                call_site="py-rattler/src/error.rs:181-183",
-            ),
-        ),
+        pinned=frozenset({"OverflowError", "VersionExtendError"}),
+        triggers={
+            "OverflowError": _trigger_version_extend_negative,
+            "VersionExtendError": _trigger_version_extend_too_long,
+        },
     ),
     "rattler.version.version.Version.pop_segments": APICoverage(
-        pinned=frozenset({"InvalidVersionError"}),
+        pinned=frozenset({"InvalidVersionError", "OverflowError"}),
         triggers={
             "InvalidVersionError": _trigger_version_pop_too_many,
+            "OverflowError": _trigger_version_pop_negative,
         },
     ),
     "rattler.version.version.Version.with_segments": APICoverage(
-        pinned=frozenset({"InvalidVersionError"}),
+        pinned=frozenset({"InvalidVersionError", "OverflowError"}),
         triggers={
             "InvalidVersionError": _trigger_version_bad_range,
+            "OverflowError": _trigger_version_with_negative,
         },
     ),
     "rattler.channel.channel.Channel.__init__": APICoverage(
@@ -521,9 +558,10 @@ COVERED_APIS: dict[str, APICoverage] = {
         },
     ),
     "rattler.channel.channel_config.ChannelConfig.__init__": APICoverage(
-        pinned=frozenset({"InvalidUrlError"}),
+        pinned=frozenset({"InvalidUrlError", "TypeError"}),
         triggers={
             "InvalidUrlError": _trigger_channel_config_bad_url,
+            "TypeError": _trigger_channel_config_bad_type,
         },
     ),
 }
@@ -743,6 +781,11 @@ async def test_install_raises_installer_error(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_install_readonly_prefix_raises_installer_error(tmp_path: Path) -> None:
     """`install()` reports an unwritable prefix directory as `InstallerError`."""
+    if os.name == "nt":
+        pytest.skip("chmod-based readonly directories are not reliable on Windows")
+    geteuid = getattr(os, "geteuid", None)
+    if geteuid is not None and geteuid() == 0:
+        pytest.skip("running as root bypasses file mode bits")
     readonly_dir = tmp_path / "readonly-prefix"
     readonly_dir.mkdir()
     readonly_dir.chmod(0o555)
@@ -877,6 +920,12 @@ def test_gateway_clear_repodata_cache_raises_type_error(tmp_path: Path) -> None:
         _trigger_clear_bad_type(tmp_path)
 
 
+def test_gateway_clear_repodata_cache_raises_parse_subdir_error(tmp_path: Path) -> None:
+    """`Gateway.clear_repodata_cache()` rejects an invalid subdir string."""
+    with pytest.raises(rattler.exceptions.ParseSubdirError):
+        _trigger_clear_bad_subdir(tmp_path)
+
+
 def test_matchspec_raises_type_error(tmp_path: Path) -> None:
     """`MatchSpec()` rejects a spec of an unexpected type."""
     with pytest.raises(TypeError):
@@ -905,6 +954,18 @@ def test_matchspec_from_nameless_raises_package_name_matcher_parse_error(tmp_pat
     """`MatchSpec.from_nameless()` reports an invalid name as `PackageNameMatcherParseError`."""
     with pytest.raises(rattler.exceptions.PackageNameMatcherParseError):
         _trigger_matchspec_from_nameless_bad_name(tmp_path)
+
+
+def test_matchspec_from_nameless_raises_type_error(tmp_path: Path) -> None:
+    """`MatchSpec.from_nameless()` rejects a name of an unexpected type."""
+    with pytest.raises(TypeError):
+        _trigger_matchspec_from_nameless_bad_type(tmp_path)
+
+
+def test_matchspec_from_url_raises_type_error(tmp_path: Path) -> None:
+    """`MatchSpec.from_url()` rejects a URL of an unexpected type."""
+    with pytest.raises(TypeError):
+        _trigger_matchspec_from_url_bad_type(tmp_path)
 
 
 def test_version_raises_type_error(tmp_path: Path) -> None:
@@ -937,6 +998,30 @@ def test_version_with_segments_raises_invalid_version_error(tmp_path: Path) -> N
         _trigger_version_bad_range(tmp_path)
 
 
+def test_version_extend_to_length_raises_version_extend_error(tmp_path: Path) -> None:
+    """`Version.extend_to_length()` reports a length past the local-segment limit."""
+    with pytest.raises(rattler.exceptions.VersionExtendError):
+        _trigger_version_extend_too_long(tmp_path)
+
+
+def test_version_extend_to_length_raises_overflow_error(tmp_path: Path) -> None:
+    """`Version.extend_to_length()` rejects a negative length."""
+    with pytest.raises(OverflowError):
+        _trigger_version_extend_negative(tmp_path)
+
+
+def test_version_pop_segments_raises_overflow_error(tmp_path: Path) -> None:
+    """`Version.pop_segments()` rejects a negative count."""
+    with pytest.raises(OverflowError):
+        _trigger_version_pop_negative(tmp_path)
+
+
+def test_version_with_segments_raises_overflow_error(tmp_path: Path) -> None:
+    """`Version.with_segments()` rejects a negative bound."""
+    with pytest.raises(OverflowError):
+        _trigger_version_with_negative(tmp_path)
+
+
 def test_channel_raises_invalid_channel_error(tmp_path: Path) -> None:
     """`Channel()` reports an unparseable name as `InvalidChannelError`."""
     with pytest.raises(rattler.exceptions.InvalidChannelError):
@@ -953,3 +1038,9 @@ def test_channel_config_raises_invalid_url_error(tmp_path: Path) -> None:
     """`ChannelConfig()` reports an unparseable alias URL as `InvalidUrlError`."""
     with pytest.raises(rattler.exceptions.InvalidUrlError):
         _trigger_channel_config_bad_url(tmp_path)
+
+
+def test_channel_config_raises_type_error(tmp_path: Path) -> None:
+    """`ChannelConfig()` rejects an alias of an unexpected type."""
+    with pytest.raises(TypeError):
+        _trigger_channel_config_bad_type(tmp_path)

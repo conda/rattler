@@ -272,6 +272,7 @@ class MatchSpec:
 
         Raises:
             PackageNameMatcherParseError: If `name` is not a valid package name.
+            TypeError: If `name` is not a string.
         """
         return cls._from_py_match_spec(PyMatchSpec.from_nameless(spec._nameless_match_spec, name))
 
@@ -295,6 +296,7 @@ class MatchSpec:
         Raises:
             InvalidMatchSpecError: If the URL fragment carries an invalid package digest.
             InvalidUrlError: If the URL cannot be parsed.
+            TypeError: If `url` is not a string.
         """
         return cls._from_py_match_spec(PyMatchSpec.from_url(url))
 
