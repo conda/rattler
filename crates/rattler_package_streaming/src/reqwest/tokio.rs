@@ -3,8 +3,10 @@
 
 use std::{path::Path, sync::Arc};
 
+use bytes::Bytes;
 use fs_err::tokio as tokio_fs;
-use futures_util::stream::TryStreamExt;
+use futures_util::stream::BoxStream;
+use futures_util::stream::{StreamExt, TryStreamExt};
 use rattler_conda_types::package::CondaArchiveType;
 use rattler_digest::Sha256Hash;
 use reqwest::Response;
@@ -14,6 +16,8 @@ use tracing;
 use url::Url;
 use zip::result::ZipError;
 
+#[cfg(not(target_arch = "wasm32"))]
+use super::{DownloadOptions, ranged};
 use crate::{DownloadReporter, ExtractError, ExtractResult};
 
 /// zip files may use data descriptors to signal that the decompressor needs to
@@ -30,11 +34,47 @@ fn error_for_status(response: reqwest::Response) -> reqwest_middleware::Result<R
         .map_err(reqwest_middleware::Error::Reqwest)
 }
 
+/// The body of a remote file, in order.
+pub(crate) struct Download {
+    /// The size of the file, if the server reported it.
+    pub total_bytes: Option<u64>,
+    /// The bytes of the file.
+    pub body: BoxStream<'static, std::io::Result<Bytes>>,
+}
+
+/// Classify a failure reading a body so the caller can tell a dropped
+/// connection, which is worth retrying, from corrupt data.
+pub(crate) fn to_io_error(err: reqwest::Error) -> std::io::Error {
+    if err.is_body() {
+        std::io::Error::new(std::io::ErrorKind::Interrupted, err)
+    } else if err.is_decode() {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, err)
+    } else {
+        std::io::Error::other(err)
+    }
+}
+
+/// A GET request for `url`.
+pub(crate) fn get(
+    client: &reqwest_middleware::ClientWithMiddleware,
+    url: Url,
+    expected_sha256: Option<Sha256Hash>,
+) -> reqwest_middleware::RequestBuilder {
+    let request = client.get(url);
+    match expected_sha256 {
+        // The OCI registry middleware looks the blob up by its sha256, including
+        // when a mirror rewrites a URL to point at a registry.
+        Some(sha256) => request.header("X-Expected-Sha256", hex::encode(sha256)),
+        None => request,
+    }
+}
+
 async fn get_reader(
     url: Url,
     client: reqwest_middleware::ClientWithMiddleware,
     expected_sha256: Option<Sha256Hash>,
     reporter: Option<Arc<dyn DownloadReporter>>,
+    options: &DownloadOptions,
 ) -> Result<impl tokio::io::AsyncRead, ExtractError> {
     if let Some(reporter) = &reporter {
         reporter.on_download_start();
@@ -48,43 +88,63 @@ async fn get_reader(
 
         Ok(Either::Left(BufReader::new(file)))
     } else {
-        // Send the request for the file
-        let mut request = client.get(url.clone());
-
-        if let Some(sha256) = expected_sha256 {
-            // This is used by the OCI registry middleware to verify the sha256 of the
-            // response
-            request = request.header("X-Expected-Sha256", hex::encode(sha256));
-        }
-
-        let response = request
-            .send()
-            .await
-            .and_then(error_for_status)
-            .map_err(ExtractError::ReqwestError)?;
-
-        let total_bytes = response.content_length();
+        let download = send(url, client, expected_sha256, options).await?;
+        let total_bytes = download.total_bytes;
         let mut bytes_received = Box::new(0);
-        let byte_stream = response.bytes_stream().inspect_ok(move |frame| {
+        let byte_stream = download.body.inspect_ok(move |frame| {
             *bytes_received += frame.len() as u64;
             if let Some(reporter) = &reporter {
                 reporter.on_download_progress(*bytes_received, total_bytes);
             }
         });
 
-        // Get the response as a stream
-        Ok(Either::Right(StreamReader::new(byte_stream.map_err(
-            |err| {
-                if err.is_body() {
-                    std::io::Error::new(std::io::ErrorKind::Interrupted, err)
-                } else if err.is_decode() {
-                    std::io::Error::new(std::io::ErrorKind::InvalidData, err)
-                } else {
-                    std::io::Error::other(err)
-                }
-            },
-        ))))
+        Ok(Either::Right(StreamReader::new(byte_stream)))
     }
+}
+
+/// Request a remote file, in parallel ranges where its scheme allows it.
+#[cfg(not(target_arch = "wasm32"))]
+async fn send(
+    url: Url,
+    client: reqwest_middleware::ClientWithMiddleware,
+    expected_sha256: Option<Sha256Hash>,
+    options: &DownloadOptions,
+) -> Result<Download, ExtractError> {
+    // Each OCI request resolves the blob through the registry first, which
+    // ranged requests would repeat once per part.
+    if options.part_size > 0 && matches!(url.scheme(), "http" | "https" | "s3" | "gcs") {
+        return ranged::download(client, url, expected_sha256, options.clone())
+            .await
+            .map_err(ExtractError::ReqwestError);
+    }
+    send_whole(url, client, expected_sha256).await
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn send(
+    url: Url,
+    client: reqwest_middleware::ClientWithMiddleware,
+    expected_sha256: Option<Sha256Hash>,
+    _options: &DownloadOptions,
+) -> Result<Download, ExtractError> {
+    send_whole(url, client, expected_sha256).await
+}
+
+async fn send_whole(
+    url: Url,
+    client: reqwest_middleware::ClientWithMiddleware,
+    expected_sha256: Option<Sha256Hash>,
+) -> Result<Download, ExtractError> {
+    let response = get(&client, url, expected_sha256)
+        .send()
+        .await
+        .and_then(error_for_status)
+        .map_err(ExtractError::ReqwestError)?;
+
+    Ok(Download {
+        total_bytes: response.content_length(),
+        body: response.bytes_stream().map_err(to_io_error).boxed(),
+    })
 }
 
 /// Extracts the contents a `.tar.bz2` package archive from the specified remote
@@ -115,7 +175,33 @@ pub async fn extract_tar_bz2(
     expected_sha256: Option<Sha256Hash>,
     reporter: Option<Arc<dyn DownloadReporter>>,
 ) -> Result<ExtractResult, ExtractError> {
-    let reader = get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;
+    extract_tar_bz2_with_options(
+        client,
+        url,
+        destination,
+        expected_sha256,
+        reporter,
+        &DownloadOptions::default(),
+    )
+    .await
+}
+
+async fn extract_tar_bz2_with_options(
+    client: reqwest_middleware::ClientWithMiddleware,
+    url: Url,
+    destination: &Path,
+    expected_sha256: Option<Sha256Hash>,
+    reporter: Option<Arc<dyn DownloadReporter>>,
+    options: &DownloadOptions,
+) -> Result<ExtractResult, ExtractError> {
+    let reader = get_reader(
+        url.clone(),
+        client,
+        expected_sha256,
+        reporter.clone(),
+        options,
+    )
+    .await?;
     // The `response` is used to stream in the package data
     let result = crate::tokio::async_read::extract_tar_bz2(reader, destination).await?;
     if let Some(reporter) = &reporter {
@@ -152,12 +238,32 @@ pub async fn extract_conda(
     expected_sha256: Option<Sha256Hash>,
     reporter: Option<Arc<dyn DownloadReporter>>,
 ) -> Result<ExtractResult, ExtractError> {
+    extract_conda_with_options(
+        client,
+        url,
+        destination,
+        expected_sha256,
+        reporter,
+        &DownloadOptions::default(),
+    )
+    .await
+}
+
+async fn extract_conda_with_options(
+    client: reqwest_middleware::ClientWithMiddleware,
+    url: Url,
+    destination: &Path,
+    expected_sha256: Option<Sha256Hash>,
+    reporter: Option<Arc<dyn DownloadReporter>>,
+    options: &DownloadOptions,
+) -> Result<ExtractResult, ExtractError> {
     // The `response` is used to stream in the package data
     let reader = get_reader(
         url.clone(),
         client.clone(),
         expected_sha256,
         reporter.clone(),
+        options,
     )
     .await?;
     match crate::tokio::async_read::extract_conda(reader, destination).await {
@@ -178,8 +284,14 @@ pub async fn extract_conda(
             if let Some(reporter) = &reporter {
                 reporter.on_download_complete();
             }
-            let new_reader =
-                get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;
+            let new_reader = get_reader(
+                url.clone(),
+                client,
+                expected_sha256,
+                reporter.clone(),
+                options,
+            )
+            .await?;
 
             match crate::tokio::async_read::extract_conda_via_buffering(new_reader, destination)
                 .await
@@ -225,14 +337,81 @@ pub async fn extract(
     expected_sha256: Option<Sha256Hash>,
     reporter: Option<Arc<dyn DownloadReporter>>,
 ) -> Result<ExtractResult, ExtractError> {
+    extract_with_options(
+        client,
+        url,
+        destination,
+        expected_sha256,
+        reporter,
+        &DownloadOptions::default(),
+    )
+    .await
+}
+
+/// Like [`extract`], downloading large packages in parallel ranges as
+/// `options` describe.
+pub async fn extract_with_options(
+    client: reqwest_middleware::ClientWithMiddleware,
+    url: Url,
+    destination: &Path,
+    expected_sha256: Option<Sha256Hash>,
+    reporter: Option<Arc<dyn DownloadReporter>>,
+    options: &DownloadOptions,
+) -> Result<ExtractResult, ExtractError> {
     match CondaArchiveType::try_from(Path::new(url.path()))
         .ok_or(ExtractError::UnsupportedArchiveType)?
     {
         CondaArchiveType::TarBz2 => {
-            extract_tar_bz2(client, url, destination, expected_sha256, reporter).await
+            extract_tar_bz2_with_options(
+                client,
+                url,
+                destination,
+                expected_sha256,
+                reporter,
+                options,
+            )
+            .await
         }
         CondaArchiveType::Conda => {
-            extract_conda(client, url, destination, expected_sha256, reporter).await
+            extract_conda_with_options(client, url, destination, expected_sha256, reporter, options)
+                .await
         }
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use std::{path::PathBuf, time::Duration};
+
+    use rattler_digest::Sha256;
+
+    use super::*;
+    use crate::reqwest::test_server;
+
+    #[tokio::test]
+    async fn a_part_size_of_zero_downloads_with_one_request() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/clobber/clobber-fd-1-0.1.0-h4616a5c_0.conda");
+        let (url, observed) =
+            test_server::serve_file_observed(&path, Duration::ZERO, 0, Duration::ZERO).await;
+        let destination = tempfile::tempdir().unwrap();
+
+        let result = extract_with_options(
+            reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            url,
+            destination.path(),
+            None,
+            None,
+            &DownloadOptions::new(0, DownloadOptions::DEFAULT_PARTS),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            result.sha256,
+            rattler_digest::compute_file_digest::<Sha256>(&path).unwrap()
+        );
+        // No request asked for a range.
+        assert!(observed.finished.lock().unwrap().is_empty());
     }
 }
