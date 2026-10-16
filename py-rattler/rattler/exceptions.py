@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any
 try:
     from rattler.rattler import (
         ActivationError,
-        ActivationScriptFormatError,
         AttestationError,
         AuthenticationStorageError,
         CacheDirError,
@@ -53,8 +52,12 @@ except ImportError:
     class ActivationError(Exception):  # type: ignore[no-redef]
         """Error that can occur when activating a conda environment"""
 
-    class ActivationScriptFormatError(Exception):  # type: ignore[no-redef]
-        """Error that can occur when the activation script has an invalid format"""
+    class ActivationScriptFormatError(Exception):
+        """Error that can occur when the activation script has an invalid format.
+
+        .. deprecated:: 0.28.0
+            Never raised; will be removed in a future release.
+        """
 
     class AuthenticationStorageError(Exception):  # type: ignore[no-redef]
         """Error that can occur when querying the authentication storage"""
@@ -179,10 +182,25 @@ if TYPE_CHECKING:
 else:
 
     def __getattr__(name: str) -> Any:
-        """Resolve the deprecated `ParsePlatformError` name.
+        """Resolve deprecated exception names.
 
-        .. deprecated:: 0.27.0 Use `ParseSubdirError` instead.
+        `ParsePlatformError` is an alias of `ParseSubdirError`, and
+        `ActivationScriptFormatError` is a deprecated type that is never raised.
+
+        .. deprecated:: 0.27.0 Use `ParseSubdirError` instead of `ParsePlatformError`.
+        .. deprecated:: 0.28.0 `ActivationScriptFormatError` is never raised and
+            will be removed in a future release.
         """
+        if name == "ActivationScriptFormatError":
+            warnings.warn(
+                "`ActivationScriptFormatError` is deprecated, it is never raised "
+                "and will be removed in a future release.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            from rattler.rattler import ActivationScriptFormatError
+
+            return ActivationScriptFormatError
         if name in _DEPRECATED_ALIASES:
             replacement = _DEPRECATED_ALIASES[name]
             warnings.warn(
