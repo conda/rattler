@@ -114,8 +114,11 @@ async def solve(
         SolverError: If the dependencies cannot be resolved.
         GatewayError: If repodata acquisition fails (missing channels, cache, or
             network errors; fetch-level failures surface here, never as ``FetchRepoDataError``).
+        InvalidChannelError: If a source string is not a valid channel.
+        InvalidMatchSpecError: If a spec string cannot be parsed.
+        IoError: If the solver task is cancelled.
         TypeError: If a source does not implement the required interface.
-        ValueError: If `timestamp_policy` holds an invalid value.
+        ValueError: If `timestamp_policy`, `strategy`, or `channel_relations` holds an invalid value.
     """
     if gateway is None:
         gateway = Gateway()
