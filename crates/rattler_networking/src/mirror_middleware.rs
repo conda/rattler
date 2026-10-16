@@ -192,7 +192,10 @@ impl Middleware for MirrorMiddleware {
                 }
 
                 *req.url_mut() = selected_url;
+                #[allow(unused_mut)]
                 let mut res = next.run(req, extensions).await;
+                // wasm responses carry no extensions, and download whole there.
+                #[cfg(not(target_arch = "wasm32"))]
                 if let Ok(res) = &mut res {
                     res.extensions_mut().insert(Mirrored);
                 }
