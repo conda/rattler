@@ -450,7 +450,7 @@ pub(super) fn write_with_env(
     // Write to a temporary file in the cache directory and persist it into place so concurrent
     // readers never see a partial cache file.
     let path = cache_dir.join(CACHE_FILE_NAME);
-    let mut tmp = match tempfile::NamedTempFile::new_in(cache_dir) {
+    let mut tmp = match rattler_shared_tempfile::builder().tempfile_in(cache_dir) {
         Ok(tmp) => tmp,
         Err(err) => {
             tracing::debug!(

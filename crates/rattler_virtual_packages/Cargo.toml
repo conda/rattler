@@ -16,6 +16,7 @@ nom = { workspace = true }
 once_cell = { workspace = true }
 rattler_boot_id = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false }
+rattler_shared_tempfile = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
@@ -34,4 +35,6 @@ windows-sys = { workspace = true, features = [
 ] }
 
 [dev-dependencies]
+rstest = { workspace = true }
 temp-env = { workspace = true }
+tools = { path = "../tools" }

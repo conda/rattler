@@ -562,8 +562,9 @@ async fn stream_and_decode_to_file(
     );
 
     // Construct a temporary file
-    let temp_file =
-        NamedTempFile::new_in(temp_dir).map_err(FetchRepoDataError::FailedToCreateTemporaryFile)?;
+    let temp_file = rattler_shared_tempfile::builder()
+        .tempfile_in(temp_dir)
+        .map_err(FetchRepoDataError::FailedToCreateTemporaryFile)?;
 
     // Clone the file handle and create a hashing writer so we can compute a hash
     // while the content is being written to disk.
@@ -1131,6 +1132,36 @@ mod test {
             std::fs::read_to_string(result.repo_data_json_path).unwrap(),
             FAKE_REPO_DATA
         );
+    }
+
+    /// The repodata and its cache state are written so that every user the
+    /// cache directory is shared with can read them.
+    #[cfg(unix)]
+    #[rstest::rstest]
+    #[case::umask(tools::shared_cache::SharedAccess::Umask)]
+    #[case::default_acl(tools::shared_cache::SharedAccess::DefaultAcl)]
+    #[tokio::test]
+    async fn repodata_cache_is_readable_by_group(
+        #[case] access: tools::shared_cache::SharedAccess,
+    ) {
+        let Some(cache_dir) = tools::shared_cache::SharedCacheDir::new(access) else {
+            return;
+        };
+        let subdir_path = TempDir::new().unwrap();
+        std::fs::write(subdir_path.path().join("repodata.json"), FAKE_REPO_DATA).unwrap();
+        let server = SimpleChannelServer::new(subdir_path.path()).await;
+
+        fetch_repo_data(
+            server.url(),
+            LazyClient::default(),
+            cache_dir.path().to_path_buf(),
+            FetchRepoDataOptions::default(),
+            None,
+        )
+        .await
+        .unwrap();
+
+        cache_dir.assert_group_readable();
     }
 
     #[tracing_test::traced_test]

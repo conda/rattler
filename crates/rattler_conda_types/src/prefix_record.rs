@@ -12,7 +12,6 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::serde_as;
-use tempfile::NamedTempFile;
 
 use crate::utils::serde::is_none_or_empty_string;
 use crate::{
@@ -302,13 +301,16 @@ impl PrefixRecord {
         })?;
 
         // Use a temporary file in the same directory for atomic writes
-        let temp_file = NamedTempFile::with_prefix_in("prefix_record_", parent).map_err(|e| {
-            std::io::Error::other(format!(
-                "Failed to create temporary file in '{}': {}",
-                parent.display(),
-                e
-            ))
-        })?;
+        let temp_file = rattler_shared_tempfile::builder()
+            .prefix("prefix_record_")
+            .tempfile_in(parent)
+            .map_err(|e| {
+                std::io::Error::other(format!(
+                    "Failed to create temporary file in '{}': {}",
+                    parent.display(),
+                    e
+                ))
+            })?;
 
         // Write to temp file with buffered writer
         let writer = BufWriter::with_capacity(64 * 1024, &temp_file);
@@ -465,6 +467,28 @@ mod test {
         let path = get_test_data_dir().join("conda-meta").join(path_name);
         let prefix_record = super::PrefixRecord::from_path(path).unwrap();
         insta::assert_yaml_snapshot!(path_name.replace('.', "_"), prefix_record);
+    }
+
+    /// Prefix records are written so that every user the prefix is shared
+    /// with can read them, e.g. for environments that live in a shared cache.
+    #[cfg(unix)]
+    #[rstest]
+    #[case::umask(tools::shared_cache::SharedAccess::Umask)]
+    #[case::default_acl(tools::shared_cache::SharedAccess::DefaultAcl)]
+    fn prefix_record_is_readable_by_group(#[case] access: tools::shared_cache::SharedAccess) {
+        let Some(prefix) = tools::shared_cache::SharedCacheDir::new(access) else {
+            return;
+        };
+        let path = get_test_data_dir()
+            .join("conda-meta")
+            .join("pip-23.0-pyhd8ed1ab_0.json");
+        let prefix_record = super::PrefixRecord::from_path(path).unwrap();
+
+        prefix_record
+            .write_to_path(prefix.path().join(prefix_record.file_name()), false)
+            .unwrap();
+
+        prefix.assert_group_readable();
     }
 
     /// The canonical conda-meta file name must always contain three
