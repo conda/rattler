@@ -23,10 +23,11 @@ pub fn default_download_part_size() -> u64 {
     8 * 1024 * 1024
 }
 
-/// The default number of ranges downloaded at once across all packages, as in
-/// the AWS `s3transfer` library.
+/// The default number of ranges downloaded at once across all packages, the
+/// same as [`default_max_concurrent_downloads`], so as many requests are in
+/// flight as before ranged downloads.
 pub fn default_download_parts() -> usize {
-    10
+    default_max_concurrent_downloads()
 }
 
 // Saved configs only list these keys when they differ from the default.
@@ -163,25 +164,25 @@ mod tests {
     }
 
     #[test]
-    fn download_part_settings_default_to_the_aws_transfer_libraries() {
+    fn download_part_settings_have_defaults() {
         let config = parse("");
 
         assert_eq!(config.download_part_size, 8 * 1024 * 1024);
-        assert_eq!(config.download_parts, 10);
+        assert_eq!(config.download_parts, config.downloads);
     }
 
     #[test]
     fn download_part_settings_can_be_raised() {
-        let config = parse("download-part-size = 16777216\ndownload-parts = 32\n");
+        let config = parse("download-part-size = 16777216\ndownload-parts = 128\n");
 
         assert_eq!(config.download_part_size, 16 * 1024 * 1024);
-        assert_eq!(config.download_parts, 32);
+        assert_eq!(config.download_parts, 128);
         assert!(config.validate().is_ok());
     }
 
     #[test]
     fn a_later_layer_overrides_download_part_settings_it_sets() {
-        let base = parse("download-part-size = 16777216\ndownload-parts = 32\n");
+        let base = parse("download-part-size = 16777216\ndownload-parts = 128\n");
         let layer = parse("download-parts = 64\n");
 
         let merged = base.merge_config(&layer).unwrap();
