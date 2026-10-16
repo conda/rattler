@@ -873,6 +873,7 @@ mod libsolv_c {
                 specs,
                 constraints: Vec::new(),
                 pinned_packages: Vec::new(),
+                additional_packages: Vec::new(),
                 timeout: None,
                 channel_priority: ChannelPriority::default(),
                 exclude_newer: None,
@@ -1559,6 +1560,11 @@ mod resolvo {
         crate::solver_case_tests::solve_dependency_override_multiple::<
             rattler_solve::resolvo::Solver,
         >();
+    }
+
+    #[test]
+    fn test_additional_packages() {
+        crate::solver_case_tests::solve_additional_packages::<rattler_solve::resolvo::Solver>();
     }
 }
 

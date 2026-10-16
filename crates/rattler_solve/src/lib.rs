@@ -517,6 +517,15 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     /// See [`Self::locked_packages`] for the borrowing rationale.
     pub pinned_packages: Vec<&'a RepoDataRecord>,
 
+    /// Records that the solver may select but has no preference for.
+    ///
+    /// Unlike [`Self::locked_packages`] these records are not favored, and
+    /// unlike [`Self::pinned_packages`] they are not forced into the solution.
+    /// They are simply added as extra candidates next to the records from
+    /// `available_packages`, and compete with them on equal terms. This may
+    /// represent packages that already exist in the prefix.
+    pub additional_packages: Vec<&'a RepoDataRecord>,
+
     /// Virtual packages considered active
     pub virtual_packages: Vec<GenericVirtualPackage>,
 
@@ -601,6 +610,7 @@ impl<'r, T> SolverTask<'r, T> {
             available_packages,
             locked_packages: Vec::new(),
             pinned_packages: Vec::new(),
+            additional_packages: Vec::new(),
             virtual_packages: Vec::new(),
             specs: Vec::new(),
             constraints: Vec::new(),

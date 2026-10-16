@@ -167,6 +167,13 @@ impl super::SolverImpl for Solver {
             ]));
         }
 
+        // TODO: Implement
+        if !task.additional_packages.is_empty() {
+            return Err(SolveError::UnsupportedOperations(vec![
+                "additional_packages".to_string(),
+            ]));
+        }
+
         for spec in task.specs.iter().chain(task.constraints.iter()) {
             ensure_matchspec_flags_supported(spec)?;
         }
