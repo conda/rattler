@@ -200,7 +200,7 @@ impl CacheIndex {
         // anywhere is a match.
         cached_sha256s.iter().any(|entry| {
             entry.filter.accepts(cache_key)
-                && !cache_lock::sha256_mismatch(cache_key.sha256().as_ref(), entry.sha256.as_ref())
+                && cache_lock::sha256_satisfies(cache_key.sha256().as_ref(), entry.sha256.as_ref())
         })
     }
 
@@ -1106,7 +1106,7 @@ where
     let cache_revision = metadata.read_revision()?;
     let locked_sha256 = metadata.read_sha256()?;
 
-    let hash_mismatch = cache_lock::sha256_mismatch(given_sha, locked_sha256.as_ref());
+    let hash_mismatch = !cache_lock::sha256_satisfies(given_sha, locked_sha256.as_ref());
 
     let cache_dir_exists = path.is_dir();
     if cache_dir_exists && !hash_mismatch {
