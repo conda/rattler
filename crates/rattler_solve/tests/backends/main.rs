@@ -835,6 +835,13 @@ mod libsolv_c {
     }
 
     #[test]
+    fn test_flag_preferences_are_unsupported() {
+        crate::variant_flags_tests::solve_flag_preferences_are_unsupported::<
+            rattler_solve::libsolv_c::Solver,
+        >();
+    }
+
+    #[test]
     #[cfg(target_family = "unix")]
     fn test_solve_with_cached_solv_file_install_new() {
         use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, RepoDataRecord};
@@ -879,6 +886,7 @@ mod libsolv_c {
                 strategy: SolveStrategy::default(),
                 dependency_overrides: Vec::new(),
                 excluded_candidates: HashMap::default(),
+                flag_preferences: Vec::new(),
                 cancellation_token: None,
             })
             .unwrap()
@@ -998,6 +1006,13 @@ mod resolvo {
     #[test]
     fn test_dependency_flags_select_matching_variant() {
         crate::variant_flags_tests::solve_dependency_flags_select_matching_variant::<
+            rattler_solve::resolvo::Solver,
+        >();
+    }
+
+    #[test]
+    fn test_flag_preferences_order_variants() {
+        crate::variant_flags_tests::solve_flag_preferences_order_variants::<
             rattler_solve::resolvo::Solver,
         >();
     }
