@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.57.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.57.0...rattler_conda_types-v0.57.1) - 2026-10-16
+
+### Fixed
+
+- index packages with flags into legacy repodata ([#2946](https://github.com/conda/rattler/pull/2946))
+
 ## [0.57.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.56.2...rattler_conda_types-v0.57.0) - 2026-10-13
 
 ### Other

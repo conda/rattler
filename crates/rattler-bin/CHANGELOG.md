@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.8](https://github.com/conda/rattler/compare/rattler-bin-v0.5.7...rattler-bin-v0.5.8) - 2026-10-16
+
+### Added
+
+- *(rattler-bin)* Add OSC8 terminal links ([#2845](https://github.com/conda/rattler/pull/2845))
+
 ## [0.5.7](https://github.com/conda/rattler/compare/rattler-bin-v0.5.6...rattler-bin-v0.5.7) - 2026-10-13
 
 ### Other

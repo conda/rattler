@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.20](https://github.com/conda/rattler/compare/rattler_cache-v0.10.19...rattler_cache-v0.10.20) - 2026-10-16
+
+### Added
+
+- *(py-rattler)* expose PackageCache in py-rattler ([#632](https://github.com/conda/rattler/pull/632)) ([#2915](https://github.com/conda/rattler/pull/2915))
+
 ## [0.10.19](https://github.com/conda/rattler/compare/rattler_cache-v0.10.18...rattler_cache-v0.10.19) - 2026-10-13
 
 ### Added
