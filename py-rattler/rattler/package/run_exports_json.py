@@ -25,6 +25,7 @@ class RunExportsJson:
         noarch: list[str] | None = None,
         weak_constrains: list[str] | None = None,
         strong_constrains: list[str] | None = None,
+        flags: list[str] | None = None,
     ) -> None:
         """
         Create a new RunExportsJson instance.
@@ -41,6 +42,8 @@ class RunExportsJson:
             Weak constrains apply a constrain dependency from host to build, or run to host
         strong_constrains : List[str] | None, optional
             Strong constrains apply a constrain dependency from build to host and run
+        flags : List[str] | None, optional
+            Flags added to any package that has this package as a direct build or host dependency
 
         Examples
         --------
@@ -50,15 +53,21 @@ class RunExportsJson:
         ...     strong=["strong_dep 2.0"],
         ...     noarch=["noarch_dep 3.0"],
         ...     weak_constrains=["weak_constrain 4.0"],
-        ...     strong_constrains=["strong_constrain 5.0"]
+        ...     strong_constrains=["strong_constrain 5.0"],
+        ...     flags=["debug"],
         ... )
         >>> run_exports
-        RunExportsJson(weak=['weak_dep 1.0'], strong=['strong_dep 2.0'], noarch=['noarch_dep 3.0'], weak_constrains=['weak_constrain 4.0'], strong_constrains=['strong_constrain 5.0'])
+        RunExportsJson(weak=['weak_dep 1.0'], strong=['strong_dep 2.0'], noarch=['noarch_dep 3.0'], weak_constrains=['weak_constrain 4.0'], strong_constrains=['strong_constrain 5.0'], flags=['debug'])
         >>>
         ```
         """
         self._inner = PyRunExportsJson(
-            weak or [], strong or [], noarch or [], weak_constrains or [], strong_constrains or []
+            weak or [],
+            strong or [],
+            noarch or [],
+            weak_constrains or [],
+            strong_constrains or [],
+            flags or [],
         )
 
     @staticmethod
@@ -89,7 +98,7 @@ class RunExportsJson:
         ...     "../test-data/python-3.10.6-h2c4edbf_0_cpython-run_exports.json"
         ... )
         >>> run_exports
-        RunExportsJson(weak=['python_abi 3.10.* *_cp310'], strong=[], noarch=['python'], weak_constrains=[], strong_constrains=[])
+        RunExportsJson(weak=['python_abi 3.10.* *_cp310'], strong=[], noarch=['python'], weak_constrains=[], strong_constrains=[], flags=[])
         >>>
         ```
         """
@@ -268,6 +277,30 @@ class RunExportsJson:
     def strong_constrains(self, value: list[str]) -> None:
         self._inner.strong_constrains = value
 
+    @property
+    def flags(self) -> list[str]:
+        """
+        Flags added to the flags of any package that has this package as a
+        direct build or host dependency, e.g. `debug` for a debug compiler.
+
+        Examples
+        --------
+        ```python
+        >>> run_exports = RunExportsJson()
+        >>> run_exports.flags
+        []
+        >>> run_exports.flags = ["debug"]
+        >>> run_exports.flags
+        ['debug']
+        >>>
+        ```
+        """
+        return self._inner.flags
+
+    @flags.setter
+    def flags(self, value: list[str]) -> None:
+        self._inner.flags = value
+
     @classmethod
     def _from_py_run_exports_json(cls, py_run_exports_json: PyRunExportsJson) -> RunExportsJson:
         run_exports_json = cls.__new__(cls)
@@ -279,4 +312,4 @@ class RunExportsJson:
         """
         Returns a representation of the RunExportsJson.
         """
-        return f"RunExportsJson(weak={self.weak}, strong={self.strong}, noarch={self.noarch}, weak_constrains={self.weak_constrains}, strong_constrains={self.strong_constrains})"
+        return f"RunExportsJson(weak={self.weak}, strong={self.strong}, noarch={self.noarch}, weak_constrains={self.weak_constrains}, strong_constrains={self.strong_constrains}, flags={self.flags})"

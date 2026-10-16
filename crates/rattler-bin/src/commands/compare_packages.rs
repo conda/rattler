@@ -355,6 +355,14 @@ fn compare_dependencies(
             right_specs,
         );
     }
+    let flag_strings = |run_exports: &RunExportsJson| -> Vec<String> {
+        run_exports.flags.iter().map(ToString::to_string).collect()
+    };
+    any_changes |= print_spec_diff(
+        "run_exports (flags)",
+        &flag_strings(left_run_exports),
+        &flag_strings(right_run_exports),
+    );
 
     if !any_changes {
         println!("  no changes");
