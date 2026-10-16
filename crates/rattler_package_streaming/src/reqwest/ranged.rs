@@ -20,28 +20,10 @@ use reqwest_middleware::ClientWithMiddleware;
 use tokio_util::task::AbortOnDropHandle;
 use url::Url;
 
-use super::tokio::{Download, get, to_io_error};
-
-/// How a file is split into parallel range requests.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct RangedDownload {
-    /// The number of bytes requested per range.
-    pub part_size: u64,
-    /// The number of parts requested at once. Parts that arrive ahead of an
-    /// earlier one are held in memory and count against this limit, so with
-    /// the part the reader holds, at most `(parts_in_flight + 1) * part_size`
-    /// bytes are buffered per download.
-    pub parts_in_flight: usize,
-}
-
-impl Default for RangedDownload {
-    fn default() -> Self {
-        Self {
-            part_size: 8 * 1024 * 1024,
-            parts_in_flight: 8,
-        }
-    }
-}
+use super::{
+    DownloadOptions,
+    tokio::{Download, get, to_io_error},
+};
 
 /// A response that cannot be stitched together with other ranges.
 #[derive(Debug, thiserror::Error)]
@@ -88,10 +70,10 @@ pub(crate) async fn download(
     client: ClientWithMiddleware,
     url: Url,
     expected_sha256: Option<Sha256Hash>,
-    config: RangedDownload,
+    options: DownloadOptions,
 ) -> reqwest_middleware::Result<Download> {
     let first = get(&client, url.clone(), expected_sha256)
-        .header(header::RANGE, range_header(&(0..config.part_size)))
+        .header(header::RANGE, range_header(&(0..options.part_size)))
         .send()
         .await?;
 
@@ -128,13 +110,15 @@ pub(crate) async fn download(
     }
 
     // A server may return less than asked for, and the same for every range.
-    let part_size = first_range.end.min(config.part_size);
+    let part_size = first_range.end.min(options.part_size);
+    let parts_per_download = options.parts_per_download;
     let parts = Parts {
         client,
         url,
         expected_sha256,
         total,
         etag: s3_etag(&first),
+        options,
     };
     let mut first = Some(first);
     let tasks = part_ranges(first_range.end, total, part_size).map(move |range| {
@@ -161,7 +145,7 @@ pub(crate) async fn download(
     Ok(Download {
         total_bytes: Some(total),
         body: stream::iter(tasks)
-            .buffered(config.parts_in_flight.max(1))
+            .buffered(parts_per_download)
             // A reader may retry an `Interrupted` read, which must not skip
             // the part that failed.
             .scan(false, |failed, part| {
@@ -213,6 +197,7 @@ struct Parts {
     expected_sha256: Option<Sha256Hash>,
     total: u64,
     etag: Option<HeaderValue>,
+    options: DownloadOptions,
 }
 
 impl Parts {
@@ -232,6 +217,14 @@ impl Parts {
     }
 
     async fn fetch_once(&self, range: Range<u64>) -> std::io::Result<Bytes> {
+        // Held only while the part downloads, so a slow reader of one package
+        // can't stall the others.
+        let _permit = self
+            .options
+            .parts
+            .acquire()
+            .await
+            .map_err(std::io::Error::other)?;
         let mut request = get(&self.client, self.url.clone(), self.expected_sha256)
             .header(header::RANGE, range_header(&range));
         if let Some(etag) = &self.etag {
@@ -364,11 +357,8 @@ mod tests {
     const PART_SIZE: u64 = 256;
     const PARTS_IN_FLIGHT: usize = 3;
 
-    fn config() -> RangedDownload {
-        RangedDownload {
-            part_size: PART_SIZE,
-            parts_in_flight: PARTS_IN_FLIGHT,
-        }
+    fn config() -> DownloadOptions {
+        DownloadOptions::new(PART_SIZE, PARTS_IN_FLIGHT, 100)
     }
 
     fn test_file(name: &str) -> PathBuf {
@@ -385,7 +375,7 @@ mod tests {
         std::fs::metadata(path).unwrap().len().div_ceil(PART_SIZE) as usize
     }
 
-    async fn download_bytes(url: Url, config: RangedDownload) -> std::io::Result<Vec<u8>> {
+    async fn download_bytes(url: Url, config: DownloadOptions) -> std::io::Result<Vec<u8>> {
         let download = download(
             ClientWithMiddleware::from(reqwest::Client::new()),
             url,
@@ -441,6 +431,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn downloads_sharing_options_share_the_total_limit() {
+        let (url, observed) = test_server::serve_file_observed(
+            conda_file(),
+            Duration::from_millis(50),
+            0,
+            Duration::from_millis(50),
+        )
+        .await;
+        let options = DownloadOptions::new(PART_SIZE, PARTS_IN_FLIGHT, 2);
+
+        let (a, b) = tokio::join!(
+            download_bytes(url.clone(), options.clone()),
+            download_bytes(url, options)
+        );
+        a.unwrap();
+        b.unwrap();
+
+        let max_parts = observed.max_later_parts_in_flight.load(Ordering::SeqCst);
+        assert!(
+            (1..=2).contains(&max_parts),
+            "{max_parts} later parts were in flight at once"
+        );
+    }
+
+    #[tokio::test]
     async fn packages_downloaded_in_parts_extract_with_the_right_hash() {
         for (name, is_conda) in [
             ("clobber-fd-1-0.1.0-h4616a5c_0.conda", true),
@@ -487,10 +502,7 @@ mod tests {
     async fn a_file_within_one_part_takes_one_request() {
         let (url, observed) =
             test_server::serve_file_observed(conda_file(), Duration::ZERO, 0, Duration::ZERO).await;
-        let config = RangedDownload {
-            part_size: 1024 * 1024,
-            ..config()
-        };
+        let config = DownloadOptions::new(1024 * 1024, PARTS_IN_FLIGHT, 100);
 
         let bytes = download_bytes(url, config).await.unwrap();
 

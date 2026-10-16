@@ -111,6 +111,10 @@ pub struct Observed {
     in_flight: std::sync::atomic::AtomicUsize,
     /// The most requests answered at once.
     pub max_in_flight: std::sync::atomic::AtomicUsize,
+    /// Requests for ranges after the first currently being answered.
+    later_parts_in_flight: std::sync::atomic::AtomicUsize,
+    /// The most requests for ranges after the first answered at once.
+    pub max_later_parts_in_flight: std::sync::atomic::AtomicUsize,
     /// The first byte of each range requested, in the order answered.
     pub finished: std::sync::Mutex<Vec<u64>>,
 }
@@ -150,6 +154,16 @@ async fn observe(
     observed
         .max_in_flight
         .fetch_max(in_flight, Ordering::SeqCst);
+    let later_part = start.is_some_and(|start| start > 0);
+    if later_part {
+        let in_flight = observed
+            .later_parts_in_flight
+            .fetch_add(1, Ordering::SeqCst)
+            + 1;
+        observed
+            .max_later_parts_in_flight
+            .fetch_max(in_flight, Ordering::SeqCst);
+    }
     let delay = if start == Some(slow_start) {
         slow_delay
     } else {
@@ -158,6 +172,11 @@ async fn observe(
     tokio::time::sleep(delay).await;
     let response = next.run(req).await;
     observed.in_flight.fetch_sub(1, Ordering::SeqCst);
+    if later_part {
+        observed
+            .later_parts_in_flight
+            .fetch_sub(1, Ordering::SeqCst);
+    }
     observed.finished.lock().unwrap().extend(start);
     response
 }

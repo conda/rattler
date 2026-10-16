@@ -17,7 +17,7 @@ use url::Url;
 use zip::result::ZipError;
 
 #[cfg(not(target_arch = "wasm32"))]
-use super::ranged::{self, RangedDownload};
+use super::{DownloadOptions, ranged};
 use crate::{DownloadReporter, ExtractError, ExtractResult};
 
 /// zip files may use data descriptors to signal that the decompressor needs to
@@ -74,6 +74,7 @@ async fn get_reader(
     client: reqwest_middleware::ClientWithMiddleware,
     expected_sha256: Option<Sha256Hash>,
     reporter: Option<Arc<dyn DownloadReporter>>,
+    options: &DownloadOptions,
 ) -> Result<impl tokio::io::AsyncRead, ExtractError> {
     if let Some(reporter) = &reporter {
         reporter.on_download_start();
@@ -87,7 +88,7 @@ async fn get_reader(
 
         Ok(Either::Left(BufReader::new(file)))
     } else {
-        let download = send(url, client, expected_sha256).await?;
+        let download = send(url, client, expected_sha256, options).await?;
         let total_bytes = download.total_bytes;
         let mut bytes_received = Box::new(0);
         let byte_stream = download.body.inspect_ok(move |frame| {
@@ -107,11 +108,12 @@ async fn send(
     url: Url,
     client: reqwest_middleware::ClientWithMiddleware,
     expected_sha256: Option<Sha256Hash>,
+    options: &DownloadOptions,
 ) -> Result<Download, ExtractError> {
     // Each OCI request resolves the blob through the registry first, which
     // ranged requests would repeat once per part.
     if matches!(url.scheme(), "http" | "https" | "s3" | "gcs") {
-        return ranged::download(client, url, expected_sha256, RangedDownload::default())
+        return ranged::download(client, url, expected_sha256, options.clone())
             .await
             .map_err(ExtractError::ReqwestError);
     }
@@ -123,6 +125,7 @@ async fn send(
     url: Url,
     client: reqwest_middleware::ClientWithMiddleware,
     expected_sha256: Option<Sha256Hash>,
+    _options: &DownloadOptions,
 ) -> Result<Download, ExtractError> {
     send_whole(url, client, expected_sha256).await
 }
@@ -172,7 +175,33 @@ pub async fn extract_tar_bz2(
     expected_sha256: Option<Sha256Hash>,
     reporter: Option<Arc<dyn DownloadReporter>>,
 ) -> Result<ExtractResult, ExtractError> {
-    let reader = get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;
+    extract_tar_bz2_with_options(
+        client,
+        url,
+        destination,
+        expected_sha256,
+        reporter,
+        &DownloadOptions::default(),
+    )
+    .await
+}
+
+async fn extract_tar_bz2_with_options(
+    client: reqwest_middleware::ClientWithMiddleware,
+    url: Url,
+    destination: &Path,
+    expected_sha256: Option<Sha256Hash>,
+    reporter: Option<Arc<dyn DownloadReporter>>,
+    options: &DownloadOptions,
+) -> Result<ExtractResult, ExtractError> {
+    let reader = get_reader(
+        url.clone(),
+        client,
+        expected_sha256,
+        reporter.clone(),
+        options,
+    )
+    .await?;
     // The `response` is used to stream in the package data
     let result = crate::tokio::async_read::extract_tar_bz2(reader, destination).await?;
     if let Some(reporter) = &reporter {
@@ -209,12 +238,32 @@ pub async fn extract_conda(
     expected_sha256: Option<Sha256Hash>,
     reporter: Option<Arc<dyn DownloadReporter>>,
 ) -> Result<ExtractResult, ExtractError> {
+    extract_conda_with_options(
+        client,
+        url,
+        destination,
+        expected_sha256,
+        reporter,
+        &DownloadOptions::default(),
+    )
+    .await
+}
+
+async fn extract_conda_with_options(
+    client: reqwest_middleware::ClientWithMiddleware,
+    url: Url,
+    destination: &Path,
+    expected_sha256: Option<Sha256Hash>,
+    reporter: Option<Arc<dyn DownloadReporter>>,
+    options: &DownloadOptions,
+) -> Result<ExtractResult, ExtractError> {
     // The `response` is used to stream in the package data
     let reader = get_reader(
         url.clone(),
         client.clone(),
         expected_sha256,
         reporter.clone(),
+        options,
     )
     .await?;
     match crate::tokio::async_read::extract_conda(reader, destination).await {
@@ -235,8 +284,14 @@ pub async fn extract_conda(
             if let Some(reporter) = &reporter {
                 reporter.on_download_complete();
             }
-            let new_reader =
-                get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;
+            let new_reader = get_reader(
+                url.clone(),
+                client,
+                expected_sha256,
+                reporter.clone(),
+                options,
+            )
+            .await?;
 
             match crate::tokio::async_read::extract_conda_via_buffering(new_reader, destination)
                 .await
@@ -282,14 +337,44 @@ pub async fn extract(
     expected_sha256: Option<Sha256Hash>,
     reporter: Option<Arc<dyn DownloadReporter>>,
 ) -> Result<ExtractResult, ExtractError> {
+    extract_with_options(
+        client,
+        url,
+        destination,
+        expected_sha256,
+        reporter,
+        &DownloadOptions::default(),
+    )
+    .await
+}
+
+/// Like [`extract`], downloading large packages in parallel ranges as
+/// `options` describe.
+pub async fn extract_with_options(
+    client: reqwest_middleware::ClientWithMiddleware,
+    url: Url,
+    destination: &Path,
+    expected_sha256: Option<Sha256Hash>,
+    reporter: Option<Arc<dyn DownloadReporter>>,
+    options: &DownloadOptions,
+) -> Result<ExtractResult, ExtractError> {
     match CondaArchiveType::try_from(Path::new(url.path()))
         .ok_or(ExtractError::UnsupportedArchiveType)?
     {
         CondaArchiveType::TarBz2 => {
-            extract_tar_bz2(client, url, destination, expected_sha256, reporter).await
+            extract_tar_bz2_with_options(
+                client,
+                url,
+                destination,
+                expected_sha256,
+                reporter,
+                options,
+            )
+            .await
         }
         CondaArchiveType::Conda => {
-            extract_conda(client, url, destination, expected_sha256, reporter).await
+            extract_conda_with_options(client, url, destination, expected_sha256, reporter, options)
+                .await
         }
     }
 }

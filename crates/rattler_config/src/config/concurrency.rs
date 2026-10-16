@@ -17,6 +17,37 @@ pub fn default_max_concurrent_downloads() -> usize {
     50
 }
 
+/// The default number of bytes requested per range of a large package, as in
+/// the AWS `s3transfer` library.
+pub fn default_download_part_size() -> u64 {
+    8 * 1024 * 1024
+}
+
+/// The default number of ranges of one package downloaded at once, as in the
+/// AWS `s3transfer` library.
+pub fn default_download_parts() -> usize {
+    10
+}
+
+/// The default number of ranges downloaded at once across all packages, the
+/// floor the AWS Rust transfer manager uses.
+pub fn default_download_parts_total() -> usize {
+    32
+}
+
+// Saved configs only list these keys when they differ from the default.
+fn is_default_download_part_size(value: &u64) -> bool {
+    *value == default_download_part_size()
+}
+
+fn is_default_download_parts(value: &usize) -> bool {
+    *value == default_download_parts()
+}
+
+fn is_default_download_parts_total(value: &usize) -> bool {
+    *value == default_download_parts_total()
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub struct ConcurrencyConfig {
@@ -31,6 +62,28 @@ pub struct ConcurrencyConfig {
     // to 0 of partial struct was omitted.
     #[serde(default = "default_max_concurrent_downloads")]
     pub downloads: usize,
+
+    /// The number of bytes requested per range when a large package is
+    /// downloaded in parallel ranges.
+    #[serde(
+        default = "default_download_part_size",
+        skip_serializing_if = "is_default_download_part_size"
+    )]
+    pub download_part_size: u64,
+
+    /// The maximum number of ranges of one package downloaded at once.
+    #[serde(
+        default = "default_download_parts",
+        skip_serializing_if = "is_default_download_parts"
+    )]
+    pub download_parts: usize,
+
+    /// The maximum number of ranges downloaded at once across all packages.
+    #[serde(
+        default = "default_download_parts_total",
+        skip_serializing_if = "is_default_download_parts_total"
+    )]
+    pub download_parts_total: usize,
 }
 
 impl Default for ConcurrencyConfig {
@@ -38,6 +91,9 @@ impl Default for ConcurrencyConfig {
         Self {
             solves: default_max_concurrent_solves(),
             downloads: default_max_concurrent_downloads(),
+            download_part_size: default_download_part_size(),
+            download_parts: default_download_parts(),
+            download_parts_total: default_download_parts_total(),
         }
     }
 }
@@ -61,6 +117,21 @@ impl Config for ConcurrencyConfig {
             } else {
                 other.downloads
             },
+            download_part_size: if other.download_part_size == default_download_part_size() {
+                self.download_part_size
+            } else {
+                other.download_part_size
+            },
+            download_parts: if other.download_parts == default_download_parts() {
+                self.download_parts
+            } else {
+                other.download_parts
+            },
+            download_parts_total: if other.download_parts_total == default_download_parts_total() {
+                self.download_parts_total
+            } else {
+                other.download_parts_total
+            },
         })
     }
 
@@ -79,10 +150,92 @@ impl Config for ConcurrencyConfig {
             ));
         }
 
+        for (key, value) in [
+            ("download-part-size", self.download_part_size),
+            ("download-parts", self.download_parts as u64),
+            ("download-parts-total", self.download_parts_total as u64),
+        ] {
+            if value == 0 {
+                return Err(ValidationError::InvalidValue(
+                    key.to_string(),
+                    format!("{key} must be greater than 0"),
+                ));
+            }
+        }
+
         Ok(())
     }
 
     fn keys(&self) -> Vec<String> {
-        vec!["solves".to_string(), "downloads".to_string()]
+        [
+            "solves",
+            "downloads",
+            "download-part-size",
+            "download-parts",
+            "download-parts-total",
+        ]
+        .map(String::from)
+        .to_vec()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(toml: &str) -> ConcurrencyConfig {
+        toml::from_str(toml).unwrap()
+    }
+
+    #[test]
+    fn download_part_settings_default_to_the_aws_transfer_libraries() {
+        let config = parse("");
+
+        assert_eq!(config.download_part_size, 8 * 1024 * 1024);
+        assert_eq!(config.download_parts, 10);
+        assert_eq!(config.download_parts_total, 32);
+    }
+
+    #[test]
+    fn download_part_settings_can_be_raised() {
+        let config = parse(
+            "download-part-size = 16777216\ndownload-parts = 32\ndownload-parts-total = 128\n",
+        );
+
+        assert_eq!(config.download_part_size, 16 * 1024 * 1024);
+        assert_eq!(config.download_parts, 32);
+        assert_eq!(config.download_parts_total, 128);
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn a_later_layer_overrides_download_part_settings_it_sets() {
+        let base = parse("download-parts = 32\ndownload-parts-total = 128\n");
+        let layer = parse("download-parts-total = 64\n");
+
+        let merged = base.merge_config(&layer).unwrap();
+
+        assert_eq!(merged.download_parts, 32);
+        assert_eq!(merged.download_parts_total, 64);
+    }
+
+    #[test]
+    fn zero_download_part_settings_are_rejected() {
+        for key in [
+            "download-part-size",
+            "download-parts",
+            "download-parts-total",
+        ] {
+            let err = parse(&format!("{key} = 0\n")).validate().unwrap_err();
+
+            assert!(err.to_string().contains(key), "{err}");
+        }
+    }
+
+    #[test]
+    fn default_download_part_settings_are_not_saved() {
+        let saved = toml::to_string(&ConcurrencyConfig::default()).unwrap();
+
+        assert!(!saved.contains("download-part"), "{saved}");
     }
 }

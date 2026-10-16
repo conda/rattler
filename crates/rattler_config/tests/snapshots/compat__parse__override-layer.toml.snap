@@ -107,6 +107,9 @@ expression: "(unused, normalized(config))"
             concurrency: ConcurrencyConfig {
                 solves: 0,
                 downloads: 50,
+                download_part_size: 8388608,
+                download_parts: 10,
+                download_parts_total: 32,
             },
             proxy_config: ProxyConfig {
                 https: None,
