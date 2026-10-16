@@ -20,6 +20,10 @@ class Channel:
         Channel(name="conda-forge", base_url="https://conda.anaconda.org/conda-forge/")
         >>>
         ```
+
+        Raises:
+            InvalidChannelError: If the channel name or URL cannot be parsed.
+            TypeError: If `name` is not a string.
         """
         if not channel_configuration:
             channel_configuration = ChannelConfig()

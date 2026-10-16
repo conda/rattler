@@ -370,6 +370,15 @@ class Gateway:
             Missing target and ``noarch`` metadata is fetched without returning
             records from unrequested platforms.
 
+        Raises:
+            GatewayError: If repodata acquisition fails (missing channels, cache, or
+                network errors; fetch-level failures surface here, never as ``FetchRepoDataError``).
+            InvalidChannelError: If a source string is not a valid channel.
+            InvalidMatchSpecError: If a spec or constraint string cannot be parsed.
+            ParseSubdirError: If a platform string is not a valid subdir.
+            TypeError: If a source does not implement the required interface.
+            ValueError: If `channel_relations` holds an invalid value.
+
         Examples
         --------
         ```python
@@ -457,6 +466,13 @@ class Gateway:
         Returns:
             The records that reference `target`, together with the
             dependency string and kind through which they reference it.
+
+        Raises:
+            GatewayError: If repodata acquisition fails (missing channels, cache, or
+                network errors; fetch-level failures surface here, never as ``FetchRepoDataError``).
+            InvalidChannelError: If a source string is not a valid channel.
+            ParseSubdirError: If a platform string is not a valid subdir.
+            TypeError: If a source does not implement the required interface.
         """
         py_dependents = await self._gateway.who_needs(
             sources=_convert_sources(sources),
@@ -490,6 +506,18 @@ class Gateway:
 
         Returns:
             A list of package names that are present in the given subdirectories.
+
+        Raises:
+            GatewayError: If repodata acquisition fails (missing channels, cache, or
+                network errors; fetch-level failures surface here, never as ``FetchRepoDataError``).
+            InvalidChannelError: If a source string is not a valid channel.
+            ParseSubdirError: If a platform string is not a valid subdir.
+            TypeError: If a source does not implement the required interface.
+            ValueError: If `channel_relations` holds an invalid value.
+
+        Note: non-fatal CEP-42 ``channel_relations`` problems are reported via
+        Python's :mod:`warnings` module as
+        :class:`rattler.exceptions.GatewayWarning`, not raised.
 
         Examples
         --------
@@ -606,6 +634,10 @@ class Gateway:
                      all subdirectories of the channel are cleared.
             clear_disk: If `True`, also clears the on-disk cache. By default only the
                         in-memory cache is cleared.
+
+        Raises:
+            InvalidChannelError: If the channel string is not a valid channel.
+            TypeError: If the channel is not a string or a `Channel`.
 
         Examples
         --------

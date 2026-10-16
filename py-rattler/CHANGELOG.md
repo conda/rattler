@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Export `LockFileError` from `rattler.exceptions`, so lock-file failures can be caught by their dedicated type, in [#2960](https://github.com/conda/rattler/pull/2960)
 - Strict coverage test `tests/unit/test_exception_docs.py` that checks every documented `Raises:` name resolves, is pinned, is exercised by an offline negative test, and has a docs page, in [#2960](https://github.com/conda/rattler/pull/2960)
 - Document the exceptions raised by `solve()` and `fetch_repo_data()` with `Raises:` sections, and add the 23 missing exception pages, in [#2960](https://github.com/conda/rattler/pull/2960)
+- Document the exceptions raised by `install()`, the `Gateway` query methods, `MatchSpec`, `Version`, `Channel`, and `ChannelConfig` with `Raises:` sections, in [#PRNUM](https://github.com/conda/rattler/pull/PRNUM)
 
 ### Deprecated
 

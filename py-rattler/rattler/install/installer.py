@@ -371,6 +371,11 @@ async def install(
         package_cache: An optional :class:`PackageCache` to use for finding and caching
                 extracted packages. When provided, layering and validation modes are applied.
                 Takes precedence over `cache_dir`.
+
+    Raises:
+        InstallerError: If the prefix cannot be created or packages cannot be linked.
+        TransactionError: If planning or executing the install transaction fails.
+        TypeError: If a record or package name cannot be converted to its expected type.
     """
 
     if config is not None and client is None:

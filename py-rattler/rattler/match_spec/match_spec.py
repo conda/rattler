@@ -112,6 +112,10 @@ class MatchSpec:
         InvalidMatchSpecError: "^foo.*$" looks like a regex but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or .
         >>>
         ```
+
+        Raises:
+            InvalidMatchSpecError: If the spec string cannot be parsed.
+            TypeError: If `spec` is not a string.
         """
         if isinstance(spec, str):
             self._match_spec = PyMatchSpec(
@@ -205,8 +209,8 @@ class MatchSpec:
         single bracket section, with the same spec always rendering to the
         same string.
 
-        Raises `CanonicalMatchSpecError` when a value cannot be represented
-        in canonical MatchSpec syntax.
+        Raises:
+            CanonicalMatchSpecError: If a value cannot be represented in canonical MatchSpec syntax.
 
         Examples
         --------
@@ -265,6 +269,9 @@ class MatchSpec:
         exceptions.PackageNameMatcherParseError
         >>>
         ```
+
+        Raises:
+            PackageNameMatcherParseError: If `name` is not a valid package name.
         """
         return cls._from_py_match_spec(PyMatchSpec.from_nameless(spec._nameless_match_spec, name))
 
@@ -284,6 +291,10 @@ class MatchSpec:
         MatchSpec("_libgcc_mutex[sha256="adfa71f158cbd872a36394c56c3568e6034aa55c623634b37a4836bd036e6b91", url="https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2"]")
         >>>
         ```
+
+        Raises:
+            InvalidMatchSpecError: If the URL fragment carries an invalid package digest.
+            InvalidUrlError: If the URL cannot be parsed.
         """
         return cls._from_py_match_spec(PyMatchSpec.from_url(url))
 

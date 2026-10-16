@@ -18,6 +18,12 @@ class Version:
     _version: PyVersion
 
     def __init__(self, version: str) -> None:
+        """Create a new version.
+
+        Raises:
+            InvalidVersionError: If the version string cannot be parsed.
+            TypeError: If `version` is not a string.
+        """
         if isinstance(version, str):
             self._version = PyVersion(version)
         else:
@@ -143,6 +149,9 @@ class Version:
         Version("1.5.0.0.0.1")
         >>>
         ```
+
+        Raises:
+            VersionBumpError: If the segment index is not present in the version.
         """
         return Version._from_py_version(self._version.bump_segment(index))
 
@@ -200,6 +209,9 @@ class Version:
         Version("4!1.2.0.0+3.4")
         >>>
         ```
+
+        Raises:
+            VersionExtendError: If the version cannot be extended to the requested length.
         """
         return Version._from_py_version(self._version.extend_to_length(length))
 
@@ -337,8 +349,10 @@ class Version:
     def pop_segments(self, n: int = 1) -> Version:
         """
         Pops `n` number of segments from the version and returns
-        the new version. Raises `InvalidVersionError` if version
-        becomes invalid due to the operation.
+        the new version.
+
+        Raises:
+            InvalidVersionError: If the operation leaves no valid segments.
 
         Examples
         --------
@@ -364,8 +378,10 @@ class Version:
     def with_segments(self, start: int, stop: int) -> Version:
         """
         Returns new version with with segments ranging from `start` to `stop`.
-        `stop` is exclusive. Raises `InvalidVersionError` if the provided range
-        is invalid.
+        `stop` is exclusive.
+
+        Raises:
+            InvalidVersionError: If the provided range is invalid.
 
         Examples
         --------
