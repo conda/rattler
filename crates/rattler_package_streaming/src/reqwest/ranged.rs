@@ -111,7 +111,7 @@ pub(crate) async fn download(
 
     // A server may return less than asked for, and the same for every range.
     let part_size = first_range.end.min(options.part_size);
-    let parts_per_download = options.parts_per_download;
+    let parts_per_download = options.parts;
     let parts = Parts {
         client,
         url,
@@ -221,7 +221,7 @@ impl Parts {
         // can't stall the others.
         let _permit = self
             .options
-            .parts
+            .parts_in_flight
             .acquire()
             .await
             .map_err(std::io::Error::other)?;
@@ -358,7 +358,7 @@ mod tests {
     const PARTS_IN_FLIGHT: usize = 3;
 
     fn config() -> DownloadOptions {
-        DownloadOptions::new(PART_SIZE, PARTS_IN_FLIGHT, 100)
+        DownloadOptions::new(PART_SIZE, PARTS_IN_FLIGHT)
     }
 
     fn test_file(name: &str) -> PathBuf {
@@ -431,7 +431,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn downloads_sharing_options_share_the_total_limit() {
+    async fn downloads_sharing_options_share_the_limit() {
         let (url, observed) = test_server::serve_file_observed(
             conda_file(),
             Duration::from_millis(50),
@@ -439,7 +439,7 @@ mod tests {
             Duration::from_millis(50),
         )
         .await;
-        let options = DownloadOptions::new(PART_SIZE, PARTS_IN_FLIGHT, 2);
+        let options = DownloadOptions::new(PART_SIZE, 2);
 
         let (a, b) = tokio::join!(
             download_bytes(url.clone(), options.clone()),
@@ -502,7 +502,7 @@ mod tests {
     async fn a_file_within_one_part_takes_one_request() {
         let (url, observed) =
             test_server::serve_file_observed(conda_file(), Duration::ZERO, 0, Duration::ZERO).await;
-        let config = DownloadOptions::new(1024 * 1024, PARTS_IN_FLIGHT, 100);
+        let config = DownloadOptions::new(1024 * 1024, PARTS_IN_FLIGHT);
 
         let bytes = download_bytes(url, config).await.unwrap();
 

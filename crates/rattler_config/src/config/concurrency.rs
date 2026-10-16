@@ -23,16 +23,10 @@ pub fn default_download_part_size() -> u64 {
     8 * 1024 * 1024
 }
 
-/// The default number of ranges of one package downloaded at once, as in the
-/// AWS `s3transfer` library.
+/// The default number of ranges downloaded at once across all packages, as in
+/// the AWS `s3transfer` library.
 pub fn default_download_parts() -> usize {
     10
-}
-
-/// The default number of ranges downloaded at once across all packages, the
-/// floor the AWS Rust transfer manager uses.
-pub fn default_download_parts_total() -> usize {
-    32
 }
 
 // Saved configs only list these keys when they differ from the default.
@@ -42,10 +36,6 @@ fn is_default_download_part_size(value: &u64) -> bool {
 
 fn is_default_download_parts(value: &usize) -> bool {
     *value == default_download_parts()
-}
-
-fn is_default_download_parts_total(value: &usize) -> bool {
-    *value == default_download_parts_total()
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -71,19 +61,12 @@ pub struct ConcurrencyConfig {
     )]
     pub download_part_size: u64,
 
-    /// The maximum number of ranges of one package downloaded at once.
+    /// The maximum number of ranges downloaded at once across all packages.
     #[serde(
         default = "default_download_parts",
         skip_serializing_if = "is_default_download_parts"
     )]
     pub download_parts: usize,
-
-    /// The maximum number of ranges downloaded at once across all packages.
-    #[serde(
-        default = "default_download_parts_total",
-        skip_serializing_if = "is_default_download_parts_total"
-    )]
-    pub download_parts_total: usize,
 }
 
 impl Default for ConcurrencyConfig {
@@ -93,7 +76,6 @@ impl Default for ConcurrencyConfig {
             downloads: default_max_concurrent_downloads(),
             download_part_size: default_download_part_size(),
             download_parts: default_download_parts(),
-            download_parts_total: default_download_parts_total(),
         }
     }
 }
@@ -127,11 +109,6 @@ impl Config for ConcurrencyConfig {
             } else {
                 other.download_parts
             },
-            download_parts_total: if other.download_parts_total == default_download_parts_total() {
-                self.download_parts_total
-            } else {
-                other.download_parts_total
-            },
         })
     }
 
@@ -153,7 +130,6 @@ impl Config for ConcurrencyConfig {
         for (key, value) in [
             ("download-part-size", self.download_part_size),
             ("download-parts", self.download_parts as u64),
-            ("download-parts-total", self.download_parts_total as u64),
         ] {
             if value == 0 {
                 return Err(ValidationError::InvalidValue(
@@ -172,7 +148,6 @@ impl Config for ConcurrencyConfig {
             "downloads",
             "download-part-size",
             "download-parts",
-            "download-parts-total",
         ]
         .map(String::from)
         .to_vec()
@@ -193,39 +168,31 @@ mod tests {
 
         assert_eq!(config.download_part_size, 8 * 1024 * 1024);
         assert_eq!(config.download_parts, 10);
-        assert_eq!(config.download_parts_total, 32);
     }
 
     #[test]
     fn download_part_settings_can_be_raised() {
-        let config = parse(
-            "download-part-size = 16777216\ndownload-parts = 32\ndownload-parts-total = 128\n",
-        );
+        let config = parse("download-part-size = 16777216\ndownload-parts = 32\n");
 
         assert_eq!(config.download_part_size, 16 * 1024 * 1024);
         assert_eq!(config.download_parts, 32);
-        assert_eq!(config.download_parts_total, 128);
         assert!(config.validate().is_ok());
     }
 
     #[test]
     fn a_later_layer_overrides_download_part_settings_it_sets() {
-        let base = parse("download-parts = 32\ndownload-parts-total = 128\n");
-        let layer = parse("download-parts-total = 64\n");
+        let base = parse("download-part-size = 16777216\ndownload-parts = 32\n");
+        let layer = parse("download-parts = 64\n");
 
         let merged = base.merge_config(&layer).unwrap();
 
-        assert_eq!(merged.download_parts, 32);
-        assert_eq!(merged.download_parts_total, 64);
+        assert_eq!(merged.download_part_size, 16 * 1024 * 1024);
+        assert_eq!(merged.download_parts, 64);
     }
 
     #[test]
     fn zero_download_part_settings_are_rejected() {
-        for key in [
-            "download-part-size",
-            "download-parts",
-            "download-parts-total",
-        ] {
+        for key in ["download-part-size", "download-parts"] {
             let err = parse(&format!("{key} = 0\n")).validate().unwrap_err();
 
             assert!(err.to_string().contains(key), "{err}");

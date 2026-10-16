@@ -242,7 +242,6 @@ impl Installer {
         self.set_download_options(DownloadOptions::new(
             config.concurrency.download_part_size,
             config.concurrency.download_parts,
-            config.concurrency.download_parts_total,
         ));
         if let Some(run_post_link_scripts) = &config.run_post_link_scripts {
             self.set_execute_link_scripts(matches!(

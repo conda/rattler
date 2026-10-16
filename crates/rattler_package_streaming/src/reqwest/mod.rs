@@ -22,45 +22,40 @@ use ::tokio::sync::Semaphore;
 #[derive(Debug, Clone)]
 pub struct DownloadOptions {
     pub(crate) part_size: u64,
-    pub(crate) parts_per_download: usize,
+    pub(crate) parts: usize,
     /// Shared by every download that uses these options or a clone of them.
-    pub(crate) parts: Arc<Semaphore>,
+    pub(crate) parts_in_flight: Arc<Semaphore>,
 }
 
 impl DownloadOptions {
     /// The default number of bytes requested per range, as in `s3transfer`.
     pub const DEFAULT_PART_SIZE: u64 = 8 * 1024 * 1024;
-    /// The default number of ranges requested at once for one package, as in
-    /// `s3transfer`.
-    pub const DEFAULT_PARTS_PER_DOWNLOAD: usize = 10;
-    /// The default number of ranges requested at once across all packages,
-    /// the floor the AWS Rust transfer manager uses.
-    pub const DEFAULT_PARTS_TOTAL: usize = 32;
+    /// The default number of ranges requested at once, as in `s3transfer`.
+    pub const DEFAULT_PARTS: usize = 10;
 
-    /// Download packages in ranges of `part_size` bytes, at most
-    /// `parts_per_download` at once per package and `parts_total` at once
-    /// across all packages downloaded with these options. Zeros are raised to
-    /// one.
+    /// Download packages in ranges of `part_size` bytes, with at most `parts`
+    /// requested at once across all packages downloaded with these options.
+    /// Zeros are raised to one.
     ///
     /// Ranges that finish ahead of an earlier one are held in memory, so a
-    /// download buffers at most `(parts_per_download + 1) * part_size` bytes.
-    pub fn new(part_size: u64, parts_per_download: usize, parts_total: usize) -> Self {
+    /// download buffers at most `(parts + 1) * part_size` bytes.
+    pub fn new(part_size: u64, parts: usize) -> Self {
+        let parts = parts.max(1);
         Self {
             part_size: part_size.max(1),
-            parts_per_download: parts_per_download.max(1),
-            parts: Arc::new(Semaphore::new(parts_total.max(1))),
+            parts,
+            parts_in_flight: Arc::new(Semaphore::new(parts)),
         }
     }
 }
 
 impl Default for DownloadOptions {
-    /// The default options, whose total limit is shared by the whole process.
+    /// The default options, whose limit is shared by the whole process.
     fn default() -> Self {
         static DEFAULT: LazyLock<DownloadOptions> = LazyLock::new(|| {
             DownloadOptions::new(
                 DownloadOptions::DEFAULT_PART_SIZE,
-                DownloadOptions::DEFAULT_PARTS_PER_DOWNLOAD,
-                DownloadOptions::DEFAULT_PARTS_TOTAL,
+                DownloadOptions::DEFAULT_PARTS,
             )
         });
         DEFAULT.clone()
