@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.15](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.14...rattler_package_streaming-v0.27.15) - 2026-10-16
+
+### Fixed
+
+- bump zip to 9 (all zip 8.x releases are yanked) ([#2957](https://github.com/conda/rattler/pull/2957))
+
 ## [0.27.14](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.13...rattler_package_streaming-v0.27.14) - 2026-10-13
 
 ### Fixed
