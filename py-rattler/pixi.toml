@@ -46,6 +46,8 @@ nushell = ">=0.106.1"
 pytest = ">=8.4.1,<9"
 pytest-asyncio = ">=1.0.0,<2"
 pytest-xprocess = ">=1.0.2,<2"
+# Parses `Raises:` sections for tests/unit/test_exception_docs.py (conda/rattler#1351).
+griffe = ">=1.14.0,<2"
 
 # used in examples
 typer = "*"
