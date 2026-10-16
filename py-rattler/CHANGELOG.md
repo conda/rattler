@@ -9,13 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Export `LockFileError` from `rattler.exceptions`, so lock-file failures can be caught by their dedicated type, in [#1351](https://github.com/conda/rattler/issues/1351)
-- Strict coverage test `tests/unit/test_exception_docs.py` that checks every documented `Raises:` name resolves, is pinned, is exercised by an offline negative test, and has a docs page, in [#1351](https://github.com/conda/rattler/issues/1351)
-- Document the exceptions raised by `solve()` and `fetch_repo_data()` with `Raises:` sections, and add the 23 missing exception pages, in [#1351](https://github.com/conda/rattler/issues/1351)
+- Export `LockFileError` from `rattler.exceptions`, so lock-file failures can be caught by their dedicated type, in [#2960](https://github.com/conda/rattler/pull/2960)
+- Strict coverage test `tests/unit/test_exception_docs.py` that checks every documented `Raises:` name resolves, is pinned, is exercised by an offline negative test, and has a docs page, in [#2960](https://github.com/conda/rattler/pull/2960)
+- Document the exceptions raised by `solve()` and `fetch_repo_data()` with `Raises:` sections, and add the 23 missing exception pages, in [#2960](https://github.com/conda/rattler/pull/2960)
 
 ### Deprecated
 
-- Deprecate `ActivationScriptFormatError`, which is never raised and will be removed in a future release, in [#1351](https://github.com/conda/rattler/issues/1351)
+- Deprecate `ActivationScriptFormatError`, which is never raised and will be removed in a future release, in [#2960](https://github.com/conda/rattler/pull/2960)
 
 ## [0.27.1] - 2026-10-05
 
