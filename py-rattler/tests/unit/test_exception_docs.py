@@ -1,8 +1,10 @@
 """Strict staleness checks for documented py-rattler exceptions (conda/rattler#1351).
 
 Every API in ``COVERED_APIS`` documents the exceptions it raises with a
-Google-style ``Raises:`` section. Four checks keep that documentation honest:
+Google-style ``Raises:`` section. Five checks keep that documentation honest:
 
+0. every registered API has a ``Raises:`` section under at least one parser,
+   so a deleted block fails loudly instead of passing the rest vacuously;
 A. every documented name resolves to a real exception (``rattler.exceptions``
    or a builtin);
 B. every documented section still contains its pinned minimum set, so
@@ -123,6 +125,15 @@ async def _trigger_solve_bad_source(tmp_path: Path) -> None:
     await solve([123], ["mypkg"], platforms=["noarch"])  # type: ignore[list-item]
 
 
+async def _trigger_solve_bad_spec(tmp_path: Path) -> None:
+    await solve([_local_channel(tmp_path)], [":::"], platforms=["noarch"])
+
+
+async def _trigger_solve_bad_source_str(tmp_path: Path) -> None:
+    del tmp_path
+    await solve(["::::"], ["mypkg"], platforms=["noarch"])
+
+
 async def _trigger_solve_bad_policy(tmp_path: Path) -> None:
     await solve(
         [_local_channel(tmp_path)],
@@ -153,13 +164,31 @@ async def _trigger_fetch_cache_only_missing(tmp_path: Path) -> None:
 
 COVERED_APIS: dict[str, APICoverage] = {
     "rattler.solver.solver.solve": APICoverage(
-        pinned=frozenset({"SolverError", "GatewayError", "TypeError", "ValueError"}),
+        pinned=frozenset(
+            {
+                "SolverError",
+                "GatewayError",
+                "InvalidChannelError",
+                "InvalidMatchSpecError",
+                "TypeError",
+                "ValueError",
+            }
+        ),
         triggers={
             "SolverError": _trigger_solve_unsat,
             "GatewayError": _trigger_solve_missing_channel,
+            "InvalidChannelError": _trigger_solve_bad_source_str,
+            "InvalidMatchSpecError": _trigger_solve_bad_spec,
             "TypeError": _trigger_solve_bad_source,
             "ValueError": _trigger_solve_bad_policy,
         },
+        documented_but_untriggerable=(
+            Untriggerable(
+                name="IoError",
+                reason="only raised if the solver task is cancelled; no deterministic offline trigger",
+                call_site="py-rattler/src/solver.rs:207,330",
+            ),
+        ),
     ),
     "rattler.networking.fetch_repo_data.fetch_repo_data": APICoverage(
         pinned=frozenset({"FetchRepoDataError"}),
@@ -192,6 +221,19 @@ def _raises_names(dotted_path: str) -> set[str]:
     return set()
 
 
+def _has_raises_section(dotted_path: str) -> bool:
+    """Whether ``dotted_path`` has a ``Raises:`` section under either parser."""
+    for parser in (griffe.Parser.google, griffe.Parser.numpy):
+        obj = griffe.load(dotted_path, submodules=True, docstring_parser=parser)
+        docstring = obj.docstring
+        if docstring is None or docstring.parsed is None:
+            continue
+        for section in docstring.parsed:
+            if section.kind == DocstringSectionKind.raises:
+                return True
+    return False
+
+
 def _exception_class(name: str) -> type[BaseException]:
     """Resolve a documented name to the exception class it names."""
     if name in BUILTIN_ALLOWLIST:
@@ -206,17 +248,31 @@ def _exception_class(name: str) -> type[BaseException]:
     return resolved
 
 
+def test_covered_api_has_raises_section() -> None:
+    """Every registered API has a `Raises:` section under at least one parser.
+
+    Without this, a deleted `Raises:` block would make every other check pass
+    vacuously on an empty ``documented`` set.
+    """
+    for dotted_path in COVERED_APIS:
+        assert _has_raises_section(dotted_path), f"{dotted_path} has no Raises: section under either parser"
+
+
 def test_covered_api_raises_resolve() -> None:
     """Check A: every documented name resolves to a real exception."""
     for dotted_path in COVERED_APIS:
-        for name in _raises_names(dotted_path):
+        documented = _raises_names(dotted_path)
+        assert documented, f"{dotted_path} documents no exceptions"
+        for name in documented:
             _exception_class(name)
 
 
 def test_covered_api_pinned_minimum() -> None:
     """Check B: the pinned minimum set is still documented (deletions fail)."""
     for dotted_path, coverage in COVERED_APIS.items():
+        assert coverage.pinned, f"{dotted_path} registers an empty pinned minimum"
         documented = _raises_names(dotted_path)
+        assert documented, f"{dotted_path} documents no exceptions"
         missing = coverage.pinned - documented
         assert not missing, f"{dotted_path} no longer documents its pinned minimum: {sorted(missing)}"
 
@@ -252,17 +308,38 @@ def _snake_case(name: str) -> str:
     return snake.lower()
 
 
+def _exception_nav_entries(nav_text: str) -> list[tuple[str, str]]:
+    """`(name, page)` pairs from the `exceptions:` nav block, in file order."""
+    lines = nav_text.splitlines()
+    start = next(i for i, line in enumerate(lines) if line.strip() == "- exceptions:")
+    entries = []
+    for line in lines[start + 1 :]:
+        match = re.fullmatch(r"\s+- ([A-Za-z_][A-Za-z0-9_]*): (\S+)", line)
+        if match is None:
+            break
+        entries.append((match.group(1), match.group(2)))
+    return entries
+
+
 def test_all_exceptions_have_docs_page() -> None:
     """Check D: every exported exception has a docs page and a nav entry."""
     package_root = Path(__file__).resolve().parents[2]
     docs_dir = package_root / "docs"
     nav_text = (package_root / "mkdocs.yml").read_text()
-    for name in rattler.exceptions.__all__:
-        if name in EXCLUDED_FROM_DOCS:
-            continue
-        page = f"{_snake_case(name)}.md"
+    entries = _exception_nav_entries(nav_text)
+    assert entries, "no entries found in the exceptions nav block"
+    names = [name for name, _ in entries]
+    assert len(names) == len(set(names)), f"duplicate names in the exceptions nav: {sorted(names)}"
+    assert names == sorted(names), "exceptions nav entries are not sorted"
+    expected = {name for name in rattler.exceptions.__all__ if name not in EXCLUDED_FROM_DOCS}
+    assert set(names) == expected, (
+        f"exceptions nav does not match rattler.exceptions.__all__: "
+        f"missing={sorted(expected - set(names))} extra={sorted(set(names) - expected)}"
+    )
+    for name, page in entries:
+        expected_page = f"{_snake_case(name)}.md"
+        assert page == expected_page, f"nav entry for {name} points at {page}, expected {expected_page}"
         assert (docs_dir / page).is_file(), f"rattler.exceptions.{name} has no docs/{page}"
-        assert f"- {name}: {page}" in nav_text, f"rattler.exceptions.{name} has no mkdocs.yml nav entry"
 
 
 @pytest.mark.asyncio
@@ -280,6 +357,20 @@ async def test_solve_raises_gateway_error(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_solve_raises_invalid_match_spec_error(tmp_path: Path) -> None:
+    """`solve()` reports an unparseable spec string as `InvalidMatchSpecError`."""
+    with pytest.raises(rattler.exceptions.InvalidMatchSpecError):
+        await _trigger_solve_bad_spec(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_solve_raises_invalid_channel_error(tmp_path: Path) -> None:
+    """`solve()` reports an invalid channel string as `InvalidChannelError`."""
+    with pytest.raises(rattler.exceptions.InvalidChannelError):
+        await _trigger_solve_bad_source_str(tmp_path)
+
+
+@pytest.mark.asyncio
 async def test_solve_raises_type_error(tmp_path: Path) -> None:
     """`solve()` rejects sources outside the supported interface."""
     with pytest.raises(TypeError):
@@ -288,7 +379,7 @@ async def test_solve_raises_type_error(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_solve_raises_value_error(tmp_path: Path) -> None:
-    """`solve()` rejects an invalid `timestamp_policy`."""
+    """`solve()` rejects an invalid option value (`timestamp_policy`)."""
     with pytest.raises(ValueError):
         await _trigger_solve_bad_policy(tmp_path)
 
