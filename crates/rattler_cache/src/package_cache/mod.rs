@@ -850,15 +850,30 @@ impl PackageCache {
         if self.cache_origin {
             cache_key = cache_key.with_path(path);
         }
+        let sha256 = cache_key.sha256();
 
         self.get_or_fetch_hashed(
             cache_key,
             move |destination| {
                 let path_buf = path_buf.clone();
                 async move {
-                    rattler_package_streaming::tokio::fs::extract(&path_buf, &destination)
-                        .await
-                        .map(|result| Some(result.sha256))
+                    let result =
+                        rattler_package_streaming::tokio::fs::extract(&path_buf, &destination)
+                            .await?;
+                    // Recording the archive's hash for a record that claims a
+                    // different one would make every later lookup re-extract.
+                    if let Some(sha256) = sha256
+                        && sha256 != result.sha256
+                    {
+                        return Err(ExtractError::HashMismatch {
+                            url: path_buf.display().to_string(),
+                            destination: destination.display().to_string(),
+                            expected: hex::encode(sha256),
+                            actual: hex::encode(result.sha256),
+                            total_size: result.total_size,
+                        });
+                    }
+                    Ok(Some(result.sha256))
                 }
             },
             reporter,
@@ -1406,11 +1421,14 @@ mod test {
     use tokio_stream::StreamExt;
     use url::Url;
 
-    use super::{PackageCache, PackageCacheLayer, cache_lock, rename_with_retry};
+    use super::{
+        PackageCache, PackageCacheLayer, PackageCacheLayerError, cache_lock, rename_with_retry,
+    };
     use crate::{
         package_cache::{CacheKey, PackageCacheError},
         validation::{ValidationMode, validate_package_directory},
     };
+    use rattler_package_streaming::ExtractError;
 
     fn get_test_data_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
@@ -2968,6 +2986,46 @@ mod test {
         assert!(
             !cache_metadata.path().join("bin/python").exists(),
             "content of the previously cached package was served"
+        );
+    }
+
+    #[tokio::test]
+    // A record whose sha256 does not match the local archive is rejected
+    // instead of being cached under the archive's hash.
+    async fn test_get_or_fetch_from_path_rejects_hash_mismatch() {
+        let cpython_archive =
+            get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+        let pypy_archive = get_test_data_dir().join("clobber/clobber-python-0.1.0-pypy.conda");
+
+        let mut record = PackageRecord::new(
+            PackageName::new_unchecked("clobber-python"),
+            "0.1.0".parse::<VersionWithSource>().unwrap(),
+            "cpython".parse::<BuildString>().unwrap(),
+        );
+        record.sha256 = Some(compute_file_digest::<Sha256>(&pypy_archive).unwrap());
+
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+        let err = cache
+            .get_or_fetch_from_path(&cpython_archive, Some(&record), None)
+            .await
+            .unwrap_err();
+        let PackageCacheError::LayerError(err) = err else {
+            panic!("unexpected error: {err:?}");
+        };
+        assert_matches!(
+            err.downcast_ref::<PackageCacheLayerError>(),
+            Some(PackageCacheLayerError::FetchError(err))
+                if matches!(
+                    err.downcast_ref::<ExtractError>(),
+                    Some(ExtractError::HashMismatch { .. })
+                )
+        );
+        assert!(
+            !packages_dir
+                .path()
+                .join("clobber-python-0.1.0-cpython")
+                .exists()
         );
     }
 
