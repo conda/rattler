@@ -994,8 +994,8 @@ fn topological_order_of_records(records: &[PackageRecord]) -> Vec<usize> {
 pub async fn mount(metadata: MetadataTree, config: &MountConfig) -> anyhow::Result<MountHandle> {
     let transport = config.transport;
 
-    // ProjFS-specific pre-flight checks: DLL availability, mode validity,
-    // overlay state. Done before VFS construction so we don't waste offset
+    // ProjFS-specific pre-flight checks: DLL availability and mode validity.
+    // Done before VFS construction so we don't waste offset
     // computation if ProjFS isn't installed or the user passed Mode::ReadOnly.
     #[cfg(target_os = "windows")]
     if matches!(transport, Transport::ProjFs) {
@@ -1031,36 +1031,13 @@ pub async fn mount(metadata: MetadataTree, config: &MountConfig) -> anyhow::Resu
             tracing::warn!("ProjFS does not support read-only mode; falling through to writable");
         }
 
-        // Validate overlay state (env hash) to reject stale mounts.
-        {
-            use crate::overlay::{OverlayError, OverlayState};
-            match OverlayState::load(
-                config.mount_point.clone(),
-                config.env_hash.clone(),
-                "projfs".to_string(),
-                config.overlay_mismatch,
-            ) {
-                Ok(_) => {} // hash matches or fresh overlay
-                Err(OverlayError::EnvHashMismatch {
-                    expected, found, ..
-                }) => {
-                    return Err(MountError::OverlayEnvHashMismatch {
-                        expected,
-                        found,
-                        // For ProjFS the overlay is the virtualization root,
-                        // i.e. the mount point itself.
-                        overlay_dir: config.mount_point.clone(),
-                    }
-                    .into());
-                }
-                Err(OverlayError::TransportMismatch {
-                    expected, found, ..
-                }) => {
-                    return Err(MountError::OverlayTransportMismatch { expected, found }.into());
-                }
-                Err(e) => anyhow::bail!("overlay state check failed: {e}"),
-            }
-        }
+        // The overlay state (env hash) is validated only after
+        // virtualization has started (see the `Transport::ProjFs` arm below):
+        // the state file lives inside the virtualization root, and once a
+        // directory has been a root, ProjFS refuses I/O inside it while no
+        // provider is running (ERROR_FILE_SYSTEM_VIRTUALIZATION_UNAVAILABLE,
+        // os error 369). Reading it up front would make every remount of the
+        // same directory fail.
     }
 
     let read_only = matches!(config.mode, Mode::ReadOnly | Mode::ReadOnlyIfSupported);
@@ -1083,12 +1060,69 @@ pub async fn mount(metadata: MetadataTree, config: &MountConfig) -> anyhow::Resu
         Transport::Fuse => Ok(MountHandle::Fuse(fuse_adapter::mount_fuse(vfs, config)?)),
         #[cfg(target_os = "windows")]
         Transport::ProjFs => {
+            std::fs::create_dir_all(&config.mount_point)?;
             let adapter = projfs_adapter::ProjFsAdapter::new(vfs);
             let handle = adapter.start(&config.mount_point)?;
+            if let Err(e) = check_projfs_overlay_state(config) {
+                // Don't leave a provider serving an overlay we just rejected.
+                if let Err(stop_err) = handle.unmount() {
+                    tracing::warn!("failed to stop ProjFS after overlay check: {stop_err}");
+                }
+                return Err(e);
+            }
             Ok(MountHandle::ProjFs(handle))
         }
         #[allow(unreachable_patterns)]
         _ => Err(MountError::TransportNotAvailable { transport })?,
+    }
+}
+
+/// Delete a directory that has been used as a `ProjFS` mount point.
+///
+/// Once a directory has been a `ProjFS` virtualization root it can neither be
+/// read nor deleted while no provider is running on it (os error 369, "The
+/// provider that supports file system virtualization is temporarily
+/// unavailable"), so a plain `remove_dir_all` fails after unmounting. This
+/// starts a provider that projects nothing, deletes the root's contents through
+/// it, stops it again and then removes the root itself.
+///
+/// The mount at `root` must not be live (unmount it first). Directories that
+/// were never a virtualization root are removed normally.
+#[cfg(target_os = "windows")]
+pub fn remove_projfs_root(root: &Path) -> anyhow::Result<()> {
+    projfs_adapter::remove_virtualization_root(root)
+}
+
+/// Validate the `ProjFS` overlay state (env hash, transport) to reject stale
+/// mounts.
+///
+/// For `ProjFS` the overlay is the virtualization root itself, so this must run
+/// while a provider is serving the root: on a root whose provider has stopped,
+/// every access inside it fails with os error 369.
+#[cfg(target_os = "windows")]
+fn check_projfs_overlay_state(config: &MountConfig) -> anyhow::Result<()> {
+    use crate::overlay::{OverlayError, OverlayState};
+    match OverlayState::load(
+        config.mount_point.clone(),
+        config.env_hash.clone(),
+        Transport::ProjFs.name().to_string(),
+        config.overlay_mismatch,
+    ) {
+        Ok(_) => Ok(()), // hash matches or fresh overlay
+        Err(OverlayError::EnvHashMismatch {
+            expected, found, ..
+        }) => Err(MountError::OverlayEnvHashMismatch {
+            expected,
+            found,
+            // For ProjFS the overlay is the virtualization root,
+            // i.e. the mount point itself.
+            overlay_dir: config.mount_point.clone(),
+        }
+        .into()),
+        Err(OverlayError::TransportMismatch {
+            expected, found, ..
+        }) => Err(MountError::OverlayTransportMismatch { expected, found }.into()),
+        Err(e) => anyhow::bail!("overlay state check failed: {e}"),
     }
 }
 
@@ -1358,10 +1392,9 @@ pub fn force_unmount(mount_point: &Path, transport: Transport) -> anyhow::Result
         #[cfg(target_os = "windows")]
         Transport::ProjFs => {
             anyhow::bail!(
-                "ProjFS stale-mount recovery is not yet supported. \
-                 The virtualization context died with the owning process; \
-                 hydrated files remain at {mnt}. Remove the directory \
-                 manually and remount, or wait for re-attach support."
+                "ProjFS has no stale mount to detach: the virtualization \
+                 instance stopped with the owning process and {mnt} can simply \
+                 be mounted again. To delete it, use `remove_projfs_root`."
             );
         }
         _ => {
@@ -1982,5 +2015,106 @@ packages:
             .as_directory()
             .unwrap();
         assert_eq!(scripts.children.len(), 4); // 2 entry points x (script + exe)
+    }
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod projfs_tests {
+    use super::*;
+
+    /// A tiny tree: `top.txt` and `pkg/hello.txt`.
+    fn tree() -> MetadataTree {
+        let (mut nodes, mut dirs, mut files) = new_empty_tree();
+        let top = MetadataNode::new_virtual_file("top.txt".into(), 0, b"top".to_vec());
+        upsert_file_node(
+            top,
+            0,
+            Path::new(".").join("top.txt"),
+            &mut nodes,
+            &mut files,
+        );
+        let pkg = ensure_directory(Path::new(".").join("pkg"), 0, &mut nodes, &mut dirs);
+        let hello = MetadataNode::new_virtual_file("hello.txt".into(), pkg, b"hello".to_vec());
+        upsert_file_node(
+            hello,
+            pkg,
+            Path::new(".").join("pkg").join("hello.txt"),
+            &mut nodes,
+            &mut files,
+        );
+        MetadataTree(nodes)
+    }
+
+    fn config(root: &Path, env_hash: &str) -> MountConfig {
+        MountConfig::new(root.to_path_buf(), Transport::ProjFs, env_hash.to_string())
+            .with_mode(Mode::Writable { overlay_dir: None })
+    }
+
+    /// Regression test: a directory that was a `ProjFS` root used to be
+    /// unmountable a second time, because the overlay state inside it was
+    /// read before a provider was running (os error 369).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn remount_same_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("env");
+        std::fs::create_dir_all(&root).unwrap();
+        // Like `rattler exec --dematerialized`, keep a file of our own in the
+        // root from before the first mount.
+        std::fs::write(root.join(".exec-lock.yml"), "lock").unwrap();
+
+        let handle = mount(tree(), &config(&root, "env-a")).await.unwrap();
+        assert_eq!(std::fs::read(root.join("pkg/hello.txt")).unwrap(), b"hello");
+        std::fs::create_dir_all(root.join("pkg/__pycache__")).unwrap();
+        std::fs::write(root.join("pkg/__pycache__/hello.pyc"), "pyc").unwrap();
+        handle.unmount().await.unwrap();
+
+        // Without a provider, ProjFS still serves files that are fully on
+        // disk, but refuses anything it would have to ask the provider about,
+        // such as creating a file (which the overlay state code does).
+        assert_eq!(std::fs::read(root.join("pkg/hello.txt")).unwrap(), b"hello");
+        let err = std::fs::write(root.join("new.txt"), "x").unwrap_err();
+        assert!(
+            projfs_adapter::is_provider_unavailable(&err),
+            "unexpected error on stopped root: {err}"
+        );
+
+        for _ in 0..2 {
+            let handle = mount(tree(), &config(&root, "env-a")).await.unwrap();
+            assert_eq!(std::fs::read(root.join("top.txt")).unwrap(), b"top");
+            assert_eq!(std::fs::read(root.join("pkg/hello.txt")).unwrap(), b"hello");
+            assert_eq!(
+                std::fs::read(root.join("pkg/__pycache__/hello.pyc")).unwrap(),
+                b"pyc"
+            );
+            assert_eq!(std::fs::read(root.join(".exec-lock.yml")).unwrap(), b"lock");
+            handle.unmount().await.unwrap();
+        }
+
+        // A different environment is still rejected, and the provider started
+        // for the check is stopped again so the root stays usable.
+        let err = mount(tree(), &config(&root, "env-b")).await.err().unwrap();
+        assert!(
+            matches!(
+                err.downcast_ref::<MountError>(),
+                Some(MountError::OverlayEnvHashMismatch { .. })
+            ),
+            "expected an env hash mismatch, got: {err:#}"
+        );
+        let handle = mount(tree(), &config(&root, "env-a")).await.unwrap();
+        handle.unmount().await.unwrap();
+
+        remove_projfs_root(&root).unwrap();
+        assert!(!root.exists());
+    }
+
+    #[test]
+    fn remove_projfs_root_handles_plain_and_missing_dirs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let plain = tmp.path().join("plain");
+        std::fs::create_dir_all(plain.join("sub")).unwrap();
+        std::fs::write(plain.join("sub/file"), "x").unwrap();
+        remove_projfs_root(&plain).unwrap();
+        assert!(!plain.exists());
+        remove_projfs_root(&tmp.path().join("missing")).unwrap();
     }
 }
