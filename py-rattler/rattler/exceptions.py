@@ -31,6 +31,7 @@ try:
         InvalidVersionSpecError,
         IoError,
         LinkError,
+        LockFileError,
         PackageNameMatcherParseError,
         ParseArchError,
         ParseCondaLockError,
@@ -131,6 +132,9 @@ except ImportError:
     class LinkError(Exception):  # type: ignore[no-redef]
         """An error that can occur when linking a package"""
 
+    class LockFileError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when reading or writing a lock file"""
+
     class PackageNameMatcherParseError(Exception):  # type: ignore[no-redef]
         """Error that can occur when parsing a package name matcher"""
 
@@ -217,6 +221,7 @@ __all__ = [
     "InvalidVersionSpecError",
     "IoError",
     "LinkError",
+    "LockFileError",
     "PackageNameMatcherParseError",
     "ParseArchError",
     "ParseCondaLockError",
