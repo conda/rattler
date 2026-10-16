@@ -194,6 +194,7 @@ pub fn py_solve<'a>(
                 strategy: strategy.map_or_else(Default::default, |v| v.0),
                 dependency_overrides: Vec::new(),
                 excluded_candidates: HashMap::default(),
+                flag_preferences: Vec::new(),
                 cancellation_token: None,
             };
 
@@ -323,6 +324,7 @@ pub fn py_solve_with_sparse_repodata<'py>(
                 strategy: strategy.map_or_else(Default::default, |v| v.0),
                 dependency_overrides: Vec::new(),
                 excluded_candidates: HashMap::default(),
+                flag_preferences: Vec::new(),
                 cancellation_token: None,
             };
 
