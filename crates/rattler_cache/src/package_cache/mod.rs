@@ -123,9 +123,9 @@ pub struct CacheIndex {
     /// Directory names as produced by [`CacheKey::to_path_segment`], mapped to
     /// the sha256 and filter of each layer holding that entry. A sha256 is
     /// absent when the entry predates hash recording or its metadata could not
-    /// be read. Every layer holding the name contributes, in layer order:
-    /// lookup walks past a filtered or hash-mismatching layer, so the index
-    /// must too.
+    /// be read; such an entry only matches requests without a sha256. Every
+    /// layer holding the name contributes, in layer order: lookup walks past a
+    /// filtered or hash-mismatching layer, so the index must too.
     entries: HashMap<String, Vec<CacheIndexEntry>>,
     cache_origin: bool,
 }
@@ -200,7 +200,7 @@ impl CacheIndex {
         // anywhere is a match.
         cached_sha256s.iter().any(|entry| {
             entry.filter.accepts(cache_key)
-                && !cache_lock::sha256_mismatch(cache_key.sha256().as_ref(), entry.sha256.as_ref())
+                && cache_lock::sha256_satisfies(cache_key.sha256().as_ref(), entry.sha256.as_ref())
         })
     }
 
@@ -411,7 +411,7 @@ impl PackageCacheLayer {
 
         match validate_package_common::<
             fn(PathBuf) -> _,
-            Pin<Box<dyn Future<Output = Result<(), _>> + Send>>,
+            Pin<Box<dyn Future<Output = Result<Option<Sha256Hash>, _>> + Send>>,
             std::io::Error,
         >(
             cache_path,
@@ -433,6 +433,9 @@ impl PackageCacheLayer {
     }
 
     /// Validate the package, and fetch it if invalid.
+    ///
+    /// `fetch` cannot report the sha256 of what it wrote, so the entry is
+    /// recorded under the sha256 of `cache_key`.
     pub async fn validate_or_fetch<F, Fut, E>(
         &self,
         fetch: F,
@@ -442,6 +445,24 @@ impl PackageCacheLayer {
     where
         F: (Fn(PathBuf) -> Fut) + Send + 'static,
         Fut: Future<Output = Result<(), E>> + Send + 'static,
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        self.validate_or_fetch_hashed(without_sha256(fetch), cache_key, reporter)
+            .await
+    }
+
+    /// Like [`Self::validate_or_fetch`], but `fetch` returns the sha256 of the
+    /// archive it extracted, which is then recorded for the entry instead of
+    /// the one in `cache_key`.
+    async fn validate_or_fetch_hashed<F, Fut, E>(
+        &self,
+        fetch: F,
+        cache_key: &CacheKey,
+        reporter: Option<Arc<dyn CacheReporter>>,
+    ) -> Result<CacheMetadata, PackageCacheLayerError>
+    where
+        F: (Fn(PathBuf) -> Fut) + Send + 'static,
+        Fut: Future<Output = Result<Option<Sha256Hash>, E>> + Send + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
         let entry = self
@@ -687,6 +708,9 @@ impl PackageCache {
     ///
     /// If the package is already being fetched by another task/thread the
     /// request is coalesced. No duplicate fetch is performed.
+    ///
+    /// `fetch` cannot report the sha256 of what it wrote, so a fetched entry
+    /// is recorded under the sha256 of the cache key.
     pub async fn get_or_fetch<F, Fut, E>(
         &self,
         pkg: impl Into<CacheKey>,
@@ -696,6 +720,24 @@ impl PackageCache {
     where
         F: (Fn(PathBuf) -> Fut) + Send + 'static,
         Fut: Future<Output = Result<(), E>> + Send + 'static,
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        self.get_or_fetch_hashed(pkg, without_sha256(fetch), reporter)
+            .await
+    }
+
+    /// Like [`Self::get_or_fetch`], but `fetch` returns the sha256 of the
+    /// archive it extracted, which is then recorded for the entry instead of
+    /// the one in the cache key.
+    async fn get_or_fetch_hashed<F, Fut, E>(
+        &self,
+        pkg: impl Into<CacheKey>,
+        fetch: F,
+        reporter: Option<Arc<dyn CacheReporter>>,
+    ) -> Result<CacheMetadata, PackageCacheError>
+    where
+        F: (Fn(PathBuf) -> Fut) + Send + 'static,
+        Fut: Future<Output = Result<Option<Sha256Hash>, E>> + Send + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
         let cache_key = pkg.into();
@@ -745,7 +787,10 @@ impl PackageCache {
             .filter(|layer| layer.accepts(&cache_key))
             .find(|layer| !layer.is_readonly())
         {
-            return match layer.validate_or_fetch(fetch, &cache_key, reporter).await {
+            return match layer
+                .validate_or_fetch_hashed(fetch, &cache_key, reporter)
+                .await
+            {
                 Ok(cache_metadata) => Ok(cache_metadata),
                 Err(e) => Err(e.into()),
             };
@@ -805,15 +850,30 @@ impl PackageCache {
         if self.cache_origin {
             cache_key = cache_key.with_path(path);
         }
+        let sha256 = cache_key.sha256();
 
-        self.get_or_fetch(
+        self.get_or_fetch_hashed(
             cache_key,
             move |destination| {
                 let path_buf = path_buf.clone();
                 async move {
-                    rattler_package_streaming::tokio::fs::extract(&path_buf, &destination)
-                        .await
-                        .map(|_| ())
+                    let result =
+                        rattler_package_streaming::tokio::fs::extract(&path_buf, &destination)
+                            .await?;
+                    // Recording the archive's hash for a record that claims a
+                    // different one would make every later lookup re-extract.
+                    if let Some(sha256) = sha256
+                        && sha256 != result.sha256
+                    {
+                        return Err(ExtractError::HashMismatch {
+                            url: path_buf.display().to_string(),
+                            destination: destination.display().to_string(),
+                            expected: hex::encode(sha256),
+                            actual: hex::encode(result.sha256),
+                            total_size: result.total_size,
+                        });
+                    }
+                    Ok(Some(result.sha256))
                 }
             },
             reporter,
@@ -858,7 +918,7 @@ impl PackageCache {
         let md5 = cache_key.md5();
         let download_reporter = reporter.clone();
         // Get or fetch the package, using the specified fetch function
-        self.get_or_fetch(cache_key, move |destination| {
+        self.get_or_fetch_hashed(cache_key, move |destination| {
             let url = url.clone();
             let client = client.clone();
             let retry_policy = retry_policy.clone();
@@ -944,7 +1004,7 @@ impl PackageCache {
                                         total_size: result.total_size,
                                     });
                                 }
-                            return Ok(());
+                            return Ok(Some(result.sha256));
                         }
                         Err(err) => err,
                     };
@@ -1072,6 +1132,23 @@ fn is_transient_rename_error(err: &std::io::Error) -> bool {
     matches!(err.raw_os_error(), Some(5 | 32))
 }
 
+/// The future returned by a fetch function adapted with [`without_sha256`].
+type HashedFetchFuture<E> = Pin<Box<dyn Future<Output = Result<Option<Sha256Hash>, E>> + Send>>;
+
+/// Adapts a fetch function that does not report a sha256 to the signature
+/// used internally.
+fn without_sha256<F, Fut, E>(fetch: F) -> impl Fn(PathBuf) -> HashedFetchFuture<E> + Send + 'static
+where
+    F: (Fn(PathBuf) -> Fut) + Send + 'static,
+    Fut: Future<Output = Result<(), E>> + Send + 'static,
+    E: 'static,
+{
+    move |path| {
+        let fut = fetch(path);
+        Box::pin(async move { fut.await.map(|()| None) })
+    }
+}
+
 /// Shared logic for validating a package.
 async fn validate_package_common<F, Fut, E>(
     path: PathBuf,
@@ -1083,7 +1160,7 @@ async fn validate_package_common<F, Fut, E>(
 ) -> Result<CacheMetadata, PackageCacheLayerError>
 where
     F: Fn(PathBuf) -> Fut + Send,
-    Fut: Future<Output = Result<(), E>> + 'static,
+    Fut: Future<Output = Result<Option<Sha256Hash>, E>> + 'static,
     E: Error + Send + Sync + 'static,
 {
     // Open the cache metadata file to read/write revision and hash information.
@@ -1106,7 +1183,7 @@ where
     let cache_revision = metadata.read_revision()?;
     let locked_sha256 = metadata.read_sha256()?;
 
-    let hash_mismatch = cache_lock::sha256_mismatch(given_sha, locked_sha256.as_ref());
+    let hash_mismatch = !cache_lock::sha256_satisfies(given_sha, locked_sha256.as_ref());
 
     let cache_dir_exists = path.is_dir();
     if cache_dir_exists && !hash_mismatch {
@@ -1180,11 +1257,11 @@ where
     // Since we hold the global cache lock, we can safely update the metadata
     // and fetch the package without worrying about concurrent modifications.
     if let Some(ref fetch_fn) = fetch {
-        // Write the new revision
+        // Bump the revision and forget the old hash until the new package is
+        // in place, so an interrupted fetch never leaves a hash behind that
+        // vouches for content it did not produce.
         let new_revision = cache_revision + 1;
-        metadata
-            .write_revision_and_sha(new_revision, given_sha)
-            .await?;
+        metadata.write_revision_and_sha(new_revision, None).await?;
 
         // Create a temporary directory in the same parent folder for atomic extraction.
         // Using the same parent ensures the rename operation is atomic (same filesystem).
@@ -1214,7 +1291,7 @@ where
 
         // Handle fetch result
         match fetch_result {
-            Ok(()) => {
+            Ok(fetched_sha) => {
                 // Take ownership of the temp directory path so it won't be auto-deleted
                 let temp_path = temp_dir.keep();
 
@@ -1242,11 +1319,18 @@ where
                     ))))
                 })?;
 
+                // Record the hash of what was actually fetched. Fall back to the
+                // requested hash only if the fetch function could not tell.
+                let sha256 = fetched_sha.or_else(|| given_sha.copied());
+                metadata
+                    .write_revision_and_sha(new_revision, sha256.as_ref())
+                    .await?;
+
                 // After fetching, return the cache metadata with the new revision.
                 // We don't need to re-validate since we just fetched it.
                 Ok(CacheMetadata {
                     revision: new_revision,
-                    sha256: given_sha.copied(),
+                    sha256,
                     path,
                     index_json: None,
                     paths_json: None,
@@ -1337,11 +1421,14 @@ mod test {
     use tokio_stream::StreamExt;
     use url::Url;
 
-    use super::{PackageCache, PackageCacheLayer, cache_lock, rename_with_retry};
+    use super::{
+        PackageCache, PackageCacheLayer, PackageCacheLayerError, cache_lock, rename_with_retry,
+    };
     use crate::{
         package_cache::{CacheKey, PackageCacheError},
         validation::{ValidationMode, validate_package_directory},
     };
+    use rattler_package_streaming::ExtractError;
 
     fn get_test_data_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
@@ -2193,14 +2280,11 @@ mod test {
         assert!(!index.contains_path(identifier, Path::new("/somewhere/else.conda")));
     }
 
-    /// An entry whose metadata is unreadable stays present in the index.
-    ///
-    /// Entries written before hashes were recorded have no readable hash
-    /// either, and kicking those out would remove every older cache from
-    /// offline availability. Presence has never promised validity: the entry
-    /// is validated on use, exactly as `get_or_fetch` would.
+    /// An entry whose hash is unreadable is not reported as present for a
+    /// record that carries a sha256, because `get_or_fetch` would re-fetch it.
+    /// It still counts for a record without a sha256.
     #[tokio::test]
-    async fn test_cache_index_keeps_entries_with_unreadable_metadata() {
+    async fn test_cache_index_entries_with_unreadable_metadata() {
         let packages_dir = tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
         let package_path = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
@@ -2228,9 +2312,11 @@ mod test {
 
         let index = cache.index().await.unwrap();
         assert!(
-            index.contains_path(&record, &package_path),
-            "an unreadable hash must not remove the entry from the index"
+            !index.contains_path(&record, &package_path),
+            "an entry without a hash cannot vouch for a record with one"
         );
+        record.sha256 = None;
+        assert!(index.contains_path(&record, &package_path));
     }
 
     /// A `file:` record on an origin-keyed cache is stored through
@@ -2860,6 +2946,120 @@ mod test {
         .unwrap();
         assert_eq!(lock_contents.len(), 40);
         assert_eq!(&lock_contents[8..], pypy_record.sha256.unwrap().as_slice());
+    }
+
+    #[tokio::test]
+    // A package fetched without a known sha256 is recorded under the sha256
+    // of the archive that was extracted. A later request for a different
+    // package with the same name-version-build but a known sha256 must not be
+    // served the cached one.
+    async fn test_entry_without_wanted_sha_is_recorded_with_computed_sha() {
+        let cpython_archive =
+            get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+        let pypy_archive = get_test_data_dir().join("clobber/clobber-python-0.1.0-pypy.conda");
+
+        let mut record = PackageRecord::new(
+            PackageName::new_unchecked("clobber-python"),
+            "0.1.0".parse::<VersionWithSource>().unwrap(),
+            "cpython".parse::<BuildString>().unwrap(),
+        );
+
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        let cache_metadata = cache
+            .get_or_fetch_from_path(&cpython_archive, Some(&record), None)
+            .await
+            .unwrap();
+        let cpython_sha = compute_file_digest::<Sha256>(&cpython_archive).unwrap();
+        assert_eq!(cache_metadata.sha256, Some(cpython_sha));
+        drop(cache_metadata);
+
+        record.sha256 = Some(compute_file_digest::<Sha256>(&pypy_archive).unwrap());
+        let cache_metadata = cache
+            .get_or_fetch_from_path(&pypy_archive, Some(&record), None)
+            .await
+            .unwrap();
+        assert_eq!(cache_metadata.revision(), 2);
+        assert_eq!(cache_metadata.sha256, record.sha256);
+        assert!(
+            !cache_metadata.path().join("bin/python").exists(),
+            "content of the previously cached package was served"
+        );
+    }
+
+    #[tokio::test]
+    // A record whose sha256 does not match the local archive is rejected
+    // instead of being cached under the archive's hash.
+    async fn test_get_or_fetch_from_path_rejects_hash_mismatch() {
+        let cpython_archive =
+            get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+        let pypy_archive = get_test_data_dir().join("clobber/clobber-python-0.1.0-pypy.conda");
+
+        let mut record = PackageRecord::new(
+            PackageName::new_unchecked("clobber-python"),
+            "0.1.0".parse::<VersionWithSource>().unwrap(),
+            "cpython".parse::<BuildString>().unwrap(),
+        );
+        record.sha256 = Some(compute_file_digest::<Sha256>(&pypy_archive).unwrap());
+
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+        let err = cache
+            .get_or_fetch_from_path(&cpython_archive, Some(&record), None)
+            .await
+            .unwrap_err();
+        let PackageCacheError::LayerError(err) = err else {
+            panic!("unexpected error: {err:?}");
+        };
+        assert_matches!(
+            err.downcast_ref::<PackageCacheLayerError>(),
+            Some(PackageCacheLayerError::FetchError(err))
+                if matches!(
+                    err.downcast_ref::<ExtractError>(),
+                    Some(ExtractError::HashMismatch { .. })
+                )
+        );
+        assert!(
+            !packages_dir
+                .path()
+                .join("clobber-python-0.1.0-cpython")
+                .exists()
+        );
+    }
+
+    #[tokio::test]
+    // An entry recorded without a sha256 cannot vouch for any particular
+    // package, so a request with a known sha256 re-fetches it.
+    async fn test_entry_without_sha_is_refetched_when_sha_is_wanted() {
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+        let key: CacheKey =
+            CondaArchiveIdentifier::try_from_filename("clobber-python-0.1.0-cpython.conda")
+                .unwrap()
+                .into();
+
+        let fetch = |destination: PathBuf| async move {
+            let archive = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+            rattler_package_streaming::tokio::fs::extract(&archive, &destination)
+                .await
+                .map(|_| ())
+        };
+
+        let cache_metadata = cache.get_or_fetch(key.clone(), fetch, None).await.unwrap();
+        assert_eq!(cache_metadata.sha256, None);
+        drop(cache_metadata);
+
+        let sha = compute_file_digest::<Sha256>(
+            get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda"),
+        )
+        .unwrap();
+        let cache_metadata = cache
+            .get_or_fetch(key.with_sha256(sha), fetch, None)
+            .await
+            .unwrap();
+        assert_eq!(cache_metadata.revision(), 2);
+        assert_eq!(cache_metadata.sha256, Some(sha));
     }
 
     /// Verify that a fully-exhausted semaphore does not block a cache hit.
