@@ -562,6 +562,7 @@ async fn test_reindex_derives_authoritative_v3_stats_and_drops_legacy_revision()
             r#"{
                 "build": "0",
                 "build_number": 0,
+                "depends": ["python-tzdata[when=\"__win\"]"],
                 "flags": ["cuda"],
                 "name": "v3-stats",
                 "noarch": "generic",
@@ -888,10 +889,10 @@ async fn test_legacy_patch_preflight_rejects_invalid_subdir_before_any_subdir_wr
     assert_invalid_multi_subdir_patch_is_preflighted(
         serde_json::json!({
             "packages": {
-                "demo-1.0-0.tar.bz2": { "flags": ["cuda"] }
+                "demo-1.0-0.tar.bz2": { "flags": ["Not A Flag"] }
             }
         }),
-        "legacy repodata cannot represent package flags",
+        "'Not A Flag' is not a valid flag",
     )
     .await;
 }

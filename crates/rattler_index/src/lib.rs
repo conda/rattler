@@ -1279,11 +1279,6 @@ fn render_record_matchspecs_for_revision(
     matchspecs: Option<ValidatedMatchSpecs>,
     revision: RepodataRevision,
 ) -> Result<(), RepodataError> {
-    if revision.uses_legacy_package_layout() && !record.flags.is_empty() {
-        return Err(RepodataError::Other(anyhow::anyhow!(
-            "legacy repodata cannot represent package flags"
-        )));
-    }
     for flag in &record.flags {
         flag.validate().map_err(anyhow::Error::from)?;
     }
@@ -2804,6 +2799,40 @@ mod tests {
         assert_eq!(record.depends, ["python[version=\">=3.10\"]"]);
         assert_eq!(record.constrains, ["python[version=\">=3.10\"]"]);
         assert_eq!(record.extra_depends["test"], ["pytest[version=\">=8\"]"]);
+    }
+
+    #[test]
+    fn legacy_records_with_flags_are_indexed_into_legacy_maps() {
+        let filename = DistArchiveIdentifier::try_from_filename("demo-1.0-0.conda").unwrap();
+        let mut record = PackageRecord::new(
+            PackageName::new_unchecked("demo"),
+            Version::from_str("1.0").unwrap(),
+            "0".parse::<BuildString>().unwrap(),
+        );
+        record.flags = vec![Flag::new_unchecked("cuda")];
+
+        let mut conda_packages = IndexMap::default();
+        let mut v3 = V3Packages::default();
+        insert_package_record_by_revision(
+            &mut IndexMap::default(),
+            &mut conda_packages,
+            &mut v3,
+            filename.clone(),
+            IndexedPackageRecord {
+                record,
+                repodata_revision: RepodataRevision::Legacy,
+                matchspecs: None,
+                wheel_url: None,
+            },
+            RepodataRevision::Legacy,
+        )
+        .unwrap();
+
+        assert!(v3.is_empty());
+        assert_eq!(
+            conda_packages[&filename].flags,
+            [Flag::new_unchecked("cuda")]
+        );
     }
 
     #[test]
