@@ -115,7 +115,7 @@ async def solve(
         GatewayError: If repodata acquisition fails (missing channels, cache, or
             network errors; fetch-level failures surface here, never as ``FetchRepoDataError``).
         InvalidChannelError: If a source string is not a valid channel.
-        InvalidMatchSpecError: If a spec string cannot be parsed.
+        InvalidMatchSpecError: If a spec or constraint string cannot be parsed.
         IoError: If the solver task is cancelled.
         TypeError: If a source does not implement the required interface.
         ValueError: If `timestamp_policy`, `strategy`, or `channel_relations` holds an invalid value.

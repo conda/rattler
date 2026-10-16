@@ -283,6 +283,9 @@ async def test_covered_api_documented_names_exercised(tmp_path: Path) -> None:
     for dotted_path, coverage in COVERED_APIS.items():
         documented = _raises_names(dotted_path)
         allowlisted = {entry.name for entry in coverage.documented_but_untriggerable}
+        assert allowlisted <= documented, (
+            f"{dotted_path} allowlists {sorted(allowlisted - documented)} which is no longer documented"
+        )
         assert len(coverage.documented_but_untriggerable) <= 2, (
             f"{dotted_path} allowlists more than 2 untriggerable exceptions"
         )
@@ -325,7 +328,7 @@ def test_all_exceptions_have_docs_page() -> None:
     """Check D: every exported exception has a docs page and a nav entry."""
     package_root = Path(__file__).resolve().parents[2]
     docs_dir = package_root / "docs"
-    nav_text = (package_root / "mkdocs.yml").read_text()
+    nav_text = (package_root / "mkdocs.yml").read_text(encoding="utf-8")
     entries = _exception_nav_entries(nav_text)
     assert entries, "no entries found in the exceptions nav block"
     names = [name for name, _ in entries]
