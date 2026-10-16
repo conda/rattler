@@ -55,7 +55,8 @@ pub struct ConcurrencyConfig {
     pub downloads: usize,
 
     /// The number of bytes requested per range when a large package is
-    /// downloaded in parallel ranges.
+    /// downloaded in parallel ranges. 0 disables ranged downloads, so every
+    /// package is fetched with a single request.
     #[serde(
         default = "default_download_part_size",
         skip_serializing_if = "is_default_download_part_size"
@@ -128,16 +129,11 @@ impl Config for ConcurrencyConfig {
             ));
         }
 
-        for (key, value) in [
-            ("download-part-size", self.download_part_size),
-            ("download-parts", self.download_parts as u64),
-        ] {
-            if value == 0 {
-                return Err(ValidationError::InvalidValue(
-                    key.to_string(),
-                    format!("{key} must be greater than 0"),
-                ));
-            }
+        if self.download_parts == 0 {
+            return Err(ValidationError::InvalidValue(
+                "download-parts".to_string(),
+                "The number of download parts must be greater than 0".to_string(),
+            ));
         }
 
         Ok(())
@@ -192,12 +188,18 @@ mod tests {
     }
 
     #[test]
-    fn zero_download_part_settings_are_rejected() {
-        for key in ["download-part-size", "download-parts"] {
-            let err = parse(&format!("{key} = 0\n")).validate().unwrap_err();
+    fn zero_download_parts_are_rejected() {
+        let err = parse("download-parts = 0\n").validate().unwrap_err();
 
-            assert!(err.to_string().contains(key), "{err}");
-        }
+        assert!(err.to_string().contains("download-parts"), "{err}");
+    }
+
+    #[test]
+    fn a_zero_download_part_size_disables_ranged_downloads() {
+        let config = parse("download-part-size = 0\n");
+
+        assert_eq!(config.download_part_size, 0);
+        assert!(config.validate().is_ok());
     }
 
     #[test]

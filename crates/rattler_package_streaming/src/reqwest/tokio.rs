@@ -112,7 +112,7 @@ async fn send(
 ) -> Result<Download, ExtractError> {
     // Each OCI request resolves the blob through the registry first, which
     // ranged requests would repeat once per part.
-    if matches!(url.scheme(), "http" | "https" | "s3" | "gcs") {
+    if options.part_size > 0 && matches!(url.scheme(), "http" | "https" | "s3" | "gcs") {
         return ranged::download(client, url, expected_sha256, options.clone())
             .await
             .map_err(ExtractError::ReqwestError);
@@ -376,5 +376,42 @@ pub async fn extract_with_options(
             extract_conda_with_options(client, url, destination, expected_sha256, reporter, options)
                 .await
         }
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use std::{path::PathBuf, time::Duration};
+
+    use rattler_digest::Sha256;
+
+    use super::*;
+    use crate::reqwest::test_server;
+
+    #[tokio::test]
+    async fn a_part_size_of_zero_downloads_with_one_request() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/clobber/clobber-fd-1-0.1.0-h4616a5c_0.conda");
+        let (url, observed) =
+            test_server::serve_file_observed(&path, Duration::ZERO, 0, Duration::ZERO).await;
+        let destination = tempfile::tempdir().unwrap();
+
+        let result = extract_with_options(
+            reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            url,
+            destination.path(),
+            None,
+            None,
+            &DownloadOptions::new(0, DownloadOptions::DEFAULT_PARTS),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            result.sha256,
+            rattler_digest::compute_file_digest::<Sha256>(&path).unwrap()
+        );
+        // No request asked for a range.
+        assert!(observed.finished.lock().unwrap().is_empty());
     }
 }

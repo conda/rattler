@@ -37,14 +37,16 @@ impl DownloadOptions {
 
     /// Download packages in ranges of `part_size` bytes, with at most `parts`
     /// requested at once across all packages downloaded with these options.
-    /// Zeros are raised to one.
+    ///
+    /// A `part_size` of 0 disables ranged downloads: every package is fetched
+    /// with a single request. A `parts` of 0 is raised to 1.
     ///
     /// Ranges that finish ahead of an earlier one are held in memory, so a
     /// download buffers at most `(parts + 1) * part_size` bytes.
     pub fn new(part_size: u64, parts: usize) -> Self {
         let parts = parts.max(1);
         Self {
-            part_size: part_size.max(1),
+            part_size,
             parts,
             parts_in_flight: Arc::new(Semaphore::new(parts)),
         }
