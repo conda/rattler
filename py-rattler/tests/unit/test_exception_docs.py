@@ -21,6 +21,7 @@ New APIs must add a ``Raises:`` section *and* register in ``COVERED_APIS``.
 from __future__ import annotations
 
 import builtins
+import inspect
 import json
 import re
 import warnings
@@ -34,7 +35,17 @@ import pytest
 from griffe import DocstringSectionKind
 
 import rattler.exceptions
-from rattler import Channel, fetch_repo_data, solve
+from rattler import (
+    Channel,
+    ChannelConfig,
+    Gateway,
+    MatchSpec,
+    NamelessMatchSpec,
+    Version,
+    fetch_repo_data,
+    install,
+    solve,
+)
 from rattler.networking.fetch_repo_data import FetchRepoDataOptions
 from rattler.platform import Subdir
 
@@ -68,8 +79,10 @@ class Untriggerable:
     call_site: str
 
 
-# An async helper that raises the documented exception when awaited.
-Trigger = Callable[[Path], Coroutine[Any, Any, None]]
+# A helper that raises the documented exception when called. Async helpers
+# return a coroutine to await; sync helpers (plain constructors) raise
+# directly. Check C handles both.
+Trigger = Callable[[Path], Coroutine[Any, Any, None] | None]
 
 
 @dataclass(frozen=True)
@@ -162,6 +175,170 @@ async def _trigger_fetch_cache_only_missing(tmp_path: Path) -> None:
     )
 
 
+async def _trigger_install_prefix_is_file(tmp_path: Path) -> None:
+    prefix_file = tmp_path / "prefix-file"
+    prefix_file.write_text("not a directory")
+    await install([], prefix_file, show_progress=False)
+
+
+async def _trigger_install_bad_record(tmp_path: Path) -> None:
+    del tmp_path
+    await install(["not-a-record"], "prefix", show_progress=False)  # type: ignore[list-item]
+
+
+async def _trigger_gateway_query_missing_channel(tmp_path: Path) -> None:
+    del tmp_path
+    await Gateway().query([Channel("file:///nonexistent-dir-xyz-1351")], ["noarch"], ["mypkg"])
+
+
+async def _trigger_gateway_query_bad_source(tmp_path: Path) -> None:
+    del tmp_path
+    await Gateway().query([123], ["noarch"], ["mypkg"])  # type: ignore[list-item]
+
+
+async def _trigger_gateway_query_bad_source_str(tmp_path: Path) -> None:
+    del tmp_path
+    await Gateway().query(["::::"], ["noarch"], ["mypkg"])
+
+
+async def _trigger_gateway_query_bad_spec(tmp_path: Path) -> None:
+    await Gateway().query([_local_channel(tmp_path)], ["noarch"], [":::"])
+
+
+async def _trigger_gateway_query_bad_platform(tmp_path: Path) -> None:
+    await Gateway().query([_local_channel(tmp_path)], ["not-a-subdir"], ["mypkg"])  # type: ignore[list-item]
+
+
+async def _trigger_gateway_query_bad_relations(tmp_path: Path) -> None:
+    await Gateway().query(
+        [_local_channel(tmp_path)],
+        ["noarch"],
+        ["mypkg"],
+        channel_relations="bogus",  # type: ignore[arg-type]
+    )
+
+
+async def _trigger_gateway_names_missing_channel(tmp_path: Path) -> None:
+    del tmp_path
+    await Gateway().names([Channel("file:///nonexistent-dir-xyz-1351")], ["noarch"])
+
+
+async def _trigger_gateway_names_bad_source(tmp_path: Path) -> None:
+    del tmp_path
+    await Gateway().names([123], ["noarch"])  # type: ignore[list-item]
+
+
+async def _trigger_gateway_names_bad_source_str(tmp_path: Path) -> None:
+    del tmp_path
+    await Gateway().names(["::::"], ["noarch"])
+
+
+async def _trigger_gateway_names_bad_platform(tmp_path: Path) -> None:
+    await Gateway().names([_local_channel(tmp_path)], ["not-a-subdir"])  # type: ignore[list-item]
+
+
+async def _trigger_gateway_names_bad_relations(tmp_path: Path) -> None:
+    await Gateway().names(
+        [_local_channel(tmp_path)],
+        ["noarch"],
+        channel_relations="bogus",  # type: ignore[arg-type]
+    )
+
+
+async def _trigger_gateway_who_needs_missing_channel(tmp_path: Path) -> None:
+    del tmp_path
+    await Gateway().who_needs([Channel("file:///nonexistent-dir-xyz-1351")], ["noarch"], "mypkg")
+
+
+async def _trigger_gateway_who_needs_bad_source(tmp_path: Path) -> None:
+    del tmp_path
+    await Gateway().who_needs([123], ["noarch"], "mypkg")  # type: ignore[list-item]
+
+
+async def _trigger_gateway_who_needs_bad_source_str(tmp_path: Path) -> None:
+    del tmp_path
+    await Gateway().who_needs(["::::"], ["noarch"], "mypkg")
+
+
+async def _trigger_gateway_who_needs_bad_platform(tmp_path: Path) -> None:
+    await Gateway().who_needs([_local_channel(tmp_path)], ["not-a-subdir"], "mypkg")  # type: ignore[list-item]
+
+
+def _trigger_clear_bad_channel(tmp_path: Path) -> None:
+    del tmp_path
+    Gateway().clear_repodata_cache("::::")
+
+
+def _trigger_clear_bad_type(tmp_path: Path) -> None:
+    del tmp_path
+    Gateway().clear_repodata_cache(123)  # type: ignore[arg-type]
+
+
+def _trigger_matchspec_bad_type(tmp_path: Path) -> None:
+    del tmp_path
+    MatchSpec(123)  # type: ignore[arg-type]
+
+
+def _trigger_matchspec_bad_spec(tmp_path: Path) -> None:
+    del tmp_path
+    MatchSpec(":::!!!")
+
+
+def _trigger_matchspec_from_url_bad_url(tmp_path: Path) -> None:
+    del tmp_path
+    MatchSpec.from_url("not a url at all %%")
+
+
+def _trigger_matchspec_from_url_bad_digest(tmp_path: Path) -> None:
+    del tmp_path
+    MatchSpec.from_url("https://example.com/linux-64/foo-1.0-0.tar.bz2#zzzz")
+
+
+def _trigger_matchspec_from_nameless_bad_name(tmp_path: Path) -> None:
+    del tmp_path
+    MatchSpec.from_nameless(NamelessMatchSpec("3.4"), "$foo")
+
+
+def _trigger_version_bad_type(tmp_path: Path) -> None:
+    del tmp_path
+    Version(123)  # type: ignore[arg-type]
+
+
+def _trigger_version_bad_version(tmp_path: Path) -> None:
+    del tmp_path
+    Version("not a version !!!")
+
+
+def _trigger_version_bump_out_of_range(tmp_path: Path) -> None:
+    del tmp_path
+    Version("1.0").bump_segment(-9)
+
+
+def _trigger_version_pop_too_many(tmp_path: Path) -> None:
+    del tmp_path
+    Version("1.0").pop_segments(5)
+
+
+def _trigger_version_bad_range(tmp_path: Path) -> None:
+    del tmp_path
+    Version("1.0").with_segments(3, 1)
+
+
+def _trigger_channel_bad_name(tmp_path: Path) -> None:
+    del tmp_path
+    Channel("::::")
+
+
+def _trigger_channel_bad_type(tmp_path: Path) -> None:
+    del tmp_path
+    Channel(123)  # type: ignore[arg-type]
+
+
+def _trigger_channel_config_bad_url(tmp_path: Path) -> None:
+    del tmp_path
+    ChannelConfig("http://[::1")
+
+
 COVERED_APIS: dict[str, APICoverage] = {
     "rattler.solver.solver.solve": APICoverage(
         pinned=frozenset(
@@ -194,6 +371,159 @@ COVERED_APIS: dict[str, APICoverage] = {
         pinned=frozenset({"FetchRepoDataError"}),
         triggers={
             "FetchRepoDataError": _trigger_fetch_missing_channel,
+        },
+    ),
+    "rattler.install.installer.install": APICoverage(
+        pinned=frozenset({"InstallerError", "TypeError"}),
+        triggers={
+            "InstallerError": _trigger_install_prefix_is_file,
+            "TypeError": _trigger_install_bad_record,
+        },
+        documented_but_untriggerable=(
+            Untriggerable(
+                name="TransactionError",
+                reason="needs downloadable packages and link planning; prefix failures surface as InstallerError",
+                call_site="py-rattler/src/error.rs:171-173",
+            ),
+        ),
+    ),
+    "rattler.repo_data.gateway.Gateway.query": APICoverage(
+        pinned=frozenset(
+            {
+                "GatewayError",
+                "InvalidChannelError",
+                "InvalidMatchSpecError",
+                "ParseSubdirError",
+                "TypeError",
+                "ValueError",
+            }
+        ),
+        triggers={
+            "GatewayError": _trigger_gateway_query_missing_channel,
+            "InvalidChannelError": _trigger_gateway_query_bad_source_str,
+            "InvalidMatchSpecError": _trigger_gateway_query_bad_spec,
+            "ParseSubdirError": _trigger_gateway_query_bad_platform,
+            "TypeError": _trigger_gateway_query_bad_source,
+            "ValueError": _trigger_gateway_query_bad_relations,
+        },
+    ),
+    "rattler.repo_data.gateway.Gateway.names": APICoverage(
+        pinned=frozenset(
+            {
+                "GatewayError",
+                "InvalidChannelError",
+                "ParseSubdirError",
+                "TypeError",
+                "ValueError",
+            }
+        ),
+        triggers={
+            "GatewayError": _trigger_gateway_names_missing_channel,
+            "InvalidChannelError": _trigger_gateway_names_bad_source_str,
+            "ParseSubdirError": _trigger_gateway_names_bad_platform,
+            "TypeError": _trigger_gateway_names_bad_source,
+            "ValueError": _trigger_gateway_names_bad_relations,
+        },
+    ),
+    "rattler.repo_data.gateway.Gateway.who_needs": APICoverage(
+        pinned=frozenset(
+            {
+                "GatewayError",
+                "InvalidChannelError",
+                "ParseSubdirError",
+                "TypeError",
+            }
+        ),
+        triggers={
+            "GatewayError": _trigger_gateway_who_needs_missing_channel,
+            "InvalidChannelError": _trigger_gateway_who_needs_bad_source_str,
+            "ParseSubdirError": _trigger_gateway_who_needs_bad_platform,
+            "TypeError": _trigger_gateway_who_needs_bad_source,
+        },
+    ),
+    "rattler.repo_data.gateway.Gateway.clear_repodata_cache": APICoverage(
+        pinned=frozenset({"InvalidChannelError", "TypeError"}),
+        triggers={
+            "InvalidChannelError": _trigger_clear_bad_channel,
+            "TypeError": _trigger_clear_bad_type,
+        },
+    ),
+    "rattler.match_spec.match_spec.MatchSpec.__init__": APICoverage(
+        pinned=frozenset({"InvalidMatchSpecError", "TypeError"}),
+        triggers={
+            "InvalidMatchSpecError": _trigger_matchspec_bad_spec,
+            "TypeError": _trigger_matchspec_bad_type,
+        },
+    ),
+    "rattler.match_spec.match_spec.MatchSpec.from_url": APICoverage(
+        pinned=frozenset({"InvalidMatchSpecError", "InvalidUrlError"}),
+        triggers={
+            "InvalidMatchSpecError": _trigger_matchspec_from_url_bad_digest,
+            "InvalidUrlError": _trigger_matchspec_from_url_bad_url,
+        },
+    ),
+    "rattler.match_spec.match_spec.MatchSpec.from_nameless": APICoverage(
+        pinned=frozenset({"PackageNameMatcherParseError"}),
+        triggers={
+            "PackageNameMatcherParseError": _trigger_matchspec_from_nameless_bad_name,
+        },
+    ),
+    "rattler.match_spec.match_spec.MatchSpec.to_canonical_string": APICoverage(
+        pinned=frozenset({"CanonicalMatchSpecError"}),
+        documented_but_untriggerable=(
+            Untriggerable(
+                name="CanonicalMatchSpecError",
+                reason="unrepresentable values need struct-level construction; no string parses to one",
+                call_site="py-rattler/src/match_spec.rs:160-165",
+            ),
+        ),
+    ),
+    "rattler.version.version.Version.__init__": APICoverage(
+        pinned=frozenset({"InvalidVersionError", "TypeError"}),
+        triggers={
+            "InvalidVersionError": _trigger_version_bad_version,
+            "TypeError": _trigger_version_bad_type,
+        },
+    ),
+    "rattler.version.version.Version.bump_segment": APICoverage(
+        pinned=frozenset({"VersionBumpError"}),
+        triggers={
+            "VersionBumpError": _trigger_version_bump_out_of_range,
+        },
+    ),
+    "rattler.version.version.Version.extend_to_length": APICoverage(
+        pinned=frozenset({"VersionExtendError"}),
+        documented_but_untriggerable=(
+            Untriggerable(
+                name="VersionExtendError",
+                reason="only raised for internal length-limit violations; every invalid-input shaping succeeds",
+                call_site="py-rattler/src/error.rs:181-183",
+            ),
+        ),
+    ),
+    "rattler.version.version.Version.pop_segments": APICoverage(
+        pinned=frozenset({"InvalidVersionError"}),
+        triggers={
+            "InvalidVersionError": _trigger_version_pop_too_many,
+        },
+    ),
+    "rattler.version.version.Version.with_segments": APICoverage(
+        pinned=frozenset({"InvalidVersionError"}),
+        triggers={
+            "InvalidVersionError": _trigger_version_bad_range,
+        },
+    ),
+    "rattler.channel.channel.Channel.__init__": APICoverage(
+        pinned=frozenset({"InvalidChannelError", "TypeError"}),
+        triggers={
+            "InvalidChannelError": _trigger_channel_bad_name,
+            "TypeError": _trigger_channel_bad_type,
+        },
+    ),
+    "rattler.channel.channel_config.ChannelConfig.__init__": APICoverage(
+        pinned=frozenset({"InvalidUrlError"}),
+        triggers={
+            "InvalidUrlError": _trigger_channel_config_bad_url,
         },
     ),
 }
@@ -295,7 +625,9 @@ async def test_covered_api_documented_names_exercised(tmp_path: Path) -> None:
         for name in sorted(documented):
             if name in coverage.triggers:
                 with pytest.raises(_exception_class(name)):
-                    await coverage.triggers[name](tmp_path)
+                    outcome = coverage.triggers[name](tmp_path)
+                    if inspect.isawaitable(outcome):
+                        await outcome
             elif name in allowlisted:
                 continue
             else:
@@ -399,3 +731,225 @@ async def test_fetch_repo_data_cache_only_missing_raises(tmp_path: Path) -> None
     """`fetch_repo_data()` with `use-cache-only` fails on a missing channel."""
     with pytest.raises(rattler.exceptions.FetchRepoDataError):
         await _trigger_fetch_cache_only_missing(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_install_raises_installer_error(tmp_path: Path) -> None:
+    """`install()` reports a prefix that cannot be created as `InstallerError`."""
+    with pytest.raises(rattler.exceptions.InstallerError):
+        await _trigger_install_prefix_is_file(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_install_readonly_prefix_raises_installer_error(tmp_path: Path) -> None:
+    """`install()` reports an unwritable prefix directory as `InstallerError`."""
+    readonly_dir = tmp_path / "readonly-prefix"
+    readonly_dir.mkdir()
+    readonly_dir.chmod(0o555)
+    try:
+        with pytest.raises(rattler.exceptions.InstallerError):
+            await install([], readonly_dir, show_progress=False)
+    finally:
+        readonly_dir.chmod(0o755)
+
+
+@pytest.mark.asyncio
+async def test_install_raises_type_error(tmp_path: Path) -> None:
+    """`install()` rejects records that are not package records."""
+    with pytest.raises(TypeError):
+        await _trigger_install_bad_record(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_gateway_query_raises_gateway_error(tmp_path: Path) -> None:
+    """`Gateway.query()` reports missing channels as `GatewayError`."""
+    with pytest.raises(rattler.exceptions.GatewayError):
+        await _trigger_gateway_query_missing_channel(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_gateway_query_raises_type_error(tmp_path: Path) -> None:
+    """`Gateway.query()` rejects sources outside the supported interface."""
+    with pytest.raises(TypeError):
+        await _trigger_gateway_query_bad_source(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_gateway_query_raises_invalid_channel_error(tmp_path: Path) -> None:
+    """`Gateway.query()` reports an invalid channel string as `InvalidChannelError`."""
+    with pytest.raises(rattler.exceptions.InvalidChannelError):
+        await _trigger_gateway_query_bad_source_str(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_gateway_query_raises_invalid_match_spec_error(tmp_path: Path) -> None:
+    """`Gateway.query()` reports an unparseable spec string as `InvalidMatchSpecError`."""
+    with pytest.raises(rattler.exceptions.InvalidMatchSpecError):
+        await _trigger_gateway_query_bad_spec(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_gateway_query_raises_parse_subdir_error(tmp_path: Path) -> None:
+    """`Gateway.query()` reports an invalid platform string as `ParseSubdirError`."""
+    with pytest.raises(rattler.exceptions.ParseSubdirError):
+        await _trigger_gateway_query_bad_platform(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_gateway_query_raises_value_error(tmp_path: Path) -> None:
+    """`Gateway.query()` rejects an invalid `channel_relations` value."""
+    with pytest.raises(ValueError):
+        await _trigger_gateway_query_bad_relations(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_gateway_names_raises_gateway_error(tmp_path: Path) -> None:
+    """`Gateway.names()` reports missing channels as `GatewayError`."""
+    with pytest.raises(rattler.exceptions.GatewayError):
+        await _trigger_gateway_names_missing_channel(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_gateway_names_raises_type_error(tmp_path: Path) -> None:
+    """`Gateway.names()` rejects sources outside the supported interface."""
+    with pytest.raises(TypeError):
+        await _trigger_gateway_names_bad_source(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_gateway_names_raises_invalid_channel_error(tmp_path: Path) -> None:
+    """`Gateway.names()` reports an invalid channel string as `InvalidChannelError`."""
+    with pytest.raises(rattler.exceptions.InvalidChannelError):
+        await _trigger_gateway_names_bad_source_str(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_gateway_names_raises_parse_subdir_error(tmp_path: Path) -> None:
+    """`Gateway.names()` reports an invalid platform string as `ParseSubdirError`."""
+    with pytest.raises(rattler.exceptions.ParseSubdirError):
+        await _trigger_gateway_names_bad_platform(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_gateway_names_raises_value_error(tmp_path: Path) -> None:
+    """`Gateway.names()` rejects an invalid `channel_relations` value."""
+    with pytest.raises(ValueError):
+        await _trigger_gateway_names_bad_relations(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_gateway_who_needs_raises_gateway_error(tmp_path: Path) -> None:
+    """`Gateway.who_needs()` reports missing channels as `GatewayError`."""
+    with pytest.raises(rattler.exceptions.GatewayError):
+        await _trigger_gateway_who_needs_missing_channel(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_gateway_who_needs_raises_type_error(tmp_path: Path) -> None:
+    """`Gateway.who_needs()` rejects sources outside the supported interface."""
+    with pytest.raises(TypeError):
+        await _trigger_gateway_who_needs_bad_source(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_gateway_who_needs_raises_invalid_channel_error(tmp_path: Path) -> None:
+    """`Gateway.who_needs()` reports an invalid channel string as `InvalidChannelError`."""
+    with pytest.raises(rattler.exceptions.InvalidChannelError):
+        await _trigger_gateway_who_needs_bad_source_str(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_gateway_who_needs_raises_parse_subdir_error(tmp_path: Path) -> None:
+    """`Gateway.who_needs()` reports an invalid platform string as `ParseSubdirError`."""
+    with pytest.raises(rattler.exceptions.ParseSubdirError):
+        await _trigger_gateway_who_needs_bad_platform(tmp_path)
+
+
+def test_gateway_clear_repodata_cache_raises_invalid_channel_error(tmp_path: Path) -> None:
+    """`Gateway.clear_repodata_cache()` rejects an invalid channel string."""
+    with pytest.raises(rattler.exceptions.InvalidChannelError):
+        _trigger_clear_bad_channel(tmp_path)
+
+
+def test_gateway_clear_repodata_cache_raises_type_error(tmp_path: Path) -> None:
+    """`Gateway.clear_repodata_cache()` rejects a channel of an unexpected type."""
+    with pytest.raises(TypeError):
+        _trigger_clear_bad_type(tmp_path)
+
+
+def test_matchspec_raises_type_error(tmp_path: Path) -> None:
+    """`MatchSpec()` rejects a spec of an unexpected type."""
+    with pytest.raises(TypeError):
+        _trigger_matchspec_bad_type(tmp_path)
+
+
+def test_matchspec_raises_invalid_match_spec_error(tmp_path: Path) -> None:
+    """`MatchSpec()` reports an unparseable spec string as `InvalidMatchSpecError`."""
+    with pytest.raises(rattler.exceptions.InvalidMatchSpecError):
+        _trigger_matchspec_bad_spec(tmp_path)
+
+
+def test_matchspec_from_url_raises_invalid_url_error(tmp_path: Path) -> None:
+    """`MatchSpec.from_url()` reports an unparseable URL as `InvalidUrlError`."""
+    with pytest.raises(rattler.exceptions.InvalidUrlError):
+        _trigger_matchspec_from_url_bad_url(tmp_path)
+
+
+def test_matchspec_from_url_raises_invalid_match_spec_error(tmp_path: Path) -> None:
+    """`MatchSpec.from_url()` reports an invalid digest fragment as `InvalidMatchSpecError`."""
+    with pytest.raises(rattler.exceptions.InvalidMatchSpecError):
+        _trigger_matchspec_from_url_bad_digest(tmp_path)
+
+
+def test_matchspec_from_nameless_raises_package_name_matcher_parse_error(tmp_path: Path) -> None:
+    """`MatchSpec.from_nameless()` reports an invalid name as `PackageNameMatcherParseError`."""
+    with pytest.raises(rattler.exceptions.PackageNameMatcherParseError):
+        _trigger_matchspec_from_nameless_bad_name(tmp_path)
+
+
+def test_version_raises_type_error(tmp_path: Path) -> None:
+    """`Version()` rejects a version of an unexpected type."""
+    with pytest.raises(TypeError):
+        _trigger_version_bad_type(tmp_path)
+
+
+def test_version_raises_invalid_version_error(tmp_path: Path) -> None:
+    """`Version()` reports an unparseable version string as `InvalidVersionError`."""
+    with pytest.raises(rattler.exceptions.InvalidVersionError):
+        _trigger_version_bad_version(tmp_path)
+
+
+def test_version_bump_segment_raises_version_bump_error(tmp_path: Path) -> None:
+    """`Version.bump_segment()` reports an absent segment as `VersionBumpError`."""
+    with pytest.raises(rattler.exceptions.VersionBumpError):
+        _trigger_version_bump_out_of_range(tmp_path)
+
+
+def test_version_pop_segments_raises_invalid_version_error(tmp_path: Path) -> None:
+    """`Version.pop_segments()` reports popping every segment as `InvalidVersionError`."""
+    with pytest.raises(rattler.exceptions.InvalidVersionError):
+        _trigger_version_pop_too_many(tmp_path)
+
+
+def test_version_with_segments_raises_invalid_version_error(tmp_path: Path) -> None:
+    """`Version.with_segments()` reports an invalid range as `InvalidVersionError`."""
+    with pytest.raises(rattler.exceptions.InvalidVersionError):
+        _trigger_version_bad_range(tmp_path)
+
+
+def test_channel_raises_invalid_channel_error(tmp_path: Path) -> None:
+    """`Channel()` reports an unparseable name as `InvalidChannelError`."""
+    with pytest.raises(rattler.exceptions.InvalidChannelError):
+        _trigger_channel_bad_name(tmp_path)
+
+
+def test_channel_raises_type_error(tmp_path: Path) -> None:
+    """`Channel()` rejects a name of an unexpected type."""
+    with pytest.raises(TypeError):
+        _trigger_channel_bad_type(tmp_path)
+
+
+def test_channel_config_raises_invalid_url_error(tmp_path: Path) -> None:
+    """`ChannelConfig()` reports an unparseable alias URL as `InvalidUrlError`."""
+    with pytest.raises(rattler.exceptions.InvalidUrlError):
+        _trigger_channel_config_bad_url(tmp_path)
