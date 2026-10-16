@@ -131,8 +131,8 @@
 <a href=#129 id=129 data-nosnippet>129</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>file = ManuallyDrop::new(zip_file);
 <a href=#130 id=130 data-nosnippet>130</a>
 <a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">if </span>file
-<a href=#132 id=132 data-nosnippet>132</a>        .mangled_name()
-<a href=#133 id=133 data-nosnippet>133</a>        .file_name()
+<a href=#132 id=132 data-nosnippet>132</a>        .mangled_name()<span class="question-mark">?
+<a href=#133 id=133 data-nosnippet>133</a>        </span>.file_name()
 <a href=#134 id=134 data-nosnippet>134</a>        .map(OsStr::to_string_lossy)
 <a href=#135 id=135 data-nosnippet>135</a>        .is_some_and(|file_name| file_name.ends_with(<span class="string">".tar.zst"</span>))
 <a href=#136 id=136 data-nosnippet>136</a>    {
