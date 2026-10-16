@@ -2,5 +2,5 @@
 - Build: `pixi run build` | Test: `pixi run test` | Lint all: `pixi run lint`
 - Single test: `pixi run -- cargo nextest run -p <crate_name> <test_name>`
 - Before committing, run `pixi run cargo-fmt` and `pixi run cargo-clippy` to ensure formatting and lint compliance
-- crates in `crates/`, Python bindings in `py-rattler/`, WASM bindings in `js-rattler/`
+- crates in `crates/`, Python bindings in `py-rattler/`, WASM bindings in `js-rattler/`, C bindings in `c-rattler/`
 - When creating PRs, use conventional commits and use the PR template. If possible, add the user's prompt there.
