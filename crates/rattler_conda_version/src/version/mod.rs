@@ -529,10 +529,14 @@ fn segments_starts_with<
                         return false;
                     }
                 }
-                // Extra components in version segment. Only OK if this is the last
-                // prefix segment (checked on next outer iteration).
+                // Extra components in version segment. Zero components are OK (implicit zeros).
+                // E.g., "1.1c0.1" starts with "1.1c.1"
+                // Non-zero extra components are only OK if this is the last prefix segment.
                 // E.g., "1.0.1c" starts with "1.0.1"
-                EitherOrBoth::Left(_) => {
+                EitherOrBoth::Left(component) => {
+                    if component.is_zero() {
+                        continue;
+                    }
                     had_extra_left = true;
                     break;
                 }
@@ -1552,12 +1556,27 @@ mod test {
                 .starts_with(&Version::from_str("1.1c.1").unwrap())
         );
 
-        // BUT zero components in prefix are treated as "no component" (implicit zeros)
-        // So "1.1c.1" starts with "1.1c0.1" because c0 == c (trailing zero)
+        // Zero components in prefix or version are treated as "no component" (implicit zeros)
+        // So "1.1c.1" starts with "1.1c0.1" and "1.1c0.1" starts with "1.1c.1" because c0 == c
         assert!(
             Version::from_str("1.1c.1")
                 .unwrap()
                 .starts_with(&Version::from_str("1.1c0.1").unwrap())
+        );
+        assert!(
+            Version::from_str("1.1c0.1")
+                .unwrap()
+                .starts_with(&Version::from_str("1.1c.1").unwrap())
+        );
+        assert!(
+            Version::from_str("1.1c00.1")
+                .unwrap()
+                .starts_with(&Version::from_str("1.1c.1").unwrap())
+        );
+        assert!(
+            Version::from_str("1.1c0.1.2")
+                .unwrap()
+                .compatible_with(&Version::from_str("1.1c.1.1").unwrap())
         );
     }
 

@@ -535,6 +535,20 @@ mod tests {
     }
 
     #[test]
+    fn issue_2949() {
+        let spec_prefix = VersionSpec::from_str("1.1c.1.*", ParseStrictness::Strict).unwrap();
+        assert!(spec_prefix.matches(&Version::from_str("1.1c0.1").unwrap()));
+        assert!(spec_prefix.matches(&Version::from_str("1.1c.1").unwrap()));
+
+        let spec_compatible = VersionSpec::from_str("~=1.1c.1.1", ParseStrictness::Strict).unwrap();
+        assert!(spec_compatible.matches(&Version::from_str("1.1c0.1.2").unwrap()));
+        assert!(spec_compatible.matches(&Version::from_str("1.1c.1.2").unwrap()));
+
+        let spec_prefix_zero = VersionSpec::from_str("1.1c0.1.*", ParseStrictness::Strict).unwrap();
+        assert!(spec_prefix_zero.matches(&Version::from_str("1.1c.1").unwrap()));
+    }
+
+    #[test]
     fn issue_235() {
         assert_eq!(
             VersionSpec::from_str(">2.10*", ParseStrictness::Lenient).unwrap(),
