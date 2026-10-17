@@ -1,7 +1,7 @@
 //! Tests migrated to use the `SolverCase` helper for improved readability and consistency.
 
 use super::helpers::{PackageBuilder, SolverCase};
-use rattler_solve::{ExcludeNewer, SolverImpl};
+use rattler_solve::{ChannelPriority, ExcludeNewer, SolverImpl};
 
 /// Test that already-installed packages are favored when solving.
 pub(super) fn solve_favored<T: SolverImpl + Default>() {
@@ -315,6 +315,12 @@ pub(super) fn solve_additional_packages<T: SolverImpl + Default>() {
         SolverCase::new("additional package wins when it is the best candidate")
             .repository([foo_2.clone()])
             .specs(["foo"])
+            .additional_packages([foo_3.clone()])
+            .expect_present([("foo", "3.0")]),
+        SolverCase::new("strict channel priority does not discard additional packages")
+            .repository([foo_2.clone()])
+            .specs(["foo"])
+            .channel_priority(ChannelPriority::Strict)
             .additional_packages([foo_3])
             .expect_present([("foo", "3.0")]),
         SolverCase::new("additional package is used when the spec requires it")

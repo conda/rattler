@@ -835,6 +835,11 @@ mod libsolv_c {
     }
 
     #[test]
+    fn test_additional_packages() {
+        crate::solver_case_tests::solve_additional_packages::<rattler_solve::libsolv_c::Solver>();
+    }
+
+    #[test]
     #[cfg(target_family = "unix")]
     fn test_solve_with_cached_solv_file_install_new() {
         use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, RepoDataRecord};
