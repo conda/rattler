@@ -12,6 +12,8 @@
 //! * `{name}-{version}.data/data/*` goes to the package root (prefix relative)
 //! * `<dist-info>/INSTALLER` is written as `conda` (and listed in `RECORD`) so
 //!   Python package managers leave the files alone
+//! * every file is checked against the hash and size its `RECORD` line claims,
+//!   as a PEP 427 installer does; a disagreement rejects the wheel
 //! * `info/index.json` is synthesized from the repodata record
 //! * `info/paths.json` is synthesized from the files that were written
 //! * `info/link.json` is synthesized from `entry_points.txt`
@@ -27,10 +29,13 @@
 //! vast majority of command line tools on `PyPI`, are unaffected.
 
 use std::{
+    collections::HashMap,
     io::{self, Read, Seek, SeekFrom},
     path::{Component, Path, PathBuf},
     str::FromStr,
 };
+
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 
 use rattler_conda_types::{
     NoArchType, PackageRecord,
@@ -39,7 +44,7 @@ use rattler_conda_types::{
         PythonEntryPoints,
     },
 };
-use rattler_digest::{HashingReader, Sha256};
+use rattler_digest::{HashingReader, Sha256, Sha256Hash};
 use tempfile::SpooledTempFile;
 use zip::ZipArchive;
 
@@ -89,6 +94,7 @@ pub(crate) fn extract_wheel_without_hashing(
     let mut archive = ZipArchive::new(temp_file)?;
 
     let layout = WheelLayout::detect(&archive)?;
+    let manifest = RecordManifest::read(&mut archive, &layout)?;
     let mut paths = Vec::with_capacity(archive.len() + 1);
     let mut entry_points = Vec::new();
 
@@ -128,6 +134,7 @@ pub(crate) fn extract_wheel_without_hashing(
             let mode = file.unix_mode();
             write_entry(destination, target, &mut file, mode)?
         };
+        manifest.verify(&archive_path, &entry)?;
         paths.push(entry);
     }
 
@@ -143,6 +150,113 @@ pub(crate) fn extract_wheel_without_hashing(
 
     paths.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
     write_info(destination, record, paths, entry_points)
+}
+
+/// What the wheel's `RECORD` claims about each file: the sha256 and size a
+/// PEP 427 installer verifies before trusting the file.
+///
+/// `RECORD` is a second opinion, not the source of `paths.json`: the archive
+/// drives the walk and the hashes are computed from the bytes written. A file
+/// that `RECORD` does not mention is allowed, as some wheels in the wild
+/// have them, and `RECORD` itself and signature files carry no hash by spec.
+#[derive(Default)]
+struct RecordManifest {
+    entries: HashMap<String, RecordEntry>,
+}
+
+struct RecordEntry {
+    sha256: Option<Sha256Hash>,
+    size: Option<u64>,
+}
+
+impl RecordManifest {
+    fn read<R: Read + Seek>(
+        archive: &mut ZipArchive<R>,
+        layout: &WheelLayout,
+    ) -> Result<Self, ExtractError> {
+        let record_name = format!("{}/RECORD", layout.dist_info.display());
+        let Some(index) = archive.index_for_name(&record_name) else {
+            return Ok(Self::default());
+        };
+        let mut record_txt = String::new();
+        archive.by_index(index)?.read_to_string(&mut record_txt)?;
+        Self::parse(&record_txt)
+    }
+
+    fn parse(record_txt: &str) -> Result<Self, ExtractError> {
+        let mut entries = HashMap::new();
+        for line in record_txt.lines() {
+            let line = line.trim_end_matches('\r');
+            if line.trim().is_empty() {
+                continue;
+            }
+            // `path,hash,size`, split from the right because a quoted path
+            // may itself contain commas.
+            let mut fields = line.rsplitn(3, ',');
+            let (Some(size), Some(hash), Some(path)) =
+                (fields.next(), fields.next(), fields.next())
+            else {
+                return Err(ExtractError::InvalidWheel(format!(
+                    "malformed RECORD line: {line}"
+                )));
+            };
+            let path = path.trim_matches('"').to_string();
+            let sha256 = match hash.split_once('=') {
+                Some(("sha256", digest)) => {
+                    let bytes = URL_SAFE_NO_PAD.decode(digest).map_err(|err| {
+                        ExtractError::InvalidWheel(format!(
+                            "RECORD has an invalid sha256 for {path}: {err}"
+                        ))
+                    })?;
+                    let Ok(digest) = Sha256Hash::try_from(bytes.as_slice()) else {
+                        return Err(ExtractError::InvalidWheel(format!(
+                            "RECORD has a sha256 of {} bytes for {path}",
+                            bytes.len()
+                        )));
+                    };
+                    Some(digest)
+                }
+                // Other algorithms are permitted by the spec; nothing to compare.
+                _ => None,
+            };
+            let size = if size.is_empty() {
+                None
+            } else {
+                Some(size.parse::<u64>().map_err(|err| {
+                    ExtractError::InvalidWheel(format!(
+                        "RECORD has an invalid size for {path}: {err}"
+                    ))
+                })?)
+            };
+            entries.insert(path, RecordEntry { sha256, size });
+        }
+        Ok(Self { entries })
+    }
+
+    /// Checks a written file against its `RECORD` line, if it has one.
+    fn verify(&self, archive_path: &Path, written: &PathsEntry) -> Result<(), ExtractError> {
+        let key = archive_path.to_string_lossy();
+        let Some(claimed) = self.entries.get(key.as_ref()) else {
+            return Ok(());
+        };
+        if let (Some(claimed), Some(actual)) = (claimed.sha256, written.sha256)
+            && claimed != actual
+        {
+            return Err(ExtractError::InvalidWheel(format!(
+                "{key}: RECORD claims sha256 {} but the archive holds {}",
+                hex::encode(claimed),
+                hex::encode(actual)
+            )));
+        }
+        if let (Some(claimed), Some(actual)) = (claimed.size, written.size_in_bytes)
+            && claimed != actual
+        {
+            return Err(ExtractError::InvalidWheel(format!(
+                "{key}: RECORD claims {claimed} bytes but the archive holds {actual}"
+            )));
+        }
+        Ok(())
+    }
 }
 
 /// The names of the two special directories a wheel may contain.
@@ -543,6 +657,106 @@ mod tests {
         .unwrap();
         let commands: Vec<_> = entry_points.iter().map(ToString::to_string).collect();
         assert_eq!(commands, ["foo = pkg.cli:main", "foo-gui = pkg.gui:run"]);
+    }
+
+    /// Builds a wheel in memory from `(path, content)` pairs, with the given
+    /// RECORD text.
+    fn wheel_with_record(files: &[(&str, &[u8])], record: &str) -> Vec<u8> {
+        let mut buffer = std::io::Cursor::new(Vec::new());
+        {
+            let mut zip = zip::ZipWriter::new(&mut buffer);
+            let options = zip::write::SimpleFileOptions::default();
+            for (path, content) in files {
+                zip.start_file(*path, options).unwrap();
+                std::io::Write::write_all(&mut zip, content).unwrap();
+            }
+            zip.start_file("pkg-1.0.dist-info/WHEEL", options).unwrap();
+            std::io::Write::write_all(&mut zip, b"Wheel-Version: 1.0\n").unwrap();
+            zip.start_file("pkg-1.0.dist-info/RECORD", options).unwrap();
+            std::io::Write::write_all(&mut zip, record.as_bytes()).unwrap();
+            zip.finish().unwrap();
+        }
+        buffer.into_inner()
+    }
+
+    #[test]
+    fn test_extract_wheel_rejects_record_hash_mismatch() {
+        let content = b"print('hi')\n";
+        let wrong = URL_SAFE_NO_PAD.encode(compute_bytes_digest::<Sha256>(b"something else"));
+        let wheel = wheel_with_record(
+            &[("pkg/__init__.py", content)],
+            &format!(
+                "pkg/__init__.py,sha256={wrong},{}\npkg-1.0.dist-info/RECORD,,\n",
+                content.len()
+            ),
+        );
+        let destination = tempfile::tempdir().unwrap();
+        let err = extract_wheel(
+            std::io::Cursor::new(wheel),
+            destination.path(),
+            &fixture_record(),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(&err, ExtractError::InvalidWheel(msg) if msg.contains("pkg/__init__.py") && msg.contains("sha256")),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn test_extract_wheel_rejects_record_size_mismatch() {
+        let content = b"print('hi')\n";
+        let right = URL_SAFE_NO_PAD.encode(compute_bytes_digest::<Sha256>(content));
+        let wheel = wheel_with_record(
+            &[("pkg/__init__.py", content)],
+            &format!("pkg/__init__.py,sha256={right},999\npkg-1.0.dist-info/RECORD,,\n"),
+        );
+        let destination = tempfile::tempdir().unwrap();
+        let err = extract_wheel(
+            std::io::Cursor::new(wheel),
+            destination.path(),
+            &fixture_record(),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(&err, ExtractError::InvalidWheel(msg) if msg.contains("999 bytes")),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn test_record_manifest_tolerates_unlisted_files_and_other_algorithms() {
+        let content = b"data\n";
+        let wheel = wheel_with_record(
+            &[("pkg/listed.py", content), ("pkg/unlisted.py", content)],
+            "pkg/listed.py,md5=ignored,5\npkg-1.0.dist-info/RECORD,,\n",
+        );
+        let destination = tempfile::tempdir().unwrap();
+        extract_wheel(
+            std::io::Cursor::new(wheel),
+            destination.path(),
+            &fixture_record(),
+        )
+        .unwrap();
+        assert!(
+            destination
+                .path()
+                .join("site-packages/pkg/unlisted.py")
+                .is_file()
+        );
+    }
+
+    #[test]
+    fn test_record_manifest_parses_quoted_paths_and_empty_fields() {
+        let manifest = RecordManifest::parse(
+            "\"dir/with,comma.py\",sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0\r\npkg-1.0.dist-info/RECORD,,\n",
+        )
+        .unwrap();
+        let entry = &manifest.entries["dir/with,comma.py"];
+        assert_eq!(entry.size, Some(0));
+        assert_eq!(entry.sha256, Some(compute_bytes_digest::<Sha256>(b"")));
+        let record = &manifest.entries["pkg-1.0.dist-info/RECORD"];
+        assert!(record.sha256.is_none() && record.size.is_none());
     }
 
     #[test]

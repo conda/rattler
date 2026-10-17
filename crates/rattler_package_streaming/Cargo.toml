@@ -12,6 +12,7 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
+base64 = { workspace = true }
 bzip2 = { workspace = true }
 jiff = { workspace = true }
 http = { workspace = true, optional = true }

@@ -5508,6 +5508,7 @@ dependencies = [
  "async-compression",
  "async-trait",
  "axum",
+ "base64 0.22.1",
  "bytes",
  "bzip2",
  "filetime",
