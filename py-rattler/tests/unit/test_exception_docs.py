@@ -731,7 +731,7 @@ async def test_solve_raises_gateway_error(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_solve_raises_invalid_match_spec_error(tmp_path: Path) -> None:
-    """`solve()` reports an unparseable spec string as `InvalidMatchSpecError`."""
+    """`solve()` reports an unparsable spec string as `InvalidMatchSpecError`."""
     with pytest.raises(rattler.exceptions.InvalidMatchSpecError):
         await _trigger_solve_bad_spec(tmp_path)
 
@@ -826,7 +826,7 @@ async def test_gateway_query_raises_invalid_channel_error(tmp_path: Path) -> Non
 
 @pytest.mark.asyncio
 async def test_gateway_query_raises_invalid_match_spec_error(tmp_path: Path) -> None:
-    """`Gateway.query()` reports an unparseable spec string as `InvalidMatchSpecError`."""
+    """`Gateway.query()` reports an unparsable spec string as `InvalidMatchSpecError`."""
     with pytest.raises(rattler.exceptions.InvalidMatchSpecError):
         await _trigger_gateway_query_bad_spec(tmp_path)
 
@@ -933,13 +933,13 @@ def test_matchspec_raises_type_error(tmp_path: Path) -> None:
 
 
 def test_matchspec_raises_invalid_match_spec_error(tmp_path: Path) -> None:
-    """`MatchSpec()` reports an unparseable spec string as `InvalidMatchSpecError`."""
+    """`MatchSpec()` reports an unparsable spec string as `InvalidMatchSpecError`."""
     with pytest.raises(rattler.exceptions.InvalidMatchSpecError):
         _trigger_matchspec_bad_spec(tmp_path)
 
 
 def test_matchspec_from_url_raises_invalid_url_error(tmp_path: Path) -> None:
-    """`MatchSpec.from_url()` reports an unparseable URL as `InvalidUrlError`."""
+    """`MatchSpec.from_url()` reports an unparsable URL as `InvalidUrlError`."""
     with pytest.raises(rattler.exceptions.InvalidUrlError):
         _trigger_matchspec_from_url_bad_url(tmp_path)
 
@@ -975,7 +975,7 @@ def test_version_raises_type_error(tmp_path: Path) -> None:
 
 
 def test_version_raises_invalid_version_error(tmp_path: Path) -> None:
-    """`Version()` reports an unparseable version string as `InvalidVersionError`."""
+    """`Version()` reports an unparsable version string as `InvalidVersionError`."""
     with pytest.raises(rattler.exceptions.InvalidVersionError):
         _trigger_version_bad_version(tmp_path)
 
@@ -1023,7 +1023,7 @@ def test_version_with_segments_raises_overflow_error(tmp_path: Path) -> None:
 
 
 def test_channel_raises_invalid_channel_error(tmp_path: Path) -> None:
-    """`Channel()` reports an unparseable name as `InvalidChannelError`."""
+    """`Channel()` reports an unparsable name as `InvalidChannelError`."""
     with pytest.raises(rattler.exceptions.InvalidChannelError):
         _trigger_channel_bad_name(tmp_path)
 
@@ -1035,7 +1035,7 @@ def test_channel_raises_type_error(tmp_path: Path) -> None:
 
 
 def test_channel_config_raises_invalid_url_error(tmp_path: Path) -> None:
-    """`ChannelConfig()` reports an unparseable alias URL as `InvalidUrlError`."""
+    """`ChannelConfig()` reports an unparsable alias URL as `InvalidUrlError`."""
     with pytest.raises(rattler.exceptions.InvalidUrlError):
         _trigger_channel_config_bad_url(tmp_path)
 
