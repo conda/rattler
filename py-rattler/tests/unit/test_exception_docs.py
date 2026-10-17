@@ -361,7 +361,7 @@ async def test_solve_raises_gateway_error(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_solve_raises_invalid_match_spec_error(tmp_path: Path) -> None:
-    """`solve()` reports an unparseable spec string as `InvalidMatchSpecError`."""
+    """`solve()` reports an unparsable spec string as `InvalidMatchSpecError`."""
     with pytest.raises(rattler.exceptions.InvalidMatchSpecError):
         await _trigger_solve_bad_spec(tmp_path)
 
