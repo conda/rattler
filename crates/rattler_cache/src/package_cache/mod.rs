@@ -21,7 +21,8 @@ use futures::TryFutureExt;
 use itertools::Itertools;
 use parking_lot::Mutex;
 use rattler_conda_types::{
-    MatchSpec, PackageRecord, RepoDataRecord, package::CondaArchiveIdentifier,
+    MatchSpec, PackageRecord, RepoDataRecord,
+    package::{CondaArchiveIdentifier, DistArchiveType},
 };
 use rattler_digest::Sha256Hash;
 use rattler_networking::{
@@ -256,6 +257,11 @@ pub enum PackageCacheError {
     /// There are no eligible writable layers to cache the package to.
     #[error("no eligible writable layers to cache package to")]
     NoWritableLayers,
+
+    /// A wheel can only be cached when its repodata record is known, because
+    /// the package metadata (`info/index.json`) is synthesized from it.
+    #[error("a package record is required to cache the wheel at {0}")]
+    WheelRequiresRecord(PathBuf),
 
     /// The cache key contains metadata that could lead to path traversal.
     #[error(transparent)]
@@ -796,8 +802,13 @@ impl PackageCache {
         reporter: Option<Arc<dyn CacheReporter>>,
     ) -> Result<CacheMetadata, PackageCacheError> {
         let path_buf = path.to_path_buf();
+        let is_wheel = matches!(
+            DistArchiveType::try_from(path),
+            Some(DistArchiveType::Wheel(_))
+        );
         let mut cache_key: CacheKey = match record {
             Some(record) => record.into(),
+            None if is_wheel => return Err(PackageCacheError::WheelRequiresRecord(path_buf)),
             None => CondaArchiveIdentifier::try_from_path(&path_buf)
                 .unwrap()
                 .into(),
@@ -806,14 +817,30 @@ impl PackageCache {
             cache_key = cache_key.with_path(path);
         }
 
+        // A wheel is rewritten into the conda package layout as it enters the
+        // cache, which needs the record to synthesize `info/index.json`.
+        let wheel_record = is_wheel.then(|| record.cloned()).flatten();
+
         self.get_or_fetch(
             cache_key,
             move |destination| {
                 let path_buf = path_buf.clone();
+                let wheel_record = wheel_record.clone();
                 async move {
-                    rattler_package_streaming::tokio::fs::extract(&path_buf, &destination)
+                    match wheel_record {
+                        Some(record) => rattler_package_streaming::tokio::fs::extract_wheel(
+                            &path_buf,
+                            &destination,
+                            &record,
+                        )
                         .await
-                        .map(|_| ())
+                        .map(|_| ()),
+                        None => {
+                            rattler_package_streaming::tokio::fs::extract(&path_buf, &destination)
+                                .await
+                                .map(|_| ())
+                        }
+                    }
                 }
             },
             reporter,
@@ -847,9 +874,67 @@ impl PackageCache {
         reporter: Option<Arc<dyn CacheReporter>>,
         concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
     ) -> Result<CacheMetadata, PackageCacheError> {
+        self.fetch_from_url_with_retry(
+            pkg.into(),
+            url,
+            client,
+            retry_policy,
+            reporter,
+            concurrent_requests_semaphore,
+            None,
+        )
+        .await
+    }
+
+    /// Returns the directory that contains the package described by `record`,
+    /// fetching it from the record's URL if it is not cached yet.
+    ///
+    /// This is the entry point to use when the full [`RepoDataRecord`] is
+    /// available. It behaves like [`Self::get_or_fetch_from_url_with_retry`]
+    /// for conda archives, and additionally supports wheel records (repodata
+    /// v3 `whl` entries): the wheel is downloaded from the record's URL, which
+    /// is typically on another host than the channel, and rewritten into the
+    /// layout of an extracted conda package. See
+    /// [`rattler_package_streaming::wheel`] for that layout.
+    #[instrument(skip_all, fields(url=%record.url))]
+    pub async fn get_or_fetch_from_record_with_retry(
+        &self,
+        record: &RepoDataRecord,
+        client: LazyClient,
+        retry_policy: impl RetryPolicy + Send + 'static + Clone,
+        reporter: Option<Arc<dyn CacheReporter>>,
+        concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
+    ) -> Result<CacheMetadata, PackageCacheError> {
+        let wheel_record = matches!(record.identifier.archive_type, DistArchiveType::Wheel(_))
+            .then(|| record.package_record.clone());
+        self.fetch_from_url_with_retry(
+            CacheKey::from(&record.package_record),
+            record.url.clone(),
+            client,
+            retry_policy,
+            reporter,
+            concurrent_requests_semaphore,
+            wheel_record,
+        )
+        .await
+    }
+
+    /// Shared implementation of the URL based fetch entry points. When
+    /// `wheel_record` is set, the URL points at a wheel that is converted into
+    /// the conda package layout while it is extracted.
+    #[allow(clippy::too_many_arguments)]
+    async fn fetch_from_url_with_retry(
+        &self,
+        cache_key: CacheKey,
+        url: Url,
+        client: LazyClient,
+        retry_policy: impl RetryPolicy + Send + 'static + Clone,
+        reporter: Option<Arc<dyn CacheReporter>>,
+        concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
+        wheel_record: Option<PackageRecord>,
+    ) -> Result<CacheMetadata, PackageCacheError> {
         let request_start = SystemTime::now();
-        // Convert into cache key
-        let mut cache_key = pkg.into();
+        let mut cache_key = cache_key;
         if self.cache_origin {
             cache_key = cache_key.with_url(url.clone());
         }
@@ -864,6 +949,7 @@ impl PackageCache {
             let retry_policy = retry_policy.clone();
             let download_reporter = download_reporter.clone();
             let concurrent_requests_semaphore = concurrent_requests_semaphore.clone();
+            let wheel_record = wheel_record.clone();
             async move {
                 // Acquire a permit to limit the number of concurrent download
                 // and extraction operations. The permit is held until the
@@ -883,18 +969,30 @@ impl PackageCache {
                 loop {
                     current_try += 1;
                     tracing::debug!("downloading {} to {}", &url, destination.display());
+                    let reporter = download_reporter.clone().map(|reporter| Arc::new(PassthroughReporter {
+                        reporter,
+                        index: Mutex::new(None),
+                    }) as Arc::<dyn DownloadReporter>);
                     // Extract the package
-                    let result = rattler_package_streaming::reqwest::tokio::extract(
-                        client.client().clone(),
-                        url.clone(),
-                        &destination,
-                        sha256,
-                        download_reporter.clone().map(|reporter| Arc::new(PassthroughReporter {
+                    let result = match &wheel_record {
+                        Some(record) => rattler_package_streaming::reqwest::tokio::extract_wheel(
+                            client.client().clone(),
+                            url.clone(),
+                            &destination,
+                            sha256,
                             reporter,
-                            index: Mutex::new(None),
-                        }) as Arc::<dyn DownloadReporter>),
-                    )
-                        .await;
+                            record,
+                        )
+                        .await,
+                        None => rattler_package_streaming::reqwest::tokio::extract(
+                            client.client().clone(),
+                            url.clone(),
+                            &destination,
+                            sha256,
+                            reporter,
+                        )
+                        .await,
+                    };
 
                     let err = match result {
                         Ok(result) => {
@@ -2648,6 +2746,159 @@ mod test {
             }
         }
         (cache, all_layers_paths)
+    }
+
+    const FIXTURE_WHEEL: &str = "rattler_fixture-1.0.0-py3-none-any.whl";
+    const FIXTURE_WHEEL_SHA256: &str =
+        "1ea4e0472e18e5d5ab6200e1db11f3c1dc8d516c1a92a483eeccb4c6116d91d7";
+
+    fn fixture_wheels_dir() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/wheels")
+    }
+
+    /// A repodata v3 `whl` record for the fixture wheel: the identifier is the
+    /// synthetic conda-style one, the URL is wherever the wheel lives.
+    fn fixture_wheel_record(url: Url, sha256: &str) -> rattler_conda_types::RepoDataRecord {
+        use std::str::FromStr;
+
+        use rattler_conda_types::{
+            NoArchType, PackageName, Version, package::DistArchiveIdentifier,
+        };
+        rattler_conda_types::RepoDataRecord {
+            package_record: PackageRecord {
+                subdir: "noarch".to_string(),
+                noarch: NoArchType::python(),
+                depends: vec!["python >=3.8".to_string()],
+                sha256: rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(sha256),
+                ..PackageRecord::new(
+                    PackageName::new_unchecked("rattler-fixture"),
+                    Version::from_str("1.0.0").unwrap(),
+                    "py3_none_any_0".parse::<BuildString>().unwrap(),
+                )
+            },
+            identifier: DistArchiveIdentifier::try_from_filename(
+                "rattler_fixture-1.0.0-py3_none_any_0.whl",
+            )
+            .unwrap(),
+            url,
+            channel: None,
+        }
+    }
+
+    /// Serves the fixture wheels directory on a random local port.
+    async fn serve_fixture_wheels() -> Url {
+        let router = Router::new()
+            .fallback_service(tower_http::services::ServeDir::new(fixture_wheels_dir()));
+        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
+        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(listener, router.into_make_service()).into_future());
+        Url::parse(&format!("http://localhost:{}/", addr.port())).unwrap()
+    }
+
+    fn assert_conda_layout(package_dir: &Path) {
+        use rattler_conda_types::package::IndexJson;
+        let index_json = IndexJson::from_package_directory(package_dir).unwrap();
+        assert_eq!(index_json.name.as_normalized(), "rattler-fixture");
+        assert_eq!(index_json.build.as_str(), "py3_none_any_0");
+        assert!(index_json.noarch.is_python());
+        for relative in [
+            "info/paths.json",
+            "info/link.json",
+            "site-packages/rattler_fixture/__init__.py",
+            "site-packages/rattler_fixture-1.0.0.dist-info/INSTALLER",
+            "python-scripts/rattler-fixture-script",
+        ] {
+            assert!(package_dir.join(relative).is_file(), "missing {relative}");
+        }
+    }
+
+    /// A wheel record is downloaded from its own URL and enters the cache as
+    /// an extracted conda package, keyed and hash-checked like any other
+    /// record.
+    #[tokio::test]
+    async fn test_get_or_fetch_wheel_record_from_url() {
+        let server_url = serve_fixture_wheels().await;
+        let url = server_url.join(FIXTURE_WHEEL).unwrap();
+        let client = ClientBuilder::new(Client::default()).build();
+
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+        let record = fixture_wheel_record(url.clone(), FIXTURE_WHEEL_SHA256);
+        let metadata = cache
+            .get_or_fetch_from_record_with_retry(
+                &record,
+                client.clone().into(),
+                DoNotRetryPolicy,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_conda_layout(metadata.path());
+        assert!(
+            metadata
+                .path()
+                .ends_with("rattler-fixture-1.0.0-py3_none_any_0")
+        );
+
+        // A second lookup is served from the cache.
+        let again = cache
+            .get_or_fetch_from_record_with_retry(
+                &record,
+                client.clone().into(),
+                DoNotRetryPolicy,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(again.path(), metadata.path());
+        assert_eq!(again.revision(), metadata.revision());
+
+        // The hash of the wheel archive is verified against the record.
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+        let wrong = fixture_wheel_record(
+            url,
+            "0000000000000000000000000000000000000000000000000000000000000000",
+        );
+        let err = cache
+            .get_or_fetch_from_record_with_retry(
+                &wrong,
+                client.into(),
+                DoNotRetryPolicy,
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(format!("{err:?}").contains("HashMismatch"), "{err:?}");
+    }
+
+    /// A wheel on the local filesystem takes the same route, and cannot be
+    /// cached without a record to synthesize its metadata from.
+    #[tokio::test]
+    async fn test_get_or_fetch_wheel_from_path() {
+        let wheel_path = fixture_wheels_dir().join(FIXTURE_WHEEL);
+        let record = fixture_wheel_record(
+            Url::from_file_path(&wheel_path).unwrap(),
+            FIXTURE_WHEEL_SHA256,
+        );
+
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+        let metadata = cache
+            .get_or_fetch_from_path(&wheel_path, Some(&record.package_record), None)
+            .await
+            .unwrap();
+        assert_conda_layout(metadata.path());
+
+        let err = cache
+            .get_or_fetch_from_path(&wheel_path, None, None)
+            .await
+            .unwrap_err();
+        assert_matches!(err, PackageCacheError::WheelRequiresRecord(path) if path == wheel_path);
     }
 
     #[tokio::test]

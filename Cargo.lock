@@ -5527,6 +5527,7 @@ dependencies = [
  "reqwest",
  "rstest",
  "rstest_reuse",
+ "serde",
  "serde_json",
  "simple_spawn_blocking",
  "tar",
