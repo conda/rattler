@@ -1036,10 +1036,12 @@ async fn populate_cache(
             .await
             .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
     } else {
+        // Dispatches on the record's archive type, so wheel records from
+        // conda-pypi style channels are converted into the conda package
+        // layout as they enter the cache.
         cache
-            .get_or_fetch_from_url_with_retry(
-                &record.package_record,
-                record.url.clone(),
+            .get_or_fetch_from_record_with_retry(
+                record,
                 downloader,
                 default_retry_policy(),
                 reporter,
