@@ -627,8 +627,10 @@ pub enum ConversionError {
     LocationToUrlConversionError(#[from] file_url::FileURLParseError),
 
     /// The location does not have a valid binary package filename (e.g.,
-    /// `.conda` or `.tar.bz2`)
-    #[error("binary package location must have a valid archive filename (.conda or .tar.bz2)")]
+    /// `.conda`, `.tar.bz2` or `.whl`)
+    #[error(
+        "binary package location must have a valid archive filename (.conda, .tar.bz2 or .whl)"
+    )]
     InvalidBinaryPackageLocation,
 }
 
