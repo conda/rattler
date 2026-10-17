@@ -1010,6 +1010,7 @@ mod test {
     #[case::v7_partial_source_extra_depends("v7/partial-source-extra-depends-lock.yml")]
     #[case::v7_partial_source_flags("v7/partial-source-flags-lock.yml")]
     #[case::v7_partial_source_run_exports("v7/partial-source-run-exports-lock.yml")]
+    #[case::v7_conda_pypi_wheel("v7/conda-pypi-wheel-lock.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
@@ -1601,6 +1602,132 @@ packages:
         // Parsing the rendered output must be stable (parse→render idempotent).
         let reparsed = LockFile::from_str_with_base_directory(&rendered, None).unwrap();
         let rerendered = reparsed.render_to_string().unwrap();
+        similar_asserts::assert_eq!(rendered, rerendered);
+    }
+
+    /// A wheel record from a conda-pypi channel (repodata v3 `whl` entry) has a
+    /// synthetic conda-style identifier (`name-version-build.whl`) while its
+    /// location points at the real wheel file, typically on another host. The
+    /// lock-file must record the identifier explicitly, because it cannot be
+    /// derived from the location, and must hand back the exact same
+    /// [`RepoDataRecord`] after a parse.
+    #[test]
+    fn test_conda_pypi_wheel_record_roundtrip() {
+        use std::str::FromStr;
+
+        use rattler_conda_types::{
+            PackageName, PackageRecord, Version,
+            package::{
+                ArchiveIdentifier, BuildString, DistArchiveIdentifier, DistArchiveType,
+                WheelArchiveType,
+            },
+        };
+
+        use url::Url;
+
+        use crate::{CondaPackageData, PlatformData};
+
+        let identifier = DistArchiveIdentifier::new(
+            ArchiveIdentifier {
+                name: "cowsay".to_string(),
+                version: "6.1".to_string(),
+                build_string: "py3_none_any_0".to_string(),
+            },
+            WheelArchiveType::Whl,
+        );
+        assert_eq!(identifier.to_file_name(), "cowsay-6.1-py3_none_any_0.whl");
+
+        let record = RepoDataRecord {
+            package_record: PackageRecord {
+                subdir: "noarch".to_string(),
+                noarch: rattler_conda_types::NoArchType::python(),
+                depends: vec!["python >=3.8".to_string()],
+                ..PackageRecord::new(
+                    PackageName::new_unchecked("cowsay"),
+                    Version::from_str("6.1").unwrap(),
+                    "py3_none_any_0".parse::<BuildString>().unwrap(),
+                )
+            },
+            identifier,
+            // The wheel is served from PyPI, not from the channel itself.
+            url: Url::parse(
+                "https://files.pythonhosted.org/packages/py3/c/cowsay/cowsay-6.1-py3-none-any.whl",
+            )
+            .unwrap(),
+            channel: Some("https://conda.anaconda.org/conda-pypi/".to_string()),
+        };
+
+        let lock_file = LockFile::builder()
+            .with_platforms(vec![PlatformData {
+                name: PlatformName::try_from("linux-64").unwrap(),
+                subdir: rattler_conda_types::Subdir::Linux64,
+                virtual_packages: Vec::new(),
+            }])
+            .unwrap()
+            .with_conda_package(DEFAULT_ENVIRONMENT_NAME, "linux-64", record.clone().into())
+            .unwrap()
+            .finish();
+
+        // The synthetic identifier differs from the wheel filename in the URL,
+        // so it has to be written out explicitly.
+        let rendered = lock_file.render_to_string().unwrap();
+        assert!(
+            rendered.contains("file_name: cowsay-6.1-py3_none_any_0.whl"),
+            "rendered lock-file must carry the synthetic wheel identifier:\n{rendered}"
+        );
+        assert!(
+            rendered.contains(
+                "conda: https://files.pythonhosted.org/packages/py3/c/cowsay/cowsay-6.1-py3-none-any.whl"
+            ),
+            "rendered lock-file must point at the real wheel location:\n{rendered}"
+        );
+
+        // Parse it back and compare with what went in.
+        let parsed = LockFile::from_str_with_base_directory(&rendered, None).unwrap();
+        let platform = parsed.platform("linux-64").unwrap();
+        let packages: Vec<_> = parsed
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .packages(platform)
+            .unwrap()
+            .collect();
+        assert_eq!(packages.len(), 1);
+        let CondaPackageData::Binary(binary) = packages[0].as_conda().unwrap() else {
+            panic!("a wheel must be locked as a binary conda package");
+        };
+        assert_eq!(
+            binary.file_name.archive_type,
+            DistArchiveType::Wheel(WheelArchiveType::Whl)
+        );
+
+        let roundtripped = RepoDataRecord::try_from(binary.as_ref()).unwrap();
+        assert_eq!(roundtripped.identifier, record.identifier);
+        assert_eq!(roundtripped.url, record.url);
+        assert_eq!(roundtripped.channel, record.channel);
+        assert_eq!(roundtripped.package_record.name, record.package_record.name);
+        assert_eq!(
+            roundtripped.package_record.version,
+            record.package_record.version
+        );
+        assert_eq!(
+            roundtripped.package_record.build,
+            record.package_record.build
+        );
+        assert_eq!(
+            roundtripped.package_record.noarch,
+            record.package_record.noarch
+        );
+        assert_eq!(
+            roundtripped.package_record.subdir,
+            record.package_record.subdir
+        );
+        assert_eq!(
+            roundtripped.package_record.depends,
+            record.package_record.depends
+        );
+
+        // And rendering again must be stable.
+        let rerendered = parsed.render_to_string().unwrap();
         similar_asserts::assert_eq!(rendered, rerendered);
     }
 
