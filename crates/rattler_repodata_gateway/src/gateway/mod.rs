@@ -601,6 +601,134 @@ mod test {
         .await
     }
 
+    /// Wheel-only names must be discoverable and their records must survive
+    /// recursive queries, regardless of the repodata backend.
+    #[rstest]
+    #[case::local(false, false)]
+    #[case::remote(true, false)]
+    #[case::sharded(true, true)]
+    #[tokio::test]
+    async fn test_gateway_wheel_records(#[case] remote: bool, #[case] sharded: bool) {
+        use rattler_conda_types::{RepodataRevisions, Shard, ShardedRepodata, ShardedSubdirInfo};
+        use rattler_digest::{Sha256, compute_bytes_digest};
+
+        let root = tempfile::tempdir().unwrap();
+        let subdir = root.path().join("noarch");
+        std::fs::create_dir_all(&subdir).unwrap();
+        let wheel_url = "https://example.org/wheel_only-1.0-py3-none-any.whl";
+        let repodata = serde_json::json!({
+            "info": { "subdir": "noarch" },
+            "repodata_version": 3,
+            "packages.conda": {
+                "helper-1.0-0.conda": {
+                    "name": "helper", "version": "1.0", "build": "0",
+                    "build_number": 0, "subdir": "noarch", "depends": []
+                }
+            },
+            "v3": { "whl": {
+                "wheel-only-1.0-py3_none_any_0": {
+                    "name": "wheel-only", "version": "1.0", "build": "py3_none_any_0",
+                    "build_number": 0, "subdir": "noarch", "depends": ["helper >=1"],
+                    "fn": "wheel_only-1.0-py3-none-any.whl", "url": wheel_url
+                }
+            }}
+        });
+
+        if sharded {
+            std::fs::create_dir_all(subdir.join("shards")).unwrap();
+            let mut shards = ahash::HashMap::default();
+            // Give each package its own shard, as a real channel would.
+            for (name, data) in [
+                (
+                    "helper",
+                    serde_json::json!({ "packages": {}, "packages.conda": repodata["packages.conda"], "removed": [] }),
+                ),
+                (
+                    "wheel-only",
+                    serde_json::json!({ "packages": {}, "v3": repodata["v3"], "removed": [] }),
+                ),
+            ] {
+                let shard: Shard = serde_json::from_value(data).unwrap();
+                let bytes = rmp_serde::to_vec_named(&shard).unwrap();
+                let compressed = zstd::encode_all(bytes.as_slice(), 3).unwrap();
+                let hash = compute_bytes_digest::<Sha256>(&compressed);
+                std::fs::write(
+                    subdir.join(format!("shards/{}.msgpack.zst", hex::encode(hash))),
+                    compressed,
+                )
+                .unwrap();
+                shards.insert(name.to_string(), hash);
+            }
+            let index = ShardedRepodata {
+                info: ShardedSubdirInfo {
+                    subdir: "noarch".into(),
+                    base_url: "./".into(),
+                    shards_base_url: "./shards/".into(),
+                    created_at: None,
+                    repodata_revisions: RepodataRevisions::default(),
+                    channel_relations: None,
+                    virtual_package_detectors: None,
+                },
+                shards,
+            };
+            let bytes = rmp_serde::to_vec_named(&index).unwrap();
+            std::fs::write(
+                subdir.join("repodata_shards.msgpack.zst"),
+                zstd::encode_all(bytes.as_slice(), 3).unwrap(),
+            )
+            .unwrap();
+            // No repodata.json: a fallback would fail rather than hide a broken shard path.
+        } else {
+            std::fs::write(subdir.join("repodata.json"), repodata.to_string()).unwrap();
+        }
+
+        let server = if remote {
+            Some(SimpleChannelServer::new(root.path()).await)
+        } else {
+            None
+        };
+        let channel = server.as_ref().map_or_else(
+            || Channel::try_from_directory(root.path()).unwrap(),
+            SimpleChannelServer::channel,
+        );
+        let cache = tempfile::tempdir().unwrap();
+        let gateway = Gateway::builder().with_cache_dir(cache.path()).finish();
+        let names = gateway
+            .names([channel.clone()], [Subdir::NoArch])
+            .await
+            .unwrap();
+        assert_eq!(names.len(), 2);
+        assert!(names.contains(&PackageName::from_str("wheel-only").unwrap()));
+        assert!(names.contains(&PackageName::from_str("helper").unwrap()));
+
+        let repodata = gateway
+            .query(
+                [channel],
+                [Subdir::NoArch],
+                [PackageName::from_str("wheel-only").unwrap()],
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+        let records: Vec<_> = repodata.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(records.len(), 2);
+        let wheel = records
+            .iter()
+            .find(|r| r.package_record.name.as_normalized() == "wheel-only")
+            .unwrap();
+        assert_eq!(wheel.url.as_str(), wheel_url);
+        assert_eq!(
+            wheel.identifier.to_file_name(),
+            "wheel-only-1.0-py3_none_any_0.whl"
+        );
+        assert_eq!(wheel.package_record.depends, ["helper >=1"]);
+        assert!(
+            records
+                .iter()
+                .any(|r| r.identifier.to_file_name() == "helper-1.0-0.conda")
+        );
+    }
+
     #[tokio::test]
     async fn test_local_gateway() {
         let gateway = Gateway::new();

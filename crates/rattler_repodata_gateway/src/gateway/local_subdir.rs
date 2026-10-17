@@ -93,7 +93,7 @@ impl SubdirClient for LocalSubdirClient {
                 )
             };
             let records = sparse_repodata
-                .load_records(&name, PackageFormatSelection::PreferConda)
+                .load_records(&name, PackageFormatSelection::PreferCondaWithWhl)
                 .map_err(io_error)?;
             let removed = sparse_repodata
                 .load_removed(Some(&name))
@@ -116,7 +116,7 @@ impl SubdirClient for LocalSubdirClient {
     fn package_names(&self) -> Vec<String> {
         let sparse_repodata: Arc<SparseRepoData> = self.sparse.clone();
         sparse_repodata
-            .package_names(PackageFormatSelection::PreferConda)
+            .package_names(PackageFormatSelection::PreferCondaWithWhl)
             .map(std::convert::Into::into)
             .collect()
     }
