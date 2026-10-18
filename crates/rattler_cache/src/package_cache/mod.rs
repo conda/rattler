@@ -2876,6 +2876,65 @@ mod test {
         assert!(format!("{err:?}").contains("HashMismatch"), "{err:?}");
     }
 
+    /// An entry written by another conversion version is treated as invalid
+    /// and fetched again, even though its archive hash still matches.
+    #[tokio::test]
+    async fn test_outdated_wheel_conversion_is_refetched() {
+        use rattler_conda_types::package::PackageFile;
+        use rattler_package_streaming::wheel::{CONVERSION_VERSION, WheelJson};
+
+        let server_url = serve_fixture_wheels().await;
+        let url = server_url.join(FIXTURE_WHEEL).unwrap();
+        let client = ClientBuilder::new(Client::default()).build();
+        let record = fixture_wheel_record(url, FIXTURE_WHEEL_SHA256);
+        let packages_dir = tempdir().unwrap();
+
+        let first = PackageCache::new(packages_dir.path())
+            .get_or_fetch_from_record_with_retry(
+                &record,
+                client.clone().into(),
+                DoNotRetryPolicy,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        let wheel_json_path = first.path().join(WheelJson::package_path());
+        let mut wheel_json = WheelJson::from_package_directory(first.path()).unwrap();
+        assert_eq!(wheel_json.conversion_version, CONVERSION_VERSION);
+
+        // Pretend an older rattler wrote the entry.
+        wheel_json.conversion_version = CONVERSION_VERSION - 1;
+        std::fs::write(
+            &wheel_json_path,
+            serde_json::to_string(&wheel_json).unwrap(),
+        )
+        .unwrap();
+
+        // A fresh cache object has no memory of validating the entry.
+        let second = PackageCache::new(packages_dir.path())
+            .get_or_fetch_from_record_with_retry(
+                &record,
+                client.into(),
+                DoNotRetryPolicy,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(second.path(), first.path());
+        assert!(
+            second.revision() > first.revision(),
+            "entry must be refetched"
+        );
+        assert_eq!(
+            WheelJson::from_package_directory(second.path())
+                .unwrap()
+                .conversion_version,
+            CONVERSION_VERSION
+        );
+    }
+
     /// A wheel on the local filesystem takes the same route, and cannot be
     /// cached without a record to synthesize its metadata from.
     #[tokio::test]

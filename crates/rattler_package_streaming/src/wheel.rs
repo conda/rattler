@@ -17,6 +17,9 @@
 //! * `info/index.json` is synthesized from the repodata record
 //! * `info/paths.json` is synthesized from the files that were written
 //! * `info/link.json` is synthesized from `entry_points.txt`
+//! * `info/wheel.json` ([`WheelJson`]) marks the entry as a conversion and
+//!   records [`CONVERSION_VERSION`], so a cache can refetch entries produced
+//!   by an older or newer converter
 //!
 //! The linker then treats the result as an ordinary `noarch: python` package:
 //! `site-packages/` and `python-scripts/` are remapped for the target Python,
@@ -45,6 +48,7 @@ use rattler_conda_types::{
     },
 };
 use rattler_digest::{HashingReader, Sha256, Sha256Hash};
+use serde::{Deserialize, Serialize};
 use tempfile::SpooledTempFile;
 use zip::ZipArchive;
 
@@ -63,6 +67,47 @@ const INSTALLER: &str = "conda\n";
 
 /// Wheels can be spooled to memory up to this size before spilling to disk.
 const SPOOL_LIMIT: usize = 5 * 1024 * 1024;
+
+/// The version of the wheel to conda layout conversion implemented by this
+/// crate. Bump it whenever the layout written for the same wheel changes, so
+/// that caches refetch entries converted by other versions.
+pub const CONVERSION_VERSION: u64 = 1;
+
+/// The `info/wheel.json` file written into every converted wheel.
+///
+/// A converted entry is derived data: the wheel's hash and `paths.json` both
+/// stay valid when the converter changes, so this file is what lets a cache
+/// tell an outdated conversion from a current one. It also marks the entry's
+/// origin for anyone inspecting the cache, since nothing else in the layout
+/// does.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WheelJson {
+    /// The [`CONVERSION_VERSION`] of the converter that wrote this entry.
+    pub conversion_version: u64,
+
+    /// The wheel's `.dist-info` directory name, for example
+    /// `cowsay-6.1.dist-info`.
+    pub dist_info: String,
+
+    /// The compatibility tags from the wheel's `WHEEL` file, for example
+    /// `py3-none-any`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+
+    /// Hex sha256 of the wheel archive, as the repodata record stated it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+}
+
+impl PackageFile for WheelJson {
+    fn package_path() -> &'static Path {
+        Path::new("info/wheel.json")
+    }
+
+    fn from_str(str: &str) -> Result<Self, io::Error> {
+        serde_json::from_str(str).map_err(Into::into)
+    }
+}
 
 /// Extracts a wheel from `reader` into `destination` as an extracted conda
 /// package, synthesizing the `info/` metadata from `record`.
@@ -93,7 +138,7 @@ pub(crate) fn extract_wheel_without_hashing(
     temp_file.seek(SeekFrom::Start(0))?;
     let mut archive = ZipArchive::new(temp_file)?;
 
-    let layout = WheelLayout::detect(&archive)?;
+    let layout = WheelLayout::detect(&mut archive)?;
     let manifest = RecordManifest::read(&mut archive, &layout)?;
     let mut paths = Vec::with_capacity(archive.len() + 1);
     let mut entry_points = Vec::new();
@@ -149,7 +194,7 @@ pub(crate) fn extract_wheel_without_hashing(
     )?);
 
     paths.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
-    write_info(destination, record, paths, entry_points)
+    write_info(destination, record, &layout, paths, entry_points)
 }
 
 /// What the wheel's `RECORD` claims about each file: the sha256 and size a
@@ -265,10 +310,12 @@ struct WheelLayout {
     dist_info: PathBuf,
     /// `{name}-{version}.data`
     data: PathBuf,
+    /// The `Tag:` values of the `WHEEL` file.
+    tags: Vec<String>,
 }
 
 impl WheelLayout {
-    fn detect<R: Read + Seek>(archive: &ZipArchive<R>) -> Result<Self, ExtractError> {
+    fn detect<R: Read + Seek>(archive: &mut ZipArchive<R>) -> Result<Self, ExtractError> {
         let mut dist_info: Option<String> = None;
         for name in archive.file_names() {
             let name = name?;
@@ -293,17 +340,25 @@ impl WheelLayout {
                 "no .dist-info directory".to_string(),
             ));
         };
-        if archive
-            .index_for_name(&format!("{stem}.dist-info/WHEEL"))
-            .is_none()
-        {
+        let Some(wheel_index) = archive.index_for_name(&format!("{stem}.dist-info/WHEEL")) else {
             return Err(ExtractError::InvalidWheel(format!(
                 "{stem}.dist-info/WHEEL is missing"
             )));
-        }
+        };
+        let mut wheel_txt = String::new();
+        archive
+            .by_index(wheel_index)?
+            .read_to_string(&mut wheel_txt)?;
+        let tags = wheel_txt
+            .lines()
+            .filter_map(|line| line.split_once(':'))
+            .filter(|(key, _)| key.trim().eq_ignore_ascii_case("Tag"))
+            .map(|(_, value)| value.trim().to_string())
+            .collect();
         Ok(Self {
             dist_info: PathBuf::from(format!("{stem}.dist-info")),
             data: PathBuf::from(format!("{stem}.data")),
+            tags,
         })
     }
 
@@ -416,6 +471,7 @@ fn parse_entry_points(entry_points_txt: &str) -> Result<Vec<EntryPoint>, Extract
 fn write_info(
     destination: &Path,
     record: &PackageRecord,
+    layout: &WheelLayout,
     paths: Vec<PathsEntry>,
     entry_points: Vec<EntryPoint>,
 ) -> Result<(), ExtractError> {
@@ -455,10 +511,17 @@ fn write_info(
         noarch: NoArchLinks::Python(PythonEntryPoints { entry_points }),
         package_metadata_version: 1,
     };
+    let wheel_json = WheelJson {
+        conversion_version: CONVERSION_VERSION,
+        dist_info: layout.dist_info.to_string_lossy().into_owned(),
+        tags: layout.tags.clone(),
+        sha256: record.sha256.map(hex::encode),
+    };
 
     write_json(destination, IndexJson::package_path(), &index_json)?;
     write_json(destination, PathsJson::package_path(), &paths_json)?;
     write_json(destination, LinkJson::package_path(), &link_json)?;
+    write_json(destination, WheelJson::package_path(), &wheel_json)?;
     Ok(())
 }
 
@@ -540,6 +603,7 @@ mod tests {
             "info/index.json",
             "info/paths.json",
             "info/link.json",
+            "info/wheel.json",
         ] {
             assert!(dest.join(expected).is_file(), "missing {expected}");
         }
@@ -609,6 +673,17 @@ mod tests {
                 ("rattler-fixture", "rattler_fixture", "main"),
                 ("rattler-fixture-gui", "rattler_fixture", "main"),
             ]
+        );
+
+        let wheel_json = WheelJson::from_package_directory(dest).unwrap();
+        assert_eq!(
+            wheel_json,
+            WheelJson {
+                conversion_version: CONVERSION_VERSION,
+                dist_info: "rattler_fixture-1.0.0.dist-info".to_string(),
+                tags: vec!["py3-none-any".to_string()],
+                sha256: None,
+            }
         );
 
         let paths_json = PathsJson::from_package_directory(dest).unwrap();

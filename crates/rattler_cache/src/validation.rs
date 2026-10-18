@@ -18,6 +18,7 @@ use std::{
 
 use rattler_conda_types::package::{IndexJson, PackageFile, PathType, PathsEntry, PathsJson};
 use rattler_digest::{HashingWriter, Sha256};
+use rattler_package_streaming::wheel::{CONVERSION_VERSION, WheelJson};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rayon::prelude::IndexedParallelIterator;
 
@@ -60,6 +61,22 @@ pub enum PackageValidationError {
     /// An error occurred while reading the `index.json` file.
     #[error("failed to read 'index.json'")]
     ReadIndexJsonError(#[source] std::io::Error),
+
+    /// The `wheel.json` file could not be read.
+    #[error("failed to read 'wheel.json'")]
+    ReadWheelJsonError(#[source] std::io::Error),
+
+    /// The entry was converted from a wheel by a different version of the
+    /// converter, so its layout may differ from what this version expects.
+    #[error(
+        "the package was converted from a wheel with conversion version {found}, expected {expected}"
+    )]
+    OutdatedWheelConversion {
+        /// The version recorded in `wheel.json`.
+        found: u64,
+        /// The version this build of rattler writes.
+        expected: u64,
+    },
 }
 
 /// An error that indicates that a specific file in a package archive directory
@@ -128,6 +145,21 @@ pub fn validate_package_directory(
         Err(e) => return Err(PackageValidationError::ReadPathsJsonError(e)),
         Ok(paths) => paths,
     };
+
+    // An entry converted from a wheel is derived data: its archive hash and
+    // paths.json stay valid when the converter changes, so the conversion
+    // version is the only thing that can flag it as outdated.
+    match WheelJson::from_package_directory(package_dir) {
+        Ok(wheel) if wheel.conversion_version != CONVERSION_VERSION => {
+            return Err(PackageValidationError::OutdatedWheelConversion {
+                found: wheel.conversion_version,
+                expected: CONVERSION_VERSION,
+            });
+        }
+        Ok(_) => {}
+        Err(e) if e.kind() == ErrorKind::NotFound => {}
+        Err(e) => return Err(PackageValidationError::ReadWheelJsonError(e)),
+    }
 
     // In Skip mode, only validate that index.json and paths.json exist and are readable.
     // Skip all file validation checks.
