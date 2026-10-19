@@ -83,8 +83,8 @@ impl CacheMetadata {
         &self.path
     }
 
-    /// Returns the revision of the cache entry. This revision indicates the
-    /// number of times the cache entry has been updated.
+    /// Returns the revision of the cache entry. The revision increases
+    /// whenever the cache entry changes.
     pub fn revision(&self) -> u64 {
         self.revision
     }

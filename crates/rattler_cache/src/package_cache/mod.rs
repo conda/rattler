@@ -1204,8 +1204,9 @@ where
         // Bump the revision and forget the old hash until the new package is
         // in place, so an interrupted fetch never leaves a hash behind that
         // vouches for content it did not produce.
-        let new_revision = cache_revision + 1;
-        metadata.write_revision_and_sha(new_revision, None).await?;
+        metadata
+            .write_revision_and_sha(cache_revision + 1, None)
+            .await?;
 
         // Create a temporary directory in the same parent folder for atomic extraction.
         // Using the same parent ensures the rename operation is atomic (same filesystem).
@@ -1264,7 +1265,10 @@ where
                 })?;
 
                 // Record the hash of what was actually fetched, not the one
-                // that was asked for.
+                // that was asked for. Bump the revision again: anyone who
+                // validated the old package while it was being replaced must
+                // not mistake the new one for it.
+                let new_revision = cache_revision + 2;
                 metadata
                     .write_revision_and_sha(new_revision, fetched_sha.as_ref())
                     .await?;
@@ -2397,7 +2401,7 @@ mod test {
             .await
             .unwrap();
 
-        assert_eq!(cache_a_lock.revision(), 1);
+        assert_eq!(cache_a_lock.revision(), 2);
 
         // Get the file to the cache
         let cache_b_lock = cache_b
@@ -2405,7 +2409,7 @@ mod test {
             .await
             .unwrap();
 
-        assert_eq!(cache_b_lock.revision(), 1);
+        assert_eq!(cache_b_lock.revision(), 2);
 
         // Now delete the index.json from the cache entry, effectively
         // corrupting the cache.
@@ -2421,7 +2425,7 @@ mod test {
             .await
             .unwrap();
 
-        assert_eq!(cache_c_lock.revision(), 2);
+        assert_eq!(cache_c_lock.revision(), 4);
     }
 
     fn get_file_name_from_path(path: &Path) -> &str {
@@ -2854,7 +2858,7 @@ mod test {
             .get_or_fetch_from_path(&cpython_archive, Some(&record_for(&cpython_archive)), None)
             .await
             .unwrap();
-        assert_eq!(cache_metadata.revision(), 1);
+        assert_eq!(cache_metadata.revision(), 2);
         assert_eq!(
             std::fs::read(cache_metadata.path().join("bin/python")).unwrap(),
             b"cpython\n"
@@ -2870,7 +2874,7 @@ mod test {
             .unwrap();
         assert_eq!(
             cache_metadata.revision(),
-            2,
+            4,
             "expected the stale cache entry to be re-extracted"
         );
         assert_eq!(cache_metadata.sha256, pypy_record.sha256);
@@ -2923,7 +2927,7 @@ mod test {
             .get_or_fetch_from_path(&pypy_archive, Some(&record), None)
             .await
             .unwrap();
-        assert_eq!(cache_metadata.revision(), 2);
+        assert_eq!(cache_metadata.revision(), 4);
         assert_eq!(cache_metadata.sha256, record.sha256);
         assert!(
             !cache_metadata.path().join("bin/python").exists(),
@@ -3013,7 +3017,7 @@ mod test {
             )
             .await
             .unwrap();
-        assert_eq!(cache_metadata.revision(), 2);
+        assert_eq!(cache_metadata.revision(), 4);
         assert_eq!(cache_metadata.sha256, Some(sha));
     }
 
