@@ -1357,7 +1357,7 @@ mod test {
         MatchSpec, PackageName, PackageRecord, RepoDataRecord, VersionWithSource,
     };
     use rattler_digest::{
-        Sha256, compute_bytes_digest, compute_file_digest, parse_digest_from_hex,
+        Md5, Sha256, compute_bytes_digest, compute_file_digest, parse_digest_from_hex,
     };
     use rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
     use reqwest::Client;
@@ -2973,6 +2973,88 @@ mod test {
                 .join("clobber-python-0.1.0-cpython")
                 .exists()
         );
+    }
+
+    /// Serves `archive` from a local HTTP server and returns its URL.
+    async fn serve_archive(archive: PathBuf) -> Url {
+        let file_name = archive.file_name().unwrap().to_str().unwrap().to_owned();
+        let router = Router::new().route(
+            &format!("/{file_name}"),
+            get(move || {
+                let archive = archive.clone();
+                async move { fs_err::read(archive).unwrap() }
+            }),
+        );
+
+        let listener = tokio::net::TcpListener::bind(SocketAddr::new([127, 0, 0, 1].into(), 0))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(axum::serve(listener, router.into_make_service()).into_future());
+
+        Url::parse(&format!("http://localhost:{port}/{file_name}")).unwrap()
+    }
+
+    /// Downloads the cpython archive while the cache key advertises the hash
+    /// set by `with_hash`, and asserts that the download is rejected without
+    /// caching anything.
+    async fn assert_download_rejects_advertised_hash(with_hash: impl FnOnce(CacheKey) -> CacheKey) {
+        let url =
+            serve_archive(get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda"))
+                .await;
+        let key = with_hash(CondaArchiveIdentifier::try_from_url(&url).unwrap().into());
+
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+        let err = cache
+            .get_or_fetch_from_url(
+                key,
+                url,
+                ClientBuilder::new(Client::default()).build().into(),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+
+        let PackageCacheError::LayerError(err) = err else {
+            panic!("unexpected error: {err:?}");
+        };
+        assert_matches!(
+            err.downcast_ref::<PackageCacheLayerError>(),
+            Some(PackageCacheLayerError::FetchError(err))
+                if matches!(
+                    err.downcast_ref::<ExtractError>(),
+                    Some(ExtractError::HashMismatch { .. })
+                )
+        );
+        assert!(
+            !packages_dir
+                .path()
+                .join("clobber-python-0.1.0-cpython")
+                .exists()
+        );
+    }
+
+    #[tokio::test]
+    // A channel advertising the wrong sha256 for a package must not get the
+    // download cached.
+    async fn test_get_or_fetch_from_url_rejects_sha256_mismatch() {
+        let pypy_sha = compute_file_digest::<Sha256>(
+            get_test_data_dir().join("clobber/clobber-python-0.1.0-pypy.conda"),
+        )
+        .unwrap();
+        assert_download_rejects_advertised_hash(|key| key.with_sha256(pypy_sha)).await;
+    }
+
+    #[tokio::test]
+    // Without a sha256, the advertised md5 is checked instead.
+    async fn test_get_or_fetch_from_url_rejects_md5_mismatch() {
+        let pypy_md5 = compute_file_digest::<Md5>(
+            get_test_data_dir().join("clobber/clobber-python-0.1.0-pypy.conda"),
+        )
+        .unwrap();
+        assert_download_rejects_advertised_hash(|key| key.with_md5(pypy_md5)).await;
     }
 
     #[tokio::test]
