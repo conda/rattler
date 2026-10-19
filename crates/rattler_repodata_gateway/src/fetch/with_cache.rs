@@ -27,7 +27,7 @@ use crate::{
         CacheAction, FetchRepoDataError, RepoDataNotFoundError, Variant,
         cache::{CacheHeaders, Expiring, RepoDataState},
     },
-    reporter::{DownloadReporter, ResponseReporterExt},
+    reporter::{DownloadProgressGuard, DownloadReporter, ResponseReporterExt},
     utils::{AsyncEncoding, Encoding, LockedFile},
 };
 
@@ -347,10 +347,12 @@ pub async fn fetch_repo_data(
             cache_headers.add_to_request(&mut headers);
         }
         // Send the request and wait for a reply
-        let download_reporter = reporter
-            .as_deref()
-            .and_then(|reporter| reporter.download_reporter())
-            .map(|r| (r, r.on_download_start(&repo_data_url)));
+        let download = DownloadProgressGuard::start(
+            reporter
+                .as_deref()
+                .and_then(|reporter| reporter.download_reporter()),
+            &repo_data_url,
+        );
 
         let (client, request) = request_builder.headers(headers).build_split();
         let request = request.expect("must have a valid request at this point");
@@ -431,15 +433,13 @@ pub async fn fetch_repo_data(
                 response,
                 content_encoding,
                 &cache_path,
-                download_reporter,
+                download.reporter(),
             )
             .await;
 
             match stream_result {
                 Ok((file, hash)) => {
-                    if let Some((reporter, index)) = download_reporter {
-                        reporter.on_download_complete(&response_url, index);
-                    }
+                    download.finish(&response_url);
                     break 'candidates (repo_data_url, file, hash, cache_headers);
                 }
                 Err(FetchRepoDataError::FailedToDownload(url, err)) => {
