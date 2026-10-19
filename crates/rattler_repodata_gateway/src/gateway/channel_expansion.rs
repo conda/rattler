@@ -14,6 +14,7 @@ use super::{
     BarrierCell, GatewayError, GatewayInner,
     boxed::{BoxFuture, box_future},
     channel_expander::{ChannelExpander, ChannelRelationsMode, ChannelRelationsWarning},
+    error::{HttpOrFilesystemError, SubdirNotFoundError},
     query::{FetchErrorPolicy, apply_fetch_error_policy},
     subdir::SubdirState,
 };
@@ -63,6 +64,13 @@ pub(super) struct DiscoveredSubdir {
     warning: Option<ChannelRelationsWarning>,
 }
 
+#[derive(Default)]
+struct UserChannelStatus {
+    scheduled_count: usize,
+    observed_count: usize,
+    has_found: bool,
+}
+
 /// Owns the shared fetch queue, deduplication, error policy, and incremental
 /// relation discovery. Callers attach their own work to scheduled barriers.
 pub(super) struct ChannelDiscovery<'a> {
@@ -74,6 +82,7 @@ pub(super) struct ChannelDiscovery<'a> {
     channels: HashMap<ChannelUrl, Arc<Channel>>,
     subdirs: HashMap<(ChannelUrl, Subdir), Arc<SubdirState>>,
     user_order: Vec<ChannelUrl>,
+    user_channel_status: HashMap<ChannelUrl, UserChannelStatus>,
     previous: Option<&'a ChannelExpansion>,
     allow_missing: bool,
     optional_platforms: Vec<Subdir>,
@@ -98,6 +107,7 @@ impl<'a> ChannelDiscovery<'a> {
             channels: HashMap::new(),
             subdirs: HashMap::new(),
             user_order: Vec::new(),
+            user_channel_status: HashMap::new(),
             previous,
             allow_missing,
             optional_platforms: Vec::new(),
@@ -126,6 +136,12 @@ impl<'a> ChannelDiscovery<'a> {
         channel: Arc<Channel>,
         platform: Subdir,
     ) -> ScheduledSubdir {
+        if !self.optional_platforms.contains(&platform) {
+            self.user_channel_status
+                .entry(url.clone())
+                .or_default()
+                .scheduled_count += 1;
+        }
         self.schedule(url, channel, platform, FetchErrorPolicy::Propagate)
     }
 
@@ -204,8 +220,43 @@ impl<'a> ChannelDiscovery<'a> {
         let pairs = self
             .expander
             .observe(&fetched.url, fetched.platform, &fetched.subdir)?;
-        self.subdirs
-            .insert((fetched.url, fetched.platform), fetched.subdir);
+        self.subdirs.insert(
+            (fetched.url.clone(), fetched.platform),
+            fetched.subdir.clone(),
+        );
+
+        if !self.allow_missing
+            && !self.optional_platforms.contains(&fetched.platform)
+            && let Some(status) = self.user_channel_status.get_mut(&fetched.url)
+        {
+            status.observed_count += 1;
+            if matches!(fetched.subdir.as_ref(), SubdirState::Found(_)) {
+                status.has_found = true;
+            }
+            if status.observed_count == status.scheduled_count
+                && !status.has_found
+                && self.expander.platforms().contains(&Subdir::NoArch)
+            {
+                let channel = self.channels.get(&fetched.url).cloned();
+                return Err(GatewayError::SubdirNotFoundError(Box::new(
+                    SubdirNotFoundError {
+                        channel: channel.map_or_else(
+                            || Channel::from_url(fetched.url.clone()),
+                            |c| c.as_ref().clone(),
+                        ),
+                        subdir: Subdir::NoArch.to_string(),
+                        source: HttpOrFilesystemError::Filesystem(std::io::Error::new(
+                            std::io::ErrorKind::NotFound,
+                            format!(
+                                "could not find any subdirectories for channel '{}'",
+                                fetched.url
+                            ),
+                        )),
+                    },
+                )));
+            }
+        }
+
         let policy = if self.expander.strict() {
             FetchErrorPolicy::WrapAsChannelRelationsError
         } else {
@@ -221,6 +272,27 @@ impl<'a> ChannelDiscovery<'a> {
         mut self,
         order: Option<Vec<ChannelUrl>>,
     ) -> Result<ChannelExpansion, GatewayError> {
+        if !self.allow_missing && self.expander.platforms().contains(&Subdir::NoArch) {
+            for (url, status) in &self.user_channel_status {
+                if status.scheduled_count > 0 && !status.has_found {
+                    let channel = self.channels.get(url).cloned();
+                    return Err(GatewayError::SubdirNotFoundError(Box::new(
+                        SubdirNotFoundError {
+                            channel: channel.map_or_else(
+                                || Channel::from_url(url.clone()),
+                                |c| c.as_ref().clone(),
+                            ),
+                            subdir: Subdir::NoArch.to_string(),
+                            source: HttpOrFilesystemError::Filesystem(std::io::Error::new(
+                                std::io::ErrorKind::NotFound,
+                                format!("could not find any subdirectories for channel '{url}'"),
+                            )),
+                        },
+                    )));
+                }
+            }
+        }
+
         let order = match order {
             Some(order) => order,
             None if self.expander.enabled() && self.expander.has_observed_relations() => {

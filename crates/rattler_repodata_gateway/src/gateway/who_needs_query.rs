@@ -27,6 +27,7 @@ use rattler_conda_types::{PackageName, Subdir};
 use super::{
     GatewayError, GatewayInner,
     boxed::{BoxFuture, BoxStream, box_future, box_stream},
+    error::{HttpOrFilesystemError, SubdirNotFoundError},
     local_subdir::LocalSubdirClient,
     source::{CustomSourceClient, ExpandedSource, Source},
     subdir::{SubdirData, SubdirState},
@@ -158,7 +159,7 @@ impl WhoNeedsQuery {
         // Deduplicate platforms while keeping the input order, so the
         // result order stays deterministic and no subdir is scanned twice.
         let mut seen_platforms = std::collections::HashSet::new();
-        let platforms: Vec<Subdir> = self
+        let platforms: Arc<[Subdir]> = self
             .platforms
             .iter()
             .copied()
@@ -170,11 +171,13 @@ impl WhoNeedsQuery {
         // without buffering a whole platform's results to re-sort them, and
         // it bounds the number of in-flight scans; the concurrency that
         // matters is between the name batches of a subdir.
-        box_stream(stream::iter(platforms).flat_map(move |platform| {
+        let platform_list: Vec<Subdir> = platforms.iter().copied().collect();
+        box_stream(stream::iter(platform_list).flat_map(move |platform| {
             scan_platform(
                 self.gateway.clone(),
                 self.sources.clone(),
                 platform,
+                platforms.clone(),
                 self.target.clone(),
                 self.reporter.clone(),
             )
@@ -217,6 +220,7 @@ fn scan_platform(
     gateway: Arc<GatewayInner>,
     sources: Vec<Source>,
     platform: Subdir,
+    all_platforms: Arc<[Subdir]>,
     target: WhoNeedsTarget,
     reporter: Option<Arc<dyn Reporter>>,
 ) -> BoxStream<Result<Dependent, GatewayError>> {
@@ -228,6 +232,7 @@ fn scan_platform(
             gateway,
             sources,
             platform,
+            all_platforms,
             reporter.clone(),
         ))
         .map_ok(move |subdirs| {
@@ -249,6 +254,7 @@ async fn resolve_subdirs(
     gateway: Arc<GatewayInner>,
     sources: Vec<Source>,
     platform: Subdir,
+    all_platforms: Arc<[Subdir]>,
     reporter: Option<Arc<dyn Reporter>>,
 ) -> Result<Vec<IndexedSubdir>, GatewayError> {
     // Kick off the subdir fetch of every channel source; custom and sparse
@@ -264,10 +270,43 @@ async fn resolve_subdirs(
             ExpandedSource::Channel(channel, _) => {
                 let gateway = gateway.clone();
                 let reporter = reporter.clone();
+                let all_platforms = all_platforms.clone();
                 pending.push(box_future(async move {
                     let subdir = gateway
                         .get_or_create_subdir(&channel, platform, reporter, false)
                         .await?;
+                    if platform == Subdir::NoArch
+                        && matches!(subdir.as_ref(), SubdirState::NotFound)
+                        && !gateway.has_found_subdir_for_channel(&channel)
+                    {
+                        let mut any_found = false;
+                        for other_platform in all_platforms.as_ref() {
+                            if *other_platform != Subdir::NoArch
+                                && let Ok(other_subdir) = gateway
+                                    .get_or_create_subdir(&channel, *other_platform, None, false)
+                                    .await
+                                && matches!(other_subdir.as_ref(), SubdirState::Found(_))
+                            {
+                                any_found = true;
+                                break;
+                            }
+                        }
+                        if !any_found {
+                            return Err(GatewayError::SubdirNotFoundError(Box::new(
+                                SubdirNotFoundError {
+                                    subdir: Subdir::NoArch.to_string(),
+                                    channel: channel.clone(),
+                                    source: HttpOrFilesystemError::Filesystem(std::io::Error::new(
+                                        std::io::ErrorKind::NotFound,
+                                        format!(
+                                            "could not find any subdirectories for channel '{}'",
+                                            channel.base_url
+                                        ),
+                                    )),
+                                },
+                            )));
+                        }
+                    }
                     Ok((source_index, subdir))
                 }));
             }

@@ -8,7 +8,6 @@ use crate::{
     fetch::FetchRepoDataError,
     gateway::{
         GatewayInner,
-        error::SubdirNotFoundError,
         local_subdir::LocalSubdirClient,
         remote_subdir, sharded_subdir,
         subdir::{SubdirData, SubdirState},
@@ -101,9 +100,8 @@ impl<'g> SubdirBuilder<'g> {
 
         match subdir_data {
             Ok(client) => Ok(SubdirState::Found(client)),
-            Err(GatewayError::SubdirNotFoundError(err)) if self.platform != Subdir::NoArch => {
-                // If the subdir was not found and the platform is not `noarch` we assume its
-                // just empty.
+            Err(GatewayError::SubdirNotFoundError(err)) => {
+                // If the subdir was not found we assume it is just empty.
                 tracing::info!(
                     "subdir {} of channel {} was not found, ignoring",
                     err.subdir,
@@ -111,13 +109,13 @@ impl<'g> SubdirBuilder<'g> {
                 );
                 Ok(SubdirState::NotFound)
             }
-            Err(GatewayError::FetchRepoDataError(FetchRepoDataError::NotFound(err))) => {
-                Err(Box::new(SubdirNotFoundError {
-                    subdir: self.platform.to_string(),
-                    channel: self.channel.clone(),
-                    source: err.into(),
-                })
-                .into())
+            Err(GatewayError::FetchRepoDataError(FetchRepoDataError::NotFound(_))) => {
+                tracing::info!(
+                    "subdir {} of channel {} was not found, ignoring",
+                    self.platform,
+                    self.channel.canonical_name()
+                );
+                Ok(SubdirState::NotFound)
             }
             Err(err) => Err(err),
         }
