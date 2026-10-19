@@ -18,8 +18,10 @@ from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.removed_package import RemovedPackage
 from rattler.repo_data.repo_data import ChannelRelations
 from rattler.repo_data.who_needs import Dependent, _target_to_py
+from rattler.virtual_package.detectors import DetectorRegistrations
 
 if TYPE_CHECKING:
+    from rattler.repo_data.multi_source import MultiSource
     from rattler.repo_data.package_record import PackageRecord
     from rattler.repo_data.source import RepoDataSource
     from rattler.virtual_package.generic import GenericVirtualPackage
@@ -159,16 +161,16 @@ class ChannelNotice:
 
 
 class GatewayQueryResult(list[list[RepoDataRecord]]):
-    """Repodata, removed packages, and CEP-6 notices returned by :meth:`Gateway.query`.
-
-    This remains a list for compatibility with earlier releases.
-    """
+    """List-like repodata query result with removed packages, notices, and optional detector metadata."""
 
     def __init__(
         self,
         repodata: list[list[RepoDataRecord]],
         notices: list[ChannelNotice],
         removed: list[list[RemovedPackage]] | None = None,
+        virtual_package_detectors: DetectorRegistrations | None = None,
+        wanted_virtual_packages: list[PackageName] | None = None,
+        detector_target: Subdir | None = None,
     ) -> None:
         super().__init__(repodata)
         self.repodata = self
@@ -180,6 +182,12 @@ class GatewayQueryResult(list[list[RepoDataRecord]]):
         match specs of the query do not filter this list. Removed packages never
         appear in ``repodata``.
         """
+        self.virtual_package_detectors = virtual_package_detectors
+        """All accepted and rejected registrations when discovery is enabled."""
+        self.wanted_virtual_packages = wanted_virtual_packages if wanted_virtual_packages is not None else []
+        """Virtual-package names referenced by candidates, specs, or explicit constraints."""
+        self.detector_target = detector_target
+        """The solve target used for registration discovery, or ``None`` when disabled."""
 
 
 class GatewayNamesResult(list[PackageName]):
@@ -293,13 +301,15 @@ class Gateway:
 
     async def query(
         self,
-        sources: Iterable[Channel | str | RepoDataSource],
+        sources: Iterable[Channel | MultiSource | str | RepoDataSource],
         platforms: Iterable[Subdir | SubdirLiteral],
         specs: Iterable[MatchSpec | PackageName | str],
         recursive: bool = True,
         channel_relations: ChannelRelationsMode | None = None,
         channel_relations_max_depth: int | None = None,
         channel_notices: bool = False,
+        detector_target: Subdir | SubdirLiteral | None = None,
+        constraints: Iterable[MatchSpec | str] = (),
     ) -> GatewayQueryResult:
         """Queries the gateway for repodata from channels and custom sources.
 
@@ -321,8 +331,8 @@ class Gateway:
         is needed for custom sources, it must be implemented within the source itself.
 
         Arguments:
-            sources: The sources to query. Can be channels (by name, URL, or Channel object)
-                     or custom RepoDataSource implementations.
+            sources: The sources to query. Can be channels (by name, URL, or Channel object),
+                     `MultiSource` groups or custom RepoDataSource implementations.
             platforms: The platforms to query.
             specs: The specs to query.
             recursive: Whether recursively fetch dependencies or not.
@@ -335,6 +345,10 @@ class Gateway:
                                          default (10). ``0`` behaves like
                                          ``channel_relations="disabled"``.
             channel_notices: Whether to fetch CEP-6 notices for this query.
+            detector_target: Opt into detector registration discovery for this target and
+                             ``noarch``. This does not install or execute detectors.
+            constraints: Explicit solver constraints that contribute detector demand only.
+                         They do not fetch packages or filter returned records.
 
         Returns:
             A list of lists of `RepoDataRecord`s. The outer list contains one entry per
@@ -350,6 +364,12 @@ class Gateway:
             packages the source lists as removed for the fetched package names.
             Use it to detect that a previously locked package was yanked.
 
+            With ``detector_target``, ``virtual_package_detectors`` carries all accepted
+            and rejected registrations. ``wanted_virtual_packages`` contains demand
+            from every returned candidate, root specs, and explicit constraints.
+            Missing target and ``noarch`` metadata is fetched without returning
+            records from unrequested platforms.
+
         Examples
         --------
         ```python
@@ -360,7 +380,7 @@ class Gateway:
         >>>
         ```
         """
-        py_records, py_removed, py_notices = await self._gateway.query(
+        py_records, py_removed, py_notices, py_detectors = await self._gateway.query(
             sources=_convert_sources(sources),
             platforms=[
                 platform._inner if isinstance(platform, Subdir) else Subdir(platform)._inner for platform in platforms
@@ -373,18 +393,40 @@ class Gateway:
             channel_notices=channel_notices,
             channel_relations=channel_relations,
             channel_relations_max_depth=channel_relations_max_depth,
+            detector_target=(
+                detector_target._inner
+                if isinstance(detector_target, Subdir)
+                else Subdir(detector_target)._inner
+                if detector_target is not None
+                else None
+            ),
+            constraints=[
+                constraint._match_spec if isinstance(constraint, MatchSpec) else PyMatchSpec(constraint, True, True)
+                for constraint in constraints
+            ],
         )
 
+        detectors: DetectorRegistrations | None = None
+        wanted_names: list[PackageName] = []
+        target: Subdir | None = None
+        if py_detectors is not None:
+            py_target, py_wanted, accepted, rejected = py_detectors
+            detectors = DetectorRegistrations._from_py(accepted, rejected)
+            wanted_names = [PackageName._from_py_package_name(name) for name in py_wanted]
+            target = Subdir._from_py_subdir(py_target)
         # Convert the records, removed packages, and notices into Python objects.
         return GatewayQueryResult(
             [[RepoDataRecord._from_py_record(record) for record in records] for records in py_records],
             [ChannelNotice._from_py(notice) for notice in py_notices],
             [[RemovedPackage._from_py(removed) for removed in removed_packages] for removed_packages in py_removed],
+            detectors,
+            wanted_names,
+            target,
         )
 
     async def who_needs(
         self,
-        sources: Iterable[Channel | str | RepoDataSource],
+        sources: Iterable[Channel | MultiSource | str | RepoDataSource],
         platforms: Iterable[Subdir | SubdirLiteral],
         target: str | PackageName | PackageRecord | GenericVirtualPackage,
     ) -> list[Dependent]:
@@ -407,8 +449,8 @@ class Gateway:
         every package name in the channel.
 
         Arguments:
-            sources: The sources to query. Can be channels (by name, URL, or Channel object)
-                     or custom RepoDataSource implementations.
+            sources: The sources to query. Can be channels (by name, URL, or Channel object),
+                     `MultiSource` groups or custom RepoDataSource implementations.
             platforms: The platforms to query.
             target: The package to find reverse dependencies for.
 
@@ -427,7 +469,7 @@ class Gateway:
 
     async def names(
         self,
-        sources: Iterable[Channel | str | RepoDataSource],
+        sources: Iterable[Channel | MultiSource | str | RepoDataSource],
         platforms: Iterable[Subdir | SubdirLiteral],
         channel_relations: ChannelRelationsMode | None = None,
         channel_relations_max_depth: int | None = None,
@@ -436,8 +478,8 @@ class Gateway:
         """Queries all the names of packages in channels or custom sources.
 
         Arguments:
-            sources: The sources to query. Can be channels (by name, URL, or Channel object)
-                     or custom RepoDataSource implementations.
+            sources: The sources to query. Can be channels (by name, URL, or Channel object),
+                     `MultiSource` groups or custom RepoDataSource implementations.
             platforms: The platforms to query.
             channel_relations: How to treat CEP-42 ``channel_relations`` metadata. ``None``
                                uses the gateway default (``"warn"``).
@@ -514,6 +556,39 @@ class Gateway:
             return None
         return ChannelRelations._from_inner(py_relations)
 
+    async def virtual_package_detectors(
+        self,
+        channels: Iterable[Channel | str],
+        subdirs: Iterable[Subdir | SubdirLiteral],
+        channel_relations: ChannelRelationsMode | None = None,
+        channel_relations_max_depth: int | None = None,
+    ) -> DetectorRegistrations:
+        """Collects the virtual package detectors that ``channels`` and their
+        related channels register for the supplied ``subdirs``.
+
+        Registrations are combined per channel and accepted or rejected in
+        CEP-42 channel order. Include the target subdir and ``noarch`` explicitly
+        when collecting registrations for a solve. Semantic registration errors
+        are emitted as warnings. Malformed metadata shapes may fail discovery.
+
+        Arguments:
+            channels: The channels to read registrations from.
+            subdirs: The subdirs whose registrations should be combined.
+            channel_relations: How to treat CEP-42 ``channel_relations`` metadata.
+            channel_relations_max_depth: Maximum recursion depth when following
+                                         ``channel_relations``.
+        """
+        py_channels = [
+            channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for channel in channels
+        ]
+        accepted, rejected = await self._gateway.virtual_package_detectors(
+            py_channels,
+            [subdir._inner if isinstance(subdir, Subdir) else Subdir(subdir)._inner for subdir in subdirs],
+            channel_relations,
+            channel_relations_max_depth,
+        )
+        return DetectorRegistrations._from_py(accepted, rejected)
+
     def clear_repodata_cache(
         self,
         channel: Channel | str,
@@ -571,12 +646,13 @@ def _convert_sources(sources: Iterable[Any]) -> list[Any]:
     Channels are converted to their internal PyChannel representation.
     Custom RepoDataSource implementations are wrapped in an adapter that
     converts between FFI types and Python wrapper types.
-    SparseRepoData objects are converted to their internal PySparseRepoData
+    SparseRepoData and MultiSource objects are converted to their internal
     representation.
 
     Raises:
         TypeError: If a source doesn't implement the required interface.
     """
+    from rattler.repo_data.multi_source import MultiSource
     from rattler.repo_data.source import RepoDataSource
     from rattler.repo_data.sparse import SparseRepoData
 
@@ -588,6 +664,8 @@ def _convert_sources(sources: Iterable[Any]) -> list[Any]:
         elif isinstance(source, Channel):
             # Channel object - extract PyChannel
             converted.append(source._channel)
+        elif isinstance(source, MultiSource):
+            converted.append(source._multi_source)
         elif isinstance(source, SparseRepoData):
             # SparseRepoData object - extract PySparseRepoData
             converted.append(source._sparse)
@@ -596,7 +674,7 @@ def _convert_sources(sources: Iterable[Any]) -> list[Any]:
             converted.append(_RepoDataSourceAdapter(source))
         else:
             raise TypeError(
-                f"Expected Channel, str, SparseRepoData, or object implementing RepoDataSource protocol, "
+                f"Expected Channel, MultiSource, str, SparseRepoData, or object implementing RepoDataSource protocol, "
                 f"got {type(source).__name__}. "
                 f"See rattler.RepoDataSource for the required interface."
             )

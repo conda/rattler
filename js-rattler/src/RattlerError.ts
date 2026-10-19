@@ -5,6 +5,7 @@
  */
 export type RattlerErrorCode =
     | "PARSE_VERSION"
+    | "PARSE_BUILD_STRING"
     | "VERSION_EXTEND"
     | "VERSION_BUMP"
     | "PARSE_VERSION_SPEC"
@@ -14,6 +15,10 @@ export type RattlerErrorCode =
     | "PARSE_PACKAGE_NAME"
     | "PARSE_MD5"
     | "PARSE_SHA256"
+    | "PARSE_FILE_NAME"
+    | "PARSE_URL"
+    | "PARSE_JSON"
+    | "INVALID_CONFIG"
     | "SUBDIR_NOT_FOUND"
     | "FETCH"
     | "GATEWAY"

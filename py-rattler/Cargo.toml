@@ -1,6 +1,6 @@
 [package]
 name = "py-rattler"
-version = "0.27.0"
+version = "0.27.1"
 edition = "2024"
 license = "BSD-3-Clause"
 publish = false
@@ -58,6 +58,8 @@ rattler_networking = { path = "../crates/rattler_networking", default-features =
 rattler_shell = { path = "../crates/rattler_shell", default-features = false }
 rattler_pty = { path = "../crates/rattler_pty", default-features = false, optional = true }
 rattler_virtual_packages = { path = "../crates/rattler_virtual_packages", default-features = false }
+rattler_virtual_package_detectors = { path = "../crates/rattler_virtual_package_detectors" }
+rattler_cache = { path = "../crates/rattler_cache", default-features = false }
 rattler_solve = { path = "../crates/rattler_solve", default-features = false, features = [
   "resolvo",
 ] }
@@ -78,6 +80,7 @@ reqwest = { version = "0.13", default-features = false }
 reqwest-middleware = { package = "astral-reqwest-middleware", version = "0.5" }
 reqwest-retry = { package = "astral-reqwest-retry", version = "0.9" }
 async-trait = "0.1"
+hex = "0.4"
 http = "1"
 
 thiserror = "2"
@@ -88,6 +91,7 @@ pep440_rs = "0.7"
 pep508_rs = "0.9"
 serde = "1"
 serde_json = "1"
+tracing = "0.1"
 pyo3-file = "0.17"
 nix = { version = "0.31", features = ["process"], optional = true }
 

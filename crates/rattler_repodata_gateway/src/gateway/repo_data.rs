@@ -17,6 +17,7 @@ use crate::sparse::RemovedPackage;
 pub struct RepoData {
     pub(crate) records: Vec<Arc<RepoDataRecord>>,
     pub(crate) removed: RemovedPackages,
+    pub(crate) multi_channel: Option<Arc<str>>,
 }
 
 impl RepoData {
@@ -30,6 +31,14 @@ impl RepoData {
     /// [`RemovedPackages::get`].
     pub fn removed(&self) -> &RemovedPackages {
         &self.removed
+    }
+
+    /// Returns the name of the multichannel the records were requested
+    /// through, or `None` if their channel was requested on its own.
+    ///
+    /// The records themselves refer to the channel they were fetched from.
+    pub fn multi_channel(&self) -> Option<&str> {
+        self.multi_channel.as_deref()
     }
 
     /// Returns an iterator over all the records in this instance.

@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-10-05
+
+### Highlights
+
+**Multichannels.** `MultiSource` groups several sources under one name, like conda's `defaults` (`pkgs/main`, `pkgs/r`, `pkgs/msys2`) or its `custom_multichannels`. Pass it to `solve()`, `solve_with_sparse_repodata()` or the `Gateway` methods anywhere a channel goes. The sources of a group share one channel priority tier, the way conda-libmamba-solver treats them: with strict priority a package in an earlier member no longer hides a newer build in a later one, while channels outside the group are still excluded. Within the group, member order only breaks ties. A spec like `defaults::python` matches packages from any member. Members can be channels, channel names, `SparseRepoData` or a custom `RepoDataSource`, but not another `MultiSource`.
+
+```python
+defaults = MultiSource("defaults", ["https://repo.anaconda.com/pkgs/main", "https://repo.anaconda.com/pkgs/r"])
+records = await solve(
+    [defaults],
+    ["python 3.12.*"],
+    platforms=["linux-64", "noarch"],
+    channel_priority=ChannelPriority.Strict,
+    virtual_packages=VirtualPackage.detect(),
+)
+```
+
+`RepoDataRecord.channel` is still the URL of the member the record came from. Solves that don't use a `MultiSource` come out exactly as before.
+
+**Channel-provided virtual package detectors.** Channels can now register detector packages that report virtual packages rattler doesn't know about natively. `Gateway.virtual_package_detectors()` collects the registrations of a set of channels, and `detect_virtual_packages()` installs and runs the accepted detectors behind a consent callback, returning detected values, failures and skipped registrations. `Gateway.query()` can collect registrations for a solve as well, through its new `detector_target` and `constraints` arguments.
+
+### Added
+
+- `MultiSource`, a named group of sources that share a channel priority tier, accepted by `solve()`, `solve_with_sparse_repodata()`, `Gateway.query()`, `Gateway.who_needs()` and `Gateway.names()`, in [#2881](https://github.com/conda/rattler/pull/2881), [#2882](https://github.com/conda/rattler/pull/2882) and [#2884](https://github.com/conda/rattler/pull/2884)
+- Discover and run channel-provided virtual package detectors with `Gateway.virtual_package_detectors()`, `detect_virtual_packages()` and the `detector_target`/`constraints` arguments of `Gateway.query()`, along with `DetectorRegistrations`, `ConsentRequest`, `DetectionOutcome` and related types, in [#2864](https://github.com/conda/rattler/pull/2864)
+- `PrefixPlaceholder.experimental_offsets` and `PrefixPlaceholder.experimental_shebang_length`, the recorded placeholder offsets from `paths.json`, in [#2565](https://github.com/conda/rattler/pull/2565)
+- `freebsd-ppc64` and `freebsd-ppc64le` subdirs in [#2768](https://github.com/conda/rattler/pull/2768)
+- `index_fs()`/`index_s3()` accept a v3 revision message in `index-config` and patches can set `extra_depends` and `flags` in [#2668](https://github.com/conda/rattler/pull/2668)
+
+### Fixed
+
+- Parse `::numpy` (an empty channel) as a spec without a channel instead of pinning it to `conda.anaconda.org`, so `MatchSpec("::numpy").channel` is `None` in [#2737](https://github.com/conda/rattler/pull/2737)
+- `index_fs()`/`index_s3()` write `repodata_version: 2` only when a `base_url` is set, always write the `v3` map, use `indexed_timestamp` for revision bounds, and validate patches for every subdir before writing anything in [#2668](https://github.com/conda/rattler/pull/2668)
+- Keep backslashes in file names when writing `paths.json` and `conda-meta` records on Linux and macOS instead of turning them into path separators, which made such packages fail to install in [#2878](https://github.com/conda/rattler/pull/2878)
+- Store the refreshed cache policy after a `304 Not Modified` on the sharded repodata index, so later processes stop revalidating an unchanged index in [#2724](https://github.com/conda/rattler/pull/2724)
+
 ## [0.27.0] - 2026-09-29
 
 ### Highlights

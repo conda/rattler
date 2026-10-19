@@ -14,12 +14,13 @@ use url::Url;
 use crate::{
     commands::{
         QueryOutputFormat,
+        detectors::{DetectorContext, detect_virtual_packages},
         gateway::{build_gateway, load_config},
-        print_url_lines,
+        hyperlink, print_url_lines,
         progress::{wrap_in_async_progress, wrap_in_progress},
         table::{Cell, Table},
     },
-    solver_args::SolverArgs,
+    solver_args::{SolverArgs, task_for_repodata},
 };
 
 /// The examples shown by `rattler solve --help` and in `rattler skill`.
@@ -84,15 +85,22 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
     let gateway = build_gateway(download_client.clone(), &config, offline, true)?;
 
     let start_load_repo_data = Instant::now();
-    let repo_data = wrap_in_async_progress(
-        "loading repodata",
-        gateway
-            .query(channels, [platform, Subdir::NoArch], specs.clone())
-            .recursive(true),
-    )
-    .await
-    .into_diagnostic()
-    .context("failed to load repodata")?;
+    let mut query = gateway
+        .query(
+            channels.iter().cloned(),
+            [platform, Subdir::NoArch],
+            specs.clone(),
+        )
+        .recursive(true);
+    if !opt.solver.has_explicit_virtual_packages() {
+        query = query
+            .virtual_package_detectors(platform)
+            .constraints(constraints.iter().cloned());
+    }
+    let mut repo_data = wrap_in_async_progress("loading repodata", query)
+        .await
+        .into_diagnostic()
+        .context("failed to load repodata")?;
 
     // Surface any non-fatal CEP-42 channel-relation problems.
     for warning in &repo_data.warnings {
@@ -106,9 +114,16 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
         format_elapsed(start_load_repo_data.elapsed())
     );
 
-    let virtual_packages = wrap_in_progress("determining virtual packages", || {
-        opt.solver.virtual_packages()
-    })?;
+    let virtual_packages = detect_virtual_packages(
+        &opt.solver,
+        DetectorContext {
+            gateway: &gateway,
+            config: &config,
+            download_client: &download_client,
+            detectors: repo_data.virtual_package_detectors.take(),
+        },
+    )
+    .await?;
 
     eprintln!(
         "Virtual packages:\n{}\n",
@@ -134,7 +149,7 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
         strategy: opt.solver.strategy(),
         channel_priority: opt.solver.channel_priority(),
         exclude_newer,
-        ..SolverTask::from_iter(&repo_data)
+        ..task_for_repodata(&repo_data)
     };
 
     let start_solve = Instant::now();
@@ -244,18 +259,33 @@ fn print_records(
         let explicit = specs
             .iter()
             .any(|spec| spec.matches(&record.package_record));
-        let name_cell = if explicit {
-            let styled = console::style(&name).green().bold().to_string();
-            Cell::styled(styled, name)
+        let styled = if explicit {
+            console::style(&name).green().bold().to_string()
         } else {
-            Cell::plain(name)
+            name.clone()
         };
+        // The name links to the web page of the package, if its channel has
+        // one. The link wraps the styling so both survive.
+        let package_page = hyperlink::package_page(
+            record.channel.as_deref(),
+            record.package_record.name.as_normalized(),
+        );
+        let name_cell = Cell::styled(hyperlink::maybe_link(package_page, styled), name);
+
+        let channel = format_channel(record, channel_config);
+        let channel_cell = Cell::styled(
+            hyperlink::maybe_link(
+                record.channel.as_deref().and_then(hyperlink::channel_page),
+                console::style(&channel).dim(),
+            ),
+            channel,
+        );
 
         let mut row = vec![
             name_cell,
             Cell::plain(record.package_record.version.to_string()),
-            dim(record.package_record.build.clone()),
-            dim(format_channel(record, channel_config)),
+            dim(record.package_record.build.to_string()),
+            channel_cell,
         ];
         if !constraints.is_empty() {
             row.push(dim(constraints

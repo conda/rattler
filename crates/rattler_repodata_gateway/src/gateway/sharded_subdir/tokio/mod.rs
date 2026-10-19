@@ -24,7 +24,8 @@ use fs_err::tokio as tokio_fs;
 use futures::future::OptionFuture;
 use http::{HeaderValue, header::CACHE_CONTROL};
 use rattler_conda_types::{
-    Channel, ChannelRelations, PackageName, RepodataRevisions, ShardedRepodata,
+    Channel, ChannelRelations, DetectorRegistrationMetadata, PackageName, RepodataRevisions,
+    ShardedRepodata,
 };
 use rattler_networking::LazyClient;
 use simple_spawn_blocking::tokio::run_blocking_task;
@@ -114,7 +115,7 @@ impl ShardedSubdir {
             .map_err(|_e| {
                 GatewayError::Generic(format!(
                     "shard index contains invalid `shards_base_url`: {}",
-                    &sharded_repodata.info.shards_base_url
+                    sharded_repodata.info.shards_base_url
                 ))
             })?;
         let package_base_url = Url::options()
@@ -123,7 +124,7 @@ impl ShardedSubdir {
             .map_err(|_e| {
                 GatewayError::Generic(format!(
                     "shard index contains invalid `base_url`: {}",
-                    &sharded_repodata.info.base_url
+                    sharded_repodata.info.base_url
                 ))
             })?;
 
@@ -320,6 +321,13 @@ impl SubdirClient for ShardedSubdir {
 
     fn channel_relations(&self) -> Option<&ChannelRelations> {
         self.sharded_repodata.info.channel_relations.as_ref()
+    }
+
+    fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
+        self.sharded_repodata
+            .info
+            .virtual_package_detectors
+            .as_ref()
     }
 }
 

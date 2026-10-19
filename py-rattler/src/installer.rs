@@ -214,7 +214,7 @@ impl Reporter for PyReporter {
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
-#[pyo3(signature = (records, target_prefix, execute_link_scripts=None, show_progress=false, platform=None, client=None, cache_dir=None, installed_packages=None, reinstall_packages=None, ignored_packages=None, requested_specs=None, reporter=None, alternative_target_prefix=None, config=None, attestation_policy=None))]
+#[pyo3(signature = (records, target_prefix, execute_link_scripts=None, show_progress=false, platform=None, client=None, cache_dir=None, installed_packages=None, reinstall_packages=None, ignored_packages=None, requested_specs=None, reporter=None, alternative_target_prefix=None, config=None, attestation_policy=None, package_cache=None))]
 pub fn py_install<'a>(
     py: Python<'a>,
     records: Vec<Bound<'a, PyAny>>,
@@ -232,6 +232,7 @@ pub fn py_install<'a>(
     alternative_target_prefix: Option<PathBuf>,
     config: Option<PyConfig>,
     attestation_policy: Option<PyVerificationPolicy>,
+    package_cache: Option<crate::package_cache::PyPackageCache>,
 ) -> PyResult<Bound<'a, PyAny>> {
     let dependencies = records
         .into_iter()
@@ -295,7 +296,9 @@ pub fn py_install<'a>(
             installer.set_download_client(client);
         }
 
-        if let Some(cache_dir) = cache_dir {
+        if let Some(package_cache) = package_cache {
+            installer.set_package_cache(package_cache.into());
+        } else if let Some(cache_dir) = cache_dir {
             installer.set_package_cache(PackageCache::new(cache_dir));
         }
 

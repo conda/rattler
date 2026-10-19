@@ -10,6 +10,7 @@ from rattler.match_spec.match_spec import MatchSpec
 from rattler.platform.subdir import Subdir, SubdirLiteral
 from rattler.rattler import PyMatchSpec, py_solve, py_solve_with_sparse_repodata
 from rattler.repo_data.gateway import ChannelRelationsMode, Gateway, _convert_sources
+from rattler.repo_data.multi_source import MultiSource
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.sparse import PackageFormatSelection, SparseRepoData
 from rattler.virtual_package.generic import GenericVirtualPackage
@@ -27,7 +28,7 @@ TimestampPolicy = Literal["allow-missing", "require-timestamp", "require-indexed
 
 
 async def solve(
-    sources: Sequence[Channel | str | RepoDataSource | SparseRepoData],
+    sources: Sequence[Channel | MultiSource | str | RepoDataSource | SparseRepoData],
     specs: Sequence[MatchSpec | str],
     gateway: Gateway | None = None,
     platforms: Sequence[Subdir | SubdirLiteral] | None = None,
@@ -50,7 +51,8 @@ async def solve(
 
     Arguments:
         sources: The sources to query for the packages. Can be channels (by name, URL,
-                 or Channel object), custom RepoDataSource implementations or SparseRepoData objects.
+                 or Channel object), `MultiSource` groups, custom RepoDataSource implementations or
+                 SparseRepoData objects.
         specs: A list of matchspec to solve.
         platforms: The platforms to query for the packages. If `None` the current platform and
                 `noarch` is used.
@@ -160,7 +162,7 @@ async def solve(
 
 async def solve_with_sparse_repodata(
     specs: Sequence[MatchSpec | str],
-    sparse_repodata: Sequence[SparseRepoData],
+    sparse_repodata: Sequence[SparseRepoData | MultiSource],
     locked_packages: Sequence[RepoDataRecord] | None = None,
     pinned_packages: Sequence[RepoDataRecord] | None = None,
     virtual_packages: Sequence[GenericVirtualPackage | VirtualPackage] | None = None,
@@ -183,7 +185,8 @@ async def solve_with_sparse_repodata(
 
     Arguments:
         specs: A list of matchspec to solve.
-        sparse_repodata: The repodata to query for the packages.
+        sparse_repodata: The repodata to query for the packages. A `MultiSource` of
+            `SparseRepoData` makes its repodata share a single channel priority tier.
         locked_packages: Records of packages that are previously selected.
                  If the solver encounters multiple variants of a single
                  package (identified by its name), it will sort the records
@@ -230,6 +233,22 @@ async def solve_with_sparse_repodata(
     Returns:
         Resolved list of `RepoDataRecord`s.
     """
+    # Flatten the groups, remembering the group of every repodata.
+    flat_repodata: list[SparseRepoData] = []
+    multi_sources: list[str | None] = []
+    for entry in sparse_repodata:
+        if isinstance(entry, MultiSource):
+            for source in entry.sources:
+                if not isinstance(source, SparseRepoData):
+                    raise TypeError(
+                        f"MultiSource '{entry.name}' can only contain SparseRepoData here, got {type(source).__name__}"
+                    )
+                flat_repodata.append(source)
+                multi_sources.append(entry.name)
+        else:
+            flat_repodata.append(entry)
+            multi_sources.append(None)
+
     return [
         RepoDataRecord._from_py_record(solved_package)
         for solved_package in await py_solve_with_sparse_repodata(
@@ -237,7 +256,8 @@ async def solve_with_sparse_repodata(
                 spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True, True)
                 for spec in specs
             ],
-            sparse_repodata=[package._sparse for package in sparse_repodata],
+            sparse_repodata=[package._sparse for package in flat_repodata],
+            multi_sources=multi_sources,
             locked_packages=[package._record for package in locked_packages or []],
             pinned_packages=[package._record for package in pinned_packages or []],
             virtual_packages=[

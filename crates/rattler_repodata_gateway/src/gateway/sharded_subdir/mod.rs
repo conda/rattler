@@ -204,7 +204,8 @@ mod tests {
     use itertools::Itertools;
     use rattler_conda_types::{
         Channel, PackageName, PackageRecord, RepodataRevisions, Shard, ShardedRepodata,
-        ShardedSubdirInfo, Version, package::DistArchiveIdentifier,
+        ShardedSubdirInfo, Version,
+        package::{BuildString, DistArchiveIdentifier},
     };
     use rattler_digest::{Sha256, parse_digest_from_hex};
     use std::future::IntoFuture;
@@ -265,6 +266,7 @@ mod tests {
                     created_at: Some(jiff::Timestamp::now()),
                     repodata_revisions: RepodataRevisions::default(),
                     channel_relations: None,
+                    virtual_package_detectors: None,
                 },
                 shards,
             };
@@ -746,7 +748,7 @@ mod tests {
             PackageRecord::new(
                 PackageName::new_unchecked("foo"),
                 Version::from_str(version).unwrap(),
-                "0".to_string(),
+                "0".parse::<BuildString>().unwrap(),
             )
         };
         let identifier =

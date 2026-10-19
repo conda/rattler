@@ -3,9 +3,8 @@ use futures::TryStreamExt as _;
 use miette::IntoDiagnostic as _;
 use rattler_networking::{
     Authentication, AuthenticationStorage,
-    trusted_publishing::{
-        TrustedPublishResult, TrustedPublishingOptions, check_trusted_publishing,
-    },
+    oidc_exchange::OidcExchangeOptions,
+    trusted_publishing::{TrustedPublishResult, check_trusted_publishing},
 };
 use reqwest::{
     StatusCode,
@@ -254,8 +253,7 @@ pub async fn upload_package_to_prefix(
         None => match check_trusted_publishing(
             &client,
             &prefix_data.url,
-            &TrustedPublishingOptions::for_server(&prefix_data.url)
-                .unwrap_or_else(TrustedPublishingOptions::for_prefix_dev),
+            &OidcExchangeOptions::prefix_dev(&prefix_data.url),
         )
         .await
         {
@@ -292,8 +290,7 @@ pub async fn upload_package_to_prefix(
         None => match check_trusted_publishing(
             &client,
             &prefix_data.url,
-            &TrustedPublishingOptions::for_server(&prefix_data.url)
-                .unwrap_or_else(TrustedPublishingOptions::for_prefix_dev),
+            &OidcExchangeOptions::prefix_dev(&prefix_data.url),
         )
         .await
         {

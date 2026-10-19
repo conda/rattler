@@ -1,6 +1,7 @@
 import pytest
 
 from rattler import (
+    BuildString,
     Channel,
     Gateway,
     GenericVirtualPackage,
@@ -62,9 +63,9 @@ async def test_who_needs_virtual_package(gateway: Gateway, dummy_channel: Channe
 
     # A concrete virtual package matches against the dependency's version
     # constraint.
-    cuda = GenericVirtualPackage(PackageName("__cuda"), Version("12.5"), "0")
+    cuda = GenericVirtualPackage(PackageName("__cuda"), Version("12.5"), BuildString("0"))
     assert summary(await gateway.who_needs([dummy_channel], ["linux-64"], cuda)) == summary(dependents)
-    old_cuda = GenericVirtualPackage(PackageName("__cuda"), Version("11.8"), "0")
+    old_cuda = GenericVirtualPackage(PackageName("__cuda"), Version("11.8"), BuildString("0"))
     assert await gateway.who_needs([dummy_channel], ["linux-64"], old_cuda) == []
 
 
@@ -104,7 +105,7 @@ async def test_who_needs_multi_platform(gateway: Gateway, conda_forge_channel: C
         return (
             record.name.normalized,
             str(record.version),
-            record.build,
+            str(record.build),
             record.subdir,
             dependent.dependency,
             dependent.kind,

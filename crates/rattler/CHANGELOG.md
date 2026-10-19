@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.54.2](https://github.com/conda/rattler/compare/rattler-v0.54.1...rattler-v0.54.2) - 2026-10-16
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming, rattler_cache, rattler_config, rattler_networking, rattler_shell, rattler_menuinst, rattler_sigstore
+
+## [0.54.1](https://github.com/conda/rattler/compare/rattler-v0.54.0...rattler-v0.54.1) - 2026-10-13
+
+### Fixed
+
+- *(install)* preserve code signing identifier/requirements when re-signing on macOS ([#2930](https://github.com/conda/rattler/pull/2930))
+
+### Other
+
+- Add `BuildString` to rattler_conda_types ([#2430](https://github.com/conda/rattler/pull/2430))
+
+## [0.54.0](https://github.com/conda/rattler/compare/rattler-v0.53.1...rattler-v0.54.0) - 2026-10-09
+
+### Added
+
+- *(auth)* expose OAuth audience through the login CLI ([#2921](https://github.com/conda/rattler/pull/2921))
+- *(auth)* [**breaking**] reuse host credentials for explicit API origins ([#2920](https://github.com/conda/rattler/pull/2920))
+
+## [0.53.1](https://github.com/conda/rattler/compare/rattler-v0.53.0...rattler-v0.53.1) - 2026-10-07
+
+### Other
+
+- bump rust to 1.98.1 ([#2906](https://github.com/conda/rattler/pull/2906))
+
+## [0.53.0](https://github.com/conda/rattler/compare/rattler-v0.52.1...rattler-v0.53.0) - 2026-10-06
+
+### Added
+
+- *(auth)* [**breaking**] Add RFC 8693 workload-identity login ([#2897](https://github.com/conda/rattler/pull/2897))
+
+### Other
+
+- Delete clippy overrides ([#2907](https://github.com/conda/rattler/pull/2907))
+
+## [0.52.1](https://github.com/conda/rattler/compare/rattler-v0.52.0...rattler-v0.52.1) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+
+## [0.52.0](https://github.com/conda/rattler/compare/rattler-v0.51.0...rattler-v0.52.0) - 2026-10-05
+
+### Added
+
+- *(auth)* support audiences in existing OAuth flows ([#2880](https://github.com/conda/rattler/pull/2880))
+- Implementation offsets in paths.json ([#2565](https://github.com/conda/rattler/pull/2565))
+
 ## [0.51.0](https://github.com/conda/rattler/compare/rattler-v0.50.0...rattler-v0.51.0) - 2026-09-29
 
 ### Fixed

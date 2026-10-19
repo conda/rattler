@@ -52,9 +52,10 @@ pub fn stream_conda_info<'a>(
     // Find the info entry in the archive
     let file_name = archive
         .file_names()
+        .filter_map(Result::ok)
         .find(|file_name| file_name.starts_with("info-") && file_name.ends_with(".tar.zst"))
         .ok_or(ExtractError::MissingComponent)?
-        .to_owned();
+        .into_owned();
 
     stream_conda_zip_entry(archive, &file_name)
 }
@@ -68,9 +69,10 @@ pub fn stream_conda_content<'a>(
     // Find the content entry in the archive
     let file_name = archive
         .file_names()
+        .filter_map(Result::ok)
         .find(|file_name| file_name.starts_with("pkg-") && file_name.ends_with(".tar.zst"))
         .ok_or(ExtractError::MissingComponent)?
-        .to_owned();
+        .into_owned();
 
     stream_conda_zip_entry(archive, &file_name)
 }

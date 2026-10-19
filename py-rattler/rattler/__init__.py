@@ -23,6 +23,7 @@ from rattler.match_spec import MatchSpec, NamelessMatchSpec
 from rattler.networking import Client, fetch_repo_data
 from rattler.package import (
     AboutJson,
+    BuildString,
     FileMode,
     IndexJson,
     NoArchLiteral,
@@ -34,6 +35,7 @@ from rattler.package import (
     PrefixPlaceholder,
     RunExportsJson,
 )
+from rattler.package_cache import CacheIndex, PackageCache, PackageCacheLayer, ValidationMode
 from rattler.platform import Subdir
 from rattler.prefix import Link, LinkType, PrefixPaths, PrefixPathsEntry, PrefixPathType, PrefixRecord
 from rattler.repo_data import (
@@ -44,6 +46,7 @@ from rattler.repo_data import (
     Gateway,
     GatewayNamesResult,
     GatewayQueryResult,
+    MultiSource,
     PackageFormatSelection,
     PackageRecord,
     PatchInstructions,
@@ -72,13 +75,30 @@ from rattler.sigstore import (
 from rattler.solver import solve, solve_with_sparse_repodata
 from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version
 from rattler.version import Version, VersionSpec, VersionWithSource
-from rattler.virtual_package import GenericVirtualPackage, Override, VirtualPackage, VirtualPackageOverrides
+from rattler.virtual_package import (
+    ConsentRequest,
+    DetectionOutcome,
+    DetectorDiagnostics,
+    DetectorFailure,
+    DetectorRegistration,
+    DetectorRegistrations,
+    DetectorResult,
+    GenericVirtualPackage,
+    Override,
+    RejectedDetectorRegistration,
+    SkippedRegistration,
+    VirtualPackage,
+    VirtualPackageOverrides,
+    detect_virtual_packages,
+)
 
 __version__ = _get_rattler_version()
 del _get_rattler_version
 
 __all__ = [
     "AboutJson",
+    "BuildString",
+    "CacheIndex",
     "CertificateClaims",
     "Channel",
     "ChannelCheck",
@@ -92,7 +112,14 @@ __all__ = [
     "CondaLockedPackage",
     "CondaLockedSourcePackage",
     "Config",
+    "ConsentRequest",
     "Dependent",
+    "DetectionOutcome",
+    "DetectorDiagnostics",
+    "DetectorFailure",
+    "DetectorRegistration",
+    "DetectorRegistrations",
+    "DetectorResult",
     "Environment",
     "FileMode",
     "Gateway",
@@ -109,10 +136,13 @@ __all__ = [
     "LockPlatform",
     "LockedPackage",
     "MatchSpec",
+    "MultiSource",
     "NamelessMatchSpec",
     "NoArchLiteral",
     "NoArchType",
     "Override",
+    "PackageCache",
+    "PackageCacheLayer",
     "PackageFormatSelection",
     "PackageHashes",
     "PackageName",
@@ -129,6 +159,7 @@ __all__ = [
     "PrefixRecord",
     "Publisher",
     "PypiLockedPackage",
+    "RejectedDetectorRegistration",
     "RemovedPackage",
     "RepoData",
     "RepoDataRecord",
@@ -136,11 +167,13 @@ __all__ = [
     "RepodataRevisionMetadata",
     "RunExportsJson",
     "RunPostLinkScripts",
+    "SkippedRegistration",
     "SourceConfig",
     "SparseRepoData",
     "Subdir",
     "TlsRootCerts",
     "TrustedRoot",
+    "ValidationMode",
     "VerificationMode",
     "VerificationOutcome",
     "VerificationPolicy",
@@ -152,6 +185,7 @@ __all__ = [
     "VirtualPackage",
     "VirtualPackageOverrides",
     "WhlPackageRecord",
+    "detect_virtual_packages",
     "fetch_repo_data",
     "index",
     "install",

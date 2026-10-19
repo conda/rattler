@@ -104,6 +104,8 @@ pub enum PyRattlerError {
     FromSdkError(#[from] rattler_s3::FromSDKError),
     #[error(transparent)]
     ConfigLoadError(#[from] rattler_config::config::LoadError),
+    #[error(transparent)]
+    VirtualPackageOverrideError(#[from] rattler_virtual_package_detectors::OverrideError),
 }
 
 fn pretty_print_error(mut err: &dyn Error) -> String {
@@ -231,6 +233,9 @@ impl From<PyRattlerError> for PyErr {
                 crate::exceptions::InvalidHeaderValueError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::FromSdkError(err) => PyValueError::new_err(pretty_print_error(&err)),
+            PyRattlerError::VirtualPackageOverrideError(err) => {
+                crate::exceptions::VirtualPackageOverrideError::new_err(pretty_print_error(&err))
+            }
             PyRattlerError::ConfigLoadError(err) => {
                 crate::exceptions::ConfigError::new_err(pretty_print_error(&err))
             }

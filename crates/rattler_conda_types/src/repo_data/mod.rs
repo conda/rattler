@@ -29,8 +29,8 @@ use crate::{
     ParseMatchSpecError, ParseStrictness, RepoDataRecord, Subdir, VersionWithSource,
     build_spec::BuildNumber,
     package::{
-        ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, IndexJson, RunExportsJson,
-        WheelArchiveType,
+        ArchiveIdentifier, BuildString, CondaArchiveType, DistArchiveIdentifier, IndexJson,
+        RunExportsJson, WheelArchiveType,
     },
     utils::{
         TimestampMs, UrlWithTrailingSlash,
@@ -39,6 +39,7 @@ use crate::{
             sort_set_alphabetically,
         },
     },
+    virtual_package_detector::DetectorRegistrationMetadata,
 };
 
 /// [`RepoData`] is an index of package binaries available on in a subdirectory
@@ -107,6 +108,17 @@ pub struct ChannelInfo {
     /// [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
     #[serde(default, skip_serializing_if = "ChannelRelations::is_none_or_empty")]
     pub channel_relations: Option<ChannelRelations>,
+
+    /// The virtual package detectors the channel registers for this subdir.
+    /// Malformed metadata shapes reject repodata during deserialization.
+    /// Validate detector keys and registration semantics with
+    /// [`SubdirDetectorRegistrations::parse`](crate::virtual_package_detector::SubdirDetectorRegistrations::parse).
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::virtual_package_detector::deserialize_present"
+    )]
+    pub virtual_package_detectors: Option<DetectorRegistrationMetadata>,
 }
 
 /// Repodata revisions keyed by revision, mirroring the `vN` dictionary of the
@@ -561,8 +573,9 @@ pub struct PackageRecord {
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
     pub attestations_sha256: Option<Sha256Hash>,
 
-    /// The build string of the package
-    pub build: String,
+    /// The build string of the package. The field is always serialized and
+    /// required when deserializing, including empty values in existing data.
+    pub build: BuildString,
 
     /// The build number of the package
     pub build_number: BuildNumber,
@@ -777,7 +790,7 @@ impl FromStr for UrlOrPath {
 impl Display for PackageRecord {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.build.is_empty() {
-            write!(f, "{} {}", self.name.as_normalized(), self.version,)
+            write!(f, "{} {}", self.name.as_normalized(), self.version)
         } else {
             write!(
                 f,
@@ -936,7 +949,11 @@ impl AsRef<PackageRecord> for PackageRecord {
 impl PackageRecord {
     /// A simple helper method that constructs a `PackageRecord` with the bare
     /// minimum values.
-    pub fn new(name: PackageName, version: impl Into<VersionWithSource>, build: String) -> Self {
+    pub fn new(
+        name: PackageName,
+        version: impl Into<VersionWithSource>,
+        build: BuildString,
+    ) -> Self {
         Self {
             attestations_sha256: None,
             arch: None,
@@ -1239,8 +1256,11 @@ mod test {
     use crate::{
         Channel, ChannelConfig, ChannelInfo, ChannelRelations, PackageRecord, RepoData,
         RepodataRevision, V3Extensions, V3Packages,
-        package::DistArchiveIdentifier,
+        package::{BuildString, DistArchiveIdentifier},
         repo_data::{compute_package_url, determine_subdir},
+        virtual_package_detector::{
+            ChannelDetectorRegistrations, RegistrationError, SubdirDetectorRegistrations,
+        },
     };
 
     // isl-0.12.2-1.tar.bz2
@@ -1367,6 +1387,7 @@ mod test {
                     base: Some("../conda-forge".to_string()),
                     overrides: None,
                 }),
+                virtual_package_detectors: None,
             }),
             packages: IndexMap::default(),
             conda_packages: IndexMap::default(),
@@ -1389,6 +1410,7 @@ mod test {
                     base_url: None,
                     repodata_revisions: IndexMap::default(),
                     channel_relations,
+                    virtual_package_detectors: None,
                 }),
                 packages: IndexMap::default(),
                 conda_packages: IndexMap::default(),
@@ -1398,6 +1420,109 @@ mod test {
             let json = serde_json::to_string(&repodata).unwrap();
             assert!(!json.contains("channel_relations"));
         }
+    }
+
+    #[test]
+    fn test_virtual_package_detectors_round_trip() {
+        let raw = r#"{
+            "info": {
+                "subdir": "linux-64",
+                "virtual_package_detectors": {
+                    "mpi-detect": ["__conda_forge_openmpi", "__conda_forge_mpich"]
+                }
+            },
+            "packages": {},
+            "packages.conda": {}
+        }"#;
+        let repodata: RepoData = serde_json::from_str(raw).unwrap();
+        let detectors = repodata
+            .info
+            .as_ref()
+            .and_then(|info| info.virtual_package_detectors.as_ref())
+            .unwrap();
+        assert_eq!(
+            detectors["mpi-detect"],
+            ["__conda_forge_openmpi", "__conda_forge_mpich"]
+        );
+
+        let json = serde_json::to_string(&repodata).unwrap();
+        assert_eq!(serde_json::from_str::<RepoData>(&json).unwrap(), repodata);
+
+        let without = RepoData {
+            info: Some(ChannelInfo {
+                subdir: Some("linux-64".to_string()),
+                base_url: None,
+                repodata_revisions: IndexMap::default(),
+                channel_relations: None,
+                virtual_package_detectors: None,
+            }),
+            ..repodata
+        };
+        let json = serde_json::to_string(&without).unwrap();
+        assert!(!json.contains("virtual_package_detectors"));
+    }
+
+    #[test]
+    fn virtual_package_detector_metadata_rejects_malformed_shapes() {
+        for metadata in [
+            "null",
+            "true",
+            "42",
+            "\"mpi-detect\"",
+            "[]",
+            "[[\"mpi-detect\", [\"__cuda\"]]]",
+            r#"{"mpi-detect": null}"#,
+            r#"{"mpi-detect": "__cuda"}"#,
+            r#"{"mpi-detect": {"__cuda": true}}"#,
+            r#"{"mpi-detect": ["__cuda", 5]}"#,
+        ] {
+            let raw = format!(r#"{{"info": {{"virtual_package_detectors": {metadata}}}}}"#);
+            assert!(
+                serde_json::from_str::<RepoData>(&raw).is_err(),
+                "{metadata}"
+            );
+        }
+    }
+
+    #[test]
+    fn virtual_package_detector_metadata_preserves_semantic_validation() {
+        for metadata in [None, Some("{}")] {
+            let raw = metadata.map_or_else(
+                || r#"{"info": {}}"#.to_string(),
+                |metadata| format!(r#"{{"info": {{"virtual_package_detectors": {metadata}}}}}"#),
+            );
+            let repodata: RepoData = serde_json::from_str(&raw).unwrap();
+            let parsed = SubdirDetectorRegistrations::parse(
+                repodata
+                    .info
+                    .as_ref()
+                    .unwrap()
+                    .virtual_package_detectors
+                    .as_ref(),
+            )
+            .unwrap();
+            assert!(
+                ChannelDetectorRegistrations::combine([&parsed])
+                    .unwrap()
+                    .is_empty()
+            );
+        }
+
+        let repodata: RepoData = serde_json::from_str(
+            r#"{"info":{"virtual_package_detectors":{"mpi detect":["__cuda"]}}}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            SubdirDetectorRegistrations::parse(
+                repodata
+                    .info
+                    .as_ref()
+                    .unwrap()
+                    .virtual_package_detectors
+                    .as_ref()
+            ),
+            Err(RegistrationError::InvalidDetectorName { .. })
+        ));
     }
 
     #[test]
@@ -1677,7 +1802,7 @@ mod test {
         let mut record = PackageRecord::new(
             crate::PackageName::new_unchecked("demo"),
             crate::Version::major(1),
-            "0".into(),
+            "0".parse::<BuildString>().unwrap(),
         );
         assert!(
             serde_json::to_value(&record)
@@ -1891,7 +2016,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("zebra"),
                 Version::major(1),
-                "h123".to_string(),
+                "h123".parse::<BuildString>().unwrap(),
             ),
         );
         packages.insert(
@@ -1899,7 +2024,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("apple"),
                 Version::major(2),
-                "h456".to_string(),
+                "h456".parse::<BuildString>().unwrap(),
             ),
         );
         packages.insert(
@@ -1907,7 +2032,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("mango"),
                 Version::major(1),
-                "h789".to_string(),
+                "h789".parse::<BuildString>().unwrap(),
             ),
         );
         packages.insert(
@@ -1915,7 +2040,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("banana"),
                 Version::major(3),
-                "habc".to_string(),
+                "habc".parse::<BuildString>().unwrap(),
             ),
         );
 
@@ -1925,7 +2050,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("xray"),
                 Version::major(1),
-                "h111".to_string(),
+                "h111".parse::<BuildString>().unwrap(),
             ),
         );
         conda_packages.insert(
@@ -1933,7 +2058,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("alpha"),
                 Version::major(2),
-                "h222".to_string(),
+                "h222".parse::<BuildString>().unwrap(),
             ),
         );
         conda_packages.insert(
@@ -1941,7 +2066,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("omega"),
                 Version::major(3),
-                "h333".to_string(),
+                "h333".parse::<BuildString>().unwrap(),
             ),
         );
 
@@ -1997,7 +2122,7 @@ mod test {
             let mut r = PackageRecord::new(
                 PackageName::new_unchecked(name),
                 version.parse::<Version>().unwrap(),
-                format!("{build}_{build_number}"),
+                BuildString::new_unchecked(format!("{build}_{build_number}")),
             );
             r.build_number = build_number;
             r.subdir = subdir.to_string();
@@ -2039,13 +2164,12 @@ mod test {
         let formatted: Vec<String> = records
             .iter()
             .map(|r| {
-                format!(
-                    "{}/{}-{}-{}",
-                    r.subdir,
-                    r.name.as_normalized(),
-                    r.version,
-                    r.build
-                )
+                let name = r.name.as_normalized();
+                if r.build.is_empty() {
+                    format!("{}/{name}-{}", r.subdir, r.version)
+                } else {
+                    format!("{}/{name}-{}-{}", r.subdir, r.version, r.build)
+                }
             })
             .collect();
         insta::assert_snapshot!(formatted.join("\n"));
@@ -2060,7 +2184,7 @@ mod test {
                 let mut r = PackageRecord::new(
                     PackageName::new_unchecked("polars"),
                     version.parse::<Version>().unwrap(),
-                    format!("{build}_{build_number}"),
+                    BuildString::new_unchecked(format!("{build}_{build_number}")),
                 );
                 r.build_number = build_number;
                 r.subdir = "linux-64".to_string();

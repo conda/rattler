@@ -2,7 +2,7 @@
 
 # Check changed public crates for API breaking changes.
 #
-# Local usage (requires cargo-semver-checks 0.48 in PATH):
+# Local usage (requires cargo-semver-checks 0.50 in PATH):
 #   nu scripts/check-breaking-changes.nu --base-ref main
 #   nu scripts/check-breaking-changes.nu render breaking-changes.log
 #
@@ -11,9 +11,7 @@
 # `breaking-changes.md`.
 
 const repo_root = path self ..
-# cargo-semver-checks only checks library targets: a crate whose only target is a
-# proc-macro fails with "no crates with library targets selected", so proc-macro
-# crates are not selected.
+# cargo-semver-checks cannot check proc-macro crates.
 const public_target_kinds = ["lib", "rlib", "dylib", "cdylib", "staticlib"]
 # cargo-semver-checks builds each side through an isolated placeholder project and
 # runs `cargo update`, so the workspace lockfile is not an input to its API comparison.

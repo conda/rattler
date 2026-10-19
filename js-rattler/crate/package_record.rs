@@ -69,12 +69,25 @@ impl JsPackageRecord {
         let serializer = serde_wasm_bindgen::Serializer::json_compatible();
         Ok(self.inner.serialize(&serializer)?.into())
     }
+
+    /// Compares this record with another record, e.g. to sort records.
+    ///
+    /// Records are ordered by name, then records with track features before
+    /// records without, then by version, build number and timestamp. Returns `-1` if this record should be ordered before
+    /// `other`, `0` if they are ordered the same and `1` if this record
+    /// should be ordered after `other`.
+    pub fn compare(
+        &self,
+        #[wasm_bindgen(param_description = "The record to compare with")] other: &Self,
+    ) -> i8 {
+        crate::utils::ordering_to_i8(self.inner.cmp(&other.inner))
+    }
 }
 
 macro_rules! impl_package_record {
     ($name:ident, $js_class:literal) => {
         #[wasm_bindgen::prelude::wasm_bindgen(js_class = $js_class)]
-        impl JsPackageRecord {
+        impl $name {
             /// Optionally the architecture the package supports. This is almost
             /// always the second part of the `subdir` field. Except for `64` which
             /// maps to `x86_64` and `32` which maps to `x86`. This will be undefined if
@@ -100,12 +113,20 @@ macro_rules! impl_package_record {
             /// The build string of the package.
             #[wasm_bindgen::prelude::wasm_bindgen(getter)]
             pub fn build(&self) -> String {
-                AsRef::<PackageRecord>::as_ref(self).build.clone()
+                AsRef::<PackageRecord>::as_ref(self).build.to_string()
             }
 
+            /// Validates the build string against CEP26 before assignment.
             #[wasm_bindgen::prelude::wasm_bindgen(setter)]
-            pub fn set_build(&mut self, build: String) {
-                AsMut::<PackageRecord>::as_mut(self).build = build;
+            pub fn set_build(&mut self, build: String) -> crate::JsResult<()> {
+                AsMut::<PackageRecord>::as_mut(self).build = build.parse()?;
+                Ok(())
+            }
+
+            /// Assigns an existing build string without revalidating or consuming it.
+            #[wasm_bindgen::prelude::wasm_bindgen(js_name = "setBuildString")]
+            pub fn set_build_string(&mut self, build: &crate::build_string::JsBuildString) {
+                AsMut::<PackageRecord>::as_mut(self).build = build.inner.clone();
             }
 
             /// The build number of the package.
@@ -552,5 +573,7 @@ macro_rules! impl_package_record {
         }
     };
 }
+
+pub(crate) use impl_package_record;
 
 impl_package_record!(JsPackageRecord, "PackageRecord");
