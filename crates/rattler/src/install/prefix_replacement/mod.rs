@@ -24,9 +24,11 @@ mod text;
 
 pub use binary::{
     copy_and_replace_cstring_placeholder, copy_and_replace_cstring_placeholder_offsets,
+    find_cstring_occurrences,
 };
 pub use text::{
     copy_and_replace_textual_placeholder, copy_and_replace_textual_placeholder_offsets,
+    find_text_occurrences, replace_shebang_region,
 };
 
 /// Given the contents of a file copy it to the `destination` and in the process replace the
@@ -282,6 +284,29 @@ fn encoded_prefix_for(
         .iter()
         .find(|prefix| prefix.encoding == encoding)
         .ok_or(InconsistentOffsetsError::EmptyPlaceholder)
+}
+
+/// A placeholder occurrence in a text file that search-based replacement replaces, see
+/// [`find_text_occurrences`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TextOccurrence {
+    /// Absolute byte position of the occurrence.
+    pub offset: usize,
+    /// The encoding the placeholder occurs in at `offset`.
+    pub encoding: OffsetEncoding,
+}
+
+/// A c-string of a binary file that search-based replacement patches, see
+/// [`find_cstring_occurrences`].
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CStringOccurrences {
+    /// Absolute byte positions of the placeholder occurrences inside the c-string, never empty.
+    pub offsets: Vec<usize>,
+    /// Absolute position of the first byte of the NUL terminator, or the file size when the
+    /// c-string is unterminated at end-of-file.
+    pub nul_pos: usize,
+    /// The encoding of the c-string and its placeholder occurrences.
+    pub encoding: OffsetEncoding,
 }
 
 /// One placeholder occurrence in a text file.

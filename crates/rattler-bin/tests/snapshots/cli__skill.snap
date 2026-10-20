@@ -106,6 +106,7 @@ The examples below are the same ones `rattler <command> --help` prints.
 | `rattler link` | Link an extracted package into a prefix |
 | `rattler inject-into-prefix` | Add one or more conda package archives to a prefix without solving |
 | `rattler remove-from-prefix` | Remove one or more installed conda packages from a prefix without solving |
+| `rattler mount` | Mount a lockfile as a virtual conda environment |
 | `rattler upload` | Upload options |
 | `rattler upload quetz` | Upload to a Quetz server. Authentication is used from the keychain / auth-file |
 | `rattler upload artifactory` | Options for uploading to an Artifactory channel |
