@@ -29,7 +29,7 @@
 <a href=#27 id=27 data-nosnippet>27</a>        CacheAction, FetchRepoDataError, RepoDataNotFoundError, Variant,
 <a href=#28 id=28 data-nosnippet>28</a>        cache::{CacheHeaders, Expiring, RepoDataState},
 <a href=#29 id=29 data-nosnippet>29</a>    },
-<a href=#30 id=30 data-nosnippet>30</a>    reporter::{DownloadReporter, ResponseReporterExt},
+<a href=#30 id=30 data-nosnippet>30</a>    reporter::{DownloadProgressGuard, DownloadReporter, ResponseReporterExt},
 <a href=#31 id=31 data-nosnippet>31</a>    utils::{AsyncEncoding, Encoding, LockedFile},
 <a href=#32 id=32 data-nosnippet>32</a>};
 <a href=#33 id=33 data-nosnippet>33</a>
@@ -349,99 +349,99 @@
 <a href=#347 id=347 data-nosnippet>347</a>            cache_headers.add_to_request(<span class="kw-2">&amp;mut </span>headers);
 <a href=#348 id=348 data-nosnippet>348</a>        }
 <a href=#349 id=349 data-nosnippet>349</a>        <span class="comment">// Send the request and wait for a reply
-<a href=#350 id=350 data-nosnippet>350</a>        </span><span class="kw">let </span>download_reporter = reporter
-<a href=#351 id=351 data-nosnippet>351</a>            .as_deref()
-<a href=#352 id=352 data-nosnippet>352</a>            .and_then(|reporter| reporter.download_reporter())
-<a href=#353 id=353 data-nosnippet>353</a>            .map(|r| (r, r.on_download_start(<span class="kw-2">&amp;</span>repo_data_url)));
-<a href=#354 id=354 data-nosnippet>354</a>
-<a href=#355 id=355 data-nosnippet>355</a>        <span class="kw">let </span>(client, request) = request_builder.headers(headers).build_split();
-<a href=#356 id=356 data-nosnippet>356</a>        <span class="kw">let </span>request = request.expect(<span class="string">"must have a valid request at this point"</span>);
-<a href=#357 id=357 data-nosnippet>357</a>        <span class="kw">let </span><span class="kw-2">mut </span>retry_count = <span class="number">0</span>;
-<a href=#358 id=358 data-nosnippet>358</a>        <span class="kw">loop </span>{
-<a href=#359 id=359 data-nosnippet>359</a>            <span class="kw">let </span>request_start_time = SystemTime::now();
-<a href=#360 id=360 data-nosnippet>360</a>            <span class="kw">let </span>response = <span class="kw">match </span>client.execute(request.try_clone().unwrap()).<span class="kw">await </span>{
-<a href=#361 id=361 data-nosnippet>361</a>                <span class="prelude-val">Ok</span>(response) <span class="kw">if </span>response.status() == StatusCode::NOT_FOUND =&gt; {
-<a href=#362 id=362 data-nosnippet>362</a>                    <span class="kw">let </span>unavailable = <span class="prelude-val">Some</span>(Expiring {
-<a href=#363 id=363 data-nosnippet>363</a>                        value: <span class="bool-val">false</span>,
-<a href=#364 id=364 data-nosnippet>364</a>                        last_checked: jiff::Timestamp::now(),
-<a href=#365 id=365 data-nosnippet>365</a>                    });
-<a href=#366 id=366 data-nosnippet>366</a>                    <span class="kw">match </span>content_encoding {
-<a href=#367 id=367 data-nosnippet>367</a>                        Encoding::Zst =&gt; variant_availability.has_zst = unavailable,
-<a href=#368 id=368 data-nosnippet>368</a>                        Encoding::Bz2 =&gt; variant_availability.has_bz2 = unavailable,
-<a href=#369 id=369 data-nosnippet>369</a>                        <span class="kw">_ </span>=&gt; {}
-<a href=#370 id=370 data-nosnippet>370</a>                    }
-<a href=#371 id=371 data-nosnippet>371</a>                    last_not_found = <span class="prelude-val">Some</span>(RepoDataNotFoundError::from(
-<a href=#372 id=372 data-nosnippet>372</a>                        response.error_for_status().unwrap_err(),
-<a href=#373 id=373 data-nosnippet>373</a>                    ));
-<a href=#374 id=374 data-nosnippet>374</a>                    <span class="kw">continue </span><span class="lifetime">'candidates</span>;
-<a href=#375 id=375 data-nosnippet>375</a>                }
-<a href=#376 id=376 data-nosnippet>376</a>                <span class="prelude-val">Ok</span>(response) =&gt; response.error_for_status()<span class="question-mark">?</span>,
-<a href=#377 id=377 data-nosnippet>377</a>                <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#378 id=378 data-nosnippet>378</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(FetchRepoDataError::from(e));
-<a href=#379 id=379 data-nosnippet>379</a>                }
-<a href=#380 id=380 data-nosnippet>380</a>            };
-<a href=#381 id=381 data-nosnippet>381</a>
-<a href=#382 id=382 data-nosnippet>382</a>            <span class="comment">// If the content didn't change, simply return whatever we have on disk.
-<a href=#383 id=383 data-nosnippet>383</a>            </span><span class="kw">if </span>response.status() == StatusCode::NOT_MODIFIED {
-<a href=#384 id=384 data-nosnippet>384</a>                <span class="macro">tracing::debug!</span>(<span class="string">"repodata was unmodified"</span>);
-<a href=#385 id=385 data-nosnippet>385</a>
-<a href=#386 id=386 data-nosnippet>386</a>                <span class="comment">// Update the cache on disk with any new findings.
-<a href=#387 id=387 data-nosnippet>387</a>                </span><span class="kw">let </span>cache_state = RepoDataState {
-<a href=#388 id=388 data-nosnippet>388</a>                    url: repo_data_url,
-<a href=#389 id=389 data-nosnippet>389</a>                    has_zst: variant_availability.has_zst,
-<a href=#390 id=390 data-nosnippet>390</a>                    has_bz2: variant_availability.has_bz2,
-<a href=#391 id=391 data-nosnippet>391</a>                    ..cache_state.expect(<span class="string">"we must have had a cache, otherwise we wouldn't know the previous state of the cache"</span>)
-<a href=#392 id=392 data-nosnippet>392</a>                };
-<a href=#393 id=393 data-nosnippet>393</a>
-<a href=#394 id=394 data-nosnippet>394</a>                <span class="kw">let </span>cache_state = tokio::task::spawn_blocking(<span class="kw">move </span>|| {
-<a href=#395 id=395 data-nosnippet>395</a>                    cache_state
-<a href=#396 id=396 data-nosnippet>396</a>                        .to_path(<span class="kw-2">&amp;</span>cache_state_path)
-<a href=#397 id=397 data-nosnippet>397</a>                        .map(|<span class="kw">_</span>| cache_state)
-<a href=#398 id=398 data-nosnippet>398</a>                        .map_err(FetchRepoDataError::FailedToWriteCacheState)
-<a href=#399 id=399 data-nosnippet>399</a>                })
-<a href=#400 id=400 data-nosnippet>400</a>                .<span class="kw">await</span><span class="question-mark">??</span>;
-<a href=#401 id=401 data-nosnippet>401</a>
-<a href=#402 id=402 data-nosnippet>402</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(CachedRepoData {
-<a href=#403 id=403 data-nosnippet>403</a>                    lock_file,
-<a href=#404 id=404 data-nosnippet>404</a>                    repo_data_json_path,
-<a href=#405 id=405 data-nosnippet>405</a>                    cache_state,
-<a href=#406 id=406 data-nosnippet>406</a>                    cache_result: CacheResult::CacheHitAfterFetch,
-<a href=#407 id=407 data-nosnippet>407</a>                });
-<a href=#408 id=408 data-nosnippet>408</a>            }
-<a href=#409 id=409 data-nosnippet>409</a>
-<a href=#410 id=410 data-nosnippet>410</a>            <span class="comment">// Fail if the status code is not a success
-<a href=#411 id=411 data-nosnippet>411</a>            </span><span class="kw">if </span>!response.status().is_success() {
-<a href=#412 id=412 data-nosnippet>412</a>                <span class="kw">let </span>status = response.status();
-<a href=#413 id=413 data-nosnippet>413</a>                <span class="kw">let </span>body = response.text().<span class="kw">await</span>.ok();
-<a href=#414 id=414 data-nosnippet>414</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(FetchRepoDataError::HttpError(
-<a href=#415 id=415 data-nosnippet>415</a>                    reqwest_middleware::Error::Middleware(<span class="macro">anyhow::format_err!</span>(
-<a href=#416 id=416 data-nosnippet>416</a>                        <span class="string">"received unexpected status code ({}) when fetching {}.\n\nBody:\n{}"</span>,
-<a href=#417 id=417 data-nosnippet>417</a>                        status,
-<a href=#418 id=418 data-nosnippet>418</a>                        repo_data_url.redact(),
-<a href=#419 id=419 data-nosnippet>419</a>                        body.as_deref().unwrap_or(<span class="string">"&lt;failed to get body&gt;"</span>),
-<a href=#420 id=420 data-nosnippet>420</a>                    )),
-<a href=#421 id=421 data-nosnippet>421</a>                ));
-<a href=#422 id=422 data-nosnippet>422</a>            }
-<a href=#423 id=423 data-nosnippet>423</a>
-<a href=#424 id=424 data-nosnippet>424</a>            <span class="comment">// Get cache headers from the response
-<a href=#425 id=425 data-nosnippet>425</a>            </span><span class="kw">let </span>cache_headers = CacheHeaders::from(<span class="kw-2">&amp;</span>response);
-<a href=#426 id=426 data-nosnippet>426</a>
-<a href=#427 id=427 data-nosnippet>427</a>            <span class="comment">// Stream the content to a temporary file
-<a href=#428 id=428 data-nosnippet>428</a>            </span><span class="kw">let </span>response_url = response.url().clone();
-<a href=#429 id=429 data-nosnippet>429</a>            <span class="kw">let </span>stream_result = stream_and_decode_to_file(
-<a href=#430 id=430 data-nosnippet>430</a>                repo_data_url.clone(),
-<a href=#431 id=431 data-nosnippet>431</a>                response,
-<a href=#432 id=432 data-nosnippet>432</a>                content_encoding,
-<a href=#433 id=433 data-nosnippet>433</a>                <span class="kw-2">&amp;</span>cache_path,
-<a href=#434 id=434 data-nosnippet>434</a>                download_reporter,
-<a href=#435 id=435 data-nosnippet>435</a>            )
-<a href=#436 id=436 data-nosnippet>436</a>            .<span class="kw">await</span>;
-<a href=#437 id=437 data-nosnippet>437</a>
-<a href=#438 id=438 data-nosnippet>438</a>            <span class="kw">match </span>stream_result {
-<a href=#439 id=439 data-nosnippet>439</a>                <span class="prelude-val">Ok</span>((file, hash)) =&gt; {
-<a href=#440 id=440 data-nosnippet>440</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>((reporter, index)) = download_reporter {
-<a href=#441 id=441 data-nosnippet>441</a>                        reporter.on_download_complete(<span class="kw-2">&amp;</span>response_url, index);
-<a href=#442 id=442 data-nosnippet>442</a>                    }
+<a href=#350 id=350 data-nosnippet>350</a>        </span><span class="kw">let </span>download = DownloadProgressGuard::start(
+<a href=#351 id=351 data-nosnippet>351</a>            reporter
+<a href=#352 id=352 data-nosnippet>352</a>                .as_deref()
+<a href=#353 id=353 data-nosnippet>353</a>                .and_then(|reporter| reporter.download_reporter()),
+<a href=#354 id=354 data-nosnippet>354</a>            <span class="kw-2">&amp;</span>repo_data_url,
+<a href=#355 id=355 data-nosnippet>355</a>        );
+<a href=#356 id=356 data-nosnippet>356</a>
+<a href=#357 id=357 data-nosnippet>357</a>        <span class="kw">let </span>(client, request) = request_builder.headers(headers).build_split();
+<a href=#358 id=358 data-nosnippet>358</a>        <span class="kw">let </span>request = request.expect(<span class="string">"must have a valid request at this point"</span>);
+<a href=#359 id=359 data-nosnippet>359</a>        <span class="kw">let </span><span class="kw-2">mut </span>retry_count = <span class="number">0</span>;
+<a href=#360 id=360 data-nosnippet>360</a>        <span class="kw">loop </span>{
+<a href=#361 id=361 data-nosnippet>361</a>            <span class="kw">let </span>request_start_time = SystemTime::now();
+<a href=#362 id=362 data-nosnippet>362</a>            <span class="kw">let </span>response = <span class="kw">match </span>client.execute(request.try_clone().unwrap()).<span class="kw">await </span>{
+<a href=#363 id=363 data-nosnippet>363</a>                <span class="prelude-val">Ok</span>(response) <span class="kw">if </span>response.status() == StatusCode::NOT_FOUND =&gt; {
+<a href=#364 id=364 data-nosnippet>364</a>                    <span class="kw">let </span>unavailable = <span class="prelude-val">Some</span>(Expiring {
+<a href=#365 id=365 data-nosnippet>365</a>                        value: <span class="bool-val">false</span>,
+<a href=#366 id=366 data-nosnippet>366</a>                        last_checked: jiff::Timestamp::now(),
+<a href=#367 id=367 data-nosnippet>367</a>                    });
+<a href=#368 id=368 data-nosnippet>368</a>                    <span class="kw">match </span>content_encoding {
+<a href=#369 id=369 data-nosnippet>369</a>                        Encoding::Zst =&gt; variant_availability.has_zst = unavailable,
+<a href=#370 id=370 data-nosnippet>370</a>                        Encoding::Bz2 =&gt; variant_availability.has_bz2 = unavailable,
+<a href=#371 id=371 data-nosnippet>371</a>                        <span class="kw">_ </span>=&gt; {}
+<a href=#372 id=372 data-nosnippet>372</a>                    }
+<a href=#373 id=373 data-nosnippet>373</a>                    last_not_found = <span class="prelude-val">Some</span>(RepoDataNotFoundError::from(
+<a href=#374 id=374 data-nosnippet>374</a>                        response.error_for_status().unwrap_err(),
+<a href=#375 id=375 data-nosnippet>375</a>                    ));
+<a href=#376 id=376 data-nosnippet>376</a>                    <span class="kw">continue </span><span class="lifetime">'candidates</span>;
+<a href=#377 id=377 data-nosnippet>377</a>                }
+<a href=#378 id=378 data-nosnippet>378</a>                <span class="prelude-val">Ok</span>(response) =&gt; response.error_for_status()<span class="question-mark">?</span>,
+<a href=#379 id=379 data-nosnippet>379</a>                <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#380 id=380 data-nosnippet>380</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(FetchRepoDataError::from(e));
+<a href=#381 id=381 data-nosnippet>381</a>                }
+<a href=#382 id=382 data-nosnippet>382</a>            };
+<a href=#383 id=383 data-nosnippet>383</a>
+<a href=#384 id=384 data-nosnippet>384</a>            <span class="comment">// If the content didn't change, simply return whatever we have on disk.
+<a href=#385 id=385 data-nosnippet>385</a>            </span><span class="kw">if </span>response.status() == StatusCode::NOT_MODIFIED {
+<a href=#386 id=386 data-nosnippet>386</a>                <span class="macro">tracing::debug!</span>(<span class="string">"repodata was unmodified"</span>);
+<a href=#387 id=387 data-nosnippet>387</a>
+<a href=#388 id=388 data-nosnippet>388</a>                <span class="comment">// Update the cache on disk with any new findings.
+<a href=#389 id=389 data-nosnippet>389</a>                </span><span class="kw">let </span>cache_state = RepoDataState {
+<a href=#390 id=390 data-nosnippet>390</a>                    url: repo_data_url,
+<a href=#391 id=391 data-nosnippet>391</a>                    has_zst: variant_availability.has_zst,
+<a href=#392 id=392 data-nosnippet>392</a>                    has_bz2: variant_availability.has_bz2,
+<a href=#393 id=393 data-nosnippet>393</a>                    ..cache_state.expect(<span class="string">"we must have had a cache, otherwise we wouldn't know the previous state of the cache"</span>)
+<a href=#394 id=394 data-nosnippet>394</a>                };
+<a href=#395 id=395 data-nosnippet>395</a>
+<a href=#396 id=396 data-nosnippet>396</a>                <span class="kw">let </span>cache_state = tokio::task::spawn_blocking(<span class="kw">move </span>|| {
+<a href=#397 id=397 data-nosnippet>397</a>                    cache_state
+<a href=#398 id=398 data-nosnippet>398</a>                        .to_path(<span class="kw-2">&amp;</span>cache_state_path)
+<a href=#399 id=399 data-nosnippet>399</a>                        .map(|<span class="kw">_</span>| cache_state)
+<a href=#400 id=400 data-nosnippet>400</a>                        .map_err(FetchRepoDataError::FailedToWriteCacheState)
+<a href=#401 id=401 data-nosnippet>401</a>                })
+<a href=#402 id=402 data-nosnippet>402</a>                .<span class="kw">await</span><span class="question-mark">??</span>;
+<a href=#403 id=403 data-nosnippet>403</a>
+<a href=#404 id=404 data-nosnippet>404</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(CachedRepoData {
+<a href=#405 id=405 data-nosnippet>405</a>                    lock_file,
+<a href=#406 id=406 data-nosnippet>406</a>                    repo_data_json_path,
+<a href=#407 id=407 data-nosnippet>407</a>                    cache_state,
+<a href=#408 id=408 data-nosnippet>408</a>                    cache_result: CacheResult::CacheHitAfterFetch,
+<a href=#409 id=409 data-nosnippet>409</a>                });
+<a href=#410 id=410 data-nosnippet>410</a>            }
+<a href=#411 id=411 data-nosnippet>411</a>
+<a href=#412 id=412 data-nosnippet>412</a>            <span class="comment">// Fail if the status code is not a success
+<a href=#413 id=413 data-nosnippet>413</a>            </span><span class="kw">if </span>!response.status().is_success() {
+<a href=#414 id=414 data-nosnippet>414</a>                <span class="kw">let </span>status = response.status();
+<a href=#415 id=415 data-nosnippet>415</a>                <span class="kw">let </span>body = response.text().<span class="kw">await</span>.ok();
+<a href=#416 id=416 data-nosnippet>416</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(FetchRepoDataError::HttpError(
+<a href=#417 id=417 data-nosnippet>417</a>                    reqwest_middleware::Error::Middleware(<span class="macro">anyhow::format_err!</span>(
+<a href=#418 id=418 data-nosnippet>418</a>                        <span class="string">"received unexpected status code ({}) when fetching {}.\n\nBody:\n{}"</span>,
+<a href=#419 id=419 data-nosnippet>419</a>                        status,
+<a href=#420 id=420 data-nosnippet>420</a>                        repo_data_url.redact(),
+<a href=#421 id=421 data-nosnippet>421</a>                        body.as_deref().unwrap_or(<span class="string">"&lt;failed to get body&gt;"</span>),
+<a href=#422 id=422 data-nosnippet>422</a>                    )),
+<a href=#423 id=423 data-nosnippet>423</a>                ));
+<a href=#424 id=424 data-nosnippet>424</a>            }
+<a href=#425 id=425 data-nosnippet>425</a>
+<a href=#426 id=426 data-nosnippet>426</a>            <span class="comment">// Get cache headers from the response
+<a href=#427 id=427 data-nosnippet>427</a>            </span><span class="kw">let </span>cache_headers = CacheHeaders::from(<span class="kw-2">&amp;</span>response);
+<a href=#428 id=428 data-nosnippet>428</a>
+<a href=#429 id=429 data-nosnippet>429</a>            <span class="comment">// Stream the content to a temporary file
+<a href=#430 id=430 data-nosnippet>430</a>            </span><span class="kw">let </span>response_url = response.url().clone();
+<a href=#431 id=431 data-nosnippet>431</a>            <span class="kw">let </span>stream_result = stream_and_decode_to_file(
+<a href=#432 id=432 data-nosnippet>432</a>                repo_data_url.clone(),
+<a href=#433 id=433 data-nosnippet>433</a>                response,
+<a href=#434 id=434 data-nosnippet>434</a>                content_encoding,
+<a href=#435 id=435 data-nosnippet>435</a>                <span class="kw-2">&amp;</span>cache_path,
+<a href=#436 id=436 data-nosnippet>436</a>                download.reporter(),
+<a href=#437 id=437 data-nosnippet>437</a>            )
+<a href=#438 id=438 data-nosnippet>438</a>            .<span class="kw">await</span>;
+<a href=#439 id=439 data-nosnippet>439</a>
+<a href=#440 id=440 data-nosnippet>440</a>            <span class="kw">match </span>stream_result {
+<a href=#441 id=441 data-nosnippet>441</a>                <span class="prelude-val">Ok</span>((file, hash)) =&gt; {
+<a href=#442 id=442 data-nosnippet>442</a>                    download.finish(<span class="kw-2">&amp;</span>response_url);
 <a href=#443 id=443 data-nosnippet>443</a>                    <span class="kw">break </span><span class="lifetime">'candidates </span>(repo_data_url, file, hash, cache_headers);
 <a href=#444 id=444 data-nosnippet>444</a>                }
 <a href=#445 id=445 data-nosnippet>445</a>                <span class="prelude-val">Err</span>(FetchRepoDataError::FailedToDownload(url, err)) =&gt; {
