@@ -5,6 +5,8 @@
 
 #[cfg(target_family = "unix")]
 use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use std::{
     collections::HashMap,
     ffi::OsStr,
@@ -17,11 +19,15 @@ use anyhow::{Context, Result};
 use fs_err as fs;
 use indexmap::IndexMap;
 use itertools::Itertools;
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 #[cfg(target_family = "unix")]
 use rattler_pty::unix::PtySession;
 
-use crate::shell::{Shell, ShellError, ShellScript};
+use crate::{
+    environment::EnvironmentSnapshot,
+    process::{ProcessError, ProcessLimits, run_bounded},
+    shell::{Shell, ShellError, ShellScript},
+};
 
 const ENV_START_SEPARATOR: &str = "____RATTLER_ENV_START____";
 
@@ -103,7 +109,7 @@ pub struct Activator<T: Shell + 'static> {
     pub post_activation_env_vars: IndexMap<String, String>,
 
     /// The platform for which to generate the Activator
-    pub platform: Platform,
+    pub platform: Subdir,
 }
 
 /// Collect all script files that match a certain shell type from a given path.
@@ -192,6 +198,28 @@ pub enum ActivationError {
         /// The error code of running the script
         status: ExitStatus,
     },
+}
+
+/// Failure while executing activation within explicit process bounds.
+#[derive(Debug, thiserror::Error)]
+pub enum BoundedActivationError {
+    /// The activation script could not be assembled or written.
+    #[error(transparent)]
+    Script(#[from] ActivationError),
+    /// The activation process could not finish within the bounds.
+    #[error(transparent)]
+    Process(#[from] ProcessError),
+    /// The activation shell exited unsuccessfully.
+    #[error("activation exited with {status}")]
+    Failed {
+        /// The exit status.
+        status: ExitStatus,
+        /// Standard error captured from the shell.
+        stderr: Vec<u8>,
+    },
+    /// The shell did not produce both environment listings.
+    #[error("activation produced no environment listing")]
+    NoEnvironment,
 }
 
 /// Collect all environment variables that are set in a conda environment.
@@ -300,7 +328,7 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
 /// # Returns
 ///
 /// A vector of path entries
-pub fn prefix_path_entries(prefix: &Path, platform: &Platform) -> Vec<PathBuf> {
+pub fn prefix_path_entries(prefix: &Path, platform: &Subdir) -> Vec<PathBuf> {
     if platform.is_windows() {
         vec![
             prefix.to_path_buf(),
@@ -357,17 +385,17 @@ impl<T: Shell + Clone> Activator<T> {
     /// ```
     /// use rattler_shell::activation::Activator;
     /// use rattler_shell::shell;
-    /// use rattler_conda_types::Platform;
+    /// use rattler_conda_types::Subdir;
     /// use std::path::PathBuf;
     ///
-    /// let activator = Activator::from_path(&PathBuf::from("tests/fixtures/env_vars"), shell::Bash::default(), Platform::Osx64).unwrap();
+    /// let activator = Activator::from_path(&PathBuf::from("tests/fixtures/env_vars"), shell::Bash::default(), Subdir::Osx64).unwrap();
     /// assert_eq!(activator.paths.len(), 1);
     /// assert_eq!(activator.paths[0], PathBuf::from("tests/fixtures/env_vars/bin"));
     /// ```
     pub fn from_path(
         path: &Path,
         shell_type: T,
-        platform: Platform,
+        platform: Subdir,
     ) -> Result<Activator<T>, ActivationError> {
         let activation_scripts = collect_scripts(&path.join("etc/conda/activate.d"), &shell_type)?;
 
@@ -416,7 +444,7 @@ impl<T: Shell + Clone> Activator<T> {
             .context("Failed to create tmp file")?;
 
         let platform =
-            Platform::current().context("the host platform is not a known conda platform")?;
+            Subdir::current().context("the host platform is not a known conda platform")?;
         let mut shell_script = ShellScript::new(shell, platform);
         for (key, value) in env {
             shell_script
@@ -611,6 +639,117 @@ impl<T: Shell + Clone> Activator<T> {
         })
     }
 
+    fn activation_detection_script(
+        &self,
+        variables: ActivationVariables,
+        separator: &str,
+    ) -> Result<ShellScript<T>, ActivationError> {
+        let activation_script = self.activation(variables)?.script;
+        let mut script = ShellScript::new(self.shell_type.clone(), self.platform);
+        script
+            .print_env()?
+            .echo(separator)?
+            .append_script(&activation_script)
+            .echo(separator)?
+            .print_env()?;
+        Ok(script)
+    }
+
+    /// Executes activation with a complete, explicit inherited environment.
+    ///
+    /// Returns the complete reconciled environment, including removals.
+    /// Native-string values survive unchanged on Unix. Timeout, output budget
+    /// exhaustion and cancellation terminate the shell's process tree.
+    pub async fn run_activation_bounded(
+        &self,
+        mut variables: ActivationVariables,
+        environment: &EnvironmentSnapshot,
+        limits: ProcessLimits,
+    ) -> Result<EnvironmentSnapshot, BoundedActivationError> {
+        variables.current_env = environment.unicode_variables();
+        let script_dir = tempfile::TempDir::new().map_err(ActivationError::from)?;
+        let separator = format!(
+            "{ENV_START_SEPARATOR}{}",
+            script_dir
+                .path()
+                .file_name()
+                .expect("temporary directory has a name")
+                .to_string_lossy()
+        );
+        let script = self.activation_detection_script(variables, &separator)?;
+        let script_path = script_dir
+            .path()
+            .join(format!("activation.{}", self.shell_type.extension()));
+        fs::write(
+            &script_path,
+            script.contents().map_err(ActivationError::from)?,
+        )
+        .map_err(ActivationError::from)?;
+        let mut command =
+            tokio::process::Command::from(self.shell_type.create_run_script_command(&script_path));
+        command.env_clear().envs(environment.iter());
+        let output = run_bounded(&mut command, limits).await?;
+        if !output.status.success() {
+            return Err(BoundedActivationError::Failed {
+                status: output.status,
+                stderr: output.stderr,
+            });
+        }
+        let separator = separator.as_bytes();
+        let first = output
+            .stdout
+            .windows(separator.len())
+            .position(|bytes| bytes == separator)
+            .ok_or(BoundedActivationError::NoEnvironment)?;
+        let rest = &output.stdout[first + separator.len()..];
+        let last = rest
+            .windows(separator.len())
+            .rposition(|bytes| bytes == separator)
+            .ok_or(BoundedActivationError::NoEnvironment)?;
+        let before = self.parse_environment_bytes(&output.stdout[..first]);
+        let after = self.parse_environment_bytes(&rest[last + separator.len()..]);
+        let mut reconciled = environment.clone();
+        for (key, _) in before.iter() {
+            if after.get(key).is_none() {
+                reconciled.remove(key);
+            }
+        }
+        for (key, value) in after.iter() {
+            if before.get(key) != Some(value) {
+                reconciled.insert(key, value);
+            }
+        }
+        Ok(reconciled)
+    }
+
+    fn parse_environment_bytes(&self, bytes: &[u8]) -> EnvironmentSnapshot {
+        #[cfg(unix)]
+        if bytes.contains(&0) {
+            return bytes
+                .split(|byte| *byte == 0)
+                .filter_map(|record| {
+                    let equals = record.iter().position(|byte| *byte == b'=')?;
+                    let key = record[..equals]
+                        .strip_prefix(b"\n")
+                        .unwrap_or(&record[..equals]);
+                    if key.is_empty() {
+                        return None;
+                    }
+                    Some((
+                        OsStr::from_bytes(key),
+                        OsStr::from_bytes(&record[equals + 1..]),
+                    ))
+                })
+                .collect();
+        }
+        let text = String::from_utf8_lossy(bytes);
+        self.shell_type
+            .parse_env(&text)
+            .into_iter()
+            .filter(|(key, _)| !key.is_empty())
+            .collect()
+    }
+
     /// Runs the activation script and returns the environment variables changed
     /// in the environment after running the script.
     ///
@@ -621,19 +760,8 @@ impl<T: Shell + Clone> Activator<T> {
         variables: ActivationVariables,
         environment: Option<HashMap<&OsStr, &OsStr>>,
     ) -> Result<HashMap<String, String>, ActivationError> {
-        let activation_script = self.activation(variables)?.script;
-
-        // Create a script that starts by emitting all environment variables, then runs
-        // the activation script followed by again emitting all environment
-        // variables. Any changes should then become visible.
-        let mut activation_detection_script =
-            ShellScript::new(self.shell_type.clone(), self.platform);
-        activation_detection_script
-            .print_env()?
-            .echo(ENV_START_SEPARATOR)?
-            .append_script(&activation_script)
-            .echo(ENV_START_SEPARATOR)?
-            .print_env()?;
+        let activation_detection_script =
+            self.activation_detection_script(variables, ENV_START_SEPARATOR)?;
 
         // Create a temporary file that we can execute with our shell.
         let activation_script_dir = tempfile::TempDir::new()?;
@@ -673,6 +801,11 @@ impl<T: Shell + Clone> Activator<T> {
             .split_once(ENV_START_SEPARATOR)
             .unwrap_or(("", stdout.as_ref()));
         let (_, after_env) = rest.rsplit_once(ENV_START_SEPARATOR).unwrap_or(("", ""));
+
+        #[cfg(target_os = "macos")]
+        if !before_env.contains('\0') && !after_env.contains('\0') {
+            tracing::debug!("env -0 is unavailable; parsing newline-separated environment records");
+        }
 
         // Parse both environments and find the difference
         let before_env = self.shell_type.parse_env(before_env);
@@ -730,7 +863,7 @@ mod tests {
             deactivation_scripts: vec![],
             env_vars: pre_env,
             post_activation_env_vars: post_env,
-            platform: Platform::current().expect("host platform"),
+            platform: Subdir::current().expect("host platform"),
         };
 
         let result = activator
@@ -795,7 +928,7 @@ mod tests {
         assert_eq!(scripts[1], script1);
         assert_eq!(scripts[2], script3);
 
-        let activator = Activator::from_path(tdir.path(), shell_type, Platform::Osx64).unwrap();
+        let activator = Activator::from_path(tdir.path(), shell_type, Subdir::Osx64).unwrap();
         assert_eq!(activator.activation_scripts.len(), 3);
         assert_eq!(activator.activation_scripts[0], script2);
         assert_eq!(activator.activation_scripts[1], script1);
@@ -915,7 +1048,7 @@ mod tests {
     #[test]
     fn test_add_to_path() {
         let prefix = PathBuf::from_str("/opt/conda").unwrap();
-        let new_paths = prefix_path_entries(&prefix, &Platform::Osx64);
+        let new_paths = prefix_path_entries(&prefix, &Subdir::Osx64);
         assert_eq!(new_paths.len(), 1);
     }
 
@@ -939,7 +1072,7 @@ mod tests {
     ) -> String {
         let tdir = create_temp_dir();
 
-        let activator = Activator::from_path(tdir.path(), shell_type, Platform::Osx64).unwrap();
+        let activator = Activator::from_path(tdir.path(), shell_type, Subdir::Osx64).unwrap();
 
         // Create a test environment
         let test_env = HashMap::from([
@@ -1035,6 +1168,50 @@ mod tests {
         insta::assert_snapshot!(script);
     }
 
+    #[cfg(unix)]
+    #[derive(Clone)]
+    struct NewlineEnvBash(shell::Bash);
+
+    #[cfg(unix)]
+    impl Shell for NewlineEnvBash {
+        fn set_env_var(
+            &self,
+            f: &mut impl std::fmt::Write,
+            env_var: &str,
+            value: &str,
+        ) -> Result<(), ShellError> {
+            self.0.set_env_var(f, env_var, value)
+        }
+
+        fn unset_env_var(
+            &self,
+            f: &mut impl std::fmt::Write,
+            env_var: &str,
+        ) -> Result<(), ShellError> {
+            self.0.unset_env_var(f, env_var)
+        }
+
+        fn run_script(&self, f: &mut impl std::fmt::Write, path: &Path) -> Result<(), ShellError> {
+            self.0.run_script(f, path)
+        }
+
+        fn extension(&self) -> &str {
+            self.0.extension()
+        }
+
+        fn executable(&self) -> &str {
+            self.0.executable()
+        }
+
+        fn create_run_script_command(&self, path: &Path) -> std::process::Command {
+            self.0.create_run_script_command(path)
+        }
+
+        fn print_env(&self, f: &mut impl std::fmt::Write) -> std::fmt::Result {
+            writeln!(f, "/usr/bin/env")
+        }
+    }
+
     fn test_run_activation(shell: ShellEnum, with_unicode: bool) {
         let environment_dir = tempfile::TempDir::new().unwrap();
 
@@ -1082,7 +1259,7 @@ mod tests {
         let activator = Activator::from_path(
             &env,
             shell.clone(),
-            Platform::current().expect("host platform"),
+            Subdir::current().expect("host platform"),
         )
         .unwrap();
         let activation_env = activator
@@ -1137,7 +1314,7 @@ mod tests {
         let mut activator = Activator::from_path(
             environment_dir.path(),
             shell::Bash::default(),
-            Platform::current().expect("host platform"),
+            Subdir::current().expect("host platform"),
         )
         .unwrap();
         activator.post_activation_env_vars = IndexMap::from_iter([(
@@ -1153,6 +1330,52 @@ mod tests {
             activation_env.get("ENV_WITH_NEWLINE").map(String::as_str),
             Some("hello\nworld")
         );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_run_activation_with_newline_separated_env_dump() {
+        let environment_dir = tempfile::TempDir::new().unwrap();
+        let mut activator = Activator::from_path(
+            environment_dir.path(),
+            NewlineEnvBash(shell::Bash::default()),
+            Subdir::current().expect("host platform"),
+        )
+        .unwrap();
+        activator.post_activation_env_vars = IndexMap::from_iter([
+            (String::from("UNCHANGED"), String::from("same=value")),
+            (
+                String::from("VALUE_WITH_EQUALS"),
+                String::from("left=middle=right"),
+            ),
+            (String::from("EMPTY_VALUE"), String::new()),
+        ]);
+
+        let activation_env = activator
+            .run_activation(
+                ActivationVariables {
+                    current_env: HashMap::from([(
+                        String::from("UNCHANGED"),
+                        String::from("same=value"),
+                    )]),
+                    ..ActivationVariables::default()
+                },
+                Some(HashMap::from([
+                    (OsStr::new("PATH"), OsStr::new("/usr/bin:/bin")),
+                    (OsStr::new("UNCHANGED"), OsStr::new("same=value")),
+                ])),
+            )
+            .unwrap();
+
+        assert_eq!(
+            activation_env.get("VALUE_WITH_EQUALS").map(String::as_str),
+            Some("left=middle=right")
+        );
+        assert_eq!(
+            activation_env.get("EMPTY_VALUE").map(String::as_str),
+            Some("")
+        );
+        assert!(!activation_env.contains_key("UNCHANGED"));
     }
 
     #[test]
@@ -1214,7 +1437,7 @@ mod tests {
                 deactivation_scripts: vec![],
                 env_vars: env_vars.clone(),
                 post_activation_env_vars: IndexMap::new(),
-                platform: Platform::current().expect("host platform"),
+                platform: Subdir::current().expect("host platform"),
             };
 
             // Test edge case: CONDA_SHLVL not set (current behavior)
@@ -1271,7 +1494,7 @@ mod tests {
                 deactivation_scripts: vec![],
                 env_vars: env_vars.clone(),
                 post_activation_env_vars: IndexMap::new(),
-                platform: Platform::current().expect("host platform"),
+                platform: Subdir::current().expect("host platform"),
             };
 
             // CONDA_SHLVL to set to the initial level ( 1 meaning that it's activated)
@@ -1341,7 +1564,7 @@ mod tests {
                 deactivation_scripts: vec![],
                 env_vars: second_env_vars.clone(),
                 post_activation_env_vars: IndexMap::new(),
-                platform: Platform::current().expect("host platform"),
+                platform: Subdir::current().expect("host platform"),
             };
 
             let mut existing_env_vars = HashMap::new();
@@ -1464,7 +1687,7 @@ mod tests {
                 deactivation_scripts: vec![],
                 env_vars: second_env_vars.clone(),
                 post_activation_env_vars: IndexMap::new(),
-                platform: Platform::current().expect("host platform"),
+                platform: Subdir::current().expect("host platform"),
             };
 
             let mut existing_env_vars = HashMap::new();

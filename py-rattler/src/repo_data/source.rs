@@ -4,12 +4,12 @@ use std::sync::Arc;
 
 use pyo3::prelude::*;
 use pyo3_async_runtimes::tokio::into_future;
-use rattler_conda_types::{PackageName, Platform, RepoDataRecord};
+use rattler_conda_types::{PackageName, RepoDataRecord, Subdir};
 use rattler_repodata_gateway::{GatewayError, RepoDataSource};
 
 use crate::package_name::PyPackageName;
-use crate::platform::PyPlatform;
 use crate::record::PyRecord;
+use crate::subdir::PySubdir;
 
 /// Wraps a Python object implementing the `RepoDataSource` protocol.
 ///
@@ -52,7 +52,7 @@ unsafe impl Sync for PyRepoDataSource {}
 impl RepoDataSource for PyRepoDataSource {
     async fn fetch_package_records(
         &self,
-        platform: Platform,
+        platform: Subdir,
         name: &PackageName,
     ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
         // Clone what we need before the async block
@@ -60,7 +60,7 @@ impl RepoDataSource for PyRepoDataSource {
 
         // Get the Python coroutine and convert to future
         let future = Python::attach(|py| {
-            let py_platform = PyPlatform::from(platform);
+            let py_platform = PySubdir::from(platform);
             let py_name = PyPackageName::from(name_clone);
 
             // Call the async method - this returns a coroutine object
@@ -108,9 +108,9 @@ impl RepoDataSource for PyRepoDataSource {
         })
     }
 
-    fn package_names(&self, platform: Platform) -> Vec<String> {
+    fn package_names(&self, platform: Subdir) -> Vec<String> {
         Python::attach(|py| {
-            let py_platform = PyPlatform::from(platform);
+            let py_platform = PySubdir::from(platform);
 
             self.inner
                 .call_method1(py, "package_names", (py_platform,))

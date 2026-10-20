@@ -4,6 +4,10 @@ from rattler.rattler import PyLockChannel
 
 
 class LockChannel:
+    """
+    Represents a channel in a lock file.
+    """
+
     _channel: PyLockChannel
 
     def __init__(self, url: str) -> None:

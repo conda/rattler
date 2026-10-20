@@ -189,7 +189,7 @@ impl Anaconda {
             .into_diagnostic()?;
 
         // See inspect_conda_info_dir in anaconda-client
-        // https://github.com/Anaconda-Platform/anaconda-client/blob/master/binstar_client/inspect_package/conda.py#L81-L150
+        // https://github.com/Anaconda-Subdir/anaconda-client/blob/master/binstar_client/inspect_package/conda.py#L81-L150
         // dumping the entire about.json as public_attrs seems to work fine
         let payload = serde_json::json!({
             "public": true,

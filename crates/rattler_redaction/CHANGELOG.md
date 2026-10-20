@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.7](https://github.com/conda/rattler/compare/rattler_redaction-v0.2.6...rattler_redaction-v0.2.7) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+
+## [0.2.6](https://github.com/conda/rattler/compare/rattler_redaction-v0.2.5...rattler_redaction-v0.2.6) - 2026-09-23
+
+### Added
+
+- add standalone Sigstore attestation verification ([#2794](https://github.com/conda/rattler/pull/2794))
+
 ## [0.2.5](https://github.com/conda/rattler/compare/rattler_redaction-v0.2.4...rattler_redaction-v0.2.5) - 2026-08-27
 
 ### Added

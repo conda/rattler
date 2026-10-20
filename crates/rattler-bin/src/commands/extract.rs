@@ -10,8 +10,14 @@ use rattler_package_streaming::ExtractResult;
 use reqwest_middleware::ClientWithMiddleware;
 use url::Url;
 
+use super::hyperlink;
+
 /// Extract one or more local or remote conda packages.
 #[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler extract ./pkg.conda                          # extract into ./<name>-<version>-<build>
+  rattler extract ./pkg.conda --destination ./out      # extract into a specific directory
+  rattler extract ./a.conda ./b.tar.bz2 -d ./out       # one subdirectory per package"#)]
 pub struct Opt {
     /// Paths or URLs to conda package archives (.tar.bz2 or .conda)
     #[clap(required = true)]
@@ -55,6 +61,16 @@ impl Source {
         match Url::parse(package) {
             Ok(url) if url.scheme().len() > 1 => Self::Url(url),
             _ => Self::Path(PathBuf::from(package)),
+        }
+    }
+
+    /// The URL to link this source to in the output, if it is safe to.
+    fn link_target(&self) -> Option<Url> {
+        match self {
+            Self::Url(url) => hyperlink::web(url),
+            Self::Path(path) => std::path::absolute(path)
+                .ok()
+                .and_then(|absolute| hyperlink::file(&absolute)),
         }
     }
 
@@ -165,11 +181,14 @@ pub async fn extract(opt: Opt, offline: bool) -> miette::Result<()> {
         match result {
             Ok((source, destination, result, elapsed)) => {
                 extracted += 1;
+                let destination_url = std::path::absolute(&destination)
+                    .ok()
+                    .and_then(|absolute| hyperlink::directory(&absolute));
                 println!(
                     "{} {} -> {} ({:.1?})",
                     console::style("✓").green(),
-                    source,
-                    destination.display(),
+                    hyperlink::maybe_link(source.link_target(), &source),
+                    hyperlink::maybe_link(destination_url, destination.display()),
                     elapsed
                 );
                 println!("  SHA256: {}", hex::encode(result.sha256));

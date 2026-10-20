@@ -10,11 +10,11 @@
 //! ```rust,no_run
 //! use rattler_vfs::{MountConfig, Transport, build_and_mount, compute_env_hash};
 //! use rattler_cache::{default_cache_dir, package_cache::PackageCache};
-//! use rattler_conda_types::Platform;
+//! use rattler_conda_types::Subdir;
 //! use rattler_lock::LockFile;
 //! # async fn example() -> anyhow::Result<()> {
 //! let lockfile = LockFile::from_path("pixi.lock".as_ref())?;
-//! let platform = Platform::current().expect("host platform");
+//! let platform = Subdir::current().expect("host platform");
 //! let env_hash = compute_env_hash(&lockfile, "default", platform)?;
 //! let cache = PackageCache::new(default_cache_dir()?.join("pkgs"));
 //!
@@ -91,7 +91,7 @@ use metadata_tree::MetadataNode;
 use rattler::install::PythonInfo;
 use rattler::install::python_entry_point_template;
 use rattler_cache::package_cache::PackageCache;
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 use rattler_conda_types::package::{EntryPoint, LinkJson, NoArchLinks, PackageFile, PathsJson};
 use rattler_lock::LockFile;
 use rattler_networking::LazyClient;
@@ -115,7 +115,7 @@ pub enum MountError {
     /// No packages for the requested platform in the environment.
     #[error("no packages for platform {platform} in environment '{environment}'")]
     PlatformNotFound {
-        platform: Platform,
+        platform: Subdir,
         environment: String,
     },
 
@@ -625,14 +625,14 @@ impl MountHandle {
 ///
 /// Caller responsibilities:
 /// - Parse the lock file once via [`LockFile::from_path`].
-/// - Pick a [`Platform`] (usually [`Platform::current()`]).
+/// - Pick a [`Subdir`] (usually [`Subdir::current()`]).
 /// - Construct a [`PackageCache`] (commonly via
 ///   [`rattler_cache::default_cache_dir()`]). Decoupling the cache from this
 ///   function lets pixi share its own cache and lets tests use a temp dir.
 pub async fn build_metadata_tree(
     lockfile: &LockFile,
     environment_name: &str,
-    platform: Platform,
+    platform: Subdir,
     package_cache: &PackageCache,
     mount_point: &Path,
 ) -> anyhow::Result<MetadataTree> {
@@ -883,7 +883,7 @@ pub async fn mount(metadata: MetadataTree, config: &MountConfig) -> anyhow::Resu
 pub async fn build_and_mount(
     lockfile: &LockFile,
     environment_name: &str,
-    platform: Platform,
+    platform: Subdir,
     package_cache: &PackageCache,
     config: &MountConfig,
 ) -> anyhow::Result<MountHandle> {
@@ -923,7 +923,7 @@ pub const ENV_HASH_SCHEMA_VERSION: u32 = 2;
 pub fn compute_env_hash(
     lockfile: &LockFile,
     environment_name: &str,
-    platform: Platform,
+    platform: Subdir,
 ) -> anyhow::Result<String> {
     use sha2::{Digest, Sha256};
 
@@ -1488,7 +1488,7 @@ mod tests {
         PythonInfo::from_version(
             &Version::from_str("3.11.0").unwrap(),
             None,
-            rattler_conda_types::Platform::Linux64,
+            rattler_conda_types::Subdir::Linux64,
         )
         .unwrap()
     }
@@ -1773,7 +1773,7 @@ packages:
             .expect("golden lockfile should parse");
 
         let hash =
-            compute_env_hash(&lockfile, "default", Platform::Linux64).expect("hash should succeed");
+            compute_env_hash(&lockfile, "default", Subdir::Linux64).expect("hash should succeed");
 
         // To update: run `cargo test -p rattler_vfs test_env_hash_stability`
         // and copy the "got" value here.

@@ -14,7 +14,7 @@ use std::{
 use enum_dispatch::enum_dispatch;
 use indexmap::IndexMap;
 use itertools::Itertools;
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 use thiserror::Error;
 
 use crate::activation::PathModificationBehavior;
@@ -86,7 +86,7 @@ pub trait Shell {
         f: &mut impl Write,
         paths: &[PathBuf],
         modification_behavior: PathModificationBehavior,
-        platform: &Platform,
+        platform: &Subdir,
     ) -> ShellResult {
         let mut paths_vec = paths
             .iter()
@@ -116,14 +116,14 @@ pub trait Shell {
     fn create_run_script_command(&self, path: &Path) -> Command;
 
     /// Path separator
-    fn path_separator(&self, platform: &Platform) -> &str {
+    fn path_separator(&self, platform: &Subdir) -> &str {
         if platform.is_unix() { ":" } else { ";" }
     }
 
     /// Returns the name of the PATH variable for the given platform. On
     /// Windows, path variables are case-insensitive but not all shells treat
     /// them case-insensitive.
-    fn path_var(&self, platform: &Platform) -> &str {
+    fn path_var(&self, platform: &Subdir) -> &str {
         if platform.is_windows() {
             "Path"
         } else {
@@ -143,11 +143,22 @@ pub trait Shell {
 
     /// Emits writing all current environment variables to stdout.
     ///
-    /// Records are NUL-separated (`env -0`) rather than newline-separated
-    /// so that values which themselves contain newlines survive the
-    /// round-trip through [`Shell::parse_env`].
+    /// Records are NUL-separated so that values which themselves contain
+    /// newlines survive the round-trip through [`Shell::parse_env`]. Older
+    /// macOS versions fall back to newline-separated records because their
+    /// `/usr/bin/env` does not support `-0`.
     fn print_env(&self, f: &mut impl Write) -> std::fmt::Result {
-        writeln!(f, "/usr/bin/env -0")
+        #[cfg(target_os = "macos")]
+        {
+            writeln!(
+                f,
+                r#"/bin/sh -c '/usr/bin/env -0 2>/dev/null || /usr/bin/env'"#
+            )
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            writeln!(f, "/usr/bin/env -0")
+        }
     }
 
     /// Write the script to the writer and do some post-processing for
@@ -158,11 +169,12 @@ pub trait Shell {
 
     /// Parses environment variables emitted by [`Shell::print_env`].
     ///
-    /// The default implementation expects NUL-separated `KEY=VALUE`
-    /// records (see [`Shell::print_env`]), so a value containing a
-    /// newline is kept intact instead of being cut at the newline.
+    /// NUL-separated records preserve values containing newlines. The
+    /// newline separator supports older macOS versions where `env -0` is
+    /// unavailable.
     fn parse_env<'i>(&self, env: &'i str) -> HashMap<&'i str, &'i str> {
-        env.split('\0')
+        let separator = if env.contains('\0') { '\0' } else { '\n' };
+        env.split(separator)
             .filter_map(|record| record.split_once('='))
             // A record can carry a leading newline echoed just before the
             // environment dump; variable names never do, so trimming the
@@ -337,7 +349,7 @@ impl Shell for Bash {
         f: &mut impl Write,
         paths: &[PathBuf],
         modification_behavior: PathModificationBehavior,
-        platform: &Platform,
+        platform: &Subdir,
     ) -> ShellResult {
         // Put paths in a vector of the correct format.
         let paths_vec = paths
@@ -364,7 +376,7 @@ impl Shell for Bash {
         let combined_paths_string: String = match modification_behavior {
             PathModificationBehavior::Replace => paths_string,
             PathModificationBehavior::Prepend => {
-                format!("{paths_string}:{}", &self.format_env_var(path_var))
+                format!("{paths_string}:{}", self.format_env_var(path_var))
             }
             PathModificationBehavior::Append => {
                 format!("{}:{paths_string}", self.format_env_var(path_var))
@@ -379,7 +391,7 @@ impl Shell for Bash {
     }
 
     /// For Bash, the path variable is always all capital PATH, even on Windows.
-    fn path_var(&self, _platform: &Platform) -> &str {
+    fn path_var(&self, _platform: &Subdir) -> &str {
         "PATH"
     }
 
@@ -910,7 +922,7 @@ impl Shell for NuShell {
         f: &mut impl Write,
         paths: &[PathBuf],
         modification_behavior: PathModificationBehavior,
-        platform: &Platform,
+        platform: &Subdir,
     ) -> ShellResult {
         let path = paths
             .iter()
@@ -1185,12 +1197,12 @@ pub struct ShellScript<T: Shell> {
     /// The contents of the script.
     contents: String,
     /// The platform for which the script will be generated
-    platform: Platform,
+    platform: Subdir,
 }
 
 impl<T: Shell + 'static> ShellScript<T> {
     /// Create a new [`ShellScript`] for the given shell.
-    pub fn new(shell: T, platform: Platform) -> Self {
+    pub fn new(shell: T, platform: Subdir) -> Self {
         Self {
             shell,
             contents: String::new(),
@@ -1332,7 +1344,7 @@ mod tests {
 
     #[test]
     fn test_bash() {
-        let mut script = ShellScript::new(Bash::default(), Platform::Linux64);
+        let mut script = ShellScript::new(Bash::default(), Subdir::Linux64);
 
         let paths = vec![PathBuf::from("bar"), PathBuf::from("a/b")];
 
@@ -1363,7 +1375,7 @@ mod tests {
 
     #[test]
     fn test_fish() {
-        let mut script = ShellScript::new(Fish, Platform::Linux64);
+        let mut script = ShellScript::new(Fish, Subdir::Linux64);
 
         script
             .set_env_var("FOO", "bar")
@@ -1378,7 +1390,7 @@ mod tests {
 
     #[test]
     fn test_xonsh_bash() {
-        let mut script = ShellScript::new(Xonsh, Platform::Linux64);
+        let mut script = ShellScript::new(Xonsh, Subdir::Linux64);
 
         script
             .run_script(&PathBuf::from_str("foo.sh").unwrap())
@@ -1389,7 +1401,7 @@ mod tests {
 
     #[test]
     fn test_xonsh_xsh() {
-        let mut script = ShellScript::new(Xonsh, Platform::Linux64);
+        let mut script = ShellScript::new(Xonsh, Subdir::Linux64);
         script
             .set_env_var("FOO", "bar")
             .unwrap()
@@ -1416,7 +1428,7 @@ mod tests {
 
     #[test]
     fn test_path_separator() {
-        let mut script = ShellScript::new(Bash::default(), Platform::Linux64);
+        let mut script = ShellScript::new(Bash::default(), Subdir::Linux64);
         script
             .set_path(
                 &[PathBuf::from("/foo"), PathBuf::from("/bar")],
@@ -1425,7 +1437,7 @@ mod tests {
             .unwrap();
         assert!(script.contents.contains("/foo:/bar"));
 
-        let mut script = ShellScript::new(Bash::default(), Platform::Win64);
+        let mut script = ShellScript::new(Bash::default(), Subdir::Win64);
         script
             .set_path(
                 &[PathBuf::from("/foo"), PathBuf::from("/bar")],
@@ -1476,7 +1488,7 @@ mod tests {
                 Bash {
                     flavor: BashFlavor::Bash,
                 },
-                Platform::Linux64,
+                Subdir::Linux64,
             );
             s.set_env_var("FOO", "bar").unwrap();
             s.set_path(&paths, PathModificationBehavior::Prepend)
@@ -1484,7 +1496,7 @@ mod tests {
             s.contents
         };
         for flavor in flavors {
-            let mut s = ShellScript::new(Bash { flavor }, Platform::Linux64);
+            let mut s = ShellScript::new(Bash { flavor }, Subdir::Linux64);
             s.set_env_var("FOO", "bar").unwrap();
             s.set_path(&paths, PathModificationBehavior::Prepend)
                 .unwrap();
@@ -1560,7 +1572,7 @@ mod tests {
 
     #[test]
     fn test_parse_env() {
-        let script = ShellScript::new(CmdExe, Platform::Win64);
+        let script = ShellScript::new(CmdExe, Subdir::Win64);
         let input = "VAR1=\"value1\"\nNUM=1\nNUM2=\"2\"";
         let parsed_env = script.shell.parse_env(input);
 
@@ -1570,5 +1582,16 @@ mod tests {
                 .collect();
 
         assert_eq!(parsed_env, expected_env);
+    }
+
+    #[test]
+    fn test_parse_env_with_newline_separator() {
+        let input = "\nVAR1=value1\nVAR2=value2\n";
+        let parsed_env = Bash::default().parse_env(input);
+
+        assert_eq!(
+            parsed_env,
+            HashMap::from([("VAR1", "value1"), ("VAR2", "value2")])
+        );
     }
 }

@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.15](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.14...rattler_package_streaming-v0.27.15) - 2026-10-16
+
+### Fixed
+
+- bump zip to 9 (all zip 8.x releases are yanked) ([#2957](https://github.com/conda/rattler/pull/2957))
+
+## [0.27.14](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.13...rattler_package_streaming-v0.27.14) - 2026-10-13
+
+### Fixed
+
+- *(rattler_package_streaming)* remove num_cpus crate ([#2911](https://github.com/conda/rattler/pull/2911))
+
+### Other
+
+- Add `BuildString` to rattler_conda_types ([#2430](https://github.com/conda/rattler/pull/2430))
+
+## [0.27.13](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.12...rattler_package_streaming-v0.27.13) - 2026-10-09
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.27.12](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.11...rattler_package_streaming-v0.27.12) - 2026-10-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking
+
+## [0.27.11](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.10...rattler_package_streaming-v0.27.11) - 2026-10-06
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.27.10](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.9...rattler_package_streaming-v0.27.10) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+
+## [0.27.9](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.8...rattler_package_streaming-v0.27.9) - 2026-10-05
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking
+
+## [0.27.8](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.7...rattler_package_streaming-v0.27.8) - 2026-09-29
+
+### Fixed
+
+- *(rattler_package_streaming)* compare verbatim paths in extraction containment check ([#2857](https://github.com/conda/rattler/pull/2857))
+
+## [0.27.7](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.6...rattler_package_streaming-v0.27.7) - 2026-09-23
+
+### Added
+
+- add standalone Sigstore attestation verification ([#2794](https://github.com/conda/rattler/pull/2794))
+
 ## [0.27.6](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.5...rattler_package_streaming-v0.27.6) - 2026-09-17
 
 ### Other

@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.4](https://github.com/conda/rattler/compare/rattler_config-v0.9.3...rattler_config-v0.9.4) - 2026-10-16
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.9.3](https://github.com/conda/rattler/compare/rattler_config-v0.9.2...rattler_config-v0.9.3) - 2026-10-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.9.2](https://github.com/conda/rattler/compare/rattler_config-v0.9.1...rattler_config-v0.9.2) - 2026-10-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.9.1](https://github.com/conda/rattler/compare/rattler_config-v0.9.0...rattler_config-v0.9.1) - 2026-10-06
+
+### Added
+
+- *(js)* add Gateway.whoNeeds, clearRepodataCache, Config ([#2895](https://github.com/conda/rattler/pull/2895))
+
+## [0.9.0](https://github.com/conda/rattler/compare/rattler_config-v0.8.1...rattler_config-v0.9.0) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+- *(config)* configure virtual package detectors ([#2862](https://github.com/conda/rattler/pull/2862))
+
+## [0.8.1](https://github.com/conda/rattler/compare/rattler_config-v0.8.0...rattler_config-v0.8.1) - 2026-10-05
+
+### Added
+
+- emit consistent v3 repodata ([#2668](https://github.com/conda/rattler/pull/2668))
+
+## [0.8.0](https://github.com/conda/rattler/compare/rattler_config-v0.7.6...rattler_config-v0.8.0) - 2026-09-29
+
+### Other
+
+- *(s3)* [**breaking**] replace force_path_style with addressing_style ([#2843](https://github.com/conda/rattler/pull/2843))
+
+## [0.7.6](https://github.com/conda/rattler/compare/rattler_config-v0.7.5...rattler_config-v0.7.6) - 2026-09-23
+
+### Added
+
+- add standalone Sigstore attestation verification ([#2794](https://github.com/conda/rattler/pull/2794))
+
 ## [0.7.5](https://github.com/conda/rattler/compare/rattler_config-v0.7.4...rattler_config-v0.7.5) - 2026-09-17
 
 ### Other

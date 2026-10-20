@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.5](https://github.com/conda/rattler/compare/rattler_shell-v0.29.4...rattler_shell-v0.29.5) - 2026-10-16
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.29.4](https://github.com/conda/rattler/compare/rattler_shell-v0.29.3...rattler_shell-v0.29.4) - 2026-10-13
+
+### Fixed
+
+- *(shell)* support activation on older macOS ([#2866](https://github.com/conda/rattler/pull/2866))
+
+## [0.29.3](https://github.com/conda/rattler/compare/rattler_shell-v0.29.2...rattler_shell-v0.29.3) - 2026-10-07
+
+### Other
+
+- bump rust to 1.98.1 ([#2906](https://github.com/conda/rattler/pull/2906))
+
+## [0.29.2](https://github.com/conda/rattler/compare/rattler_shell-v0.29.1...rattler_shell-v0.29.2) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+
+## [0.29.1](https://github.com/conda/rattler/compare/rattler_shell-v0.29.0...rattler_shell-v0.29.1) - 2026-10-05
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.29.0](https://github.com/conda/rattler/compare/rattler_shell-v0.28.1...rattler_shell-v0.29.0) - 2026-09-29
+
+### Other
+
+- [**breaking**] rename Platform to Subdir and validate names against CEP 26 ([#2787](https://github.com/conda/rattler/pull/2787))
+
+## [0.28.1](https://github.com/conda/rattler/compare/rattler_shell-v0.28.0...rattler_shell-v0.28.1) - 2026-09-23
+
+### Added
+
+- add standalone Sigstore attestation verification ([#2794](https://github.com/conda/rattler/pull/2794))
+
 ## [0.28.0](https://github.com/conda/rattler/compare/rattler_shell-v0.27.17...rattler_shell-v0.28.0) - 2026-09-17
 
 ### Other

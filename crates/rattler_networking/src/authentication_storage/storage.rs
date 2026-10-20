@@ -1,6 +1,5 @@
 //! Storage and access of authentication information
 
-use anyhow::{Result, anyhow};
 use reqwest::IntoUrl;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -137,7 +136,11 @@ impl AuthenticationStorage {
     }
 
     /// Store the given authentication information for the given host
-    pub fn store(&self, host: &str, authentication: &Authentication) -> Result<()> {
+    pub fn store(
+        &self,
+        host: &str,
+        authentication: &Authentication,
+    ) -> Result<(), AuthenticationStorageError> {
         {
             let mut cache = self.cache.lock().unwrap();
             cache.insert(host.to_string(), Some(authentication.clone()));
@@ -163,14 +166,19 @@ impl AuthenticationStorage {
             }
         }
 
-        Err(anyhow!(
-            "All backends failed to store credentials. Checked the following backends: {:?}",
-            self.backends
-        ))
+        Err(AuthenticationStorageError::StoreFailed {
+            host: host.to_string(),
+            backends: self
+                .backends
+                .iter()
+                .map(|backend| backend.name())
+                .collect::<Vec<_>>()
+                .join(", "),
+        })
     }
 
     /// Retrieve the authentication information for the given host
-    pub fn get(&self, host: &str) -> Result<Option<Authentication>> {
+    pub fn get(&self, host: &str) -> Result<Option<Authentication>, AuthenticationStorageError> {
         {
             let cache = self.cache.lock().unwrap();
             if let Some(auth) = cache.get(host) {
@@ -215,7 +223,7 @@ impl AuthenticationStorage {
     ///
     /// Entries are deduplicated by host using backend priority, matching the
     /// lookup behavior of [`get`](Self::get).
-    pub fn list(&self) -> Result<Vec<(String, Authentication)>> {
+    pub fn list(&self) -> Result<Vec<(String, Authentication)>, AuthenticationStorageError> {
         let mut entries: BTreeMap<String, Authentication> = BTreeMap::new();
 
         for backend in &self.backends {
@@ -239,7 +247,7 @@ impl AuthenticationStorage {
     /// [`StorageBackend::name`]) and whether it's the entry that `get()` would
     /// return for that host. Used by `auth status` so users can see what's
     /// stored where, including shadowed entries.
-    pub fn list_with_sources(&self) -> Result<Vec<ListedEntry>> {
+    pub fn list_with_sources(&self) -> Result<Vec<ListedEntry>, AuthenticationStorageError> {
         let mut entries: Vec<ListedEntry> = Vec::new();
         let mut seen_hosts: std::collections::HashSet<String> = std::collections::HashSet::new();
 
@@ -394,7 +402,9 @@ impl AuthenticationStorage {
     /// the per-entry keychain ACL prompts that `list_with_sources` would
     /// trigger on macOS. Callers that need the actual credential should call
     /// [`get_entry`](Self::get_entry) on the chosen `(host, source)` pair.
-    pub fn list_keys_with_sources(&self) -> Result<Vec<LazyListedEntry>> {
+    pub fn list_keys_with_sources(
+        &self,
+    ) -> Result<Vec<LazyListedEntry>, AuthenticationStorageError> {
         let mut entries: Vec<LazyListedEntry> = Vec::new();
         let mut seen_hosts: std::collections::HashSet<String> = std::collections::HashSet::new();
 
@@ -426,17 +436,19 @@ impl AuthenticationStorage {
     ///
     /// Used together with [`list_keys_with_sources`](Self::list_keys_with_sources)
     /// to defer secret reads until needed.
-    pub fn get_entry(&self, host: &str, source: &str) -> Result<Option<Authentication>> {
+    pub fn get_entry(
+        &self,
+        host: &str,
+        source: &str,
+    ) -> Result<Option<Authentication>, AuthenticationStorageError> {
         let backend = self
             .backends
             .iter()
             .find(|b| b.name() == source)
-            .ok_or_else(|| {
-                anyhow!(
-                    "No configured backend named '{source}' is available to read the entry from"
-                )
+            .ok_or_else(|| AuthenticationStorageError::UnknownBackend {
+                backend: source.to_string(),
             })?;
-        backend.get(host).map_err(Into::into)
+        backend.get(host)
     }
 
     /// Delete the entry stored under `host` in the backend identified by
@@ -445,7 +457,7 @@ impl AuthenticationStorage {
     /// Use this when callers want to surgically remove one backend's copy of a
     /// host without touching shadowed copies in other backends. For deleting
     /// every backend's copy of a host, see [`delete`](Self::delete).
-    pub fn delete_entry(&self, host: &str, source: &str) -> Result<()> {
+    pub fn delete_entry(&self, host: &str, source: &str) -> Result<(), AuthenticationStorageError> {
         // Drop the host from the cache entirely. Inserting `None` instead
         // would be read back by `get()` as a definitive "no credentials"
         // answer, hiding a shadowed copy in another backend; removing the
@@ -459,18 +471,16 @@ impl AuthenticationStorage {
             .backends
             .iter()
             .find(|b| b.name() == source)
-            .ok_or_else(|| {
-                anyhow!(
-                    "No configured backend named '{source}' is available to delete the entry from"
-                )
+            .ok_or_else(|| AuthenticationStorageError::UnknownBackend {
+                backend: source.to_string(),
             })?;
 
-        backend.delete(host).map_err(Into::into)
+        backend.delete(host)
     }
 
     /// Delete the authentication information for the given host from every
     /// backend that holds it.
-    pub fn delete(&self, host: &str) -> Result<()> {
+    pub fn delete(&self, host: &str) -> Result<(), AuthenticationStorageError> {
         {
             let mut cache = self.cache.lock().unwrap();
             cache.insert(host.to_string(), None);
@@ -491,7 +501,9 @@ impl AuthenticationStorage {
         }
 
         if all_failed {
-            Err(anyhow!("All backends failed to delete credentials"))
+            Err(AuthenticationStorageError::DeleteFailed {
+                host: host.to_string(),
+            })
         } else {
             Ok(())
         }
@@ -626,11 +638,40 @@ mod tests {
     #[test]
     fn entry_operations_reject_unknown_source() {
         let storage = storage_with("example.com", Authentication::BearerToken("t".into()));
-        assert!(storage.get_entry("example.com", "no-such-backend").is_err());
-        assert!(
+
+        for result in [
             storage
-                .delete_entry("example.com", "no-such-backend")
-                .is_err()
+                .get_entry("example.com", "no-such-backend")
+                .map(|_| ()),
+            storage.delete_entry("example.com", "no-such-backend"),
+        ] {
+            // The name the caller asked for has to survive into the error, so
+            // that a CLI can tell the user which `--source` it did not know.
+            assert!(
+                matches!(
+                    result,
+                    Err(AuthenticationStorageError::UnknownBackend { ref backend })
+                        if backend == "no-such-backend"
+                ),
+                "expected an UnknownBackend error, got {result:?}"
+            );
+        }
+    }
+
+    /// A store with no backends at all cannot store anything, and says so
+    /// rather than silently succeeding.
+    #[test]
+    fn store_without_backends_reports_the_host_it_failed_for() {
+        let storage = AuthenticationStorage::empty();
+        let result = storage.store("example.com", &Authentication::BearerToken("t".into()));
+
+        assert!(
+            matches!(
+                result,
+                Err(AuthenticationStorageError::StoreFailed { ref host, .. })
+                    if host == "example.com"
+            ),
+            "expected a StoreFailed error, got {result:?}"
         );
     }
 }

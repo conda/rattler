@@ -3,17 +3,19 @@ use std::{collections::HashMap, env, path::PathBuf, time::Instant};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
 use rattler::install::{IndicatifReporter, Installer, Transaction, TransactionOperation};
-use rattler_conda_types::{ChannelConfig, PackageName, Platform, PrefixRecord, RepoDataRecord};
+use rattler_conda_types::{ChannelConfig, PackageName, PrefixRecord, RepoDataRecord, Subdir};
 use rattler_repodata_gateway::RepoData;
 use rattler_solve::SolverTask;
 
 use crate::{
     commands::{
+        detectors::{DetectorContext, detect_virtual_packages},
         gateway::{build_gateway, load_config},
+        hyperlink,
         progress::{wrap_in_async_progress, wrap_in_progress},
     },
     global_multi_progress,
-    solver_args::SolverArgs,
+    solver_args::{SolverArgs, task_for_repodata},
 };
 
 /// Create a conda environment from package listing
@@ -21,6 +23,11 @@ use crate::{
 /// Resolves and installs the specified packages into a target prefix,
 /// pulling from the configured channels.
 #[derive(Debug, clap::Parser)]
+#[clap(after_help = r#"Examples:
+  rattler create python numpy                          # install into ./.prefix from conda-forge
+  rattler create -p ./env -c conda-forge python=3.12   # choose the prefix and the channel
+  rattler create python --dry-run --platform linux-64  # show the transaction without installing
+  rattler create python --constraint "numpy<2"         # constrain a package without requiring it"#)]
 pub struct Opt {
     /// Package specs to install
     #[clap(required = true)]
@@ -32,6 +39,10 @@ pub struct Opt {
     /// Simulate command without installation
     #[clap(long)]
     dry_run: bool,
+
+    #[cfg(feature = "sigstore")]
+    #[clap(flatten)]
+    attestations: crate::attestation_args::AttestationPolicyArgs,
 
     /// Target prefix (environment path) for package installation
     #[clap(
@@ -63,7 +74,7 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     // Determine the channels to use from the command line or select the default.
     // Like matchspecs this also requires the use of the `channel_config` so we
     // have to do this manually.
-    let channels = opt.solver.channels(&channel_config)?;
+    let channels = opt.solver.channels(&config, &channel_config)?;
     let exclude_newer = opt.solver.exclude_newer(&channel_config)?;
 
     // Determine the packages that are currently installed in the environment.
@@ -81,19 +92,22 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     let gateway = build_gateway(download_client.clone(), &config, offline, true)?;
 
     let start_load_repo_data = Instant::now();
-    let repo_data = wrap_in_async_progress(
-        "loading repodata",
-        gateway
-            .query(
-                channels,
-                [install_platform, Platform::NoArch],
-                specs.clone(),
-            )
-            .recursive(true),
-    )
-    .await
-    .into_diagnostic()
-    .context("failed to load repodata")?;
+    let mut query = gateway
+        .query(
+            channels.iter().cloned(),
+            [install_platform, Subdir::NoArch],
+            specs.clone(),
+        )
+        .recursive(true);
+    if !opt.solver.has_explicit_virtual_packages() {
+        query = query
+            .virtual_package_detectors(install_platform)
+            .constraints(constraints.iter().cloned());
+    }
+    let mut repo_data = wrap_in_async_progress("loading repodata", query)
+        .await
+        .into_diagnostic()
+        .context("failed to load repodata")?;
 
     // Surface any non-fatal CEP-42 channel-relation problems.
     for warning in &repo_data.warnings {
@@ -108,12 +122,16 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
         start_load_repo_data.elapsed()
     );
 
-    // Determine virtual packages of the system. These packages define the
-    // capabilities of the system. Some packages depend on these virtual
-    // packages to indicate compatibility with the hardware of the system.
-    let virtual_packages = wrap_in_progress("determining virtual packages", || {
-        opt.solver.virtual_packages()
-    })?;
+    let virtual_packages = detect_virtual_packages(
+        &opt.solver,
+        DetectorContext {
+            gateway: &gateway,
+            config: &config,
+            download_client: &download_client,
+            detectors: repo_data.virtual_package_detectors.take(),
+        },
+    )
+    .await?;
 
     println!(
         "Virtual packages:\n{}\n",
@@ -149,7 +167,7 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
         strategy: opt.solver.strategy(),
         channel_priority: opt.solver.channel_priority(),
         exclude_newer,
-        ..SolverTask::from_iter(&repo_data)
+        ..task_for_repodata(&repo_data)
     };
 
     // Next, use a solver to solve this specific problem. This provides us with all
@@ -182,7 +200,10 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     }
 
     let install_start = Instant::now();
-    let result = Installer::new()
+    let installer = Installer::new();
+    #[cfg(feature = "sigstore")]
+    let installer = installer.with_attestation_policy(opt.attestations.policy());
+    let result = installer
         .with_download_client(download_client)
         .with_max_concurrent_requests(config.concurrency.downloads)
         .with_target_platform(install_platform)
@@ -226,28 +247,23 @@ fn print_transaction(
     features: HashMap<PackageName, Vec<String>>,
 ) {
     let format_record = |r: &RepoDataRecord| {
-        let direct_url_print = if let Some(channel) = &r.channel {
-            channel.clone()
-        } else {
-            String::new()
-        };
+        let name = r.package_record.name.as_normalized();
+        let name = hyperlink::maybe_link(hyperlink::package_page(r.channel.as_deref(), name), name);
+        let channel = r.channel.as_deref().map_or_else(String::new, |channel| {
+            hyperlink::maybe_link(hyperlink::channel_page(channel), channel)
+        });
 
         if let Some(features) = features.get(&r.package_record.name) {
             format!(
-                "{}[{}] {} {} {}",
-                r.package_record.name.as_normalized(),
+                "{name}[{}] {} {} {channel}",
                 features.join(", "),
                 r.package_record.version,
                 r.package_record.build,
-                direct_url_print,
             )
         } else {
             format!(
-                "{} {} {} {}",
-                r.package_record.name.as_normalized(),
-                r.package_record.version,
-                r.package_record.build,
-                direct_url_print,
+                "{name} {} {} {channel}",
+                r.package_record.version, r.package_record.build,
             )
         }
     };

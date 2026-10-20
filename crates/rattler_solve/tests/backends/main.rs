@@ -9,7 +9,9 @@ use once_cell::sync::Lazy;
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
     ParseMatchSpecOptions, ParseStrictness, RepoData, RepoDataRecord, SolverResult, Version,
-    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
+    package::{
+        ArchiveIdentifier, BuildString, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
+    },
 };
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{
@@ -21,9 +23,11 @@ mod conditional_tests;
 mod extras_tests;
 mod helpers;
 mod min_age_tests;
+mod multichannel_tests;
 mod solver_case_tests;
 mod sorting_tests;
 mod strategy_tests;
+mod timestamp_policy_tests;
 mod variant_flags_tests;
 
 fn channel_config() -> ChannelConfig {
@@ -122,7 +126,7 @@ impl PackageBuilder {
                     attestations_sha256: None,
                     name: name.parse().unwrap(),
                     version: Version::from_str("0.0.0").unwrap().into(),
-                    build: "h123456_0".to_string(),
+                    build: "h123456_0".parse::<BuildString>().unwrap(),
                     build_number: 0,
                     subdir: "linux-64".to_string(),
                     md5: Some(dummy_md5_hash()),
@@ -173,7 +177,7 @@ impl PackageBuilder {
     }
 
     fn build_string(mut self, build: &str) -> Self {
-        self.record.package_record.build = build.to_string();
+        self.record.package_record.build = BuildString::new_unchecked(build);
         self
     }
 
@@ -224,12 +228,14 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
         let mut pkgs = records
             .into_iter()
             .map(|pkg| {
-                format!(
-                    "{} {} {}",
-                    pkg.package_record.name.as_normalized(),
-                    pkg.package_record.version,
-                    pkg.package_record.build
-                )
+                let name = pkg.package_record.name.as_normalized();
+                let version = &pkg.package_record.version;
+                let build = &pkg.package_record.build;
+                if build.is_empty() {
+                    format!("{name} {version}")
+                } else {
+                    format!("{name} {version} {build}")
+                }
             })
             .collect::<Vec<_>>();
 
@@ -416,7 +422,7 @@ macro_rules! solver_backend_tests {
                     virtual_packages: vec![GenericVirtualPackage {
                         name: rattler_conda_types::PackageName::new_unchecked("__unix"),
                         version: Version::from_str("0").unwrap(),
-                        build_string: "0".to_string(),
+                        build_string: "0".parse::<BuildString>().unwrap(),
                     }],
                     ..SimpleSolveTask::default()
                 },
@@ -459,7 +465,7 @@ macro_rules! solver_backend_tests {
             assert_eq!("foo", info.package_record.name.as_normalized());
             assert_eq!("linux-64", info.package_record.subdir);
             assert_eq!("3.0.2", info.package_record.version.to_string());
-            assert_eq!("py36h1af98f8_3", info.package_record.build);
+            assert_eq!("py36h1af98f8_3", info.package_record.build.as_str());
             assert_eq!(3, info.package_record.build_number);
             assert_eq!(
                 rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
@@ -507,7 +513,7 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
-        fn test_min_age_with_exemption() {
+        fn test_min_age_with_package_override() {
             crate::min_age_tests::solve_min_age_with_package_override::<$T>();
         }
 
@@ -517,7 +523,7 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
-        fn test_min_age_exempt_dependency() {
+        fn test_min_age_package_override_dependency() {
             crate::min_age_tests::solve_min_age_package_override_dependency::<$T>();
         }
 
@@ -527,18 +533,48 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
-        fn test_min_age_include_unknown_timestamp() {
-            crate::min_age_tests::solve_min_age_include_unknown_timestamp::<$T>();
+        fn test_min_age_allow_missing_timestamps() {
+            crate::min_age_tests::solve_min_age_allow_missing_timestamps::<$T>();
         }
 
         #[test]
-        fn test_min_age_exempt_no_timestamp() {
+        fn test_min_age_package_override_no_timestamp() {
             crate::min_age_tests::solve_min_age_package_override_no_timestamp::<$T>();
         }
 
         #[test]
         fn test_min_age_per_channel() {
             crate::min_age_tests::solve_min_age_per_channel::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exemption() {
+            crate::min_age_tests::solve_min_age_exemption::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exemption_build() {
+            crate::min_age_tests::solve_min_age_exemption_build::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exemption_not_transitive() {
+            crate::min_age_tests::solve_min_age_exemption_not_transitive::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exemption_no_timestamp() {
+            crate::min_age_tests::solve_min_age_exemption_no_timestamp::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exemption_channel() {
+            crate::min_age_tests::solve_min_age_exemption_channel::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exemption_subdir_and_file_name() {
+            crate::min_age_tests::solve_min_age_exemption_subdir_and_file_name::<$T>();
         }
 
         #[test]
@@ -573,7 +609,7 @@ macro_rules! solver_backend_tests {
                     virtual_packages: vec![GenericVirtualPackage {
                         name: "__cuda".parse().unwrap(),
                         version: Version::from_str("1").unwrap(),
-                        build_string: "0".to_string(),
+                        build_string: "0".parse::<BuildString>().unwrap(),
                     }],
                     ..SimpleSolveTask::default()
                 },
@@ -584,12 +620,14 @@ macro_rules! solver_backend_tests {
                     .records
                     .iter()
                     .format_with("\n", |pkg, f| {
-                        f(&format_args!(
-                            "{}={}={}",
-                            pkg.package_record.name.as_normalized(),
-                            pkg.package_record.version.as_str(),
-                            &pkg.package_record.build
-                        ))
+                        let name = pkg.package_record.name.as_normalized();
+                        let version = pkg.package_record.version.as_str();
+                        let build = &pkg.package_record.build;
+                        if build.is_empty() {
+                            f(&format_args!("{name}={version}"))
+                        } else {
+                            f(&format_args!("{name}={version}={build}"))
+                        }
                     })
                     .to_string(),
                 Err(e) => e.to_string(),
@@ -636,6 +674,31 @@ macro_rules! solver_backend_tests {
         #[test]
         fn test_solver_case_constraints() {
             crate::solver_case_tests::solve_constraints::<$T>();
+        }
+
+        #[test]
+        fn test_missing_timestamps() {
+            crate::timestamp_policy_tests::missing_timestamps::<$T>();
+        }
+
+        #[test]
+        fn test_indexed_timestamp_cutoffs() {
+            crate::timestamp_policy_tests::indexed_timestamp_cutoffs::<$T>();
+        }
+
+        #[test]
+        fn test_timestamp_overrides() {
+            crate::timestamp_policy_tests::timestamp_overrides::<$T>();
+        }
+
+        #[test]
+        fn test_timestamp_archive_fallback() {
+            crate::timestamp_policy_tests::timestamp_archive_fallback::<$T>();
+        }
+
+        #[test]
+        fn test_locked_package_newer_than_cutoff() {
+            crate::timestamp_policy_tests::locked_package_newer_than_cutoff::<$T>();
         }
 
         #[test]
@@ -697,6 +760,41 @@ macro_rules! solver_backend_tests {
         fn test_solve_with_unparsable_dependency() {
             crate::solver_case_tests::solve_with_unparsable_dependency::<$T>();
         }
+
+        #[test]
+        fn test_multichannel_channel_priority() {
+            crate::multichannel_tests::multichannel_channel_priority::<$T>();
+        }
+
+        #[test]
+        fn test_multichannel_strict_priority_is_per_package() {
+            crate::multichannel_tests::multichannel_strict_priority_is_per_package::<$T>();
+        }
+
+        #[test]
+        fn test_multichannel_after_channel() {
+            crate::multichannel_tests::multichannel_after_channel::<$T>();
+        }
+
+        #[test]
+        fn test_multichannel_multiple_multichannels() {
+            crate::multichannel_tests::multichannel_multiple_multichannels::<$T>();
+        }
+
+        #[test]
+        fn test_multichannel_members_apart() {
+            crate::multichannel_tests::multichannel_members_apart::<$T>();
+        }
+
+        #[test]
+        fn test_multichannel_dependency_from_other_member() {
+            crate::multichannel_tests::multichannel_dependency_from_other_member::<$T>();
+        }
+
+        #[test]
+        fn test_multichannel_ties() {
+            crate::multichannel_tests::multichannel_ties::<$T>();
+        }
     };
 }
 
@@ -709,8 +807,8 @@ mod libsolv_c {
     use rattler_solve::{ChannelPriority, SolveStrategy};
 
     use super::{
-        FromStr, GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
-        dummy_channel_json_path, installed_package, solve, solve_real_world,
+        BuildString, FromStr, GenericVirtualPackage, ParseStrictness, SimpleSolveTask, SolveError,
+        Version, dummy_channel_json_path, installed_package, solve, solve_real_world,
     };
 
     solver_backend_tests!(rattler_solve::libsolv_c::Solver);
@@ -752,7 +850,7 @@ mod libsolv_c {
                 &ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap()),
             )
             .unwrap()
-            .platform_url(rattler_conda_types::Platform::Linux64)
+            .platform_url(rattler_conda_types::Subdir::Linux64)
             .to_string(),
             &repo_data,
             None,
@@ -762,6 +860,7 @@ mod libsolv_c {
         let libsolv_repodata = rattler_solve::libsolv_c::RepoData {
             records: repo_data.iter().collect(),
             solv_file: Some(&cached_repo_data),
+            multi_channel: None,
         };
 
         let specs: Vec<MatchSpec> = vec!["foo<4".parse().unwrap()];
@@ -807,7 +906,7 @@ mod libsolv_c {
         assert_eq!("foo", info.package_record.name.as_normalized());
         assert_eq!("linux-64", info.package_record.subdir);
         assert_eq!("3.0.2", info.package_record.version.to_string());
-        assert_eq!("py36h1af98f8_3", info.package_record.build);
+        assert_eq!("py36h1af98f8_3", info.package_record.build.as_str());
         assert_eq!(3, info.package_record.build_number);
         assert_eq!(
             rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
@@ -833,9 +932,11 @@ mod resolvo {
     use std::{collections::HashMap, sync::Arc};
 
     use rattler_conda_types::{
-        MatchSpec, PackageRecord, ParseStrictness, RepoDataRecord, VersionWithSource,
-        package::DistArchiveIdentifier,
+        MatchSpec, PackageRecord, ParseMatchSpecOptions, ParseStrictness, RepoDataRecord,
+        VersionWithSource,
+        package::{BuildString, DistArchiveIdentifier},
     };
+    use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
     use rattler_solve::{SolveStrategy, SolverImpl, SolverTask};
     use url::Url;
 
@@ -846,6 +947,13 @@ mod resolvo {
     };
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);
+
+    #[test]
+    fn test_multichannel_channel_specific_specs() {
+        crate::multichannel_tests::multichannel_channel_specific_specs::<
+            rattler_solve::resolvo::Solver,
+        >();
+    }
 
     /// When a single node in the conflict merges many versions, the version list
     /// is abbreviated with an ellipsis instead of printing every version.
@@ -1200,7 +1308,7 @@ mod resolvo {
             // package direct_url: Some(url.clone()),
             "_libgcc_mutex".parse().unwrap(),
             VersionWithSource::from_str("0.1").unwrap(),
-            "0".to_string(),
+            "0".parse::<BuildString>().unwrap(),
         );
         let repo_data: Vec<RepoDataRecord> = vec![RepoDataRecord {
             package_record: package_record.clone(),
@@ -1355,6 +1463,48 @@ mod resolvo {
         "###);
     }
 
+    #[test]
+    fn test_sparse_repodata_loads_extra_dependencies() {
+        let repo_data =
+            super::read_sparse_repodata(&dummy_channel_with_optional_dependencies_json_path());
+
+        for (spec, expected) in [
+            ("bar <2", "bar 1"),
+            ("foo[extras=[with-bar]]", "bar 1, foo 1"),
+        ] {
+            let spec =
+                MatchSpec::from_str(spec, ParseMatchSpecOptions::lenient().with_extras(true))
+                    .unwrap();
+            let package_names = spec.name.as_exact().cloned().into_iter();
+            let records = SparseRepoData::load_records_recursive(
+                [&repo_data],
+                package_names,
+                None,
+                PackageFormatSelection::default(),
+            )
+            .unwrap();
+            let result = rattler_solve::resolvo::Solver
+                .solve(SolverTask {
+                    specs: vec![spec],
+                    ..SolverTask::from_iter(&records)
+                })
+                .unwrap();
+            let mut packages = result
+                .records
+                .iter()
+                .map(|record| {
+                    format!(
+                        "{} {}",
+                        record.package_record.name.as_normalized(),
+                        record.package_record.version
+                    )
+                })
+                .collect::<Vec<_>>();
+            packages.sort();
+            assert_eq!(packages.join(", "), expected);
+        }
+    }
+
     // Candidate ordering tests (resolvo-specific)
 
     #[test]
@@ -1498,12 +1648,14 @@ fn compare_solve(task: CompareTask<'_>) {
         let mut pkgs = records
             .into_iter()
             .map(|pkg| {
-                format!(
-                    "{} {} {}",
-                    pkg.package_record.name.as_normalized(),
-                    pkg.package_record.version,
-                    pkg.package_record.build
-                )
+                let name = pkg.package_record.name.as_normalized();
+                let version = &pkg.package_record.version;
+                let build = &pkg.package_record.build;
+                if build.is_empty() {
+                    format!("{name} {version}")
+                } else {
+                    format!("{name} {version} {build}")
+                }
             })
             .collect::<Vec<_>>();
 

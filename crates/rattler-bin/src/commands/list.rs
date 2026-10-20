@@ -6,7 +6,7 @@ use rattler_conda_types::{
 };
 
 use crate::commands::{
-    QueryOutputFormat, print_url_lines,
+    QueryOutputFormat, hyperlink, print_url_lines,
     table::{Cell, Table},
 };
 
@@ -112,18 +112,32 @@ pub async fn list(opt: Opt) -> miette::Result<()> {
         None => {
             let mut table = Table::with_header(["# Name", "Version", "Build", "Channel"]);
             for record in records {
-                table.add_row(
-                    [
-                        record.name().as_normalized().to_string(),
-                        record.version().as_str().to_string(),
-                        record.build().to_string(),
-                        record.repodata_record.channel.clone().unwrap_or_default(),
-                    ]
-                    .map(Cell::plain),
-                );
+                let channel = record.repodata_record.channel.as_deref();
+                let name = record.name().as_normalized().to_string();
+                let channel_text = channel.unwrap_or_default().to_string();
+                table.add_row([
+                    // The name and the channel link to their web page where one
+                    // is known; the text of both is unchanged either way.
+                    Cell::styled(
+                        hyperlink::maybe_link(hyperlink::package_page(channel, &name), &name),
+                        name,
+                    ),
+                    Cell::plain(record.version().as_str().to_string()),
+                    Cell::plain(record.build().to_string()),
+                    Cell::styled(
+                        hyperlink::maybe_link(
+                            channel.and_then(hyperlink::channel_page),
+                            &channel_text,
+                        ),
+                        channel_text,
+                    ),
+                ]);
             }
 
-            println!("# packages in environment at {}", prefix.to_string_lossy());
+            println!(
+                "# packages in environment at {}",
+                hyperlink::maybe_link(hyperlink::directory(&prefix), prefix.to_string_lossy())
+            );
             table.print();
         }
     }

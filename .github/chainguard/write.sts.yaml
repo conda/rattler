@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/octo-sts/app/refs/heads/main/pkg/octosts/octosts.TrustPolicy.json
 issuer: https://token.actions.githubusercontent.com
-subject_pattern: ^repo:conda/rattler:(ref:refs/heads/main|environment:release)$
+subject_pattern: ^repo:conda@6392739/rattler@432671463:(ref:refs/heads/main|environment:release)$
 claim_pattern:
   ref: ^refs/heads/main$
 

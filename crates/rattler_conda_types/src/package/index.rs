@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 use thiserror::Error;
 
-use super::PackageFile;
+use super::{BuildString, PackageFile};
 use crate::{
     CanonicalMatchSpecError, Flag, MatchSpec, NoArchType, PackageName, PackageUrl,
     ParseMatchSpecError, ParseMatchSpecOptions, RepodataRevision, VersionWithSource,
@@ -28,7 +28,7 @@ pub struct IndexJson {
     pub arch: Option<String>,
 
     /// The build string of the package.
-    pub build: String,
+    pub build: BuildString,
 
     /// The build number of the package. This is also included in the build
     /// string.
@@ -134,10 +134,6 @@ impl IndexJson {
             return revision;
         }
 
-        if !self.flags.is_empty() {
-            return RepodataRevision::V3;
-        }
-
         let parse_options =
             ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3);
         if self
@@ -180,11 +176,10 @@ impl IndexJson {
             .collect::<Result<BTreeMap<_, _>, _>>()?;
 
         let required_revision = self.repodata_revision.unwrap_or_else(|| {
-            if !self.flags.is_empty()
-                || depends
-                    .iter()
-                    .chain(constrains.iter())
-                    .any(|spec| spec.required_repodata_revision() == RepodataRevision::V3)
+            if depends
+                .iter()
+                .chain(constrains.iter())
+                .any(|spec| spec.required_repodata_revision() == RepodataRevision::V3)
             {
                 RepodataRevision::V3
             } else {
@@ -192,9 +187,6 @@ impl IndexJson {
             }
         });
 
-        if required_revision.uses_legacy_package_layout() && !self.flags.is_empty() {
-            return Err(ValidateIndexJsonError::LegacyFlags);
-        }
         for flag in &self.flags {
             if flag.validate().is_err() {
                 return Err(ValidateIndexJsonError::InvalidFlag {
@@ -356,10 +348,6 @@ fn matchspec_requires_v3(spec: &str, parse_options: ParseMatchSpecOptions) -> bo
 /// An error when validating an [`IndexJson`] value.
 #[derive(Debug, Error)]
 pub enum ValidateIndexJsonError {
-    /// Legacy repodata cannot represent package flags.
-    #[error("legacy repodata cannot represent flags")]
-    LegacyFlags,
-
     /// Legacy repodata cannot represent matchspec extras.
     #[error("legacy repodata cannot represent matchspec extras in {field}: {spec}")]
     LegacyMatchSpecExtras {
@@ -507,8 +495,9 @@ mod test {
         .unwrap();
         assert_eq!(
             inferred_revision.required_repodata_revision(),
-            RepodataRevision::V3
+            RepodataRevision::Legacy
         );
+        inferred_revision.validate().unwrap();
     }
 
     #[test]
@@ -634,10 +623,28 @@ mod test {
             }"#,
         )
         .unwrap();
-        assert!(matches!(
-            flags.validate(),
-            Err(ValidateIndexJsonError::LegacyFlags)
-        ));
+        assert_eq!(flags.required_repodata_revision(), RepodataRevision::Legacy);
+        let validated = flags.clone().into_validated().unwrap();
+        assert_eq!(
+            validated.required_repodata_revision(),
+            RepodataRevision::Legacy
+        );
+
+        let inferred_flags: IndexJson = serde_json::from_str(
+            r#"{
+                "build": "0",
+                "build_number": 0,
+                "flags": ["cuda"],
+                "name": "demo",
+                "version": "1.0"
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            inferred_flags.required_repodata_revision(),
+            RepodataRevision::Legacy
+        );
+        inferred_flags.validate().unwrap();
 
         let flags_matchspec: IndexJson = serde_json::from_str(
             r#"{

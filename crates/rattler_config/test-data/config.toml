@@ -20,7 +20,7 @@ disable-sharded = false
 
 [s3-options.my-bucket]
 endpoint-url = "https://my-s3-compatible-host.com"
-force-path-style = true
+addressing-style = "path"
 region = "us-east-1"
 
 [concurrency]

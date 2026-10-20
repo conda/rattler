@@ -1,8 +1,8 @@
+import select
 import sys
 import time
-import select
-import pytest
 
+import pytest
 
 # PTY functionality is only available on Unix platforms
 skip_on_windows = pytest.mark.skipif(sys.platform == "win32", reason="PTY is Unix-only")
@@ -134,24 +134,27 @@ def test_pty_process_bash_command() -> None:
 
 @skip_on_windows
 def test_pty_process_status() -> None:
+    """Check running, exited, and reaped child statuses."""
     from rattler import PtyProcess
 
-    """Test checking process status."""
-    # Start a very short process
-    process = PtyProcess(["sleep", "0.01"])
+    process = PtyProcess(["bash", "-c", "read -r _ && exit 7"])
+    try:
+        with process.get_file_handle() as file:
+            assert process.status() == "StillAlive"
+            file.write(b"finish\n")
 
-    # Check initial status - might still be alive
-    status = process.status()
-    assert status is None or "Exited" in status or "StillAlive" in status
+            deadline = time.monotonic() + 5.0
+            status = process.status()
+            while status == "StillAlive" and time.monotonic() < deadline:
+                time.sleep(0.01)
+                status = process.status()
 
-    # Wait for it to finish
-    time.sleep(0.05)
-
-    # Should be exited now
-    status = process.status()
-    # Note: status might be None if we already reaped the process
-    if status is not None:
-        assert "Exited" in status or "Signaled" in status
+            assert status == "Exited(7)"
+            assert process.status() is None
+    finally:
+        if process.status() == "StillAlive":
+            process.kill_timeout = 1.0
+            process.exit()
 
 
 @skip_on_windows
@@ -240,6 +243,7 @@ def test_pty_process_get_file_handle() -> None:
 async def test_pty_process_async_read_write() -> None:
     """Test async read and write operations."""
     import asyncio
+
     from rattler import PtyProcess
 
     process = PtyProcess(["bash", "-c", "echo 'hello async world'"])
@@ -258,6 +262,7 @@ async def test_pty_process_async_read_write() -> None:
 async def test_pty_process_async_wait() -> None:
     """Test async waiting for process to exit."""
     import asyncio
+
     from rattler import PtyProcess
 
     process = PtyProcess(["sleep", "0.1"])
@@ -276,6 +281,7 @@ async def test_pty_process_async_wait() -> None:
 async def test_pty_process_async_exit() -> None:
     """Test async process termination."""
     import asyncio
+
     from rattler import PtyProcess
 
     process = PtyProcess(["sleep", "100"])
@@ -295,6 +301,7 @@ async def test_pty_process_async_exit() -> None:
 async def test_pty_process_multiple_async_operations() -> None:
     """Test multiple concurrent async operations."""
     import asyncio
+
     from rattler import PtyProcess
 
     # Create multiple processes

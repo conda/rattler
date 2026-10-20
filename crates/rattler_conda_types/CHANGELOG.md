@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.57.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.57.0...rattler_conda_types-v0.57.1) - 2026-10-16
+
+### Fixed
+
+- index packages with flags into legacy repodata ([#2946](https://github.com/conda/rattler/pull/2946))
+
+## [0.57.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.56.2...rattler_conda_types-v0.57.0) - 2026-10-13
+
+### Other
+
+- Add `BuildString` to rattler_conda_types ([#2430](https://github.com/conda/rattler/pull/2430))
+- compile simple glob patterns into string matcher variants ([#2924](https://github.com/conda/rattler/pull/2924))
+
+## [0.56.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.56.1...rattler_conda_types-v0.56.2) - 2026-10-07
+
+### Fixed
+
+- include optional dependencies in virtual package demand ([#2912](https://github.com/conda/rattler/pull/2912))
+
+### Other
+
+- bump rust to 1.98.1 ([#2906](https://github.com/conda/rattler/pull/2906))
+
+## [0.56.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.56.0...rattler_conda_types-v0.56.1) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+
+## [0.56.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.55.0...rattler_conda_types-v0.56.0) - 2026-10-05
+
+### Added
+
+- *(conda-types)* parse virtual package detector registrations ([#2859](https://github.com/conda/rattler/pull/2859))
+- Implementation offsets in paths.json ([#2565](https://github.com/conda/rattler/pull/2565))
+- emit consistent v3 repodata ([#2668](https://github.com/conda/rattler/pull/2668))
+- add freebsd-ppc64le and freebsd-ppc64 subdirs ([#2768](https://github.com/conda/rattler/pull/2768))
+
+### Fixed
+
+- handle empty channel specifiers ([#2737](https://github.com/conda/rattler/pull/2737))
+- *(rattler_conda_types)* keep backslashes in file names when serializing paths on Unix ([#2878](https://github.com/conda/rattler/pull/2878))
+
+## [0.55.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.54.0...rattler_conda_types-v0.55.0) - 2026-09-29
+
+### Added
+
+- *(sigstore)* add FulcioCiClaims from `1.3.6.1.4.1.57264.1` ([#2844](https://github.com/conda/rattler/pull/2844))
+
+### Other
+
+- [**breaking**] rename Platform to Subdir and validate names against CEP 26 ([#2787](https://github.com/conda/rattler/pull/2787))
+
+## [0.54.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.53.0...rattler_conda_types-v0.54.0) - 2026-09-23
+
+### Added
+
+- add standalone Sigstore attestation verification ([#2794](https://github.com/conda/rattler/pull/2794))
+- Add attestations to PackageRecord and rattler-index/upload ([#2773](https://github.com/conda/rattler/pull/2773))
+
 ## [0.53.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.52.1...rattler_conda_types-v0.53.0) - 2026-09-17
 
 ### Added

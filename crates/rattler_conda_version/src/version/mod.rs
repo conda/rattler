@@ -630,16 +630,27 @@ impl Hash for Version {
             segments: I,
         ) {
             let default = Component::default();
+            // The versions `1.0` and `1` are considered equal because a version has an
+            // infinite number of default components in each segment. To get an
+            // equivalent hash we skip trailing default components and trailing
+            // default segments. Non-trailing default segments still hash a single
+            // default component so that e.g. `1.0.1` and `1.1.0` don't collide.
+            let mut pending_default_segments = 0;
             for segment in segments {
-                // The versions `1.0` and `1` are considered equal because a version has an
-                // infinite number of default components in each segment. The
-                // get an equivalent hash we skip trailing default components
-                // when computing the hash
-                segment
+                let mut components = segment
                     .components()
                     .rev()
                     .skip_while(|c| **c == default)
-                    .for_each(|c| c.hash(state));
+                    .peekable();
+                if components.peek().is_none() {
+                    pending_default_segments += 1;
+                    continue;
+                }
+                for _ in 0..pending_default_segments {
+                    default.hash(state);
+                }
+                pending_default_segments = 0;
+                components.for_each(|c| c.hash(state));
             }
         }
 
@@ -1598,6 +1609,24 @@ mod test {
 
         let v2 = Version::from_str("1.2.3").unwrap();
         assert_ne!(get_hash(&v1), get_hash(&v2));
+
+        // https://github.com/conda/rattler/issues/2899
+        for (a, b, equal) in [
+            ("0.1", "1", false),
+            ("1.0.1", "1.1.0", false),
+            ("1.0.0", "1.0", true),
+            ("1.0.0", "1", true),
+            ("1.0a", "1.0a.0", true),
+        ] {
+            let a = Version::from_str(a).unwrap();
+            let b = Version::from_str(b).unwrap();
+            assert_eq!(a == b, equal, "{a} == {b}");
+            assert_eq!(
+                get_hash(&a) == get_hash(&b),
+                equal,
+                "hash({a}) == hash({b})"
+            );
+        }
     }
 
     #[test]

@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use miette::{IntoDiagnostic, Result};
 use rattler_cache::{default_cache_dir, package_cache::PackageCache};
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 use rattler_lock::{DEFAULT_ENVIRONMENT_NAME, LockFile};
 use rattler_vfs::{MountConfig, Transport, build_and_mount, compute_env_hash};
 
@@ -74,7 +74,7 @@ fn anyhow_to_miette(e: anyhow::Error) -> miette::Report {
 
 pub async fn mount(opt: Opt) -> Result<()> {
     let lockfile = LockFile::from_path(&opt.lock_file).into_diagnostic()?;
-    let platform = Platform::current().expect("host platform");
+    let platform = Subdir::current().expect("host platform");
     let env_hash =
         compute_env_hash(&lockfile, &opt.environment, platform).map_err(anyhow_to_miette)?;
 

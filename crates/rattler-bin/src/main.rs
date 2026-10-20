@@ -7,8 +7,12 @@ use tracing_subscriber::{EnvFilter, filter::LevelFilter, util::SubscriberInitExt
 
 use crate::{commands::exec, writer::IndicatifWriter};
 
+#[cfg(feature = "sigstore")]
+mod attestation_args;
 mod commands;
 mod exclude_newer;
+#[cfg(feature = "sigstore")]
+mod publisher_args;
 mod solver_args;
 mod writer;
 
@@ -28,8 +32,8 @@ pub fn global_multi_progress() -> MultiProgress {
 }
 
 /// Returns the conda platform of the host, or an error when the host has none.
-pub fn host_platform() -> miette::Result<rattler_conda_types::Platform> {
-    rattler_conda_types::Platform::current().ok_or_else(|| {
+pub fn host_platform() -> miette::Result<rattler_conda_types::Subdir> {
+    rattler_conda_types::Subdir::current().ok_or_else(|| {
         miette::miette!(
             "the current host is not a known conda platform, specify the platform explicitly"
         )
@@ -69,6 +73,8 @@ enum Command {
     Whoneeds(commands::whoneeds::Opt),
     ShellHook(commands::shell_hook::Opt),
     VirtualPackages(commands::virtual_packages::Opt),
+    #[cfg(feature = "sigstore")]
+    VerifyAttestation(commands::verify_attestation::Opt),
     InstallMenu(commands::menu::InstallOpt),
     RemoveMenu(commands::menu::RemoveOpt),
     Run(commands::run::Opt),
@@ -81,6 +87,7 @@ enum Command {
     Upload(Box<rattler_upload::upload::opt::UploadOpts>),
     List(commands::list::Opt),
     Exec(commands::exec::Opt),
+    Skill(commands::skill::Opt),
 }
 
 /// Entry point of the `rattler` cli.
@@ -146,6 +153,10 @@ async fn async_main() -> miette::Result<()> {
         Command::List(opts) => commands::list::list(opts).await,
         Command::ShellHook(opts) => commands::shell_hook::shell_hook(opts).await,
         Command::VirtualPackages(opts) => commands::virtual_packages::virtual_packages(opts),
+        #[cfg(feature = "sigstore")]
+        Command::VerifyAttestation(opts) => {
+            commands::verify_attestation::verify_attestation(opts, offline).await
+        }
         Command::InstallMenu(opts) => commands::menu::install_menu(opts).await,
         Command::RemoveMenu(opts) => commands::menu::remove_menu(opts).await,
         Command::Run(opts) => commands::run::run(opts).await,
@@ -164,6 +175,7 @@ async fn async_main() -> miette::Result<()> {
             rattler_upload::upload_from_args(*opts).await
         }
         Command::Exec(opts) => exec::exec(opts, offline).await,
+        Command::Skill(opts) => commands::skill::skill(opts),
     }
 }
 

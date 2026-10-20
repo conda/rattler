@@ -7,6 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.5](https://github.com/conda/rattler/compare/rattler_upload-v0.13.4...rattler_upload-v0.13.5) - 2026-10-16
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming, rattler_solve, rattler_config, rattler_networking, rattler_s3
+
+## [0.13.4](https://github.com/conda/rattler/compare/rattler_upload-v0.13.3...rattler_upload-v0.13.4) - 2026-10-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming, rattler_solve, rattler_config, rattler_s3
+
+## [0.13.3](https://github.com/conda/rattler/compare/rattler_upload-v0.13.2...rattler_upload-v0.13.3) - 2026-10-09
+
+### Other
+
+- updated the following local packages: rattler_networking, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.13.2](https://github.com/conda/rattler/compare/rattler_upload-v0.13.1...rattler_upload-v0.13.2) - 2026-10-07
+
+### Other
+
+- updated the following local packages: rattler_solve
+
+## [0.13.1](https://github.com/conda/rattler/compare/rattler_upload-v0.13.0...rattler_upload-v0.13.1) - 2026-10-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_solve, rattler_config, rattler_package_streaming, rattler_s3
+
+## [0.13.0](https://github.com/conda/rattler/compare/rattler_upload-v0.12.2...rattler_upload-v0.13.0) - 2026-10-06
+
+### Added
+
+- *(auth)* [**breaking**] Add RFC 8693 workload-identity login ([#2897](https://github.com/conda/rattler/pull/2897))
+
+## [0.12.2](https://github.com/conda/rattler/compare/rattler_upload-v0.12.1...rattler_upload-v0.12.2) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+
+## [0.12.1](https://github.com/conda/rattler/compare/rattler_upload-v0.12.0...rattler_upload-v0.12.1) - 2026-10-05
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_solve, rattler_package_streaming, rattler_s3
+
+## [0.12.0](https://github.com/conda/rattler/compare/rattler_upload-v0.11.0...rattler_upload-v0.12.0) - 2026-09-29
+
+### Added
+
+- *(sigstore)* add FulcioCiClaims from `1.3.6.1.4.1.57264.1` ([#2844](https://github.com/conda/rattler/pull/2844))
+
+### Other
+
+- *(index)* [**breaking**] build S3 operators from `S3CredentialSource` ([#2847](https://github.com/conda/rattler/pull/2847))
+- [**breaking**] rename Platform to Subdir and validate names against CEP 26 ([#2787](https://github.com/conda/rattler/pull/2787))
+
+## [0.11.0](https://github.com/conda/rattler/compare/rattler_upload-v0.10.9...rattler_upload-v0.11.0) - 2026-09-23
+
+### Added
+
+- add standalone Sigstore attestation verification ([#2794](https://github.com/conda/rattler/pull/2794))
+- Add attestations to PackageRecord and rattler-index/upload ([#2773](https://github.com/conda/rattler/pull/2773))
+
+### Fixed
+
+- respect force option when uploading to Quetz ([#2816](https://github.com/conda/rattler/pull/2816))
+
 ## [0.10.9](https://github.com/conda/rattler/compare/rattler_upload-v0.10.8...rattler_upload-v0.10.9) - 2026-09-17
 
 ### Other

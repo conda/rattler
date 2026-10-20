@@ -11,7 +11,9 @@ use clap::Parser;
 use console::style;
 use jiff::Timestamp;
 use rattler_networking::{
-    Authentication, AuthenticationStorage, authentication_storage::AuthenticationStorageError,
+    Authentication, AuthenticationStorage,
+    authentication_storage::AuthenticationStorageError,
+    oidc_exchange::{ExchangeProtocol, OidcExchangeError, OidcExchangeOptions},
 };
 use reqwest::{Client, header::CONTENT_TYPE};
 use serde_json::{Value, json};
@@ -61,9 +63,9 @@ struct LoginArgs {
     s3_session_token: Option<String>,
 
     // -- OAuth/OIDC --
-    /// Use OAuth/OIDC authentication
+    /// Log in interactively with OAuth/OIDC (browser or device code)
     #[cfg(feature = "oauth")]
-    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id"], help_heading = "OAuth/OIDC Authentication")]
+    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id", "workload_identity"], help_heading = "OAuth/OIDC Authentication")]
     oauth: bool,
 
     /// OIDC issuer URL (defaults to <https://{host>})
@@ -102,9 +104,72 @@ struct LoginArgs {
     #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
     oauth_redirect_uri: Option<String>,
 
+    /// OAuth `audience` to request, so the access token is also accepted by
+    /// that API (provider-specific).
+    #[cfg(feature = "oauth")]
+    #[clap(
+        long,
+        conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id", "workload_identity"],
+        help_heading = "OAuth/OIDC Authentication"
+    )]
+    oauth_audience: Option<String>,
+
+    // -- Workload identity --
+    /// Log in non-interactively by exchanging the CI provider's OIDC ID
+    /// token (GitHub Actions, GitLab CI, ...) for an access token
+    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id"], help_heading = "Workload Identity (CI, non-interactive)")]
+    workload_identity: bool,
+
+    /// Audience requested in the OIDC ID token (defaults to the host, or
+    /// `prefix.dev` for prefix.dev hosts)
+    #[clap(
+        long,
+        requires = "workload_identity",
+        help_heading = "Workload Identity (CI, non-interactive)"
+    )]
+    workload_identity_audience: Option<String>,
+
+    /// How the server exchanges the ID token (defaults to `prefix` for
+    /// prefix.dev hosts and `token-exchange` otherwise)
+    #[clap(
+        long,
+        requires = "workload_identity",
+        value_enum,
+        help_heading = "Workload Identity (CI, non-interactive)"
+    )]
+    workload_identity_exchange: Option<WorkloadIdentityExchange>,
+
+    /// Token endpoint for `--workload-identity-exchange token-exchange`: a
+    /// URL or a path on the host (defaults to the `token_endpoint` from the
+    /// host's RFC 8414 metadata, or `/access/api/v1/oidc/token` for
+    /// *.jfrog.io hosts)
+    #[clap(
+        long,
+        requires = "workload_identity",
+        help_heading = "Workload Identity (CI, non-interactive)"
+    )]
+    workload_identity_token_endpoint: Option<String>,
+
     /// User-Agent header used for requests
     #[clap(long)]
     user_agent: Option<String>,
+}
+
+/// How the server exchanges the CI provider's OIDC ID token.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+enum WorkloadIdentityExchange {
+    /// OAuth 2.0 Token Exchange (RFC 8693) at `--workload-identity-token-endpoint`
+    TokenExchange,
+    /// prefix.dev's mint endpoint
+    Prefix,
+}
+
+impl WorkloadIdentityExchange {
+    fn name(self) -> String {
+        clap::ValueEnum::to_possible_value(&self)
+            .map(|value| value.get_name().to_string())
+            .unwrap_or_default()
+    }
 }
 
 #[derive(Parser, Debug)]
@@ -162,6 +227,27 @@ pub struct Args {
     subcommand: Subcommand,
 }
 
+#[cfg(feature = "oauth")]
+impl Args {
+    /// Set a default audience for OAuth login at `host` (HTTPS unless specified).
+    /// Explicit audiences, custom clients, and other authentication methods are unchanged.
+    pub fn with_default_oauth_audience(mut self, host: &str, audience: impl Into<String>) -> Self {
+        if let Subcommand::Login(args) = &mut self.subcommand
+            && args.oauth_audience.is_none()
+            && args.oauth_issuer_url.is_none()
+            && args.oauth_client_id.is_none()
+            && args.oauth_client_secret.is_none()
+            && (args.oauth || default_oauth_for_login(args).is_some())
+            && let Ok(host_url) = Url::parse(&ensure_url_scheme(host))
+            && Url::parse(&ensure_url_scheme(&args.host))
+                .is_ok_and(|url| url.origin() == host_url.origin())
+        {
+            args.oauth_audience = Some(audience.into());
+        }
+        self
+    }
+}
+
 /// Authentication errors that can be returned by the `AuthenticationCLIError`
 #[derive(thiserror::Error, Debug)]
 pub enum AuthenticationCLIError {
@@ -193,12 +279,6 @@ pub enum AuthenticationCLIError {
         "Authentication with S3 requires a S3 access key ID and a secret access key. Use `--s3-access-key-id` and `--s3-secret-access-key` to provide them"
     )]
     S3BadMethod,
-
-    // TODO: rework this
-    /// Wrapper for errors that are generated from the underlying storage system
-    /// (keyring or file system)
-    #[error("Failed to interact with the authentication storage system")]
-    AnyhowError(#[from] anyhow::Error),
 
     /// Wrapper for errors that are generated from the underlying storage system
     /// (keyring or file system)
@@ -244,6 +324,35 @@ pub enum AuthenticationCLIError {
     #[cfg(feature = "oauth")]
     #[error(transparent)]
     OAuthError(#[from] oauth::OAuthError),
+
+    /// No token endpoint was passed and none could be found.
+    #[error(
+        "Could not find the token endpoint of {0}: it doesn't publish RFC 8414 authorization server metadata with a usable `token_endpoint`. Pass `--workload-identity-token-endpoint`"
+    )]
+    TokenEndpointNotFound(String),
+
+    /// A flag was passed that the selected workload identity exchange doesn't use.
+    #[error("`{flag}` can't be used with `--workload-identity-exchange {exchange}`")]
+    UnsupportedWorkloadIdentityFlag {
+        /// The unsupported flag.
+        flag: &'static str,
+        /// The selected exchange.
+        exchange: String,
+    },
+
+    /// The CI OIDC ID token must not be sent over plain HTTP.
+    #[error("Workload identity login requires an https endpoint, got {0}")]
+    WorkloadIdentityRequiresHttps(String),
+
+    /// No CI provider that issues OIDC ID tokens was detected.
+    #[error(
+        "No CI OIDC provider detected. `--workload-identity` only works in CI; on GitHub Actions the job needs `permissions: id-token: write`"
+    )]
+    NoCiOidcProvider,
+
+    /// The OIDC token exchange failed.
+    #[error(transparent)]
+    OidcExchange(#[from] OidcExchangeError),
 }
 
 /// Normalize a user-supplied host into its canonical hostname form.
@@ -321,7 +430,8 @@ fn default_oauth_for_login(args: &LoginArgs) -> Option<DefaultOAuthConfig> {
         && args.username.is_none()
         && args.password.is_none()
         && args.conda_token.is_none()
-        && args.s3_access_key_id.is_none();
+        && args.s3_access_key_id.is_none()
+        && !args.workload_identity;
 
     if !no_explicit_method {
         return None;
@@ -385,11 +495,22 @@ async fn login_with_offline(
     storage: AuthenticationStorage,
     offline: bool,
 ) -> Result<(), AuthenticationCLIError> {
+    if args.workload_identity {
+        if offline {
+            return Err(AuthenticationCLIError::Offline);
+        }
+        let auth = workload_identity_login(&args).await?;
+        let host = get_url(&args.host)?;
+        storage.store(&host, &auth)?;
+        eprintln!("Credentials stored for {host}.");
+        return Ok(());
+    }
+
     // explicit `--oauth` *or* no explicit method on an OAuth-capable host
     #[cfg(feature = "oauth")]
     {
         let auto_default = default_oauth_for_login(&args);
-        if args.oauth || auto_default.is_some() {
+        if args.oauth || args.oauth_audience.is_some() || auto_default.is_some() {
             if offline {
                 return Err(AuthenticationCLIError::Offline);
             }
@@ -435,7 +556,8 @@ async fn login_with_offline(
                     .collect()
             };
 
-            let config = oauth::OAuthConfig {
+            let auth = oauth::perform_oauth_login(oauth::OAuthConfig {
+                audience: args.oauth_audience,
                 issuer_url,
                 client_id,
                 client_secret: args.oauth_client_secret,
@@ -444,9 +566,8 @@ async fn login_with_offline(
                 redirect_uri,
                 user_agent: args.user_agent,
                 callback_page: None,
-            };
-
-            let auth = oauth::perform_oauth_login(config).await?;
+            })
+            .await?;
             // Normalize the host so that `prefix.dev` and `prefix.dev/` (and
             // any `https://...` form) write to the same storage key
             let host = normalize_login_host(&args.host);
@@ -526,6 +647,125 @@ async fn login_with_offline(
         storage.store(&host, &auth)?;
     }
     Ok(())
+}
+
+/// Token endpoint path of `JFrog` Cloud instances (`*.jfrog.io`), which don't
+/// publish RFC 8414 metadata.
+const JFROG_TOKEN_ENDPOINT: &str = "/access/api/v1/oidc/token";
+
+/// Finds the token endpoint when `--workload-identity-token-endpoint` isn't
+/// passed: from the server's RFC 8414 metadata, falling back to known
+/// defaults.
+async fn find_token_endpoint(
+    server_url: &Url,
+    client: &reqwest_middleware::ClientWithMiddleware,
+) -> Result<String, AuthenticationCLIError> {
+    if let Some(endpoint) =
+        rattler_networking::oidc_exchange::discover_token_endpoint(client, server_url).await?
+    {
+        eprintln!("Using the token endpoint from the server's RFC 8414 metadata");
+        return Ok(endpoint.to_string());
+    }
+    let host = server_url.host_str().unwrap_or_default();
+    if host.ends_with(".jfrog.io") {
+        return Ok(JFROG_TOKEN_ENDPOINT.to_string());
+    }
+    Err(AuthenticationCLIError::TokenEndpointNotFound(
+        host.to_string(),
+    ))
+}
+
+/// Builds the exchange options for `--workload-identity` from the login args.
+async fn workload_identity_options(
+    args: &LoginArgs,
+    server_url: &Url,
+    client: &reqwest_middleware::ClientWithMiddleware,
+) -> Result<OidcExchangeOptions, AuthenticationCLIError> {
+    let host = server_url.host_str().unwrap_or_default();
+    let exchange = args
+        .workload_identity_exchange
+        .unwrap_or(if is_prefix_dev_host(host) {
+            WorkloadIdentityExchange::Prefix
+        } else {
+            WorkloadIdentityExchange::TokenExchange
+        });
+
+    Ok(match exchange {
+        WorkloadIdentityExchange::TokenExchange => {
+            let endpoint = match &args.workload_identity_token_endpoint {
+                Some(endpoint) => endpoint.clone(),
+                None => find_token_endpoint(server_url, client).await?,
+            };
+            let audience = args
+                .workload_identity_audience
+                .clone()
+                .unwrap_or_else(|| host.to_string());
+            OidcExchangeOptions::token_exchange(audience, endpoint)
+        }
+        WorkloadIdentityExchange::Prefix => {
+            if args.workload_identity_token_endpoint.is_some() {
+                return Err(AuthenticationCLIError::UnsupportedWorkloadIdentityFlag {
+                    flag: "--workload-identity-token-endpoint",
+                    exchange: exchange.name(),
+                });
+            }
+            let mut options = OidcExchangeOptions::prefix_dev(server_url);
+            if let Some(audience) = &args.workload_identity_audience {
+                options.audience.clone_from(audience);
+            }
+            options
+        }
+    })
+}
+
+/// The CI provider's ID token is a live credential: only send it, and only
+/// trust metadata pointing to where it's sent, over https. Plain http is
+/// allowed for loopback hosts, e.g. local test servers.
+fn ensure_https(url: &Url) -> Result<(), AuthenticationCLIError> {
+    let is_loopback = match url.host() {
+        Some(url::Host::Domain(domain)) => domain == "localhost",
+        Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
+        Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
+        None => false,
+    };
+    if url.scheme() != "https" && !is_loopback {
+        return Err(AuthenticationCLIError::WorkloadIdentityRequiresHttps(
+            url.to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Exchanges the CI provider's OIDC ID token for a bearer token at `host`.
+async fn workload_identity_login(
+    args: &LoginArgs,
+) -> Result<Authentication, AuthenticationCLIError> {
+    let server_url = Url::parse(&ensure_url_scheme(&args.host))?;
+    ensure_https(&server_url)?;
+
+    let client = reqwest_middleware::ClientBuilder::new(
+        Client::builder()
+            .user_agent(args.user_agent.as_deref().unwrap_or(DEFAULT_USER_AGENT))
+            .build()?,
+    )
+    .build();
+    let options = workload_identity_options(args, &server_url, &client).await?;
+
+    // Checked again on the resolved endpoint, which may be on another host.
+    let endpoint = server_url.join(match &options.exchange {
+        ExchangeProtocol::TokenExchange { endpoint } => endpoint,
+        ExchangeProtocol::PrefixMint { path } => path,
+    })?;
+    ensure_https(&endpoint)?;
+
+    eprintln!(
+        "Exchanging the CI OIDC token (audience `{}`) at {endpoint}",
+        options.audience
+    );
+    let token = rattler_networking::oidc_exchange::get_token(&client, &server_url, &options)
+        .await?
+        .ok_or(AuthenticationCLIError::NoCiOidcProvider)?;
+    Ok(Authentication::BearerToken(token.secret().to_string()))
 }
 
 /// Validates a token with prefix.dev by making a GraphQL API call
@@ -1021,6 +1261,7 @@ fn print_authentication_status(
             token_endpoint,
             revocation_endpoint,
             client_id,
+            ..
         } => {
             let metadata = token_metadata(access_token);
             // OAuth's `expires_at` always refers to the short-lived ACCESS
@@ -1206,6 +1447,12 @@ mod tests {
             oauth_scopes: vec![],
             #[cfg(feature = "oauth")]
             oauth_redirect_uri: None,
+            #[cfg(feature = "oauth")]
+            oauth_audience: None,
+            workload_identity: false,
+            workload_identity_audience: None,
+            workload_identity_exchange: None,
+            workload_identity_token_endpoint: None,
             user_agent: None,
         }
     }
@@ -1529,6 +1776,72 @@ mod tests {
 
     #[cfg(feature = "oauth")]
     #[test]
+    fn default_oauth_audience_matches_the_login_origin() {
+        for (host, expected) in [
+            ("prefix.dev", Some("https://api.example")),
+            ("https://prefix.dev/", Some("https://api.example")),
+            ("PREFIX.DEV", Some("https://api.example")),
+            ("https://prefix.dev:443", Some("https://api.example")),
+            ("http://prefix.dev", None),
+            ("https://prefix.dev:8443", None),
+            ("repo.prefix.dev", None),
+            ("example.com", None),
+        ] {
+            let args = Args {
+                subcommand: Subcommand::Login(create_login_args(host)),
+            }
+            .with_default_oauth_audience("prefix.dev", "https://api.example");
+            let Subcommand::Login(login) = args.subcommand else {
+                panic!("expected login");
+            };
+            assert_eq!(login.oauth_audience.as_deref(), expected, "{host}");
+        }
+    }
+
+    #[cfg(feature = "oauth")]
+    #[test]
+    fn default_oauth_audience_preserves_explicit_options() {
+        for (options, expected) in [
+            (vec!["--oauth"], Some("https://api.example")),
+            (vec!["--oauth-audience", "custom"], Some("custom")),
+            (
+                vec!["--oauth", "--oauth-issuer-url", "https://custom.example"],
+                None,
+            ),
+            (vec!["--oauth", "--oauth-client-id", "custom"], None),
+            (vec!["--oauth", "--oauth-client-secret", "custom"], None),
+            (vec!["--token", "token"], None),
+            (vec!["--username", "user", "--password", "password"], None),
+            (vec!["--conda-token", "token"], None),
+            (
+                vec![
+                    "--s3-access-key-id",
+                    "key",
+                    "--s3-secret-access-key",
+                    "secret",
+                ],
+                None,
+            ),
+            (vec!["--workload-identity"], None),
+        ] {
+            let args = Args::try_parse_from(
+                [vec!["auth", "login", "prefix.dev"], options.clone()].concat(),
+            )
+            .unwrap()
+            .with_default_oauth_audience("prefix.dev", "https://api.example");
+            let Subcommand::Login(login) = args.subcommand else {
+                panic!("expected login");
+            };
+            assert_eq!(login.oauth_audience.as_deref(), expected, "{options:?}");
+        }
+        let args = Args::try_parse_from(["auth", "status"])
+            .unwrap()
+            .with_default_oauth_audience("prefix.dev", "https://api.example");
+        assert!(matches!(args.subcommand, Subcommand::Status(_)));
+    }
+
+    #[cfg(feature = "oauth")]
+    #[test]
     fn test_default_oauth_for_login() {
         // No explicit method on prefix.dev → OAuth default kicks in
         assert!(default_oauth_for_login(&create_login_args("prefix.dev")).is_some());
@@ -1538,9 +1851,170 @@ mod tests {
         args.token = Some("t".into());
         assert!(default_oauth_for_login(&args).is_none());
 
+        // `--workload-identity` is an explicit method too.
+        let mut args = create_login_args("prefix.dev");
+        args.workload_identity = true;
+        assert!(default_oauth_for_login(&args).is_none());
+
         // No explicit method on a non-OAuth host → still falls through to existing
         // NoAuthenticationMethod error.
         assert!(default_oauth_for_login(&create_login_args("example.com")).is_none());
+    }
+
+    fn workload_identity_args(host: &str) -> LoginArgs {
+        let mut args = create_login_args(host);
+        args.workload_identity = true;
+        args
+    }
+
+    #[tokio::test]
+    async fn workload_identity_login_requires_https() {
+        let (storage, _temp_dir) = create_test_storage();
+        let mut args = workload_identity_args("http://example.com");
+        args.workload_identity_token_endpoint = Some("/oauth/token".into());
+        assert!(matches!(
+            login(args, storage.clone()).await,
+            Err(AuthenticationCLIError::WorkloadIdentityRequiresHttps(_))
+        ));
+
+        // An absolute token endpoint is checked, not just the host.
+        let mut args = workload_identity_args("https://example.com");
+        args.workload_identity_token_endpoint = Some("http://example.com/oauth/token".into());
+        assert!(matches!(
+            login(args, storage).await,
+            Err(AuthenticationCLIError::WorkloadIdentityRequiresHttps(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn workload_identity_login_offline_is_rejected() {
+        let (storage, _temp_dir) = create_test_storage();
+        assert!(matches!(
+            login_with_offline(workload_identity_args("prefix.dev"), storage, true).await,
+            Err(AuthenticationCLIError::Offline)
+        ));
+    }
+
+    #[tokio::test]
+    async fn workload_identity_login_stores_exchanged_token() {
+        use axum::{Form, Json, routing::post};
+
+        let router = axum::Router::new().route(
+            "/oauth/token",
+            post(
+                |Form(body): Form<std::collections::HashMap<String, String>>| async move {
+                    assert_eq!(body["subject_token"], "fake.oidc.token");
+                    Json(json!({ "access_token": "exchanged.access.token" }))
+                },
+            ),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+        let (storage, _temp_dir) = create_test_storage();
+        let mut args = workload_identity_args(&format!("http://{addr}"));
+        args.workload_identity_token_endpoint = Some("/oauth/token".into());
+        args.workload_identity_audience = Some("example-audience".into());
+
+        // Force ambient-id's GitLab detector, which reads the ID token from
+        // an env var derived from the audience.
+        async_with_vars(
+            [
+                ("GITLAB_CI", Some("true")),
+                ("EXAMPLE_AUDIENCE_ID_TOKEN", Some("fake.oidc.token")),
+                ("GITHUB_ACTIONS", None),
+                ("BUILDKITE", None),
+                ("CIRCLECI", None),
+            ],
+            login(args, storage.clone()),
+        )
+        .await
+        .unwrap();
+
+        let (_, auth) = storage
+            .get_by_url(format!("http://{addr}/channel/repodata.json"))
+            .unwrap();
+        assert!(matches!(
+            auth,
+            Some(Authentication::BearerToken(token)) if token == "exchanged.access.token"
+        ));
+    }
+
+    #[tokio::test]
+    async fn workload_identity_login_discovers_token_endpoint() {
+        use axum::{
+            Form, Json,
+            routing::{get, post},
+        };
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let metadata = json!({
+            "issuer": format!("http://{addr}"),
+            "token_endpoint": format!("http://{addr}/discovered/token"),
+        });
+        let router = axum::Router::new()
+            .route(
+                "/.well-known/oauth-authorization-server",
+                get(move || async move { Json(metadata) }),
+            )
+            .route(
+                "/discovered/token",
+                post(
+                    |Form(body): Form<std::collections::HashMap<String, String>>| async move {
+                        assert_eq!(body["subject_token"], "fake.oidc.token");
+                        Json(json!({ "access_token": "discovered.access.token" }))
+                    },
+                ),
+            );
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+        let (storage, _temp_dir) = create_test_storage();
+        let mut args = workload_identity_args(&format!("http://{addr}"));
+        args.workload_identity_audience = Some("example-audience".into());
+
+        async_with_vars(
+            [
+                ("GITLAB_CI", Some("true")),
+                ("EXAMPLE_AUDIENCE_ID_TOKEN", Some("fake.oidc.token")),
+                ("GITHUB_ACTIONS", None),
+                ("BUILDKITE", None),
+                ("CIRCLECI", None),
+            ],
+            login(args, storage.clone()),
+        )
+        .await
+        .unwrap();
+
+        let (_, auth) = storage
+            .get_by_url(format!("http://{addr}/channel/repodata.json"))
+            .unwrap();
+        assert!(matches!(
+            auth,
+            Some(Authentication::BearerToken(token)) if token == "discovered.access.token"
+        ));
+    }
+
+    #[tokio::test]
+    async fn workload_identity_login_outside_ci_fails() {
+        let (storage, _temp_dir) = create_test_storage();
+        let mut args = workload_identity_args("example.com");
+        args.workload_identity_token_endpoint = Some("/oauth/token".into());
+        let result = async_with_vars(
+            [
+                ("GITLAB_CI", None::<&str>),
+                ("GITHUB_ACTIONS", None),
+                ("BUILDKITE", None),
+                ("CIRCLECI", None),
+            ],
+            login(args, storage),
+        )
+        .await;
+        assert!(matches!(
+            result,
+            Err(AuthenticationCLIError::NoCiOidcProvider)
+        ));
     }
 
     fn token_args(host: &str) -> TokenArgs {
@@ -1642,6 +2116,7 @@ mod tests {
             .store(
                 "prefix.dev",
                 &Authentication::OAuth {
+                    audience: None,
                     access_token: "a".into(),
                     refresh_token: None,
                     expires_at: None,
@@ -1768,6 +2243,7 @@ mod tests {
         storage.add_backend(backend_b.clone());
 
         let oauth = Authentication::OAuth {
+            audience: None,
             access_token: "tok".into(),
             refresh_token: None,
             expires_at: None,

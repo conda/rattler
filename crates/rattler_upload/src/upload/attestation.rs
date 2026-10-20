@@ -7,7 +7,7 @@ use reqwest::header;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sigstore_sign::{Attestation, SigningConfig, SigningContext, oidc::IdentityToken};
+use sigstore_sign::{Attestation, SigningContext, SigningServices, oidc::IdentityToken};
 use sigstore_trust_root::SigningConfig as TufSigningConfig;
 use std::path::Path;
 
@@ -83,11 +83,11 @@ pub async fn create_attestation(
     let tuf_config = TufSigningConfig::production()
         .await
         .map_err(|e| miette::miette!("Failed to fetch Sigstore TUF signing config: {}", e))?;
-    let signing_config = SigningConfig::from_tuf_config(&tuf_config)
+    let signing_services = SigningServices::from_tuf_config(&tuf_config)
         .map_err(|e| miette::miette!("Failed to build Sigstore signing config: {}", e))?;
 
     tracing::info!("Signing attestation with Sigstore...");
-    let context = SigningContext::with_config(signing_config);
+    let context = SigningContext::new(signing_services);
     let signer = context.signer(identity_token);
 
     let bundle = signer
