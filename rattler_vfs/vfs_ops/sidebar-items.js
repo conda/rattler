@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ContentSource","FileKind"],"fn":["current_uid_gid","set_file_permissions"],"struct":["DirEntry","FileAttr"],"trait":["VfsOps"]};

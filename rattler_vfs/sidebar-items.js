@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ENV_HASH_SCHEMA_VERSION"],"enum":["Mode","MountError","MountHandle","OverlayMismatch","Transport"],"fn":["build_and_mount","build_metadata_tree","compute_env_hash","force_unmount","mount"],"mod":["fuse_adapter","nfs_adapter","overlay","overlay_fs","prefix_replacement","vfs_ops","virtual_fs"],"struct":["MetadataTree","MountConfig"]};

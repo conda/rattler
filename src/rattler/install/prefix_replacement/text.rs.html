@@ -14,8 +14,8 @@
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>regex::Regex;
 <a href=#13 id=13 data-nosnippet>13</a>
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use super</span>::{
-<a href=#15 id=15 data-nosnippet>15</a>    EncodedPrefix, InconsistentOffsetsError, OffsetReplaceError, TextPatch, encoded_prefix_for,
-<a href=#16 id=16 data-nosnippet>16</a>    write_replacement_range,
+<a href=#15 id=15 data-nosnippet>15</a>    EncodedPrefix, InconsistentOffsetsError, OffsetReplaceError, TextOccurrence, TextPatch,
+<a href=#16 id=16 data-nosnippet>16</a>    encoded_prefix_for, write_replacement_range,
 <a href=#17 id=17 data-nosnippet>17</a>};
 <a href=#18 id=18 data-nosnippet>18</a>
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">static </span>SHEBANG_REGEX: Lazy&lt;Regex&gt; = Lazy::new(|| {
@@ -161,276 +161,330 @@
 <a href=#159 id=159 data-nosnippet>159</a>    write_patched_text(destination, source_bytes, region_end, <span class="kw-2">&amp;</span>patches)
 <a href=#160 id=160 data-nosnippet>160</a>}
 <a href=#161 id=161 data-nosnippet>161</a>
-<a href=#162 id=162 data-nosnippet>162</a><span class="doccomment">/// Finds every placeholder occurrence that starts at or after `from`, under every encoding,
-<a href=#163 id=163 data-nosnippet>163</a>/// ordered by position in the file.
+<a href=#162 id=162 data-nosnippet>162</a><span class="doccomment">/// Finds the placeholder occurrences that search-based text replacement replaces, starting at or
+<a href=#163 id=163 data-nosnippet>163</a>/// after `from`, under every encoding the draft CEP defines and ordered by position in the file.
 <a href=#164 id=164 data-nosnippet>164</a>///
-<a href=#165 id=165 data-nosnippet>165</a>/// Per encoding, occurrences are the leftmost non-overlapping matches over the whole file, which
-<a href=#166 id=166 data-nosnippet>166</a>/// is how the draft CEP defines them; the ones before `from` are dropped afterwards. Searching only
-<a href=#167 id=167 data-nosnippet>167</a>/// `source_bytes[from..]` instead would find matches a producer's file-wide scan consumed as part
-<a href=#168 id=168 data-nosnippet>168</a>/// of an earlier, overlapping occurrence.
-<a href=#169 id=169 data-nosnippet>169</a>///
-<a href=#170 id=170 data-nosnippet>170</a>/// Matches of different encodings can overlap, because the encodings of an ASCII placeholder are
-<a href=#171 id=171 data-nosnippet>171</a>/// byte-shifted variants of one another: in UTF-16-LE text every occurrence has a spurious
-<a href=#172 id=172 data-nosnippet>172</a>/// UTF-16-BE twin one byte earlier. Of two overlapping matches the one preferred is the UTF-8
-<a href=#173 id=173 data-nosnippet>173</a>/// match, then the one whose offset is code-unit aligned (as every character of a wide-encoded
-<a href=#174 id=174 data-nosnippet>174</a>/// text file is), then the earlier one.
-<a href=#175 id=175 data-nosnippet>175</a></span><span class="kw">fn </span>find_text_patches&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#176 id=176 data-nosnippet>176</a>    source_bytes: <span class="kw-2">&amp;</span>[u8],
-<a href=#177 id=177 data-nosnippet>177</a>    from: usize,
-<a href=#178 id=178 data-nosnippet>178</a>    prefixes: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[EncodedPrefix],
-<a href=#179 id=179 data-nosnippet>179</a>) -&gt; Vec&lt;TextPatch&lt;<span class="lifetime">'a</span>&gt;&gt; {
-<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">let </span><span class="kw-2">mut </span>candidates = Vec::new();
-<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">for </span>prefix <span class="kw">in </span>prefixes {
-<a href=#182 id=182 data-nosnippet>182</a>        candidates.extend(
-<a href=#183 id=183 data-nosnippet>183</a>            memchr::memmem::find_iter(source_bytes, <span class="kw-2">&amp;</span>prefix.placeholder)
-<a href=#184 id=184 data-nosnippet>184</a>                .map(|offset| TextPatch { offset, prefix }),
-<a href=#185 id=185 data-nosnippet>185</a>        );
-<a href=#186 id=186 data-nosnippet>186</a>    }
-<a href=#187 id=187 data-nosnippet>187</a>    candidates.sort_by_key(|patch| patch.offset);
-<a href=#188 id=188 data-nosnippet>188</a>
-<a href=#189 id=189 data-nosnippet>189</a>    <span class="kw">let </span>rank = |patch: <span class="kw-2">&amp;</span>TextPatch&lt;<span class="lifetime">'_</span>&gt;| <span class="kw">match </span>patch.prefix.encoding {
-<a href=#190 id=190 data-nosnippet>190</a>        OffsetEncoding::Utf8 =&gt; <span class="number">0u8</span>,
-<a href=#191 id=191 data-nosnippet>191</a>        OffsetEncoding::Utf16Le
-<a href=#192 id=192 data-nosnippet>192</a>        | OffsetEncoding::Utf16Be
-<a href=#193 id=193 data-nosnippet>193</a>        | OffsetEncoding::Utf32Le
-<a href=#194 id=194 data-nosnippet>194</a>        | OffsetEncoding::Utf32Be =&gt; {
-<a href=#195 id=195 data-nosnippet>195</a>            <span class="kw">if </span>patch.offset.is_multiple_of(patch.prefix.code_unit_size()) {
-<a href=#196 id=196 data-nosnippet>196</a>                <span class="number">1
-<a href=#197 id=197 data-nosnippet>197</a>            </span>} <span class="kw">else </span>{
-<a href=#198 id=198 data-nosnippet>198</a>                <span class="number">2
-<a href=#199 id=199 data-nosnippet>199</a>            </span>}
-<a href=#200 id=200 data-nosnippet>200</a>        }
-<a href=#201 id=201 data-nosnippet>201</a>    };
-<a href=#202 id=202 data-nosnippet>202</a>    <span class="kw">let </span><span class="kw-2">mut </span>patches: Vec&lt;TextPatch&lt;<span class="lifetime">'a</span>&gt;&gt; = Vec::with_capacity(candidates.len());
-<a href=#203 id=203 data-nosnippet>203</a>    <span class="kw">for </span>candidate <span class="kw">in </span>candidates {
-<a href=#204 id=204 data-nosnippet>204</a>        <span class="comment">// The kept patches are disjoint and sorted, and the candidate starts at or after the last
-<a href=#205 id=205 data-nosnippet>205</a>        // one, so only the last one can overlap it.
-<a href=#206 id=206 data-nosnippet>206</a>        </span><span class="kw">match </span>patches.last() {
-<a href=#207 id=207 data-nosnippet>207</a>            <span class="prelude-val">Some</span>(last) <span class="kw">if </span>candidate.offset &lt; last.offset + last.prefix.placeholder.len() =&gt; {
-<a href=#208 id=208 data-nosnippet>208</a>                <span class="kw">if </span>rank(<span class="kw-2">&amp;</span>candidate) &lt; rank(last) {
-<a href=#209 id=209 data-nosnippet>209</a>                    patches.pop();
-<a href=#210 id=210 data-nosnippet>210</a>                    patches.push(candidate);
-<a href=#211 id=211 data-nosnippet>211</a>                }
-<a href=#212 id=212 data-nosnippet>212</a>            }
-<a href=#213 id=213 data-nosnippet>213</a>            <span class="prelude-val">Some</span>(<span class="kw">_</span>) | <span class="prelude-val">None </span>=&gt; patches.push(candidate),
-<a href=#214 id=214 data-nosnippet>214</a>        }
-<a href=#215 id=215 data-nosnippet>215</a>    }
-<a href=#216 id=216 data-nosnippet>216</a>    patches.retain(|patch| patch.offset &gt;= from);
-<a href=#217 id=217 data-nosnippet>217</a>    patches
-<a href=#218 id=218 data-nosnippet>218</a>}
-<a href=#219 id=219 data-nosnippet>219</a>
-<a href=#220 id=220 data-nosnippet>220</a><span class="doccomment">/// Given the contents of a file copy it to the `destination` and in the process replace the
-<a href=#221 id=221 data-nosnippet>221</a>/// `prefix_placeholder` text with the `target_prefix` text using the offsets from the `paths.json`.
-<a href=#222 id=222 data-nosnippet>222</a>///
-<a href=#223 id=223 data-nosnippet>223</a>/// This is a text based version where the complete string is replaced. This works fine for text
-<a href=#224 id=224 data-nosnippet>224</a>/// files but will not work correctly for binary files where the length of the string is often
-<a href=#225 id=225 data-nosnippet>225</a>/// important. See [`super::copy_and_replace_cstring_placeholder_offsets`] when you are dealing with binary
-<a href=#226 id=226 data-nosnippet>226</a>/// content.
-<a href=#227 id=227 data-nosnippet>227</a>///
-<a href=#228 id=228 data-nosnippet>228</a>/// Every group of `groups` is applied, each under its own encoding. Its ranges are absolute byte
-<a href=#229 id=229 data-nosnippet>229</a>/// positions in `source_bytes` and, per the draft CEP, exclude any occurrence inside the shebang
-<a href=#230 id=230 data-nosnippet>230</a>/// region (the first `shebang_length` bytes, present exactly when the file starts with `#!`). The
-<a href=#231 id=231 data-nosnippet>231</a>/// region is handled separately: on targets with shebang handling ([`Subdir::is_unix`]) the
-<a href=#232 id=232 data-nosnippet>232</a>/// region minus its trailing newline is rewritten by `replace_shebang` and the newline byte copied
-<a href=#233 id=233 data-nosnippet>233</a>/// through verbatim; on other targets the region gets plain placeholder replacement.
-<a href=#234 id=234 data-nosnippet>234</a>///
-<a href=#235 id=235 data-nosnippet>235</a>/// The recorded metadata is validated before anything is written, so a mismatch surfaces as
-<a href=#236 id=236 data-nosnippet>236</a>/// [`OffsetReplaceError::InconsistentMetadata`] with an untouched destination the caller can hand
-<a href=#237 id=237 data-nosnippet>237</a>/// to search-based replacement.
-<a href=#238 id=238 data-nosnippet>238</a></span><span class="kw">pub fn </span>copy_and_replace_textual_placeholder_offsets(
-<a href=#239 id=239 data-nosnippet>239</a>    source_bytes: <span class="kw-2">&amp;</span>[u8],
-<a href=#240 id=240 data-nosnippet>240</a>    <span class="kw-2">mut </span>destination: <span class="kw">impl </span>Write,
-<a href=#241 id=241 data-nosnippet>241</a>    prefix_placeholder: <span class="kw-2">&amp;</span>str,
-<a href=#242 id=242 data-nosnippet>242</a>    target_prefix: <span class="kw-2">&amp;</span>str,
-<a href=#243 id=243 data-nosnippet>243</a>    target_platform: <span class="kw-2">&amp;</span>Subdir,
-<a href=#244 id=244 data-nosnippet>244</a>    groups: <span class="kw-2">&amp;</span>[OffsetGroup],
-<a href=#245 id=245 data-nosnippet>245</a>    shebang_length: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#246 id=246 data-nosnippet>246</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), OffsetReplaceError&gt; {
-<a href=#247 id=247 data-nosnippet>247</a>    <span class="kw">let </span>prefixes = EncodedPrefix::all(prefix_placeholder, target_prefix);
-<a href=#248 id=248 data-nosnippet>248</a>    <span class="kw">let </span>region_end = validated_shebang_region_end(source_bytes, shebang_length)<span class="question-mark">?</span>;
-<a href=#249 id=249 data-nosnippet>249</a>    <span class="kw">let </span>patches = text_patches_from_groups(groups, <span class="kw-2">&amp;</span>prefixes)<span class="question-mark">?</span>;
-<a href=#250 id=250 data-nosnippet>250</a>    validate_text_patches(source_bytes, <span class="kw-2">&amp;</span>patches, region_end)<span class="question-mark">?</span>;
-<a href=#251 id=251 data-nosnippet>251</a>
-<a href=#252 id=252 data-nosnippet>252</a>    <span class="comment">// --- The metadata is consistent; write the patched file. ---
-<a href=#253 id=253 data-nosnippet>253</a>    </span>write_shebang_region(
-<a href=#254 id=254 data-nosnippet>254</a>        <span class="kw-2">&amp;mut </span>destination,
-<a href=#255 id=255 data-nosnippet>255</a>        source_bytes,
-<a href=#256 id=256 data-nosnippet>256</a>        region_end,
-<a href=#257 id=257 data-nosnippet>257</a>        prefix_placeholder,
-<a href=#258 id=258 data-nosnippet>258</a>        target_prefix,
-<a href=#259 id=259 data-nosnippet>259</a>        target_platform,
-<a href=#260 id=260 data-nosnippet>260</a>        <span class="kw-2">&amp;</span>prefixes,
-<a href=#261 id=261 data-nosnippet>261</a>    )<span class="question-mark">?</span>;
-<a href=#262 id=262 data-nosnippet>262</a>    write_patched_text(destination, source_bytes, region_end, <span class="kw-2">&amp;</span>patches)<span class="question-mark">?</span>;
-<a href=#263 id=263 data-nosnippet>263</a>    <span class="prelude-val">Ok</span>(())
-<a href=#264 id=264 data-nosnippet>264</a>}
-<a href=#265 id=265 data-nosnippet>265</a>
-<a href=#266 id=266 data-nosnippet>266</a><span class="doccomment">/// Determines the shebang region from the recorded `shebang_length` rather than re-deriving it
-<a href=#267 id=267 data-nosnippet>267</a>/// from the file contents, validating the recorded value against those contents.
-<a href=#268 id=268 data-nosnippet>268</a>///
-<a href=#269 id=269 data-nosnippet>269</a>/// Per the draft CEP `shebang_length` is present exactly when the file starts with `#!`, and its
-<a href=#270 id=270 data-nosnippet>270</a>/// value is the offset of the first newline plus one, or the file size when there is no newline.
-<a href=#271 id=271 data-nosnippet>271</a>/// The first `shebang_length` bytes form the shebang region; a file without a shebang has an empty
-<a href=#272 id=272 data-nosnippet>272</a>/// one.
-<a href=#273 id=273 data-nosnippet>273</a>///
-<a href=#274 id=274 data-nosnippet>274</a>/// Validating that reads the region and nothing beyond it, which is the bound the draft CEP
-<a href=#275 id=275 data-nosnippet>275</a>/// promises consumers: the region is the first line, so its only newline is its last byte, unless
-<a href=#276 id=276 data-nosnippet>276</a>/// it runs to end-of-file.
-<a href=#277 id=277 data-nosnippet>277</a></span><span class="kw">fn </span>validated_shebang_region_end(
-<a href=#278 id=278 data-nosnippet>278</a>    source_bytes: <span class="kw-2">&amp;</span>[u8],
-<a href=#279 id=279 data-nosnippet>279</a>    shebang_length: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#280 id=280 data-nosnippet>280</a>) -&gt; <span class="prelude-ty">Result</span>&lt;usize, InconsistentOffsetsError&gt; {
-<a href=#281 id=281 data-nosnippet>281</a>    <span class="kw">if </span>!source_bytes.starts_with(<span class="string">b"#!"</span>) {
-<a href=#282 id=282 data-nosnippet>282</a>        <span class="kw">return match </span>shebang_length {
-<a href=#283 id=283 data-nosnippet>283</a>            <span class="prelude-val">Some</span>(<span class="kw">_</span>) =&gt; <span class="prelude-val">Err</span>(InconsistentOffsetsError::UnexpectedShebangLength),
-<a href=#284 id=284 data-nosnippet>284</a>            <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Ok</span>(<span class="number">0</span>),
-<a href=#285 id=285 data-nosnippet>285</a>        };
-<a href=#286 id=286 data-nosnippet>286</a>    }
-<a href=#287 id=287 data-nosnippet>287</a>
-<a href=#288 id=288 data-nosnippet>288</a>    <span class="kw">let </span>shebang_length = shebang_length.ok_or(InconsistentOffsetsError::MissingShebangLength)<span class="question-mark">?</span>;
-<a href=#289 id=289 data-nosnippet>289</a>    <span class="kw">let </span>region = source_bytes
-<a href=#290 id=290 data-nosnippet>290</a>        .get(..shebang_length)
-<a href=#291 id=291 data-nosnippet>291</a>        .ok_or(InconsistentOffsetsError::ShebangLengthMismatch { shebang_length })<span class="question-mark">?</span>;
-<a href=#292 id=292 data-nosnippet>292</a>    <span class="kw">let </span>ends_the_line = <span class="kw">match </span>memchr::memchr(<span class="string">b'\n'</span>, region) {
-<a href=#293 id=293 data-nosnippet>293</a>        <span class="prelude-val">Some</span>(index) =&gt; index + <span class="number">1 </span>== shebang_length,
-<a href=#294 id=294 data-nosnippet>294</a>        <span class="prelude-val">None </span>=&gt; shebang_length == source_bytes.len(),
-<a href=#295 id=295 data-nosnippet>295</a>    };
-<a href=#296 id=296 data-nosnippet>296</a>    <span class="kw">if </span>!ends_the_line {
-<a href=#297 id=297 data-nosnippet>297</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(InconsistentOffsetsError::ShebangLengthMismatch { shebang_length });
-<a href=#298 id=298 data-nosnippet>298</a>    }
-<a href=#299 id=299 data-nosnippet>299</a>    <span class="prelude-val">Ok</span>(shebang_length)
-<a href=#300 id=300 data-nosnippet>300</a>}
-<a href=#301 id=301 data-nosnippet>301</a>
-<a href=#302 id=302 data-nosnippet>302</a><span class="doccomment">/// Writes the first `region_end` bytes of a text file, transformed by the installer's shebang
-<a href=#303 id=303 data-nosnippet>303</a>/// rules on targets that rewrite shebangs and by plain placeholder replacement everywhere else.
-<a href=#304 id=304 data-nosnippet>304</a>///
-<a href=#305 id=305 data-nosnippet>305</a>/// The plain replacement covers every encoding, exactly as the body splice does, so that a
-<a href=#306 id=306 data-nosnippet>306</a>/// wide-encoded occurrence in the first line is not left behind on a target without shebang
-<a href=#307 id=307 data-nosnippet>307</a>/// handling. An empty placeholder means there is nothing to replace: `prefixes` is then empty and
-<a href=#308 id=308 data-nosnippet>308</a>/// the region is copied verbatim rather than fed to a search that matches at every byte.
-<a href=#309 id=309 data-nosnippet>309</a></span><span class="kw">fn </span>write_shebang_region(
-<a href=#310 id=310 data-nosnippet>310</a>    destination: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>Write,
-<a href=#311 id=311 data-nosnippet>311</a>    source_bytes: <span class="kw-2">&amp;</span>[u8],
-<a href=#312 id=312 data-nosnippet>312</a>    region_end: usize,
-<a href=#313 id=313 data-nosnippet>313</a>    prefix_placeholder: <span class="kw-2">&amp;</span>str,
-<a href=#314 id=314 data-nosnippet>314</a>    target_prefix: <span class="kw-2">&amp;</span>str,
-<a href=#315 id=315 data-nosnippet>315</a>    target_platform: <span class="kw-2">&amp;</span>Subdir,
-<a href=#316 id=316 data-nosnippet>316</a>    prefixes: <span class="kw-2">&amp;</span>[EncodedPrefix],
-<a href=#317 id=317 data-nosnippet>317</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), std::io::Error&gt; {
-<a href=#318 id=318 data-nosnippet>318</a>    <span class="kw">if </span>region_end == <span class="number">0 </span>{
-<a href=#319 id=319 data-nosnippet>319</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#320 id=320 data-nosnippet>320</a>    }
-<a href=#321 id=321 data-nosnippet>321</a>
-<a href=#322 id=322 data-nosnippet>322</a>    <span class="kw">if </span>prefixes.is_empty() {
-<a href=#323 id=323 data-nosnippet>323</a>        destination.write_all(<span class="kw-2">&amp;</span>source_bytes[..region_end])<span class="question-mark">?</span>;
-<a href=#324 id=324 data-nosnippet>324</a>    } <span class="kw">else if </span>target_platform.is_unix() {
-<a href=#325 id=325 data-nosnippet>325</a>        <span class="comment">// Feed the region minus its trailing newline to the shebang rules; the newline byte, when
-<a href=#326 id=326 data-nosnippet>326</a>        // present, is copied through unchanged.
-<a href=#327 id=327 data-nosnippet>327</a>        </span><span class="kw">let </span>has_newline = source_bytes[region_end - <span class="number">1</span>] == <span class="string">b'\n'</span>;
-<a href=#328 id=328 data-nosnippet>328</a>        <span class="kw">let </span>line_end = <span class="kw">if </span>has_newline {
-<a href=#329 id=329 data-nosnippet>329</a>            region_end - <span class="number">1
-<a href=#330 id=330 data-nosnippet>330</a>        </span>} <span class="kw">else </span>{
-<a href=#331 id=331 data-nosnippet>331</a>            region_end
-<a href=#332 id=332 data-nosnippet>332</a>        };
-<a href=#333 id=333 data-nosnippet>333</a>        <span class="kw">let </span>first_line = String::from_utf8_lossy(<span class="kw-2">&amp;</span>source_bytes[..line_end]);
-<a href=#334 id=334 data-nosnippet>334</a>        <span class="kw">let </span>new_shebang = replace_shebang(
-<a href=#335 id=335 data-nosnippet>335</a>            first_line,
-<a href=#336 id=336 data-nosnippet>336</a>            (prefix_placeholder, target_prefix),
-<a href=#337 id=337 data-nosnippet>337</a>            target_platform,
-<a href=#338 id=338 data-nosnippet>338</a>        );
-<a href=#339 id=339 data-nosnippet>339</a>        destination.write_all(new_shebang.as_bytes())<span class="question-mark">?</span>;
-<a href=#340 id=340 data-nosnippet>340</a>        <span class="kw">if </span>has_newline {
-<a href=#341 id=341 data-nosnippet>341</a>            destination.write_all(<span class="kw-2">&amp;</span>source_bytes[line_end..region_end])<span class="question-mark">?</span>;
-<a href=#342 id=342 data-nosnippet>342</a>        }
-<a href=#343 id=343 data-nosnippet>343</a>    } <span class="kw">else </span>{
-<a href=#344 id=344 data-nosnippet>344</a>        <span class="comment">// On non-rewriting targets (e.g. Windows for a noarch package) the region gets plain
-<a href=#345 id=345 data-nosnippet>345</a>        // placeholder replacement, exactly as the body does, searching at most the first
-<a href=#346 id=346 data-nosnippet>346</a>        // `shebang_length` bytes.
-<a href=#347 id=347 data-nosnippet>347</a>        </span><span class="kw">let </span>region = <span class="kw-2">&amp;</span>source_bytes[..region_end];
-<a href=#348 id=348 data-nosnippet>348</a>        <span class="kw">let </span>patches = find_text_patches(region, <span class="number">0</span>, prefixes);
-<a href=#349 id=349 data-nosnippet>349</a>        write_patched_text(<span class="kw-2">&amp;mut *</span>destination, region, <span class="number">0</span>, <span class="kw-2">&amp;</span>patches)<span class="question-mark">?</span>;
-<a href=#350 id=350 data-nosnippet>350</a>    }
-<a href=#351 id=351 data-nosnippet>351</a>
-<a href=#352 id=352 data-nosnippet>352</a>    <span class="prelude-val">Ok</span>(())
-<a href=#353 id=353 data-nosnippet>353</a>}
-<a href=#354 id=354 data-nosnippet>354</a>
-<a href=#355 id=355 data-nosnippet>355</a><span class="doccomment">/// Collects the occurrences to replace from the recorded offset groups, ordered by their position
-<a href=#356 id=356 data-nosnippet>356</a>/// in the file so that the splice runs in file order regardless of which group a range came from.
-<a href=#357 id=357 data-nosnippet>357</a></span><span class="kw">fn </span>text_patches_from_groups&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#358 id=358 data-nosnippet>358</a>    groups: <span class="kw-2">&amp;</span>[OffsetGroup],
-<a href=#359 id=359 data-nosnippet>359</a>    prefixes: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[EncodedPrefix],
-<a href=#360 id=360 data-nosnippet>360</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;TextPatch&lt;<span class="lifetime">'a</span>&gt;&gt;, InconsistentOffsetsError&gt; {
-<a href=#361 id=361 data-nosnippet>361</a>    <span class="kw">let </span><span class="kw-2">mut </span>patches = Vec::new();
-<a href=#362 id=362 data-nosnippet>362</a>    <span class="kw">for </span>group <span class="kw">in </span>groups {
-<a href=#363 id=363 data-nosnippet>363</a>        <span class="kw">let </span>prefix = encoded_prefix_for(prefixes, group.encoding())<span class="question-mark">?</span>;
-<a href=#364 id=364 data-nosnippet>364</a>        <span class="kw">let </span>OffsetRanges::Text(offsets) = group.ranges() <span class="kw">else </span>{
-<a href=#365 id=365 data-nosnippet>365</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(InvalidOffsetsError::RangesShapeMismatch(group.encoding()).into());
-<a href=#366 id=366 data-nosnippet>366</a>        };
-<a href=#367 id=367 data-nosnippet>367</a>        patches.extend(offsets.iter().map(|<span class="kw-2">&amp;</span>offset| TextPatch { offset, prefix }));
-<a href=#368 id=368 data-nosnippet>368</a>    }
-<a href=#369 id=369 data-nosnippet>369</a>    patches.sort_by_key(|patch| patch.offset);
-<a href=#370 id=370 data-nosnippet>370</a>    <span class="prelude-val">Ok</span>(patches)
-<a href=#371 id=371 data-nosnippet>371</a>}
-<a href=#372 id=372 data-nosnippet>372</a>
-<a href=#373 id=373 data-nosnippet>373</a><span class="doccomment">/// Validates the occurrences to replace against the file contents.
-<a href=#374 id=374 data-nosnippet>374</a>///
-<a href=#375 id=375 data-nosnippet>375</a>/// Nothing may be written before this passes so that, on inconsistent metadata, the caller can
-<a href=#376 id=376 data-nosnippet>376</a>/// fall back to search-based replacement using the still-empty destination. Offsets must be in
-<a href=#377 id=377 data-nosnippet>377</a>/// range, sorted in strictly increasing non-overlapping order (also across encodings), at or after
-<a href=#378 id=378 data-nosnippet>378</a>/// the shebang region, and the placeholder bytes must be present at each one.
-<a href=#379 id=379 data-nosnippet>379</a></span><span class="kw">fn </span>validate_text_patches(
-<a href=#380 id=380 data-nosnippet>380</a>    source_bytes: <span class="kw-2">&amp;</span>[u8],
-<a href=#381 id=381 data-nosnippet>381</a>    patches: <span class="kw-2">&amp;</span>[TextPatch&lt;<span class="lifetime">'_</span>&gt;],
-<a href=#382 id=382 data-nosnippet>382</a>    region_end: usize,
-<a href=#383 id=383 data-nosnippet>383</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), InconsistentOffsetsError&gt; {
-<a href=#384 id=384 data-nosnippet>384</a>    <span class="kw">let </span><span class="kw-2">mut </span>prev_end = region_end;
-<a href=#385 id=385 data-nosnippet>385</a>    <span class="kw">for </span>patch <span class="kw">in </span>patches {
-<a href=#386 id=386 data-nosnippet>386</a>        <span class="kw">let </span>offset = patch.offset;
-<a href=#387 id=387 data-nosnippet>387</a>        <span class="kw">let </span>placeholder = patch.prefix.placeholder.as_slice();
-<a href=#388 id=388 data-nosnippet>388</a>        <span class="kw">if </span>offset &lt; region_end {
-<a href=#389 id=389 data-nosnippet>389</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(InconsistentOffsetsError::OffsetInShebangRegion {
-<a href=#390 id=390 data-nosnippet>390</a>                offset,
-<a href=#391 id=391 data-nosnippet>391</a>                shebang_length: region_end,
-<a href=#392 id=392 data-nosnippet>392</a>            });
-<a href=#393 id=393 data-nosnippet>393</a>        }
-<a href=#394 id=394 data-nosnippet>394</a>        <span class="kw">if </span>offset &lt; prev_end {
-<a href=#395 id=395 data-nosnippet>395</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(InconsistentOffsetsError::UnsortedOffset { offset });
+<a href=#165 id=165 data-nosnippet>165</a>/// This exposes the search [`copy_and_replace_textual_placeholder`] performs, including how it
+<a href=#166 id=166 data-nosnippet>166</a>/// resolves overlapping matches of different encodings, so that callers patching files lazily,
+<a href=#167 id=167 data-nosnippet>167</a>/// such as the mount-time ranged reads in `rattler_vfs`, stay byte-identical with it. Pass the
+<a href=#168 id=168 data-nosnippet>168</a>/// end of the shebang region as `from` on targets that rewrite shebangs, as the installer does.
+<a href=#169 id=169 data-nosnippet>169</a></span><span class="kw">pub fn </span>find_text_occurrences(
+<a href=#170 id=170 data-nosnippet>170</a>    source_bytes: <span class="kw-2">&amp;</span>[u8],
+<a href=#171 id=171 data-nosnippet>171</a>    from: usize,
+<a href=#172 id=172 data-nosnippet>172</a>    prefix_placeholder: <span class="kw-2">&amp;</span>str,
+<a href=#173 id=173 data-nosnippet>173</a>) -&gt; Vec&lt;TextOccurrence&gt; {
+<a href=#174 id=174 data-nosnippet>174</a>    <span class="comment">// Only the placeholder is searched for, so the target prefix does not matter here.
+<a href=#175 id=175 data-nosnippet>175</a>    </span><span class="kw">let </span>prefixes = EncodedPrefix::all(prefix_placeholder, <span class="string">""</span>);
+<a href=#176 id=176 data-nosnippet>176</a>    find_text_patches(source_bytes, from, <span class="kw-2">&amp;</span>prefixes)
+<a href=#177 id=177 data-nosnippet>177</a>        .into_iter()
+<a href=#178 id=178 data-nosnippet>178</a>        .map(|patch| TextOccurrence {
+<a href=#179 id=179 data-nosnippet>179</a>            offset: patch.offset,
+<a href=#180 id=180 data-nosnippet>180</a>            encoding: patch.prefix.encoding,
+<a href=#181 id=181 data-nosnippet>181</a>        })
+<a href=#182 id=182 data-nosnippet>182</a>        .collect()
+<a href=#183 id=183 data-nosnippet>183</a>}
+<a href=#184 id=184 data-nosnippet>184</a>
+<a href=#185 id=185 data-nosnippet>185</a><span class="doccomment">/// Finds every placeholder occurrence that starts at or after `from`, under every encoding,
+<a href=#186 id=186 data-nosnippet>186</a>/// ordered by position in the file.
+<a href=#187 id=187 data-nosnippet>187</a>///
+<a href=#188 id=188 data-nosnippet>188</a>/// Per encoding, occurrences are the leftmost non-overlapping matches over the whole file, which
+<a href=#189 id=189 data-nosnippet>189</a>/// is how the draft CEP defines them; the ones before `from` are dropped afterwards. Searching only
+<a href=#190 id=190 data-nosnippet>190</a>/// `source_bytes[from..]` instead would find matches a producer's file-wide scan consumed as part
+<a href=#191 id=191 data-nosnippet>191</a>/// of an earlier, overlapping occurrence.
+<a href=#192 id=192 data-nosnippet>192</a>///
+<a href=#193 id=193 data-nosnippet>193</a>/// Matches of different encodings can overlap, because the encodings of an ASCII placeholder are
+<a href=#194 id=194 data-nosnippet>194</a>/// byte-shifted variants of one another: in UTF-16-LE text every occurrence has a spurious
+<a href=#195 id=195 data-nosnippet>195</a>/// UTF-16-BE twin one byte earlier. Of two overlapping matches the one preferred is the UTF-8
+<a href=#196 id=196 data-nosnippet>196</a>/// match, then the one whose offset is code-unit aligned (as every character of a wide-encoded
+<a href=#197 id=197 data-nosnippet>197</a>/// text file is), then the earlier one.
+<a href=#198 id=198 data-nosnippet>198</a></span><span class="kw">fn </span>find_text_patches&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#199 id=199 data-nosnippet>199</a>    source_bytes: <span class="kw-2">&amp;</span>[u8],
+<a href=#200 id=200 data-nosnippet>200</a>    from: usize,
+<a href=#201 id=201 data-nosnippet>201</a>    prefixes: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[EncodedPrefix],
+<a href=#202 id=202 data-nosnippet>202</a>) -&gt; Vec&lt;TextPatch&lt;<span class="lifetime">'a</span>&gt;&gt; {
+<a href=#203 id=203 data-nosnippet>203</a>    <span class="kw">let </span><span class="kw-2">mut </span>candidates = Vec::new();
+<a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">for </span>prefix <span class="kw">in </span>prefixes {
+<a href=#205 id=205 data-nosnippet>205</a>        candidates.extend(
+<a href=#206 id=206 data-nosnippet>206</a>            memchr::memmem::find_iter(source_bytes, <span class="kw-2">&amp;</span>prefix.placeholder)
+<a href=#207 id=207 data-nosnippet>207</a>                .map(|offset| TextPatch { offset, prefix }),
+<a href=#208 id=208 data-nosnippet>208</a>        );
+<a href=#209 id=209 data-nosnippet>209</a>    }
+<a href=#210 id=210 data-nosnippet>210</a>    candidates.sort_by_key(|patch| patch.offset);
+<a href=#211 id=211 data-nosnippet>211</a>
+<a href=#212 id=212 data-nosnippet>212</a>    <span class="kw">let </span>rank = |patch: <span class="kw-2">&amp;</span>TextPatch&lt;<span class="lifetime">'_</span>&gt;| <span class="kw">match </span>patch.prefix.encoding {
+<a href=#213 id=213 data-nosnippet>213</a>        OffsetEncoding::Utf8 =&gt; <span class="number">0u8</span>,
+<a href=#214 id=214 data-nosnippet>214</a>        OffsetEncoding::Utf16Le
+<a href=#215 id=215 data-nosnippet>215</a>        | OffsetEncoding::Utf16Be
+<a href=#216 id=216 data-nosnippet>216</a>        | OffsetEncoding::Utf32Le
+<a href=#217 id=217 data-nosnippet>217</a>        | OffsetEncoding::Utf32Be =&gt; {
+<a href=#218 id=218 data-nosnippet>218</a>            <span class="kw">if </span>patch.offset.is_multiple_of(patch.prefix.code_unit_size()) {
+<a href=#219 id=219 data-nosnippet>219</a>                <span class="number">1
+<a href=#220 id=220 data-nosnippet>220</a>            </span>} <span class="kw">else </span>{
+<a href=#221 id=221 data-nosnippet>221</a>                <span class="number">2
+<a href=#222 id=222 data-nosnippet>222</a>            </span>}
+<a href=#223 id=223 data-nosnippet>223</a>        }
+<a href=#224 id=224 data-nosnippet>224</a>    };
+<a href=#225 id=225 data-nosnippet>225</a>    <span class="kw">let </span><span class="kw-2">mut </span>patches: Vec&lt;TextPatch&lt;<span class="lifetime">'a</span>&gt;&gt; = Vec::with_capacity(candidates.len());
+<a href=#226 id=226 data-nosnippet>226</a>    <span class="kw">for </span>candidate <span class="kw">in </span>candidates {
+<a href=#227 id=227 data-nosnippet>227</a>        <span class="comment">// The kept patches are disjoint and sorted, and the candidate starts at or after the last
+<a href=#228 id=228 data-nosnippet>228</a>        // one, so only the last one can overlap it.
+<a href=#229 id=229 data-nosnippet>229</a>        </span><span class="kw">match </span>patches.last() {
+<a href=#230 id=230 data-nosnippet>230</a>            <span class="prelude-val">Some</span>(last) <span class="kw">if </span>candidate.offset &lt; last.offset + last.prefix.placeholder.len() =&gt; {
+<a href=#231 id=231 data-nosnippet>231</a>                <span class="kw">if </span>rank(<span class="kw-2">&amp;</span>candidate) &lt; rank(last) {
+<a href=#232 id=232 data-nosnippet>232</a>                    patches.pop();
+<a href=#233 id=233 data-nosnippet>233</a>                    patches.push(candidate);
+<a href=#234 id=234 data-nosnippet>234</a>                }
+<a href=#235 id=235 data-nosnippet>235</a>            }
+<a href=#236 id=236 data-nosnippet>236</a>            <span class="prelude-val">Some</span>(<span class="kw">_</span>) | <span class="prelude-val">None </span>=&gt; patches.push(candidate),
+<a href=#237 id=237 data-nosnippet>237</a>        }
+<a href=#238 id=238 data-nosnippet>238</a>    }
+<a href=#239 id=239 data-nosnippet>239</a>    patches.retain(|patch| patch.offset &gt;= from);
+<a href=#240 id=240 data-nosnippet>240</a>    patches
+<a href=#241 id=241 data-nosnippet>241</a>}
+<a href=#242 id=242 data-nosnippet>242</a>
+<a href=#243 id=243 data-nosnippet>243</a><span class="doccomment">/// Given the contents of a file copy it to the `destination` and in the process replace the
+<a href=#244 id=244 data-nosnippet>244</a>/// `prefix_placeholder` text with the `target_prefix` text using the offsets from the `paths.json`.
+<a href=#245 id=245 data-nosnippet>245</a>///
+<a href=#246 id=246 data-nosnippet>246</a>/// This is a text based version where the complete string is replaced. This works fine for text
+<a href=#247 id=247 data-nosnippet>247</a>/// files but will not work correctly for binary files where the length of the string is often
+<a href=#248 id=248 data-nosnippet>248</a>/// important. See [`super::copy_and_replace_cstring_placeholder_offsets`] when you are dealing with binary
+<a href=#249 id=249 data-nosnippet>249</a>/// content.
+<a href=#250 id=250 data-nosnippet>250</a>///
+<a href=#251 id=251 data-nosnippet>251</a>/// Every group of `groups` is applied, each under its own encoding. Its ranges are absolute byte
+<a href=#252 id=252 data-nosnippet>252</a>/// positions in `source_bytes` and, per the draft CEP, exclude any occurrence inside the shebang
+<a href=#253 id=253 data-nosnippet>253</a>/// region (the first `shebang_length` bytes, present exactly when the file starts with `#!`). The
+<a href=#254 id=254 data-nosnippet>254</a>/// region is handled separately: on targets with shebang handling ([`Subdir::is_unix`]) the
+<a href=#255 id=255 data-nosnippet>255</a>/// region minus its trailing newline is rewritten by `replace_shebang` and the newline byte copied
+<a href=#256 id=256 data-nosnippet>256</a>/// through verbatim; on other targets the region gets plain placeholder replacement.
+<a href=#257 id=257 data-nosnippet>257</a>///
+<a href=#258 id=258 data-nosnippet>258</a>/// The recorded metadata is validated before anything is written, so a mismatch surfaces as
+<a href=#259 id=259 data-nosnippet>259</a>/// [`OffsetReplaceError::InconsistentMetadata`] with an untouched destination the caller can hand
+<a href=#260 id=260 data-nosnippet>260</a>/// to search-based replacement.
+<a href=#261 id=261 data-nosnippet>261</a></span><span class="kw">pub fn </span>copy_and_replace_textual_placeholder_offsets(
+<a href=#262 id=262 data-nosnippet>262</a>    source_bytes: <span class="kw-2">&amp;</span>[u8],
+<a href=#263 id=263 data-nosnippet>263</a>    <span class="kw-2">mut </span>destination: <span class="kw">impl </span>Write,
+<a href=#264 id=264 data-nosnippet>264</a>    prefix_placeholder: <span class="kw-2">&amp;</span>str,
+<a href=#265 id=265 data-nosnippet>265</a>    target_prefix: <span class="kw-2">&amp;</span>str,
+<a href=#266 id=266 data-nosnippet>266</a>    target_platform: <span class="kw-2">&amp;</span>Subdir,
+<a href=#267 id=267 data-nosnippet>267</a>    groups: <span class="kw-2">&amp;</span>[OffsetGroup],
+<a href=#268 id=268 data-nosnippet>268</a>    shebang_length: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#269 id=269 data-nosnippet>269</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), OffsetReplaceError&gt; {
+<a href=#270 id=270 data-nosnippet>270</a>    <span class="kw">let </span>prefixes = EncodedPrefix::all(prefix_placeholder, target_prefix);
+<a href=#271 id=271 data-nosnippet>271</a>    <span class="kw">let </span>region_end = validated_shebang_region_end(source_bytes, shebang_length)<span class="question-mark">?</span>;
+<a href=#272 id=272 data-nosnippet>272</a>    <span class="kw">let </span>patches = text_patches_from_groups(groups, <span class="kw-2">&amp;</span>prefixes)<span class="question-mark">?</span>;
+<a href=#273 id=273 data-nosnippet>273</a>    validate_text_patches(source_bytes, <span class="kw-2">&amp;</span>patches, region_end)<span class="question-mark">?</span>;
+<a href=#274 id=274 data-nosnippet>274</a>
+<a href=#275 id=275 data-nosnippet>275</a>    <span class="comment">// --- The metadata is consistent; write the patched file. ---
+<a href=#276 id=276 data-nosnippet>276</a>    </span>write_shebang_region(
+<a href=#277 id=277 data-nosnippet>277</a>        <span class="kw-2">&amp;mut </span>destination,
+<a href=#278 id=278 data-nosnippet>278</a>        source_bytes,
+<a href=#279 id=279 data-nosnippet>279</a>        region_end,
+<a href=#280 id=280 data-nosnippet>280</a>        prefix_placeholder,
+<a href=#281 id=281 data-nosnippet>281</a>        target_prefix,
+<a href=#282 id=282 data-nosnippet>282</a>        target_platform,
+<a href=#283 id=283 data-nosnippet>283</a>        <span class="kw-2">&amp;</span>prefixes,
+<a href=#284 id=284 data-nosnippet>284</a>    )<span class="question-mark">?</span>;
+<a href=#285 id=285 data-nosnippet>285</a>    write_patched_text(destination, source_bytes, region_end, <span class="kw-2">&amp;</span>patches)<span class="question-mark">?</span>;
+<a href=#286 id=286 data-nosnippet>286</a>    <span class="prelude-val">Ok</span>(())
+<a href=#287 id=287 data-nosnippet>287</a>}
+<a href=#288 id=288 data-nosnippet>288</a>
+<a href=#289 id=289 data-nosnippet>289</a><span class="doccomment">/// Determines the shebang region from the recorded `shebang_length` rather than re-deriving it
+<a href=#290 id=290 data-nosnippet>290</a>/// from the file contents, validating the recorded value against those contents.
+<a href=#291 id=291 data-nosnippet>291</a>///
+<a href=#292 id=292 data-nosnippet>292</a>/// Per the draft CEP `shebang_length` is present exactly when the file starts with `#!`, and its
+<a href=#293 id=293 data-nosnippet>293</a>/// value is the offset of the first newline plus one, or the file size when there is no newline.
+<a href=#294 id=294 data-nosnippet>294</a>/// The first `shebang_length` bytes form the shebang region; a file without a shebang has an empty
+<a href=#295 id=295 data-nosnippet>295</a>/// one.
+<a href=#296 id=296 data-nosnippet>296</a>///
+<a href=#297 id=297 data-nosnippet>297</a>/// Validating that reads the region and nothing beyond it, which is the bound the draft CEP
+<a href=#298 id=298 data-nosnippet>298</a>/// promises consumers: the region is the first line, so its only newline is its last byte, unless
+<a href=#299 id=299 data-nosnippet>299</a>/// it runs to end-of-file.
+<a href=#300 id=300 data-nosnippet>300</a></span><span class="kw">fn </span>validated_shebang_region_end(
+<a href=#301 id=301 data-nosnippet>301</a>    source_bytes: <span class="kw-2">&amp;</span>[u8],
+<a href=#302 id=302 data-nosnippet>302</a>    shebang_length: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#303 id=303 data-nosnippet>303</a>) -&gt; <span class="prelude-ty">Result</span>&lt;usize, InconsistentOffsetsError&gt; {
+<a href=#304 id=304 data-nosnippet>304</a>    <span class="kw">if </span>!source_bytes.starts_with(<span class="string">b"#!"</span>) {
+<a href=#305 id=305 data-nosnippet>305</a>        <span class="kw">return match </span>shebang_length {
+<a href=#306 id=306 data-nosnippet>306</a>            <span class="prelude-val">Some</span>(<span class="kw">_</span>) =&gt; <span class="prelude-val">Err</span>(InconsistentOffsetsError::UnexpectedShebangLength),
+<a href=#307 id=307 data-nosnippet>307</a>            <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Ok</span>(<span class="number">0</span>),
+<a href=#308 id=308 data-nosnippet>308</a>        };
+<a href=#309 id=309 data-nosnippet>309</a>    }
+<a href=#310 id=310 data-nosnippet>310</a>
+<a href=#311 id=311 data-nosnippet>311</a>    <span class="kw">let </span>shebang_length = shebang_length.ok_or(InconsistentOffsetsError::MissingShebangLength)<span class="question-mark">?</span>;
+<a href=#312 id=312 data-nosnippet>312</a>    <span class="kw">let </span>region = source_bytes
+<a href=#313 id=313 data-nosnippet>313</a>        .get(..shebang_length)
+<a href=#314 id=314 data-nosnippet>314</a>        .ok_or(InconsistentOffsetsError::ShebangLengthMismatch { shebang_length })<span class="question-mark">?</span>;
+<a href=#315 id=315 data-nosnippet>315</a>    <span class="kw">let </span>ends_the_line = <span class="kw">match </span>memchr::memchr(<span class="string">b'\n'</span>, region) {
+<a href=#316 id=316 data-nosnippet>316</a>        <span class="prelude-val">Some</span>(index) =&gt; index + <span class="number">1 </span>== shebang_length,
+<a href=#317 id=317 data-nosnippet>317</a>        <span class="prelude-val">None </span>=&gt; shebang_length == source_bytes.len(),
+<a href=#318 id=318 data-nosnippet>318</a>    };
+<a href=#319 id=319 data-nosnippet>319</a>    <span class="kw">if </span>!ends_the_line {
+<a href=#320 id=320 data-nosnippet>320</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(InconsistentOffsetsError::ShebangLengthMismatch { shebang_length });
+<a href=#321 id=321 data-nosnippet>321</a>    }
+<a href=#322 id=322 data-nosnippet>322</a>    <span class="prelude-val">Ok</span>(shebang_length)
+<a href=#323 id=323 data-nosnippet>323</a>}
+<a href=#324 id=324 data-nosnippet>324</a>
+<a href=#325 id=325 data-nosnippet>325</a><span class="doccomment">/// Transforms the shebang region (the first `shebang_length` bytes of a text file) exactly as the
+<a href=#326 id=326 data-nosnippet>326</a>/// installer does when writing the patched file, returning the region's contribution to the output.
+<a href=#327 id=327 data-nosnippet>327</a>///
+<a href=#328 id=328 data-nosnippet>328</a>/// On targets with shebang handling ([`Subdir::is_unix`]) the region minus its trailing newline is
+<a href=#329 id=329 data-nosnippet>329</a>/// rewritten by `replace_shebang` (which may collapse an over-long line to the
+<a href=#330 id=330 data-nosnippet>330</a>/// `#!/usr/bin/env &lt;program&gt;` form) and the trailing newline, if present, is appended unchanged. On
+<a href=#331 id=331 data-nosnippet>331</a>/// other targets the region receives plain placeholder replacement under every encoding.
+<a href=#332 id=332 data-nosnippet>332</a>///
+<a href=#333 id=333 data-nosnippet>333</a>/// This shares its implementation with install-time replacement so that callers patching files
+<a href=#334 id=334 data-nosnippet>334</a>/// lazily, such as the mount-time ranged reads in `rattler_vfs`, stay byte-identical with it.
+<a href=#335 id=335 data-nosnippet>335</a></span><span class="kw">pub fn </span>replace_shebang_region(
+<a href=#336 id=336 data-nosnippet>336</a>    region: <span class="kw-2">&amp;</span>[u8],
+<a href=#337 id=337 data-nosnippet>337</a>    prefix_placeholder: <span class="kw-2">&amp;</span>str,
+<a href=#338 id=338 data-nosnippet>338</a>    target_prefix: <span class="kw-2">&amp;</span>str,
+<a href=#339 id=339 data-nosnippet>339</a>    target_platform: <span class="kw-2">&amp;</span>Subdir,
+<a href=#340 id=340 data-nosnippet>340</a>) -&gt; Vec&lt;u8&gt; {
+<a href=#341 id=341 data-nosnippet>341</a>    <span class="kw">let </span>prefixes = EncodedPrefix::all(prefix_placeholder, target_prefix);
+<a href=#342 id=342 data-nosnippet>342</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = Vec::with_capacity(region.len());
+<a href=#343 id=343 data-nosnippet>343</a>    write_shebang_region(
+<a href=#344 id=344 data-nosnippet>344</a>        <span class="kw-2">&amp;mut </span>out,
+<a href=#345 id=345 data-nosnippet>345</a>        region,
+<a href=#346 id=346 data-nosnippet>346</a>        region.len(),
+<a href=#347 id=347 data-nosnippet>347</a>        prefix_placeholder,
+<a href=#348 id=348 data-nosnippet>348</a>        target_prefix,
+<a href=#349 id=349 data-nosnippet>349</a>        target_platform,
+<a href=#350 id=350 data-nosnippet>350</a>        <span class="kw-2">&amp;</span>prefixes,
+<a href=#351 id=351 data-nosnippet>351</a>    )
+<a href=#352 id=352 data-nosnippet>352</a>    .expect(<span class="string">"writing to a Vec cannot fail"</span>);
+<a href=#353 id=353 data-nosnippet>353</a>    out
+<a href=#354 id=354 data-nosnippet>354</a>}
+<a href=#355 id=355 data-nosnippet>355</a>
+<a href=#356 id=356 data-nosnippet>356</a><span class="doccomment">/// Writes the first `region_end` bytes of a text file, transformed by the installer's shebang
+<a href=#357 id=357 data-nosnippet>357</a>/// rules on targets that rewrite shebangs and by plain placeholder replacement everywhere else.
+<a href=#358 id=358 data-nosnippet>358</a>///
+<a href=#359 id=359 data-nosnippet>359</a>/// The plain replacement covers every encoding, exactly as the body splice does, so that a
+<a href=#360 id=360 data-nosnippet>360</a>/// wide-encoded occurrence in the first line is not left behind on a target without shebang
+<a href=#361 id=361 data-nosnippet>361</a>/// handling. An empty placeholder means there is nothing to replace: `prefixes` is then empty and
+<a href=#362 id=362 data-nosnippet>362</a>/// the region is copied verbatim rather than fed to a search that matches at every byte.
+<a href=#363 id=363 data-nosnippet>363</a></span><span class="kw">fn </span>write_shebang_region(
+<a href=#364 id=364 data-nosnippet>364</a>    destination: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>Write,
+<a href=#365 id=365 data-nosnippet>365</a>    source_bytes: <span class="kw-2">&amp;</span>[u8],
+<a href=#366 id=366 data-nosnippet>366</a>    region_end: usize,
+<a href=#367 id=367 data-nosnippet>367</a>    prefix_placeholder: <span class="kw-2">&amp;</span>str,
+<a href=#368 id=368 data-nosnippet>368</a>    target_prefix: <span class="kw-2">&amp;</span>str,
+<a href=#369 id=369 data-nosnippet>369</a>    target_platform: <span class="kw-2">&amp;</span>Subdir,
+<a href=#370 id=370 data-nosnippet>370</a>    prefixes: <span class="kw-2">&amp;</span>[EncodedPrefix],
+<a href=#371 id=371 data-nosnippet>371</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), std::io::Error&gt; {
+<a href=#372 id=372 data-nosnippet>372</a>    <span class="kw">if </span>region_end == <span class="number">0 </span>{
+<a href=#373 id=373 data-nosnippet>373</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#374 id=374 data-nosnippet>374</a>    }
+<a href=#375 id=375 data-nosnippet>375</a>
+<a href=#376 id=376 data-nosnippet>376</a>    <span class="kw">if </span>prefixes.is_empty() {
+<a href=#377 id=377 data-nosnippet>377</a>        destination.write_all(<span class="kw-2">&amp;</span>source_bytes[..region_end])<span class="question-mark">?</span>;
+<a href=#378 id=378 data-nosnippet>378</a>    } <span class="kw">else if </span>target_platform.is_unix() {
+<a href=#379 id=379 data-nosnippet>379</a>        <span class="comment">// Feed the region minus its trailing newline to the shebang rules; the newline byte, when
+<a href=#380 id=380 data-nosnippet>380</a>        // present, is copied through unchanged.
+<a href=#381 id=381 data-nosnippet>381</a>        </span><span class="kw">let </span>has_newline = source_bytes[region_end - <span class="number">1</span>] == <span class="string">b'\n'</span>;
+<a href=#382 id=382 data-nosnippet>382</a>        <span class="kw">let </span>line_end = <span class="kw">if </span>has_newline {
+<a href=#383 id=383 data-nosnippet>383</a>            region_end - <span class="number">1
+<a href=#384 id=384 data-nosnippet>384</a>        </span>} <span class="kw">else </span>{
+<a href=#385 id=385 data-nosnippet>385</a>            region_end
+<a href=#386 id=386 data-nosnippet>386</a>        };
+<a href=#387 id=387 data-nosnippet>387</a>        <span class="kw">let </span>first_line = String::from_utf8_lossy(<span class="kw-2">&amp;</span>source_bytes[..line_end]);
+<a href=#388 id=388 data-nosnippet>388</a>        <span class="kw">let </span>new_shebang = replace_shebang(
+<a href=#389 id=389 data-nosnippet>389</a>            first_line,
+<a href=#390 id=390 data-nosnippet>390</a>            (prefix_placeholder, target_prefix),
+<a href=#391 id=391 data-nosnippet>391</a>            target_platform,
+<a href=#392 id=392 data-nosnippet>392</a>        );
+<a href=#393 id=393 data-nosnippet>393</a>        destination.write_all(new_shebang.as_bytes())<span class="question-mark">?</span>;
+<a href=#394 id=394 data-nosnippet>394</a>        <span class="kw">if </span>has_newline {
+<a href=#395 id=395 data-nosnippet>395</a>            destination.write_all(<span class="kw-2">&amp;</span>source_bytes[line_end..region_end])<span class="question-mark">?</span>;
 <a href=#396 id=396 data-nosnippet>396</a>        }
-<a href=#397 id=397 data-nosnippet>397</a>        <span class="kw">let </span>end = offset
-<a href=#398 id=398 data-nosnippet>398</a>            .checked_add(placeholder.len())
-<a href=#399 id=399 data-nosnippet>399</a>            .filter(|<span class="kw-2">&amp;</span>end| end &lt;= source_bytes.len())
-<a href=#400 id=400 data-nosnippet>400</a>            .ok_or(InconsistentOffsetsError::OffsetOutOfRange {
-<a href=#401 id=401 data-nosnippet>401</a>                offset,
-<a href=#402 id=402 data-nosnippet>402</a>                file_size: source_bytes.len(),
-<a href=#403 id=403 data-nosnippet>403</a>            })<span class="question-mark">?</span>;
-<a href=#404 id=404 data-nosnippet>404</a>        <span class="kw">if </span><span class="kw-2">&amp;</span>source_bytes[offset..end] != placeholder {
-<a href=#405 id=405 data-nosnippet>405</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(InconsistentOffsetsError::PlaceholderNotFound { offset });
-<a href=#406 id=406 data-nosnippet>406</a>        }
-<a href=#407 id=407 data-nosnippet>407</a>        prev_end = end;
-<a href=#408 id=408 data-nosnippet>408</a>    }
-<a href=#409 id=409 data-nosnippet>409</a>    <span class="prelude-val">Ok</span>(())
-<a href=#410 id=410 data-nosnippet>410</a>}
-<a href=#411 id=411 data-nosnippet>411</a>
-<a href=#412 id=412 data-nosnippet>412</a><span class="doccomment">/// Writes `source_bytes` from `start` onwards to `destination`, replacing the placeholder at every
-<a href=#413 id=413 data-nosnippet>413</a>/// patched position with the target prefix encoded the same way.
-<a href=#414 id=414 data-nosnippet>414</a></span><span class="kw">fn </span>write_patched_text(
-<a href=#415 id=415 data-nosnippet>415</a>    <span class="kw-2">mut </span>destination: <span class="kw">impl </span>Write,
-<a href=#416 id=416 data-nosnippet>416</a>    source_bytes: <span class="kw-2">&amp;</span>[u8],
-<a href=#417 id=417 data-nosnippet>417</a>    start: usize,
-<a href=#418 id=418 data-nosnippet>418</a>    patches: <span class="kw-2">&amp;</span>[TextPatch&lt;<span class="lifetime">'_</span>&gt;],
-<a href=#419 id=419 data-nosnippet>419</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), std::io::Error&gt; {
-<a href=#420 id=420 data-nosnippet>420</a>    <span class="kw">let </span><span class="kw-2">mut </span>last_match = start;
-<a href=#421 id=421 data-nosnippet>421</a>    <span class="kw">for </span>patch <span class="kw">in </span>patches {
-<a href=#422 id=422 data-nosnippet>422</a>        write_replacement_range(<span class="kw-2">&amp;mut </span>destination, source_bytes, last_match, patch.offset)<span class="question-mark">?</span>;
-<a href=#423 id=423 data-nosnippet>423</a>        destination.write_all(<span class="kw-2">&amp;</span>patch.prefix.target)<span class="question-mark">?</span>;
-<a href=#424 id=424 data-nosnippet>424</a>        last_match = patch.offset + patch.prefix.placeholder.len();
-<a href=#425 id=425 data-nosnippet>425</a>    }
+<a href=#397 id=397 data-nosnippet>397</a>    } <span class="kw">else </span>{
+<a href=#398 id=398 data-nosnippet>398</a>        <span class="comment">// On non-rewriting targets (e.g. Windows for a noarch package) the region gets plain
+<a href=#399 id=399 data-nosnippet>399</a>        // placeholder replacement, exactly as the body does, searching at most the first
+<a href=#400 id=400 data-nosnippet>400</a>        // `shebang_length` bytes.
+<a href=#401 id=401 data-nosnippet>401</a>        </span><span class="kw">let </span>region = <span class="kw-2">&amp;</span>source_bytes[..region_end];
+<a href=#402 id=402 data-nosnippet>402</a>        <span class="kw">let </span>patches = find_text_patches(region, <span class="number">0</span>, prefixes);
+<a href=#403 id=403 data-nosnippet>403</a>        write_patched_text(<span class="kw-2">&amp;mut *</span>destination, region, <span class="number">0</span>, <span class="kw-2">&amp;</span>patches)<span class="question-mark">?</span>;
+<a href=#404 id=404 data-nosnippet>404</a>    }
+<a href=#405 id=405 data-nosnippet>405</a>
+<a href=#406 id=406 data-nosnippet>406</a>    <span class="prelude-val">Ok</span>(())
+<a href=#407 id=407 data-nosnippet>407</a>}
+<a href=#408 id=408 data-nosnippet>408</a>
+<a href=#409 id=409 data-nosnippet>409</a><span class="doccomment">/// Collects the occurrences to replace from the recorded offset groups, ordered by their position
+<a href=#410 id=410 data-nosnippet>410</a>/// in the file so that the splice runs in file order regardless of which group a range came from.
+<a href=#411 id=411 data-nosnippet>411</a></span><span class="kw">fn </span>text_patches_from_groups&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#412 id=412 data-nosnippet>412</a>    groups: <span class="kw-2">&amp;</span>[OffsetGroup],
+<a href=#413 id=413 data-nosnippet>413</a>    prefixes: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[EncodedPrefix],
+<a href=#414 id=414 data-nosnippet>414</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;TextPatch&lt;<span class="lifetime">'a</span>&gt;&gt;, InconsistentOffsetsError&gt; {
+<a href=#415 id=415 data-nosnippet>415</a>    <span class="kw">let </span><span class="kw-2">mut </span>patches = Vec::new();
+<a href=#416 id=416 data-nosnippet>416</a>    <span class="kw">for </span>group <span class="kw">in </span>groups {
+<a href=#417 id=417 data-nosnippet>417</a>        <span class="kw">let </span>prefix = encoded_prefix_for(prefixes, group.encoding())<span class="question-mark">?</span>;
+<a href=#418 id=418 data-nosnippet>418</a>        <span class="kw">let </span>OffsetRanges::Text(offsets) = group.ranges() <span class="kw">else </span>{
+<a href=#419 id=419 data-nosnippet>419</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(InvalidOffsetsError::RangesShapeMismatch(group.encoding()).into());
+<a href=#420 id=420 data-nosnippet>420</a>        };
+<a href=#421 id=421 data-nosnippet>421</a>        patches.extend(offsets.iter().map(|<span class="kw-2">&amp;</span>offset| TextPatch { offset, prefix }));
+<a href=#422 id=422 data-nosnippet>422</a>    }
+<a href=#423 id=423 data-nosnippet>423</a>    patches.sort_by_key(|patch| patch.offset);
+<a href=#424 id=424 data-nosnippet>424</a>    <span class="prelude-val">Ok</span>(patches)
+<a href=#425 id=425 data-nosnippet>425</a>}
 <a href=#426 id=426 data-nosnippet>426</a>
-<a href=#427 id=427 data-nosnippet>427</a>    <span class="comment">// Write any remaining bytes after the final replacement.
-<a href=#428 id=428 data-nosnippet>428</a>    </span><span class="kw">if </span>last_match &lt; source_bytes.len() {
-<a href=#429 id=429 data-nosnippet>429</a>        destination.write_all(<span class="kw-2">&amp;</span>source_bytes[last_match..])<span class="question-mark">?</span>;
-<a href=#430 id=430 data-nosnippet>430</a>    }
-<a href=#431 id=431 data-nosnippet>431</a>
-<a href=#432 id=432 data-nosnippet>432</a>    <span class="prelude-val">Ok</span>(())
-<a href=#433 id=433 data-nosnippet>433</a>}
+<a href=#427 id=427 data-nosnippet>427</a><span class="doccomment">/// Validates the occurrences to replace against the file contents.
+<a href=#428 id=428 data-nosnippet>428</a>///
+<a href=#429 id=429 data-nosnippet>429</a>/// Nothing may be written before this passes so that, on inconsistent metadata, the caller can
+<a href=#430 id=430 data-nosnippet>430</a>/// fall back to search-based replacement using the still-empty destination. Offsets must be in
+<a href=#431 id=431 data-nosnippet>431</a>/// range, sorted in strictly increasing non-overlapping order (also across encodings), at or after
+<a href=#432 id=432 data-nosnippet>432</a>/// the shebang region, and the placeholder bytes must be present at each one.
+<a href=#433 id=433 data-nosnippet>433</a></span><span class="kw">fn </span>validate_text_patches(
+<a href=#434 id=434 data-nosnippet>434</a>    source_bytes: <span class="kw-2">&amp;</span>[u8],
+<a href=#435 id=435 data-nosnippet>435</a>    patches: <span class="kw-2">&amp;</span>[TextPatch&lt;<span class="lifetime">'_</span>&gt;],
+<a href=#436 id=436 data-nosnippet>436</a>    region_end: usize,
+<a href=#437 id=437 data-nosnippet>437</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), InconsistentOffsetsError&gt; {
+<a href=#438 id=438 data-nosnippet>438</a>    <span class="kw">let </span><span class="kw-2">mut </span>prev_end = region_end;
+<a href=#439 id=439 data-nosnippet>439</a>    <span class="kw">for </span>patch <span class="kw">in </span>patches {
+<a href=#440 id=440 data-nosnippet>440</a>        <span class="kw">let </span>offset = patch.offset;
+<a href=#441 id=441 data-nosnippet>441</a>        <span class="kw">let </span>placeholder = patch.prefix.placeholder.as_slice();
+<a href=#442 id=442 data-nosnippet>442</a>        <span class="kw">if </span>offset &lt; region_end {
+<a href=#443 id=443 data-nosnippet>443</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(InconsistentOffsetsError::OffsetInShebangRegion {
+<a href=#444 id=444 data-nosnippet>444</a>                offset,
+<a href=#445 id=445 data-nosnippet>445</a>                shebang_length: region_end,
+<a href=#446 id=446 data-nosnippet>446</a>            });
+<a href=#447 id=447 data-nosnippet>447</a>        }
+<a href=#448 id=448 data-nosnippet>448</a>        <span class="kw">if </span>offset &lt; prev_end {
+<a href=#449 id=449 data-nosnippet>449</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(InconsistentOffsetsError::UnsortedOffset { offset });
+<a href=#450 id=450 data-nosnippet>450</a>        }
+<a href=#451 id=451 data-nosnippet>451</a>        <span class="kw">let </span>end = offset
+<a href=#452 id=452 data-nosnippet>452</a>            .checked_add(placeholder.len())
+<a href=#453 id=453 data-nosnippet>453</a>            .filter(|<span class="kw-2">&amp;</span>end| end &lt;= source_bytes.len())
+<a href=#454 id=454 data-nosnippet>454</a>            .ok_or(InconsistentOffsetsError::OffsetOutOfRange {
+<a href=#455 id=455 data-nosnippet>455</a>                offset,
+<a href=#456 id=456 data-nosnippet>456</a>                file_size: source_bytes.len(),
+<a href=#457 id=457 data-nosnippet>457</a>            })<span class="question-mark">?</span>;
+<a href=#458 id=458 data-nosnippet>458</a>        <span class="kw">if </span><span class="kw-2">&amp;</span>source_bytes[offset..end] != placeholder {
+<a href=#459 id=459 data-nosnippet>459</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(InconsistentOffsetsError::PlaceholderNotFound { offset });
+<a href=#460 id=460 data-nosnippet>460</a>        }
+<a href=#461 id=461 data-nosnippet>461</a>        prev_end = end;
+<a href=#462 id=462 data-nosnippet>462</a>    }
+<a href=#463 id=463 data-nosnippet>463</a>    <span class="prelude-val">Ok</span>(())
+<a href=#464 id=464 data-nosnippet>464</a>}
+<a href=#465 id=465 data-nosnippet>465</a>
+<a href=#466 id=466 data-nosnippet>466</a><span class="doccomment">/// Writes `source_bytes` from `start` onwards to `destination`, replacing the placeholder at every
+<a href=#467 id=467 data-nosnippet>467</a>/// patched position with the target prefix encoded the same way.
+<a href=#468 id=468 data-nosnippet>468</a></span><span class="kw">fn </span>write_patched_text(
+<a href=#469 id=469 data-nosnippet>469</a>    <span class="kw-2">mut </span>destination: <span class="kw">impl </span>Write,
+<a href=#470 id=470 data-nosnippet>470</a>    source_bytes: <span class="kw-2">&amp;</span>[u8],
+<a href=#471 id=471 data-nosnippet>471</a>    start: usize,
+<a href=#472 id=472 data-nosnippet>472</a>    patches: <span class="kw-2">&amp;</span>[TextPatch&lt;<span class="lifetime">'_</span>&gt;],
+<a href=#473 id=473 data-nosnippet>473</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), std::io::Error&gt; {
+<a href=#474 id=474 data-nosnippet>474</a>    <span class="kw">let </span><span class="kw-2">mut </span>last_match = start;
+<a href=#475 id=475 data-nosnippet>475</a>    <span class="kw">for </span>patch <span class="kw">in </span>patches {
+<a href=#476 id=476 data-nosnippet>476</a>        write_replacement_range(<span class="kw-2">&amp;mut </span>destination, source_bytes, last_match, patch.offset)<span class="question-mark">?</span>;
+<a href=#477 id=477 data-nosnippet>477</a>        destination.write_all(<span class="kw-2">&amp;</span>patch.prefix.target)<span class="question-mark">?</span>;
+<a href=#478 id=478 data-nosnippet>478</a>        last_match = patch.offset + patch.prefix.placeholder.len();
+<a href=#479 id=479 data-nosnippet>479</a>    }
+<a href=#480 id=480 data-nosnippet>480</a>
+<a href=#481 id=481 data-nosnippet>481</a>    <span class="comment">// Write any remaining bytes after the final replacement.
+<a href=#482 id=482 data-nosnippet>482</a>    </span><span class="kw">if </span>last_match &lt; source_bytes.len() {
+<a href=#483 id=483 data-nosnippet>483</a>        destination.write_all(<span class="kw-2">&amp;</span>source_bytes[last_match..])<span class="question-mark">?</span>;
+<a href=#484 id=484 data-nosnippet>484</a>    }
+<a href=#485 id=485 data-nosnippet>485</a>
+<a href=#486 id=486 data-nosnippet>486</a>    <span class="prelude-val">Ok</span>(())
+<a href=#487 id=487 data-nosnippet>487</a>}
 </code></pre></div></section></main></body></html>
