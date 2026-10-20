@@ -9,7 +9,7 @@ use std::{
     fs::{self, File},
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{Arc, Mutex},
     time::UNIX_EPOCH,
 };
 
@@ -49,36 +49,53 @@ pub(crate) fn target_prefix_for_platform(mount_point: &Path, platform: Subdir) -
     }
 }
 
-/// Bounded FIFO cache of fully materialized + ad-hoc re-signed binaries (macOS).
+/// Bounded cache keyed by inode, evicting entries to stay within `max_entries`.
 ///
-/// Each entry is a whole binary, so an unbounded map would pin the entire
-/// re-signed binary set in memory for the sidecar's lifetime. This caps the
-/// entry count and evicts oldest-first; an evicted binary is simply recomputed
-/// on the next read.
-struct CodesignCache {
-    map: HashMap<u64, Vec<u8>>,
+/// The eviction policy is chosen at construction via `touch_on_get`:
+/// - `false` (FIFO): insertion order is preserved and a `get` never reorders.
+///   Used for the codesign cache, where each entry is a whole re-signed binary
+///   and an unbounded map would pin the entire binary set in memory.
+/// - `true` (LRU): a `get` marks the entry most-recently-used, so the entry a
+///   caller is actively hitting is never the one evicted. Used for the mmap
+///   cache, so streaming one file back-to-back never evicts its own mapping.
+///
+/// In both cases re-inserting an existing key updates the value in place
+/// without growing the cache or creating a duplicate order entry, and an
+/// evicted entry is simply recomputed on the next access. For the mmap cache
+/// the value is an [`Arc<Mmap>`], which keeps the file mapped by the kernel on
+/// its own — a cached entry holds no Rust `File` and leaks no descriptor, so
+/// the bound only caps virtual-address use for very large environments.
+struct BoundedCache<V> {
+    map: HashMap<u64, V>,
     order: VecDeque<u64>,
     max_entries: usize,
+    touch_on_get: bool,
 }
 
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-impl CodesignCache {
-    fn new(max_entries: usize) -> Self {
+impl<V> BoundedCache<V> {
+    fn new(max_entries: usize, touch_on_get: bool) -> Self {
         Self {
             map: HashMap::new(),
             order: VecDeque::new(),
             max_entries,
+            touch_on_get,
         }
     }
 
-    fn get(&self, ino: &u64) -> Option<&Vec<u8>> {
-        self.map.get(ino)
+    fn get(&mut self, ino: u64) -> Option<&V> {
+        if self.touch_on_get
+            && let Some(pos) = self.order.iter().position(|&i| i == ino)
+        {
+            self.order.remove(pos);
+            self.order.push_back(ino);
+        }
+        self.map.get(&ino)
     }
 
-    fn insert(&mut self, ino: u64, data: Vec<u8>) {
-        // Only track insertion order for genuinely new inodes so re-materializing
-        // the same binary doesn't create a duplicate order entry.
-        if self.map.insert(ino, data).is_none() {
+    fn insert(&mut self, ino: u64, value: V) {
+        // Only track order for genuinely new inodes so re-inserting the same
+        // key doesn't create a duplicate order entry.
+        if self.map.insert(ino, value).is_none() {
             self.order.push_back(ino);
             while self.map.len() > self.max_entries {
                 match self.order.pop_front() {
@@ -129,7 +146,10 @@ pub struct VirtualFS {
     /// Keyed by inode. Only populated for binary-mode prefix files that need
     /// ad-hoc re-signing, since codesign requires the full file.
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-    codesign_cache: Mutex<CodesignCache>,
+    codesign_cache: Mutex<BoundedCache<Vec<u8>>>,
+    /// Cache of memory-mapped source files, keyed by inode, so streaming a
+    /// prefix-replaced file doesn't re-`open` + re-`mmap` it on every window.
+    mmap_cache: Mutex<BoundedCache<Arc<Mmap>>>,
 }
 
 impl VirtualFS {
@@ -322,7 +342,8 @@ impl VirtualFS {
             uid: current_uid_gid().0,
             gid: current_uid_gid().1,
             offset_cache,
-            codesign_cache: Mutex::new(CodesignCache::new(16)),
+            codesign_cache: Mutex::new(BoundedCache::new(16, false)),
+            mmap_cache: Mutex::new(BoundedCache::new(128, true)),
         }
     }
 
@@ -454,6 +475,27 @@ impl VirtualFS {
         Ok(ContentSource::Direct(path))
     }
 
+    /// Memory-map the source file for `ino`, reusing a cached mapping when one
+    /// exists. On a miss the file is mapped once and the mapping cached; a
+    /// concurrent miss on the same inode simply maps twice and keeps whichever
+    /// mapping the cache records — both are valid views of an immutable cache
+    /// file.
+    fn mmap_for(&self, ino: u64, path: &Path) -> Result<Arc<Mmap>, i32> {
+        if let Some(mmap) = self.mmap_cache.lock().unwrap().get(ino).cloned() {
+            return Ok(mmap);
+        }
+        let file = File::open(path).map_err(|e| {
+            tracing::warn!("failed to open {}: {}", path.display(), e);
+            EIO
+        })?;
+        let mmap = Arc::new(unsafe { Mmap::map(&file) }.map_err(|e| {
+            tracing::warn!("failed to memory map {}: {}", path.display(), e);
+            EIO
+        })?);
+        self.mmap_cache.lock().unwrap().insert(ino, mmap.clone());
+        Ok(mmap)
+    }
+
     pub(crate) fn do_read(&self, ino: u64, offset: u64, size: u32) -> Result<Vec<u8>, i32> {
         let index = self.validate_ino(ino)?;
 
@@ -496,15 +538,7 @@ impl VirtualFS {
         // Has prefix placeholder — use ranged replacement
         let placeholder = current_file.prefix_placeholder.as_ref().unwrap();
 
-        let file = File::open(&path).map_err(|e| {
-            tracing::warn!("failed to open {}: {}", path.display(), e);
-            EIO
-        })?;
-
-        let mmap = unsafe { Mmap::map(&file) }.map_err(|e| {
-            tracing::warn!("failed to memory map {}: {}", path.display(), e);
-            EIO
-        })?;
+        let mmap = self.mmap_for(ino, &path)?;
 
         // Must match the prefix used to build the plan in `with_platform`.
         let target_prefix = target_prefix_for_platform(&self.mount_point, self.platform);
@@ -514,7 +548,10 @@ impl VirtualFS {
         );
 
         let start = offset as usize;
-        let end = start + size as usize;
+        // `offset` is client-supplied and unclamped here; the ranged reads
+        // clamp `end` to the transformed length, but the addition itself must
+        // not wrap for a pathological offset.
+        let end = start.saturating_add(size as usize);
 
         let Some(plan) = self.offset_cache.get(&ino) else {
             // No plan — serve source bytes directly
@@ -536,7 +573,7 @@ impl VirtualFS {
                 #[cfg(target_os = "macos")]
                 if self.platform.is_osx() && !cstrings.is_empty() {
                     // Fast path: serve from cache
-                    if let Some(cached) = self.codesign_cache.lock().unwrap().get(&ino) {
+                    if let Some(cached) = self.codesign_cache.lock().unwrap().get(ino) {
                         let s = start.min(cached.len());
                         let e = (s + size as usize).min(cached.len());
                         return Ok(cached[s..e].to_vec());
@@ -682,24 +719,46 @@ mod tests {
     use crate::{new_empty_tree, path_parse};
 
     #[test]
-    fn test_codesign_cache_bounds_and_evicts_oldest() {
-        let mut cache = CodesignCache::new(2);
+    fn test_bounded_cache_fifo_evicts_oldest() {
+        // FIFO policy (touch_on_get = false), as used by the codesign cache.
+        let mut cache: BoundedCache<Vec<u8>> = BoundedCache::new(2, false);
         cache.insert(1, vec![1]);
         cache.insert(2, vec![2]);
-        assert!(cache.get(&1).is_some());
-        assert!(cache.get(&2).is_some());
+        assert!(cache.get(1).is_some());
+        assert!(cache.get(2).is_some());
 
-        // Inserting a third entry evicts the oldest (inode 1).
+        // Inserting a third entry evicts the oldest (inode 1). Under FIFO a
+        // preceding `get` does not protect it.
         cache.insert(3, vec![3]);
-        assert!(cache.get(&1).is_none());
-        assert!(cache.get(&2).is_some());
-        assert!(cache.get(&3).is_some());
+        assert!(cache.get(1).is_none());
+        assert!(cache.get(2).is_some());
+        assert!(cache.get(3).is_some());
 
         // Re-inserting an existing inode updates in place without growing the
         // cache or evicting a live entry.
         cache.insert(2, vec![22]);
-        assert_eq!(cache.get(&2), Some(&vec![22]));
-        assert!(cache.get(&3).is_some());
+        assert_eq!(cache.get(2), Some(&vec![22]));
+        assert!(cache.get(3).is_some());
+    }
+
+    #[test]
+    fn test_bounded_cache_lru_get_protects_touched_entry() {
+        // LRU policy (touch_on_get = true), as used by the mmap cache: a `get`
+        // marks an entry most-recently-used so it survives an eviction that
+        // FIFO would have applied to it.
+        let mut cache: BoundedCache<u32> = BoundedCache::new(2, true);
+        cache.insert(1, 10);
+        cache.insert(2, 20);
+
+        // Touch inode 1 — now inode 2 is the least-recently-used.
+        assert_eq!(cache.get(1), Some(&10));
+
+        // Inserting a third entry evicts inode 2 (LRU), not inode 1, even
+        // though inode 1 was inserted first.
+        cache.insert(3, 30);
+        assert_eq!(cache.get(1), Some(&10));
+        assert!(cache.get(2).is_none());
+        assert_eq!(cache.get(3), Some(&30));
     }
     use rattler_conda_types::package::{
         FileMode, PathType, PathsEntry, PathsJson, PrefixPlaceholder,
