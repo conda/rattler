@@ -135,6 +135,45 @@ pub(crate) fn report_unsupported_repodata_revisions(
     }
 }
 
+/// Reports a download to a [`DownloadReporter`] and reports it complete when
+/// dropped, so a request that fails or whose future is cancelled does not
+/// leave the download in progress forever.
+pub(crate) struct DownloadProgressGuard<'a> {
+    reporter: Option<(&'a dyn DownloadReporter, usize)>,
+    url: Url,
+}
+
+impl<'a> DownloadProgressGuard<'a> {
+    /// Reports the start of a download of `url`, if there is a reporter.
+    pub(crate) fn start(reporter: Option<&'a dyn DownloadReporter>, url: &Url) -> Self {
+        Self {
+            reporter: reporter.map(|reporter| (reporter, reporter.on_download_start(url))),
+            url: url.clone(),
+        }
+    }
+
+    /// The reporter and download index to report progress to.
+    pub(crate) fn reporter(&self) -> Option<(&'a dyn DownloadReporter, usize)> {
+        self.reporter
+    }
+
+    /// Reports the download complete under `url`, which can differ from the
+    /// requested url, for example after a redirect.
+    pub(crate) fn finish(mut self, url: &Url) {
+        // We transfer ownership into finish, do not return it
+        // => force a "drop()" that completes the reporter.
+        self.url = url.clone();
+    }
+}
+
+impl Drop for DownloadProgressGuard<'_> {
+    fn drop(&mut self) {
+        if let Some((reporter, index)) = self.reporter {
+            reporter.on_download_complete(&self.url, index);
+        }
+    }
+}
+
 #[allow(dead_code)]
 pub(crate) trait ResponseReporterExt {
     /// Converts a response into a stream of bytes, notifying a reporter of the
