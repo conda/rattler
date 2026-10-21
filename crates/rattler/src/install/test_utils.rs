@@ -90,6 +90,7 @@ pub async fn execute_operation(
             .get_or_fetch_from_url_with_retry(
                 &install_record.package_record,
                 install_record.url.clone(),
+                install_record.identifier.archive_type,
                 download_client.clone(),
                 default_retry_policy(),
                 None,

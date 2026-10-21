@@ -115,6 +115,7 @@ impl DirectUrlQuery {
                 .get_or_fetch_from_url(
                     cache_key,
                     self.url.clone(),
+                    archive_type.into(),
                     self.client.clone(),
                     // Should we add a reporter?
                     None,

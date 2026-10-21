@@ -78,6 +78,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 
 [dev-dependencies]
+rattler_repodata_gateway = { workspace = true, features = ["gateway"] }
 assert_matches = { workspace = true }
 rand = { workspace = true }
 rstest = { workspace = true }

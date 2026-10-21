@@ -325,15 +325,11 @@ impl RunExportExtractor {
         record: &RepoDataRecord,
         progress_reporter: Option<Arc<dyn RunExportsReporter>>,
     ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
-        use rattler_cache::package_cache::CacheKey;
-
         let (Some(package_cache), Some(client)) =
             (self.package_cache.as_ref(), self.client.as_ref())
         else {
             return Ok(None);
         };
-
-        let cache_key = CacheKey::from(&record.package_record);
 
         // Construct a reporter specifically for the run export download
         let reporter = progress_reporter
@@ -343,8 +339,9 @@ impl RunExportExtractor {
 
         match package_cache
             .get_or_fetch_from_url_with_retry(
-                cache_key,
+                &record.package_record,
                 record.url.clone(),
+                record.identifier.archive_type,
                 client.clone(),
                 rattler_networking::retry_policies::default_retry_policy(),
                 reporter,

@@ -1434,8 +1434,9 @@ mod test {
                     let package_info = CondaArchiveIdentifier::try_from_url(&package_url).unwrap();
                     let package_cache_lock = package_cache
                         .get_or_fetch_from_url(
-                            package_info,
+                            crate::package_cache::CacheKey::from(package_info.clone()),
                             package_url.clone(),
+                            package_info.archive_type.into(),
                             client.clone(),
                             None,
                             None,
