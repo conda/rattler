@@ -75,8 +75,14 @@ async def solve(
         virtual_packages: A list of virtual packages considered active.
         channel_priority: (Default = ChannelPriority.Strict) When `ChannelPriority.Strict`
                  the channel that the package is first found in will be used as
-                 the only channel for that package. When `ChannelPriority.Disabled`
-                 it will search for every package in every channel.
+                 the only channel for that package. When `ChannelPriority.Flexible`
+                 higher-priority channels are preferred, but packages can still
+                 come from lower-priority channels, when needed. When
+                 `ChannelPriority.Disabled` it will search for every package in
+                 every channel. When `ChannelPriority.VersionFirst` it also
+                 searches every channel, but the channel order breaks ties
+                 between candidates with the same version, similar to conda's
+                 disabled channel priority.
         timeout:    The maximum time the solver is allowed to run.
         exclude_newer: Exclude any record that is newer than the given datetime,
             or newer than the cutoff produced by subtracting a timedelta from now.
@@ -205,8 +211,14 @@ async def solve_with_sparse_repodata(
         virtual_packages: A list of virtual packages considered active.
         channel_priority: (Default = ChannelPriority.Strict) When `ChannelPriority.Strict`
                  the channel that the package is first found in will be used as
-                 the only channel for that package. When `ChannelPriority.Disabled`
-                 it will search for every package in every channel.
+                 the only channel for that package. When `ChannelPriority.Flexible`
+                 higher-priority channels are preferred, but packages can still
+                 come from lower-priority channels when needed. When
+                 `ChannelPriority.Disabled` it will search for every package in
+                 every channel. When `ChannelPriority.VersionFirst` it also
+                 searches every channel, but the channel order breaks ties
+                 between candidates with the same version, like conda's disabled
+                 channel priority.
         timeout:    The maximum time the solver is allowed to run.
         exclude_newer: Exclude any record that is newer than the given datetime,
             or newer than the cutoff produced by subtracting a timedelta from now.
