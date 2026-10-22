@@ -12,8 +12,8 @@ use rattler_conda_types::package::{
 use regex::Regex;
 
 use super::{
-    EncodedPrefix, InconsistentOffsetsError, OffsetReplaceError, TextPatch, encoded_prefix_for,
-    write_replacement_range,
+    EncodedPrefix, InconsistentOffsetsError, OffsetReplaceError, TextOccurrence, TextPatch,
+    encoded_prefix_for, write_replacement_range,
 };
 
 static SHEBANG_REGEX: Lazy<Regex> = Lazy::new(|| {
@@ -159,6 +159,29 @@ pub fn copy_and_replace_textual_placeholder(
     write_patched_text(destination, source_bytes, region_end, &patches)
 }
 
+/// Finds the placeholder occurrences that search-based text replacement replaces, starting at or
+/// after `from`, under every encoding the draft CEP defines and ordered by position in the file.
+///
+/// This exposes the search [`copy_and_replace_textual_placeholder`] performs, including how it
+/// resolves overlapping matches of different encodings, so that callers patching files lazily,
+/// such as the mount-time ranged reads in `rattler_vfs`, stay byte-identical with it. Pass the
+/// end of the shebang region as `from` on targets that rewrite shebangs, as the installer does.
+pub fn find_text_occurrences(
+    source_bytes: &[u8],
+    from: usize,
+    prefix_placeholder: &str,
+) -> Vec<TextOccurrence> {
+    // Only the placeholder is searched for, so the target prefix does not matter here.
+    let prefixes = EncodedPrefix::all(prefix_placeholder, "");
+    find_text_patches(source_bytes, from, &prefixes)
+        .into_iter()
+        .map(|patch| TextOccurrence {
+            offset: patch.offset,
+            encoding: patch.prefix.encoding,
+        })
+        .collect()
+}
+
 /// Finds every placeholder occurrence that starts at or after `from`, under every encoding,
 /// ordered by position in the file.
 ///
@@ -297,6 +320,37 @@ fn validated_shebang_region_end(
         return Err(InconsistentOffsetsError::ShebangLengthMismatch { shebang_length });
     }
     Ok(shebang_length)
+}
+
+/// Transforms the shebang region (the first `shebang_length` bytes of a text file) exactly as the
+/// installer does when writing the patched file, returning the region's contribution to the output.
+///
+/// On targets with shebang handling ([`Subdir::is_unix`]) the region minus its trailing newline is
+/// rewritten by `replace_shebang` (which may collapse an over-long line to the
+/// `#!/usr/bin/env <program>` form) and the trailing newline, if present, is appended unchanged. On
+/// other targets the region receives plain placeholder replacement under every encoding.
+///
+/// This shares its implementation with install-time replacement so that callers patching files
+/// lazily, such as the mount-time ranged reads in `rattler_vfs`, stay byte-identical with it.
+pub fn replace_shebang_region(
+    region: &[u8],
+    prefix_placeholder: &str,
+    target_prefix: &str,
+    target_platform: &Subdir,
+) -> Vec<u8> {
+    let prefixes = EncodedPrefix::all(prefix_placeholder, target_prefix);
+    let mut out = Vec::with_capacity(region.len());
+    write_shebang_region(
+        &mut out,
+        region,
+        region.len(),
+        prefix_placeholder,
+        target_prefix,
+        target_platform,
+        &prefixes,
+    )
+    .expect("writing to a Vec cannot fail");
+    out
 }
 
 /// Writes the first `region_end` bytes of a text file, transformed by the installer's shebang

@@ -22,7 +22,7 @@ use crate::{
         },
         subdir::{PackageRecords, SubdirClient},
     },
-    reporter::ResponseReporterExt,
+    reporter::{DownloadProgressGuard, ResponseReporterExt},
     utils::js_fetch::JsFetcher,
 };
 
@@ -151,9 +151,10 @@ impl SubdirClient for ShardedSubdir {
                         .build()
                         .expect("failed to build shard request");
 
-                    let reporter = reporter
-                        .and_then(Reporter::download_reporter)
-                        .map(|r| (r, r.on_download_start(&shard_url)));
+                    let download = DownloadProgressGuard::start(
+                        reporter.and_then(Reporter::download_reporter),
+                        &shard_url,
+                    );
                     let shard_response = self
                         .client
                         .client()
@@ -163,13 +164,11 @@ impl SubdirClient for ShardedSubdir {
                         .map_err(FetchRepoDataError::from)?;
 
                     let bytes = shard_response
-                        .bytes_with_progress(reporter)
+                        .bytes_with_progress(download.reporter())
                         .await
                         .map_err(FetchRepoDataError::from)?;
 
-                    if let Some((reporter, index)) = reporter {
-                        reporter.on_download_complete(&shard_url, index);
-                    }
+                    download.finish(&shard_url);
 
                     bytes::Bytes::from(bytes)
                 }

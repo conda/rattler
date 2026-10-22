@@ -15,7 +15,7 @@ use tokio::sync::Semaphore;
 use tracing::instrument;
 use url::Url;
 
-use crate::reporter::{DownloadReporter, ResponseReporterExt};
+use crate::reporter::{DownloadProgressGuard, DownloadReporter, ResponseReporterExt};
 
 /// Type used for in-memory caching of `SubdirRunExportsJson`.
 pub(crate) type SubdirRunExportsCache = CoalescedMap<Url, Option<Arc<SubdirRunExportsJson>>>;
@@ -185,9 +185,8 @@ impl RunExportExtractor {
 
         let reporter = reporter
             .as_deref()
-            .and_then(RunExportsReporter::download_reporter)
-            .map(|reporter| (reporter, reporter.on_download_start(&url)));
-        let _progress_guard = DownloadProgressGuard::new(reporter, url.clone());
+            .and_then(RunExportsReporter::download_reporter);
+        let download = DownloadProgressGuard::start(reporter, &url);
 
         let request = client.get(url.clone());
         let response = request.send().await.and_then(|resp| {
@@ -196,7 +195,7 @@ impl RunExportExtractor {
         });
         match response {
             Ok(response) => {
-                let bytes_stream = match response.bytes_with_progress(reporter).await {
+                let bytes_stream = match response.bytes_with_progress(download.reporter()).await {
                     Ok(bytes) => bytes,
                     Err(err) => return Err(RunExportExtractorError::TransportError(url, err)),
                 };
@@ -245,9 +244,8 @@ impl RunExportExtractor {
         let request = client.get(url.clone());
         let reporter = reporter
             .as_deref()
-            .and_then(RunExportsReporter::download_reporter)
-            .map(|reporter| (reporter, reporter.on_download_start(&url)));
-        let _progress_guard = DownloadProgressGuard::new(reporter, url.clone());
+            .and_then(RunExportsReporter::download_reporter);
+        let download = DownloadProgressGuard::start(reporter, &url);
 
         let response = request.send().await.and_then(|resp| {
             resp.error_for_status()
@@ -255,7 +253,7 @@ impl RunExportExtractor {
         });
         match response {
             Ok(response) => {
-                let bytes_stream = match response.bytes_with_progress(reporter).await {
+                let bytes_stream = match response.bytes_with_progress(download.reporter()).await {
                     Ok(bytes) => bytes,
                     Err(err) => return Err(RunExportExtractorError::TransportError(url, err)),
                 };
@@ -400,26 +398,5 @@ impl RunExportExtractor {
         _path: &Path,
     ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
         Ok(None)
-    }
-}
-
-/// RAII guard to automatically complete download progress reporting when
-/// dropped.
-struct DownloadProgressGuard<'a> {
-    reporter: Option<(&'a dyn DownloadReporter, usize)>,
-    url: Url,
-}
-
-impl<'a> DownloadProgressGuard<'a> {
-    fn new(reporter: Option<(&'a dyn DownloadReporter, usize)>, url: Url) -> Self {
-        Self { reporter, url }
-    }
-}
-
-impl<'a> Drop for DownloadProgressGuard<'a> {
-    fn drop(&mut self) {
-        if let Some((reporter, index)) = self.reporter {
-            reporter.on_download_complete(&self.url, index);
-        }
     }
 }
