@@ -539,8 +539,7 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     /// The timeout after which the solver should stop
     pub timeout: Option<std::time::Duration>,
 
-    /// The channel priority to solve with, either [`ChannelPriority::Strict`]
-    /// or [`ChannelPriority::Disabled`]
+    /// The channel priority to solve with, see [`ChannelPriority`].
     pub channel_priority: ChannelPriority,
 
     /// Exclude packages newer than the configured cutoff.
@@ -725,7 +724,10 @@ impl<'a, T: IntoIterator<Item = &'a RepoDataRecord>, S: SolverRepoData<'a>> Into
 /// that package, while channels outside the multichannel are still excluded.
 /// With [`ChannelPriority::Flexible`] the solver does not prefer an earlier
 /// member over a later one. The order of the members only breaks ties between
-/// otherwise identical candidates.
+/// otherwise identical candidates. With [`ChannelPriority::VersionFirst`] a
+/// version tie between two members falls through to the build number, since
+/// the members share a rank, while a tie with a channel outside the
+/// multichannel goes to the earlier tier.
 ///
 /// For backends that support channel-specific match specs, a spec whose
 /// channel name equals the name of the multichannel (e.g. `defaults::python`)
