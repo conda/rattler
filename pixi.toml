@@ -102,6 +102,17 @@ cargo-clippy = "cargo clippy --all-targets --workspace -- -D warnings -Dclippy::
 
 [environments]
 lint = { features = ["lint"], solve-group = "default" }
+mutants = { features = ["mutants"], solve-group = "default" }
+
+#------------------------------
+# Mutation testing
+#------------------------------
+[feature.mutants.dependencies]
+cargo-mutants = ">=27.1.0,<28"
+
+[feature.mutants.tasks]
+# Configuration lives in `.cargo/mutants.toml`.
+mutants = "cargo mutants"
 
 #------------------------------
 # Breaking API change detection
