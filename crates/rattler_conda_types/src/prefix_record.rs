@@ -273,13 +273,16 @@ impl PrefixRecord {
     }
 
     /// Return the canonical file name for a `PrefixRecord`. Takes the form of
-    /// `<package_name>-<version>-<build>.json`.
+    /// `<package_name>-<version>-<build>.json`. The three segments are always
+    /// present so that the file name can be parsed back by splitting on the
+    /// last two `-` characters.
     pub fn file_name(&self) -> String {
+        let record = &self.repodata_record.package_record;
         format!(
             "{}-{}-{}.json",
-            self.repodata_record.package_record.name.as_normalized(),
-            self.repodata_record.package_record.version,
-            self.repodata_record.package_record.build
+            record.name.as_normalized(),
+            record.version,
+            record.build,
         )
     }
 
@@ -453,17 +456,74 @@ mod test {
     use crate::get_test_data_dir;
 
     #[rstest]
-    #[case::xz_5_2_6_h8d14728_0("xz-5.2.6-h8d14728_0.json")]
     #[case::libsqlite_3_40_0_hcfcfb64_0("libsqlite-3.40.0-hcfcfb64_0.json")]
-    #[case::menuinst_1_4_19_py311h1ea47a8_1("menuinst-1.4.19-py311h1ea47a8_1.json")]
     #[case::pip_23_0_pyhd8ed1ab_0_json("pip-23.0-pyhd8ed1ab_0.json")]
-    #[case::pysocks_1_7_1_pyh0701188_6("pysocks-1.7.1-pyh0701188_6.json")]
-    #[case::requests_2_28_2_pyhd8ed1ab_0("requests-2.28.2-pyhd8ed1ab_0.json")]
     #[case::tk_8_6_12_h8ffe710_0("tk-8.6.12-h8ffe710_0.json")]
-    #[case::urllib3_1_26_14_pyhd8ed1ab_0("urllib3-1.26.14-pyhd8ed1ab_0.json")]
     #[case::vc_14_3_hb6edc58_10_json("vc-14.3-hb6edc58_10.json")]
     #[case::wheel_0_38_4_pyhd8ed1ab_0("wheel-0.38.4-pyhd8ed1ab_0.json")]
     fn parse_prefix_record(#[case] path_name: &str) {
+        let path = get_test_data_dir().join("conda-meta").join(path_name);
+        let prefix_record = super::PrefixRecord::from_path(path).unwrap();
+        insta::assert_yaml_snapshot!(path_name.replace('.', "_"), prefix_record);
+    }
+
+    /// The canonical conda-meta file name must always contain three
+    /// `-`-separated segments because `MinimalPrefixRecord::from_path` parses
+    /// the name, version and build back out of the file name by splitting on
+    /// the last two `-` characters.
+    #[test]
+    fn test_file_name_round_trips() {
+        use std::str::FromStr;
+
+        use itertools::Itertools;
+
+        use crate::{
+            PackageName, PackageRecord, RepoDataRecord, Version,
+            package::{BuildString, DistArchiveIdentifier},
+        };
+
+        let record = super::PrefixRecord::from_repodata_record(
+            RepoDataRecord {
+                package_record: PackageRecord::new(
+                    PackageName::new_unchecked("foo-bar"),
+                    Version::from_str("1.0").unwrap(),
+                    "0".parse::<BuildString>().unwrap(),
+                ),
+                identifier: "foo-bar-1.0-py37_0.conda"
+                    .parse::<DistArchiveIdentifier>()
+                    .unwrap(),
+                url: url::Url::parse("https://example.com/foo-bar-1.0.conda").unwrap(),
+                channel: None,
+            },
+            Vec::new(),
+        );
+
+        let file_name = record.file_name();
+        assert_eq!(file_name, "foo-bar-1.0-0.json");
+
+        // Parse it back the same way `MinimalPrefixRecord::from_path` does.
+        let (build, version, name) = file_name
+            .strip_suffix(".json")
+            .unwrap()
+            .rsplitn(3, '-')
+            .next_tuple()
+            .unwrap();
+        assert_eq!(name, "foo-bar");
+        assert_eq!(version, "1.0");
+        assert_eq!(build, "0");
+    }
+
+    /// These records were written on Windows and separate the components of
+    /// `files` and `paths_data` with `\`, which is only a path separator on
+    /// Windows.
+    #[cfg(windows)]
+    #[rstest]
+    #[case::xz_5_2_6_h8d14728_0("xz-5.2.6-h8d14728_0.json")]
+    #[case::menuinst_1_4_19_py311h1ea47a8_1("menuinst-1.4.19-py311h1ea47a8_1.json")]
+    #[case::pysocks_1_7_1_pyh0701188_6("pysocks-1.7.1-pyh0701188_6.json")]
+    #[case::requests_2_28_2_pyhd8ed1ab_0("requests-2.28.2-pyhd8ed1ab_0.json")]
+    #[case::urllib3_1_26_14_pyhd8ed1ab_0("urllib3-1.26.14-pyhd8ed1ab_0.json")]
+    fn parse_windows_prefix_record(#[case] path_name: &str) {
         let path = get_test_data_dir().join("conda-meta").join(path_name);
         let prefix_record = super::PrefixRecord::from_path(path).unwrap();
         insta::assert_yaml_snapshot!(path_name.replace('.', "_"), prefix_record);

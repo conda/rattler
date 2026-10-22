@@ -1,4 +1,5 @@
 mod about_json;
+mod build_string;
 mod channel;
 mod config;
 mod error;
@@ -12,21 +13,24 @@ mod meta;
 mod nameless_match_spec;
 mod networking;
 mod no_arch_type;
+mod package_cache;
 mod package_name;
 mod package_name_matcher;
 mod package_streaming;
 mod paths_json;
-mod platform;
 mod prefix_paths;
 #[cfg(feature = "pty")]
 mod pty;
 mod record;
 mod repo_data;
 mod shell;
+mod sigstore;
 mod solver;
+mod subdir;
 mod utils;
 mod version;
 mod virtual_package;
+mod virtual_package_detectors;
 mod who_needs;
 
 mod exceptions;
@@ -36,19 +40,20 @@ mod run_exports_json;
 use std::ops::Deref;
 
 use about_json::PyAboutJson;
+use build_string::PyBuildString;
 use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
 use config::PyConfig;
 use error::PyRattlerError;
 use exceptions::{
-    ActivationError, ActivationScriptFormatError, AuthenticationStorageError, CacheDirError,
-    CanonicalMatchSpecError, ConfigError, ConversionError, ConvertSubdirError,
+    ActivationError, ActivationScriptFormatError, AttestationError, AuthenticationStorageError,
+    CacheDirError, CanonicalMatchSpecError, ConfigError, ConversionError, ConvertSubdirError,
     DetectVirtualPackageError, EnvironmentCreationError, FetchRepoDataError, InvalidChannelError,
     InvalidHeaderNameError, InvalidHeaderValueError, InvalidMatchSpecError,
     InvalidPackageNameError, InvalidUrlError, InvalidVersionError, InvalidVersionSpecError,
     IoError, LinkError, LockFileError, PackageNameMatcherParseError, ParseArchError,
-    ParseCondaLockError, ParseExplicitEnvironmentSpecError, ParsePlatformError, RequirementError,
+    ParseCondaLockError, ParseExplicitEnvironmentSpecError, ParseSubdirError, RequirementError,
     ShellError, SolverError, TransactionError, ValidatePackageRecordsError, VersionBumpError,
-    VersionExtendError,
+    VersionExtendError, VirtualPackageOverrideError,
 };
 use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
 use generic_virtual_package::PyGenericVirtualPackage;
@@ -68,26 +73,37 @@ use networking::middleware::{
 };
 use networking::{client::PyClientWithMiddleware, py_fetch_repo_data};
 use no_arch_type::PyNoArchType;
+use package_cache::{PyCacheIndex, PyPackageCache, PyPackageCacheLayer, PyValidationMode};
 use package_name::PyPackageName;
 use package_name_matcher::PyPackageNameMatcher;
 use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
-use platform::{PyArch, PyPlatform};
 use prefix_paths::{PyPrefixPathType, PyPrefixPaths, PyPrefixPathsEntry};
 use pyo3::prelude::*;
 use record::{PyLink, PyRecord};
 use repo_data::{
     PyChannelInfo, PyChannelRelations, PyRepoData,
     gateway::{
-        PyChannelNotice, PyFetchRepoDataOptions, PyGateway, PyRemovedPackage, PySourceConfig,
+        PyChannelNotice, PyFetchRepoDataOptions, PyGateway, PyMultiSource, PyRemovedPackage,
+        PySourceConfig,
     },
     patch_instructions::PyPatchInstructions,
     sparse::{PyPackageFormatSelection, PySparseRepoData},
 };
 use run_exports_json::PyRunExportsJson;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
+use sigstore::{
+    PyCertificateClaims, PyTrustedRoot, PyVerificationOutcome, PyVerificationPolicy,
+    PyVerifiedAttestation, PyVerifiedChecks, py_verify_attestation,
+};
 use solver::{py_solve, py_solve_with_sparse_repodata};
+use subdir::{PyArch, PySubdir};
 use version::{PyVersion, PyVersionSpec};
 use virtual_package::{PyOverride, PyVirtualPackage, PyVirtualPackageOverrides};
+use virtual_package_detectors::{
+    PyConsentRequest, PyDetectionOutcome, PyDetectorDiagnostics, PyDetectorFailure,
+    PyDetectorRegistration, PyDetectorResult, PyRejectedDetectorRegistration,
+    PySkippedRegistration, py_detect_virtual_packages,
+};
 use who_needs::PyDependent;
 
 #[cfg(feature = "pty")]
@@ -113,14 +129,16 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyMatchSpec>()?;
     m.add_class::<PyNamelessMatchSpec>()?;
 
+    m.add_class::<PyBuildString>()?;
     m.add_class::<PyPackageName>()?;
     m.add_class::<PyPackageNameMatcher>()?;
 
     m.add_class::<PyChannel>()?;
     m.add_class::<PyChannelConfig>()?;
+    m.add_class::<PyMultiSource>()?;
     m.add_class::<PyChannelPriority>()?;
     m.add_class::<PyConfig>()?;
-    m.add_class::<PyPlatform>()?;
+    m.add_class::<PySubdir>()?;
     m.add_class::<PyArch>()?;
 
     m.add_class::<PyMirrorMiddleware>()?;
@@ -132,6 +150,13 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyRetryMiddleware>()?;
     m.add_class::<PyAddHeadersMiddleware>()?;
     m.add_class::<PyClientWithMiddleware>()?;
+    m.add_class::<PyVerificationPolicy>()?;
+    m.add_class::<PyVerifiedAttestation>()?;
+    m.add_class::<PyCertificateClaims>()?;
+    m.add_class::<PyVerifiedChecks>()?;
+    m.add_class::<PyVerificationOutcome>()?;
+    m.add_class::<PyTrustedRoot>()?;
+    m.add_function(wrap_pyfunction!(py_verify_attestation, &m)?)?;
 
     // Shell activation things
     m.add_class::<PyActivationVariables>()?;
@@ -167,6 +192,15 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyOverride>()?;
     m.add_class::<PyVirtualPackageOverrides>()?;
     m.add_class::<PyVirtualPackage>()?;
+    m.add_class::<PyDetectorRegistration>()?;
+    m.add_class::<PyRejectedDetectorRegistration>()?;
+    m.add_class::<PyConsentRequest>()?;
+    m.add_class::<PyDetectorResult>()?;
+    m.add_class::<PyDetectorDiagnostics>()?;
+    m.add_class::<PyDetectorFailure>()?;
+    m.add_class::<PySkippedRegistration>()?;
+    m.add_class::<PyDetectionOutcome>()?;
+    m.add_function(wrap_pyfunction!(py_detect_virtual_packages, &m)?)?;
     m.add_class::<PyPrefixPathsEntry>()?;
     m.add_class::<PyPrefixPathType>()?;
     m.add_class::<PyPrefixPaths>()?;
@@ -216,8 +250,18 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyExplicitEnvironmentSpec>()?;
     m.add_class::<PyExplicitEnvironmentEntry>()?;
 
+    // Package cache
+    m.add_class::<PyPackageCache>()?;
+    m.add_class::<PyPackageCacheLayer>()?;
+    m.add_class::<PyCacheIndex>()?;
+    m.add_class::<PyValidationMode>()?;
+
     // Exceptions
     m.add("InvalidVersionError", py.get_type::<InvalidVersionError>())?;
+    m.add(
+        "VirtualPackageOverrideError",
+        py.get_type::<VirtualPackageOverrideError>(),
+    )?;
     m.add(
         "InvalidVersionSpecError",
         py.get_type::<InvalidVersionSpecError>(),
@@ -245,7 +289,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
         "ActivationScriptFormatError",
         py.get_type::<ActivationScriptFormatError>(),
     )?;
-    m.add("ParsePlatformError", py.get_type::<ParsePlatformError>())?;
+    m.add("ParseSubdirError", py.get_type::<ParseSubdirError>())?;
     m.add("ParseArchError", py.get_type::<ParseArchError>())?;
     m.add("FetchRepoDataError", py.get_type::<FetchRepoDataError>())?;
     m.add("CacheDirError", py.get_type::<CacheDirError>())?;
@@ -284,6 +328,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
         "InstallerError",
         py.get_type::<crate::exceptions::InstallerError>(),
     )?;
+    m.add("AttestationError", py.get_type::<AttestationError>())?;
     m.add(
         "ParseExplicitEnvironmentSpecError",
         py.get_type::<ParseExplicitEnvironmentSpecError>(),

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from rattler.rattler import PyRemovedPackage
 
@@ -32,7 +31,7 @@ class RemovedPackage:
     build: str
     """The build string parsed from the file name."""
 
-    channel: Optional[str]
+    channel: str | None
     """The channel the package was removed from."""
 
     @classmethod

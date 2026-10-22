@@ -1,7 +1,6 @@
 from __future__ import annotations
-from typing import List, Optional
 
-from rattler.platform.platform import Platform
+from rattler.platform.subdir import Subdir
 from rattler.rattler import PyLockPlatform
 
 
@@ -18,8 +17,8 @@ class LockPlatform:
     def __init__(
         self,
         name: str,
-        subdir: Optional[Platform] = None,
-        virtual_packages: Optional[List[str]] = None,
+        subdir: Subdir | None = None,
+        virtual_packages: list[str] | None = None,
     ) -> None:
         """
         Create a new lock platform.
@@ -65,7 +64,7 @@ class LockPlatform:
         return self._inner.name
 
     @property
-    def subdir(self) -> Platform:
+    def subdir(self) -> Subdir:
         """
         The underlying conda subdir/platform.
 
@@ -75,14 +74,14 @@ class LockPlatform:
         >>> from rattler import LockPlatform
         >>> platform = LockPlatform("linux-64")
         >>> platform.subdir
-        Platform(linux-64)
+        Subdir(linux-64)
         >>>
         ```
         """
-        return Platform._from_py_platform(self._inner.subdir)
+        return Subdir._from_py_subdir(self._inner.subdir)
 
     @property
-    def virtual_packages(self) -> List[str]:
+    def virtual_packages(self) -> list[str]:
         """
         The list of virtual packages for this platform.
 

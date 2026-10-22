@@ -1,7 +1,7 @@
 use std::{fs, fs::File, path::Path};
 
 use rattler_conda_types::{
-    Channel, ChannelConfig, PackageName, Platform, Shard, ShardedRepodata,
+    Channel, ChannelConfig, PackageName, Shard, ShardedRepodata, Subdir,
     compression_level::CompressionLevel,
 };
 use rattler_index::{
@@ -78,7 +78,7 @@ fn archive(root: &Path, conda: bool, patch: bool) -> String {
 async fn index(root: &Path, force: bool, patch: Option<&str>, v3: bool) -> Value {
     index_fs(IndexFsConfig {
         channel: root.into(),
-        target_platform: Some(Platform::NoArch),
+        target_platform: Some(Subdir::NoArch),
         repodata_patch: patch.map(str::to_owned),
         write_zst: true,
         write_shards: true,
@@ -331,7 +331,7 @@ async fn forced_retry_preserves_concurrent_publication_with_cached_metadata() {
         .await
         .unwrap();
     let stats = rattler_index::index(
-        Some(Platform::NoArch),
+        Some(Subdir::NoArch),
         op.clone(),
         None,
         false,

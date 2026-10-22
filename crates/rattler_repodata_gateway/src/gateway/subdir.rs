@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use ahash::HashMap;
-use rattler_conda_types::{ChannelRelations, PackageName, RepoDataRecord, RepodataRevisions};
+use rattler_conda_types::{
+    ChannelRelations, DetectorRegistrationMetadata, PackageName, RepoDataRecord, RepodataRevisions,
+};
 
 use super::GatewayError;
 use crate::Reporter;
@@ -83,7 +85,7 @@ pub(crate) fn extract_unique_deps_split<'a>(
     (Arc::from(base), Arc::new(per_extra))
 }
 
-pub enum Subdir {
+pub enum SubdirState {
     /// The subdirectory is missing from the channel, it is considered empty.
     NotFound,
 
@@ -91,20 +93,20 @@ pub enum Subdir {
     Found(SubdirData),
 }
 
-impl Subdir {
+impl SubdirState {
     /// Returns the names of all packages in the subdirectory.
     pub fn package_names(&self) -> Option<Vec<String>> {
         match self {
-            Subdir::Found(subdir) => Some(subdir.package_names()),
-            Subdir::NotFound => None,
+            SubdirState::Found(subdir) => Some(subdir.package_names()),
+            SubdirState::NotFound => None,
         }
     }
 
     /// Returns repodata revisions advertised by this subdirectory.
     pub fn repodata_revisions(&self) -> &RepodataRevisions {
         match self {
-            Subdir::Found(subdir) => subdir.repodata_revisions(),
-            Subdir::NotFound => empty_repodata_revisions(),
+            SubdirState::Found(subdir) => subdir.repodata_revisions(),
+            SubdirState::NotFound => empty_repodata_revisions(),
         }
     }
 
@@ -114,8 +116,17 @@ impl Subdir {
     /// [CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
     pub fn channel_relations(&self) -> Option<&ChannelRelations> {
         match self {
-            Subdir::Found(subdir) => subdir.channel_relations(),
-            Subdir::NotFound => None,
+            SubdirState::Found(subdir) => subdir.channel_relations(),
+            SubdirState::NotFound => None,
+        }
+    }
+
+    /// Detector registration metadata, or `None` if absent or not found.
+    /// Names and registration semantics are validated during discovery.
+    pub fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
+        match self {
+            SubdirState::Found(subdir) => subdir.virtual_package_detectors(),
+            SubdirState::NotFound => None,
         }
     }
 }
@@ -203,6 +214,11 @@ impl SubdirData {
     pub fn channel_relations(&self) -> Option<&ChannelRelations> {
         self.client.channel_relations()
     }
+
+    /// Detector registration metadata, if any, before semantic validation.
+    pub fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
+        self.client.virtual_package_detectors()
+    }
 }
 
 /// A client that can be used to fetch repodata for a specific subdirectory.
@@ -232,6 +248,12 @@ pub trait SubdirClient: Send + Sync {
     fn channel_relations(&self) -> Option<&ChannelRelations> {
         None
     }
+
+    /// Detector registration metadata, before semantic validation.
+    /// Sources without repodata metadata keep the default.
+    fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -241,7 +263,7 @@ mod tests {
 
     use rattler_conda_types::{
         NoArchType, PackageRecord, RepoDataRecord, VersionWithSource,
-        package::DistArchiveIdentifier,
+        package::{BuildString, DistArchiveIdentifier},
     };
     use url::Url;
 
@@ -259,7 +281,7 @@ mod tests {
         let package_record = PackageRecord {
             attestations_sha256: None,
             arch: None,
-            build: "0".to_string(),
+            build: "0".parse::<BuildString>().unwrap(),
             build_number: 0,
             constrains: Vec::new(),
             depends: deps.iter().map(|s| (*s).to_string()).collect(),

@@ -8,7 +8,7 @@ use crate::{
         error::SubdirNotFoundError,
         sharded_subdir::{decode_zst_bytes_async, is_missing_sharded_repodata_status},
     },
-    reporter::{DownloadReporter, ResponseReporterExt},
+    reporter::{DownloadProgressGuard, ResponseReporterExt},
     utils::url_to_cache_filename,
 };
 use async_fd_lock::{LockWrite, RwLockWriteGuard};
@@ -57,7 +57,7 @@ pub async fn fetch_index(
         cache_path: &Path,
         policy: CachePolicy,
         response: Response,
-        reporter: Option<(&dyn DownloadReporter, usize)>,
+        download: DownloadProgressGuard<'_>,
         permit: Option<tokio::sync::SemaphorePermit<'_>>,
     ) -> Result<ShardedRepodata, GatewayError> {
         let response = response.error_for_status()?;
@@ -77,11 +77,9 @@ pub async fn fetch_index(
 
         // Read the bytes of the response
         let response_url = response.url().clone();
-        let bytes = response.bytes_with_progress(reporter).await?;
+        let bytes = response.bytes_with_progress(download.reporter()).await?;
 
-        if let Some((reporter, index)) = reporter {
-            reporter.on_download_complete(&response_url, index);
-        }
+        download.finish(&response_url);
 
         // Decompress the bytes
         let decoded_bytes = Bytes::from(decode_zst_bytes_async(bytes, response_url.clone()).await?);
@@ -230,9 +228,10 @@ pub async fn fetch_index(
                     .expect("failed to acquire semaphore permit");
 
                     // Send the request
-                    let download_reporter = reporter
-                        .and_then(Reporter::download_reporter)
-                        .map(|r| (r, r.on_download_start(&shards_url)));
+                    let download = DownloadProgressGuard::start(
+                        reporter.and_then(Reporter::download_reporter),
+                        &shards_url,
+                    );
                     let response = client.client().execute(request).await?;
 
                     // Check if the resource was not found (404) or not
@@ -259,9 +258,7 @@ pub async fn fetch_index(
                                 )
                             })?;
 
-                        if let Some((reporter, index)) = download_reporter {
-                            reporter.on_download_complete(response.url(), index);
-                        }
+                        download.finish(response.url());
 
                         // Return SubdirNotFoundError to trigger fallback
                         return Err(create_subdir_not_found_error(channel_base_url));
@@ -272,25 +269,37 @@ pub async fn fetch_index(
                         &response,
                         SystemTime::now(),
                     ) {
-                        AfterResponse::NotModified(_policy, _) => {
-                            // The cached file is still valid
-                            match read_shard_index_from_reader(&mut cache_reader).await {
-                                Ok(shard_index) => {
+                        AfterResponse::NotModified(policy, _) => {
+                            download.finish(response.url());
+
+                            match read_shard_index_with_bytes(&mut cache_reader).await {
+                                Ok((shard_index, bytes)) => {
+                                    // The 304 carries refreshed caching headers. Store them
+                                    // with the cached body so later loads treat the index as
+                                    // fresh instead of revalidating it again.
+                                    write_shard_index_cache(
+                                        cache_reader.get_mut().inner_mut(),
+                                        policy,
+                                        bytes,
+                                    )
+                                    .await
+                                    .map_err(|e| {
+                                        GatewayError::IoError(
+                                            format!(
+                                                "failed to update shard index cache at {}",
+                                                cache_path.display()
+                                            ),
+                                            e,
+                                        )
+                                    })?;
                                     tracing::debug!("shard index cache was not modified");
-                                    if let Some((reporter, index)) = download_reporter {
-                                        reporter.on_download_complete(response.url(), index);
-                                    }
-                                    // If reading the file failed for some reason we'll just
-                                    // fetch it again.
                                     return Ok(shard_index);
                                 }
-                                Err(e) => {
+                                Err(error) => {
                                     tracing::warn!(
-                                        "the cached shard index has been corrupted: {e}"
+                                        %error,
+                                        "the cached shard index is corrupted, fetching it again"
                                     );
-                                    if let Some((reporter, index)) = download_reporter {
-                                        reporter.on_download_complete(response.url(), index);
-                                    }
                                 }
                             }
                         }
@@ -302,7 +311,7 @@ pub async fn fetch_index(
                                 &cache_path,
                                 policy,
                                 response,
-                                download_reporter,
+                                download,
                                 request_permit,
                             )
                             .await;
@@ -344,9 +353,8 @@ pub async fn fetch_index(
     .expect("failed to acquire semaphore permit");
 
     // Do a fresh requests
-    let reporter = reporter
-        .and_then(Reporter::download_reporter)
-        .map(|r| (r, r.on_download_start(&shards_url)));
+    let download =
+        DownloadProgressGuard::start(reporter.and_then(Reporter::download_reporter), &shards_url);
     let response = client
         .client()
         .execute(
@@ -389,7 +397,7 @@ pub async fn fetch_index(
         &cache_path,
         policy,
         response,
-        reporter,
+        download,
         request_permit,
     )
     .await
@@ -467,14 +475,25 @@ async fn write_not_found_cache(cache_file: &mut File, policy: CachePolicy) -> st
 pub async fn read_shard_index_from_reader<R: AsyncRead + Unpin>(
     reader: &mut BufReader<R>,
 ) -> Result<ShardedRepodata, GatewayError> {
-    // Read the file to memory
+    Ok(read_shard_index_with_bytes(reader).await?.0)
+}
+
+/// Reads the shard index from a reader and deserializes it, also returning the
+/// raw bytes so the caller can write them back to the cache.
+async fn read_shard_index_with_bytes<R: AsyncRead + Unpin>(
+    reader: &mut BufReader<R>,
+) -> Result<(ShardedRepodata, Bytes), GatewayError> {
     let mut bytes = Vec::new();
     reader
         .read_to_end(&mut bytes)
         .await
         .map_err(|e| GatewayError::IoError("failed to read shard index buffer".to_string(), e))?;
+    let bytes = Bytes::from(bytes);
+    Ok((parse_shard_index(bytes.clone()).await?, bytes))
+}
 
-    // Deserialize the bytes
+/// Deserializes a decoded (decompressed) shard index.
+async fn parse_shard_index(bytes: Bytes) -> Result<ShardedRepodata, GatewayError> {
     run_blocking_task(move || {
         rmp_serde::from_slice(&bytes)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))

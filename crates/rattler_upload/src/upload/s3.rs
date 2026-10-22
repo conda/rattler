@@ -2,9 +2,9 @@ use std::path::{Path, PathBuf};
 
 use futures::StreamExt;
 use miette::IntoDiagnostic;
-use opendal::{Configurator, ErrorKind, Operator, services::S3Config};
+use opendal::{ErrorKind, Operator};
 use rattler_digest::{HashingReader, Md5, Sha256};
-use rattler_s3::ResolvedS3Credentials;
+use rattler_s3::S3CredentialSource;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::bytes::BytesMut;
 use url::Url;
@@ -23,12 +23,11 @@ const PACKAGE_CONCURRENCY: usize = 4;
 
 /// Uploads a package to a channel in an S3 bucket.
 ///
-/// Credentials must already be resolved by the caller (e.g. via
-/// [`rattler_s3::S3Credentials::resolve`] or
-/// [`ResolvedS3Credentials::from_sdk`]).
+/// The credential source must already be determined by the caller (e.g. via
+/// [`S3CredentialSource::resolve`] or [`S3CredentialSource::from_sdk`]).
 pub async fn upload_package_to_s3(
     channel: Url,
-    credentials: ResolvedS3Credentials,
+    credentials: S3CredentialSource,
     package_files: &[PathBuf],
     force: bool,
 ) -> miette::Result<()> {
@@ -44,7 +43,7 @@ pub async fn upload_package_to_s3(
 /// mutable discovery sidecar.
 pub async fn upload_package_to_s3_with_attestation(
     channel: Url,
-    credentials: ResolvedS3Credentials,
+    credentials: S3CredentialSource,
     package_files: &[PathBuf],
     attestation: Option<&Path>,
     force: bool,
@@ -67,20 +66,7 @@ pub async fn upload_package_to_s3_with_attestation(
         .host_str()
         .ok_or(miette::miette!("No bucket in S3 URL"))?;
 
-    // Create the S3 configuration for opendal.
-    let mut s3_config = S3Config::default();
-    s3_config.root = Some(channel.path().to_string());
-    s3_config.bucket = bucket.to_string();
-
-    s3_config.endpoint = Some(credentials.endpoint_url.to_string());
-    s3_config.region = Some(credentials.region);
-    s3_config.access_key_id = Some(credentials.access_key_id);
-    s3_config.secret_access_key = Some(credentials.secret_access_key);
-    s3_config.session_token = credentials.session_token;
-    s3_config.enable_virtual_host_style =
-        credentials.addressing_style == rattler_s3::S3AddressingStyle::VirtualHost;
-
-    let builder = s3_config.into_builder();
+    let builder = credentials.opendal_builder(bucket, channel.path());
     let op = Operator::new(builder).into_diagnostic()?.finish();
 
     // Upload multiple packages concurrently. Each individual package upload also

@@ -46,9 +46,11 @@
 //!
 //! Initially the lock-file format was based on [`conda-lock`](https://github.com/conda/conda-lock)
 //! but over time significant changes have been made compared to the original
-//! conda-lock format. Conda-lock files (e.g. `conda-lock.yml` files) can still
-//! be parsed by this crate but the serialization format changed significantly.
-//! This means files created by this crate are not compatible with conda-lock.
+//! conda-lock format. The default serializer writes pixi lockfiles, not CEP-37.
+//! With the `conda-lock` feature enabled, use `conda_lock` for explicit,
+//! fallible conversion between CEP-37 and pixi, or `rattler_conda_lock` for
+//! source-aware CEP-37 reading and writing.
+//! The historical parser remains available for older lockfile formats.
 //!
 //! Conda-lock stores a lot of metadata to be able to verify if the lock-file is
 //! still valid given the sources/inputs. For example conda-lock contains a
@@ -81,6 +83,8 @@ use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
 mod builder;
 mod channel;
 mod conda;
+#[cfg(feature = "conda-lock")]
+pub mod conda_lock;
 mod file_format_version;
 mod hash;
 pub mod options;
@@ -1423,7 +1427,7 @@ packages:
         let lock_file = LockFile::builder()
             .with_platforms(vec![crate::PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: rattler_conda_types::Platform::Linux64,
+                subdir: rattler_conda_types::Subdir::Linux64,
                 virtual_packages: Vec::new(),
             }])
             .unwrap()
@@ -2183,7 +2187,7 @@ packages:
     fn builder_deduplicates_conda_source_packages() {
         use std::collections::BTreeMap;
 
-        use rattler_conda_types::{PackageName, PackageRecord};
+        use rattler_conda_types::{PackageName, PackageRecord, package::BuildString};
 
         use crate::{
             CondaPackageData, CondaSourceData, PlatformData, SourceData, SourceMetadata, UrlOrPath,
@@ -2204,7 +2208,7 @@ packages:
                 let mut r = PackageRecord::new(
                     PackageName::new_unchecked("my-source-pkg"),
                     version,
-                    "py_0".to_string(),
+                    "py_0".parse::<BuildString>().unwrap(),
                 );
                 r.subdir = "noarch".to_string();
                 r
@@ -2214,7 +2218,7 @@ packages:
         let lock_file = LockFile::builder()
             .with_platforms(vec![PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: rattler_conda_types::Platform::Linux64,
+                subdir: rattler_conda_types::Subdir::Linux64,
                 virtual_packages: Vec::new(),
             }])
             .unwrap()
@@ -2354,7 +2358,7 @@ packages:
         let lock_file = LockFile::builder()
             .with_platforms(vec![PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: rattler_conda_types::Platform::Linux64,
+                subdir: rattler_conda_types::Subdir::Linux64,
                 virtual_packages: Vec::new(),
             }])
             .unwrap()
@@ -2388,7 +2392,8 @@ packages:
         };
 
         use rattler_conda_types::{
-            PackageName, PackageRecord, Version, package::DistArchiveIdentifier,
+            PackageName, PackageRecord, Version,
+            package::{BuildString, DistArchiveIdentifier},
         };
         use url::Url;
 
@@ -2410,7 +2415,7 @@ packages:
                     ..PackageRecord::new(
                         PackageName::new_unchecked(name),
                         Version::from_str(version).unwrap(),
-                        "build0".into(),
+                        "build0".parse::<BuildString>().unwrap(),
                     )
                 },
                 location: Url::parse(&format!(

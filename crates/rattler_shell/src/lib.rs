@@ -2,6 +2,8 @@
 #![deny(missing_docs)]
 
 pub mod activation;
+pub mod environment;
+pub mod process;
 pub mod run;
 pub mod shell;
 pub use run::{run_command_in_environment, run_in_environment};

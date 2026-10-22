@@ -1,3 +1,3 @@
-from rattler.explicit_environment.environment import ExplicitEnvironmentSpec, ExplicitEnvironmentEntry
+from rattler.explicit_environment.environment import ExplicitEnvironmentEntry, ExplicitEnvironmentSpec
 
-__all__ = ["ExplicitEnvironmentSpec", "ExplicitEnvironmentEntry"]
+__all__ = ["ExplicitEnvironmentEntry", "ExplicitEnvironmentSpec"]

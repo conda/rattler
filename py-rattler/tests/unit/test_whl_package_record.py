@@ -1,11 +1,11 @@
-from rattler import PackageRecord, WhlPackageRecord
+from rattler import BuildString, PackageRecord, WhlPackageRecord
 
 
 def test_whl_package_record_construction_with_url() -> None:
     record = PackageRecord(
         name="numpy",
         version="1.24.0",
-        build="cp39-cp39-linux_x86_64",
+        build=BuildString.new_unchecked("cp39-cp39-linux_x86_64"),
         build_number=0,
         subdir="linux-64",
     )
@@ -22,7 +22,7 @@ def test_whl_package_record_construction_with_relative_path() -> None:
     record = PackageRecord(
         name="requests",
         version="2.28.0",
-        build="py3-none-any",
+        build=BuildString.new_unchecked("py3-none-any"),
         build_number=0,
         subdir="noarch",
     )
@@ -35,7 +35,7 @@ def test_whl_package_record_properties() -> None:
     record = PackageRecord(
         name="foo",
         version="1.0",
-        build="py_0",
+        build=BuildString("py_0"),
         build_number=0,
         subdir="noarch",
     )
@@ -54,7 +54,7 @@ def test_whl_package_record_repr() -> None:
     record = PackageRecord(
         name="pkg",
         version="1.0",
-        build="0",
+        build=BuildString("0"),
         build_number=0,
         subdir="noarch",
     )

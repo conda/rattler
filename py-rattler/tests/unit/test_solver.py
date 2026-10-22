@@ -6,16 +6,19 @@ from pathlib import Path
 import pytest
 
 from rattler import (
-    solve,
-    ChannelPriority,
-    RepoDataRecord,
+    BuildString,
     Channel,
+    ChannelPriority,
     Gateway,
-    SparseRepoData,
     MatchSpec,
-    solve_with_sparse_repodata,
+    MultiSource,
     PackageFormatSelection,
+    RepoDataRecord,
+    SparseRepoData,
+    solve,
+    solve_with_sparse_repodata,
 )
+from rattler.solver import TimestampPolicy
 
 
 @pytest.mark.asyncio
@@ -122,7 +125,7 @@ async def test_solve_channel_priority_disabled(
     assert isinstance(solved_data, list)
     assert isinstance(solved_data[0], RepoDataRecord)
     assert (
-        list(filter(lambda r: r.file_name.startswith("pytorch-cpu-0.4.1-py36_cpu_1"), solved_data))[0].channel
+        next(r for r in solved_data if r.file_name.startswith("pytorch-cpu-0.4.1-py36_cpu_1")).channel
         == pytorch_channel.base_url
     )
     assert len(solved_data) == 32
@@ -320,6 +323,65 @@ async def test_solve_accepts_sparse_repodata_as_source() -> None:
     assert len(solved_data) == 2
 
 
+def multichannel_test_channel_dir(name: str) -> str:
+    data_dir = os.path.join(os.path.dirname(__file__), "../../../test-data/")
+    return os.path.abspath(os.path.join(data_dir, f"channels/multichannel-{name}"))
+
+
+@pytest.mark.asyncio
+async def test_solve_multi_source(gateway: Gateway) -> None:
+    """The channels of a `MultiSource` share a channel priority tier. With strict
+    channel priority `pkg` 1.0 in the first channel does not hide `pkg` 2.0 in the
+    second, while `pkg` 3.0 in the channel after the group is excluded."""
+    channel_a, channel_b, channel_c = (Channel(multichannel_test_channel_dir(name)) for name in "abc")
+
+    solved_data = await solve(
+        [MultiSource("grp", [channel_a, channel_b]), channel_c],
+        ["pkg"],
+        gateway=gateway,
+        platforms=["noarch"],
+        channel_priority=ChannelPriority.Strict,
+    )
+
+    assert [(str(record.version), record.channel) for record in solved_data] == [("2.0", channel_b.base_url)]
+
+
+def multichannel_test_sparse_repodata(name: str) -> SparseRepoData:
+    channel_dir = multichannel_test_channel_dir(name)
+    return SparseRepoData(
+        channel=Channel(channel_dir), subdir="noarch", path=os.path.join(channel_dir, "noarch", "repodata.json")
+    )
+
+
+@pytest.mark.asyncio
+async def test_solve_multi_source_of_sparse_repodata() -> None:
+    sparse_a, sparse_b, sparse_c = (multichannel_test_sparse_repodata(name) for name in "abc")
+
+    solved_data = await solve(
+        [MultiSource("grp", [sparse_a, sparse_b]), sparse_c],
+        ["pkg"],
+        platforms=["noarch"],
+        channel_priority=ChannelPriority.Strict,
+    )
+    solved_without_gateway = await solve_with_sparse_repodata(
+        ["pkg"],
+        [MultiSource("grp", [sparse_a, sparse_b]), sparse_c],
+        channel_priority=ChannelPriority.Strict,
+    )
+
+    expected = [("2.0", Channel(multichannel_test_channel_dir("b")).base_url)]
+    assert [(str(record.version), record.channel) for record in solved_data] == expected
+    assert [(str(record.version), record.channel) for record in solved_without_gateway] == expected
+
+
+@pytest.mark.asyncio
+async def test_solve_with_sparse_repodata_rejects_channels_in_multi_source() -> None:
+    multi_source = MultiSource("grp", [Channel(multichannel_test_channel_dir("a"))])
+
+    with pytest.raises(TypeError, match="can only contain SparseRepoData"):
+        await solve_with_sparse_repodata(["pkg"], [multi_source])
+
+
 @pytest.mark.asyncio
 async def test_conditional_root_requirement_satisfied(gateway: Gateway, dummy_channel: Channel) -> None:
     """Test that a conditional root requirement is included when the condition is satisfied."""
@@ -330,7 +392,7 @@ async def test_conditional_root_requirement_satisfied(gateway: Gateway, dummy_ch
         [MatchSpec('foo[when="__unix"]')],
         platforms=["linux-64"],
         gateway=gateway,
-        virtual_packages=[GenericVirtualPackage(PackageName("__unix"), Version("0"), "0")],
+        virtual_packages=[GenericVirtualPackage(PackageName("__unix"), Version("0"), BuildString("0"))],
     )
 
     assert isinstance(solved_data, list)
@@ -350,7 +412,7 @@ async def test_conditional_root_requirement_not_satisfied(gateway: Gateway, dumm
         [MatchSpec('foo[when="__win"]')],
         platforms=["linux-64"],
         gateway=gateway,
-        virtual_packages=[GenericVirtualPackage(PackageName("__unix"), Version("0"), "0")],
+        virtual_packages=[GenericVirtualPackage(PackageName("__unix"), Version("0"), BuildString("0"))],
     )
 
     assert isinstance(solved_data, list)
@@ -370,8 +432,8 @@ async def test_conditional_root_requirement_with_logic(gateway: Gateway, dummy_c
         platforms=["linux-64"],
         gateway=gateway,
         virtual_packages=[
-            GenericVirtualPackage(PackageName("__unix"), Version("0"), "0"),
-            GenericVirtualPackage(PackageName("__linux"), Version("0"), "0"),
+            GenericVirtualPackage(PackageName("__unix"), Version("0"), BuildString("0")),
+            GenericVirtualPackage(PackageName("__linux"), Version("0"), BuildString("0")),
         ],
     )
 
@@ -401,12 +463,12 @@ async def test_solve_with_sparse_repodata_conditional_dependencies() -> None:
         path=noarch_path,
     )
 
-    # Test: Platform-conditional dependency with __linux virtual package
+    # Test: Subdir-conditional dependency with __linux virtual package
     solved_data = await solve_with_sparse_repodata(
         [MatchSpec("package")],
         [noarch_data],
         virtual_packages=[
-            GenericVirtualPackage(PackageName("__linux"), Version("0"), "0"),
+            GenericVirtualPackage(PackageName("__linux"), Version("0"), BuildString("0")),
         ],
     )
 
@@ -444,7 +506,7 @@ async def test_solve_with_sparse_repodata_version_conditional_dependencies() -> 
         [MatchSpec("conditional-dependency"), MatchSpec("side-dependency=0.2")],
         [noarch_data],
         virtual_packages=[
-            GenericVirtualPackage(PackageName("__linux"), Version("0"), "0"),
+            GenericVirtualPackage(PackageName("__linux"), Version("0"), BuildString("0")),
         ],
     )
 
@@ -487,8 +549,8 @@ async def test_solve_with_sparse_repodata_with_wheels() -> None:
         [MatchSpec("starlette")],
         [noarch_data, linux_64_data],
         virtual_packages=[
-            GenericVirtualPackage(PackageName("__unix"), Version("15"), "0"),
-            GenericVirtualPackage(PackageName("__linux"), Version("0"), "0"),
+            GenericVirtualPackage(PackageName("__unix"), Version("15"), BuildString("0")),
+            GenericVirtualPackage(PackageName("__linux"), Version("0"), BuildString("0")),
         ],
         package_format_selection=PackageFormatSelection.PREFER_CONDA_WITH_WHL,
     )
@@ -506,3 +568,38 @@ async def test_solve_with_sparse_repodata_with_wheels() -> None:
     # solve needs to include these two packages
     assert "starlette" in package_names
     assert "python" in package_names
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sparse", [False, True])
+@pytest.mark.parametrize(
+    "policy,expected", [("allow-missing", "3"), ("require-timestamp", "2"), ("require-indexed-timestamp", "1")]
+)
+async def test_timestamp_policy(tmp_path: Path, sparse: bool, policy: TimestampPolicy, expected: str) -> None:
+    cutoff = datetime.datetime(2026, 3, 23, tzinfo=datetime.timezone.utc)
+    cutoff_ms = int(cutoff.timestamp() * 1000)
+    packages = {}
+    for version, timestamps in [
+        ("1", {"indexed_timestamp": cutoff_ms, "timestamp": cutoff_ms + 1000}),
+        ("2", {"timestamp": cutoff_ms}),
+        ("3", {}),
+        ("4", {"timestamp": cutoff_ms - 86400000, "indexed_timestamp": cutoff_ms + 1}),
+    ]:
+        packages[f"foo-{version}-0.tar.bz2"] = {
+            "name": "foo",
+            "version": version,
+            "build": "0",
+            "build_number": 0,
+            "subdir": "noarch",
+            "depends": [],
+            **timestamps,
+        }
+    path = tmp_path / "noarch" / "repodata.json"
+    path.parent.mkdir()
+    path.write_text(json.dumps({"info": {"subdir": "noarch"}, "packages": packages}))
+    repodata = SparseRepoData(Channel(str(tmp_path)), "noarch", path)
+    if sparse:
+        result = await solve_with_sparse_repodata(["foo"], [repodata], exclude_newer=cutoff, timestamp_policy=policy)
+    else:
+        result = await solve([repodata], ["foo"], platforms=["noarch"], exclude_newer=cutoff, timestamp_policy=policy)
+    assert str(result[0].version) == expected

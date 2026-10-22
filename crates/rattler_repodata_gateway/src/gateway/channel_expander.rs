@@ -6,11 +6,11 @@ use std::{
     sync::Arc,
 };
 
-use rattler_conda_types::{Channel, ChannelRelations, ChannelUrl, Platform};
+use rattler_conda_types::{Channel, ChannelRelations, ChannelUrl, Subdir};
 
 use super::{
     channel_relations::{EdgeSource, PriorityEdge, Resolution, resolve_channel_priority},
-    subdir::Subdir,
+    subdir::SubdirState,
     warning::GatewayWarning,
 };
 use crate::Reporter;
@@ -117,8 +117,8 @@ pub enum ChannelRelationsWarning {
     DiscoveryFetchFailed {
         /// Channel that failed to fetch.
         url: ChannelUrl,
-        /// Platform whose subdir failed to fetch.
-        platform: Platform,
+        /// Subdir whose subdir failed to fetch.
+        platform: Subdir,
         /// Display-formatted [`GatewayError`](super::GatewayError).
         error: String,
     },
@@ -169,7 +169,7 @@ fn format_broken_edges(edges: &[(ChannelUrl, ChannelUrl)]) -> String {
 pub(super) struct ChannelExpander {
     mode: ChannelRelationsMode,
     max_depth: usize,
-    platforms: Vec<Platform>,
+    platforms: Vec<Subdir>,
     user_channels: Vec<ChannelUrl>,
     discovered: HashMap<ChannelUrl, Arc<Channel>>,
     /// Shortest known hop distance from any user channel (user = 0).
@@ -190,7 +190,7 @@ impl ChannelExpander {
     pub fn new(
         mode: ChannelRelationsMode,
         max_depth: usize,
-        platforms: Vec<Platform>,
+        platforms: Vec<Subdir>,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Self {
         Self {
@@ -217,7 +217,7 @@ impl ChannelExpander {
         matches!(self.mode, ChannelRelationsMode::Strict)
     }
 
-    pub fn platforms(&self) -> &[Platform] {
+    pub fn platforms(&self) -> &[Subdir] {
         &self.platforms
     }
 
@@ -277,9 +277,9 @@ impl ChannelExpander {
     pub fn observe(
         &mut self,
         channel_url: &ChannelUrl,
-        _platform: Platform,
-        subdir: &Subdir,
-    ) -> Result<Vec<(ChannelUrl, Arc<Channel>, Platform)>, super::GatewayError> {
+        _platform: Subdir,
+        subdir: &SubdirState,
+    ) -> Result<Vec<(ChannelUrl, Arc<Channel>, Subdir)>, super::GatewayError> {
         if !self.enabled() {
             return Ok(Vec::new());
         }
@@ -824,7 +824,7 @@ mod tests {
         // depths, and discovered sets.
         let run = |order: &[(&ChannelUrl, ChannelRelations)]| {
             let mut ex =
-                ChannelExpander::new(ChannelRelationsMode::Warn, 2, vec![Platform::Linux64], None);
+                ChannelExpander::new(ChannelRelationsMode::Warn, 2, vec![Subdir::Linux64], None);
             ex.register_user_channel(Channel::from_url(a.clone()));
             ex.register_user_channel(Channel::from_url(b.clone()));
             for (url, relations) in order {
@@ -881,7 +881,7 @@ mod tests {
         let cf = chan("https://example.com/conda-forge/");
 
         let mut ex =
-            ChannelExpander::new(ChannelRelationsMode::Warn, 2, vec![Platform::Linux64], None);
+            ChannelExpander::new(ChannelRelationsMode::Warn, 2, vec![Subdir::Linux64], None);
         ex.register_user_channel(Channel::from_url(a.clone()));
         ex.register_user_channel(Channel::from_url(b.clone()));
 
@@ -916,7 +916,7 @@ mod proptests {
     use std::collections::HashMap;
 
     use proptest::prelude::*;
-    use rattler_conda_types::{Channel, ChannelRelations, ChannelUrl, Platform};
+    use rattler_conda_types::{Channel, ChannelRelations, ChannelUrl, Subdir};
     use url::Url;
 
     use super::{
@@ -972,7 +972,7 @@ mod proptests {
         let mut ex = ChannelExpander::new(
             ChannelRelationsMode::Warn,
             sc.max_depth,
-            vec![Platform::Linux64],
+            vec![Subdir::Linux64],
             None,
         );
         let user_urls: Vec<ChannelUrl> = urls[..sc.user_count].to_vec();

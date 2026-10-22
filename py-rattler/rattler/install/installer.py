@@ -1,15 +1,17 @@
 from __future__ import annotations
+
 import os
-from typing import List, Optional, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from rattler.config import Config
 from rattler.match_spec import MatchSpec
 from rattler.networking.client import Client
-from rattler.platform.platform import Platform
+from rattler.package_cache import PackageCache
+from rattler.platform.subdir import Subdir
 from rattler.prefix.prefix_record import PrefixRecord
-from rattler.repo_data.record import RepoDataRecord
-
 from rattler.rattler import py_install
+from rattler.repo_data.record import RepoDataRecord
+from rattler.sigstore import VerificationPolicy
 
 
 @runtime_checkable
@@ -124,7 +126,7 @@ class InstallerReporter(Protocol):
         """
         return 0
 
-    def on_download_progress(self, download_idx: int, progress: int, total: Optional[int]) -> None:
+    def on_download_progress(self, download_idx: int, progress: int, total: int | None) -> None:
         """Called periodically with download byte progress.
 
         Parameters
@@ -277,20 +279,22 @@ class InstallerReporter(Protocol):
 
 
 async def install(
-    records: List[RepoDataRecord],
+    records: list[RepoDataRecord],
     target_prefix: str | os.PathLike[str],
-    cache_dir: Optional[os.PathLike[str]] = None,
-    installed_packages: Optional[List[PrefixRecord]] = None,
-    reinstall_packages: Optional[set[str]] = None,
-    ignored_packages: Optional[set[str]] = None,
-    platform: Optional[Platform] = None,
-    execute_link_scripts: Optional[bool] = None,
+    cache_dir: os.PathLike[str] | None = None,
+    installed_packages: list[PrefixRecord] | None = None,
+    reinstall_packages: set[str] | None = None,
+    ignored_packages: set[str] | None = None,
+    platform: Subdir | None = None,
+    execute_link_scripts: bool | None = None,
     show_progress: bool = True,
-    client: Optional[Client] = None,
-    requested_specs: Optional[List[MatchSpec]] = None,
-    reporter: Optional[InstallerReporter] = None,
-    alternative_target_prefix: Optional[str | os.PathLike[str]] = None,
-    config: Optional[Config] = None,
+    client: Client | None = None,
+    requested_specs: list[MatchSpec] | None = None,
+    reporter: InstallerReporter | None = None,
+    alternative_target_prefix: str | os.PathLike[str] | None = None,
+    config: Config | None = None,
+    attestation_policy: VerificationPolicy | None = None,
+    package_cache: PackageCache | None = None,
 ) -> None:
     """
     Create an environment by downloading and linking the `dependencies` in
@@ -361,6 +365,12 @@ async def install(
         config: Shared rattler configuration. Applies link-type preferences,
                 download concurrency, link-script execution, and—when ``client``
                 is omitted—the networking settings used for package downloads.
+        attestation_policy: Sigstore policy for packages installed, replaced, or relinked by
+                this transaction. Required verification runs before package metadata or files
+                are changed. Unchanged and removal-only packages are not verified.
+        package_cache: An optional :class:`PackageCache` to use for finding and caching
+                extracted packages. When provided, layering and validation modes are applied.
+                Takes precedence over `cache_dir`.
     """
 
     if config is not None and client is None:
@@ -381,4 +391,6 @@ async def install(
         reporter=reporter,
         alternative_target_prefix=str(alternative_target_prefix) if alternative_target_prefix is not None else None,
         config=config._inner if config is not None else None,
+        attestation_policy=attestation_policy._inner if attestation_policy is not None else None,
+        package_cache=package_cache._inner if package_cache is not None else None,
     )

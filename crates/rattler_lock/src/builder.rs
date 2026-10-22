@@ -3,7 +3,7 @@
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use indexmap::IndexMap;
-use rattler_conda_types::Version;
+use rattler_conda_types::{Version, package::BuildString};
 
 use crate::{
     Channel, CondaBinaryData, CondaPackageData, CondaSourceData, EnvironmentData, EnvironmentIndex,
@@ -119,7 +119,7 @@ struct UniqueBinaryIdentifier {
     location: UrlOrPath,
     normalized_name: String,
     version: Version,
-    build: String,
+    build: BuildString,
     subdir: String,
 }
 
@@ -345,6 +345,28 @@ impl LockFileBuilder {
             .or_default()
             .insert(handle)?;
 
+        Ok(self)
+    }
+
+    /// Records that an environment targets a platform, even when no package is
+    /// selected for it. Adding packages does this implicitly; call this to keep
+    /// a platform that resolves to an empty package set.
+    pub fn add_environment_platform(
+        &mut self,
+        environment: impl Into<String>,
+        platform_name: &str,
+    ) -> Result<&mut Self, ParseCondaLockError> {
+        let environment = environment.into();
+        let platform_index = self.find_platform_index(platform_name).map_err(|_e| {
+            ParseCondaLockError::UnknownPlatform {
+                environment: environment.clone(),
+                platform: platform_name.to_string(),
+            }
+        })?;
+        self.environment_data(environment)
+            .packages
+            .entry(platform_index)
+            .or_default();
         Ok(self)
     }
 
@@ -574,8 +596,10 @@ mod test {
     use std::str::FromStr;
 
     use rattler_conda_types::{
-        MatchSpec, PackageName, PackageRecord, ParseMatchSpecOptions, ParseStrictness::Strict,
-        Platform, RepodataRevision, Version, package::DistArchiveIdentifier,
+        MatchSpec, PackageName, PackageRecord, ParseMatchSpecOptions,
+        ParseStrictness::Strict,
+        RepodataRevision, Subdir, Version,
+        package::{BuildString, DistArchiveIdentifier},
     };
     use url::Url;
 
@@ -591,7 +615,7 @@ mod test {
             ..PackageRecord::new(
                 PackageName::new_unchecked("foobar"),
                 Version::from_str("1.0.0").unwrap(),
-                "build".into(),
+                "build".parse::<BuildString>().unwrap(),
             )
         };
 
@@ -607,7 +631,7 @@ mod test {
         let lock_file = LockFile::builder()
             .with_platforms(vec![PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: rattler_conda_types::Platform::Linux64,
+                subdir: rattler_conda_types::Subdir::Linux64,
                 virtual_packages: Vec::new(),
             }])
             .unwrap()
@@ -683,7 +707,7 @@ mod test {
             ..PackageRecord::new(
                 PackageName::new_unchecked("foobar"),
                 Version::from_str("1.0.0").unwrap(),
-                "build".into(),
+                "build".parse::<BuildString>().unwrap(),
             )
         }
     }
@@ -718,7 +742,7 @@ mod test {
     fn linux_64_platform() -> PlatformData {
         PlatformData {
             name: PlatformName::try_from("linux-64").unwrap(),
-            subdir: rattler_conda_types::Platform::Linux64,
+            subdir: rattler_conda_types::Subdir::Linux64,
             virtual_packages: Vec::new(),
         }
     }
@@ -837,7 +861,7 @@ mod test {
         let mut record = PackageRecord::new(
             PackageName::new_unchecked("my-pkg"),
             Version::from_str("0.1.0").unwrap(),
-            "py_0".into(),
+            "py_0".parse::<BuildString>().unwrap(),
         );
         record.subdir = "noarch".into();
         record.run_exports = Some(make_run_exports());
@@ -897,7 +921,7 @@ mod test {
         let mut source_record = PackageRecord::new(
             PackageName::new_unchecked("my-pkg"),
             Version::from_str("0.1.0").unwrap(),
-            "py_0".into(),
+            "py_0".parse::<BuildString>().unwrap(),
         );
         source_record.subdir = "noarch".into();
         source_record.run_exports = Some(rattler_conda_types::package::RunExportsJson {
@@ -938,7 +962,7 @@ mod test {
             ..PackageRecord::new(
                 PackageName::new_unchecked("foobar"),
                 Version::from_str("1.0.0").unwrap(),
-                "build".into(),
+                "build".parse::<BuildString>().unwrap(),
             )
         };
         let package = CondaPackageData::from(CondaBinaryData {
@@ -955,7 +979,7 @@ mod test {
         let lock_file = LockFile::builder()
             .with_platforms(vec![PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: Platform::Linux64,
+                subdir: Subdir::Linux64,
                 virtual_packages: Vec::new(),
             }])
             .unwrap()
@@ -981,14 +1005,14 @@ mod test {
             ..PackageRecord::new(
                 PackageName::new_unchecked("python"),
                 Version::from_str("3.12.0").unwrap(),
-                "build".into(),
+                "build".parse::<BuildString>().unwrap(),
             )
         };
 
         let lock_file = LockFile::builder()
             .with_platforms(vec![PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: rattler_conda_types::Platform::Linux64,
+                subdir: rattler_conda_types::Subdir::Linux64,
                 virtual_packages: Vec::new(),
             }])
             .unwrap()
@@ -1028,7 +1052,7 @@ mod test {
             ..PackageRecord::new(
                 PackageName::new_unchecked("python"),
                 Version::from_str("3.12.0").unwrap(),
-                "build".into(),
+                "build".parse::<BuildString>().unwrap(),
             )
         };
 
@@ -1043,7 +1067,7 @@ mod test {
             let lock_file = LockFile::builder()
                 .with_platforms(vec![PlatformData {
                     name: PlatformName::try_from("linux-64").unwrap(),
-                    subdir: rattler_conda_types::Platform::Linux64,
+                    subdir: rattler_conda_types::Subdir::Linux64,
                     virtual_packages: Vec::new(),
                 }])
                 .unwrap()
@@ -1095,7 +1119,7 @@ mod test {
             let mut record = PackageRecord::new(
                 PackageName::new_unchecked(name),
                 Version::from_str("1.0.0").unwrap(),
-                "build0".into(),
+                "build0".parse::<BuildString>().unwrap(),
             );
             record.subdir = "linux-64".into();
             CondaBinaryData {
@@ -1126,7 +1150,7 @@ mod test {
             metadata: SourceMetadata::Full(Box::new(PackageRecord::new(
                 PackageName::new_unchecked("my-pkg"),
                 Version::from_str("0.1.0").unwrap(),
-                "py_0".into(),
+                "py_0".parse::<BuildString>().unwrap(),
             ))),
         };
 
@@ -1162,7 +1186,7 @@ mod test {
                 let mut r = PackageRecord::new(
                     PackageName::new_unchecked("other"),
                     Version::from_str("1.0.0").unwrap(),
-                    "build0".into(),
+                    "build0".parse::<BuildString>().unwrap(),
                 );
                 r.subdir = "linux-64".into();
                 r
@@ -1190,7 +1214,7 @@ mod test {
             metadata: SourceMetadata::Full(Box::new(PackageRecord::new(
                 PackageName::new_unchecked("my-pkg"),
                 Version::from_str("0.1.0").unwrap(),
-                "py_0".into(),
+                "py_0".parse::<BuildString>().unwrap(),
             ))),
         };
 
@@ -1217,7 +1241,7 @@ mod test {
             let mut record = PackageRecord::new(
                 PackageName::new_unchecked(name),
                 Version::from_str("1.0.0").unwrap(),
-                "build0".into(),
+                "build0".parse::<BuildString>().unwrap(),
             );
             record.subdir = "linux-64".into();
             // Use a path location: path-based locations derive no channel,
@@ -1247,7 +1271,7 @@ mod test {
                 let mut record = PackageRecord::new(
                     PackageName::new_unchecked(name),
                     Version::from_str("0.1.0").unwrap(),
-                    "py_0".into(),
+                    "py_0".parse::<BuildString>().unwrap(),
                 );
                 record.subdir = "noarch".into();
                 record
@@ -1265,7 +1289,7 @@ mod test {
         let mut builder = LockFile::builder()
             .with_platforms(vec![PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: rattler_conda_types::Platform::Linux64,
+                subdir: rattler_conda_types::Subdir::Linux64,
                 virtual_packages: Vec::new(),
             }])
             .unwrap();

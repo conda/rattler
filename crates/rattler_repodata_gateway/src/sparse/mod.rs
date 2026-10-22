@@ -15,8 +15,9 @@ use std::{
 use bytes::Bytes;
 use itertools::Itertools;
 use rattler_conda_types::{
-    Channel, ChannelInfo, ChannelRelations, MatchSpec, Matches, PackageName, PackageRecord,
-    RepoDataRecord, RepodataRevisions, UrlOrPath, WhlPackageRecord, compute_package_url,
+    Channel, ChannelInfo, ChannelRelations, DetectorRegistrationMetadata, MatchSpec, Matches,
+    PackageName, PackageRecord, RepoDataRecord, RepodataRevisions, UrlOrPath, WhlPackageRecord,
+    compute_package_url,
     package::{
         ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
         WheelArchiveType,
@@ -510,11 +511,11 @@ impl SparseRepoData {
     }
 
     /// Given a set of [`SparseRepoData`]s load all the records for the packages
-    /// with the specified names and all the packages these records depend
-    /// on.
+    /// with the specified names and all packages referenced by their regular
+    /// or optional dependencies.
     ///
-    /// This will parse the records for the specified packages as well as all
-    /// the packages these records depend on.
+    /// This parses the records for the specified packages as well as all
+    /// packages they may depend on, including packages in `extra_depends`.
     pub fn load_records_recursive<'a>(
         repo_data: impl IntoIterator<Item = &'a SparseRepoData>,
         package_names: impl IntoIterator<Item = PackageName>,
@@ -559,7 +560,12 @@ impl SparseRepoData {
 
                 // Iterate over all packages to find recursive dependencies.
                 for record in records.iter() {
-                    for dependency in &record.package_record.depends {
+                    for dependency in record
+                        .package_record
+                        .depends
+                        .iter()
+                        .chain(record.package_record.extra_depends.values().flatten())
+                    {
                         let dependency_name = PackageName::from_matchspec_str_unchecked(dependency);
                         if !seen.contains(&dependency_name) {
                             pending.push_back(dependency_name.clone());
@@ -595,6 +601,20 @@ impl SparseRepoData {
             .info
             .as_ref()?
             .channel_relations
+            .as_ref()
+    }
+
+    /// Detector registration metadata, if the field is present.
+    ///
+    /// Its JSON shape is checked when reading repodata. Use
+    /// [`SubdirDetectorRegistrations::parse`](rattler_conda_types::virtual_package_detector::SubdirDetectorRegistrations::parse)
+    /// to validate names and registration semantics.
+    pub fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
+        self.inner
+            .borrow_repo_data()
+            .info
+            .as_ref()?
+            .virtual_package_detectors
             .as_ref()
     }
 }

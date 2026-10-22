@@ -192,37 +192,56 @@ impl GitSource {
         // Don’t use the full hash, in order to contribute less to reaching the
         // path length limit on Windows.
         let short_id = db.to_short_id(actual_rev.into())?;
-
-        // Check out `actual_rev` from the database to a scoped location on the
-        // filesystem. This will use hard links and such to ideally make the
-        // checkout operation here pretty fast. LFS-enabled checkouts contain
-        // different files than plain checkouts and must not share their path.
-        let checkout_name = if lfs_requested && !self.checkout_options.lfs_filter.is_empty() {
-            let mut hasher = DefaultHasher::new();
-            self.checkout_options.lfs_filter.hash(&mut hasher);
-            format!("{short_id}-lfs-{:x}", hasher.finish())
-        } else if lfs_requested {
-            format!("{short_id}-lfs")
-        } else {
-            short_id.clone()
-        };
-        let checkout_path = self
-            .cache
-            .join("checkouts")
-            .join(&ident)
-            .join(checkout_name);
+        let checkout_path =
+            checkout_path_for(&self.cache, &ident, &short_id, &self.checkout_options);
 
         tracing::debug!(
             "Copying git revision `{}` to path `{}`",
             actual_rev,
             checkout_path.display()
         );
-        db.copy_to(
+
+        // A local clone copies the database's object store and then writes the
+        // database's refs, so a database missing an object one of its refs
+        // points at fails every checkout. Fetching into such a database does
+        // not repair it, so rebuild it from the remote and check out once more.
+        let copied = db.copy_to(
             actual_rev.into(),
             &checkout_path,
             &self.git.repository,
             &self.checkout_options,
-        )?;
+        );
+        let (db, actual_rev, short_id, checkout_path) = match copied {
+            Ok(_) => (db, actual_rev, short_id, checkout_path),
+            Err(err) if db.is_connected() => return Err(err),
+            Err(err) => {
+                tracing::warn!(
+                    "Git database at `{}` is missing objects its refs point to ({err}); rebuilding it",
+                    db_path.display()
+                );
+
+                let (db, rebuilt_rev) = remote.checkout(
+                    &db_path,
+                    None,
+                    &self.git.reference,
+                    self.git.precise.map(GitOid::from),
+                    &self.client,
+                    &self.checkout_options,
+                )?;
+                let short_id = db.to_short_id(rebuilt_rev)?;
+                let checkout_path =
+                    checkout_path_for(&self.cache, &ident, &short_id, &self.checkout_options);
+
+                db.copy_to(
+                    rebuilt_rev,
+                    &checkout_path,
+                    &self.git.repository,
+                    &self.checkout_options,
+                )?;
+
+                (db, GitSha::from(rebuilt_rev), short_id, checkout_path)
+            }
+        };
 
         // Report the checkout operation to the reporter.
         if let (Some(task), Some(reporter)) = (task, self.reporter.as_ref()) {
@@ -241,6 +260,32 @@ impl GitSource {
             lfs_ready: db.lfs_ready() == Some(true),
         })
     }
+}
+
+/// Location of the checkout for `short_id` within `cache`.
+///
+/// Checkouts are scoped per revision, and additionally per LFS configuration:
+/// an LFS checkout materializes file contents that a plain checkout leaves as
+/// pointer files, so the two must not share a path.
+fn checkout_path_for(
+    cache: &Path,
+    ident: &str,
+    short_id: &str,
+    options: &CheckoutOptions,
+) -> PathBuf {
+    let name = if options.lfs == Some(true) {
+        if options.lfs_filter.is_empty() {
+            format!("{short_id}-lfs")
+        } else {
+            let mut hasher = DefaultHasher::new();
+            options.lfs_filter.hash(&mut hasher);
+            format!("{short_id}-lfs-{:x}", hasher.finish())
+        }
+    } else {
+        short_id.to_string()
+    };
+
+    cache.join("checkouts").join(ident).join(name)
 }
 
 #[derive(Debug, Clone)]

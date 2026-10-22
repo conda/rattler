@@ -29,3 +29,6 @@ test-data/channels/conda-forge/
 
 # Local environment files
 *.local.*
+
+# insta pending snapshots
+*.pending-snap

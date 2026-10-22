@@ -13,7 +13,10 @@ use rattler_redaction::Redact;
 use reqwest::StatusCode;
 use serde::Deserialize;
 
-use crate::{Reporter, reporter::ResponseReporterExt};
+use crate::{
+    Reporter,
+    reporter::{DownloadProgressGuard, ResponseReporterExt},
+};
 
 use super::GatewayInner;
 
@@ -247,10 +250,9 @@ impl GatewayInner {
             return NoticeFetch::failed();
         }
 
-        let download = reporter
-            .and_then(Reporter::download_reporter)
-            .map(|download| (download, download.on_download_start(&url)));
-        let mut stream = std::pin::pin!(response.byte_stream_with_progress(download));
+        let download =
+            DownloadProgressGuard::start(reporter.and_then(Reporter::download_reporter), &url);
+        let mut stream = std::pin::pin!(response.byte_stream_with_progress(download.reporter()));
         let mut bytes = Vec::new();
         let result = loop {
             match stream.try_next().await {
@@ -266,9 +268,7 @@ impl GatewayInner {
                 Ok(None) => break parse_notices(&bytes),
             }
         };
-        if let Some((download, index)) = download {
-            download.on_download_complete(&url, index);
-        }
+        download.finish(&url);
         result
     }
 }

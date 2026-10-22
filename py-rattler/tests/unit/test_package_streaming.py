@@ -1,8 +1,10 @@
 import io
+from pathlib import Path
 
 import pytest
-from pathlib import Path
-from rattler.networking.middleware import MirrorMiddleware, OciMiddleware, GCSMiddleware
+
+from rattler.networking.client import Client
+from rattler.networking.middleware import GCSMiddleware, MirrorMiddleware, OciMiddleware
 from rattler.package_streaming import (
     download_and_extract,
     download_bytes,
@@ -10,7 +12,6 @@ from rattler.package_streaming import (
     download_to_writer,
     extract,
 )
-from rattler.networking.client import Client
 
 
 def get_test_data() -> Path:

@@ -97,6 +97,7 @@ expression: "(unused, normalized(config))"
                     base_url: None,
                     notices: None,
                     channel_relations: None,
+                    virtual_package_detectors: None,
                 },
                 per_channel: {},
             },
@@ -104,6 +105,10 @@ expression: "(unused, normalized(config))"
             allow_symbolic_links: None,
             allow_hard_links: None,
             allow_ref_links: None,
+            virtual_package_detectors: VirtualPackageDetectorsConfig {
+                timeout_seconds: None,
+                consent: {},
+            },
         },
         extensions: NoExtension,
         loaded_from: [],

@@ -3,6 +3,7 @@ mod boxed;
 mod builder;
 mod channel_config;
 mod channel_expander;
+mod channel_expansion;
 mod channel_notices;
 mod channel_relations;
 #[cfg(not(target_arch = "wasm32"))]
@@ -19,6 +20,7 @@ mod sharded_subdir;
 mod source;
 mod subdir;
 mod subdir_builder;
+mod virtual_package_detectors_query;
 mod warning;
 mod who_needs_query;
 
@@ -37,17 +39,24 @@ use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use error::GatewayError;
 #[cfg(feature = "indicatif")]
 pub use indicatif::{IndicatifReporter, IndicatifReporterBuilder};
-pub use query::{NamesQuery, NamesQueryOutput, RepoDataQuery, RepoDataQueryOutput};
+pub use query::{
+    NamesQuery, NamesQueryOutput, QueryVirtualPackageDetectors, RepoDataQuery, RepoDataQueryOutput,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
-use rattler_conda_types::{Channel, ChannelRelations, MatchSpec, Platform, RepoDataRecord};
+use rattler_conda_types::{Channel, ChannelRelations, MatchSpec, RepoDataRecord, Subdir};
 use rattler_networking::LazyClient;
 pub use repo_data::{RemovedPackages, RepoData};
 use run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
 pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
-pub use source::{RepoDataSource, Source};
-use subdir::Subdir;
+pub use source::{MultiSource, MultiSourceError, RepoDataSource, Source};
+use subdir::SubdirState;
 use tracing::{Level, instrument};
+pub use virtual_package_detectors_query::{
+    AcceptedDetectorRegistration, RegistrationConflict, RegistrationConflictKind,
+    RejectedDetectorRegistration, VirtualPackageDetectorWarning, VirtualPackageDetectorsOutput,
+    VirtualPackageDetectorsQuery,
+};
 pub use warning::GatewayWarning;
 pub use who_needs_query::WhoNeedsQuery;
 
@@ -128,6 +137,8 @@ impl Gateway {
     /// The `sources` parameter accepts any type that implements `Into<Source>`.
     /// This includes:
     /// - `Channel` - traditional conda channels
+    /// - `MultiSource` - a named group of sources, each queried as if it was
+    ///   passed on its own; see [`RepoData::multi_channel`]
     /// - `Arc<dyn RepoDataSource>` - custom repodata sources
     /// - `Source` - the enum itself
     ///
@@ -136,7 +147,7 @@ impl Gateway {
     /// ```ignore
     /// gateway.query(
     ///     vec![channel1, channel2],
-    ///     vec![Platform::Linux64],
+    ///     vec![Subdir::Linux64],
     ///     vec![spec],
     /// ).await
     /// ```
@@ -149,7 +160,7 @@ impl Gateway {
     ///         Source::Channel(channel),
     ///         Source::Custom(my_custom_source),
     ///     ],
-    ///     vec![Platform::Linux64],
+    ///     vec![Subdir::Linux64],
     ///     vec![spec],
     /// ).await
     /// ```
@@ -162,7 +173,7 @@ impl Gateway {
     where
         AsSource: Into<Source>,
         SourceIter: IntoIterator<Item = AsSource>,
-        PlatformIter: IntoIterator<Item = Platform>,
+        PlatformIter: IntoIterator<Item = Subdir>,
         <PlatformIter as IntoIterator>::IntoIter: Clone,
         PackageNameIter: IntoIterator<Item = IntoMatchSpec>,
         IntoMatchSpec: Into<MatchSpec>,
@@ -184,13 +195,45 @@ impl Gateway {
     where
         AsChannel: Into<Channel>,
         ChannelIter: IntoIterator<Item = AsChannel>,
-        PlatformIter: IntoIterator<Item = Platform>,
+        PlatformIter: IntoIterator<Item = Subdir>,
         <PlatformIter as IntoIterator>::IntoIter: Clone,
     {
         NamesQuery::new(
             self.inner.clone(),
             channels.into_iter().map(Into::into).collect(),
             platforms.into_iter().collect(),
+        )
+    }
+
+    /// The package cache this gateway shares with the installers it feeds.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn package_cache(&self) -> &PackageCache {
+        &self.inner.package_cache
+    }
+
+    /// Collects the virtual package detectors that `channels` and the
+    /// channels they relate to register for the supplied `subdirs`.
+    ///
+    /// Registrations of these subdirs are combined per channel and accepted
+    /// or rejected in CEP 42 channel order. Duplicate subdirs are ignored,
+    /// and no subdirs are added implicitly. To include platform-independent
+    /// registrations, pass `Subdir::NoArch` explicitly alongside the target.
+    /// See [`VirtualPackageDetectorsQuery`] for the options and output.
+    pub fn virtual_package_detectors<AsChannel, ChannelIter, SubdirIter>(
+        &self,
+        channels: ChannelIter,
+        subdirs: SubdirIter,
+    ) -> VirtualPackageDetectorsQuery
+    where
+        AsChannel: Into<Channel>,
+        ChannelIter: IntoIterator<Item = AsChannel>,
+        SubdirIter: IntoIterator<Item = Subdir>,
+    {
+        VirtualPackageDetectorsQuery::new(
+            self.inner.clone(),
+            channels.into_iter().map(Into::into).collect(),
+            subdirs.into_iter().collect(),
+            None,
         )
     }
 
@@ -218,14 +261,14 @@ impl Gateway {
     /// sharding configuration, to avoid fetching a shard for every package.
     ///
     /// ```no_run
-    /// # use rattler_conda_types::{Channel, PackageName, Platform};
+    /// # use rattler_conda_types::{Channel, PackageName, Subdir};
     /// # use rattler_repodata_gateway::Gateway;
     /// # async fn example(gateway: Gateway, channel: Channel) -> anyhow::Result<()> {
     /// // Which packages of the channel depend on `polars`?
     /// let dependents = gateway
     ///     .who_needs(
     ///         vec![channel],
-    ///         vec![Platform::Linux64, Platform::NoArch],
+    ///         vec![Subdir::Linux64, Subdir::NoArch],
     ///         PackageName::new_unchecked("polars"),
     ///     )
     ///     .await?;
@@ -254,7 +297,7 @@ impl Gateway {
     where
         AsSource: Into<Source>,
         SourceIter: IntoIterator<Item = AsSource>,
-        PlatformIter: IntoIterator<Item = Platform>,
+        PlatformIter: IntoIterator<Item = Subdir>,
     {
         WhoNeedsQuery::new(
             self.inner.clone(),
@@ -287,7 +330,7 @@ impl Gateway {
     pub async fn channel_relations(
         &self,
         channel: &Channel,
-        platform: Platform,
+        platform: Subdir,
     ) -> Result<Option<ChannelRelations>, GatewayError> {
         match self
             .inner
@@ -368,11 +411,11 @@ impl Gateway {
         if mode == CacheClearMode::InMemoryAndDisk {
             use std::str::FromStr;
 
-            let platforms_to_clear: Vec<Platform> = match &subdirs {
-                SubdirSelection::All => Platform::all().collect(),
+            let platforms_to_clear: Vec<Subdir> = match &subdirs {
+                SubdirSelection::All => Subdir::all().collect(),
                 SubdirSelection::Some(subdirs) => subdirs
                     .iter()
-                    .filter_map(|s| Platform::from_str(s).ok())
+                    .filter_map(|s| Subdir::from_str(s).ok())
                     .collect(),
             };
 
@@ -406,7 +449,7 @@ impl Gateway {
 struct GatewayInner {
     /// Subdirectories keyed by channel, platform and whether sharding is enabled.
     /// Full repodata scans must not reuse a sharded subdir from an ordinary query.
-    subdirs: CoalescedMap<(Channel, Platform, bool), Arc<Subdir>>,
+    subdirs: CoalescedMap<(Channel, Subdir, bool), Arc<SubdirState>>,
 
     /// The client to use to fetch repodata.
     client: LazyClient,
@@ -461,10 +504,10 @@ impl GatewayInner {
     async fn get_or_create_subdir(
         &self,
         channel: &Channel,
-        platform: Platform,
+        platform: Subdir,
         reporter: Option<Arc<dyn Reporter>>,
         allow_sharded: bool,
-    ) -> Result<Arc<Subdir>, GatewayError> {
+    ) -> Result<Arc<SubdirState>, GatewayError> {
         let url = channel.platform_url(platform);
         let sharded_enabled = allow_sharded
             && url.scheme() != "file"
@@ -522,7 +565,7 @@ mod test {
     use rattler_conda_types::{
         Channel, ChannelConfig, MatchSpec, PackageName,
         ParseStrictness::{Lenient, Strict},
-        Platform, RepoDataRecord,
+        RepoDataRecord, Subdir,
     };
     use rstest::rstest;
     use url::Url;
@@ -565,7 +608,7 @@ mod test {
         let records = gateway
             .query(
                 vec![local_conda_forge().await],
-                vec![Platform::Linux64, Platform::NoArch],
+                vec![Subdir::Linux64, Subdir::NoArch],
                 vec![PackageName::from_str("rubin-env").unwrap()].into_iter(),
             )
             .recursive(true)
@@ -585,7 +628,7 @@ mod test {
         let records = gateway
             .query(
                 vec![index.channel()],
-                vec![Platform::Linux64, Platform::Win32, Platform::NoArch],
+                vec![Subdir::Linux64, Subdir::Win32, Subdir::NoArch],
                 vec![PackageName::from_str("rubin-env").unwrap()].into_iter(),
             )
             .recursive(true)
@@ -664,7 +707,7 @@ mod test {
         let records = gateway
             .query(
                 vec![channel.clone()],
-                vec![Platform::NoArch],
+                vec![Subdir::NoArch],
                 vec![PackageName::from_str("demo").unwrap()],
             )
             .with_reporter(reporter.clone())
@@ -678,7 +721,7 @@ mod test {
         let records = gateway
             .query(
                 vec![channel],
-                vec![Platform::NoArch],
+                vec![Subdir::NoArch],
                 vec![PackageName::from_str("demo").unwrap()],
             )
             .with_reporter(reporter.clone())
@@ -762,7 +805,7 @@ mod test {
         let records = Gateway::new()
             .query(
                 vec![Channel::try_from_directory(tempdir.path()).unwrap()],
-                vec![Platform::NoArch],
+                vec![Subdir::NoArch],
                 vec![PackageName::from_str("demo").unwrap()],
             )
             .with_reporter(reporter.clone())
@@ -807,7 +850,7 @@ mod test {
         let output = Gateway::new()
             .query(
                 vec![channel.clone()],
-                vec![Platform::NoArch],
+                vec![Subdir::NoArch],
                 vec![PackageName::from_str("demo").unwrap()],
             )
             .channel_notices(true)
@@ -822,7 +865,7 @@ mod test {
         let output = Gateway::new()
             .query(
                 vec![channel],
-                vec![Platform::NoArch],
+                vec![Subdir::NoArch],
                 vec![PackageName::from_str("demo").unwrap()],
             )
             .await
@@ -967,7 +1010,7 @@ mod test {
         let records = gateway
             .query(
                 vec![index.clone()],
-                vec![Platform::Win64],
+                vec![Subdir::Win64],
                 vec![MatchSpec::from_str(
                     "https://conda.anaconda.org/conda-forge/win-64/openssl-3.3.1-h2466b09_1.conda",
                     Strict,
@@ -989,7 +1032,7 @@ mod test {
         let records = gateway
             .query(
                 vec![index],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("openssl ==3.3.1 h2466b09_1", Strict).unwrap()]
                     .into_iter(),
             )
@@ -1032,7 +1075,7 @@ mod test {
         let records = gateway
             .query(
                 vec![index.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![
                     MatchSpec::from_str("mamba ==0.9.2 py39h951de11_0", Strict).unwrap(),
                     MatchSpec::from_str(openssl_url, Strict).unwrap(),
@@ -1070,7 +1113,7 @@ mod test {
         let records = gateway
             .query(
                 vec![index.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("mamba ==0.9.2 py39h951de11_0", Strict).unwrap()]
                     .into_iter(),
             )
@@ -1105,7 +1148,7 @@ mod test {
         let records = gateway
             .query(
                 vec![index.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![matchspec].into_iter(),
             )
             .recursive(false)
@@ -1126,7 +1169,7 @@ mod test {
         let records = gateway
             .query(
                 vec![index.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![matchspec].into_iter(),
             )
             .recursive(false)
@@ -1143,7 +1186,7 @@ mod test {
         let records = gateway
             .query(
                 vec![index.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![matchspec1, matchspec2].into_iter(),
             )
             .recursive(false)
@@ -1170,7 +1213,7 @@ mod test {
         let gateway_error = gateway
             .query(
                 vec![index.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![matchspec].into_iter(),
             )
             .recursive(true)
@@ -1194,7 +1237,7 @@ mod test {
         let err = gateway
             .query(
                 vec![Channel::from_str(channel, &default_channel_config).unwrap()],
-                vec![Platform::Linux64, Platform::NoArch],
+                vec![Subdir::Linux64, Subdir::NoArch],
                 vec![PackageName::from_str("some-package").unwrap()].into_iter(),
             )
             .await;
@@ -1213,7 +1256,7 @@ mod test {
                 vec![Channel::from_url(
                     Url::parse("https://conda.anaconda.org/conda-forge").unwrap(),
                 )],
-                vec![Platform::Linux64, Platform::NoArch],
+                vec![Subdir::Linux64, Subdir::NoArch],
                 vec![
                     // PackageName::from_str("rubin-env").unwrap(),
                     // PackageName::from_str("jupyterlab").unwrap(),
@@ -1270,7 +1313,7 @@ mod test {
         let query = gateway
             .query(
                 vec![local_channel.channel()],
-                vec![Platform::Linux64, Platform::NoArch],
+                vec![Subdir::Linux64, Subdir::NoArch],
                 vec![PackageName::from_str("python").unwrap()].into_iter(),
             )
             .with_reporter(downloads.clone());
@@ -1313,7 +1356,7 @@ mod test {
         let channel = Channel::from_str("conda-forge", &channel_config).unwrap();
 
         // Create mock cache files for linux-64 platform
-        let subdir_url = channel.platform_url(Platform::Linux64);
+        let subdir_url = channel.platform_url(Subdir::Linux64);
         let cache_key = crate::utils::url_to_cache_filename(
             &subdir_url.join("repodata.json").expect("valid filename"),
         );
@@ -1333,7 +1376,7 @@ mod test {
         assert!(lock_path.exists(), "lock file should exist before clear");
 
         // Clear the disk cache
-        RemoteSubdirClient::clear_cache(cache_dir.path(), &channel, Platform::Linux64).unwrap();
+        RemoteSubdirClient::clear_cache(cache_dir.path(), &channel, Subdir::Linux64).unwrap();
 
         // Verify json and info files are removed but lock file remains
         assert!(
@@ -1366,7 +1409,7 @@ mod test {
         let index_base_url = channel
             .base_url
             .url()
-            .join(&format!("{}/", Platform::Linux64.as_str()))
+            .join(&format!("{}/", Subdir::Linux64.as_str()))
             .expect("invalid subdir url");
         let canonical_shards_url = index_base_url
             .join(REPODATA_SHARDS_FILENAME)
@@ -1387,7 +1430,7 @@ mod test {
         );
 
         // Clear the disk cache
-        ShardedSubdir::clear_cache(cache_dir.path(), &channel, Platform::Linux64).unwrap();
+        ShardedSubdir::clear_cache(cache_dir.path(), &channel, Subdir::Linux64).unwrap();
 
         // Verify cache file is removed
         assert!(
@@ -1407,11 +1450,11 @@ mod test {
         let channel = Channel::from_str("conda-forge", &channel_config).unwrap();
 
         // Clear should succeed even when there's no cache (empty directory)
-        RemoteSubdirClient::clear_cache(cache_dir.path(), &channel, Platform::Linux64).unwrap();
+        RemoteSubdirClient::clear_cache(cache_dir.path(), &channel, Subdir::Linux64).unwrap();
 
         // Clear should also succeed when the cache directory doesn't exist at all
         let non_existent_dir = cache_dir.path().join("does-not-exist");
-        RemoteSubdirClient::clear_cache(&non_existent_dir, &channel, Platform::Linux64).unwrap();
+        RemoteSubdirClient::clear_cache(&non_existent_dir, &channel, Subdir::Linux64).unwrap();
     }
 
     #[test]
@@ -1425,11 +1468,11 @@ mod test {
         let channel = Channel::from_str("conda-forge", &channel_config).unwrap();
 
         // Clear should succeed even when there's no cache (empty directory)
-        ShardedSubdir::clear_cache(cache_dir.path(), &channel, Platform::Linux64).unwrap();
+        ShardedSubdir::clear_cache(cache_dir.path(), &channel, Subdir::Linux64).unwrap();
 
         // Clear should also succeed when the cache directory doesn't exist at all
         let non_existent_dir = cache_dir.path().join("does-not-exist");
-        ShardedSubdir::clear_cache(&non_existent_dir, &channel, Platform::Linux64).unwrap();
+        ShardedSubdir::clear_cache(&non_existent_dir, &channel, Subdir::Linux64).unwrap();
     }
 
     #[test]
@@ -1555,7 +1598,7 @@ mod test {
         let unpatched = gateway
             .query(
                 vec![channel.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![application()],
             )
             .recursive(true)
@@ -1572,7 +1615,7 @@ mod test {
         let patched = gateway
             .query(
                 vec![channel.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![application()],
             )
             .recursive(true)
@@ -1595,7 +1638,7 @@ mod test {
         );
 
         let unpatched_again = gateway
-            .query(vec![channel], vec![Platform::Linux64], vec![application()])
+            .query(vec![channel], vec![Subdir::Linux64], vec![application()])
             .recursive(true)
             .await
             .unwrap();
@@ -1654,7 +1697,7 @@ mod test {
         let output = gateway
             .query(
                 vec![channel.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("foo", Lenient).unwrap()],
             )
             .await
@@ -1719,7 +1762,7 @@ mod test {
         let records = gateway
             .query(
                 vec![channel.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
             )
             .recursive(false)
@@ -1746,7 +1789,7 @@ mod test {
         let records = gateway
             .query(
                 vec![channel.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
             )
             .recursive(false)
@@ -1786,7 +1829,7 @@ mod test {
         let records = gateway_cache_only
             .query(
                 vec![channel.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
             )
             .recursive(false)
@@ -1818,7 +1861,7 @@ mod test {
         let records = gateway_fresh
             .query(
                 vec![channel.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
             )
             .recursive(false)
@@ -1860,7 +1903,7 @@ mod test {
         let records = gateway
             .query(
                 vec![index.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![matchspec].into_iter(),
             )
             .recursive(false)
@@ -1918,7 +1961,7 @@ mod test {
         let records = gateway
             .query(
                 vec![server.channel()],
-                vec![Platform::Linux64, Platform::NoArch],
+                vec![Subdir::Linux64, Subdir::NoArch],
                 vec![MatchSpec::from_str("openssl=3.*=*_1", Lenient).unwrap()].into_iter(),
             )
             .recursive(false)
@@ -1988,7 +2031,7 @@ mod test {
 
     /// A mock `RepoDataSource` for testing custom source functionality.
     struct MockRepoDataSource {
-        records: std::collections::HashMap<(Platform, PackageName), Vec<RepoDataRecord>>,
+        records: std::collections::HashMap<(Subdir, PackageName), Vec<RepoDataRecord>>,
     }
 
     impl MockRepoDataSource {
@@ -1998,7 +2041,7 @@ mod test {
             }
         }
 
-        fn add_record(&mut self, platform: Platform, record: RepoDataRecord) {
+        fn add_record(&mut self, platform: Subdir, record: RepoDataRecord) {
             let name = record.package_record.name.clone();
             self.records
                 .entry((platform, name))
@@ -2011,7 +2054,7 @@ mod test {
     impl super::RepoDataSource for MockRepoDataSource {
         async fn fetch_package_records(
             &self,
-            platform: Platform,
+            platform: Subdir,
             name: &PackageName,
         ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
             let records = self
@@ -2022,7 +2065,7 @@ mod test {
             Ok(records.into_iter().map(Arc::new).collect())
         }
 
-        fn package_names(&self, platform: Platform) -> Vec<String> {
+        fn package_names(&self, platform: Subdir) -> Vec<String> {
             self.records
                 .keys()
                 .filter(|(p, _)| *p == platform)
@@ -2043,7 +2086,8 @@ mod test {
         extra_depends: &[(&str, &[&str])],
     ) -> RepoDataRecord {
         use rattler_conda_types::{
-            PackageRecord, VersionWithSource, package::DistArchiveIdentifier,
+            PackageRecord, VersionWithSource,
+            package::{BuildString, DistArchiveIdentifier},
         };
 
         let mut extra_depends_map: std::collections::BTreeMap<String, Vec<String>> =
@@ -2059,7 +2103,7 @@ mod test {
             attestations_sha256: None,
             name: PackageName::from_str(name).unwrap(),
             version: VersionWithSource::from_str(version).unwrap(),
-            build: "0".to_string(),
+            build: "0".parse::<BuildString>().unwrap(),
             build_number: 0,
             subdir: subdir.to_string(),
             md5: None,
@@ -2105,15 +2149,15 @@ mod test {
         // Create a mock source with some records
         let mut mock_source = MockRepoDataSource::new();
         mock_source.add_record(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record("testpkg", "1.0.0", "linux-64"),
         );
         mock_source.add_record(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record("testpkg", "2.0.0", "linux-64"),
         );
         mock_source.add_record(
-            Platform::NoArch,
+            Subdir::NoArch,
             make_test_record("otherpkg", "1.0.0", "noarch"),
         );
 
@@ -2123,7 +2167,7 @@ mod test {
         let records = gateway
             .query(
                 vec![super::Source::Custom(source.clone())],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
             )
             .recursive(false)
@@ -2145,7 +2189,7 @@ mod test {
         let records = gateway
             .query(
                 vec![super::Source::Custom(source)],
-                vec![Platform::NoArch],
+                vec![Subdir::NoArch],
                 vec![PackageName::from_str("otherpkg").unwrap()].into_iter(),
             )
             .recursive(false)
@@ -2179,7 +2223,7 @@ mod test {
         let records = gateway
             .query(
                 vec![super::Source::SparseRepoData(vec![source.clone()])],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![PackageName::from_str("foobar").unwrap()].into_iter(),
             )
             .recursive(false)
@@ -2199,7 +2243,7 @@ mod test {
         let records = gateway
             .query(
                 vec![super::Source::SparseRepoData(vec![source.clone()])],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![PackageName::from_str("foobar").unwrap()].into_iter(),
             )
             .recursive(true)
@@ -2219,7 +2263,7 @@ mod test {
         let records = gateway
             .query(
                 vec![super::Source::SparseRepoData(vec![source])],
-                vec![Platform::Win64],
+                vec![Subdir::Win64],
                 vec![PackageName::from_str("foobar").unwrap()].into_iter(),
             )
             .recursive(false)
@@ -2240,7 +2284,7 @@ mod test {
         // Create a mock source with a custom package
         let mut mock_source = MockRepoDataSource::new();
         mock_source.add_record(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record("custom-pkg", "1.0.0", "linux-64"),
         );
 
@@ -2256,7 +2300,7 @@ mod test {
                     super::Source::Channel(channel),
                     super::Source::Custom(custom_source),
                 ],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![
                     PackageName::from_str("python").unwrap(),
                     PackageName::from_str("custom-pkg").unwrap(),
@@ -2293,6 +2337,117 @@ mod test {
         assert_eq!(custom_records[0].package_record.version.as_str(), "1.0.0");
     }
 
+    fn multichannel_test_channel(name: &str) -> Channel {
+        Channel::try_from_directory(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../test-data/channels/{name}")),
+        )
+        .unwrap()
+    }
+
+    fn multichannel_test_sparse_repo_data(name: &str) -> Arc<crate::sparse::SparseRepoData> {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
+            "../../test-data/channels/{name}/noarch/repodata.json"
+        ));
+        Arc::new(
+            crate::sparse::SparseRepoData::from_file(
+                multichannel_test_channel(name),
+                "noarch",
+                path,
+                None,
+            )
+            .unwrap(),
+        )
+    }
+
+    /// One line per bucket: the multichannel it is marked with and the
+    /// channel its records refer to.
+    fn render_multichannel_buckets(output: &[RepoData]) -> String {
+        output
+            .iter()
+            .map(|repo_data| {
+                let channels = repo_data
+                    .iter()
+                    .filter_map(|record| record.channel.as_deref())
+                    .map(|channel| channel.trim_end_matches('/').rsplit('/').next().unwrap())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{} | {channels}", repo_data.multi_channel().unwrap_or("-"))
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Every source of a group is queried as if it was passed on its own, and
+    /// its records end up in their own bucket, in the order of the group,
+    /// marked with the name of the group.
+    #[rstest]
+    #[case::channels(false)]
+    #[case::sparse_repo_data(true)]
+    #[tokio::test]
+    async fn test_multi_source(#[case] sparse: bool) {
+        let source = |name: &str| {
+            if sparse {
+                super::Source::from(multichannel_test_sparse_repo_data(name))
+            } else {
+                super::Source::from(multichannel_test_channel(name))
+            }
+        };
+        let multi_source = super::MultiSource::new(
+            "grp",
+            vec![source("multichannel-b"), source("multichannel-a")],
+        )
+        .unwrap();
+
+        let output = Gateway::new()
+            .query(
+                vec![super::Source::from(multi_source), source("multichannel-c")],
+                vec![Subdir::NoArch],
+                vec![PackageName::from_str("pkg").unwrap()],
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        insta::allow_duplicates! {
+            insta::assert_snapshot!(render_multichannel_buckets(&output), @r"
+            grp | multichannel-b
+            grp | multichannel-a
+            - | multichannel-c
+            ");
+        }
+    }
+
+    #[test]
+    fn test_invalid_multi_source() {
+        let channel = || super::Source::from(multichannel_test_channel("multichannel-a"));
+        let sparse = || super::Source::from(multichannel_test_sparse_repo_data("multichannel-a"));
+        let nested = super::MultiSource::new("inner", vec![channel()]).unwrap();
+
+        let errors = [
+            super::MultiSource::new("grp", Vec::new()),
+            super::MultiSource::new("grp", vec![channel(), super::Source::from(nested)]),
+            super::MultiSource::new("grp", vec![channel(), channel()]),
+            super::MultiSource::new("grp", vec![sparse(), sparse()]),
+        ]
+        .into_iter()
+        .map(|result| {
+            result.err().unwrap().to_string().replace(
+                &multichannel_test_channel("multichannel-a")
+                    .base_url
+                    .to_string(),
+                "[CHANNEL]",
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+        insta::assert_snapshot!(errors, @r"
+        multichannel 'grp' does not contain any sources
+        multichannel 'grp' cannot contain another multichannel ('inner')
+        multichannel 'grp' contains '[CHANNEL]' more than once
+        multichannel 'grp' contains 'noarch' of '[CHANNEL]' more than once
+        ");
+    }
+
     /// Test that ensures `run_exports` fallback works when `run_exports.json` exists
     /// but doesn't contain all packages (out-of-sync scenario).
     ///
@@ -2317,7 +2472,7 @@ mod test {
         let records = gateway
             .query(
                 vec![server.channel()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![matchspec].into_iter(),
             )
             .recursive(false)
@@ -2373,7 +2528,7 @@ mod test {
         let records = gateway
             .query(
                 vec![index.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![matchspec].into_iter(),
             )
             .recursive(false)
@@ -2424,7 +2579,7 @@ mod test {
         let records = gateway
             .query(
                 vec![index.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![matchspec].into_iter(),
             )
             .recursive(false)
@@ -2474,7 +2629,7 @@ mod test {
         let records = gateway
             .query(
                 vec![index.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![matchspec].into_iter(),
             )
             .recursive(false)
@@ -2500,32 +2655,32 @@ mod test {
         // --- Source A: has lib-foo on linux-64 and lib-bar on noarch ----------
         let mut source_a = MockRepoDataSource::new();
         source_a.add_record(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record("lib-foo", "1.0.0", "linux-64"),
         );
         source_a.add_record(
-            Platform::NoArch,
+            Subdir::NoArch,
             make_test_record("lib-bar", "2.0.0", "noarch"),
         );
         // A non-matching package that should be excluded.
         source_a.add_record(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record("unrelated", "1.0.0", "linux-64"),
         );
 
         // --- Source B: has lib-baz on linux-64 and lib-qux on noarch ---------
         let mut source_b = MockRepoDataSource::new();
         source_b.add_record(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record("lib-baz", "3.0.0", "linux-64"),
         );
         source_b.add_record(
-            Platform::NoArch,
+            Subdir::NoArch,
             make_test_record("lib-qux", "4.0.0", "noarch"),
         );
         // Another non-matching package.
         source_b.add_record(
-            Platform::NoArch,
+            Subdir::NoArch,
             make_test_record("other-pkg", "1.0.0", "noarch"),
         );
 
@@ -2545,7 +2700,7 @@ mod test {
         let records = gateway
             .query(
                 vec![super::Source::Custom(src_a), super::Source::Custom(src_b)],
-                vec![Platform::Linux64, Platform::NoArch],
+                vec![Subdir::Linux64, Subdir::NoArch],
                 vec![matchspec].into_iter(),
             )
             .recursive(false)
@@ -2589,7 +2744,7 @@ mod test {
             )
         }
 
-        fn add(&mut self, platform: Platform, rec: RepoDataRecord) {
+        fn add(&mut self, platform: Subdir, rec: RepoDataRecord) {
             self.inner.add_record(platform, rec);
         }
     }
@@ -2598,7 +2753,7 @@ mod test {
     impl super::RepoDataSource for RecordingSource {
         async fn fetch_package_records(
             &self,
-            platform: Platform,
+            platform: Subdir,
             name: &PackageName,
         ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
             self.fetched
@@ -2608,7 +2763,7 @@ mod test {
             self.inner.fetch_package_records(platform, name).await
         }
 
-        fn package_names(&self, platform: Platform) -> Vec<String> {
+        fn package_names(&self, platform: Subdir) -> Vec<String> {
             self.inner.package_names(platform)
         }
     }
@@ -2621,11 +2776,11 @@ mod test {
         let gateway = Gateway::new();
         let (mut src, fetched) = RecordingSource::new();
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("outer", "1.0.0", "linux-64", &["black"], &[]),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full(
                 "black",
                 "25.0.0",
@@ -2635,11 +2790,11 @@ mod test {
             ),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("click", "8.0.0", "linux-64", &[], &[]),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("aiohttp", "3.0.0", "linux-64", &[], &[]),
         );
         let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
@@ -2647,7 +2802,7 @@ mod test {
         gateway
             .query(
                 vec![super::Source::Custom(source)],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("outer", Lenient).unwrap()].into_iter(),
             )
             .recursive(true)
@@ -2672,11 +2827,11 @@ mod test {
         let gateway = Gateway::new();
         let (mut src, fetched) = RecordingSource::new();
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("helper", "1.0.0", "linux-64", &["black[extras=[d]]"], &[]),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full(
                 "black",
                 "25.0.0",
@@ -2686,7 +2841,7 @@ mod test {
             ),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("aiohttp", "3.0.0", "linux-64", &[], &[]),
         );
         let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
@@ -2694,7 +2849,7 @@ mod test {
         gateway
             .query(
                 vec![super::Source::Custom(source)],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("helper", Lenient).unwrap()].into_iter(),
             )
             .recursive(true)
@@ -2720,11 +2875,11 @@ mod test {
         let gateway = Gateway::new();
         let (mut src, fetched) = RecordingSource::new();
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("helper", "1.0.0", "linux-64", &["aiohttp", "tornado"], &[]),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full(
                 "aiohttp",
                 "3.0.0",
@@ -2734,7 +2889,7 @@ mod test {
             ),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full(
                 "tornado",
                 "6.0.0",
@@ -2744,7 +2899,7 @@ mod test {
             ),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("speedups_helper", "1.0.0", "linux-64", &[], &[]),
         );
         let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
@@ -2752,7 +2907,7 @@ mod test {
         gateway
             .query(
                 vec![super::Source::Custom(source)],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("helper", Lenient).unwrap()].into_iter(),
             )
             .recursive(true)
@@ -2777,11 +2932,11 @@ mod test {
         let gateway = Gateway::new();
         let (mut src, fetched) = RecordingSource::new();
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("driver", "1.0.0", "linux-64", &["pkg[extras=[full]]"], &[]),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full(
                 "pkg",
                 "1.0.0",
@@ -2795,11 +2950,11 @@ mod test {
             ),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("dep_a", "1.0.0", "linux-64", &[], &[]),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("dep_b", "1.0.0", "linux-64", &[], &[]),
         );
         let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
@@ -2807,7 +2962,7 @@ mod test {
         gateway
             .query(
                 vec![super::Source::Custom(source)],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("driver", Lenient).unwrap()].into_iter(),
             )
             .recursive(true)
@@ -2837,7 +2992,7 @@ mod test {
         let gateway = Gateway::new();
         let (mut src, fetched) = RecordingSource::new();
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full(
                 "black",
                 "25.0.0",
@@ -2847,15 +3002,15 @@ mod test {
             ),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("click", "8.0.0", "linux-64", &[], &[]),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("aiohttp", "3.0.0", "linux-64", &[], &[]),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("ipython", "8.0.0", "linux-64", &[], &[]),
         );
         let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
@@ -2863,7 +3018,7 @@ mod test {
         gateway
             .query(
                 vec![super::Source::Custom(source)],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("black", Lenient).unwrap()].into_iter(),
             )
             .recursive(true)
@@ -2890,7 +3045,7 @@ mod test {
         let gateway = Gateway::new();
         let (mut src, fetched) = RecordingSource::new();
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full(
                 "black",
                 "25.0.0",
@@ -2900,11 +3055,11 @@ mod test {
             ),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("aiohttp", "3.0.0", "linux-64", &[], &[]),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("ipython", "8.0.0", "linux-64", &[], &[]),
         );
         let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
@@ -2912,7 +3067,7 @@ mod test {
         gateway
             .query(
                 vec![super::Source::Custom(source)],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("black[extras=[d]]", extras_options()).unwrap()]
                     .into_iter(),
             )
@@ -2937,7 +3092,7 @@ mod test {
         let gateway = Gateway::new();
         let (mut src, fetched) = RecordingSource::new();
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full(
                 "black",
                 "25.0.0",
@@ -2947,11 +3102,11 @@ mod test {
             ),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("click", "8.0.0", "linux-64", &[], &[]),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("aiohttp", "3.0.0", "linux-64", &[], &[]),
         );
         let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
@@ -2967,7 +3122,7 @@ mod test {
         gateway
             .query(
                 vec![super::Source::Custom(source)],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("black", Lenient).unwrap(), pattern].into_iter(),
             )
             .recursive(true)
@@ -2990,7 +3145,7 @@ mod test {
         let gateway = Gateway::new();
         let (mut src, fetched) = RecordingSource::new();
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full(
                 "black",
                 "25.0.0",
@@ -3000,15 +3155,15 @@ mod test {
             ),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("click", "8.0.0", "linux-64", &[], &[]),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("aiohttp", "3.0.0", "linux-64", &[], &[]),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("ipython", "8.0.0", "linux-64", &[], &[]),
         );
         let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
@@ -3024,7 +3179,7 @@ mod test {
         gateway
             .query(
                 vec![super::Source::Custom(source)],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![pattern].into_iter(),
             )
             .recursive(true)
@@ -3051,7 +3206,7 @@ mod test {
         let (mut src, fetched) = RecordingSource::new();
         // Two versions of pkg with different deps in the [d] extra.
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full(
                 "pkg",
                 "1.0.0",
@@ -3061,7 +3216,7 @@ mod test {
             ),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full(
                 "pkg",
                 "2.0.0",
@@ -3072,15 +3227,15 @@ mod test {
         );
         // Transitive activator: introduced via a separate top-level package.
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("activator", "1.0.0", "linux-64", &["pkg[extras=[d]]"], &[]),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("dep_for_v1", "1.0.0", "linux-64", &[], &[]),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("dep_for_v2", "1.0.0", "linux-64", &[], &[]),
         );
         let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
@@ -3088,7 +3243,7 @@ mod test {
         gateway
             .query(
                 vec![super::Source::Custom(source)],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![
                     MatchSpec::from_str("pkg >=2", Lenient).unwrap(),
                     MatchSpec::from_str("activator", Lenient).unwrap(),
@@ -3117,11 +3272,11 @@ mod test {
         let gateway = Gateway::new();
         let (mut src, fetched) = RecordingSource::new();
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("helper", "1.0.0", "linux-64", &["black[extras=[d]]"], &[]),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full(
                 "black",
                 "25.0.0",
@@ -3131,11 +3286,11 @@ mod test {
             ),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("aiohttp", "3.0.0", "linux-64", &[], &[]),
         );
         src.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("ipython", "8.0.0", "linux-64", &[], &[]),
         );
         let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
@@ -3143,7 +3298,7 @@ mod test {
         gateway
             .query(
                 vec![super::Source::Custom(source)],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("helper", Lenient).unwrap()].into_iter(),
             )
             .recursive(true)
@@ -3167,11 +3322,11 @@ mod test {
         let (mut source_b, fetched_b) = RecordingSource::new();
 
         source_a.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("driver", "1.0.0", "linux-64", &["pkg", "activator"], &[]),
         );
         source_a.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full(
                 "pkg",
                 "1.0.0",
@@ -3181,16 +3336,16 @@ mod test {
             ),
         );
         source_a.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("dep_from_source_a", "1.0.0", "linux-64", &[], &[]),
         );
 
         source_b.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("activator", "1.0.0", "linux-64", &["pkg[extras=[d]]"], &[]),
         );
         source_b.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full(
                 "pkg",
                 "2.0.0",
@@ -3200,7 +3355,7 @@ mod test {
             ),
         );
         source_b.add(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record_full("dep_from_source_b", "1.0.0", "linux-64", &[], &[]),
         );
 
@@ -3210,7 +3365,7 @@ mod test {
                     super::Source::Custom(Arc::new(source_a)),
                     super::Source::Custom(Arc::new(source_b)),
                 ],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("driver", Lenient).unwrap()].into_iter(),
             )
             .recursive(true)
@@ -3294,7 +3449,7 @@ mod test {
         let gateway = Gateway::new();
 
         let relations = gateway
-            .channel_relations(&channel, Platform::Linux64)
+            .channel_relations(&channel, Subdir::Linux64)
             .await
             .unwrap()
             .expect("repodata declares channel_relations");
@@ -3319,7 +3474,7 @@ mod test {
 
         let gateway = Gateway::new();
         let relations = gateway
-            .channel_relations(&channel, Platform::Linux64)
+            .channel_relations(&channel, Subdir::Linux64)
             .await
             .unwrap();
         assert!(relations.is_none());
@@ -3343,7 +3498,7 @@ mod test {
         let channel = server.channel();
 
         let gateway = Gateway::new();
-        for platform in [Platform::Osx64, Platform::NoArch] {
+        for platform in [Subdir::Osx64, Subdir::NoArch] {
             let relations = gateway
                 .channel_relations(&channel, platform)
                 .await
@@ -3381,7 +3536,7 @@ mod test {
         let mut q = gateway
             .query(
                 channels,
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str(pkg, Strict).unwrap()],
             )
             .recursive(false);
@@ -3452,7 +3607,7 @@ mod test {
         let output = Gateway::new()
             .query(
                 [bioconda],
-                [Platform::Linux64],
+                [Subdir::Linux64],
                 [MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .channel_notices(true)
@@ -3563,7 +3718,7 @@ mod test {
 
         let mut mock = MockRepoDataSource::new();
         mock.add_record(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record("shared", "9.9.9", "linux-64"),
         );
         let custom: Arc<dyn super::RepoDataSource> = Arc::new(mock);
@@ -3575,7 +3730,7 @@ mod test {
                     super::Source::Channel(bioconda),
                     super::Source::Custom(custom),
                 ],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .recursive(false)
@@ -3608,7 +3763,7 @@ mod test {
         // Custom source FIRST, then channel.
         let mut mock = MockRepoDataSource::new();
         mock.add_record(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record("shared", "9.9.9", "linux-64"),
         );
         let custom: Arc<dyn super::RepoDataSource> = Arc::new(mock);
@@ -3620,7 +3775,7 @@ mod test {
                     super::Source::Custom(custom),
                     super::Source::Channel(conda_forge),
                 ],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .recursive(false)
@@ -3701,7 +3856,7 @@ mod test {
 
         let gateway = Gateway::new();
         let output = gateway
-            .names(vec![bioconda], vec![Platform::Linux64])
+            .names(vec![bioconda], vec![Subdir::Linux64])
             .execute()
             .await
             .unwrap();
@@ -3731,7 +3886,7 @@ mod test {
 
         let gateway = Gateway::new();
         let output = gateway
-            .names(vec![bioconda], vec![Platform::Linux64])
+            .names(vec![bioconda], vec![Subdir::Linux64])
             .channel_relations(crate::ChannelRelationsMode::Disabled)
             .execute()
             .await
@@ -3760,7 +3915,7 @@ mod test {
 
         let gateway = Gateway::new();
         let err = gateway
-            .names(vec![a_ch], vec![Platform::Linux64])
+            .names(vec![a_ch], vec![Subdir::Linux64])
             .channel_relations(crate::ChannelRelationsMode::Strict)
             .execute()
             .await
@@ -3802,7 +3957,7 @@ mod test {
         let output = gateway
             .query(
                 vec![a_ch],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .recursive(false)
@@ -3856,7 +4011,7 @@ mod test {
         let output = gateway
             .query(
                 vec![a_ch],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .recursive(false)
@@ -3916,7 +4071,7 @@ mod test {
         let output = gateway
             .query(
                 vec![a_ch],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .recursive(false)
@@ -3953,7 +4108,7 @@ mod test {
         let output = gateway
             .query(
                 vec![bioconda],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .recursive(false)
@@ -4009,7 +4164,7 @@ mod test {
 
         let mut mock = MockRepoDataSource::new();
         mock.add_record(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record("shared", "9.9.9", "linux-64"),
         );
         let custom: Arc<dyn super::RepoDataSource> = Arc::new(mock);
@@ -4021,7 +4176,7 @@ mod test {
                     super::Source::Custom(custom),
                     super::Source::Channel(bioconda),
                 ],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .recursive(false)
@@ -4061,7 +4216,7 @@ mod test {
         let output = gateway
             .query(
                 vec![a_ch.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .recursive(false)
@@ -4086,7 +4241,7 @@ mod test {
         let err = gateway
             .query(
                 vec![a_ch],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .recursive(false)
@@ -4114,7 +4269,7 @@ mod test {
 
         let mut mock = MockRepoDataSource::new();
         mock.add_record(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record("shared", "9.9.9", "linux-64"),
         );
         let custom: Arc<dyn super::RepoDataSource> = Arc::new(mock);
@@ -4126,7 +4281,7 @@ mod test {
                     super::Source::Custom(custom),
                     super::Source::Channel(bioconda),
                 ],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .recursive(false)
@@ -4191,7 +4346,7 @@ mod test {
 
         let mut mock = MockRepoDataSource::new();
         mock.add_record(
-            Platform::Linux64,
+            Subdir::Linux64,
             make_test_record("shared", "9.9.9", "linux-64"),
         );
         let custom: Arc<dyn super::RepoDataSource> = Arc::new(mock);
@@ -4204,7 +4359,7 @@ mod test {
                     super::Source::Custom(custom),
                     super::Source::Channel(bioconda),
                 ],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .recursive(false)
@@ -4256,7 +4411,7 @@ mod test {
         let output = gateway
             .query(
                 vec![a_ch.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .recursive(false)
@@ -4294,7 +4449,7 @@ mod test {
         let err = gateway
             .query(
                 vec![a_ch],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .recursive(false)
@@ -4321,7 +4476,7 @@ mod test {
         let output = gateway
             .query(
                 vec![a_ch.clone()],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .recursive(false)
@@ -4342,7 +4497,7 @@ mod test {
         let err = gateway
             .query(
                 vec![a_ch],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .recursive(false)
@@ -4370,7 +4525,7 @@ mod test {
         let output = gateway
             .query(
                 vec![bioconda],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .recursive(false)
@@ -4411,7 +4566,7 @@ mod test {
         let output = gateway
             .query(
                 vec![bioconda],
-                vec![Platform::Linux64, Platform::NoArch],
+                vec![Subdir::Linux64, Subdir::NoArch],
                 vec![MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .recursive(false)
@@ -4448,7 +4603,7 @@ mod test {
             let output = gateway
                 .query(
                     vec![a_ch.clone(), b_ch.clone()],
-                    vec![Platform::Linux64],
+                    vec![Subdir::Linux64],
                     vec![MatchSpec::from_str("shared", Strict).unwrap()],
                 )
                 .recursive(false)
@@ -4475,6 +4630,49 @@ mod test {
         }
     }
 
+    /// The channels of a multichannel share one priority tier, so a channel
+    /// that a member relates to must outrank or be outranked by the whole
+    /// multichannel: a `base` of any member comes before the first member and
+    /// an `overrides` target comes after the last one. The related channels
+    /// do not join the multichannel.
+    #[tokio::test]
+    async fn test_cep42_relations_of_multichannel_members_surround_the_multichannel() {
+        let dir = tempfile::tempdir().unwrap();
+        write_test_subdir(&dir.path().join("a"), "shared", "1.0.0", None, Some("../y"));
+        write_test_subdir(&dir.path().join("b"), "shared", "2.0.0", Some("../x"), None);
+        write_test_subdir(&dir.path().join("x"), "shared", "3.0.0", None, None);
+        write_test_subdir(&dir.path().join("y"), "shared", "4.0.0", None, None);
+        write_test_subdir(&dir.path().join("c"), "shared", "5.0.0", None, None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let channel = |name: &str| {
+            super::Source::from(Channel::from_url(
+                server.url().join(&format!("{name}/")).unwrap(),
+            ))
+        };
+        let multi_source =
+            super::MultiSource::new("grp", vec![channel("a"), channel("b")]).unwrap();
+
+        let output = Gateway::new()
+            .query(
+                vec![super::Source::from(multi_source), channel("c")],
+                vec![Subdir::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+
+        insta::assert_snapshot!(render_multichannel_buckets(&output.repodata), @r"
+        - | x
+        grp | a
+        grp | b
+        - | y
+        - | c
+        ");
+    }
+
     /// One malformed declaration must produce ONE warning, not one
     /// per queried platform.
     #[tokio::test]
@@ -4497,7 +4695,7 @@ mod test {
         let output = gateway
             .query(
                 vec![a_ch],
-                vec![Platform::Linux64, Platform::NoArch],
+                vec![Subdir::Linux64, Subdir::NoArch],
                 vec![MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .recursive(false)
@@ -4544,7 +4742,7 @@ mod test {
         let output = gateway
             .query(
                 vec![bioconda, conda_forge],
-                vec![Platform::Linux64],
+                vec![Subdir::Linux64],
                 vec![MatchSpec::from_str("shared", Strict).unwrap()],
             )
             .recursive(false)
@@ -4572,6 +4770,147 @@ mod test {
             )),
             "expected UserOrderConflict warning; got {:?}",
             output.warnings,
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn package_fetches_run_while_channel_discovery_is_pending() {
+        use axum::{Router, routing::get};
+        use std::time::Duration;
+        use tokio::{net::TcpListener, sync::Notify, time::timeout};
+
+        struct UnblockingSource(Arc<Notify>);
+
+        #[async_trait::async_trait]
+        impl super::RepoDataSource for UnblockingSource {
+            async fn fetch_package_records(
+                &self,
+                _platform: Subdir,
+                _name: &PackageName,
+            ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
+                self.0.notify_one();
+                Ok(vec![Arc::new(make_test_record(
+                    "shared", "9.0.0", "linux-64",
+                ))])
+            }
+
+            fn package_names(&self, _platform: Subdir) -> Vec<String> {
+                vec!["shared".to_string()]
+            }
+        }
+
+        // Discovery cannot finish until an independent package fetch runs.
+        let package_fetched = Arc::new(Notify::new());
+        let wait_for_package = package_fetched.clone();
+        let app = Router::new().route(
+            "/linux-64/repodata.json",
+            get(move || {
+                let wait_for_package = wait_for_package.clone();
+                async move {
+                    wait_for_package.notified().await;
+                    r#"{"info":{"subdir":"linux-64"},"packages":{},"packages.conda":{}}"#
+                }
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let channel = Channel::from_url(Url::parse(&format!("http://{address}/")).unwrap());
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(UnblockingSource(package_fetched));
+        let gateway = Gateway::new();
+        let result = timeout(
+            Duration::from_secs(5),
+            gateway
+                .query(
+                    [
+                        super::Source::Channel(channel),
+                        super::Source::Custom(source),
+                    ],
+                    [Subdir::Linux64],
+                    [PackageName::try_from("shared").unwrap()],
+                )
+                .execute(),
+        )
+        .await;
+        server.abort();
+        let output = result
+            .expect("discovery blocked independent package fetching")
+            .unwrap();
+        assert!(output[0].is_empty());
+        assert_eq!(
+            output[1]
+                .iter()
+                .map(|record| record.package_record.version.as_str())
+                .collect::<Vec<_>>(),
+            ["9.0.0"],
+        );
+    }
+
+    #[tokio::test]
+    async fn custom_source_records_contribute_detector_demand_without_registration_origins() {
+        let dir = tempfile::tempdir().unwrap();
+        for platform in [Subdir::Linux64, Subdir::NoArch] {
+            let subdir = dir.path().join(platform.as_str());
+            std::fs::create_dir_all(&subdir).unwrap();
+            let registrations = if platform == Subdir::NoArch {
+                serde_json::json!({"custom-detect": ["__custom"], "extra-detect": ["__extra"]})
+            } else {
+                serde_json::json!({})
+            };
+            std::fs::write(subdir.join("repodata.json"), serde_json::to_vec(&serde_json::json!({
+                "info": {"subdir": platform.as_str(), "virtual_package_detectors": registrations},
+                "packages": {}, "packages.conda": {},
+            })).unwrap()).unwrap();
+        }
+        let channel = Channel::from_url(Url::from_directory_path(dir.path()).unwrap());
+        let mut source = MockRepoDataSource::new();
+        let mut record = make_test_record("consumer", "1", "linux-64");
+        record.package_record.depends = vec!["__custom >=1".to_string()];
+        source.add_record(Subdir::Linux64, record);
+        let output = Gateway::new()
+            .query(
+                [
+                    super::Source::Custom(Arc::new(source)),
+                    super::Source::Channel(channel.clone()),
+                ],
+                [Subdir::Linux64],
+                [PackageName::new_unchecked("consumer")],
+            )
+            .virtual_package_detectors(Subdir::Linux64)
+            .constraints([MatchSpec::from_str("__extra >=1", Lenient).unwrap()])
+            .await
+            .unwrap();
+        assert_eq!(
+            output.repodata[0]
+                .iter()
+                .map(|r| r.package_record.name.as_normalized())
+                .collect::<Vec<_>>(),
+            ["consumer"]
+        );
+        assert!(output.repodata[1].is_empty());
+        let detectors = output.virtual_package_detectors.unwrap();
+        assert_eq!(
+            detectors
+                .wanted_names
+                .iter()
+                .map(PackageName::as_normalized)
+                .collect::<Vec<_>>(),
+            ["__custom", "__extra"]
+        );
+        assert!(
+            detectors
+                .registrations
+                .iter()
+                .all(|r| r.origin() == &channel.base_url)
+        );
+        assert_eq!(
+            detectors
+                .registrations
+                .iter()
+                .map(|r| r.registration.detector.as_normalized())
+                .collect::<Vec<_>>(),
+            ["custom-detect", "extra-detect"]
         );
     }
 }

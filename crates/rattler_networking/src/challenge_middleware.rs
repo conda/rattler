@@ -35,7 +35,7 @@ pub struct Challenge {
 
 /// Parse all challenges from every `WWW-Authenticate` header in `headers`.
 ///
-/// RFC 7235 parsing is delegated to the `http-auth` crate. Tolerant: a
+/// Parsing (RFC 9110 §11, formerly RFC 7235) is delegated to the `http-auth` crate. Tolerant: a
 /// header value `http-auth` cannot parse contributes no challenges instead
 /// of failing the whole set, so one malformed header never hides the
 /// others. (`http-auth` does not support the apocryphal `token68` challenge

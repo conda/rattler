@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 import os
-from typing import List, TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Literal
 
 from rattler.package.paths_json import FileMode
 from rattler.rattler import PyPrefixPaths, PyPrefixPathsEntry, PyPrefixPathType
@@ -110,12 +111,12 @@ class PrefixPathsEntry(BasePathLike):
         self,
         relative_path: os.PathLike[str],
         path_type: PrefixPathType,
-        prefix_placeholder: Optional[str] = None,
-        file_mode: Optional[FileMode] = None,
-        sha256: Optional[bytes] = None,
-        sha256_in_prefix: Optional[bytes] = None,
-        size_in_bytes: Optional[int] = None,
-        original_path: Optional[os.PathLike[str]] = None,
+        prefix_placeholder: str | None = None,
+        file_mode: FileMode | None = None,
+        sha256: bytes | None = None,
+        sha256_in_prefix: bytes | None = None,
+        size_in_bytes: int | None = None,
+        original_path: os.PathLike[str] | None = None,
     ) -> None:
         """
         Create a new PrefixPathsEntry instance.
@@ -249,7 +250,7 @@ class PrefixPathsEntry(BasePathLike):
         return self._inner.prefix_placeholder
 
     @prefix_placeholder.setter
-    def prefix_placeholder(self, placeholder: Optional[str]) -> None:
+    def prefix_placeholder(self, placeholder: str | None) -> None:
         self._inner.set_prefix_placeholder(placeholder)
 
     @property
@@ -272,7 +273,7 @@ class PrefixPathsEntry(BasePathLike):
         return FileMode._from_py_file_mode(self._inner.file_mode)
 
     @file_mode.setter
-    def file_mode(self, file_mode: Optional[FileMode]) -> None:
+    def file_mode(self, file_mode: FileMode | None) -> None:
         self._inner.set_file_mode(file_mode._inner if file_mode else None)
 
     @property
@@ -295,7 +296,7 @@ class PrefixPathsEntry(BasePathLike):
         return self._inner.sha256
 
     @sha256.setter
-    def sha256(self, sha256: Optional[bytes]) -> None:
+    def sha256(self, sha256: bytes | None) -> None:
         self._inner.set_sha256(sha256)
 
     @property
@@ -318,7 +319,7 @@ class PrefixPathsEntry(BasePathLike):
         return self._inner.sha256_in_prefix
 
     @sha256_in_prefix.setter
-    def sha256_in_prefix(self, sha256: Optional[bytes]) -> None:
+    def sha256_in_prefix(self, sha256: bytes | None) -> None:
         self._inner.set_sha256_in_prefix(sha256)
 
     @property
@@ -341,7 +342,7 @@ class PrefixPathsEntry(BasePathLike):
         return self._inner.size_in_bytes
 
     @size_in_bytes.setter
-    def size_in_bytes(self, size: Optional[int]) -> None:
+    def size_in_bytes(self, size: int | None) -> None:
         self._inner.set_size_in_bytes(size)
 
 
@@ -400,7 +401,7 @@ class PrefixPaths:
         self._paths.paths_version = version
 
     @property
-    def paths(self) -> List[PrefixPathsEntry]:
+    def paths(self) -> list[PrefixPathsEntry]:
         """
         All entries included in the package.
 
@@ -420,7 +421,7 @@ class PrefixPaths:
         return [PrefixPathsEntry._from_py_paths_entry(path) for path in self._paths.paths]
 
     @paths.setter
-    def paths(self, paths: List[PrefixPathsEntry]) -> None:
+    def paths(self, paths: list[PrefixPathsEntry]) -> None:
         self._paths.paths = [path._inner for path in paths]
 
     def __repr__(self) -> str:

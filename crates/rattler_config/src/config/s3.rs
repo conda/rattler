@@ -14,6 +14,20 @@ impl S3OptionsMap {
     }
 }
 
+/// How to address an S3 bucket.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum S3AddressingStyle {
+    /// Address the bucket as a virtual host, e.g.
+    /// <https://bucket-name.s3.us-east-1.amazonaws.com>.
+    #[default]
+    VirtualHost,
+
+    /// Address the bucket through the path, e.g.
+    /// <https://s3.us-east-1.amazonaws.com/bucket-name>.
+    Path,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub struct S3Options {
@@ -23,8 +37,9 @@ pub struct S3Options {
     /// The name of the S3 region
     pub region: String,
 
-    /// Force path style URLs instead of subdomain style
-    pub force_path_style: bool,
+    /// How to address the bucket
+    #[serde(default)]
+    pub addressing_style: S3AddressingStyle,
 }
 
 impl Config for S3OptionsMap {

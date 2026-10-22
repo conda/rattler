@@ -6,10 +6,12 @@
 
 #[cfg(feature = "libsolv_c")]
 pub mod libsolv_c;
+#[cfg(any(feature = "resolvo", feature = "libsolv_c"))]
+mod priority_tier;
 #[cfg(feature = "resolvo")]
 pub mod resolvo;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::{
     Arc,
@@ -18,7 +20,7 @@ use std::sync::{
 
 use jiff::Timestamp;
 use rattler_conda_types::{
-    GenericVirtualPackage, MatchSpec, PackageName, RepoDataRecord, SolverResult, utils::TimestampMs,
+    GenericVirtualPackage, MatchSpec, Matches, PackageName, RepoDataRecord, SolverResult,
 };
 use url::Url;
 
@@ -149,6 +151,48 @@ impl CancellationToken {
     }
 }
 
+/// Global timestamp selection and missing metadata policy for [`ExcludeNewer`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum TimestampPolicy {
+    /// Prefer index time, then build time; include records missing both.
+    AllowMissing,
+    /// Prefer index time, then build time; reject records missing both.
+    #[default]
+    RequireTimestamp,
+    /// Use only index time; reject records without an index timestamp.
+    RequireIndexedTimestamp,
+}
+
+/// Why a record is excluded by [`ExcludeNewer`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum TimestampExclusionReason {
+    /// The strict policy requires publication metadata.
+    #[error("the package has no indexed timestamp")]
+    MissingIndexedTimestamp,
+    /// Neither publication nor build time is available.
+    #[error("the package has no timestamp")]
+    MissingTimestamp,
+    /// The selected timestamp is strictly later than the effective cutoff.
+    #[error("the package is uploaded after the cutoff date of {}", cutoff.to_zoned(jiff::tz::TimeZone::system()).strftime("%Y-%m-%d %H:%M:%S"))]
+    NewerThanCutoff {
+        /// The effective package/channel cutoff.
+        cutoff: Timestamp,
+    },
+}
+
+/// Error returned by [`ExcludeNewer::with_exemption`] for a spec that cannot
+/// be used as an exemption.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum InvalidExemptionError {
+    /// The spec does not name exactly one package.
+    #[error("exclude-newer exemption '{0}' must name exactly one package")]
+    NotExactName(String),
+    /// The spec has extras, a condition, or a namespace, which do not select
+    /// records.
+    #[error("exclude-newer exemption '{0}' must not have extras, a condition, or a namespace")]
+    UnsupportedField(String),
+}
+
 /// Configuration for filtering packages newer than a cutoff.
 ///
 /// This feature helps reduce the risk of installing compromised packages by
@@ -160,6 +204,17 @@ impl CancellationToken {
 ///
 /// This is similar to pnpm's `minimumReleaseAge` feature.
 ///
+/// By default, [`TimestampPolicy::RequireTimestamp`] uses the index timestamp,
+/// falls back to build time, and excludes records missing both. Use
+/// [`Self::with_timestamp_policy`] to change this for all packages and channels.
+/// Records exactly at their effective cutoff remain eligible.
+///
+/// Records matching an exemption added with [`Self::with_exemption`] are
+/// never excluded, regardless of their timestamp. This allows a single vetted
+/// release (for example an urgent security fix) without lowering the cutoff
+/// for every future release of that package. A broad spec such as `pkg` or
+/// `pkg >=1` exempts every matching release, including future ones.
+///
 /// # Example
 ///
 /// ```
@@ -168,8 +223,6 @@ impl CancellationToken {
 ///
 /// // Only allow packages that have been published for at least 1 hour
 /// let config = ExcludeNewer::from_duration(Duration::from_secs(60 * 60))
-///     // But allow "my-internal-package" to use a package-specific cutoff
-///     .with_package_duration("my-internal-package".parse().unwrap(), Duration::ZERO)
 ///     // And allow a trusted internal channel to skip the delay entirely
 ///     .with_channel_duration("my-internal-channel", Duration::ZERO);
 /// ```
@@ -186,10 +239,15 @@ pub struct ExcludeNewer {
 
     /// Package-specific cutoff dates that override both [`Self::cutoff`] and
     /// [`Self::channel_cutoffs`] for matching package names.
+    ///
+    /// Deprecated in favor of [`Self::exemptions`].
     package_cutoffs: HashMap<PackageName, Timestamp>,
 
-    /// Whether to include packages that don't have a timestamp.
-    include_unknown_timestamp: bool,
+    /// Records matching any of these specs are never excluded.
+    exemptions: HashSet<MatchSpec>,
+
+    /// Timestamp policy shared by all packages and channels.
+    timestamp_policy: TimestampPolicy,
 }
 
 impl ExcludeNewer {
@@ -205,7 +263,8 @@ impl ExcludeNewer {
             cutoff,
             channel_cutoffs: HashMap::new(),
             package_cutoffs: HashMap::new(),
-            include_unknown_timestamp: false,
+            exemptions: HashSet::new(),
+            timestamp_policy: TimestampPolicy::default(),
         }
     }
 
@@ -221,17 +280,24 @@ impl ExcludeNewer {
             cutoff: Self::cutoff_from_duration(duration, now),
             channel_cutoffs: HashMap::new(),
             package_cutoffs: HashMap::new(),
-            include_unknown_timestamp: false,
+            exemptions: HashSet::new(),
+            timestamp_policy: TimestampPolicy::default(),
         }
     }
 
     /// Sets the absolute cutoff override for a specific package.
+    #[deprecated(
+        note = "use `with_exemption` to allow specific vetted releases instead of lowering the cutoff for every release of a package"
+    )]
     pub fn with_package_cutoff(mut self, package: PackageName, cutoff: Timestamp) -> Self {
         self.package_cutoffs.insert(package, cutoff);
         self
     }
 
     /// Sets the duration override for a specific package.
+    #[deprecated(
+        note = "use `with_exemption` to allow specific vetted releases instead of lowering the cutoff for every release of a package"
+    )]
     pub fn with_package_duration(
         mut self,
         package: PackageName,
@@ -246,6 +312,9 @@ impl ExcludeNewer {
 
     /// Sets the duration override for a specific package using an explicit
     /// reference time.
+    #[deprecated(
+        note = "use `with_exemption` to allow specific vetted releases instead of lowering the cutoff for every release of a package"
+    )]
     pub fn with_package_duration_with_now(
         mut self,
         package: PackageName,
@@ -289,17 +358,60 @@ impl ExcludeNewer {
         self
     }
 
-    /// Sets whether packages without a timestamp should be included.
+    /// Exempts records matching `spec` from the cutoff and the timestamp
+    /// policy.
     ///
-    /// Call this to override the constructor default.
-    pub fn with_include_unknown_timestamp(mut self, include: bool) -> Self {
-        self.include_unknown_timestamp = include;
+    /// The spec must name exactly one package; a spec without a name or with
+    /// a glob or regex name would exempt more than intended. Extras,
+    /// conditions, and namespaces are rejected because matching ignores them.
+    /// A broad spec such as `pkg` or `pkg >=1` exempts every matching release,
+    /// including future ones.
+    ///
+    /// If the spec has a channel, only records from exactly that channel are
+    /// exempt. The channel is compared by its canonical URL, so a multichannel
+    /// name never matches; use the name or URL of the underlying channel.
+    pub fn with_exemption(mut self, spec: MatchSpec) -> Result<Self, InvalidExemptionError> {
+        if spec.name.as_exact().is_none() {
+            return Err(InvalidExemptionError::NotExactName(spec.to_string()));
+        }
+        if spec.extras.is_some() || spec.condition.is_some() || spec.namespace.is_some() {
+            return Err(InvalidExemptionError::UnsupportedField(spec.to_string()));
+        }
+        self.exemptions.insert(spec);
+        Ok(self)
+    }
+
+    /// Returns whether a record matches one of the exemptions.
+    fn is_exempt(&self, record: &RepoDataRecord) -> bool {
+        self.exemptions.iter().any(|spec| {
+            // `MatchSpec::matches` ignores the channel, subdir, and file name,
+            // so check them here.
+            // TODO: these checks may belong in `MatchSpec::matches` itself,
+            // which the solver also uses for ordinary specs.
+            spec.matches(record)
+                && spec
+                    .subdir
+                    .as_ref()
+                    .is_none_or(|subdir| *subdir == record.package_record.subdir)
+                && spec
+                    .file_name
+                    .as_ref()
+                    .is_none_or(|file_name| *file_name == record.identifier.to_file_name())
+                && spec.channel.as_ref().is_none_or(|channel| {
+                    record.channel.as_deref() == Some(channel.canonical_name().as_str())
+                })
+        })
+    }
+
+    /// Sets the global timestamp policy. Cutoff overrides do not change it.
+    pub fn with_timestamp_policy(mut self, policy: TimestampPolicy) -> Self {
+        self.timestamp_policy = policy;
         self
     }
 
-    /// Returns whether packages without a timestamp are included.
-    pub fn include_unknown_timestamp(&self) -> bool {
-        self.include_unknown_timestamp
+    /// Returns the global timestamp policy.
+    pub fn timestamp_policy(&self) -> TimestampPolicy {
+        self.timestamp_policy
     }
 
     /// Computes the cutoff time for the given package and channel.
@@ -311,17 +423,34 @@ impl ExcludeNewer {
             .unwrap_or(self.cutoff)
     }
 
-    /// Returns whether a package should be excluded.
-    pub fn is_excluded(
-        &self,
-        package: &PackageName,
-        channel: Option<&str>,
-        timestamp: Option<&TimestampMs>,
-    ) -> bool {
-        match timestamp {
-            Some(timestamp) => *timestamp > self.cutoff_for_package(package, channel),
-            None => !self.include_unknown_timestamp(),
+    /// Returns why a record is excluded, preserving timestamp provenance.
+    pub fn exclusion_reason(&self, record: &RepoDataRecord) -> Option<TimestampExclusionReason> {
+        if self.is_exempt(record) {
+            return None;
         }
+        let package = &record.package_record;
+        let timestamp = match self.timestamp_policy {
+            TimestampPolicy::RequireIndexedTimestamp => match package.indexed_timestamp {
+                Some(timestamp) => Some(timestamp),
+                None => return Some(TimestampExclusionReason::MissingIndexedTimestamp),
+            },
+            _ => package.indexed_timestamp.or(package.timestamp),
+        };
+        let cutoff = self.cutoff_for_package(&package.name, record.channel.as_deref());
+        match timestamp {
+            Some(timestamp) if timestamp > cutoff => {
+                Some(TimestampExclusionReason::NewerThanCutoff { cutoff })
+            }
+            None if self.timestamp_policy == TimestampPolicy::RequireTimestamp => {
+                Some(TimestampExclusionReason::MissingTimestamp)
+            }
+            _ => None,
+        }
+    }
+
+    /// Returns whether a record should be excluded by the timestamp policy and cutoff.
+    pub fn is_excluded(&self, record: &RepoDataRecord) -> bool {
+        self.exclusion_reason(record).is_some()
     }
 }
 
@@ -422,6 +551,12 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     ///   behavior; or
     /// - a relative duration, equivalent to the historical `min_age`
     ///   behavior.
+    ///
+    /// The cutoff applies to `locked_packages` and `pinned_packages` as well.
+    /// A locked record newer than the cutoff is not favored, so the solver
+    /// picks a record the cutoff allows instead. With the `resolvo` backend,
+    /// a pinned record newer than the cutoff makes the solve unsatisfiable
+    /// when the package is needed, the same as with `excluded_candidates`.
     pub exclude_newer: Option<ExcludeNewer>,
 
     /// The solve strategy.
@@ -466,12 +601,12 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     pub cancellation_token: Option<CancellationToken>,
 }
 
-impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
-    for SolverTask<'r, Vec<RepoDataIter<I>>>
-{
-    fn from_iter<T: IntoIterator<Item = I>>(iter: T) -> Self {
+impl<'r, T> SolverTask<'r, T> {
+    /// Creates a task that solves against `available_packages` with default
+    /// settings for everything else.
+    fn with_available_packages(available_packages: T) -> Self {
         Self {
-            available_packages: iter.into_iter().map(|iter| RepoDataIter(iter)).collect(),
+            available_packages,
             locked_packages: Vec::new(),
             pinned_packages: Vec::new(),
             virtual_packages: Vec::new(),
@@ -485,6 +620,22 @@ impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
             excluded_candidates: HashMap::new(),
             cancellation_token: None,
         }
+    }
+}
+
+impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
+    for SolverTask<'r, Vec<RepoDataIter<I>>>
+{
+    fn from_iter<T: IntoIterator<Item = I>>(iter: T) -> Self {
+        Self::with_available_packages(iter.into_iter().map(|iter| RepoDataIter(iter)).collect())
+    }
+}
+
+impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<ChannelRepoData<'r, I>>
+    for SolverTask<'r, Vec<ChannelRepoData<'r, I>>>
+{
+    fn from_iter<T: IntoIterator<Item = ChannelRepoData<'r, I>>>(iter: T) -> Self {
+        Self::with_available_packages(iter.into_iter().collect())
     }
 }
 
@@ -521,7 +672,12 @@ pub enum SolveStrategy {
 /// Some solvers may add additional functionality to their specific
 /// implementation that enables caching the repodata to disk in an efficient way
 /// (see [`crate::libsolv_c::RepoData`] for an example).
-pub trait SolverRepoData<'a>: FromIterator<&'a RepoDataRecord> {}
+pub trait SolverRepoData<'a>: FromIterator<&'a RepoDataRecord> {
+    /// Places these records in the multichannel called `name`.
+    ///
+    /// See [`ChannelRepoData`] for how a multichannel affects the solve.
+    fn set_multi_channel(&mut self, name: &'a str);
+}
 
 /// Defines the ability to convert a type into [`SolverRepoData`].
 pub trait IntoRepoData<'a, S: SolverRepoData<'a>> {
@@ -557,5 +713,84 @@ impl<'a, T: IntoIterator<Item = &'a RepoDataRecord>, S: SolverRepoData<'a>> Into
 {
     fn into(self) -> S {
         self.0.into_iter().collect()
+    }
+}
+
+/// The records of a single channel subdirectory, together with the
+/// multichannel the channel was requested through, if any.
+///
+/// All channels of one multichannel form a single channel priority tier, like
+/// conda treats them. With [`ChannelPriority::Strict`] a package is not
+/// excluded from a later member just because an earlier member also provides
+/// that package, while channels outside the multichannel are still excluded.
+/// With [`ChannelPriority::Flexible`] the solver does not prefer an earlier
+/// member over a later one. The order of the members only breaks ties between
+/// otherwise identical candidates.
+///
+/// For backends that support channel-specific match specs, a spec whose
+/// channel name equals the name of the multichannel (e.g. `defaults::python`)
+/// accepts records from every member.
+pub struct ChannelRepoData<'a, T> {
+    /// The records of the channel subdirectory.
+    pub records: T,
+
+    /// The name of the multichannel this channel belongs to, or `None` if the
+    /// channel was requested on its own.
+    pub multi_channel: Option<&'a str>,
+}
+
+impl<'a, T: IntoIterator<Item = &'a RepoDataRecord>, S: SolverRepoData<'a>> IntoRepoData<'a, S>
+    for ChannelRepoData<'a, T>
+{
+    fn into(self) -> S {
+        let mut repo_data: S = self.records.into_iter().collect();
+        if let Some(name) = self.multi_channel {
+            repo_data.set_multi_channel(name);
+        }
+        repo_data
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rattler_conda_types::ParseMatchSpecOptions;
+
+    use super::*;
+
+    #[test]
+    fn exemption_requires_exact_name() {
+        let config = ExcludeNewer::from_datetime(Timestamp::UNIX_EPOCH);
+        let options = ParseMatchSpecOptions::lenient().with_exact_names_only(false);
+        for spec in ["pkg-*", "*", "^pkg-.*$"] {
+            let spec = MatchSpec::from_str(spec, options).unwrap();
+            assert!(
+                matches!(
+                    config.clone().with_exemption(spec.clone()),
+                    Err(InvalidExemptionError::NotExactName(_))
+                ),
+                "expected '{spec}' to be rejected"
+            );
+        }
+        let options = ParseMatchSpecOptions::strict()
+            .with_extras(true)
+            .with_conditionals(true);
+        for spec in ["pkg[extras=[foo]]", r#"pkg[when="other"]"#] {
+            let spec = MatchSpec::from_str(spec, options).unwrap();
+            assert!(
+                matches!(
+                    config.clone().with_exemption(spec.clone()),
+                    Err(InvalidExemptionError::UnsupportedField(_))
+                ),
+                "expected '{spec}' to be rejected"
+            );
+        }
+
+        let mut spec = MatchSpec::from_str("pkg ==1.0", ParseMatchSpecOptions::strict()).unwrap();
+        assert!(config.clone().with_exemption(spec.clone()).is_ok());
+        spec.namespace = Some("ns".to_string());
+        assert!(matches!(
+            config.with_exemption(spec),
+            Err(InvalidExemptionError::UnsupportedField(_))
+        ));
     }
 }

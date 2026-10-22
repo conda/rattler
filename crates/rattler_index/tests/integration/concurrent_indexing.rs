@@ -11,7 +11,7 @@
 use std::path::Path;
 
 use opendal::Operator;
-use rattler_conda_types::Platform;
+use rattler_conda_types::Subdir;
 use rattler_index::{PackageRevisionAssignment, PreconditionChecks, index};
 use tracing::Instrument;
 
@@ -102,7 +102,7 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
     let handle1 = tokio::spawn(
         async move {
             index(
-                Some(Platform::NoArch),
+                Some(Subdir::NoArch),
                 op1,
                 None,
                 false,
@@ -123,7 +123,7 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
     let handle2 = tokio::spawn(
         async move {
             index(
-                Some(Platform::NoArch),
+                Some(Subdir::NoArch),
                 op2,
                 None,
                 false,
