@@ -39,9 +39,7 @@ pub fn extract_conda(archive: &Path, destination: &Path) -> Result<ExtractResult
     crate::read::extract_conda_via_streaming(file, destination)
 }
 
-/// Extracts a wheel at the specified path to a directory as an extracted conda
-/// package, synthesizing its `info/` metadata from `record`. See
-/// [`crate::wheel`] for the layout.
+/// Extracts a wheel into the [`crate::wheel`] conda layout using `record` metadata.
 pub fn extract_wheel(
     archive: &Path,
     destination: &Path,

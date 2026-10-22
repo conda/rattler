@@ -69,9 +69,7 @@ pub async fn extract_conda_via_buffering(
     .await
 }
 
-/// Extracts a wheel into `destination` as an extracted conda package,
-/// synthesizing its `info/` metadata from `record`. See [`crate::wheel`] for
-/// the layout.
+/// Extracts a wheel stream into the [`crate::wheel`] conda layout using `record` metadata.
 pub async fn extract_wheel(
     reader: impl AsyncRead + Unpin,
     destination: &Path,

@@ -66,8 +66,7 @@ pub enum PackageValidationError {
     #[error("failed to read 'wheel.json'")]
     ReadWheelJsonError(#[source] std::io::Error),
 
-    /// The entry was converted from a wheel by a different version of the
-    /// converter, so its layout may differ from what this version expects.
+    /// The cached wheel layout was produced by a different converter version.
     #[error(
         "the package was converted from a wheel with conversion version {found}, expected {expected}"
     )]
@@ -146,9 +145,7 @@ pub fn validate_package_directory(
         Ok(paths) => paths,
     };
 
-    // An entry converted from a wheel is derived data: its archive hash and
-    // paths.json stay valid when the converter changes, so the conversion
-    // version is the only thing that can flag it as outdated.
+    // Archive hashes cannot detect changes to the wheel conversion layout.
     match WheelJson::from_package_directory(package_dir) {
         Ok(wheel) if wheel.conversion_version != CONVERSION_VERSION => {
             return Err(PackageValidationError::OutdatedWheelConversion {

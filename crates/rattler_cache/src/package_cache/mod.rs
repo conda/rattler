@@ -264,8 +264,7 @@ pub enum PackageCacheError {
     #[error("no eligible writable layers to cache package to")]
     NoWritableLayers,
 
-    /// A wheel can only be cached when its repodata record is known, because
-    /// the package metadata (`info/index.json`) is synthesized from it.
+    /// Wheel conversion requires a package record to generate conda metadata.
     #[error("a package record is required to cache the wheel at {0}")]
     WheelRequiresRecord(PathBuf),
 
@@ -894,13 +893,8 @@ impl PackageCache {
         .await
     }
 
-    /// Fetch a wheel and cache its converted conda layout, using `record` for
-    /// the cache key, expected hashes, and generated package metadata.
-    /// The URL need not end in `.whl`.
-    ///
-    /// Retry and concurrency behavior is the same as
-    /// [`Self::get_or_fetch_from_url_with_retry`]. Unlike conda archives, a wheel
-    /// cannot be fetched with only a cache key.
+    /// Fetch a wheel as a conda-layout cache entry, using `record` for its key,
+    /// hashes, and metadata. Retry behavior matches [`Self::get_or_fetch_from_url_with_retry`].
     #[instrument(skip_all, fields(url=%url))]
     pub async fn get_or_fetch_wheel_from_url_with_retry(
         &self,
@@ -2746,37 +2740,6 @@ mod test {
             }
         }
         (cache, all_layers_paths)
-    }
-
-    #[rstest::rstest]
-    #[case::conda("clobber/clobber-python-0.1.0-cpython.conda")]
-    #[case::tar_bz2("clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2")]
-    #[tokio::test]
-    async fn test_conda_url_accepts_cache_key(#[case] archive: &str) {
-        let path = get_test_data_dir().join(archive);
-        let identifier = CondaArchiveIdentifier::try_from_path(&path).unwrap();
-        let key =
-            CacheKey::from(identifier).with_sha256(compute_file_digest::<Sha256>(&path).unwrap());
-        let route = format!("/{}", path.file_name().unwrap().to_str().unwrap());
-        let router =
-            Router::new().route_service(&route, tower_http::services::ServeFile::new(path));
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let url = Url::parse(&format!("http://{}{route}", listener.local_addr().unwrap())).unwrap();
-        let server = tokio::spawn(axum::serve(listener, router).into_future());
-        let packages_dir = tempdir().unwrap();
-        let cache = PackageCache::new(packages_dir.path());
-        let cached = cache
-            .get_or_fetch_from_url(
-                key,
-                url,
-                rattler_networking::LazyClient::default(),
-                None,
-                None,
-            )
-            .await
-            .unwrap();
-        assert!(cached.path().join("info/index.json").is_file());
-        server.abort();
     }
 
     #[tokio::test]

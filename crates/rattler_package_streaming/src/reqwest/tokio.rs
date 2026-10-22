@@ -197,14 +197,8 @@ pub async fn extract_conda(
     }
 }
 
-/// Downloads a wheel from the specified remote location and extracts it into
-/// `destination` as an extracted conda package, synthesizing its `info/`
-/// metadata from `record`. See [`rattler_package_streaming::wheel`](crate::wheel)
-/// for the layout.
-///
-/// Wheels referenced from a conda channel usually live on another host (for
-/// example `files.pythonhosted.org`), so `client` should not assume channel
-/// specific authentication applies to `url`.
+/// Downloads a wheel into the [`crate::wheel`] conda layout using `record` metadata.
+/// The URL may use a different host than the channel; scope credentials accordingly.
 pub async fn extract_wheel(
     client: reqwest_middleware::ClientWithMiddleware,
     url: Url,
@@ -213,7 +207,7 @@ pub async fn extract_wheel(
     reporter: Option<Arc<dyn DownloadReporter>>,
     record: &PackageRecord,
 ) -> Result<ExtractResult, ExtractError> {
-    let reader = get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;
+    let reader = get_reader(url, client, expected_sha256, reporter.clone()).await?;
     let result = crate::tokio::async_read::extract_wheel(reader, destination, record).await?;
     if let Some(reporter) = &reporter {
         reporter.on_download_complete();

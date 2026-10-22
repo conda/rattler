@@ -14,6 +14,7 @@ readme.workspace = true
 [dependencies]
 base64 = { workspace = true }
 bzip2 = { workspace = true }
+csv = { workspace = true }
 jiff = { workspace = true }
 http = { workspace = true, optional = true }
 filetime = { workspace = true }
@@ -36,6 +37,7 @@ reqwest-middleware = { workspace = true, optional = true }
 simple_spawn_blocking = { workspace = true, features = ["tokio"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }

@@ -5,6 +5,7 @@ use crate::{
     install::{InstallDriver, InstallOptions, transaction, unlink_package},
     package_cache::PackageCache,
 };
+use futures::TryFutureExt;
 use rattler_conda_types::{PrefixRecord, RepoDataRecord, Subdir, Version, prefix::Prefix};
 use rattler_networking::LazyClient;
 use rattler_networking::retry_policies::default_retry_policy;
@@ -85,34 +86,19 @@ pub async fn execute_operation(
 
     let install_package = if let Some(install_record) = install_record {
         // Make sure the package is available in the package cache.
-        let cached = match install_record.identifier.archive_type {
-            rattler_conda_types::package::DistArchiveType::Wheel(_) => {
-                package_cache
-                    .get_or_fetch_wheel_from_url_with_retry(
-                        &install_record.package_record,
-                        install_record.url.clone(),
-                        download_client.clone(),
-                        default_retry_policy(),
-                        None,
-                        None,
-                    )
-                    .await
-            }
-            rattler_conda_types::package::DistArchiveType::Conda(_) => {
-                package_cache
-                    .get_or_fetch_from_url_with_retry(
-                        &install_record.package_record,
-                        install_record.url.clone(),
-                        download_client.clone(),
-                        default_retry_policy(),
-                        None,
-                        None,
-                    )
-                    .await
-            }
-        }
-        .unwrap();
-        Some((install_record.clone(), cached))
+        package_cache
+            .get_or_fetch_from_url_with_retry(
+                &install_record.package_record,
+                install_record.url.clone(),
+                download_client.clone(),
+                default_retry_policy(),
+                None,
+                None,
+            )
+            .map_ok(|cache_lock| Some((install_record.clone(), cache_lock)))
+            .map_err(anyhow::Error::from)
+            .await
+            .unwrap()
     } else {
         None
     };

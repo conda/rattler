@@ -11,7 +11,7 @@ use std::path::Path;
 async fn spawn_extract(
     archive: &Path,
     destination: &Path,
-    extract: fn(&Path, &Path) -> Result<ExtractResult, ExtractError>,
+    extract: impl FnOnce(&Path, &Path) -> Result<ExtractResult, ExtractError> + Send + 'static,
 ) -> Result<ExtractResult, ExtractError> {
     let archive = archive.to_owned();
     let destination = destination.to_owned();
@@ -68,29 +68,17 @@ pub async fn extract_conda(
     spawn_extract(archive, destination, crate::fs::extract_conda).await
 }
 
-/// Extracts a wheel at the specified path to a directory as an extracted conda
-/// package on a blocking worker thread. See [`crate::wheel`] for the layout.
+/// Extracts a wheel into the [`crate::wheel`] conda layout on a blocking worker.
 pub async fn extract_wheel(
     archive: &Path,
     destination: &Path,
     record: &PackageRecord,
 ) -> Result<ExtractResult, ExtractError> {
-    let archive = archive.to_owned();
-    let destination = destination.to_owned();
     let record = record.clone();
-    match tokio::task::spawn_blocking(move || {
-        crate::fs::extract_wheel(&archive, &destination, &record)
+    spawn_extract(archive, destination, move |archive, destination| {
+        crate::fs::extract_wheel(archive, destination, &record)
     })
     .await
-    {
-        Ok(result) => result,
-        Err(err) => {
-            if let Ok(reason) = err.try_into_panic() {
-                std::panic::resume_unwind(reason);
-            }
-            Err(ExtractError::Cancelled)
-        }
-    }
 }
 
 /// Extracts the contents a package archive at the specified path to a directory. The type of
