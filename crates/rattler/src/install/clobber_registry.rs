@@ -34,6 +34,7 @@ pub enum ClobberMode {
     Error,
 }
 
+/// A path that is installed by multiple packages.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClobberedPath {
     /// The name of the package from which the final file is taken.

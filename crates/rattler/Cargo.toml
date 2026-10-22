@@ -63,6 +63,7 @@ reqwest = { workspace = true, features = ["json", "form"] }
 reqwest-middleware = { workspace = true }
 smallvec = { workspace = true }
 simple_spawn_blocking = { workspace = true, features = ["tokio"] }
+tar = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "io-util", "macros"] }

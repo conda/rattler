@@ -19,6 +19,7 @@ pub mod apple_codesign;
 mod clobber_registry;
 mod driver;
 mod entry_point;
+pub mod from_archive;
 pub mod link;
 pub mod link_script;
 mod prefix_replacement;
@@ -43,7 +44,7 @@ use std::{
 };
 
 pub use apple_codesign::AppleCodeSignBehavior;
-pub use clobber_registry::ClobberMode;
+pub use clobber_registry::{ClobberMode, ClobberedPath};
 pub use driver::InstallDriver;
 use fs_err::tokio as tokio_fs;
 use futures::{FutureExt, StreamExt, stream::FuturesUnordered};
@@ -74,7 +75,9 @@ use tracing::instrument;
 pub use transaction::{Transaction, TransactionError, TransactionOperation};
 pub use unlink::{empty_trash, unlink_package};
 
-pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
+pub use crate::install::entry_point::{
+    EntryPointFile, get_windows_launcher, python_entry_point_files, python_entry_point_template,
+};
 use crate::install::{
     clobber_registry::{CLOBBERS_DIR_NAME, ClobberRegistry},
     entry_point::{create_unix_python_entry_point, create_windows_python_entry_point},

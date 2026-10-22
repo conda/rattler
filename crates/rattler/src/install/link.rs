@@ -3,7 +3,9 @@
 use fs_err as fs;
 use memmap2::Mmap;
 use rattler_conda_types::Subdir;
-use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
+use rattler_conda_types::package::{
+    FileMode, InvalidOffsetsError, PathType, PathsEntry, PrefixOffsets, PrefixPlaceholder,
+};
 use rattler_digest::Sha256;
 use rattler_digest::{HashingWriter, Sha256Hash};
 use reflink_copy::reflink;
@@ -216,84 +218,16 @@ pub fn link_file(
         let destination = BufWriter::with_capacity(50 * 1024, destination);
         let mut destination_writer = HashingWriter::<_, rattler_digest::Sha256>::new(destination);
 
-        // Convert back-slashes (\) on windows with forward-slashes (/) to avoid problems with
-        // string escaping. For instance if we replace the prefix in the following text
-        //
-        // ```text
-        // string = "c:\\old_prefix"
-        // ```
-        //
-        // with the path `c:\new_prefix` the text will become:
-        //
-        // ```text
-        // string = "c:\new_prefix"
-        // ```
-        //
-        // In this case the literal string is not properly escape. This is fixed by using
-        // forward-slashes on windows instead.
-        let target_prefix = if target_platform.is_windows() {
-            Cow::Owned(target_prefix.replace('\\', "/"))
-        } else {
-            Cow::Borrowed(target_prefix)
-        };
-
-        // The offsets come from the (untrusted) `paths.json`. If they are invalid or inconsistent
-        // with the file contents we do not fail the install: we fall back to the search-based path
-        // with a warning. The offset function guarantees it wrote nothing before reporting an
-        // inconsistency, so the fallback reuses the same (empty) destination.
-        let offsets = match experimental_offsets {
-            Some(Ok(offsets)) => Some(offsets),
-            Some(Err(error)) => {
-                tracing::warn!(
-                    path = %path_json_entry.relative_path.display(),
-                    %error,
-                    "prefix replacement offsets are invalid; falling back to search-based replacement"
-                );
-                None
-            }
-            None => None,
-        };
-        let spliced = match offsets {
-            Some(offsets) => match copy_and_replace_placeholders_with_offsets(
-                source.as_ref(),
-                &mut destination_writer,
-                placeholder,
-                &target_prefix,
-                &target_platform,
-                *file_mode,
-                offsets,
-            ) {
-                Ok(()) => true,
-                Err(OffsetReplaceError::InconsistentMetadata(error)) => {
-                    tracing::warn!(
-                        path = %path_json_entry.relative_path.display(),
-                        %error,
-                        "prefix replacement offsets are inconsistent with the file; falling back \
-                         to search-based replacement"
-                    );
-                    false
-                }
-                Err(OffsetReplaceError::Io(err)) => {
-                    return Err(LinkFileError::IoError(
-                        String::from("replacing placeholders"),
-                        err,
-                    ));
-                }
-            },
-            None => false,
-        };
-        if !spliced {
-            // Replace the prefix placeholder in the file with the new placeholder
-            copy_and_replace_placeholders(
-                source.as_ref(),
-                &mut destination_writer,
-                placeholder,
-                &target_prefix,
-                &target_platform,
-                *file_mode,
-            )
-            .map_err(|err| LinkFileError::IoError(String::from("replacing placeholders"), err))?;
-        }
+        replace_prefix_placeholder(
+            source.as_ref(),
+            &mut destination_writer,
+            &path_json_entry.relative_path,
+            placeholder,
+            experimental_offsets.as_ref(),
+            *file_mode,
+            target_prefix,
+            target_platform,
+        )?;
 
         let (mut file, current_hash) = destination_writer.finalize();
 
@@ -445,6 +379,102 @@ pub fn link_file(
         method: link_method,
         prefix_placeholder,
     }))
+}
+
+/// Copies `source` to `destination` while replacing the prefix `placeholder` with
+/// `target_prefix`. Uses the `experimental_offsets` from `paths.json` when they are valid and
+/// falls back to searching for the placeholder otherwise.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn replace_prefix_placeholder(
+    source: &[u8],
+    destination: &mut impl std::io::Write,
+    relative_path: &Path,
+    placeholder: &str,
+    experimental_offsets: Option<&Result<PrefixOffsets, InvalidOffsetsError>>,
+    file_mode: FileMode,
+    target_prefix: &str,
+    target_platform: Subdir,
+) -> Result<(), LinkFileError> {
+    // Convert back-slashes (\) on windows with forward-slashes (/) to avoid problems with
+    // string escaping. For instance if we replace the prefix in the following text
+    //
+    // ```text
+    // string = "c:\\old_prefix"
+    // ```
+    //
+    // with the path `c:\new_prefix` the text will become:
+    //
+    // ```text
+    // string = "c:\new_prefix"
+    // ```
+    //
+    // In this case the literal string is not properly escape. This is fixed by using
+    // forward-slashes on windows instead.
+    let target_prefix = if target_platform.is_windows() {
+        Cow::Owned(target_prefix.replace('\\', "/"))
+    } else {
+        Cow::Borrowed(target_prefix)
+    };
+
+    // The offsets come from the (untrusted) `paths.json`. If they are invalid or inconsistent
+    // with the file contents we do not fail the install: we fall back to the search-based path
+    // with a warning. The offset function guarantees it wrote nothing before reporting an
+    // inconsistency, so the fallback reuses the same (empty) destination.
+    let offsets = match experimental_offsets {
+        Some(Ok(offsets)) => Some(offsets),
+        Some(Err(error)) => {
+            tracing::warn!(
+                path = %relative_path.display(),
+                %error,
+                "prefix replacement offsets are invalid; falling back to search-based replacement"
+            );
+            None
+        }
+        None => None,
+    };
+    let spliced = match offsets {
+        Some(offsets) => match copy_and_replace_placeholders_with_offsets(
+            source,
+            &mut *destination,
+            placeholder,
+            &target_prefix,
+            &target_platform,
+            file_mode,
+            offsets,
+        ) {
+            Ok(()) => true,
+            Err(OffsetReplaceError::InconsistentMetadata(error)) => {
+                tracing::warn!(
+                    path = %relative_path.display(),
+                    %error,
+                    "prefix replacement offsets are inconsistent with the file; falling back \
+                     to search-based replacement"
+                );
+                false
+            }
+            Err(OffsetReplaceError::Io(err)) => {
+                return Err(LinkFileError::IoError(
+                    String::from("replacing placeholders"),
+                    err,
+                ));
+            }
+        },
+        None => false,
+    };
+    if !spliced {
+        // Replace the prefix placeholder in the file with the new placeholder
+        copy_and_replace_placeholders(
+            source,
+            &mut *destination,
+            placeholder,
+            &target_prefix,
+            &target_platform,
+            file_mode,
+        )
+        .map_err(|err| LinkFileError::IoError(String::from("replacing placeholders"), err))?;
+    }
+
+    Ok(())
 }
 
 /// Either a memory mapped file or the complete contents of a file read to memory.
@@ -729,7 +759,7 @@ impl FileType {
 
     /// Detects the file type by checking its magic bytes.
     /// Returns `Some(FileType)` if a known file type is detected, `None` otherwise.
-    fn detect(bytes: &[u8]) -> Option<Self> {
+    pub(crate) fn detect(bytes: &[u8]) -> Option<Self> {
         if bytes.len() < 4 {
             return None;
         }

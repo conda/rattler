@@ -7,6 +7,7 @@ use rattler_conda_types::{
 };
 use rattler_digest::HashingWriter;
 use rattler_digest::Sha256;
+use std::borrow::Cow;
 use std::path::{Component, PathBuf};
 use std::{fs::File, io, io::Write, path::Path};
 
@@ -92,6 +93,100 @@ pub fn get_windows_launcher(platform: &Subdir) -> &'static [u8] {
         Subdir::Win64 => include_bytes!("../../resources/cli-64.exe"),
         Subdir::WinArm64 => include_bytes!("../../resources/cli-arm64.exe"),
         _ => panic!("unsupported platform for a Windows entry point launcher: {platform}"),
+    }
+}
+
+/// A single file that makes up a Python entry point, see [`python_entry_point_files`].
+#[derive(Debug, Clone)]
+pub struct EntryPointFile {
+    /// The location of the file relative to the prefix.
+    pub relative_path: PathBuf,
+
+    /// The contents of the file.
+    pub contents: Cow<'static, [u8]>,
+
+    /// The unix permission bits of the file.
+    pub mode: u32,
+
+    /// The type of the entry point file.
+    pub path_type: PathType,
+}
+
+impl EntryPointFile {
+    /// Returns the entry that describes this file in a `PrefixRecord`.
+    pub fn paths_entry(&self) -> PathsEntry {
+        PathsEntry {
+            relative_path: self.relative_path.clone(),
+            // todo: clobbering of entry points not handled yet
+            original_path: None,
+            path_type: self.path_type,
+            no_link: false,
+            sha256: Some(rattler_digest::compute_bytes_digest::<Sha256>(
+                &self.contents,
+            )),
+            sha256_in_prefix: None,
+            size_in_bytes: Some(self.contents.len() as u64),
+            prefix_placeholder: None,
+            file_mode: None,
+        }
+    }
+}
+
+/// Computes the files that make up a Python entry point without writing them to disk.
+///
+/// On unix an entry point is a single executable script. On Windows it is a `<command>-script.py`
+/// file together with a `<command>.exe` launcher that runs the script.
+pub fn python_entry_point_files(
+    target_prefix: &str,
+    entry_point: &EntryPoint,
+    python_info: &PythonInfo,
+    target_platform: &Subdir,
+) -> Result<Vec<EntryPointFile>, std::io::Error> {
+    // The paths are only relative to the prefix, so there is no prefix on disk to check them
+    // against.
+    let unrooted = Path::new("");
+    if target_platform.is_windows() {
+        let script_py = ensure_entry_point_relative_path(
+            &python_info
+                .bin_dir
+                .join(format!("{}-script.py", entry_point.command)),
+            unrooted,
+        )?;
+        let script_exe = ensure_entry_point_relative_path(
+            &python_info
+                .bin_dir
+                .join(format!("{}.exe", entry_point.command)),
+            unrooted,
+        )?;
+        let script_contents =
+            python_entry_point_template(target_prefix, true, entry_point, python_info);
+        Ok(vec![
+            EntryPointFile {
+                relative_path: script_py.into_path_buf(),
+                contents: Cow::Owned(script_contents.into_bytes()),
+                mode: 0o644,
+                path_type: PathType::WindowsPythonEntryPointScript,
+            },
+            EntryPointFile {
+                relative_path: script_exe.into_path_buf(),
+                contents: Cow::Borrowed(get_windows_launcher(target_platform)),
+                mode: 0o755,
+                path_type: PathType::WindowsPythonEntryPointExe,
+            },
+        ])
+    } else {
+        let script = ensure_entry_point_relative_path(
+            &python_info.bin_dir.join(&entry_point.command),
+            unrooted,
+        )?;
+        let script_contents =
+            python_entry_point_template(target_prefix, false, entry_point, python_info);
+        Ok(vec![EntryPointFile {
+            relative_path: script.into_path_buf(),
+            contents: Cow::Owned(script_contents.into_bytes()),
+            mode: 0o775,
+            path_type: PathType::UnixPythonEntryPoint,
+        }])
     }
 }
 
