@@ -955,6 +955,14 @@ mod resolvo {
         >();
     }
 
+    /// Not part of `solver_backend_tests!` because libsolv does not support
+    /// version-first channel priority.
+    #[test]
+    fn test_multichannel_version_first_ties() {
+        crate::multichannel_tests::multichannel_version_first_ties::<rattler_solve::resolvo::Solver>(
+        );
+    }
+
     /// When a single node in the conflict merges many versions, the version list
     /// is abbreviated with an ellipsis instead of printing every version.
     #[test]
