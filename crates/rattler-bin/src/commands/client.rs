@@ -5,7 +5,6 @@ use rattler_networking::{
     AuthChallengeMiddleware, AuthenticationMiddleware, AuthenticationStorage, OfflineMiddleware,
 };
 use rattler_repodata_gateway::fetch::CacheAction;
-use reqwest::Client;
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 
 pub const USER_AGENT: &str = concat!("rattler/", env!("CARGO_PKG_VERSION"));
@@ -38,13 +37,18 @@ pub fn repodata_cache_action(offline: bool) -> CacheAction {
 /// credentials from [`AuthenticationMiddleware`] take precedence.
 ///
 /// Transient failures are retried with exponential backoff, and connect and
-/// read timeouts bound how long a hung server can stall a request. When the
-/// `s3` feature is enabled, S3 buckets configured through the `s3-options`
-/// of the rattler configuration are picked up as well.
+/// read timeouts bound how long a hung server can stall a request. The TLS
+/// and proxy settings of the rattler configuration are applied through
+/// [`rattler_networking::client_builder_from_config`]. When the `s3` feature
+/// is enabled, S3 buckets configured through the `s3-options` of the rattler
+/// configuration are picked up as well.
 pub fn create_client_with_middleware(
     offline: bool,
 ) -> miette::Result<reqwest_middleware::ClientWithMiddleware> {
-    let download_client = Client::builder()
+    let config = super::gateway::load_config()?;
+    let download_client = rattler_networking::client_builder_from_config(&config.common)
+        .into_diagnostic()
+        .context("failed to apply the network settings from the configuration")?
         .no_gzip()
         .user_agent(USER_AGENT)
         .connect_timeout(CONNECT_TIMEOUT)
@@ -79,13 +83,10 @@ pub fn create_client_with_middleware(
             .with_authentication_storage(authentication_storage.clone()),
     );
     #[cfg(feature = "s3")]
-    let client = {
-        let config = super::gateway::load_config()?;
-        client.with(rattler_networking::S3Middleware::new(
-            rattler_networking::s3_middleware::compute_s3_config_from_config(&config.common),
-            authentication_storage,
-        ))
-    };
+    let client = client.with(rattler_networking::S3Middleware::new(
+        rattler_networking::s3_middleware::compute_s3_config_from_config(&config.common),
+        authentication_storage,
+    ));
     #[cfg(feature = "gcs")]
     let client = client.with(rattler_networking::GCSMiddleware::default());
 

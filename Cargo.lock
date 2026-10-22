@@ -5580,6 +5580,8 @@ dependencies = [
  "retry-policies",
  "rmp-serde",
  "rstest",
+ "rustls-native-certs",
+ "rustls-pki-types",
  "serde",
  "serde_bytes",
  "serde_json",
@@ -5591,6 +5593,7 @@ dependencies = [
  "tracing",
  "tracing-test",
  "url",
+ "webpki-root-certs",
  "windows-native-keyring-store",
  "zstd 0.13.3",
 ]

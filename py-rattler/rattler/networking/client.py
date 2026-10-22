@@ -114,7 +114,8 @@ class Client:
     ) -> Client:
         """Build the standard client using networking settings from ``config``.
 
-        This applies certificate verification, HTTP/HTTPS proxies,
+        This applies certificate verification, TLS root certificates
+        (``tls-root-certs``), HTTP/HTTPS proxies,
         ``authentication-override-file``, mirrors, and per-bucket S3 options.
         Explicit client options such as ``headers`` and ``timeout`` remain
         available to the caller.

@@ -23,9 +23,14 @@ pub mod s3_middleware;
 #[cfg(feature = "s3")]
 pub use s3_middleware::{S3Middleware, S3MiddlewareError};
 
+#[cfg(all(feature = "rattler_config", not(target_arch = "wasm32")))]
+pub use client_config::client_builder_from_config;
+
 pub mod authentication_middleware;
 pub mod authentication_storage;
 pub mod challenge_middleware;
+#[cfg(all(feature = "rattler_config", not(target_arch = "wasm32")))]
+pub mod client_config;
 pub(crate) mod oauth_refresh;
 
 mod lazy_client;
@@ -36,4 +41,10 @@ pub mod oidc_exchange;
 #[cfg(feature = "rattler_config")]
 pub mod proxy;
 pub mod retry_policies;
+#[cfg(all(
+    feature = "rattler_config",
+    any(feature = "native-tls", feature = "rustls"),
+    not(target_arch = "wasm32")
+))]
+pub mod tls;
 pub mod trusted_publishing;

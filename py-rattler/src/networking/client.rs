@@ -8,7 +8,7 @@ use rattler_networking::{
     AuthenticationMiddleware, AuthenticationStorage, GCSMiddleware, LazyClient, MirrorMiddleware,
     OciMiddleware, S3Middleware,
     authentication_storage::{AuthenticationStorageError, backends::file::FileStorage},
-    proxy::proxies_from_config,
+    client_builder_from_config,
     s3_middleware::compute_s3_config_from_config,
 };
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
@@ -20,12 +20,11 @@ use std::{collections::HashMap, sync::Arc};
 static RATTLER_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 fn reqwest_client_builder(
+    mut client_builder: reqwest::ClientBuilder,
     headers: Option<HashMap<String, String>>,
     user_agent: Option<String>,
     timeout: Option<u64>,
 ) -> PyResult<reqwest::ClientBuilder> {
-    let mut client_builder = reqwest::Client::builder();
-
     if let Some(timeout) = timeout {
         client_builder = client_builder.timeout(std::time::Duration::from_secs(timeout));
     }
@@ -81,9 +80,10 @@ impl PyClientWithMiddleware {
         timeout: Option<u64>,
     ) -> PyResult<Self> {
         let middlewares = middlewares.unwrap_or_default();
-        let reqwest_client = reqwest_client_builder(headers, user_agent, timeout)?
-            .build()
-            .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        let reqwest_client =
+            reqwest_client_builder(reqwest::Client::builder(), headers, user_agent, timeout)?
+                .build()
+                .map_err(|err| PyValueError::new_err(err.to_string()))?;
         let mut client = reqwest_middleware::ClientBuilder::new(reqwest_client.clone());
 
         for middleware in middlewares {
@@ -145,21 +145,15 @@ impl PyClientWithMiddleware {
         user_agent: Option<String>,
         timeout: Option<u64>,
     ) -> PyResult<Self> {
-        let mut client_builder = reqwest_client_builder(headers, user_agent, timeout)?;
-
-        #[cfg(any(feature = "native-tls", feature = "rustls"))]
-        if config.inner.tls_no_verify.unwrap_or(false) {
-            client_builder = client_builder.tls_danger_accept_invalid_certs(true);
-        }
-        for proxy in proxies_from_config(&config.inner.proxy_config)
-            .map_err(|err| PyValueError::new_err(err.to_string()))?
-        {
-            client_builder = client_builder.proxy(proxy);
-        }
-
-        let reqwest_client = client_builder
-            .build()
-            .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        let reqwest_client = reqwest_client_builder(
+            client_builder_from_config(&config.inner)
+                .map_err(|err| PyValueError::new_err(err.to_string()))?,
+            headers,
+            user_agent,
+            timeout,
+        )?
+        .build()
+        .map_err(|err| PyValueError::new_err(err.to_string()))?;
         let auth_storage =
             authentication_storage_from_config(config).map_err(PyRattlerError::from)?;
         let retry_policy = ExponentialBackoff::builder().build_with_max_retries(max_retries);

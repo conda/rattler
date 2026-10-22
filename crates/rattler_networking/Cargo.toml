@@ -18,6 +18,12 @@ rustls = ["reqwest/rustls", "ambient-id/rustls"]
 gcs = ["google-cloud-auth", "tokio/sync"]
 s3 = ["aws-config", "aws-sdk-s3", "aws-smithy-http-client"]
 system-integration = ["keyring", "netrc-rs", "dirs"]
+rattler_config = [
+    "dep:rattler_config",
+    "dep:rustls-native-certs",
+    "dep:rustls-pki-types",
+    "dep:webpki-root-certs",
+]
 keyring = [
     "keyring-core",
     "dep:apple-native-keyring-store",
@@ -68,6 +74,11 @@ tokio = { workspace = true, optional = true }
 tracing = { workspace = true }
 url = { workspace = true }
 rattler_config = { workspace = true, optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rustls-native-certs = { workspace = true, optional = true }
+rustls-pki-types = { workspace = true, optional = true }
+webpki-root-certs = { workspace = true, optional = true }
 
 [target.'cfg( target_arch = "wasm32" )'.dependencies]
 getrandom = { workspace = true, features = ["wasm_js"] }

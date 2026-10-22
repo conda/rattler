@@ -153,6 +153,8 @@ rmp-serde = { version = "1" }
 rstest = { version = "0.26" }
 rstest_reuse = "0.7"
 rustix = { version = "1.1", default-features = false }
+rustls-native-certs = "0.8"
+rustls-pki-types = "1"
 simd-json = { version = "0.17", features = ["serde_impl"] }
 self_cell = "1"
 semver = "1"
@@ -216,6 +218,7 @@ wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 wasmtimer = "0.4"
 web-sys = "0.3"
+webpki-root-certs = "1"
 which = "8"
 windows = { version = "0.62", features = ["Win32_Storage_ProjectedFileSystem", "Win32_Foundation", "Win32_System_LibraryLoader"] }
 windows-sys = { version = "0.61", default-features = false }
