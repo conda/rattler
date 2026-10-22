@@ -132,6 +132,38 @@ async def test_solve_channel_priority_disabled(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("channel_priority", "expected_channel"),
+    [
+        # Disabled never consults the channel, so the version tie goes to the
+        # higher build number in the second channel.
+        (ChannelPriority.Disabled, "version-tie-b"),
+        # VersionFirst breaks the version tie by channel order before the build
+        # number, like conda's disabled channel priority.
+        (ChannelPriority.VersionFirst, "version-tie-a"),
+    ],
+)
+async def test_solve_version_tie_channel_priority(
+    gateway: Gateway, test_data_dir: str, channel_priority: ChannelPriority, expected_channel: str
+) -> None:
+    # Both channels carry foo 1.0, the second one with a higher build number.
+    channel_a = Channel(os.path.join(test_data_dir, "channels/version-tie-a"))
+    channel_b = Channel(os.path.join(test_data_dir, "channels/version-tie-b"))
+
+    solved_data = await solve(
+        [channel_a, channel_b],
+        ["foo"],
+        platforms=["noarch"],
+        gateway=gateway,
+        channel_priority=channel_priority,
+    )
+
+    assert len(solved_data) == 1
+    assert str(solved_data[0].version) == "1.0"
+    assert solved_data[0].channel == Channel(os.path.join(test_data_dir, f"channels/{expected_channel}")).base_url
+
+
+@pytest.mark.asyncio
 async def test_solve_constraints(gateway: Gateway, dummy_channel: Channel) -> None:
     solved_data = await solve(
         [dummy_channel],
