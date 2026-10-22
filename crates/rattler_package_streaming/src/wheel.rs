@@ -5,7 +5,7 @@
 //! noarch path remapping and entry points from the generated `info/link.json`.
 //!
 //! `RECORD` describes the cache layout, not final installed paths; its original
-//! signatures are discarded. Raw script shebangs are preserved (see RAT-288).
+//! signatures are discarded.
 
 use std::{
     collections::HashSet,
