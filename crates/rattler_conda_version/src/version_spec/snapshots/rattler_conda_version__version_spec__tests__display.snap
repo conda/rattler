@@ -1,0 +1,21 @@
+---
+source: crates/rattler_conda_version/src/version_spec/mod.rs
+expression: "specs.chain(errors).collect::<Vec<_>>().join(\"\\n\")"
+---
+==1.2
+!=1.2
+>1.2
+>=1.2
+<1.2
+<=1.2
+1.2.*
+!=1.2.*
+~=1.2
+*
+>=1.2,<2|==3
+!~=1.2
+'*' is incompatible with '<' operator'
+'*' is incompatible with '!=' operator'
+'*' is incompatible with '>' operator'
+'*' is incompatible with '~=' operator'
+'*' is incompatible with '<' operator'

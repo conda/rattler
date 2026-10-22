@@ -552,6 +552,39 @@ mod tests {
     }
 
     #[test]
+    fn test_display() {
+        let mut specs: Vec<VersionSpec> = [
+            "==1.2",
+            "!=1.2",
+            ">1.2",
+            ">=1.2",
+            "<1.2",
+            "<=1.2",
+            "1.2.*",
+            "!=1.2.*",
+            "~=1.2",
+            "*",
+            ">=1.2,<2|==3",
+        ]
+        .into_iter()
+        .map(|s| VersionSpec::from_str(s, ParseStrictness::Strict).unwrap())
+        .collect();
+        specs.push(VersionSpec::StrictRange(
+            StrictRangeOperator::NotCompatible,
+            StrictVersion::new(Version::from_str("1.2").unwrap()),
+        ));
+        let specs = specs.iter().map(ToString::to_string);
+
+        // Errors that render the operator that was used.
+        let errors = ["<*", "!=*", ">*", "~=1.2.*", "<1.2.*"]
+            .into_iter()
+            .map(|s| VersionSpec::from_str(s, ParseStrictness::Strict).unwrap_err())
+            .map(|e| e.to_string());
+
+        insta::assert_snapshot!(specs.chain(errors).collect::<Vec<_>>().join("\n"));
+    }
+
+    #[test]
     fn issue_204() {
         assert!(VersionSpec::from_str(">=3.8<3.9", ParseStrictness::Strict).is_err());
     }
