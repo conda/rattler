@@ -21,6 +21,7 @@ pub mod reqwest;
 
 pub mod fs;
 pub mod tokio;
+pub mod wheel;
 pub mod write;
 
 /// An error that can occur when extracting a package archive.
@@ -85,6 +86,9 @@ pub enum ExtractError {
 
     #[error("unsupported package archive format")]
     UnsupportedArchiveType,
+
+    #[error("invalid wheel archive: {0}")]
+    InvalidWheel(String),
 
     #[error("the task was cancelled")]
     Cancelled,

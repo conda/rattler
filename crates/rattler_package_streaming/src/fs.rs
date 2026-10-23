@@ -39,6 +39,16 @@ pub fn extract_conda(archive: &Path, destination: &Path) -> Result<ExtractResult
     crate::read::extract_conda_via_streaming(file, destination)
 }
 
+/// Extracts a wheel into the [`crate::wheel`] conda layout using `record` metadata.
+pub fn extract_wheel(
+    archive: &Path,
+    destination: &Path,
+    record: &PackageRecord,
+) -> Result<ExtractResult, ExtractError> {
+    let file = File::open(archive)?;
+    crate::wheel::extract_wheel(file, destination, record)
+}
+
 /// Extracts the contents a package archive at the specified path to a directory. The type of
 /// package is determined based on the file extension of the archive path.
 ///

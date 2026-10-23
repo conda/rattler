@@ -5,7 +5,7 @@ use std::{path::Path, sync::Arc};
 
 use fs_err::tokio as tokio_fs;
 use futures_util::stream::TryStreamExt;
-use rattler_conda_types::package::CondaArchiveType;
+use rattler_conda_types::{PackageRecord, package::CondaArchiveType};
 use rattler_digest::Sha256Hash;
 use reqwest::Response;
 use tokio::io::BufReader;
@@ -195,6 +195,24 @@ pub async fn extract_conda(
         }
         Err(e) => Err(e),
     }
+}
+
+/// Downloads a wheel into the [`crate::wheel`] conda layout using `record` metadata.
+/// The URL may use a different host than the channel; scope credentials accordingly.
+pub async fn extract_wheel(
+    client: reqwest_middleware::ClientWithMiddleware,
+    url: Url,
+    destination: &Path,
+    expected_sha256: Option<Sha256Hash>,
+    reporter: Option<Arc<dyn DownloadReporter>>,
+    record: &PackageRecord,
+) -> Result<ExtractResult, ExtractError> {
+    let reader = get_reader(url, client, expected_sha256, reporter.clone()).await?;
+    let result = crate::tokio::async_read::extract_wheel(reader, destination, record).await?;
+    if let Some(reporter) = &reporter {
+        reporter.on_download_complete();
+    }
+    Ok(result)
 }
 
 /// Extracts the contents a package archive from the specified remote location.
