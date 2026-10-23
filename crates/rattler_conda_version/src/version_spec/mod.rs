@@ -509,6 +509,81 @@ mod tests {
         assert!(vs4.matches(&v3));
     }
 
+    #[rstest]
+    #[case("==1.2", "1.2.0", true)]
+    #[case("==1.2", "1.3", false)]
+    #[case("!=1.2", "1.2", false)]
+    #[case("!=1.2", "1.3", true)]
+    #[case(">1.2", "1.1", false)]
+    #[case(">1.2", "1.2", false)]
+    #[case(">1.2", "1.3", true)]
+    #[case(">=1.2", "1.1", false)]
+    #[case(">=1.2", "1.2", true)]
+    #[case(">=1.2", "1.3", true)]
+    #[case("<1.2", "1.1", true)]
+    #[case("<1.2", "1.2", false)]
+    #[case("<1.2", "1.3", false)]
+    #[case("<=1.2", "1.1", true)]
+    #[case("<=1.2", "1.2", true)]
+    #[case("<=1.2", "1.3", false)]
+    #[case("1.2.*", "1.2.5", true)]
+    #[case("1.2.*", "1.3", false)]
+    #[case("!=1.2.*", "1.2.5", false)]
+    #[case("!=1.2.*", "1.3", true)]
+    #[case("~=1.2", "1.5", true)]
+    #[case("~=1.2", "2.0", false)]
+    fn test_matches_operators(#[case] spec: &str, #[case] version: &str, #[case] expected: bool) {
+        let spec = VersionSpec::from_str(spec, ParseStrictness::Strict).unwrap();
+        let version = Version::from_str(version).unwrap();
+        assert_eq!(spec.matches(&version), expected);
+    }
+
+    #[rstest]
+    #[case("1.5", false)]
+    #[case("2.0", true)]
+    #[case("1.1", true)]
+    fn test_matches_not_compatible(#[case] version: &str, #[case] expected: bool) {
+        // `NotCompatible` has no textual operator so it is constructed directly.
+        let spec = VersionSpec::StrictRange(
+            StrictRangeOperator::NotCompatible,
+            StrictVersion::new(Version::from_str("1.2").unwrap()),
+        );
+        assert_eq!(spec.matches(&Version::from_str(version).unwrap()), expected);
+    }
+
+    #[test]
+    fn test_display() {
+        let mut specs: Vec<VersionSpec> = [
+            "==1.2",
+            "!=1.2",
+            ">1.2",
+            ">=1.2",
+            "<1.2",
+            "<=1.2",
+            "1.2.*",
+            "!=1.2.*",
+            "~=1.2",
+            "*",
+            ">=1.2,<2|==3",
+        ]
+        .into_iter()
+        .map(|s| VersionSpec::from_str(s, ParseStrictness::Strict).unwrap())
+        .collect();
+        specs.push(VersionSpec::StrictRange(
+            StrictRangeOperator::NotCompatible,
+            StrictVersion::new(Version::from_str("1.2").unwrap()),
+        ));
+        let specs = specs.iter().map(ToString::to_string);
+
+        // Errors that render the operator that was used.
+        let errors = ["<*", "!=*", ">*", "~=1.2.*", "<1.2.*"]
+            .into_iter()
+            .map(|s| VersionSpec::from_str(s, ParseStrictness::Strict).unwrap_err())
+            .map(|e| e.to_string());
+
+        insta::assert_snapshot!(specs.chain(errors).collect::<Vec<_>>().join("\n"));
+    }
+
     #[test]
     fn issue_204() {
         assert!(VersionSpec::from_str(">=3.8<3.9", ParseStrictness::Strict).is_err());

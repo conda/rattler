@@ -577,6 +577,47 @@ mod test {
     }
 
     #[rstest]
+    fn parse_logical_constraint_glob_in_middle(
+        #[values(Lenient, Strict)] strictness: ParseStrictness,
+        #[values(">=1.*.3", ">1.*.3", "<1.*.3", "==1.*.3")] input: &str,
+    ) {
+        // A glob that is not at the end of the version is treated as a regex.
+        assert_eq!(
+            logical_constraint_parser(strictness)(input),
+            Err(nom::Err::Failure(
+                ParseConstraintError::RegexConstraintsNotSupported
+            ))
+        );
+    }
+
+    #[rstest]
+    fn parse_logical_constraint_invalid_version(
+        #[values(Lenient, Strict)] strictness: ParseStrictness,
+        #[values(">=1..2", "==1.2!", "1.2.+")] input: &str,
+    ) {
+        assert_eq!(
+            logical_constraint_parser(strictness)(input),
+            Err(nom::Err::Failure(ParseConstraintError::InvalidVersion(
+                ParseVersionError {
+                    version: input.trim_start_matches(['>', '=']).to_owned(),
+                    kind: ParseVersionErrorKind::ExpectedEof,
+                }
+            )))
+        );
+    }
+
+    #[test]
+    fn parse_logical_constraint_lenient_trailing_glob() {
+        assert_eq!(
+            logical_constraint_parser(Lenient)("<1.2.*"),
+            Ok((
+                "",
+                Constraint::Comparison(RangeOperator::Less, Version::from_str("1.2").unwrap())
+            ))
+        );
+    }
+
+    #[rstest]
     fn parse_regex_constraint(#[values(Lenient, Strict)] strictness: ParseStrictness) {
         // Regular expressions
         assert_eq!(
