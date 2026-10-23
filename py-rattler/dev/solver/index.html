@@ -4233,7 +4233,8 @@ is set and is shared by all packages and channels.</p>
 </span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">channel_relations_max_depth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="n">add_pip_as_python_dependency</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 </span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    <span class="n">timestamp_policy</span><span class="o">=</span><span class="s2">&quot;require-timestamp&quot;</span><span class="p">,</span>
-</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="p">)</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>    <span class="n">package_format_selection</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4568,6 +4569,24 @@ package records before solving.</p>
             </td>
             <td>
                   <code>False</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>package_format_selection</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="PackageFormatSelection (rattler.repo_data.sparse.PackageFormatSelection)" href="../sparse_repo_data/#rattler.repo_data.sparse.PackageFormatSelection">PackageFormatSelection</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Which archive formats of a package are considered when
+the same build is available in more than one format. Applies to every source.
+<code>None</code> uses the gateway default (<code>PackageFormatSelection.PREFER_CONDA</code>).</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
             </td>
           </tr>
       </tbody>

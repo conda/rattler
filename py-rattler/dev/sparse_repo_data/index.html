@@ -2911,6 +2911,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#rattler.repo_data.sparse.PackageFormatSelection.ALL" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ALL
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rattler.repo_data.sparse.PackageFormatSelection.BOTH" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4244,6 +4255,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#rattler.repo_data.sparse.PackageFormatSelection.ALL" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ALL
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rattler.repo_data.sparse.PackageFormatSelection.BOTH" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4534,7 +4556,11 @@
 
 
 
-        <p>Enum that describes what to do if both a <code>.tar.bz2</code> and a <code>.conda</code> package is available.</p>
+        <p>Enum that describes which archive formats of a package are used when the same build
+(the same name, version and build string) is available in more than one format.</p>
+<p>Removed packages are dropped before formats are compared: if the <code>.conda</code> file of a
+build is removed, its <code>.tar.bz2</code> file counts as having no <code>.conda</code> counterpart. Where
+formats are preferred over each other the order is <code>.conda</code> over <code>.whl</code> over <code>.tar.bz2</code>.</p>
 
 
 
@@ -4558,6 +4584,32 @@
 
 
 
+<h3 id="rattler.repo_data.sparse.PackageFormatSelection.ALL" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">ALL</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#rattler.repo_data.sparse.PackageFormatSelection.ALL" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">ALL</span> <span class="o">=</span> <span class="n">All</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Use every package regardless of its format, without dropping any format in favor of
+another.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
 <h3 id="rattler.repo_data.sparse.PackageFormatSelection.BOTH" class="doc doc-heading">
             <span class="doc doc-object-name doc-attribute-name">BOTH</span>
 
@@ -4573,7 +4625,8 @@
 
     <div class="doc doc-contents ">
 
-        <p>Use both the <code>.tar.bz2</code> and the <code>.conda</code> packages.</p>
+        <p>Use both the <code>.tar.bz2</code> and the <code>.conda</code> packages, also when they represent the same build.
+Wheels are not used.</p>
 
     </div>
 
@@ -4598,7 +4651,7 @@
 
     <div class="doc doc-contents ">
 
-        <p>Only use the <code>.conda</code> packages, ignore all <code>.tar.bz2</code> packages.</p>
+        <p>Only use the <code>.conda</code> packages.</p>
 
     </div>
 
@@ -4623,7 +4676,7 @@
 
     <div class="doc doc-contents ">
 
-        <p>Only use the <code>.tar.bz2</code> packages, ignore all <code>.conda</code> packages.</p>
+        <p>Only use the <code>.tar.bz2</code> packages.</p>
 
     </div>
 
@@ -4648,7 +4701,8 @@
 
     <div class="doc doc-contents ">
 
-        <p>Only use the <code>.conda</code> packages if there are both a <code>.tar.bz2</code> and a <code>.conda</code> package available.</p>
+        <p>Use the <code>.conda</code> and <code>.tar.bz2</code> packages, but drop a <code>.tar.bz2</code> package if the same build
+is available as <code>.conda</code>. Wheels are not used.</p>
 
     </div>
 
@@ -4673,8 +4727,8 @@
 
     <div class="doc doc-contents ">
 
-        <p>Only use the <code>.conda</code> packages if there are both a <code>.tar.bz2</code> and a <code>.conda</code> package available.
-Also adds <code>.whl</code> files if available.</p>
+        <p>Use the <code>.conda</code>, <code>.whl</code> and <code>.tar.bz2</code> packages, but only the most preferred format of
+each build: <code>.conda</code> over <code>.whl</code> over <code>.tar.bz2</code>.</p>
 
     </div>
 

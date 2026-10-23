@@ -4161,6 +4161,14 @@ your custom source, you must implement it yourself within your source implementa
 <p><strong>Performance:</strong> Custom sources are slower than channels because data must be
 marshalled between Python and Rust for each request. For performance-critical
 applications with large amounts of repodata, consider using channels when possible.</p>
+<p><strong>Package formats:</strong> The records a source returns are filtered by the
+<code>package_format_selection</code> of the query, like the records of a channel. Records
+with the same name, version and build in several archive formats are treated as
+one build in different formats. With the default
+(<code>PackageFormatSelection.PREFER_CONDA</code>), wheels are never returned and a
+<code>.tar.bz2</code> record is dropped when the same build is also available as <code>.conda</code>;
+a source that only serves wheels returns no records unless the query uses
+<code>PREFER_CONDA_WITH_WHL</code> or <code>ALL</code>.</p>
 <h4 id="rattler.repo_data.source.RepoDataSource--example">Example<a class="headerlink" href="#rattler.repo_data.source.RepoDataSource--example" title="Permanent link">#</a></h4>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">Subdir</span><span class="p">,</span> <span class="n">PackageName</span><span class="p">,</span> <span class="n">RepoDataRecord</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
