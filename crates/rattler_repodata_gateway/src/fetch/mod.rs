@@ -110,7 +110,7 @@ impl From<tokio::task::JoinError> for FetchRepoDataError {
 /// Defines which type of repodata.json file to download. Usually you want to
 /// use the [`Variant::AfterPatches`] variant because that reflects the repodata
 /// with any patches applied.
-#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Default, Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub enum Variant {
     /// Fetch the `repodata.json` file. This `repodata.json` has repodata
     /// patches applied. Packages may have also been removed from this file

@@ -34,6 +34,7 @@ http-cache-semantics = { workspace = true, optional = true, features = ["reqwest
 humansize = { workspace = true }
 humantime = { workspace = true }
 indicatif = { workspace = true, optional = true }
+indexmap = { workspace = true }
 itertools = { workspace = true, optional = true }
 json-patch = { workspace = true }
 self_cell = { workspace = true, optional = true }
