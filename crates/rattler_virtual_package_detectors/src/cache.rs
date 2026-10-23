@@ -319,7 +319,8 @@ impl ResultCache {
         let bytes = serde_json::to_vec_pretty(&entry)?;
         // Written next to the entry and renamed into place, so a reader never
         // sees a partial file.
-        let (file, temporary) = tempfile::NamedTempFile::new_in(&self.root)
+        let (file, temporary) = rattler_shared_tempfile::builder()
+            .tempfile_in(&self.root)
             .map_err(io_error)?
             .into_parts();
         let mut file = tokio::fs::File::from_std(file);
@@ -526,6 +527,36 @@ mod tests {
         cache.clear().await.unwrap();
         assert_eq!(cache.read(&key, &clock(1_050), &env()).await, None);
         cache.clear().await.unwrap();
+    }
+
+    /// Results are written so that every user the cache directory is shared
+    /// with can read them.
+    #[cfg(unix)]
+    #[rstest::rstest]
+    #[case::umask(tools::shared_cache::SharedAccess::Umask)]
+    #[case::default_acl(tools::shared_cache::SharedAccess::DefaultAcl)]
+    #[tokio::test]
+    async fn results_are_readable_by_group(#[case] access: tools::shared_cache::SharedAccess) {
+        let Some(cache_dir) = tools::shared_cache::SharedCacheDir::new(access) else {
+            return;
+        };
+        let cache = ResultCache::new(cache_dir.path().join("results"));
+        cache
+            .write(
+                &key(),
+                &report(CacheHints {
+                    ttl: Some(CacheLifetime::Seconds(100)),
+                    watch_paths: Vec::new(),
+                    watch_env: Vec::new(),
+                }),
+                None,
+                &clock(1_000),
+                &env(),
+            )
+            .await
+            .unwrap();
+
+        cache_dir.assert_group_readable();
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

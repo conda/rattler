@@ -1892,6 +1892,27 @@ mod test {
         "clobber-python ==0.1.0 cpython".parse().unwrap()
     }
 
+    /// Extracted packages are written so that every user the cache directory
+    /// is shared with can read them.
+    #[cfg(unix)]
+    #[rstest::rstest]
+    #[case::umask(tools::shared_cache::SharedAccess::Umask)]
+    #[case::default_acl(tools::shared_cache::SharedAccess::DefaultAcl)]
+    #[tokio::test]
+    async fn package_cache_is_readable_by_group(#[case] access: tools::shared_cache::SharedAccess) {
+        let Some(cache_dir) = tools::shared_cache::SharedCacheDir::new(access) else {
+            return;
+        };
+        let package = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+
+        PackageCache::new(cache_dir.path())
+            .get_or_fetch_from_path(&package, None, None)
+            .await
+            .unwrap();
+
+        cache_dir.assert_group_readable();
+    }
+
     #[tokio::test]
     async fn test_layer_filters_route_packages_to_different_layers() {
         let temp = tempdir().unwrap();

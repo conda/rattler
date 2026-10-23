@@ -346,6 +346,15 @@ mod tests {
                         move || async move {
                             shard_requests.fetch_add(1, Ordering::SeqCst);
                             match shard_response {
+                                MockShardResponse::Valid => {
+                                    let shard = rmp_serde::to_vec_named(&Shard::default()).unwrap();
+                                    Response::builder()
+                                        .status(StatusCode::OK)
+                                        .body(Body::from(
+                                            zstd::encode_all(shard.as_slice(), 3).unwrap(),
+                                        ))
+                                        .unwrap()
+                                }
                                 MockShardResponse::Empty => Response::builder()
                                     .status(StatusCode::OK)
                                     .body(Body::empty())
@@ -427,6 +436,7 @@ mod tests {
 
     #[derive(Clone, Copy)]
     enum MockShardResponse {
+        Valid,
         Empty,
         Truncated,
         /// Answer with this status and an empty body.
@@ -587,6 +597,42 @@ mod tests {
             .to_string();
 
         insta::assert_snapshot!("truncated_shard_response_error", err_string);
+    }
+
+    /// The shard index and the shards are written so that every user the
+    /// cache directory is shared with can read them.
+    #[cfg(unix)]
+    #[rstest::rstest]
+    #[case::umask(tools::shared_cache::SharedAccess::Umask)]
+    #[case::default_acl(tools::shared_cache::SharedAccess::DefaultAcl)]
+    #[tokio::test]
+    async fn shard_cache_is_readable_by_group(#[case] access: tools::shared_cache::SharedAccess) {
+        let Some(cache_dir) = tools::shared_cache::SharedCacheDir::new(access) else {
+            return;
+        };
+        let server = MockShardedServer::new(MockShardResponse::Valid).await;
+
+        let subdir = ShardedSubdir::new(
+            server.channel(),
+            "linux-64".to_string(),
+            rattler_networking::LazyClient::default(),
+            cache_dir.path().to_path_buf(),
+            ShardCachePolicy {
+                action: CacheAction::CacheOrFetch,
+                missing_shards_are_empty: false,
+            },
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        subdir
+            .fetch_package_records(&"test-package".parse().unwrap(), None)
+            .await
+            .unwrap();
+
+        cache_dir.assert_group_readable();
     }
 
     /// Warms the shard *index* cache without ever fetching a shard, then hands

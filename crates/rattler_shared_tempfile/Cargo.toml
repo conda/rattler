@@ -1,0 +1,13 @@
+[package]
+name = "rattler_shared_tempfile"
+version = "0.1.0"
+edition.workspace = true
+description = "Create temporary files that are renamed into directories shared with other users"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+
+[dependencies]
+tempfile = { workspace = true }

@@ -34,6 +34,7 @@ rattler_digest = { workspace = true, default-features = false }
 rattler_redaction = { workspace = true, default-features = false }
 rattler_networking = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false, features = ["reqwest"] }
+rattler_shared_tempfile = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "fs"] }
