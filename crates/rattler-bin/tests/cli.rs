@@ -205,6 +205,33 @@ fn test_solve_multichannel() {
     insta::assert_snapshot!(urls);
 }
 
+/// `--channel-priority version-first` breaks a version tie by the channel
+/// order before the build number, like conda's disabled channel priority, so
+/// `foo` 1.0 build 0 from the first channel wins over build 3 from the second.
+#[test]
+fn test_solve_version_first_channel_priority() {
+    let urls = run_rattler(&[
+        "solve",
+        "foo",
+        "--platform",
+        "linux-64",
+        "--virtual-package",
+        "__unix",
+        "--channel-priority",
+        "version-first",
+        "-c",
+        "./test-data/channels/version-tie-a",
+        "-c",
+        "./test-data/channels/version-tie-b",
+        "--format",
+        "urls",
+    ]);
+    let urls = regex::Regex::new(r"file://\S*/test-data/")
+        .expect("the pattern is valid")
+        .replace_all(&urls, "file:///[ROOT]/test-data/");
+    insta::assert_snapshot!(urls);
+}
+
 /// The skill embeds the crate version, which is replaced so the snapshot does
 /// not change on every release.
 ///

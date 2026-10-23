@@ -96,6 +96,11 @@ pub enum PyChannelPriority {
 
     /// Packages can be retrieved from any channel as package version takes precedence.
     Disabled,
+
+    /// Packages can be retrieved from any channel and the package version takes
+    /// precedence, but the channel order still breaks ties between candidates
+    /// with the same version, matching conda's disabled channel priority.
+    VersionFirst,
 }
 
 impl From<ChannelPriority> for PyChannelPriority {
@@ -104,6 +109,7 @@ impl From<ChannelPriority> for PyChannelPriority {
             ChannelPriority::Strict => PyChannelPriority::Strict,
             ChannelPriority::Flexible => PyChannelPriority::Flexible,
             ChannelPriority::Disabled => PyChannelPriority::Disabled,
+            ChannelPriority::VersionFirst => PyChannelPriority::VersionFirst,
         }
     }
 }
@@ -114,6 +120,7 @@ impl From<PyChannelPriority> for ChannelPriority {
             PyChannelPriority::Strict => ChannelPriority::Strict,
             PyChannelPriority::Flexible => ChannelPriority::Flexible,
             PyChannelPriority::Disabled => ChannelPriority::Disabled,
+            PyChannelPriority::VersionFirst => ChannelPriority::VersionFirst,
         }
     }
 }

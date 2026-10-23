@@ -136,8 +136,11 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
 
     /// Sort the candidates based on:
     /// 1. Whether the package has tracked features
-    /// 2. The version of the package
-    /// 3. The build number of the package
+    /// 2. The channel rank, under flexible channel priority
+    /// 3. The version of the package
+    /// 4. The channel rank for version ties, under version-first channel
+    ///    priority
+    /// 5. The build number of the package
     fn simple_compare(&self, a: SolvableId, b: SolvableId) -> Ordering {
         let a_record = &self.solvable_record(a);
         let b_record = &self.solvable_record(b);
@@ -175,6 +178,19 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             | (CompareStrategy::LowestVersion, Ordering::Greater) => return Ordering::Greater,
             (_, Ordering::Equal) => {}
         };
+
+        // Under version-first channel priority the version comparison comes
+        // first, but a version tie is still broken by the channel rank before
+        // the build number. Build numbers from different channels are
+        // unrelated counters, so they only order candidates within one
+        // channel. This matches conda's documented sort order for disabled
+        // channel priority.
+        if self.solver.provider().channel_priority == ChannelPriority::VersionFirst {
+            match self.channel_rank(a).cmp(&self.channel_rank(b)) {
+                Ordering::Equal => {}
+                ordering => return ordering,
+            }
+        }
 
         // Otherwise, select the variant with the highest build number first
         b_record.build_number().cmp(&a_record.build_number())

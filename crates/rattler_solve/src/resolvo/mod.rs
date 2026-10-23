@@ -348,7 +348,7 @@ pub struct CondaDependencyProvider<'a> {
     /// multichannel share a single rank.
     ///
     /// This is only populated (and consulted) for
-    /// [`ChannelPriority::Flexible`].
+    /// [`ChannelPriority::Flexible`] and [`ChannelPriority::VersionFirst`].
     channel_order: HashMap<Option<String>, u32>,
 }
 
@@ -421,7 +421,8 @@ impl<'a> CondaDependencyProvider<'a> {
 
         // Maps each channel to the priority rank of its tier in the order tiers are
         // first encountered (which matches the order channels were provided). Lower
-        // rank == higher priority. Used by `ChannelPriority::Flexible`.
+        // rank == higher priority. Used by `ChannelPriority::Flexible` and
+        // `ChannelPriority::VersionFirst`.
         let mut channel_order = HashMap::<Option<String>, u32>::new();
         let mut tier_order = HashMap::<PriorityTier<'a>, u32>::new();
 
@@ -520,9 +521,13 @@ impl<'a> CondaDependencyProvider<'a> {
 
                 let tier = PriorityTier::new(multi_channel, record.channel.as_deref());
 
-                // Only [`ChannelPriority::Flexible`] consults channel ranks.
-                if channel_priority == ChannelPriority::Flexible
-                    && !channel_order.contains_key(&record.channel)
+                // Flexible and version-first channel priority both consult
+                // channel ranks: flexible sorts on them before the version,
+                // version-first uses them only to break version ties.
+                if matches!(
+                    channel_priority,
+                    ChannelPriority::Flexible | ChannelPriority::VersionFirst
+                ) && !channel_order.contains_key(&record.channel)
                 {
                     let next_rank = tier_order.len() as u32;
                     let rank = *tier_order.entry(tier).or_insert(next_rank);

@@ -203,6 +203,64 @@ pub(super) fn multichannel_ties<T: SolverImpl + Default>() {
     ]);
 }
 
+/// Under version-first channel priority, a version tie is broken by the
+/// channel rank before the build number. Members of a multichannel share
+/// a rank, so within a multichannel the higher build number still wins,
+/// while a tie with a channel outside the multichannel goes to the earlier
+/// tier. This matches conda's disabled channel priority, which gives
+/// every member of a multichannel the same priority.
+///
+/// N.B. Only the resolvo backend supports version-first channel priority.
+pub(super) fn multichannel_version_first_ties<T: SolverImpl + Default>() {
+    let pkg_b = PackageBuilder::new("pkg")
+        .version("2.0")
+        .build_string("h0")
+        .build_number(0)
+        .channel("https://conda.anaconda.org/chan-b/")
+        .build();
+    let pkg_c_rebuilt = PackageBuilder::new("pkg")
+        .version("2.0")
+        .build_string("h1")
+        .build_number(1)
+        .channel("https://conda.anaconda.org/chan-c/")
+        .build();
+    let pkg_d_rebuilt = PackageBuilder::new("pkg")
+        .version("2.0")
+        .build_string("h1")
+        .build_number(1)
+        .channel("https://conda.anaconda.org/chan-d/")
+        .build();
+
+    run_solver_cases::<T>(&[
+        SolverCase::new("a higher build number in a later member wins the tie")
+            .multi_channel_repository("grp", [pkg_b.clone()])
+            .multi_channel_repository("grp", [pkg_d_rebuilt.clone()])
+            .channel_priority(ChannelPriority::VersionFirst)
+            .specs(["pkg"])
+            .expect_present([&pkg_d_rebuilt])
+            .expect_absent([&pkg_b]),
+        SolverCase::new(
+            "the multichannel wins the tie over a higher build number in a later channel",
+        )
+        .multi_channel_repository("grp", [pkg_b.clone()])
+        .repository([pkg_c_rebuilt.clone()])
+        .channel_priority(ChannelPriority::VersionFirst)
+        .specs(["pkg"])
+        .expect_present([&pkg_b])
+        .expect_absent([&pkg_c_rebuilt]),
+        SolverCase::new(
+            "an earlier channel wins the tie over a higher build number in a later multichannel",
+        )
+        .repository([pkg_b.clone()])
+        .multi_channel_repository("grp", [pkg_c_rebuilt.clone()])
+        .multi_channel_repository("grp", [pkg_d_rebuilt.clone()])
+        .channel_priority(ChannelPriority::VersionFirst)
+        .specs(["pkg"])
+        .expect_present([&pkg_b])
+        .expect_absent([&pkg_c_rebuilt, &pkg_d_rebuilt]),
+    ]);
+}
+
 /// A channel-specific spec that names a multichannel accepts every member,
 /// while a spec that names a member only accepts that member.
 ///
