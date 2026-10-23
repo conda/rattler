@@ -340,6 +340,13 @@ pub(super) fn solve_additional_packages<T: SolverImpl + Default>() {
             .additional_packages([foo_3.clone()])
             .expect_present([("foo", "3.0")])
             .expect_absent([("foo", "2.0")]),
+         SolverCase::new("flexible channel priority")
+            .repository([foo_2.clone()])
+            .specs(["foo"])
+            .channel_priority(ChannelPriority::Disabled)
+            .additional_packages([foo_3.clone()])
+            .expect_present([("foo", "3.0")])
+            .expect_absent([("foo", "2.0")]),
         // Additional packages rank with the highest-priority tier even when
         // their channel is a lower-priority channel of the solve.
         SolverCase::new("flexible channel priority ignores the channel of additional packages")
