@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [12.0.0](https://github.com/conda/rattler/compare/rattler_solve-v11.2.3...rattler_solve-v12.0.0) - 2026-10-23
+
+### Added
+
+- *(repodata_gateway)* [**breaking**] select package formats the same way for every source ([#2887](https://github.com/conda/rattler/pull/2887))
+
 ## [11.2.3](https://github.com/conda/rattler/compare/rattler_solve-v11.2.2...rattler_solve-v11.2.3) - 2026-10-16
 
 ### Other
