@@ -2260,7 +2260,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.36.5"
+version = "0.36.6"
 dependencies = [
  "ahash",
  "anyhow",
