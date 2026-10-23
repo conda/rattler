@@ -54,6 +54,13 @@ jobs:
         working-directory: js-rattler
         run: pixi run cargo clippy --locked --all-targets
 
+      - name: Check wasm compatibility of crates not used by js-rattler
+        working-directory: js-rattler
+        run: |
+          set -euxo pipefail
+          pixi run cargo clippy --locked --manifest-path ../crates/rattler_package_streaming/Cargo.toml --target wasm32-unknown-unknown --no-default-features --features wasm
+          pixi run cargo clippy --locked --manifest-path ../crates/rattler_package_streaming/Cargo.toml --target wasm32-unknown-unknown --no-default-features --features wasm,reqwest
+
       - name: Check formatting
         working-directory: js-rattler
         run: pixi run fmt-check

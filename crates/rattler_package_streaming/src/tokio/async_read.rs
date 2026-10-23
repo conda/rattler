@@ -14,8 +14,6 @@ use std::{
     },
 };
 
-#[cfg(feature = "reqwest")]
-use futures_util::StreamExt;
 use futures_util::future::{self, Either};
 use rattler_digest::{Md5, Sha256, digest::Digest};
 use tokio::io::{AsyncRead, AsyncReadExt};
@@ -226,30 +224,4 @@ async fn extract_blocking<R: AsyncRead + Unpin>(
             pump.await.map_err(ExtractError::IoError)
         }
     }
-}
-
-/// Async equivalent of [`crate::seek::get_file_from_archive`].
-///
-/// Iterates entries of a tar archive, returning the contents of the first
-/// entry whose path matches `file_name`. Because the reader is streaming,
-/// only the bytes up to (and including) the target entry are consumed.
-#[cfg(feature = "reqwest")]
-pub(crate) async fn get_file_from_tar_archive<R: tokio::io::AsyncRead + Unpin>(
-    archive: &mut tokio_tar::Archive<R>,
-    file_name: &Path,
-) -> Result<Option<Vec<u8>>, ExtractError> {
-    let target = crate::archive::normalize(file_name)?;
-    let mut entries = archive.entries().map_err(ExtractError::IoError)?;
-    while let Some(entry) = entries.next().await {
-        let mut entry = entry.map_err(ExtractError::IoError)?;
-        let path = entry.path().map_err(ExtractError::IoError)?;
-        // Normalized comparison, matching the sparse path in `crate::archive`.
-        if crate::archive::normalize(&path)? == target {
-            drop(path);
-            return crate::archive::read_raw_entry_contents(&mut entry)
-                .await
-                .map(Some);
-        }
-    }
-    Ok(None)
 }

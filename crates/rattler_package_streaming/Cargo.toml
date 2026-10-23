@@ -16,7 +16,7 @@ bzip2 = { workspace = true }
 jiff = { workspace = true }
 http = { workspace = true, optional = true }
 filetime = { workspace = true }
-fs-err = { workspace = true, features = ["tokio"], optional = true }
+fs-err = { workspace = true, optional = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false }
@@ -29,7 +29,6 @@ rattler_redaction = { workspace = true, features = [
   "reqwest",
   "reqwest-middleware",
 ], default-features = false }
-async_http_range_reader = { workspace = true, optional = true }
 reqwest = { workspace = true, features = ["stream", "http2"], optional = true }
 reqwest-middleware = { workspace = true, optional = true }
 simple_spawn_blocking = { workspace = true, features = ["tokio"] }
@@ -38,22 +37,22 @@ tar = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["sync"], default-features = false }
-tokio-util = { workspace = true, features = ["io-util"] }
+tokio-util = { workspace = true, features = ["compat", "io-util"] }
 tracing = { workspace = true }
 url = { workspace = true }
 zip = { workspace = true, features = ["deflate", "time"] }
 # https://github.com/Majored/rs-async-zip/issues/173
-astral_async_zip = { workspace = true, features = [
-  "deflate",
-  "tokio",
-  "tokio-fs",
-] }
-astral-tokio-tar = { workspace = true }
+astral_async_zip = { workspace = true, features = ["deflate", "tokio"] }
+tar-codec = { workspace = true }
 bytes = { workspace = true }
 async-compression = { workspace = true }
 zstd = { workspace = true, default-features = false }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# `astral-tokio-tar` unconditionally enables `tokio/fs`, which is unsupported on wasm.
+astral-tokio-tar = { workspace = true }
+async_http_range_reader = { workspace = true, optional = true }
+fs-err = { workspace = true, features = ["tokio"], optional = true }
 tokio = { workspace = true, features = ["fs"] }
 zstd = { workspace = true, features = ["zstdmt"] }
 
@@ -61,6 +60,8 @@ zstd = { workspace = true, features = ["zstdmt"] }
 getrandom = { workspace = true, features = ["wasm_js"] }
 # Also need getrandom 0.2 for rand dependency
 getrandom_v02 = { package = "getrandom", version = "0.2", features = ["js"] }
+# getrandom 0.3 is pulled in by `ahash` (via rattler_conda_types)
+getrandom_v03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
 
 [features]
 default = ["rustls"]
