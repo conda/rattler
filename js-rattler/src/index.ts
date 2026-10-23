@@ -12,4 +12,5 @@ export * from "./Channel";
 export * from "./Config";
 export * from "./PackageMetadata";
 export * from "./Gateway";
+export * from "./PackageArchive";
 export * from "./RattlerError";

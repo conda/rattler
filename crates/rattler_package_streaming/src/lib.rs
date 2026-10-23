@@ -19,7 +19,9 @@ pub mod seek;
 #[cfg(feature = "reqwest")]
 pub mod reqwest;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub mod fs;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod tokio;
 pub mod write;
 

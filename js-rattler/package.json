@@ -28,7 +28,7 @@
         "build:wasm:debug": "wasm-pack build --mode normal --debug",
         "build:esm": "npm run build:wasm -- --target web    && rollup -c rollup.config.esm.mjs",
         "build:cjs": "npm run build:wasm -- --target nodejs && rollup -c rollup.config.cjs.mjs",
-        "build:types": "rollup -c rollup.config.types.mjs",
+        "build:types": "rollup -c rollup.config.types.mjs && tsc --noEmit --skipLibCheck false --target ES2022 --module ES2022 --moduleResolution node --lib ES2022,DOM,DOM.Iterable dist/index.d.ts",
         "build": "shx rm -rf dist pkg types && npm run build:esm && npm run build:cjs && shx cp pkg/js_rattler_bg.wasm ./dist/ && npm run build:types",
         "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
         "test:debug": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
