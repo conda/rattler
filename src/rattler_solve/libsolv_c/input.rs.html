@@ -331,129 +331,130 @@
 <a href=#329 id=329 data-nosnippet>329</a>    <span class="prelude-val">Ok</span>(solvable_ids)
 <a href=#330 id=330 data-nosnippet>330</a>}
 <a href=#331 id=331 data-nosnippet>331</a>
-<a href=#332 id=332 data-nosnippet>332</a><span class="doccomment">/// When adding packages, we want to make sure that `.conda` packages have
-<a href=#333 id=333 data-nosnippet>333</a>/// preference over `.tar.bz` packages. For that reason, when adding a solvable
-<a href=#334 id=334 data-nosnippet>334</a>/// we check first if a `.conda` version of the package has already been added,
-<a href=#335 id=335 data-nosnippet>335</a>/// in which case we forgo adding its `.tar.bz` version (and return `None`). If
-<a href=#336 id=336 data-nosnippet>336</a>/// no `.conda` version has been added, we create a new solvable (replacing any
-<a href=#337 id=337 data-nosnippet>337</a>/// existing solvable for the `.tar.bz` version of the package).
-<a href=#338 id=338 data-nosnippet>338</a></span><span class="kw">fn </span>add_or_reuse_solvable&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#339 id=339 data-nosnippet>339</a>    pool: <span class="kw-2">&amp;</span>Pool,
-<a href=#340 id=340 data-nosnippet>340</a>    repo: <span class="kw-2">&amp;</span>Repo&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#341 id=341 data-nosnippet>341</a>    data: <span class="kw-2">&amp;</span>Repodata&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#342 id=342 data-nosnippet>342</a>    package_to_type: <span class="kw-2">&amp;mut </span>HashMap&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>ArchiveIdentifier, (DistArchiveType, SolvableId)&gt;,
-<a href=#343 id=343 data-nosnippet>343</a>    repo_data: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>RepoDataRecord,
-<a href=#344 id=344 data-nosnippet>344</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;SolvableId&gt;, SolveError&gt; {
-<a href=#345 id=345 data-nosnippet>345</a>    <span class="comment">// Sometimes we can reuse an existing solvable
-<a href=#346 id=346 data-nosnippet>346</a>    </span><span class="kw">let </span>identifier = <span class="kw-2">&amp;</span>repo_data.identifier.identifier;
-<a href=#347 id=347 data-nosnippet>347</a>    <span class="kw">let </span>archive_type = repo_data.identifier.archive_type;
-<a href=#348 id=348 data-nosnippet>348</a>
-<a href=#349 id=349 data-nosnippet>349</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>(other_package_type, old_solvable_id)) = package_to_type.get(identifier) {
-<a href=#350 id=350 data-nosnippet>350</a>        <span class="kw">match </span>archive_type.cmp_preference(other_package_type) {
-<a href=#351 id=351 data-nosnippet>351</a>            Ordering::Less =&gt; {
-<a href=#352 id=352 data-nosnippet>352</a>                <span class="comment">// A previous package that we already stored is actually a package of a better
-<a href=#353 id=353 data-nosnippet>353</a>                // "type" so we'll just use that instead (.conda &gt; .tar.bz)
-<a href=#354 id=354 data-nosnippet>354</a>                </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>)
-<a href=#355 id=355 data-nosnippet>355</a>            }
-<a href=#356 id=356 data-nosnippet>356</a>            Ordering::Greater =&gt; {
-<a href=#357 id=357 data-nosnippet>357</a>                <span class="comment">// A previous package has a worse package "type", we'll reuse the handle but
-<a href=#358 id=358 data-nosnippet>358</a>                // overwrite its attributes
-<a href=#359 id=359 data-nosnippet>359</a>
-<a href=#360 id=360 data-nosnippet>360</a>                // Update the package to the new type mapping
-<a href=#361 id=361 data-nosnippet>361</a>                </span>package_to_type.insert(identifier, (archive_type, old_solvable_id));
-<a href=#362 id=362 data-nosnippet>362</a>
-<a href=#363 id=363 data-nosnippet>363</a>                <span class="comment">// Reset and reuse the old solvable
-<a href=#364 id=364 data-nosnippet>364</a>                </span>reset_solvable(pool, repo, data, old_solvable_id);
-<a href=#365 id=365 data-nosnippet>365</a>                <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(old_solvable_id))
-<a href=#366 id=366 data-nosnippet>366</a>            }
-<a href=#367 id=367 data-nosnippet>367</a>            Ordering::Equal =&gt; <span class="prelude-val">Err</span>(SolveError::DuplicateRecords(identifier.to_string())),
-<a href=#368 id=368 data-nosnippet>368</a>        }
-<a href=#369 id=369 data-nosnippet>369</a>    } <span class="kw">else </span>{
-<a href=#370 id=370 data-nosnippet>370</a>        <span class="kw">let </span>solvable_id = repo.add_solvable();
-<a href=#371 id=371 data-nosnippet>371</a>        package_to_type.insert(identifier, (archive_type, solvable_id));
-<a href=#372 id=372 data-nosnippet>372</a>        <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(solvable_id))
-<a href=#373 id=373 data-nosnippet>373</a>    }
-<a href=#374 id=374 data-nosnippet>374</a>}
-<a href=#375 id=375 data-nosnippet>375</a>
-<a href=#376 id=376 data-nosnippet>376</a><span class="kw">pub fn </span>add_virtual_packages(pool: <span class="kw-2">&amp;</span>Pool, repo: <span class="kw-2">&amp;</span>Repo&lt;<span class="lifetime">'_</span>&gt;, packages: <span class="kw-2">&amp;</span>[GenericVirtualPackage]) {
-<a href=#377 id=377 data-nosnippet>377</a>    <span class="kw">let </span>data = repo.add_repodata();
-<a href=#378 id=378 data-nosnippet>378</a>
-<a href=#379 id=379 data-nosnippet>379</a>    <span class="kw">let </span>solvable_buildflavor_id = pool.find_interned_str(SOLVABLE_BUILDFLAVOR).unwrap();
-<a href=#380 id=380 data-nosnippet>380</a>
-<a href=#381 id=381 data-nosnippet>381</a>    <span class="kw">for </span>package <span class="kw">in </span>packages {
-<a href=#382 id=382 data-nosnippet>382</a>        <span class="comment">// Create a solvable for the package
-<a href=#383 id=383 data-nosnippet>383</a>        </span><span class="kw">let </span>solvable_id = repo.add_solvable();
-<a href=#384 id=384 data-nosnippet>384</a>
-<a href=#385 id=385 data-nosnippet>385</a>        <span class="comment">// Safe because there are no other references to this solvable_id (we just
-<a href=#386 id=386 data-nosnippet>386</a>        // created it)
-<a href=#387 id=387 data-nosnippet>387</a>        </span><span class="kw">let </span>solvable = <span class="kw">unsafe </span>{ solvable_id.resolve_raw(pool).as_mut() };
-<a href=#388 id=388 data-nosnippet>388</a>
-<a href=#389 id=389 data-nosnippet>389</a>        <span class="comment">// Name and version
-<a href=#390 id=390 data-nosnippet>390</a>        </span>solvable.name = pool.intern_str(package.name.as_normalized()).into();
-<a href=#391 id=391 data-nosnippet>391</a>        solvable.evr = pool.intern_str(package.version.to_string()).into();
-<a href=#392 id=392 data-nosnippet>392</a>        <span class="kw">let </span>rel_eq = pool.rel_eq(solvable.name, solvable.evr);
-<a href=#393 id=393 data-nosnippet>393</a>        repo.add_provides(solvable, rel_eq);
-<a href=#394 id=394 data-nosnippet>394</a>
-<a href=#395 id=395 data-nosnippet>395</a>        <span class="comment">// Build string
-<a href=#396 id=396 data-nosnippet>396</a>        </span>data.add_poolstr_array(
-<a href=#397 id=397 data-nosnippet>397</a>            solvable_id,
-<a href=#398 id=398 data-nosnippet>398</a>            solvable_buildflavor_id,
-<a href=#399 id=399 data-nosnippet>399</a>            <span class="kw-2">&amp;</span>c_string(package.build_string.as_str()),
-<a href=#400 id=400 data-nosnippet>400</a>        );
-<a href=#401 id=401 data-nosnippet>401</a>    }
-<a href=#402 id=402 data-nosnippet>402</a>}
-<a href=#403 id=403 data-nosnippet>403</a>
-<a href=#404 id=404 data-nosnippet>404</a><span class="kw">fn </span>reset_solvable(pool: <span class="kw-2">&amp;</span>Pool, repo: <span class="kw-2">&amp;</span>Repo&lt;<span class="lifetime">'_</span>&gt;, data: <span class="kw-2">&amp;</span>Repodata&lt;<span class="lifetime">'_</span>&gt;, solvable_id: SolvableId) {
-<a href=#405 id=405 data-nosnippet>405</a>    <span class="kw">let </span>blank_solvable = repo.add_solvable();
-<a href=#406 id=406 data-nosnippet>406</a>
-<a href=#407 id=407 data-nosnippet>407</a>    <span class="comment">// Replace the existing solvable with the blank one
-<a href=#408 id=408 data-nosnippet>408</a>    </span>pool.swap_solvables(blank_solvable, solvable_id);
-<a href=#409 id=409 data-nosnippet>409</a>    data.swap_attrs(blank_solvable, solvable_id);
-<a href=#410 id=410 data-nosnippet>410</a>
-<a href=#411 id=411 data-nosnippet>411</a>    <span class="comment">// It is safe to free the blank solvable, because there are no other references
-<a href=#412 id=412 data-nosnippet>412</a>    // to it than in this function
-<a href=#413 id=413 data-nosnippet>413</a>    </span><span class="kw">unsafe </span>{ repo.free_solvable(blank_solvable) };
-<a href=#414 id=414 data-nosnippet>414</a>}
-<a href=#415 id=415 data-nosnippet>415</a>
-<a href=#416 id=416 data-nosnippet>416</a><span class="doccomment">/// Caches the repodata as an in-memory `.solv` file
-<a href=#417 id=417 data-nosnippet>417</a>///
-<a href=#418 id=418 data-nosnippet>418</a>/// Note: this function relies on primitives that are only available on
-<a href=#419 id=419 data-nosnippet>419</a>/// unix-like operating systems, and will panic if called from another platform
-<a href=#420 id=420 data-nosnippet>420</a>/// (e.g. Windows)
-<a href=#421 id=421 data-nosnippet>421</a></span><span class="attr">#[cfg(not(target_family = <span class="string">"unix"</span>))]
-<a href=#422 id=422 data-nosnippet>422</a></span><span class="kw">pub fn </span>cache_repodata(_url: String, _data: <span class="kw-2">&amp;</span>[RepoDataRecord]) -&gt; <span class="prelude-ty">Result</span>&lt;LibcByteSlice, SolveError&gt; {
-<a href=#423 id=423 data-nosnippet>423</a>    <span class="macro">unimplemented!</span>(<span class="string">"this function is only available on unix-like operating systems"</span>)
-<a href=#424 id=424 data-nosnippet>424</a>}
-<a href=#425 id=425 data-nosnippet>425</a>
-<a href=#426 id=426 data-nosnippet>426</a><span class="doccomment">/// Caches the repodata as an in-memory `.solv` file
-<a href=#427 id=427 data-nosnippet>427</a>///
-<a href=#428 id=428 data-nosnippet>428</a>/// Note: this function relies on primitives that are only available on
-<a href=#429 id=429 data-nosnippet>429</a>/// unix-like operating systems, and will panic if called from another platform
-<a href=#430 id=430 data-nosnippet>430</a>/// (e.g. Windows)
-<a href=#431 id=431 data-nosnippet>431</a></span><span class="attr">#[cfg(target_family = <span class="string">"unix"</span>)]
-<a href=#432 id=432 data-nosnippet>432</a></span><span class="kw">pub fn </span>cache_repodata(
-<a href=#433 id=433 data-nosnippet>433</a>    url: String,
-<a href=#434 id=434 data-nosnippet>434</a>    data: <span class="kw-2">&amp;</span>[RepoDataRecord],
-<a href=#435 id=435 data-nosnippet>435</a>    channel_priority: <span class="prelude-ty">Option</span>&lt;i32&gt;,
-<a href=#436 id=436 data-nosnippet>436</a>) -&gt; <span class="prelude-ty">Result</span>&lt;LibcByteSlice, SolveError&gt; {
-<a href=#437 id=437 data-nosnippet>437</a>    <span class="comment">// Add repodata to a new pool + repo
-<a href=#438 id=438 data-nosnippet>438</a>    </span><span class="kw">let </span>pool = Pool::default();
-<a href=#439 id=439 data-nosnippet>439</a>    <span class="kw">let </span>repo = Repo::new(<span class="kw-2">&amp;</span>pool, url, channel_priority.unwrap_or(<span class="number">0</span>));
-<a href=#440 id=440 data-nosnippet>440</a>    add_repodata_records(<span class="kw-2">&amp;</span>pool, <span class="kw-2">&amp;</span>repo, data, <span class="prelude-val">None</span>)<span class="question-mark">?</span>;
-<a href=#441 id=441 data-nosnippet>441</a>
-<a href=#442 id=442 data-nosnippet>442</a>    <span class="comment">// Export repo to .solv in memory
-<a href=#443 id=443 data-nosnippet>443</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>stream_ptr = std::ptr::null_mut();
-<a href=#444 id=444 data-nosnippet>444</a>    <span class="kw">let </span><span class="kw-2">mut </span>stream_size = <span class="number">0</span>;
-<a href=#445 id=445 data-nosnippet>445</a>    <span class="kw">let </span>file = <span class="kw">unsafe </span>{ libc::open_memstream(<span class="kw-2">&amp;mut </span>stream_ptr, <span class="kw-2">&amp;mut </span>stream_size) };
-<a href=#446 id=446 data-nosnippet>446</a>    <span class="macro">assert!</span>(!file.is_null(), <span class="string">"unable to open memstream"</span>);
-<a href=#447 id=447 data-nosnippet>447</a>
-<a href=#448 id=448 data-nosnippet>448</a>    repo.write(<span class="kw-2">&amp;</span>pool, file);
-<a href=#449 id=449 data-nosnippet>449</a>    <span class="kw">unsafe </span>{ libc::fclose(file) };
-<a href=#450 id=450 data-nosnippet>450</a>
-<a href=#451 id=451 data-nosnippet>451</a>    <span class="kw">let </span>stream_ptr = std::ptr::NonNull::new(stream_ptr).expect(<span class="string">"stream_ptr was null"</span>);
-<a href=#452 id=452 data-nosnippet>452</a>
-<a href=#453 id=453 data-nosnippet>453</a>    <span class="comment">// Safe because we know `stream_ptr` points to an array of bytes of length
-<a href=#454 id=454 data-nosnippet>454</a>    // `stream_size`
-<a href=#455 id=455 data-nosnippet>455</a>    </span><span class="prelude-val">Ok</span>(<span class="kw">unsafe </span>{ LibcByteSlice::from_raw_parts(stream_ptr.cast(), stream_size) })
-<a href=#456 id=456 data-nosnippet>456</a>}
+<a href=#332 id=332 data-nosnippet>332</a><span class="doccomment">/// When adding packages, we want to make sure that the preferred archive type
+<a href=#333 id=333 data-nosnippet>333</a>/// of a build is used (`.conda` &gt; `.whl` &gt; `.tar.bz2`, see
+<a href=#334 id=334 data-nosnippet>334</a>/// [`DistArchiveType::cmp_preference`]). For that reason, when adding a
+<a href=#335 id=335 data-nosnippet>335</a>/// solvable we check first if a more preferred archive of the same build has
+<a href=#336 id=336 data-nosnippet>336</a>/// already been added, in which case we forgo adding this one (and return
+<a href=#337 id=337 data-nosnippet>337</a>/// `None`). Otherwise we create a new solvable (replacing any existing solvable
+<a href=#338 id=338 data-nosnippet>338</a>/// for a less preferred archive of the same build).
+<a href=#339 id=339 data-nosnippet>339</a></span><span class="kw">fn </span>add_or_reuse_solvable&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#340 id=340 data-nosnippet>340</a>    pool: <span class="kw-2">&amp;</span>Pool,
+<a href=#341 id=341 data-nosnippet>341</a>    repo: <span class="kw-2">&amp;</span>Repo&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#342 id=342 data-nosnippet>342</a>    data: <span class="kw-2">&amp;</span>Repodata&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#343 id=343 data-nosnippet>343</a>    package_to_type: <span class="kw-2">&amp;mut </span>HashMap&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>ArchiveIdentifier, (DistArchiveType, SolvableId)&gt;,
+<a href=#344 id=344 data-nosnippet>344</a>    repo_data: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>RepoDataRecord,
+<a href=#345 id=345 data-nosnippet>345</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;SolvableId&gt;, SolveError&gt; {
+<a href=#346 id=346 data-nosnippet>346</a>    <span class="comment">// Sometimes we can reuse an existing solvable
+<a href=#347 id=347 data-nosnippet>347</a>    </span><span class="kw">let </span>identifier = <span class="kw-2">&amp;</span>repo_data.identifier.identifier;
+<a href=#348 id=348 data-nosnippet>348</a>    <span class="kw">let </span>archive_type = repo_data.identifier.archive_type;
+<a href=#349 id=349 data-nosnippet>349</a>
+<a href=#350 id=350 data-nosnippet>350</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>(other_package_type, old_solvable_id)) = package_to_type.get(identifier) {
+<a href=#351 id=351 data-nosnippet>351</a>        <span class="kw">match </span>archive_type.cmp_preference(other_package_type) {
+<a href=#352 id=352 data-nosnippet>352</a>            Ordering::Less =&gt; {
+<a href=#353 id=353 data-nosnippet>353</a>                <span class="comment">// A previous package that we already stored is actually a package of a better
+<a href=#354 id=354 data-nosnippet>354</a>                // "type" so we'll just use that instead (.conda &gt; .whl &gt; .tar.bz2)
+<a href=#355 id=355 data-nosnippet>355</a>                </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>)
+<a href=#356 id=356 data-nosnippet>356</a>            }
+<a href=#357 id=357 data-nosnippet>357</a>            Ordering::Greater =&gt; {
+<a href=#358 id=358 data-nosnippet>358</a>                <span class="comment">// A previous package has a worse package "type", we'll reuse the handle but
+<a href=#359 id=359 data-nosnippet>359</a>                // overwrite its attributes
+<a href=#360 id=360 data-nosnippet>360</a>
+<a href=#361 id=361 data-nosnippet>361</a>                // Update the package to the new type mapping
+<a href=#362 id=362 data-nosnippet>362</a>                </span>package_to_type.insert(identifier, (archive_type, old_solvable_id));
+<a href=#363 id=363 data-nosnippet>363</a>
+<a href=#364 id=364 data-nosnippet>364</a>                <span class="comment">// Reset and reuse the old solvable
+<a href=#365 id=365 data-nosnippet>365</a>                </span>reset_solvable(pool, repo, data, old_solvable_id);
+<a href=#366 id=366 data-nosnippet>366</a>                <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(old_solvable_id))
+<a href=#367 id=367 data-nosnippet>367</a>            }
+<a href=#368 id=368 data-nosnippet>368</a>            Ordering::Equal =&gt; <span class="prelude-val">Err</span>(SolveError::DuplicateRecords(identifier.to_string())),
+<a href=#369 id=369 data-nosnippet>369</a>        }
+<a href=#370 id=370 data-nosnippet>370</a>    } <span class="kw">else </span>{
+<a href=#371 id=371 data-nosnippet>371</a>        <span class="kw">let </span>solvable_id = repo.add_solvable();
+<a href=#372 id=372 data-nosnippet>372</a>        package_to_type.insert(identifier, (archive_type, solvable_id));
+<a href=#373 id=373 data-nosnippet>373</a>        <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(solvable_id))
+<a href=#374 id=374 data-nosnippet>374</a>    }
+<a href=#375 id=375 data-nosnippet>375</a>}
+<a href=#376 id=376 data-nosnippet>376</a>
+<a href=#377 id=377 data-nosnippet>377</a><span class="kw">pub fn </span>add_virtual_packages(pool: <span class="kw-2">&amp;</span>Pool, repo: <span class="kw-2">&amp;</span>Repo&lt;<span class="lifetime">'_</span>&gt;, packages: <span class="kw-2">&amp;</span>[GenericVirtualPackage]) {
+<a href=#378 id=378 data-nosnippet>378</a>    <span class="kw">let </span>data = repo.add_repodata();
+<a href=#379 id=379 data-nosnippet>379</a>
+<a href=#380 id=380 data-nosnippet>380</a>    <span class="kw">let </span>solvable_buildflavor_id = pool.find_interned_str(SOLVABLE_BUILDFLAVOR).unwrap();
+<a href=#381 id=381 data-nosnippet>381</a>
+<a href=#382 id=382 data-nosnippet>382</a>    <span class="kw">for </span>package <span class="kw">in </span>packages {
+<a href=#383 id=383 data-nosnippet>383</a>        <span class="comment">// Create a solvable for the package
+<a href=#384 id=384 data-nosnippet>384</a>        </span><span class="kw">let </span>solvable_id = repo.add_solvable();
+<a href=#385 id=385 data-nosnippet>385</a>
+<a href=#386 id=386 data-nosnippet>386</a>        <span class="comment">// Safe because there are no other references to this solvable_id (we just
+<a href=#387 id=387 data-nosnippet>387</a>        // created it)
+<a href=#388 id=388 data-nosnippet>388</a>        </span><span class="kw">let </span>solvable = <span class="kw">unsafe </span>{ solvable_id.resolve_raw(pool).as_mut() };
+<a href=#389 id=389 data-nosnippet>389</a>
+<a href=#390 id=390 data-nosnippet>390</a>        <span class="comment">// Name and version
+<a href=#391 id=391 data-nosnippet>391</a>        </span>solvable.name = pool.intern_str(package.name.as_normalized()).into();
+<a href=#392 id=392 data-nosnippet>392</a>        solvable.evr = pool.intern_str(package.version.to_string()).into();
+<a href=#393 id=393 data-nosnippet>393</a>        <span class="kw">let </span>rel_eq = pool.rel_eq(solvable.name, solvable.evr);
+<a href=#394 id=394 data-nosnippet>394</a>        repo.add_provides(solvable, rel_eq);
+<a href=#395 id=395 data-nosnippet>395</a>
+<a href=#396 id=396 data-nosnippet>396</a>        <span class="comment">// Build string
+<a href=#397 id=397 data-nosnippet>397</a>        </span>data.add_poolstr_array(
+<a href=#398 id=398 data-nosnippet>398</a>            solvable_id,
+<a href=#399 id=399 data-nosnippet>399</a>            solvable_buildflavor_id,
+<a href=#400 id=400 data-nosnippet>400</a>            <span class="kw-2">&amp;</span>c_string(package.build_string.as_str()),
+<a href=#401 id=401 data-nosnippet>401</a>        );
+<a href=#402 id=402 data-nosnippet>402</a>    }
+<a href=#403 id=403 data-nosnippet>403</a>}
+<a href=#404 id=404 data-nosnippet>404</a>
+<a href=#405 id=405 data-nosnippet>405</a><span class="kw">fn </span>reset_solvable(pool: <span class="kw-2">&amp;</span>Pool, repo: <span class="kw-2">&amp;</span>Repo&lt;<span class="lifetime">'_</span>&gt;, data: <span class="kw-2">&amp;</span>Repodata&lt;<span class="lifetime">'_</span>&gt;, solvable_id: SolvableId) {
+<a href=#406 id=406 data-nosnippet>406</a>    <span class="kw">let </span>blank_solvable = repo.add_solvable();
+<a href=#407 id=407 data-nosnippet>407</a>
+<a href=#408 id=408 data-nosnippet>408</a>    <span class="comment">// Replace the existing solvable with the blank one
+<a href=#409 id=409 data-nosnippet>409</a>    </span>pool.swap_solvables(blank_solvable, solvable_id);
+<a href=#410 id=410 data-nosnippet>410</a>    data.swap_attrs(blank_solvable, solvable_id);
+<a href=#411 id=411 data-nosnippet>411</a>
+<a href=#412 id=412 data-nosnippet>412</a>    <span class="comment">// It is safe to free the blank solvable, because there are no other references
+<a href=#413 id=413 data-nosnippet>413</a>    // to it than in this function
+<a href=#414 id=414 data-nosnippet>414</a>    </span><span class="kw">unsafe </span>{ repo.free_solvable(blank_solvable) };
+<a href=#415 id=415 data-nosnippet>415</a>}
+<a href=#416 id=416 data-nosnippet>416</a>
+<a href=#417 id=417 data-nosnippet>417</a><span class="doccomment">/// Caches the repodata as an in-memory `.solv` file
+<a href=#418 id=418 data-nosnippet>418</a>///
+<a href=#419 id=419 data-nosnippet>419</a>/// Note: this function relies on primitives that are only available on
+<a href=#420 id=420 data-nosnippet>420</a>/// unix-like operating systems, and will panic if called from another platform
+<a href=#421 id=421 data-nosnippet>421</a>/// (e.g. Windows)
+<a href=#422 id=422 data-nosnippet>422</a></span><span class="attr">#[cfg(not(target_family = <span class="string">"unix"</span>))]
+<a href=#423 id=423 data-nosnippet>423</a></span><span class="kw">pub fn </span>cache_repodata(_url: String, _data: <span class="kw-2">&amp;</span>[RepoDataRecord]) -&gt; <span class="prelude-ty">Result</span>&lt;LibcByteSlice, SolveError&gt; {
+<a href=#424 id=424 data-nosnippet>424</a>    <span class="macro">unimplemented!</span>(<span class="string">"this function is only available on unix-like operating systems"</span>)
+<a href=#425 id=425 data-nosnippet>425</a>}
+<a href=#426 id=426 data-nosnippet>426</a>
+<a href=#427 id=427 data-nosnippet>427</a><span class="doccomment">/// Caches the repodata as an in-memory `.solv` file
+<a href=#428 id=428 data-nosnippet>428</a>///
+<a href=#429 id=429 data-nosnippet>429</a>/// Note: this function relies on primitives that are only available on
+<a href=#430 id=430 data-nosnippet>430</a>/// unix-like operating systems, and will panic if called from another platform
+<a href=#431 id=431 data-nosnippet>431</a>/// (e.g. Windows)
+<a href=#432 id=432 data-nosnippet>432</a></span><span class="attr">#[cfg(target_family = <span class="string">"unix"</span>)]
+<a href=#433 id=433 data-nosnippet>433</a></span><span class="kw">pub fn </span>cache_repodata(
+<a href=#434 id=434 data-nosnippet>434</a>    url: String,
+<a href=#435 id=435 data-nosnippet>435</a>    data: <span class="kw-2">&amp;</span>[RepoDataRecord],
+<a href=#436 id=436 data-nosnippet>436</a>    channel_priority: <span class="prelude-ty">Option</span>&lt;i32&gt;,
+<a href=#437 id=437 data-nosnippet>437</a>) -&gt; <span class="prelude-ty">Result</span>&lt;LibcByteSlice, SolveError&gt; {
+<a href=#438 id=438 data-nosnippet>438</a>    <span class="comment">// Add repodata to a new pool + repo
+<a href=#439 id=439 data-nosnippet>439</a>    </span><span class="kw">let </span>pool = Pool::default();
+<a href=#440 id=440 data-nosnippet>440</a>    <span class="kw">let </span>repo = Repo::new(<span class="kw-2">&amp;</span>pool, url, channel_priority.unwrap_or(<span class="number">0</span>));
+<a href=#441 id=441 data-nosnippet>441</a>    add_repodata_records(<span class="kw-2">&amp;</span>pool, <span class="kw-2">&amp;</span>repo, data, <span class="prelude-val">None</span>)<span class="question-mark">?</span>;
+<a href=#442 id=442 data-nosnippet>442</a>
+<a href=#443 id=443 data-nosnippet>443</a>    <span class="comment">// Export repo to .solv in memory
+<a href=#444 id=444 data-nosnippet>444</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>stream_ptr = std::ptr::null_mut();
+<a href=#445 id=445 data-nosnippet>445</a>    <span class="kw">let </span><span class="kw-2">mut </span>stream_size = <span class="number">0</span>;
+<a href=#446 id=446 data-nosnippet>446</a>    <span class="kw">let </span>file = <span class="kw">unsafe </span>{ libc::open_memstream(<span class="kw-2">&amp;mut </span>stream_ptr, <span class="kw-2">&amp;mut </span>stream_size) };
+<a href=#447 id=447 data-nosnippet>447</a>    <span class="macro">assert!</span>(!file.is_null(), <span class="string">"unable to open memstream"</span>);
+<a href=#448 id=448 data-nosnippet>448</a>
+<a href=#449 id=449 data-nosnippet>449</a>    repo.write(<span class="kw-2">&amp;</span>pool, file);
+<a href=#450 id=450 data-nosnippet>450</a>    <span class="kw">unsafe </span>{ libc::fclose(file) };
+<a href=#451 id=451 data-nosnippet>451</a>
+<a href=#452 id=452 data-nosnippet>452</a>    <span class="kw">let </span>stream_ptr = std::ptr::NonNull::new(stream_ptr).expect(<span class="string">"stream_ptr was null"</span>);
+<a href=#453 id=453 data-nosnippet>453</a>
+<a href=#454 id=454 data-nosnippet>454</a>    <span class="comment">// Safe because we know `stream_ptr` points to an array of bytes of length
+<a href=#455 id=455 data-nosnippet>455</a>    // `stream_size`
+<a href=#456 id=456 data-nosnippet>456</a>    </span><span class="prelude-val">Ok</span>(<span class="kw">unsafe </span>{ LibcByteSlice::from_raw_parts(stream_ptr.cast(), stream_size) })
+<a href=#457 id=457 data-nosnippet>457</a>}
 </code></pre></div></section></main></body></html>
