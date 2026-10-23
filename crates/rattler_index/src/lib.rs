@@ -1913,9 +1913,9 @@ fn s3_operator(credentials: &S3CredentialSource, channel: &Url) -> Result<Operat
     let bucket = channel
         .host_str()
         .ok_or(anyhow::anyhow!("No bucket in S3 URL"))?;
-    let builder = credentials.opendal_builder(bucket, channel.path());
+    let operator = credentials.opendal_operator(bucket, channel.path())?;
 
-    Ok(Operator::new(builder)?.layer(RetryLayer::new()))
+    Ok(operator.layer(RetryLayer::new()))
 }
 
 /// Create a new `repodata.json` for all packages in the channel at the given S3

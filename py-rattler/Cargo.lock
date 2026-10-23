@@ -4457,6 +4457,7 @@ dependencies = [
  "aws-smithy-http-client",
  "clap",
  "opendal",
+ "opendal-http-transport-reqwest",
  "rattler_networking",
  "reqsign-aws-v4",
  "reqsign-core",

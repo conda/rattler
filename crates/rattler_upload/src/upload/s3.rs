@@ -66,8 +66,9 @@ pub async fn upload_package_to_s3_with_attestation(
         .host_str()
         .ok_or(miette::miette!("No bucket in S3 URL"))?;
 
-    let builder = credentials.opendal_builder(bucket, channel.path());
-    let op = Operator::new(builder).into_diagnostic()?;
+    let op = credentials
+        .opendal_operator(bucket, channel.path())
+        .into_diagnostic()?;
 
     // Upload multiple packages concurrently. Each individual package upload also
     // streams its chunks concurrently (see `upload_single_package`).

@@ -119,6 +119,7 @@ nfs3_types = { version = "0.5" }
 nom = "8"
 nom-language = "0.1"
 opendal = { version = "0.59", default-features = false }
+opendal-http-transport-reqwest = { version = "0.59", default-features = false }
 once_cell = "1"
 open = "5"
 openidconnect = { version = "4", default-features = false }
