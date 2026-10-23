@@ -1739,6 +1739,89 @@ mod test {
         assert_eq!(current_paths, paths);
     }
 
+    #[tokio::test]
+    async fn test_wheel_package_cache() {
+        use rattler_networking::OfflineMiddleware;
+        use rattler_package_streaming::wheel::{CONVERSION_VERSION, WheelJson};
+
+        let sha256 = "274b1e6fc1b966d53976333eb90ac94cb07a450a700b455af9fbdf882244b30a";
+        let wheel = tools::download_and_cache_file_async(
+            "https://files.pythonhosted.org/packages/f1/13/63c0a02c44024ee16f664e0b36eefeb22d54e93531630bd99e237986f534/cowsay-6.1-py3-none-any.whl".parse().unwrap(),
+            sha256,
+        )
+        .await
+        .unwrap();
+        let router =
+            Router::new().route_service("/download", tower_http::services::ServeFile::new(wheel));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = Url::parse(&format!(
+            "http://{}/download",
+            listener.local_addr().unwrap()
+        ))
+        .unwrap();
+        let server = tokio::spawn(axum::serve(listener, router).into_future());
+        let record = PackageRecord {
+            subdir: "noarch".into(),
+            noarch: rattler_conda_types::NoArchType::python(),
+            depends: vec!["python >=3.8".into()],
+            sha256: parse_digest_from_hex::<Sha256>(sha256),
+            ..PackageRecord::new(
+                PackageName::new_unchecked("cowsay"),
+                "6.1".parse::<VersionWithSource>().unwrap(),
+                "py3_none_any_0".parse::<BuildString>().unwrap(),
+            )
+        };
+        let packages_dir = tempdir().unwrap();
+        let cached = PackageCache::new(packages_dir.path())
+            .get_or_fetch_wheel_from_url_with_retry(
+                &record,
+                url.clone(),
+                ClientBuilder::new(Client::default()).build().into(),
+                DoNotRetryPolicy,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        server.abort();
+        let _ = server.await;
+
+        let (index, _) = validate_package_directory(cached.path(), ValidationMode::Full).unwrap();
+        assert_eq!(index.name, record.name);
+        assert_eq!(index.depends, record.depends);
+        assert!(
+            cached
+                .path()
+                .join("site-packages/cowsay/__init__.py")
+                .is_file()
+        );
+        assert_eq!(cached.sha256, record.sha256);
+        assert_eq!(
+            WheelJson::from_package_directory(cached.path())
+                .unwrap()
+                .conversion_version,
+            CONVERSION_VERSION
+        );
+
+        // Reopen the cache with HTTP blocked to verify reuse across instances.
+        let reused = PackageCache::new(packages_dir.path())
+            .get_or_fetch_wheel_from_url_with_retry(
+                &record,
+                url,
+                ClientBuilder::new(Client::default())
+                    .with(OfflineMiddleware)
+                    .build()
+                    .into(),
+                DoNotRetryPolicy,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(reused.path(), cached.path());
+        assert_eq!(reused.revision(), cached.revision());
+    }
+
     /// A helper middleware function that fails the first two requests.
     async fn fail_the_first_two_requests(
         State(count): State<Arc<Mutex<i32>>>,
