@@ -72,6 +72,7 @@ pub struct PathsEntry {
     /// file was clobbered by another package and therefore the original
     /// path is not the same as the relative path.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde_as(as = "Option<crate::utils::serde::NormalizedPath>")]
     pub original_path: Option<PathBuf>,
 
     /// How the file was installed into the environment
