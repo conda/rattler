@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.13.6](https://github.com/conda/rattler/compare/rattler_upload-v0.13.5...rattler_upload-v0.13.6) - 2026-10-23
+## [0.14.0](https://github.com/conda/rattler/compare/rattler_upload-v0.13.5...rattler_upload-v0.14.0) - 2026-10-23
+
+### Changed
+
+- **BREAKING:** `S3Opts::credentials` is a `rattler_s3` 0.4 `S3CredentialsOpts` ([#2979](https://github.com/conda/rattler/pull/2979))
 
 ### Fixed
 
