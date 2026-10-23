@@ -1,6 +1,7 @@
 //! This module provides functionality to cache extracted Conda packages. See
 //! [`PackageCache`].
 
+use rattler_package_streaming::reqwest::DownloadOptions;
 use std::{
     collections::HashMap,
     error::Error,
@@ -52,6 +53,7 @@ mod reporter;
 pub struct PackageCache {
     inner: Arc<PackageCacheInner>,
     cache_origin: bool,
+    download_options: DownloadOptions,
 }
 
 #[derive(Clone, Default)]
@@ -492,6 +494,14 @@ impl PackageCache {
         }
     }
 
+    /// Downloads packages in parallel ranges as `options` describe.
+    pub fn with_download_options(self, download_options: DownloadOptions) -> Self {
+        Self {
+            download_options,
+            ..self
+        }
+    }
+
     /// Prepends a configured layer to this cache.
     ///
     /// Existing layers, filters, cached-origin behavior, and in-memory entry
@@ -579,6 +589,7 @@ impl PackageCache {
                 layers: layers.into_iter().collect(),
             }),
             cache_origin,
+            download_options: DownloadOptions::default(),
         }
     }
 
@@ -857,6 +868,7 @@ impl PackageCache {
         let sha256 = cache_key.sha256();
         let md5 = cache_key.md5();
         let download_reporter = reporter.clone();
+        let download_options = self.download_options.clone();
         // Get or fetch the package, using the specified fetch function
         self.get_or_fetch(cache_key, move |destination| {
             let url = url.clone();
@@ -864,6 +876,7 @@ impl PackageCache {
             let retry_policy = retry_policy.clone();
             let download_reporter = download_reporter.clone();
             let concurrent_requests_semaphore = concurrent_requests_semaphore.clone();
+            let download_options = download_options.clone();
             async move {
                 // Acquire a permit to limit the number of concurrent download
                 // and extraction operations. The permit is held until the
@@ -884,7 +897,7 @@ impl PackageCache {
                     current_try += 1;
                     tracing::debug!("downloading {} to {}", &url, destination.display());
                     // Extract the package
-                    let result = rattler_package_streaming::reqwest::tokio::extract(
+                    let result = rattler_package_streaming::reqwest::tokio::extract_with_options(
                         client.client().clone(),
                         url.clone(),
                         &destination,
@@ -893,6 +906,7 @@ impl PackageCache {
                             reporter,
                             index: Mutex::new(None),
                         }) as Arc::<dyn DownloadReporter>),
+                        &download_options,
                     )
                         .await;
 

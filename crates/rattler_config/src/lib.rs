@@ -1013,6 +1013,7 @@ mod tests {
                 concurrency: crate::config::concurrency::ConcurrencyConfig {
                     solves: 4,
                     downloads: 8,
+                    ..Default::default()
                 },
                 ..Default::default()
             },
