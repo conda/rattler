@@ -39,7 +39,9 @@ jobs:
           environments: mutants
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Compute diff
-        run: git diff "origin/${{ github.base_ref }}...HEAD" > git.diff
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git diff "origin/${BASE_REF}...HEAD" > git.diff
       - name: Run cargo-mutants on changed code
         run: pixi run -e mutants mutants --no-shuffle --in-diff git.diff
       - name: Upload results
