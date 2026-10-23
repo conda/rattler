@@ -17,6 +17,7 @@ from rattler.rattler import PyChannelNotice, PyGateway, PyMatchSpec, PySourceCon
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.removed_package import RemovedPackage
 from rattler.repo_data.repo_data import ChannelRelations
+from rattler.repo_data.sparse import PackageFormatSelection, SparseRepoData
 from rattler.repo_data.who_needs import Dependent, _target_to_py
 from rattler.virtual_package.detectors import DetectorRegistrations
 
@@ -310,6 +311,7 @@ class Gateway:
         channel_notices: bool = False,
         detector_target: Subdir | SubdirLiteral | None = None,
         constraints: Iterable[MatchSpec | str] = (),
+        package_format_selection: PackageFormatSelection | None = None,
     ) -> GatewayQueryResult:
         """Queries the gateway for repodata from channels and custom sources.
 
@@ -349,6 +351,10 @@ class Gateway:
                              ``noarch``. This does not install or execute detectors.
             constraints: Explicit solver constraints that contribute detector demand only.
                          They do not fetch packages or filter returned records.
+            package_format_selection: Which archive formats of a package are returned when
+                                      the same build is available in more than one format.
+                                      Applies to every source. ``None`` uses the gateway
+                                      default (``PackageFormatSelection.PREFER_CONDA``).
 
         Returns:
             A list of lists of `RepoDataRecord`s. The outer list contains one entry per
@@ -393,6 +399,7 @@ class Gateway:
             channel_notices=channel_notices,
             channel_relations=channel_relations,
             channel_relations_max_depth=channel_relations_max_depth,
+            package_format_selection=package_format_selection.value if package_format_selection is not None else None,
             detector_target=(
                 detector_target._inner
                 if isinstance(detector_target, Subdir)
@@ -469,17 +476,18 @@ class Gateway:
 
     async def names(
         self,
-        sources: Iterable[Channel | MultiSource | str | RepoDataSource],
+        sources: Iterable[Channel | MultiSource | str | RepoDataSource | SparseRepoData],
         platforms: Iterable[Subdir | SubdirLiteral],
         channel_relations: ChannelRelationsMode | None = None,
         channel_relations_max_depth: int | None = None,
         channel_notices: bool = False,
+        package_format_selection: PackageFormatSelection | None = None,
     ) -> GatewayNamesResult:
         """Queries all the names of packages in channels or custom sources.
 
         Arguments:
             sources: The sources to query. Can be channels (by name, URL, or Channel object),
-                     `MultiSource` groups or custom RepoDataSource implementations.
+                     `MultiSource` groups, `SparseRepoData` objects, or custom RepoDataSource implementations.
             platforms: The platforms to query.
             channel_relations: How to treat CEP-42 ``channel_relations`` metadata. ``None``
                                uses the gateway default (``"warn"``).
@@ -487,6 +495,12 @@ class Gateway:
                                          ``channel_relations``. ``None`` uses the
                                          default (10).
             channel_notices: Whether to fetch CEP-6 notices for this query.
+            package_format_selection: Only list packages that have records in this
+                                      selection. ``None`` uses the gateway default
+                                      (``PackageFormatSelection.PREFER_CONDA``). Exact for
+                                      ``repodata.json`` channels and ``SparseRepoData``;
+                                      sharded channels and custom sources only index names,
+                                      so they list every package.
 
         Returns:
             A list of package names that are present in the given subdirectories.
@@ -511,6 +525,7 @@ class Gateway:
             channel_notices=channel_notices,
             channel_relations=channel_relations,
             channel_relations_max_depth=channel_relations_max_depth,
+            package_format_selection=package_format_selection.value if package_format_selection is not None else None,
         )
 
         # Convert the names and notices into Python objects.
@@ -654,7 +669,6 @@ def _convert_sources(sources: Iterable[Any]) -> list[Any]:
     """
     from rattler.repo_data.multi_source import MultiSource
     from rattler.repo_data.source import RepoDataSource
-    from rattler.repo_data.sparse import SparseRepoData
 
     converted = []
     for source in sources:
