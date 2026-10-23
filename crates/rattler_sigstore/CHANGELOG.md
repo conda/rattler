@@ -7,11 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.6](https://github.com/conda/rattler/compare/rattler_sigstore-v0.2.5...rattler_sigstore-v0.2.6) - 2026-10-23
+## [0.3.0](https://github.com/conda/rattler/compare/rattler_sigstore-v0.2.5...rattler_sigstore-v0.3.0) - 2026-10-23
 
-### Other
+### Changed
 
-- update Cargo.toml dependencies
+- **BREAKING:** update the `sigstore-*` crates to 0.15.1. The re-exported `Bundle`, `TransparencyLogEntry`, `CertificateInfo`, `FulcioCiClaims` and `TrustedRoot` are now the 0.15 types ([#2977](https://github.com/conda/rattler/pull/2977))
 
 ## [0.2.5](https://github.com/conda/rattler/compare/rattler_sigstore-v0.2.4...rattler_sigstore-v0.2.5) - 2026-10-16
 

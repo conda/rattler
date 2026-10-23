@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.54.3](https://github.com/conda/rattler/compare/rattler-v0.54.2...rattler-v0.54.3) - 2026-10-23
+## [0.55.0](https://github.com/conda/rattler/compare/rattler-v0.54.2...rattler-v0.55.0) - 2026-10-23
+
+### Changed
+
+- **BREAKING:** `Installer::with_attestation_policy` takes a `rattler_sigstore` 0.3 `VerificationPolicy` ([#2977](https://github.com/conda/rattler/pull/2977))
 
 ### Added
 

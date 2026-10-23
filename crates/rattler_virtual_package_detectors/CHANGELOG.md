@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.4](https://github.com/conda/rattler/compare/rattler_virtual_package_detectors-v0.2.3...rattler_virtual_package_detectors-v0.2.4) - 2026-10-23
+## [0.3.0](https://github.com/conda/rattler/compare/rattler_virtual_package_detectors-v0.2.3...rattler_virtual_package_detectors-v0.3.0) - 2026-10-23
+
+### Changed
+
+- **BREAKING:** `EnvironmentError::Install` wraps the `InstallerError` of `rattler` 0.55 ([#2977](https://github.com/conda/rattler/pull/2977))
 
 ### Other
 

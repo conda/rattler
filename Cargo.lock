@@ -5225,7 +5225,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.54.3"
+version = "0.55.0"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -5966,7 +5966,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_sigstore"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "astral-reqwest-middleware",
  "axum",
@@ -6088,7 +6088,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_package_detectors"
-version = "0.2.4"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "fs-err",
