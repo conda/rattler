@@ -35,15 +35,13 @@ jobs:
           submodules: recursive
       - name: Set up pixi
         uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
-        with:
-          environments: mutants
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Compute diff
         env:
           BASE_REF: ${{ github.base_ref }}
         run: git diff "origin/${BASE_REF}...HEAD" > git.diff
       - name: Run cargo-mutants on changed code
-        run: pixi run -e mutants mutants --no-shuffle --in-diff git.diff
+        run: pixi run mutants --no-shuffle --in-diff git.diff
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
