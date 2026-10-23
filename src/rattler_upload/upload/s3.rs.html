@@ -68,216 +68,216 @@
 <a href=#66 id=66 data-nosnippet>66</a>        .host_str()
 <a href=#67 id=67 data-nosnippet>67</a>        .ok_or(<span class="macro">miette::miette!</span>(<span class="string">"No bucket in S3 URL"</span>))<span class="question-mark">?</span>;
 <a href=#68 id=68 data-nosnippet>68</a>
-<a href=#69 id=69 data-nosnippet>69</a>    <span class="kw">let </span>builder = credentials.opendal_builder(bucket, channel.path());
-<a href=#70 id=70 data-nosnippet>70</a>    <span class="kw">let </span>op = Operator::new(builder).into_diagnostic()<span class="question-mark">?</span>.finish();
-<a href=#71 id=71 data-nosnippet>71</a>
-<a href=#72 id=72 data-nosnippet>72</a>    <span class="comment">// Upload multiple packages concurrently. Each individual package upload also
-<a href=#73 id=73 data-nosnippet>73</a>    // streams its chunks concurrently (see `upload_single_package`).
-<a href=#74 id=74 data-nosnippet>74</a>    </span>futures::stream::iter(package_files.iter())
-<a href=#75 id=75 data-nosnippet>75</a>        .map(|package_file| {
-<a href=#76 id=76 data-nosnippet>76</a>            <span class="kw">let </span>op = op.clone();
-<a href=#77 id=77 data-nosnippet>77</a>            <span class="kw">let </span>channel = <span class="kw-2">&amp;</span>channel;
-<a href=#78 id=78 data-nosnippet>78</a>            <span class="kw">async move </span>{ upload_single_package(<span class="kw-2">&amp;</span>op, channel, bucket, package_file, force).<span class="kw">await </span>}
-<a href=#79 id=79 data-nosnippet>79</a>        })
-<a href=#80 id=80 data-nosnippet>80</a>        .buffer_unordered(PACKAGE_CONCURRENCY)
-<a href=#81 id=81 data-nosnippet>81</a>        .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
-<a href=#82 id=82 data-nosnippet>82</a>        .<span class="kw">await
-<a href=#83 id=83 data-nosnippet>83</a>        </span>.into_iter()
-<a href=#84 id=84 data-nosnippet>84</a>        .collect::&lt;miette::Result&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;&gt;()<span class="question-mark">?</span>;
-<a href=#85 id=85 data-nosnippet>85</a>
-<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(attestation) = attestation {
-<a href=#87 id=87 data-nosnippet>87</a>        <span class="kw">let </span>package = ExtractedPackage::from_package_file(<span class="kw-2">&amp;</span>package_files[<span class="number">0</span>])<span class="question-mark">?</span>;
-<a href=#88 id=88 data-nosnippet>88</a>        <span class="kw">let </span>subdir = package
-<a href=#89 id=89 data-nosnippet>89</a>            .subdir()
-<a href=#90 id=90 data-nosnippet>90</a>            .ok_or_else(|| <span class="macro">miette::miette!</span>(<span class="string">"Failed to get subdir"</span>))<span class="question-mark">?</span>;
-<a href=#91 id=91 data-nosnippet>91</a>        <span class="kw">let </span>filename = package
-<a href=#92 id=92 data-nosnippet>92</a>            .filename()
-<a href=#93 id=93 data-nosnippet>93</a>            .ok_or_else(|| <span class="macro">miette::miette!</span>(<span class="string">"Failed to get filename"</span>))<span class="question-mark">?</span>;
-<a href=#94 id=94 data-nosnippet>94</a>        <span class="kw">let </span>mutable_key = <span class="macro">format!</span>(<span class="string">"{subdir}/{filename}.sigs"</span>);
-<a href=#95 id=95 data-nosnippet>95</a>
-<a href=#96 id=96 data-nosnippet>96</a>        publish_attestation_sidecar(<span class="kw-2">&amp;</span>op, <span class="kw-2">&amp;</span>mutable_key, attestation).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#97 id=97 data-nosnippet>97</a>    }
-<a href=#98 id=98 data-nosnippet>98</a>
-<a href=#99 id=99 data-nosnippet>99</a>    <span class="prelude-val">Ok</span>(())
-<a href=#100 id=100 data-nosnippet>100</a>}
-<a href=#101 id=101 data-nosnippet>101</a>
-<a href=#102 id=102 data-nosnippet>102</a><span class="doccomment">/// Checks the basic container format required for a conda attestation sidecar.
-<a href=#103 id=103 data-nosnippet>103</a></span><span class="kw">fn </span>validate_attestation_sidecar(bytes: <span class="kw-2">&amp;</span>[u8]) -&gt; miette::Result&lt;()&gt; {
-<a href=#104 id=104 data-nosnippet>104</a>    <span class="kw">match </span>serde_json::from_slice::&lt;serde_json::Value&gt;(bytes) {
-<a href=#105 id=105 data-nosnippet>105</a>        <span class="prelude-val">Ok</span>(serde_json::Value::Array(bundles)) <span class="kw">if </span>!bundles.is_empty() =&gt; <span class="prelude-val">Ok</span>(()),
-<a href=#106 id=106 data-nosnippet>106</a>        <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; {
-<a href=#107 id=107 data-nosnippet>107</a>            <span class="macro">miette::bail!</span>(<span class="string">"attestation sidecar must be a non-empty JSON array of Sigstore bundles"</span>)
-<a href=#108 id=108 data-nosnippet>108</a>        }
-<a href=#109 id=109 data-nosnippet>109</a>        <span class="prelude-val">Err</span>(err) =&gt; <span class="prelude-val">Err</span>(<span class="macro">miette::miette!</span>(
-<a href=#110 id=110 data-nosnippet>110</a>            <span class="string">"attestation sidecar is not valid JSON: {err}"
-<a href=#111 id=111 data-nosnippet>111</a>        </span>)),
-<a href=#112 id=112 data-nosnippet>112</a>    }
-<a href=#113 id=113 data-nosnippet>113</a>}
-<a href=#114 id=114 data-nosnippet>114</a>
-<a href=#115 id=115 data-nosnippet>115</a><span class="doccomment">/// Publishes the immutable sidecar before updating its mutable discovery path.
-<a href=#116 id=116 data-nosnippet>116</a></span><span class="kw">async fn </span>publish_attestation_sidecar(
-<a href=#117 id=117 data-nosnippet>117</a>    op: <span class="kw-2">&amp;</span>Operator,
-<a href=#118 id=118 data-nosnippet>118</a>    mutable_key: <span class="kw-2">&amp;</span>str,
-<a href=#119 id=119 data-nosnippet>119</a>    bytes: Vec&lt;u8&gt;,
-<a href=#120 id=120 data-nosnippet>120</a>) -&gt; miette::Result&lt;()&gt; {
-<a href=#121 id=121 data-nosnippet>121</a>    <span class="kw">let </span>sha256 = rattler_digest::compute_bytes_digest::&lt;Sha256&gt;(<span class="kw-2">&amp;</span>bytes);
-<a href=#122 id=122 data-nosnippet>122</a>    <span class="kw">let </span>immutable_key = <span class="macro">format!</span>(<span class="string">"{mutable_key}.{}"</span>, hex::encode(sha256));
-<a href=#123 id=123 data-nosnippet>123</a>
-<a href=#124 id=124 data-nosnippet>124</a>    <span class="kw">match </span>op
-<a href=#125 id=125 data-nosnippet>125</a>        .write_with(<span class="kw-2">&amp;</span>immutable_key, bytes.clone())
-<a href=#126 id=126 data-nosnippet>126</a>        .content_type(<span class="string">"application/json"</span>)
-<a href=#127 id=127 data-nosnippet>127</a>        .if_not_exists(<span class="bool-val">true</span>)
-<a href=#128 id=128 data-nosnippet>128</a>        .<span class="kw">await
-<a href=#129 id=129 data-nosnippet>129</a>    </span>{
-<a href=#130 id=130 data-nosnippet>130</a>        <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; {}
-<a href=#131 id=131 data-nosnippet>131</a>        <span class="prelude-val">Err</span>(err) <span class="kw">if </span>err.kind() == ErrorKind::ConditionNotMatch =&gt; {
-<a href=#132 id=132 data-nosnippet>132</a>            <span class="kw">let </span>existing = op.read(<span class="kw-2">&amp;</span>immutable_key).<span class="kw">await</span>.into_diagnostic()<span class="question-mark">?</span>.to_bytes();
-<a href=#133 id=133 data-nosnippet>133</a>            <span class="kw">if </span>existing.as_ref() != bytes.as_slice() {
-<a href=#134 id=134 data-nosnippet>134</a>                <span class="macro">miette::bail!</span>(
-<a href=#135 id=135 data-nosnippet>135</a>                    <span class="string">"content-addressed attestation sidecar {immutable_key} already exists with different contents"
-<a href=#136 id=136 data-nosnippet>136</a>                </span>);
-<a href=#137 id=137 data-nosnippet>137</a>            }
-<a href=#138 id=138 data-nosnippet>138</a>        }
-<a href=#139 id=139 data-nosnippet>139</a>        <span class="prelude-val">Err</span>(err) =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(err).into_diagnostic(),
-<a href=#140 id=140 data-nosnippet>140</a>    }
-<a href=#141 id=141 data-nosnippet>141</a>
-<a href=#142 id=142 data-nosnippet>142</a>    <span class="comment">// Copying from the immutable object guarantees that both published paths
-<a href=#143 id=143 data-nosnippet>143</a>    // contain exactly the same bytes.
-<a href=#144 id=144 data-nosnippet>144</a>    </span>op.copy(<span class="kw-2">&amp;</span>immutable_key, mutable_key)
-<a href=#145 id=145 data-nosnippet>145</a>        .<span class="kw">await
-<a href=#146 id=146 data-nosnippet>146</a>        </span>.into_diagnostic()<span class="question-mark">?</span>;
-<a href=#147 id=147 data-nosnippet>147</a>
-<a href=#148 id=148 data-nosnippet>148</a>    <span class="macro">tracing::info!</span>(<span class="string">"Uploaded attestation sidecar to {mutable_key}"</span>);
-<a href=#149 id=149 data-nosnippet>149</a>    <span class="prelude-val">Ok</span>(())
-<a href=#150 id=150 data-nosnippet>150</a>}
-<a href=#151 id=151 data-nosnippet>151</a>
-<a href=#152 id=152 data-nosnippet>152</a><span class="doccomment">/// Uploads a single package file to the S3 bucket via the given operator.
-<a href=#153 id=153 data-nosnippet>153</a></span><span class="kw">async fn </span>upload_single_package(
-<a href=#154 id=154 data-nosnippet>154</a>    op: <span class="kw-2">&amp;</span>Operator,
-<a href=#155 id=155 data-nosnippet>155</a>    channel: <span class="kw-2">&amp;</span>Url,
-<a href=#156 id=156 data-nosnippet>156</a>    bucket: <span class="kw-2">&amp;</span>str,
-<a href=#157 id=157 data-nosnippet>157</a>    package_file: <span class="kw-2">&amp;</span>Path,
-<a href=#158 id=158 data-nosnippet>158</a>    force: bool,
-<a href=#159 id=159 data-nosnippet>159</a>) -&gt; miette::Result&lt;()&gt; {
-<a href=#160 id=160 data-nosnippet>160</a>    <span class="kw">let </span>package = ExtractedPackage::from_package_file(package_file)<span class="question-mark">?</span>;
-<a href=#161 id=161 data-nosnippet>161</a>    <span class="kw">let </span>subdir = package
-<a href=#162 id=162 data-nosnippet>162</a>        .subdir()
-<a href=#163 id=163 data-nosnippet>163</a>        .ok_or_else(|| <span class="macro">miette::miette!</span>(<span class="string">"Failed to get subdir"</span>))<span class="question-mark">?</span>;
-<a href=#164 id=164 data-nosnippet>164</a>    <span class="kw">let </span>filename = package
-<a href=#165 id=165 data-nosnippet>165</a>        .filename()
-<a href=#166 id=166 data-nosnippet>166</a>        .ok_or_else(|| <span class="macro">miette::miette!</span>(<span class="string">"Failed to get filename"</span>))<span class="question-mark">?</span>;
-<a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">let </span>key = <span class="macro">format!</span>(<span class="string">"{subdir}/{filename}"</span>);
-<a href=#168 id=168 data-nosnippet>168</a>
-<a href=#169 id=169 data-nosnippet>169</a>    <span class="comment">// Compute the hash of the package by streaming its content.
-<a href=#170 id=170 data-nosnippet>170</a>    </span><span class="kw">let </span>file = tokio::io::BufReader::new(
-<a href=#171 id=171 data-nosnippet>171</a>        fs_err::tokio::File::open(package_file)
-<a href=#172 id=172 data-nosnippet>172</a>            .<span class="kw">await
-<a href=#173 id=173 data-nosnippet>173</a>            </span>.into_diagnostic()<span class="question-mark">?</span>,
-<a href=#174 id=174 data-nosnippet>174</a>    );
-<a href=#175 id=175 data-nosnippet>175</a>    <span class="kw">let </span>sha256_reader = HashingReader::&lt;<span class="kw">_</span>, Sha256&gt;::new(file);
-<a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">let </span><span class="kw-2">mut </span>md5_reader = HashingReader::&lt;<span class="kw">_</span>, Md5&gt;::new(sha256_reader);
-<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">let </span>size = tokio::io::copy(<span class="kw-2">&amp;mut </span>md5_reader, <span class="kw-2">&amp;mut </span>tokio::io::sink())
-<a href=#178 id=178 data-nosnippet>178</a>        .<span class="kw">await
-<a href=#179 id=179 data-nosnippet>179</a>        </span>.into_diagnostic()<span class="question-mark">?</span>;
-<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">let </span>(sha256_reader, md5hash) = md5_reader.finalize();
-<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>file, sha256hash) = sha256_reader.finalize();
-<a href=#182 id=182 data-nosnippet>182</a>
-<a href=#183 id=183 data-nosnippet>183</a>    <span class="comment">// Rewind the file to the beginning.
-<a href=#184 id=184 data-nosnippet>184</a>    </span>file.rewind().<span class="kw">await</span>.into_diagnostic()<span class="question-mark">?</span>;
-<a href=#185 id=185 data-nosnippet>185</a>
-<a href=#186 id=186 data-nosnippet>186</a>    <span class="comment">// Construct a writer for the package. Setting `chunk` and `concurrent`
-<a href=#187 id=187 data-nosnippet>187</a>    // enables opendal's concurrent multipart upload: data is buffered into
-<a href=#188 id=188 data-nosnippet>188</a>    // `DESIRED_CHUNK_SIZE` parts and up to `PART_CONCURRENCY` parts are uploaded
-<a href=#189 id=189 data-nosnippet>189</a>    // in parallel.
-<a href=#190 id=190 data-nosnippet>190</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>writer = <span class="kw">match </span>op
-<a href=#191 id=191 data-nosnippet>191</a>        .writer_with(<span class="kw-2">&amp;</span>key)
-<a href=#192 id=192 data-nosnippet>192</a>        .chunk(DESIRED_CHUNK_SIZE)
-<a href=#193 id=193 data-nosnippet>193</a>        .concurrent(PART_CONCURRENCY)
-<a href=#194 id=194 data-nosnippet>194</a>        .content_disposition(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"attachment; filename={filename}"</span>))
-<a href=#195 id=195 data-nosnippet>195</a>        .if_not_exists(!force)
-<a href=#196 id=196 data-nosnippet>196</a>        .user_metadata([
-<a href=#197 id=197 data-nosnippet>197</a>            (String::from(<span class="string">"package-sha256"</span>), hex::encode(sha256hash)),
-<a href=#198 id=198 data-nosnippet>198</a>            (String::from(<span class="string">"package-md5"</span>), hex::encode(md5hash)),
-<a href=#199 id=199 data-nosnippet>199</a>        ])
-<a href=#200 id=200 data-nosnippet>200</a>        .<span class="kw">await
-<a href=#201 id=201 data-nosnippet>201</a>    </span>{
-<a href=#202 id=202 data-nosnippet>202</a>        <span class="prelude-val">Err</span>(e) <span class="kw">if </span>e.kind() == ErrorKind::ConditionNotMatch =&gt; {
-<a href=#203 id=203 data-nosnippet>203</a>            <span class="macro">miette::bail!</span>(
-<a href=#204 id=204 data-nosnippet>204</a>                <span class="string">"Package s3://{bucket}{}/{key} already exists. Use --force to overwrite."</span>,
-<a href=#205 id=205 data-nosnippet>205</a>                channel.path().to_string()
-<a href=#206 id=206 data-nosnippet>206</a>            );
-<a href=#207 id=207 data-nosnippet>207</a>        }
-<a href=#208 id=208 data-nosnippet>208</a>        <span class="prelude-val">Ok</span>(writer) =&gt; writer,
-<a href=#209 id=209 data-nosnippet>209</a>        <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#210 id=210 data-nosnippet>210</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(e).into_diagnostic();
-<a href=#211 id=211 data-nosnippet>211</a>        }
-<a href=#212 id=212 data-nosnippet>212</a>    };
-<a href=#213 id=213 data-nosnippet>213</a>
-<a href=#214 id=214 data-nosnippet>214</a>    <span class="comment">// Stream the file to the writer in `DESIRED_CHUNK_SIZE` chunks. opendal takes
-<a href=#215 id=215 data-nosnippet>215</a>    // care of buffering these into correctly sized parts and uploading them
-<a href=#216 id=216 data-nosnippet>216</a>    // concurrently.
-<a href=#217 id=217 data-nosnippet>217</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>remaining_size = size <span class="kw">as </span>usize;
-<a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">while </span>remaining_size &gt; <span class="number">0 </span>{
-<a href=#219 id=219 data-nosnippet>219</a>        <span class="comment">// Allocate memory for this chunk.
-<a href=#220 id=220 data-nosnippet>220</a>        </span><span class="kw">let </span>chunk_size = remaining_size.min(DESIRED_CHUNK_SIZE);
-<a href=#221 id=221 data-nosnippet>221</a>        <span class="kw">let </span><span class="kw-2">mut </span>chunk = BytesMut::with_capacity(chunk_size);
-<a href=#222 id=222 data-nosnippet>222</a>        <span class="comment">// SAFE: because we do not care about the bytes that are currently in the buffer
-<a href=#223 id=223 data-nosnippet>223</a>        </span><span class="kw">unsafe </span>{ chunk.set_len(chunk_size) };
-<a href=#224 id=224 data-nosnippet>224</a>
-<a href=#225 id=225 data-nosnippet>225</a>        <span class="comment">// Fill the chunk with data. This reads exactly the number of bytes we want. No
-<a href=#226 id=226 data-nosnippet>226</a>        // more, no less.
-<a href=#227 id=227 data-nosnippet>227</a>        </span><span class="kw">let </span>bytes_read = file.read_exact(<span class="kw-2">&amp;mut </span>chunk[..]).<span class="kw">await</span>.into_diagnostic()<span class="question-mark">?</span>;
-<a href=#228 id=228 data-nosnippet>228</a>        <span class="macro">debug_assert_eq!</span>(bytes_read, chunk.len());
-<a href=#229 id=229 data-nosnippet>229</a>
-<a href=#230 id=230 data-nosnippet>230</a>        <span class="comment">// Hand the chunk to the writer. With concurrent writes enabled this returns
-<a href=#231 id=231 data-nosnippet>231</a>        // as soon as the chunk is queued rather than fully uploaded.
-<a href=#232 id=232 data-nosnippet>232</a>        </span>writer.write(chunk.freeze()).<span class="kw">await</span>.into_diagnostic()<span class="question-mark">?</span>;
-<a href=#233 id=233 data-nosnippet>233</a>
-<a href=#234 id=234 data-nosnippet>234</a>        <span class="comment">// Update the number of remaining bytes.
-<a href=#235 id=235 data-nosnippet>235</a>        </span>remaining_size = remaining_size.saturating_sub(bytes_read);
-<a href=#236 id=236 data-nosnippet>236</a>    }
-<a href=#237 id=237 data-nosnippet>237</a>
-<a href=#238 id=238 data-nosnippet>238</a>    <span class="kw">match </span>writer.close().<span class="kw">await </span>{
-<a href=#239 id=239 data-nosnippet>239</a>        <span class="prelude-val">Err</span>(e) <span class="kw">if </span>e.kind() == ErrorKind::ConditionNotMatch =&gt; {
-<a href=#240 id=240 data-nosnippet>240</a>            <span class="macro">miette::bail!</span>(
-<a href=#241 id=241 data-nosnippet>241</a>                <span class="string">"Package s3://{bucket}{}/{key} already exists. Use --force to overwrite."</span>,
-<a href=#242 id=242 data-nosnippet>242</a>                channel.path().to_string()
-<a href=#243 id=243 data-nosnippet>243</a>            );
-<a href=#244 id=244 data-nosnippet>244</a>        }
-<a href=#245 id=245 data-nosnippet>245</a>        <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; {
-<a href=#246 id=246 data-nosnippet>246</a>            <span class="macro">tracing::info!</span>(
-<a href=#247 id=247 data-nosnippet>247</a>                <span class="string">"Uploaded package to s3://{bucket}{}/{key}"</span>,
-<a href=#248 id=248 data-nosnippet>248</a>                channel.path().to_string()
-<a href=#249 id=249 data-nosnippet>249</a>            );
-<a href=#250 id=250 data-nosnippet>250</a>        }
-<a href=#251 id=251 data-nosnippet>251</a>        <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#252 id=252 data-nosnippet>252</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(e).into_diagnostic();
-<a href=#253 id=253 data-nosnippet>253</a>        }
-<a href=#254 id=254 data-nosnippet>254</a>    }
-<a href=#255 id=255 data-nosnippet>255</a>
-<a href=#256 id=256 data-nosnippet>256</a>    <span class="prelude-val">Ok</span>(())
-<a href=#257 id=257 data-nosnippet>257</a>}
-<a href=#258 id=258 data-nosnippet>258</a>
-<a href=#259 id=259 data-nosnippet>259</a><span class="attr">#[cfg(test)]
-<a href=#260 id=260 data-nosnippet>260</a></span><span class="kw">mod </span>tests {
-<a href=#261 id=261 data-nosnippet>261</a>    <span class="kw">use </span>opendal::services::Fs;
-<a href=#262 id=262 data-nosnippet>262</a>
-<a href=#263 id=263 data-nosnippet>263</a>    <span class="kw">use super</span>::{publish_attestation_sidecar, validate_attestation_sidecar};
-<a href=#264 id=264 data-nosnippet>264</a>
-<a href=#265 id=265 data-nosnippet>265</a>    <span class="attr">#[test]
-<a href=#266 id=266 data-nosnippet>266</a>    </span><span class="kw">fn </span>validates_attestation_sidecar_container() {
-<a href=#267 id=267 data-nosnippet>267</a>        <span class="macro">assert!</span>(validate_attestation_sidecar(<span class="string">br#"[{"bundle":1}]"#</span>).is_ok());
-<a href=#268 id=268 data-nosnippet>268</a>        <span class="macro">assert!</span>(validate_attestation_sidecar(<span class="string">br#"[]"#</span>).is_err());
-<a href=#269 id=269 data-nosnippet>269</a>        <span class="macro">assert!</span>(validate_attestation_sidecar(<span class="string">br#"{"bundle":1}"#</span>).is_err());
-<a href=#270 id=270 data-nosnippet>270</a>        <span class="macro">assert!</span>(validate_attestation_sidecar(<span class="string">b"not json"</span>).is_err());
-<a href=#271 id=271 data-nosnippet>271</a>    }
-<a href=#272 id=272 data-nosnippet>272</a>
-<a href=#273 id=273 data-nosnippet>273</a>    <span class="attr">#[tokio::test]
-<a href=#274 id=274 data-nosnippet>274</a>    </span><span class="kw">async fn </span>publishes_immutable_and_mutable_sidecars_with_identical_bytes() {
-<a href=#275 id=275 data-nosnippet>275</a>        <span class="kw">let </span>temp_dir = tempfile::tempdir().unwrap();
-<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw">let </span>op = opendal::Operator::new(Fs::default().root(temp_dir.path().to_str().unwrap()))
-<a href=#277 id=277 data-nosnippet>277</a>            .unwrap()
-<a href=#278 id=278 data-nosnippet>278</a>            .finish();
+<a href=#69 id=69 data-nosnippet>69</a>    <span class="kw">let </span>op = credentials
+<a href=#70 id=70 data-nosnippet>70</a>        .opendal_operator(bucket, channel.path())
+<a href=#71 id=71 data-nosnippet>71</a>        .into_diagnostic()<span class="question-mark">?</span>;
+<a href=#72 id=72 data-nosnippet>72</a>
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="comment">// Upload multiple packages concurrently. Each individual package upload also
+<a href=#74 id=74 data-nosnippet>74</a>    // streams its chunks concurrently (see `upload_single_package`).
+<a href=#75 id=75 data-nosnippet>75</a>    </span>futures::stream::iter(package_files.iter())
+<a href=#76 id=76 data-nosnippet>76</a>        .map(|package_file| {
+<a href=#77 id=77 data-nosnippet>77</a>            <span class="kw">let </span>op = op.clone();
+<a href=#78 id=78 data-nosnippet>78</a>            <span class="kw">let </span>channel = <span class="kw-2">&amp;</span>channel;
+<a href=#79 id=79 data-nosnippet>79</a>            <span class="kw">async move </span>{ upload_single_package(<span class="kw-2">&amp;</span>op, channel, bucket, package_file, force).<span class="kw">await </span>}
+<a href=#80 id=80 data-nosnippet>80</a>        })
+<a href=#81 id=81 data-nosnippet>81</a>        .buffer_unordered(PACKAGE_CONCURRENCY)
+<a href=#82 id=82 data-nosnippet>82</a>        .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
+<a href=#83 id=83 data-nosnippet>83</a>        .<span class="kw">await
+<a href=#84 id=84 data-nosnippet>84</a>        </span>.into_iter()
+<a href=#85 id=85 data-nosnippet>85</a>        .collect::&lt;miette::Result&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;&gt;()<span class="question-mark">?</span>;
+<a href=#86 id=86 data-nosnippet>86</a>
+<a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(attestation) = attestation {
+<a href=#88 id=88 data-nosnippet>88</a>        <span class="kw">let </span>package = ExtractedPackage::from_package_file(<span class="kw-2">&amp;</span>package_files[<span class="number">0</span>])<span class="question-mark">?</span>;
+<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">let </span>subdir = package
+<a href=#90 id=90 data-nosnippet>90</a>            .subdir()
+<a href=#91 id=91 data-nosnippet>91</a>            .ok_or_else(|| <span class="macro">miette::miette!</span>(<span class="string">"Failed to get subdir"</span>))<span class="question-mark">?</span>;
+<a href=#92 id=92 data-nosnippet>92</a>        <span class="kw">let </span>filename = package
+<a href=#93 id=93 data-nosnippet>93</a>            .filename()
+<a href=#94 id=94 data-nosnippet>94</a>            .ok_or_else(|| <span class="macro">miette::miette!</span>(<span class="string">"Failed to get filename"</span>))<span class="question-mark">?</span>;
+<a href=#95 id=95 data-nosnippet>95</a>        <span class="kw">let </span>mutable_key = <span class="macro">format!</span>(<span class="string">"{subdir}/{filename}.sigs"</span>);
+<a href=#96 id=96 data-nosnippet>96</a>
+<a href=#97 id=97 data-nosnippet>97</a>        publish_attestation_sidecar(<span class="kw-2">&amp;</span>op, <span class="kw-2">&amp;</span>mutable_key, attestation).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#98 id=98 data-nosnippet>98</a>    }
+<a href=#99 id=99 data-nosnippet>99</a>
+<a href=#100 id=100 data-nosnippet>100</a>    <span class="prelude-val">Ok</span>(())
+<a href=#101 id=101 data-nosnippet>101</a>}
+<a href=#102 id=102 data-nosnippet>102</a>
+<a href=#103 id=103 data-nosnippet>103</a><span class="doccomment">/// Checks the basic container format required for a conda attestation sidecar.
+<a href=#104 id=104 data-nosnippet>104</a></span><span class="kw">fn </span>validate_attestation_sidecar(bytes: <span class="kw-2">&amp;</span>[u8]) -&gt; miette::Result&lt;()&gt; {
+<a href=#105 id=105 data-nosnippet>105</a>    <span class="kw">match </span>serde_json::from_slice::&lt;serde_json::Value&gt;(bytes) {
+<a href=#106 id=106 data-nosnippet>106</a>        <span class="prelude-val">Ok</span>(serde_json::Value::Array(bundles)) <span class="kw">if </span>!bundles.is_empty() =&gt; <span class="prelude-val">Ok</span>(()),
+<a href=#107 id=107 data-nosnippet>107</a>        <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; {
+<a href=#108 id=108 data-nosnippet>108</a>            <span class="macro">miette::bail!</span>(<span class="string">"attestation sidecar must be a non-empty JSON array of Sigstore bundles"</span>)
+<a href=#109 id=109 data-nosnippet>109</a>        }
+<a href=#110 id=110 data-nosnippet>110</a>        <span class="prelude-val">Err</span>(err) =&gt; <span class="prelude-val">Err</span>(<span class="macro">miette::miette!</span>(
+<a href=#111 id=111 data-nosnippet>111</a>            <span class="string">"attestation sidecar is not valid JSON: {err}"
+<a href=#112 id=112 data-nosnippet>112</a>        </span>)),
+<a href=#113 id=113 data-nosnippet>113</a>    }
+<a href=#114 id=114 data-nosnippet>114</a>}
+<a href=#115 id=115 data-nosnippet>115</a>
+<a href=#116 id=116 data-nosnippet>116</a><span class="doccomment">/// Publishes the immutable sidecar before updating its mutable discovery path.
+<a href=#117 id=117 data-nosnippet>117</a></span><span class="kw">async fn </span>publish_attestation_sidecar(
+<a href=#118 id=118 data-nosnippet>118</a>    op: <span class="kw-2">&amp;</span>Operator,
+<a href=#119 id=119 data-nosnippet>119</a>    mutable_key: <span class="kw-2">&amp;</span>str,
+<a href=#120 id=120 data-nosnippet>120</a>    bytes: Vec&lt;u8&gt;,
+<a href=#121 id=121 data-nosnippet>121</a>) -&gt; miette::Result&lt;()&gt; {
+<a href=#122 id=122 data-nosnippet>122</a>    <span class="kw">let </span>sha256 = rattler_digest::compute_bytes_digest::&lt;Sha256&gt;(<span class="kw-2">&amp;</span>bytes);
+<a href=#123 id=123 data-nosnippet>123</a>    <span class="kw">let </span>immutable_key = <span class="macro">format!</span>(<span class="string">"{mutable_key}.{}"</span>, hex::encode(sha256));
+<a href=#124 id=124 data-nosnippet>124</a>
+<a href=#125 id=125 data-nosnippet>125</a>    <span class="kw">match </span>op
+<a href=#126 id=126 data-nosnippet>126</a>        .write_with(<span class="kw-2">&amp;</span>immutable_key, bytes.clone())
+<a href=#127 id=127 data-nosnippet>127</a>        .content_type(<span class="string">"application/json"</span>)
+<a href=#128 id=128 data-nosnippet>128</a>        .if_not_exists(<span class="bool-val">true</span>)
+<a href=#129 id=129 data-nosnippet>129</a>        .<span class="kw">await
+<a href=#130 id=130 data-nosnippet>130</a>    </span>{
+<a href=#131 id=131 data-nosnippet>131</a>        <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; {}
+<a href=#132 id=132 data-nosnippet>132</a>        <span class="prelude-val">Err</span>(err) <span class="kw">if </span>err.kind() == ErrorKind::ConditionNotMatch =&gt; {
+<a href=#133 id=133 data-nosnippet>133</a>            <span class="kw">let </span>existing = op.read(<span class="kw-2">&amp;</span>immutable_key).<span class="kw">await</span>.into_diagnostic()<span class="question-mark">?</span>.to_bytes();
+<a href=#134 id=134 data-nosnippet>134</a>            <span class="kw">if </span>existing.as_ref() != bytes.as_slice() {
+<a href=#135 id=135 data-nosnippet>135</a>                <span class="macro">miette::bail!</span>(
+<a href=#136 id=136 data-nosnippet>136</a>                    <span class="string">"content-addressed attestation sidecar {immutable_key} already exists with different contents"
+<a href=#137 id=137 data-nosnippet>137</a>                </span>);
+<a href=#138 id=138 data-nosnippet>138</a>            }
+<a href=#139 id=139 data-nosnippet>139</a>        }
+<a href=#140 id=140 data-nosnippet>140</a>        <span class="prelude-val">Err</span>(err) =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(err).into_diagnostic(),
+<a href=#141 id=141 data-nosnippet>141</a>    }
+<a href=#142 id=142 data-nosnippet>142</a>
+<a href=#143 id=143 data-nosnippet>143</a>    <span class="comment">// Copying from the immutable object guarantees that both published paths
+<a href=#144 id=144 data-nosnippet>144</a>    // contain exactly the same bytes.
+<a href=#145 id=145 data-nosnippet>145</a>    </span>op.copy(<span class="kw-2">&amp;</span>immutable_key, mutable_key)
+<a href=#146 id=146 data-nosnippet>146</a>        .<span class="kw">await
+<a href=#147 id=147 data-nosnippet>147</a>        </span>.into_diagnostic()<span class="question-mark">?</span>;
+<a href=#148 id=148 data-nosnippet>148</a>
+<a href=#149 id=149 data-nosnippet>149</a>    <span class="macro">tracing::info!</span>(<span class="string">"Uploaded attestation sidecar to {mutable_key}"</span>);
+<a href=#150 id=150 data-nosnippet>150</a>    <span class="prelude-val">Ok</span>(())
+<a href=#151 id=151 data-nosnippet>151</a>}
+<a href=#152 id=152 data-nosnippet>152</a>
+<a href=#153 id=153 data-nosnippet>153</a><span class="doccomment">/// Uploads a single package file to the S3 bucket via the given operator.
+<a href=#154 id=154 data-nosnippet>154</a></span><span class="kw">async fn </span>upload_single_package(
+<a href=#155 id=155 data-nosnippet>155</a>    op: <span class="kw-2">&amp;</span>Operator,
+<a href=#156 id=156 data-nosnippet>156</a>    channel: <span class="kw-2">&amp;</span>Url,
+<a href=#157 id=157 data-nosnippet>157</a>    bucket: <span class="kw-2">&amp;</span>str,
+<a href=#158 id=158 data-nosnippet>158</a>    package_file: <span class="kw-2">&amp;</span>Path,
+<a href=#159 id=159 data-nosnippet>159</a>    force: bool,
+<a href=#160 id=160 data-nosnippet>160</a>) -&gt; miette::Result&lt;()&gt; {
+<a href=#161 id=161 data-nosnippet>161</a>    <span class="kw">let </span>package = ExtractedPackage::from_package_file(package_file)<span class="question-mark">?</span>;
+<a href=#162 id=162 data-nosnippet>162</a>    <span class="kw">let </span>subdir = package
+<a href=#163 id=163 data-nosnippet>163</a>        .subdir()
+<a href=#164 id=164 data-nosnippet>164</a>        .ok_or_else(|| <span class="macro">miette::miette!</span>(<span class="string">"Failed to get subdir"</span>))<span class="question-mark">?</span>;
+<a href=#165 id=165 data-nosnippet>165</a>    <span class="kw">let </span>filename = package
+<a href=#166 id=166 data-nosnippet>166</a>        .filename()
+<a href=#167 id=167 data-nosnippet>167</a>        .ok_or_else(|| <span class="macro">miette::miette!</span>(<span class="string">"Failed to get filename"</span>))<span class="question-mark">?</span>;
+<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">let </span>key = <span class="macro">format!</span>(<span class="string">"{subdir}/{filename}"</span>);
+<a href=#169 id=169 data-nosnippet>169</a>
+<a href=#170 id=170 data-nosnippet>170</a>    <span class="comment">// Compute the hash of the package by streaming its content.
+<a href=#171 id=171 data-nosnippet>171</a>    </span><span class="kw">let </span>file = tokio::io::BufReader::new(
+<a href=#172 id=172 data-nosnippet>172</a>        fs_err::tokio::File::open(package_file)
+<a href=#173 id=173 data-nosnippet>173</a>            .<span class="kw">await
+<a href=#174 id=174 data-nosnippet>174</a>            </span>.into_diagnostic()<span class="question-mark">?</span>,
+<a href=#175 id=175 data-nosnippet>175</a>    );
+<a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">let </span>sha256_reader = HashingReader::&lt;<span class="kw">_</span>, Sha256&gt;::new(file);
+<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">let </span><span class="kw-2">mut </span>md5_reader = HashingReader::&lt;<span class="kw">_</span>, Md5&gt;::new(sha256_reader);
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">let </span>size = tokio::io::copy(<span class="kw-2">&amp;mut </span>md5_reader, <span class="kw-2">&amp;mut </span>tokio::io::sink())
+<a href=#179 id=179 data-nosnippet>179</a>        .<span class="kw">await
+<a href=#180 id=180 data-nosnippet>180</a>        </span>.into_diagnostic()<span class="question-mark">?</span>;
+<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let </span>(sha256_reader, md5hash) = md5_reader.finalize();
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>file, sha256hash) = sha256_reader.finalize();
+<a href=#183 id=183 data-nosnippet>183</a>
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="comment">// Rewind the file to the beginning.
+<a href=#185 id=185 data-nosnippet>185</a>    </span>file.rewind().<span class="kw">await</span>.into_diagnostic()<span class="question-mark">?</span>;
+<a href=#186 id=186 data-nosnippet>186</a>
+<a href=#187 id=187 data-nosnippet>187</a>    <span class="comment">// Construct a writer for the package. Setting `chunk` and `concurrent`
+<a href=#188 id=188 data-nosnippet>188</a>    // enables opendal's concurrent multipart upload: data is buffered into
+<a href=#189 id=189 data-nosnippet>189</a>    // `DESIRED_CHUNK_SIZE` parts and up to `PART_CONCURRENCY` parts are uploaded
+<a href=#190 id=190 data-nosnippet>190</a>    // in parallel.
+<a href=#191 id=191 data-nosnippet>191</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>writer = <span class="kw">match </span>op
+<a href=#192 id=192 data-nosnippet>192</a>        .writer_with(<span class="kw-2">&amp;</span>key)
+<a href=#193 id=193 data-nosnippet>193</a>        .chunk(DESIRED_CHUNK_SIZE)
+<a href=#194 id=194 data-nosnippet>194</a>        .concurrent(PART_CONCURRENCY)
+<a href=#195 id=195 data-nosnippet>195</a>        .content_disposition(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"attachment; filename={filename}"</span>))
+<a href=#196 id=196 data-nosnippet>196</a>        .if_not_exists(!force)
+<a href=#197 id=197 data-nosnippet>197</a>        .user_metadata([
+<a href=#198 id=198 data-nosnippet>198</a>            (String::from(<span class="string">"package-sha256"</span>), hex::encode(sha256hash)),
+<a href=#199 id=199 data-nosnippet>199</a>            (String::from(<span class="string">"package-md5"</span>), hex::encode(md5hash)),
+<a href=#200 id=200 data-nosnippet>200</a>        ])
+<a href=#201 id=201 data-nosnippet>201</a>        .<span class="kw">await
+<a href=#202 id=202 data-nosnippet>202</a>    </span>{
+<a href=#203 id=203 data-nosnippet>203</a>        <span class="prelude-val">Err</span>(e) <span class="kw">if </span>e.kind() == ErrorKind::ConditionNotMatch =&gt; {
+<a href=#204 id=204 data-nosnippet>204</a>            <span class="macro">miette::bail!</span>(
+<a href=#205 id=205 data-nosnippet>205</a>                <span class="string">"Package s3://{bucket}{}/{key} already exists. Use --force to overwrite."</span>,
+<a href=#206 id=206 data-nosnippet>206</a>                channel.path().to_string()
+<a href=#207 id=207 data-nosnippet>207</a>            );
+<a href=#208 id=208 data-nosnippet>208</a>        }
+<a href=#209 id=209 data-nosnippet>209</a>        <span class="prelude-val">Ok</span>(writer) =&gt; writer,
+<a href=#210 id=210 data-nosnippet>210</a>        <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#211 id=211 data-nosnippet>211</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(e).into_diagnostic();
+<a href=#212 id=212 data-nosnippet>212</a>        }
+<a href=#213 id=213 data-nosnippet>213</a>    };
+<a href=#214 id=214 data-nosnippet>214</a>
+<a href=#215 id=215 data-nosnippet>215</a>    <span class="comment">// Stream the file to the writer in `DESIRED_CHUNK_SIZE` chunks. opendal takes
+<a href=#216 id=216 data-nosnippet>216</a>    // care of buffering these into correctly sized parts and uploading them
+<a href=#217 id=217 data-nosnippet>217</a>    // concurrently.
+<a href=#218 id=218 data-nosnippet>218</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>remaining_size = size <span class="kw">as </span>usize;
+<a href=#219 id=219 data-nosnippet>219</a>    <span class="kw">while </span>remaining_size &gt; <span class="number">0 </span>{
+<a href=#220 id=220 data-nosnippet>220</a>        <span class="comment">// Allocate memory for this chunk.
+<a href=#221 id=221 data-nosnippet>221</a>        </span><span class="kw">let </span>chunk_size = remaining_size.min(DESIRED_CHUNK_SIZE);
+<a href=#222 id=222 data-nosnippet>222</a>        <span class="kw">let </span><span class="kw-2">mut </span>chunk = BytesMut::with_capacity(chunk_size);
+<a href=#223 id=223 data-nosnippet>223</a>        <span class="comment">// SAFE: because we do not care about the bytes that are currently in the buffer
+<a href=#224 id=224 data-nosnippet>224</a>        </span><span class="kw">unsafe </span>{ chunk.set_len(chunk_size) };
+<a href=#225 id=225 data-nosnippet>225</a>
+<a href=#226 id=226 data-nosnippet>226</a>        <span class="comment">// Fill the chunk with data. This reads exactly the number of bytes we want. No
+<a href=#227 id=227 data-nosnippet>227</a>        // more, no less.
+<a href=#228 id=228 data-nosnippet>228</a>        </span><span class="kw">let </span>bytes_read = file.read_exact(<span class="kw-2">&amp;mut </span>chunk[..]).<span class="kw">await</span>.into_diagnostic()<span class="question-mark">?</span>;
+<a href=#229 id=229 data-nosnippet>229</a>        <span class="macro">debug_assert_eq!</span>(bytes_read, chunk.len());
+<a href=#230 id=230 data-nosnippet>230</a>
+<a href=#231 id=231 data-nosnippet>231</a>        <span class="comment">// Hand the chunk to the writer. With concurrent writes enabled this returns
+<a href=#232 id=232 data-nosnippet>232</a>        // as soon as the chunk is queued rather than fully uploaded.
+<a href=#233 id=233 data-nosnippet>233</a>        </span>writer.write(chunk.freeze()).<span class="kw">await</span>.into_diagnostic()<span class="question-mark">?</span>;
+<a href=#234 id=234 data-nosnippet>234</a>
+<a href=#235 id=235 data-nosnippet>235</a>        <span class="comment">// Update the number of remaining bytes.
+<a href=#236 id=236 data-nosnippet>236</a>        </span>remaining_size = remaining_size.saturating_sub(bytes_read);
+<a href=#237 id=237 data-nosnippet>237</a>    }
+<a href=#238 id=238 data-nosnippet>238</a>
+<a href=#239 id=239 data-nosnippet>239</a>    <span class="kw">match </span>writer.close().<span class="kw">await </span>{
+<a href=#240 id=240 data-nosnippet>240</a>        <span class="prelude-val">Err</span>(e) <span class="kw">if </span>e.kind() == ErrorKind::ConditionNotMatch =&gt; {
+<a href=#241 id=241 data-nosnippet>241</a>            <span class="macro">miette::bail!</span>(
+<a href=#242 id=242 data-nosnippet>242</a>                <span class="string">"Package s3://{bucket}{}/{key} already exists. Use --force to overwrite."</span>,
+<a href=#243 id=243 data-nosnippet>243</a>                channel.path().to_string()
+<a href=#244 id=244 data-nosnippet>244</a>            );
+<a href=#245 id=245 data-nosnippet>245</a>        }
+<a href=#246 id=246 data-nosnippet>246</a>        <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; {
+<a href=#247 id=247 data-nosnippet>247</a>            <span class="macro">tracing::info!</span>(
+<a href=#248 id=248 data-nosnippet>248</a>                <span class="string">"Uploaded package to s3://{bucket}{}/{key}"</span>,
+<a href=#249 id=249 data-nosnippet>249</a>                channel.path().to_string()
+<a href=#250 id=250 data-nosnippet>250</a>            );
+<a href=#251 id=251 data-nosnippet>251</a>        }
+<a href=#252 id=252 data-nosnippet>252</a>        <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#253 id=253 data-nosnippet>253</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(e).into_diagnostic();
+<a href=#254 id=254 data-nosnippet>254</a>        }
+<a href=#255 id=255 data-nosnippet>255</a>    }
+<a href=#256 id=256 data-nosnippet>256</a>
+<a href=#257 id=257 data-nosnippet>257</a>    <span class="prelude-val">Ok</span>(())
+<a href=#258 id=258 data-nosnippet>258</a>}
+<a href=#259 id=259 data-nosnippet>259</a>
+<a href=#260 id=260 data-nosnippet>260</a><span class="attr">#[cfg(test)]
+<a href=#261 id=261 data-nosnippet>261</a></span><span class="kw">mod </span>tests {
+<a href=#262 id=262 data-nosnippet>262</a>    <span class="kw">use </span>opendal::services::Fs;
+<a href=#263 id=263 data-nosnippet>263</a>
+<a href=#264 id=264 data-nosnippet>264</a>    <span class="kw">use super</span>::{publish_attestation_sidecar, validate_attestation_sidecar};
+<a href=#265 id=265 data-nosnippet>265</a>
+<a href=#266 id=266 data-nosnippet>266</a>    <span class="attr">#[test]
+<a href=#267 id=267 data-nosnippet>267</a>    </span><span class="kw">fn </span>validates_attestation_sidecar_container() {
+<a href=#268 id=268 data-nosnippet>268</a>        <span class="macro">assert!</span>(validate_attestation_sidecar(<span class="string">br#"[{"bundle":1}]"#</span>).is_ok());
+<a href=#269 id=269 data-nosnippet>269</a>        <span class="macro">assert!</span>(validate_attestation_sidecar(<span class="string">br#"[]"#</span>).is_err());
+<a href=#270 id=270 data-nosnippet>270</a>        <span class="macro">assert!</span>(validate_attestation_sidecar(<span class="string">br#"{"bundle":1}"#</span>).is_err());
+<a href=#271 id=271 data-nosnippet>271</a>        <span class="macro">assert!</span>(validate_attestation_sidecar(<span class="string">b"not json"</span>).is_err());
+<a href=#272 id=272 data-nosnippet>272</a>    }
+<a href=#273 id=273 data-nosnippet>273</a>
+<a href=#274 id=274 data-nosnippet>274</a>    <span class="attr">#[tokio::test]
+<a href=#275 id=275 data-nosnippet>275</a>    </span><span class="kw">async fn </span>publishes_immutable_and_mutable_sidecars_with_identical_bytes() {
+<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw">let </span>temp_dir = tempfile::tempdir().unwrap();
+<a href=#277 id=277 data-nosnippet>277</a>        <span class="kw">let </span>op =
+<a href=#278 id=278 data-nosnippet>278</a>            opendal::Operator::new(Fs::default().root(temp_dir.path().to_str().unwrap())).unwrap();
 <a href=#279 id=279 data-nosnippet>279</a>        <span class="kw">let </span>mutable_key = <span class="string">"noarch/test-1.0-0.conda.sigs"</span>;
 <a href=#280 id=280 data-nosnippet>280</a>        <span class="kw">let </span>bytes = <span class="string">br#"[{"bundle":1}]"#</span>.to_vec();
 <a href=#281 id=281 data-nosnippet>281</a>        <span class="kw">let </span>hash =

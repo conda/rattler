@@ -1857,7 +1857,7 @@
 <a href=#1855 id=1855 data-nosnippet>1855</a>    // enumeration since it doesn't parse as a `Subdir`.
 <a href=#1856 id=1856 data-nosnippet>1856</a>    </span>config.atomic_write_dir = <span class="prelude-val">Some</span>(root.join(<span class="string">".tmp"</span>).to_string_lossy().to_string());
 <a href=#1857 id=1857 data-nosnippet>1857</a>    <span class="kw">let </span>builder = config.into_builder();
-<a href=#1858 id=1858 data-nosnippet>1858</a>    <span class="kw">let </span>op = Operator::new(builder)<span class="question-mark">?</span>.finish();
+<a href=#1858 id=1858 data-nosnippet>1858</a>    <span class="kw">let </span>op = Operator::new(builder)<span class="question-mark">?</span>;
 <a href=#1859 id=1859 data-nosnippet>1859</a>    index_with_channel_metadata(
 <a href=#1860 id=1860 data-nosnippet>1860</a>        target_platform,
 <a href=#1861 id=1861 data-nosnippet>1861</a>        op,
@@ -1915,9 +1915,9 @@
 <a href=#1913 id=1913 data-nosnippet>1913</a>    <span class="kw">let </span>bucket = channel
 <a href=#1914 id=1914 data-nosnippet>1914</a>        .host_str()
 <a href=#1915 id=1915 data-nosnippet>1915</a>        .ok_or(<span class="macro">anyhow::anyhow!</span>(<span class="string">"No bucket in S3 URL"</span>))<span class="question-mark">?</span>;
-<a href=#1916 id=1916 data-nosnippet>1916</a>    <span class="kw">let </span>builder = credentials.opendal_builder(bucket, channel.path());
+<a href=#1916 id=1916 data-nosnippet>1916</a>    <span class="kw">let </span>operator = credentials.opendal_operator(bucket, channel.path())<span class="question-mark">?</span>;
 <a href=#1917 id=1917 data-nosnippet>1917</a>
-<a href=#1918 id=1918 data-nosnippet>1918</a>    <span class="prelude-val">Ok</span>(Operator::new(builder)<span class="question-mark">?</span>.layer(RetryLayer::new()).finish())
+<a href=#1918 id=1918 data-nosnippet>1918</a>    <span class="prelude-val">Ok</span>(operator.layer(RetryLayer::new()))
 <a href=#1919 id=1919 data-nosnippet>1919</a>}
 <a href=#1920 id=1920 data-nosnippet>1920</a>
 <a href=#1921 id=1921 data-nosnippet>1921</a><span class="doccomment">/// Create a new `repodata.json` for all packages in the channel at the given S3
@@ -2269,7 +2269,7 @@
 <a href=#2267 id=2267 data-nosnippet>2267</a>    config.root = <span class="prelude-val">Some</span>(root.to_string_lossy().to_string());
 <a href=#2268 id=2268 data-nosnippet>2268</a>    <span class="comment">// Atomic writes, see `index_fs_with_channel_metadata`.
 <a href=#2269 id=2269 data-nosnippet>2269</a>    </span>config.atomic_write_dir = <span class="prelude-val">Some</span>(root.join(<span class="string">".tmp"</span>).to_string_lossy().to_string());
-<a href=#2270 id=2270 data-nosnippet>2270</a>    <span class="kw">let </span>op = Operator::new(config.into_builder())<span class="question-mark">?</span>.finish();
+<a href=#2270 id=2270 data-nosnippet>2270</a>    <span class="kw">let </span>op = Operator::new(config.into_builder())<span class="question-mark">?</span>;
 <a href=#2271 id=2271 data-nosnippet>2271</a>    ensure_channel_initialized_with_channel_metadata(<span class="kw-2">&amp;</span>op, channel_metadata).<span class="kw">await
 <a href=#2272 id=2272 data-nosnippet>2272</a></span>}
 <a href=#2273 id=2273 data-nosnippet>2273</a>
@@ -2513,7 +2513,7 @@
 <a href=#2511 id=2511 data-nosnippet>2511</a>        <span class="kw">let </span>channel = tempfile::tempdir().unwrap();
 <a href=#2512 id=2512 data-nosnippet>2512</a>        <span class="kw">let </span><span class="kw-2">mut </span>config = FsConfig::default();
 <a href=#2513 id=2513 data-nosnippet>2513</a>        config.root = <span class="prelude-val">Some</span>(channel.path().to_string_lossy().to_string());
-<a href=#2514 id=2514 data-nosnippet>2514</a>        <span class="kw">let </span>op = Operator::new(config.into_builder()).unwrap().finish();
+<a href=#2514 id=2514 data-nosnippet>2514</a>        <span class="kw">let </span>op = Operator::new(config.into_builder()).unwrap();
 <a href=#2515 id=2515 data-nosnippet>2515</a>        op.create_dir(<span class="string">"noarch/"</span>).<span class="kw">await</span>.unwrap();
 <a href=#2516 id=2516 data-nosnippet>2516</a>        op.write(<span class="string">"noarch/repodata_from_packages.json"</span>, <span class="string">"source sentinel"</span>)
 <a href=#2517 id=2517 data-nosnippet>2517</a>            .<span class="kw">await
