@@ -67,7 +67,7 @@ pub async fn upload_package_to_s3_with_attestation(
         .ok_or(miette::miette!("No bucket in S3 URL"))?;
 
     let builder = credentials.opendal_builder(bucket, channel.path());
-    let op = Operator::new(builder).into_diagnostic()?.finish();
+    let op = Operator::new(builder).into_diagnostic()?;
 
     // Upload multiple packages concurrently. Each individual package upload also
     // streams its chunks concurrently (see `upload_single_package`).
@@ -273,9 +273,8 @@ mod tests {
     #[tokio::test]
     async fn publishes_immutable_and_mutable_sidecars_with_identical_bytes() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let op = opendal::Operator::new(Fs::default().root(temp_dir.path().to_str().unwrap()))
-            .unwrap()
-            .finish();
+        let op =
+            opendal::Operator::new(Fs::default().root(temp_dir.path().to_str().unwrap())).unwrap();
         let mutable_key = "noarch/test-1.0-0.conda.sigs";
         let bytes = br#"[{"bundle":1}]"#.to_vec();
         let hash =
