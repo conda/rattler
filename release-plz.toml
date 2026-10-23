@@ -6,5 +6,4 @@ git_release_enable = true
 git_tag_enable = true
 pr_labels = ["release"]
 publish_allow_dirty = false
-# shortcut: published baselines require yanked zip 8, restore checks after releasing the zip 9 update.
-semver_check = false
+semver_check = true

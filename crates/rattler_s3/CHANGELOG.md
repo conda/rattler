@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/conda/rattler/compare/rattler_s3-v0.3.7...rattler_s3-v0.4.0) - 2026-10-23
+
+### Changed
+
+- **BREAKING:** `S3CredentialSource::opendal_builder` returns the `opendal` 0.59 `S3` builder; the new `S3CredentialSource::opendal_operator` builds an operator with its own HTTP transport, which `opendal` 0.59 no longer installs by default ([#2979](https://github.com/conda/rattler/pull/2979))
+
+### Other
+
+- bump opendal to 0.59 ([#2979](https://github.com/conda/rattler/pull/2979))
+
 ## [0.3.7](https://github.com/conda/rattler/compare/rattler_s3-v0.3.6...rattler_s3-v0.3.7) - 2026-10-16
 
 ### Other
