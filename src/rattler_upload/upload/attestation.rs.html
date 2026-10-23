@@ -85,7 +85,7 @@
 <a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">let </span>tuf_config = TufSigningConfig::production()
 <a href=#84 id=84 data-nosnippet>84</a>        .<span class="kw">await
 <a href=#85 id=85 data-nosnippet>85</a>        </span>.map_err(|e| <span class="macro">miette::miette!</span>(<span class="string">"Failed to fetch Sigstore TUF signing config: {}"</span>, e))<span class="question-mark">?</span>;
-<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">let </span>signing_services = SigningServices::from_tuf_config(<span class="kw-2">&amp;</span>tuf_config)
+<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">let </span>signing_services = SigningServices::from_signing_config(<span class="kw-2">&amp;</span>tuf_config)
 <a href=#87 id=87 data-nosnippet>87</a>        .map_err(|e| <span class="macro">miette::miette!</span>(<span class="string">"Failed to build Sigstore signing config: {}"</span>, e))<span class="question-mark">?</span>;
 <a href=#88 id=88 data-nosnippet>88</a>
 <a href=#89 id=89 data-nosnippet>89</a>    <span class="macro">tracing::info!</span>(<span class="string">"Signing attestation with Sigstore..."</span>);
