@@ -1,6 +1,9 @@
 use pyo3::{Bound, Py, PyAny, PyErr, PyResult, Python, pyclass, pymethods};
 use pyo3_async_runtimes::tokio::future_into_py;
-use rattler_conda_types::package::{PackageFile, RunExportsJson};
+use rattler_conda_types::{
+    Flag,
+    package::{PackageFile, RunExportsJson},
+};
 use rattler_package_streaming::seek::read_package_file;
 use std::path::PathBuf;
 use url::Url;
@@ -33,12 +36,14 @@ impl From<PyRunExportsJson> for RunExportsJson {
 impl PyRunExportsJson {
     /// Constructor
     #[new]
+    #[pyo3(signature = (weak, strong, noarch, weak_constrains, strong_constrains, flags=Vec::new()))]
     pub fn new(
         weak: Vec<String>,
         strong: Vec<String>,
         noarch: Vec<String>,
         weak_constrains: Vec<String>,
         strong_constrains: Vec<String>,
+        flags: Vec<String>,
     ) -> Self {
         let inner = RunExportsJson {
             weak,
@@ -46,6 +51,7 @@ impl PyRunExportsJson {
             noarch,
             weak_constrains,
             strong_constrains,
+            flags: flags.into_iter().map(Flag::new_unchecked).collect(),
         };
         Self { inner }
     }
@@ -193,5 +199,18 @@ impl PyRunExportsJson {
     #[setter]
     pub fn set_strong_constrains(&mut self, strong_constrains: Vec<String>) {
         self.inner.strong_constrains = strong_constrains;
+    }
+
+    /// Flags added to any package that has this package as a direct build or
+    /// host dependency.
+    #[getter]
+    pub fn flags(&self) -> Vec<String> {
+        self.inner.flags.iter().map(ToString::to_string).collect()
+    }
+
+    /// Set flags
+    #[setter]
+    pub fn set_flags(&mut self, flags: Vec<String>) {
+        self.inner.flags = flags.into_iter().map(Flag::new_unchecked).collect();
     }
 }
