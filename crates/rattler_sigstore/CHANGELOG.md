@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.6](https://github.com/conda/rattler/compare/rattler_sigstore-v0.2.5...rattler_sigstore-v0.2.6) - 2026-10-23
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.2.5](https://github.com/conda/rattler/compare/rattler_sigstore-v0.2.4...rattler_sigstore-v0.2.5) - 2026-10-16
 
 ### Other

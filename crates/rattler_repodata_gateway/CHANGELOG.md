@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.6](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.36.5...rattler_repodata_gateway-v0.36.6) - 2026-10-23
+
+### Other
+
+- *(gateway)* Fix progress bar being redrawn after child is spawned ([#2969](https://github.com/conda/rattler/pull/2969))
+
 ## [0.36.5](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.36.4...rattler_repodata_gateway-v0.36.5) - 2026-10-16
 
 ### Other
