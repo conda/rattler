@@ -100,7 +100,7 @@ fn patch_python_with_pip(record: &RepoDataRecord) -> Option<RepoDataRecord> {
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-#[pyo3(signature = (sources, platforms, specs, constraints, gateway, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, channel_relations=None, channel_relations_max_depth=None, add_pip_as_python_dependency=false, timestamp_policy="require-timestamp", package_format_selection=None)
+#[pyo3(signature = (sources, platforms, specs, constraints, gateway, locked_packages, pinned_packages, additional_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, channel_relations=None, channel_relations_max_depth=None, add_pip_as_python_dependency=false, timestamp_policy="require-timestamp", package_format_selection=None)
 )]
 pub fn py_solve<'a>(
     py: Python<'a>,
@@ -111,6 +111,7 @@ pub fn py_solve<'a>(
     gateway: PyGateway,
     locked_packages: Vec<PyRecord>,
     pinned_packages: Vec<PyRecord>,
+    additional_packages: Vec<PyRecord>,
     virtual_packages: Vec<PyGenericVirtualPackage>,
     channel_priority: PyChannelPriority,
     timeout: Option<u64>,
@@ -169,6 +170,10 @@ pub fn py_solve<'a>(
                 .into_iter()
                 .map(<Arc<RepoDataRecord>>::try_from)
                 .collect::<PyResult<_>>()?;
+            let additional_arcs: Vec<Arc<RepoDataRecord>> = additional_packages
+                .into_iter()
+                .map(<Arc<RepoDataRecord>>::try_from)
+                .collect::<PyResult<_>>()?;
             let task = SolverTask {
                 available_packages: available_packages
                     .iter()
@@ -179,6 +184,7 @@ pub fn py_solve<'a>(
                     .collect::<Vec<_>>(),
                 locked_packages: locked_arcs.iter().map(AsRef::as_ref).collect(),
                 pinned_packages: pinned_arcs.iter().map(AsRef::as_ref).collect(),
+                additional_packages: additional_arcs.iter().map(AsRef::as_ref).collect(),
                 virtual_packages: virtual_packages.into_iter().map(Into::into).collect(),
                 specs: specs.into_iter().map(Into::into).collect(),
                 constraints: constraints.into_iter().map(Into::into).collect(),
@@ -218,7 +224,7 @@ pub fn py_solve<'a>(
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-#[pyo3(signature = (specs, sparse_repodata, multi_sources, constraints, locked_packages, pinned_packages, virtual_packages, channel_priority, package_format_selection, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, add_pip_as_python_dependency=false, timestamp_policy="require-timestamp")
+#[pyo3(signature = (specs, sparse_repodata, multi_sources, constraints, locked_packages, pinned_packages, additional_packages, virtual_packages, channel_priority, package_format_selection, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, add_pip_as_python_dependency=false, timestamp_policy="require-timestamp")
 )]
 pub fn py_solve_with_sparse_repodata<'py>(
     py: Python<'py>,
@@ -228,6 +234,7 @@ pub fn py_solve_with_sparse_repodata<'py>(
     constraints: Vec<PyMatchSpec>,
     locked_packages: Vec<PyRecord>,
     pinned_packages: Vec<PyRecord>,
+    additional_packages: Vec<PyRecord>,
     virtual_packages: Vec<PyGenericVirtualPackage>,
     channel_priority: PyChannelPriority,
     package_format_selection: PyPackageFormatSelection,
@@ -291,6 +298,10 @@ pub fn py_solve_with_sparse_repodata<'py>(
                 .into_iter()
                 .map(<Arc<RepoDataRecord>>::try_from)
                 .collect::<PyResult<_>>()?;
+            let additional_arcs: Vec<Arc<RepoDataRecord>> = additional_packages
+                .into_iter()
+                .map(<Arc<RepoDataRecord>>::try_from)
+                .collect::<PyResult<_>>()?;
             let task = SolverTask {
                 available_packages: available_packages
                     .iter()
@@ -302,6 +313,7 @@ pub fn py_solve_with_sparse_repodata<'py>(
                     .collect::<Vec<_>>(),
                 locked_packages: locked_arcs.iter().map(AsRef::as_ref).collect(),
                 pinned_packages: pinned_arcs.iter().map(AsRef::as_ref).collect(),
+                additional_packages: additional_arcs.iter().map(AsRef::as_ref).collect(),
                 virtual_packages: virtual_packages.into_iter().map(Into::into).collect(),
                 specs: specs.into_iter().map(Into::into).collect(),
                 constraints: constraints.into_iter().map(Into::into).collect(),

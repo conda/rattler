@@ -1,7 +1,7 @@
 //! Tests migrated to use the `SolverCase` helper for improved readability and consistency.
 
 use super::helpers::{PackageBuilder, SolverCase};
-use rattler_solve::{ExcludeNewer, SolverImpl};
+use rattler_solve::{ChannelPriority, ExcludeNewer, SolverImpl};
 
 /// Test that already-installed packages are favored when solving.
 pub(super) fn solve_favored<T: SolverImpl + Default>() {
@@ -264,4 +264,112 @@ pub(super) fn solve_dependency_override_multiple<T: SolverImpl + Default>() {
         ])
         .expect_present([("mypackage", "1.0"), ("python", "3.8"), ("numpy", "1.20")])
         .run::<T>();
+}
+
+/// Test that `additional_packages` are plain candidates: selectable, but
+/// neither favored like `locked_packages` nor forced like `pinned_packages`.
+pub(super) fn solve_additional_packages<T: SolverImpl + Default>() {
+    use super::helpers::run_solver_cases;
+
+    let foo_1 = PackageBuilder::new("foo")
+        .version("1.0")
+        .channel("removed")
+        .build();
+    let foo_2 = PackageBuilder::new("foo")
+        .version("2.0")
+        .channel("current")
+        .build();
+    let foo_3 = PackageBuilder::new("foo")
+        .version("3.0")
+        .channel("removed")
+        .build();
+    let foo_1_lower = PackageBuilder::new("foo")
+        .version("1.0")
+        .channel("lower")
+        .build();
+    let foo_3_lower = PackageBuilder::new("foo")
+        .version("3.0")
+        .channel("lower")
+        .build();
+    let foo_old = PackageBuilder::new("foo")
+        .version("1.0")
+        .channel("removed")
+        .timestamp("2021-06-01T00:00:00Z")
+        .build();
+    let foo_new = PackageBuilder::new("foo")
+        .version("3.0")
+        .channel("removed")
+        .timestamp("2022-06-01T00:00:00Z")
+        .build();
+    let bar = PackageBuilder::new("bar")
+        .version("1.0")
+        .channel("current")
+        .timestamp("2021-01-01T00:00:00Z")
+        .depends(["foo"])
+        .build();
+
+    run_solver_cases::<T>(&[
+        SolverCase::new("additional package is selectable without any repodata for it")
+            .repository([bar.clone()])
+            .specs(["bar"])
+            .additional_packages([foo_1.clone()])
+            .expect_present([("foo", "1.0"), ("bar", "1.0")]),
+        SolverCase::new("additional package is not favored over a newer version")
+            .repository([foo_2.clone()])
+            .specs(["foo"])
+            .additional_packages([foo_1.clone()])
+            .expect_present([("foo", "2.0")])
+            .expect_absent([("foo", "1.0")]),
+        SolverCase::new("additional package wins when it is the best candidate")
+            .repository([foo_2.clone()])
+            .specs(["foo"])
+            .additional_packages([foo_3.clone()])
+            .expect_present([("foo", "3.0")]),
+        SolverCase::new("strict channel priority does not discard additional packages")
+            .repository([foo_2.clone()])
+            .specs(["foo"])
+            .channel_priority(ChannelPriority::Strict)
+            .additional_packages([foo_3.clone()])
+            .expect_present([("foo", "3.0")]),
+        // The additional package's channel is not part of the solve, so it
+        // must not be ranked below the channels that are.
+        SolverCase::new("flexible channel priority")
+            .repository([foo_2.clone()])
+            .specs(["foo"])
+            .channel_priority(ChannelPriority::Flexible)
+            .additional_packages([foo_3.clone()])
+            .expect_present([("foo", "3.0")])
+            .expect_absent([("foo", "2.0")]),
+         SolverCase::new("flexible channel priority")
+            .repository([foo_2.clone()])
+            .specs(["foo"])
+            .channel_priority(ChannelPriority::Disabled)
+            .additional_packages([foo_3.clone()])
+            .expect_present([("foo", "3.0")])
+            .expect_absent([("foo", "2.0")]),
+        // Additional packages rank with the highest-priority tier even when
+        // their channel is a lower-priority channel of the solve.
+        SolverCase::new("flexible channel priority ignores the channel of additional packages")
+            .repository([foo_2.clone()])
+            .repository([foo_1_lower])
+            .specs(["foo"])
+            .channel_priority(ChannelPriority::Flexible)
+            .additional_packages([foo_3_lower])
+            .expect_present([("foo", "3.0")])
+            .expect_absent([("foo", "2.0")]),
+        SolverCase::new("additional package is used when the spec requires it")
+            .repository([foo_2.clone()])
+            .specs(["foo <2"])
+            .additional_packages([foo_1])
+            .expect_present([("foo", "1.0")]),
+        SolverCase::new("exclude_newer applies to additional packages")
+            .repository([bar])
+            .specs(["bar"])
+            .additional_packages([foo_old, foo_new])
+            .exclude_newer(ExcludeNewer::from_datetime(
+                "2022-01-01T00:00:00Z".parse().unwrap(),
+            ))
+            .expect_present([("foo", "1.0"), ("bar", "1.0")])
+            .expect_absent([("foo", "3.0")]),
+    ]);
 }

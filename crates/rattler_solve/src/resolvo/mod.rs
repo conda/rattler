@@ -350,6 +350,13 @@ pub struct CondaDependencyProvider<'a> {
     /// This is only populated (and consulted) for
     /// [`ChannelPriority::Flexible`].
     channel_order: HashMap<Option<String>, u32>,
+
+    /// The solvables interned from the additional records. Under
+    /// [`ChannelPriority::Flexible`] these rank with the highest-priority tier
+    /// regardless of their channel, like the separate highest-priority repo
+    /// the libsolv backend puts them in. Tracking ids rather than channel
+    /// names leaves repodata records from the same channel at their own rank.
+    additional_solvables: HashSet<SolvableId>,
 }
 
 impl<'a> CondaDependencyProvider<'a> {
@@ -359,6 +366,7 @@ impl<'a> CondaDependencyProvider<'a> {
         repodata: impl IntoIterator<Item = RepoData<'a>>,
         favored_records: &[&'a RepoDataRecord],
         locked_records: &[&'a RepoDataRecord],
+        additional_records: &[&'a RepoDataRecord],
         virtual_packages: &'a [GenericVirtualPackage],
         match_specs: &[MatchSpec],
         stop_time: Option<std::time::SystemTime>,
@@ -619,6 +627,23 @@ impl<'a> CondaDependencyProvider<'a> {
             }
         }
 
+        // Add additional packages to the records. These are plain candidates:
+        // they are neither favored nor locked, so the solver weighs them like
+        // any record from the repodata. These records may represent packages
+        // that are not in repodata for the current solve. But are already
+        // installed in the prefix.
+        let mut additional_solvables = HashSet::with_capacity(additional_records.len());
+        for &additional_record in additional_records {
+            let name =
+                pool.intern_package_name(NameType::from(&additional_record.package_record.name));
+            let solvable =
+                pool.intern_solvable(name, SolverPackageRecord::Record(additional_record));
+            additional_solvables.insert(solvable);
+            let candidates = records.entry(name).or_default();
+            candidates.candidates.push(solvable);
+            exclude_if_requested(candidates, solvable, additional_record);
+        }
+
         // Add favored packages to the records.
         //
         // An excluded record must not become the favored one: favoring means
@@ -688,6 +713,7 @@ impl<'a> CondaDependencyProvider<'a> {
             dependency_overrides: override_map,
             channel_priority,
             channel_order,
+            additional_solvables,
         })
     }
 
@@ -1150,6 +1176,7 @@ impl super::SolverImpl for Solver {
             task.available_packages.into_iter().map(|r| r.into()),
             &task.locked_packages,
             &task.pinned_packages,
+            &task.additional_packages,
             &task.virtual_packages,
             task.specs.clone().as_ref(),
             stop_time,

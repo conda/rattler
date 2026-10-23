@@ -295,6 +295,22 @@ impl super::SolverImpl for Solver {
         repo_mapping.insert(repo.id(), repo_mapping.len());
         all_repodata_records.push(task.pinned_packages.clone());
 
+        // Create a special pool for additional records. These are plain
+        // candidates: unlike the locked and pinned records they are neither
+        // favored nor locked. The repo gets the highest priority so that strict
+        // channel priority never discards them in favor of a channel record.
+        let repo = Repo::new(&pool, "additional", highest_priority);
+        add_repodata_records(
+            &pool,
+            &repo,
+            task.additional_packages.iter().copied(),
+            task.exclude_newer.as_ref(),
+        )?;
+
+        // Also add the additional records to the repodata
+        repo_mapping.insert(repo.id(), repo_mapping.len());
+        all_repodata_records.push(task.additional_packages.clone());
+
         // Create data-structures for solving
         pool.create_whatprovides();
 
