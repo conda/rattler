@@ -686,13 +686,14 @@ async def test_solve_additional_packages(
             additional_packages=removed.load_records("foo"),
             channel_priority=ChannelPriority.Strict,
         )
-    result = await solve(
-        [repodata],
-        specs,
-        platforms=["noarch"],
-        additional_packages=removed.load_records("foo"),
-        channel_priority=ChannelPriority.Strict,
-    )
+    else:
+        result = await solve(
+            [repodata],
+            specs,
+            platforms=["noarch"],
+            additional_packages=removed.load_records("foo"),
+            channel_priority=ChannelPriority.Strict,
+        )
 
     assert {(r.name.normalized, str(r.version)) for r in result} == expected
 
@@ -718,8 +719,13 @@ async def test_solve_additional_packages_exclude_newer(tmp_path: Path, sparse: b
         result = await solve_with_sparse_repodata(
             ["bar"], [repodata], additional_packages=removed.load_records("foo"), exclude_newer=cutoff
         )
-    result = await solve(
-        [repodata], ["bar"], platforms=["noarch"], additional_packages=removed.load_records("foo"), exclude_newer=cutoff
-    )
+    else:
+        result = await solve(
+            [repodata],
+            ["bar"],
+            platforms=["noarch"],
+            additional_packages=removed.load_records("foo"),
+            exclude_newer=cutoff
+        )
 
     assert {(r.name.normalized, str(r.version)) for r in result} == {("bar", "1.0"), ("foo", "1.0")}
