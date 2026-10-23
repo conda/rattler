@@ -725,7 +725,7 @@ async def test_solve_additional_packages_exclude_newer(tmp_path: Path, sparse: b
             ["bar"],
             platforms=["noarch"],
             additional_packages=removed.load_records("foo"),
-            exclude_newer=cutoff
+            exclude_newer=cutoff,
         )
 
     assert {(r.name.normalized, str(r.version)) for r in result} == {("bar", "1.0"), ("foo", "1.0")}

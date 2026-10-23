@@ -74,10 +74,12 @@ async def solve(
                  there is a variant available in the `pinned_packages` field it
                  will always select that version no matter what even if that
                  means other packages have to be downgraded.
-        additional_packages: Records that the solver may select but has no preference
-                for. This can represent currently installed packages that should be
-                updated. Unlike `locked_packages`, these packages are not favored. And
-                unlike `pinned_packages`, these packages are not forced into the solution.
+        additional_packages: Records that the solver may select but has no strong
+                preference for. Unlike `locked_packages`, these packages are not
+                favored. And unlike `pinned_packages`, these packages are not forced
+                into the solution. They are added as extra candidates next to other
+                packages at the highest priority tier. This can represent currently
+                installed packages that should be updated.
         virtual_packages: A list of virtual packages considered active.
         channel_priority: (Default = ChannelPriority.Strict) When `ChannelPriority.Strict`
                  the channel that the package is first found in will be used as
@@ -214,10 +216,12 @@ async def solve_with_sparse_repodata(
                  there is a variant available in the `pinned_packages` field it
                  will always select that version no matter what even if that
                  means other packages have to be downgraded.
-        additional_packages: Records that the solver may select but has no preference
-                for. This can represent currently installed packages that should be
-                updated. Unlike `locked_packages`, these packages are not favored. And
-                unlike `pinned_packages`, these packages are not forced into the solution.
+        additional_packages: Records that the solver may select but has no strong
+                preference for. Unlike `locked_packages`, these packages are not
+                favored. And unlike `pinned_packages`, these packages are not forced
+                into the solution. They are added as extra candidates next to other
+                packages at the highest priority tier. This can represent currently
+                installed packages that should be updated.
         virtual_packages: A list of virtual packages considered active.
         channel_priority: (Default = ChannelPriority.Strict) When `ChannelPriority.Strict`
                  the channel that the package is first found in will be used as
