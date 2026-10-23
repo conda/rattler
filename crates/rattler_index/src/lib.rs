@@ -815,6 +815,57 @@ async fn index_subdir_inner(
         package_source
     };
 
+    // List all the packages in the subdirectory along with their size.
+    // Attestation sidecars (`<package>.sigs`) are collected alongside so that
+    // the corresponding package records can advertise them.
+    let mut uploaded_packages: HashMap<DistArchiveIdentifier, u64> = HashMap::new();
+    let mut attestation_sidecars: HashSet<DistArchiveIdentifier> = HashSet::new();
+    for entry in op.list_with(&format!("{}/", subdir.as_str())).await? {
+        if !entry.metadata().mode().is_file() {
+            continue;
+        }
+        let filename = entry.name();
+        if let Some(package_filename) = filename.strip_suffix(ATTESTATION_SIDECAR_SUFFIX) {
+            if let Some(identifier) = DistArchiveIdentifier::try_from_filename(package_filename) {
+                attestation_sidecars.insert(identifier);
+            }
+        } else if let Some(identifier) = DistArchiveIdentifier::try_from_filename(filename) {
+            uploaded_packages.insert(identifier, entry.metadata().content_length());
+        }
+    }
+
+    tracing::debug!(
+        "Found {} already uploaded packages in subdir {}.",
+        uploaded_packages.len(),
+        subdir
+    );
+
+    // A package that was overwritten under the same filename still has the
+    // record of the old file. Comparing sizes catches that without reading
+    // anything, the listing already reports them. A size of 0 means the
+    // backend didn't report one.
+    let packages_to_replace = existing_repodata
+        .packages
+        .iter()
+        .filter(|(filename, package)| {
+            let listed_size = uploaded_packages.get(*filename).copied().unwrap_or(0);
+            listed_size != 0 && package.record.size.is_some_and(|size| size != listed_size)
+        })
+        .map(|(filename, _)| filename.clone())
+        .collect::<Vec<_>>();
+
+    tracing::debug!(
+        "Reindexing {} replaced packages in subdir {}.",
+        packages_to_replace.len(),
+        subdir
+    );
+
+    // A replaced package was published again, so it gets a new indexed
+    // timestamp instead of keeping the one of the file it replaced.
+    for filename in &packages_to_replace {
+        indexed_timestamps.remove(filename);
+    }
+
     let ExistingRepodata {
         packages: mut registered_packages,
         v3_extensions,
@@ -829,38 +880,11 @@ async fn index_subdir_inner(
         existing_repodata
     };
 
-    // List all the packages in the subdirectory. Attestation sidecars
-    // (`<package>.sigs`) are collected alongside so that the corresponding
-    // package records can advertise them.
-    let mut uploaded_packages: HashSet<DistArchiveIdentifier> = HashSet::new();
-    let mut attestation_sidecars: HashSet<DistArchiveIdentifier> = HashSet::new();
-    for entry in op.list_with(&format!("{}/", subdir.as_str())).await? {
-        if !entry.metadata().mode().is_file() {
-            continue;
-        }
-        let filename = entry.name();
-        if let Some(package_filename) = filename.strip_suffix(ATTESTATION_SIDECAR_SUFFIX) {
-            if let Some(identifier) = DistArchiveIdentifier::try_from_filename(package_filename) {
-                attestation_sidecars.insert(identifier);
-            }
-        } else if let Some(identifier) = DistArchiveIdentifier::try_from_filename(filename) {
-            uploaded_packages.insert(identifier);
-        }
-    }
-
-    tracing::debug!(
-        "Found {} already uploaded packages in subdir {}.",
-        uploaded_packages.len(),
-        subdir
-    );
-
     // Find packages that are listed in the previous repodata.json file but have
     // since been removed.
     let packages_to_delete = registered_packages
         .keys()
-        .cloned()
-        .collect::<HashSet<_>>()
-        .difference(&uploaded_packages)
+        .filter(|filename| !uploaded_packages.contains_key(*filename))
         .cloned()
         .collect::<Vec<_>>();
 
@@ -870,12 +894,14 @@ async fn index_subdir_inner(
         subdir
     );
 
-    for filename in &packages_to_delete {
+    // Replaced packages are dropped as well, so they get indexed again below.
+    for filename in packages_to_delete.iter().chain(&packages_to_replace) {
         registered_packages.remove(filename);
     }
 
     let packages_to_add = uploaded_packages
-        .difference(&registered_packages.keys().cloned().collect::<HashSet<_>>())
+        .keys()
+        .filter(|filename| !registered_packages.contains_key(*filename))
         .cloned()
         .collect::<Vec<_>>();
 
