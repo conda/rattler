@@ -229,6 +229,7 @@ mod tests {
     use crate::gateway::subdir::SubdirClient;
     use crate::sparse::FormatBucketSet;
     use crate::utils::url_to_cache_filename;
+    use crate::{DownloadReporter, Reporter};
     use axum::{
         Router,
         body::Body,
@@ -238,7 +239,8 @@ mod tests {
     use itertools::Itertools;
     use rattler_conda_types::{
         Channel, PackageName, PackageRecord, RepodataRevisions, Shard, ShardedRepodata,
-        ShardedSubdirInfo, Version, package::DistArchiveIdentifier,
+        ShardedSubdirInfo, Version,
+        package::{BuildString, DistArchiveIdentifier},
     };
     use rattler_digest::{Sha256, parse_digest_from_hex};
     use std::future::IntoFuture;
@@ -246,7 +248,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::str::FromStr;
     use std::sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
     };
     use tokio::sync::oneshot;
@@ -299,6 +301,7 @@ mod tests {
                     created_at: Some(jiff::Timestamp::now()),
                     repodata_revisions: RepodataRevisions::default(),
                     channel_relations: None,
+                    virtual_package_detectors: None,
                 },
                 shards,
             };
@@ -354,6 +357,11 @@ mod tests {
                                         .body(Body::from(vec![0x28, 0xb5, 0x2f, 0xfd]))
                                         .unwrap()
                                 }
+                                MockShardResponse::Status(status) => Response::builder()
+                                    .status(status)
+                                    .body(Body::empty())
+                                    .unwrap(),
+                                MockShardResponse::Hang => std::future::pending().await,
                             }
                         }
                     }),
@@ -421,6 +429,10 @@ mod tests {
     enum MockShardResponse {
         Empty,
         Truncated,
+        /// Answer with this status and an empty body.
+        Status(StatusCode),
+        /// Never answer.
+        Hang,
     }
 
     #[tokio::test]
@@ -784,7 +796,7 @@ mod tests {
             PackageRecord::new(
                 PackageName::new_unchecked("foo"),
                 Version::from_str(version).unwrap(),
-                "0".to_string(),
+                "0".parse::<BuildString>().unwrap(),
             )
         };
         let identifier =
@@ -829,5 +841,136 @@ mod tests {
         https://example.com/channel/linux-64/foo-0.1-0.tar.bz2 foo-0.1-0.tar.bz2 https://example.com/channel/
         https://example.com/channel/linux-64/foo-2.0-0.conda foo-2.0-0.conda https://example.com/channel/
         ");
+    }
+
+    /// Records which downloads were started and which of those were reported
+    /// complete, so a test can find a download that was left dangling.
+    #[derive(Default)]
+    struct DownloadTracker {
+        next_index: AtomicUsize,
+        started: Mutex<Vec<(usize, Url)>>,
+        completed: Mutex<Vec<usize>>,
+    }
+
+    impl DownloadTracker {
+        /// The downloads that were started but never completed.
+        fn unfinished(&self) -> Vec<Url> {
+            let completed = self.completed.lock().unwrap();
+            self.started
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(index, _)| !completed.contains(index))
+                .map(|(_, url)| url.clone())
+                .collect()
+        }
+    }
+
+    impl DownloadReporter for DownloadTracker {
+        fn on_download_start(&self, url: &Url) -> usize {
+            let index = self.next_index.fetch_add(1, Ordering::SeqCst);
+            self.started.lock().unwrap().push((index, url.clone()));
+            index
+        }
+
+        fn on_download_complete(&self, _url: &Url, index: usize) {
+            self.completed.lock().unwrap().push(index);
+        }
+    }
+
+    impl Reporter for DownloadTracker {
+        fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
+            Some(self)
+        }
+    }
+
+    async fn subdir_for(server: &MockShardedServer, cache_dir: &Path) -> ShardedSubdir {
+        ShardedSubdir::new(
+            server.channel(),
+            "linux-64".to_string(),
+            rattler_networking::LazyClient::default(),
+            cache_dir.to_path_buf(),
+            ShardCachePolicy {
+                action: CacheAction::NoCache,
+                missing_shards_are_empty: false,
+            },
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn failed_shard_download_is_reported_complete() {
+        let server =
+            MockShardedServer::new(MockShardResponse::Status(StatusCode::INTERNAL_SERVER_ERROR))
+                .await;
+        let cache_dir = tempfile::tempdir().unwrap();
+        let subdir = subdir_for(&server, cache_dir.path()).await;
+
+        let tracker = DownloadTracker::default();
+        let package_name = "test-package".parse().unwrap();
+        subdir
+            .fetch_package_records(&package_name, FormatBucketSet::ALL, Some(&tracker))
+            .await
+            .expect_err("the shard request fails");
+
+        assert_eq!(server.shard_request_count(), 1);
+        assert_eq!(tracker.unfinished(), Vec::<Url>::new());
+    }
+
+    #[tokio::test]
+    async fn cancelled_shard_download_is_reported_complete() {
+        let server = MockShardedServer::new(MockShardResponse::Hang).await;
+        let cache_dir = tempfile::tempdir().unwrap();
+        let subdir = subdir_for(&server, cache_dir.path()).await;
+
+        let tracker = DownloadTracker::default();
+        let package_name = "test-package".parse().unwrap();
+        let fetch =
+            subdir.fetch_package_records(&package_name, FormatBucketSet::ALL, Some(&tracker));
+        let request_arrived = async {
+            while server.shard_request_count() == 0 {
+                tokio::task::yield_now().await;
+            }
+        };
+        tokio::select! {
+            _ = fetch => panic!("the shard request never gets an answer"),
+            () = request_arrived => {}
+        }
+        // Leaving the select dropped the fetch mid-request.
+
+        assert_eq!(tracker.unfinished(), Vec::<Url>::new());
+    }
+
+    #[tokio::test]
+    async fn failed_index_download_is_reported_complete() {
+        let (local_addr, _shutdown) =
+            start_index_status_server(StatusCode::INTERNAL_SERVER_ERROR).await;
+        let channel = Channel::from_url(
+            Url::parse(&format!("http://localhost:{}", local_addr.port())).unwrap(),
+        );
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        let tracker = DownloadTracker::default();
+        let result = ShardedSubdir::new(
+            channel,
+            "linux-64".to_string(),
+            rattler_networking::LazyClient::default(),
+            cache_dir.path().to_path_buf(),
+            ShardCachePolicy {
+                action: CacheAction::NoCache,
+                missing_shards_are_empty: false,
+            },
+            None,
+            None,
+            Some(&tracker),
+        )
+        .await;
+
+        assert!(result.is_err(), "the index request fails");
+        assert_eq!(tracker.unfinished(), Vec::<Url>::new());
     }
 }

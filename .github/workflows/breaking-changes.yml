@@ -34,9 +34,9 @@ jobs:
 
       # Keep this version aligned with the release-plz action.
       - name: Install cargo-semver-checks
-        uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2.83.2
+        uses: taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3 # v2.87.16
         with:
-          tool: cargo-semver-checks@0.48
+          tool: cargo-semver-checks@0.50
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
@@ -52,7 +52,7 @@ jobs:
 
       - name: Upload result artifact
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           if-no-files-found: error
           name: semver-check-result

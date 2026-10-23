@@ -3,7 +3,7 @@ use std::sync::Arc;
 use ahash::{HashMap, HashSet};
 use dashmap::DashMap;
 use rattler_conda_types::{
-    ChannelRelations, PackageName, RepoDataRecord, RepodataRevisions,
+    ChannelRelations, DetectorRegistrationMetadata, PackageName, RepoDataRecord, RepodataRevisions,
     package::{ArchiveIdentifier, DistArchiveType},
 };
 use tokio::sync::Mutex;
@@ -217,6 +217,15 @@ impl SubdirState {
     pub fn channel_relations(&self) -> Option<&ChannelRelations> {
         match self {
             SubdirState::Found(subdir) => subdir.channel_relations(),
+            SubdirState::NotFound => None,
+        }
+    }
+
+    /// Detector registration metadata, or `None` if absent or not found.
+    /// Names and registration semantics are validated during discovery.
+    pub fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
+        match self {
+            SubdirState::Found(subdir) => subdir.virtual_package_detectors(),
             SubdirState::NotFound => None,
         }
     }
@@ -449,6 +458,11 @@ impl SubdirData {
     pub fn channel_relations(&self) -> Option<&ChannelRelations> {
         self.client.channel_relations()
     }
+
+    /// Detector registration metadata, if any, before semantic validation.
+    pub fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
+        self.client.virtual_package_detectors()
+    }
 }
 
 /// A client that can be used to fetch repodata for a specific subdirectory.
@@ -489,6 +503,12 @@ pub trait SubdirClient: Send + Sync {
     fn channel_relations(&self) -> Option<&ChannelRelations> {
         None
     }
+
+    /// Detector registration metadata, before semantic validation.
+    /// Sources without repodata metadata keep the default.
+    fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -498,7 +518,7 @@ mod tests {
 
     use rattler_conda_types::{
         NoArchType, PackageRecord, RepoDataRecord, VersionWithSource,
-        package::DistArchiveIdentifier,
+        package::{BuildString, DistArchiveIdentifier},
     };
     use url::Url;
 
@@ -516,7 +536,7 @@ mod tests {
         let package_record = PackageRecord {
             attestations_sha256: None,
             arch: None,
-            build: "0".to_string(),
+            build: "0".parse::<BuildString>().unwrap(),
             build_number: 0,
             constrains: Vec::new(),
             depends: deps.iter().map(|s| (*s).to_string()).collect(),

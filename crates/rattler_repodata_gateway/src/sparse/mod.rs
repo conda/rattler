@@ -23,8 +23,9 @@ pub(crate) use format_bucket::FormatBucketMap;
 pub(crate) use format_bucket::{FormatBucket, FormatBucketSet};
 use itertools::{Either, EitherOrBoth, Itertools};
 use rattler_conda_types::{
-    Channel, ChannelInfo, ChannelRelations, MatchSpec, Matches, PackageName, PackageRecord,
-    RepoDataRecord, RepodataRevisions, UrlOrPath, WhlPackageRecord, compute_package_url,
+    Channel, ChannelInfo, ChannelRelations, DetectorRegistrationMetadata, MatchSpec, Matches,
+    PackageName, PackageRecord, RepoDataRecord, RepodataRevisions, UrlOrPath, WhlPackageRecord,
+    compute_package_url,
     package::{
         ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
         WheelArchiveType,
@@ -500,6 +501,20 @@ impl SparseRepoData {
             .info
             .as_ref()?
             .channel_relations
+            .as_ref()
+    }
+
+    /// Detector registration metadata, if the field is present.
+    ///
+    /// Its JSON shape is checked when reading repodata. Use
+    /// [`SubdirDetectorRegistrations::parse`](rattler_conda_types::virtual_package_detector::SubdirDetectorRegistrations::parse)
+    /// to validate names and registration semantics.
+    pub fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
+        self.inner
+            .borrow_repo_data()
+            .info
+            .as_ref()?
+            .virtual_package_detectors
             .as_ref()
     }
 }

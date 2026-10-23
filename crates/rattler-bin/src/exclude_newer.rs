@@ -34,23 +34,9 @@ impl ExcludeNewer {
             }
         }
     }
-
-    pub fn apply_to_package(
-        self,
-        exclude_newer: rattler_solve::ExcludeNewer,
-        package: rattler_conda_types::PackageName,
-        now: Timestamp,
-    ) -> rattler_solve::ExcludeNewer {
-        match self {
-            Self::Timestamp(timestamp) => exclude_newer.with_package_cutoff(package, timestamp),
-            Self::Duration(duration) => {
-                exclude_newer.with_package_duration_with_now(package, duration, now)
-            }
-        }
-    }
 }
 
-/// A named channel or package and its cutoff override.
+/// A named channel and its cutoff override.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NamedCutoff {
     pub name: String,

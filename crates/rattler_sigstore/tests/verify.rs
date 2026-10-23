@@ -47,7 +47,7 @@ fn record(channel_url: &Url, attestations_sha256: Option<Sha256Hash>) -> RepoDat
     let mut package_record = PackageRecord::new(
         name.parse().unwrap(),
         VersionWithSource::from_str(&version).unwrap(),
-        build_string,
+        build_string.parse().unwrap(),
     );
     package_record.subdir = "osx-arm64".to_string();
     package_record.sha256 =

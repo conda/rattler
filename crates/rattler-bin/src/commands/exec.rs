@@ -27,6 +27,7 @@ use crate::{
     commands::{
         client::create_client_with_middleware,
         gateway::{build_gateway, load_config, resolve_channels},
+        hyperlink,
         progress::{wrap_in_async_progress, wrap_in_progress},
         table::{Cell, Table},
     },
@@ -422,9 +423,13 @@ fn list_environment(
         } else {
             Cell::plain(" ")
         };
+        let name = r.package_record.name.as_normalized();
         table.add_row([
             bullet,
-            Cell::plain(r.package_record.name.as_normalized()),
+            Cell::styled(
+                hyperlink::maybe_link(hyperlink::package_page(r.channel.as_deref(), name), name),
+                name,
+            ),
             Cell::plain(r.package_record.version.to_string()),
         ]);
     }

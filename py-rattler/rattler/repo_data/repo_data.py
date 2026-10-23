@@ -86,6 +86,15 @@ class ChannelInfo:
         return ChannelRelations._from_inner(relations)
 
     @property
+    def virtual_package_detectors(self) -> dict[str, list[str]] | None:
+        """
+        Shape-validated detector registration metadata. Names and combined
+        registration limits are validated during discovery.
+        ``None`` when the field is absent.
+        """
+        return self._inner.virtual_package_detectors
+
+    @property
     def repodata_revisions(self) -> dict[str, RepodataRevisionMetadata]:
         """Revisions advertised in ``info.repodata_revisions``, keyed by ``vN``.
 

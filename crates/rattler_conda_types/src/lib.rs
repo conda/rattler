@@ -22,6 +22,8 @@ mod run_export;
 pub mod subdir;
 pub mod utils;
 pub mod version_spec;
+mod virtual_package_demand;
+pub mod virtual_package_detector;
 
 pub mod compression_level;
 mod environment_yaml;
@@ -76,7 +78,7 @@ pub use rattler_conda_version::version_spec::{
     StrictRangeOperator, VersionOperators,
 };
 pub use rattler_conda_version::{ParseStrictness, Version, VersionSpec};
-pub use record_traits::HasArtifactIdentificationRefs;
+pub use record_traits::{HasArtifactDigestRefs, HasArtifactIdentificationRefs};
 pub use repo_data::{
     ChannelInfo, ChannelRelations, ConvertSubdirError, MAX_REPODATA_REVISION_MESSAGE_BYTES,
     PackageRecord, RecordFromPath, RepoData, RepodataRevision, RepodataRevisionInfo,
@@ -89,6 +91,8 @@ pub use repo_data::{
 pub use repo_data_record::{RepoDataRecord, SolverResult};
 pub use run_export::RunExportKind;
 pub use subdir::{Arch, ParseArchError, ParseSubdirError, Subdir};
+pub use virtual_package_demand::referenced_virtual_packages;
+pub use virtual_package_detector::{DetectorRegistrationMetadata, VirtualPackageName};
 
 /// An package identifier that can be used to identify packages across package
 /// ecosystems.

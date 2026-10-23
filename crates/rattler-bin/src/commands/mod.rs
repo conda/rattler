@@ -7,16 +7,20 @@ pub mod client;
 pub mod compare_packages;
 pub mod completion;
 pub mod create;
+mod detectors;
 pub mod download;
 pub mod exec;
 pub mod extract;
 pub mod fetch_file;
 pub mod gateway;
+pub mod hyperlink;
 pub mod info;
 pub mod inspect;
 pub mod link;
 pub mod list;
 pub mod menu;
+#[cfg(feature = "mount")]
+pub mod mount;
 pub mod package_source;
 pub mod prefix;
 pub mod progress;
@@ -68,7 +72,8 @@ pub fn write_all_to_stdout(bytes: &[u8]) -> miette::Result<()> {
 /// Writes `urls` to stdout, one per line.
 ///
 /// This output is meant to be piped (e.g. into `head`), so a closed stdout is
-/// a normal way to end instead of an error.
+/// a normal way to end instead of an error, and the lines are never decorated
+/// with [`hyperlink`]s.
 pub fn print_url_lines(
     urls: impl IntoIterator<Item = impl std::fmt::Display>,
 ) -> miette::Result<()> {

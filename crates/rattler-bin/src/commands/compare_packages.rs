@@ -16,7 +16,10 @@ use rattler_package_streaming::{
 };
 use sha2::{Digest, Sha256};
 
-use super::package_source::{PackageSource, client_for};
+use super::{
+    hyperlink,
+    package_source::{PackageSource, client_for},
+};
 
 /// Compare two conda packages and report the differences.
 ///
@@ -48,8 +51,14 @@ pub async fn compare_packages(opt: Opt, offline: bool) -> miette::Result<()> {
     )?;
 
     println!("comparing");
-    println!("  left:  {}", opt.left);
-    println!("  right: {}", opt.right);
+    println!(
+        "  left:  {}",
+        hyperlink::maybe_link(hyperlink::package_source(&left_source), &opt.left)
+    );
+    println!(
+        "  right: {}",
+        hyperlink::maybe_link(hyperlink::package_source(&right_source), &opt.right)
+    );
 
     let (left_index, right_index, left_run_exports, right_run_exports, left_paths, right_paths) = tokio::try_join!(
         read_package_file::<IndexJson>(&left, "left"),
@@ -150,7 +159,7 @@ fn compare_metadata(left: &IndexJson, right: &IndexJson) -> bool {
         left.version.to_string(),
         right.version.to_string(),
     );
-    compare("build", left.build.clone(), right.build.clone());
+    compare("build", left.build.to_string(), right.build.to_string());
     compare(
         "build_number",
         left.build_number.to_string(),

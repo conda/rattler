@@ -7,6 +7,102 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-10-23
+
+### Highlights
+
+**Security fixes in the bundled TLS stack.** The wheels now ship `rustls-webpki` 0.103.16 and `webpki-root-certs` 1.0.11, which stop trusting the compromised eMudhra/emSign intermediates ([RUSTSEC-2026-0382](https://rustsec.org/advisories/RUSTSEC-2026-0382.html), [RUSTSEC-2026-0383](https://rustsec.org/advisories/RUSTSEC-2026-0383.html)), plus `rustls` 0.23.46 and `quinn-proto` 0.11.19 for the advisories listed under Security below. Nothing changes in the Python API; upgrading is enough.
+
+**Breaking: build strings are `BuildString` objects.** `PackageRecord.build`, `IndexJson.build` and friends return a `BuildString` instead of a `str`, and the constructors and setters that take a build string (`PackageRecord(...)`, `record.build = ...`, `GenericVirtualPackage(...)`) only accept a `BuildString`. New values are validated against CEP 26, while build strings read from existing metadata are not. Watch out for comparisons: `record.build == "py312_0"` used to be a plain string comparison and is now always `False` without raising an error, so convert explicitly.
+
+```python
+str(record.build).startswith("py312")             # read the text
+record.build = BuildString("py312_1")             # validated against CEP 26
+record.build = BuildString.new_unchecked("py3-none-any")  # keep a non-conforming value
+GenericVirtualPackage(PackageName("__archspec"), Version("1"), BuildString("x86_64"))
+```
+
+**Breaking: `exclude_newer` also applies to locked and pinned packages.** Until now `solve(..., exclude_newer=...)` only filtered records coming from the channels, so a record passed through `locked_packages` or `pinned_packages` slipped past the cutoff. Now a locked record newer than the cutoff is no longer preferred and the solver falls back to an older one, and a pinned record newer than the cutoff makes the solve fail with an error that names the cutoff. If you re-solve an existing lock file with a tighter cutoff, expect older packages or a `SolverError` where you previously got the locked ones.
+
+**Layered package caches.** `PackageCache` and `PackageCacheLayer` describe a package cache made of several directories, for example a writable cache of your own in front of a shared read-only one, each with its own validation mode and include/exclude filters. Pass it to `install()` through the new `package_cache` argument.
+
+```python
+cache = PackageCache.from_layers([
+    PackageCacheLayer("/home/me/.cache/my-tool/pkgs"),
+    PackageCacheLayer("/opt/shared/pkgs").with_validation_mode(ValidationMode.fast()).excluding(MatchSpec("openssl")),
+])
+await install(records, target_prefix, package_cache=cache)
+```
+
+**Faster solves.** Candidate versions are ranked once per package instead of compared over and over while sorting, which cut solve times by 8.9% (geometric mean) across the benchmark environments and by 12% to 14% for the larger ones like TensorFlow and Quetz.
+
+### Added
+
+- `PackageCache`, `PackageCacheLayer`, `CacheIndex` and `ValidationMode`, and a `package_cache` argument for `install()` that takes precedence over `cache_dir`, in [#2915](https://github.com/conda/rattler/pull/2915) and [#2933](https://github.com/conda/rattler/pull/2933)
+- `BuildString`, with `BuildString.new_unchecked()` for values that don't conform to CEP 26, in [#2430](https://github.com/conda/rattler/pull/2430)
+- `DetectionOutcome.diagnostics`, the non-empty stderr of detectors that succeeded, so a report that a client rejects can still be explained, in [#2913](https://github.com/conda/rattler/pull/2913)
+
+### Changed
+
+- **BREAKING:** `PackageRecord.build`, `IndexJson.build` and the other build string properties return a `BuildString` instead of a `str`, and `PackageRecord(...)`, the `build` setters and `GenericVirtualPackage(...)` raise `TypeError` when given a `str`, in [#2430](https://github.com/conda/rattler/pull/2430)
+- **BREAKING:** `solve()` applies `exclude_newer` to `locked_packages` (no longer preferred when too new) and `pinned_packages` (the solve fails when one is too new) instead of only to records from the channels, in [#2940](https://github.com/conda/rattler/pull/2940)
+- `index_fs()`/`index_s3()` put packages that have `flags` into the legacy `packages`/`packages.conda` maps instead of the v3 map; v3-only match spec syntax or an explicit `repodata_revision: 3` still places a package in v3, in [#2946](https://github.com/conda/rattler/pull/2946)
+- `oci://` channels read the sharded repodata that conda-oci-mirror now publishes instead of downloading the full `repodata.json`, in [#2855](https://github.com/conda/rattler/pull/2855)
+
+### Fixed
+
+- Activation works again on macOS 12.2 and older, where `/usr/bin/env -0` is not available, in [#2866](https://github.com/conda/rattler/pull/2866)
+- Keep the code signing identifier and requirements of macOS binaries that `install()` re-signs after prefix replacement, matching what rattler-build does, in [#2930](https://github.com/conda/rattler/pull/2930)
+- Run the detectors of virtual packages that are only referenced by optional dependencies (`extra_depends`) in [#2912](https://github.com/conda/rattler/pull/2912)
+
+### Security
+
+- Update `rustls-webpki` to 0.103.16 and `webpki-root-certs` to 1.0.11 to stop trusting the compromised eMudhra/emSign intermediates ([RUSTSEC-2026-0382](https://rustsec.org/advisories/RUSTSEC-2026-0382.html), [RUSTSEC-2026-0383](https://rustsec.org/advisories/RUSTSEC-2026-0383.html)) in [#2977](https://github.com/conda/rattler/pull/2977)
+- Update `rustls` to 0.23.46 ([RUSTSEC-2026-0346](https://rustsec.org/advisories/RUSTSEC-2026-0346.html), [RUSTSEC-2026-0347](https://rustsec.org/advisories/RUSTSEC-2026-0347.html), [RUSTSEC-2026-0348](https://rustsec.org/advisories/RUSTSEC-2026-0348.html), [RUSTSEC-2026-0349](https://rustsec.org/advisories/RUSTSEC-2026-0349.html)), `quinn-proto` to 0.11.19 ([RUSTSEC-2026-0338](https://rustsec.org/advisories/RUSTSEC-2026-0338.html), [RUSTSEC-2026-0340](https://rustsec.org/advisories/RUSTSEC-2026-0340.html), [RUSTSEC-2026-0343](https://rustsec.org/advisories/RUSTSEC-2026-0343.html)), `ctutils` to 0.4.5 ([RUSTSEC-2026-0385](https://rustsec.org/advisories/RUSTSEC-2026-0385.html)) and `lru` to 0.18.5 ([RUSTSEC-2026-0253](https://rustsec.org/advisories/RUSTSEC-2026-0253.html)) in [#2977](https://github.com/conda/rattler/pull/2977)
+- Update the Sigstore crates to 0.15.1, which embed refreshed Sigstore TUF trust roots for `verify_attestation()` in [#2977](https://github.com/conda/rattler/pull/2977)
+
+### Performance
+
+- Rank candidate versions once per package while solving, 8.9% faster solves (geometric mean) and up to 13.9% on the largest benchmark environment, in [#2948](https://github.com/conda/rattler/pull/2948)
+- Cache dependency scores while sorting tied candidates, about 48% less time in the PyTorch candidate-sorting benchmark, in [#2923](https://github.com/conda/rattler/pull/2923)
+- Match simple glob patterns in match specs (like `py312*` or `*_cuda`) with prefix/suffix checks instead of the general glob matcher in [#2924](https://github.com/conda/rattler/pull/2924)
+
+## [0.27.1] - 2026-10-05
+
+### Highlights
+
+**Multichannels.** `MultiSource` groups several sources under one name, like conda's `defaults` (`pkgs/main`, `pkgs/r`, `pkgs/msys2`) or its `custom_multichannels`. Pass it to `solve()`, `solve_with_sparse_repodata()` or the `Gateway` methods anywhere a channel goes. The sources of a group share one channel priority tier, the way conda-libmamba-solver treats them: with strict priority a package in an earlier member no longer hides a newer build in a later one, while channels outside the group are still excluded. Within the group, member order only breaks ties. A spec like `defaults::python` matches packages from any member. Members can be channels, channel names, `SparseRepoData` or a custom `RepoDataSource`, but not another `MultiSource`.
+
+```python
+defaults = MultiSource("defaults", ["https://repo.anaconda.com/pkgs/main", "https://repo.anaconda.com/pkgs/r"])
+records = await solve(
+    [defaults],
+    ["python 3.12.*"],
+    platforms=["linux-64", "noarch"],
+    channel_priority=ChannelPriority.Strict,
+    virtual_packages=VirtualPackage.detect(),
+)
+```
+
+`RepoDataRecord.channel` is still the URL of the member the record came from. Solves that don't use a `MultiSource` come out exactly as before.
+
+**Channel-provided virtual package detectors.** Channels can now register detector packages that report virtual packages rattler doesn't know about natively. `Gateway.virtual_package_detectors()` collects the registrations of a set of channels, and `detect_virtual_packages()` installs and runs the accepted detectors behind a consent callback, returning detected values, failures and skipped registrations. `Gateway.query()` can collect registrations for a solve as well, through its new `detector_target` and `constraints` arguments.
+
+### Added
+
+- `MultiSource`, a named group of sources that share a channel priority tier, accepted by `solve()`, `solve_with_sparse_repodata()`, `Gateway.query()`, `Gateway.who_needs()` and `Gateway.names()`, in [#2881](https://github.com/conda/rattler/pull/2881), [#2882](https://github.com/conda/rattler/pull/2882) and [#2884](https://github.com/conda/rattler/pull/2884)
+- Discover and run channel-provided virtual package detectors with `Gateway.virtual_package_detectors()`, `detect_virtual_packages()` and the `detector_target`/`constraints` arguments of `Gateway.query()`, along with `DetectorRegistrations`, `ConsentRequest`, `DetectionOutcome` and related types, in [#2864](https://github.com/conda/rattler/pull/2864)
+- `PrefixPlaceholder.experimental_offsets` and `PrefixPlaceholder.experimental_shebang_length`, the recorded placeholder offsets from `paths.json`, in [#2565](https://github.com/conda/rattler/pull/2565)
+- `freebsd-ppc64` and `freebsd-ppc64le` subdirs in [#2768](https://github.com/conda/rattler/pull/2768)
+- `index_fs()`/`index_s3()` accept a v3 revision message in `index-config` and patches can set `extra_depends` and `flags` in [#2668](https://github.com/conda/rattler/pull/2668)
+
+### Fixed
+
+- Parse `::numpy` (an empty channel) as a spec without a channel instead of pinning it to `conda.anaconda.org`, so `MatchSpec("::numpy").channel` is `None` in [#2737](https://github.com/conda/rattler/pull/2737)
+- `index_fs()`/`index_s3()` write `repodata_version: 2` only when a `base_url` is set, always write the `v3` map, use `indexed_timestamp` for revision bounds, and validate patches for every subdir before writing anything in [#2668](https://github.com/conda/rattler/pull/2668)
+- Keep backslashes in file names when writing `paths.json` and `conda-meta` records on Linux and macOS instead of turning them into path separators, which made such packages fail to install in [#2878](https://github.com/conda/rattler/pull/2878)
+- Store the refreshed cache policy after a `304 Not Modified` on the sharded repodata index, so later processes stop revalidating an unchanged index in [#2724](https://github.com/conda/rattler/pull/2724)
+
 ## [0.27.0] - 2026-09-29
 
 ### Highlights

@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use futures::future::OptionFuture;
 use rattler_conda_types::{
-    Channel, ChannelRelations, PackageName, RepodataRevisions, ShardedRepodata,
+    Channel, ChannelRelations, DetectorRegistrationMetadata, PackageName, RepodataRevisions,
+    ShardedRepodata,
 };
 use rattler_networking::LazyClient;
 use url::Url;
@@ -21,7 +22,7 @@ use crate::{
         },
         subdir::{FetchedPackage, SubdirClient},
     },
-    reporter::ResponseReporterExt,
+    reporter::{DownloadProgressGuard, ResponseReporterExt},
     sparse::{FormatBucketSet, PackageFormatSelection},
     utils::js_fetch::JsFetcher,
 };
@@ -152,9 +153,10 @@ impl SubdirClient for ShardedSubdir {
                         .build()
                         .expect("failed to build shard request");
 
-                    let reporter = reporter
-                        .and_then(Reporter::download_reporter)
-                        .map(|r| (r, r.on_download_start(&shard_url)));
+                    let download = DownloadProgressGuard::start(
+                        reporter.and_then(Reporter::download_reporter),
+                        &shard_url,
+                    );
                     let shard_response = self
                         .client
                         .client()
@@ -164,13 +166,11 @@ impl SubdirClient for ShardedSubdir {
                         .map_err(FetchRepoDataError::from)?;
 
                     let bytes = shard_response
-                        .bytes_with_progress(reporter)
+                        .bytes_with_progress(download.reporter())
                         .await
                         .map_err(FetchRepoDataError::from)?;
 
-                    if let Some((reporter, index)) = reporter {
-                        reporter.on_download_complete(&shard_url, index);
-                    }
+                    download.finish(&shard_url);
 
                     bytes::Bytes::from(bytes)
                 }
@@ -198,5 +198,12 @@ impl SubdirClient for ShardedSubdir {
 
     fn channel_relations(&self) -> Option<&ChannelRelations> {
         self.sharded_repodata.info.channel_relations.as_ref()
+    }
+
+    fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
+        self.sharded_repodata
+            .info
+            .virtual_package_detectors
+            .as_ref()
     }
 }

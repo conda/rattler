@@ -19,7 +19,7 @@ use url::Url;
 #[cfg(target_arch = "wasm32")]
 use wasmtimer::std::SystemTime;
 
-use crate::reporter::DownloadReporter;
+use crate::reporter::{DownloadProgressGuard, DownloadReporter};
 use crate::{
     Reporter,
     fetch::{FetchRepoDataError, RepoDataNotFoundError, Variant},
@@ -219,10 +219,12 @@ pub async fn fetch_repo_data(
 
     // Notify that a request has started
     let repo_data_url = request.url().clone();
-    let download_reporter = reporter
-        .as_deref()
-        .and_then(|reporter| reporter.download_reporter())
-        .map(|r| (r, r.on_download_start(&repo_data_url)));
+    let download = DownloadProgressGuard::start(
+        reporter
+            .as_deref()
+            .and_then(|reporter| reporter.download_reporter()),
+        &repo_data_url,
+    );
 
     // Construct a retry behavior
     let default_retry_behavior = default_retry_policy();
@@ -250,7 +252,7 @@ pub async fn fetch_repo_data(
 
         // Stream the response the bytes and decode them on the fly.
         let (download_url, stream_error) =
-            match stream_response_body(response, compression, download_reporter).await {
+            match stream_response_body(response, compression, download.reporter()).await {
                 Ok(bytes) => break (bytes, repo_data_url),
                 Err(FetchRepoDataError::FailedToDownload(url, err)) => (url, err),
                 Err(e) => {
@@ -291,9 +293,7 @@ pub async fn fetch_repo_data(
         retry_count += 1;
     };
 
-    if let Some((reporter, index)) = download_reporter {
-        reporter.on_download_complete(&response_url, index);
-    }
+    download.finish(&response_url);
 
     Ok(bytes)
 }

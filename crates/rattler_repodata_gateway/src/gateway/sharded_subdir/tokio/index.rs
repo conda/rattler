@@ -8,7 +8,7 @@ use crate::{
         error::SubdirNotFoundError,
         sharded_subdir::{decode_zst_bytes_async, is_missing_sharded_repodata_status},
     },
-    reporter::{DownloadReporter, ResponseReporterExt},
+    reporter::{DownloadProgressGuard, ResponseReporterExt},
     utils::url_to_cache_filename,
 };
 use async_fd_lock::{LockWrite, RwLockWriteGuard};
@@ -57,7 +57,7 @@ pub async fn fetch_index(
         cache_path: &Path,
         policy: CachePolicy,
         response: Response,
-        reporter: Option<(&dyn DownloadReporter, usize)>,
+        download: DownloadProgressGuard<'_>,
         permit: Option<tokio::sync::SemaphorePermit<'_>>,
     ) -> Result<ShardedRepodata, GatewayError> {
         let response = response.error_for_status()?;
@@ -77,11 +77,9 @@ pub async fn fetch_index(
 
         // Read the bytes of the response
         let response_url = response.url().clone();
-        let bytes = response.bytes_with_progress(reporter).await?;
+        let bytes = response.bytes_with_progress(download.reporter()).await?;
 
-        if let Some((reporter, index)) = reporter {
-            reporter.on_download_complete(&response_url, index);
-        }
+        download.finish(&response_url);
 
         // Decompress the bytes
         let decoded_bytes = Bytes::from(decode_zst_bytes_async(bytes, response_url.clone()).await?);
@@ -230,9 +228,10 @@ pub async fn fetch_index(
                     .expect("failed to acquire semaphore permit");
 
                     // Send the request
-                    let download_reporter = reporter
-                        .and_then(Reporter::download_reporter)
-                        .map(|r| (r, r.on_download_start(&shards_url)));
+                    let download = DownloadProgressGuard::start(
+                        reporter.and_then(Reporter::download_reporter),
+                        &shards_url,
+                    );
                     let response = client.client().execute(request).await?;
 
                     // Check if the resource was not found (404) or not
@@ -259,9 +258,7 @@ pub async fn fetch_index(
                                 )
                             })?;
 
-                        if let Some((reporter, index)) = download_reporter {
-                            reporter.on_download_complete(response.url(), index);
-                        }
+                        download.finish(response.url());
 
                         // Return SubdirNotFoundError to trigger fallback
                         return Err(create_subdir_not_found_error(channel_base_url));
@@ -273,9 +270,7 @@ pub async fn fetch_index(
                         SystemTime::now(),
                     ) {
                         AfterResponse::NotModified(policy, _) => {
-                            if let Some((reporter, index)) = download_reporter {
-                                reporter.on_download_complete(response.url(), index);
-                            }
+                            download.finish(response.url());
 
                             match read_shard_index_with_bytes(&mut cache_reader).await {
                                 Ok((shard_index, bytes)) => {
@@ -316,7 +311,7 @@ pub async fn fetch_index(
                                 &cache_path,
                                 policy,
                                 response,
-                                download_reporter,
+                                download,
                                 request_permit,
                             )
                             .await;
@@ -358,9 +353,8 @@ pub async fn fetch_index(
     .expect("failed to acquire semaphore permit");
 
     // Do a fresh requests
-    let reporter = reporter
-        .and_then(Reporter::download_reporter)
-        .map(|r| (r, r.on_download_start(&shards_url)));
+    let download =
+        DownloadProgressGuard::start(reporter.and_then(Reporter::download_reporter), &shards_url);
     let response = client
         .client()
         .execute(
@@ -403,7 +397,7 @@ pub async fn fetch_index(
         &cache_path,
         policy,
         response,
-        reporter,
+        download,
         request_permit,
     )
     .await
