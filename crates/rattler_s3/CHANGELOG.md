@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.8](https://github.com/conda/rattler/compare/rattler_s3-v0.3.7...rattler_s3-v0.3.8) - 2026-10-23
+
+### Other
+
+- bump opendal to 0.59 ([#2979](https://github.com/conda/rattler/pull/2979))
+
 ## [0.3.7](https://github.com/conda/rattler/compare/rattler_s3-v0.3.6...rattler_s3-v0.3.7) - 2026-10-16
 
 ### Other

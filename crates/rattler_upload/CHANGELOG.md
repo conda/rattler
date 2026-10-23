@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.6](https://github.com/conda/rattler/compare/rattler_upload-v0.13.5...rattler_upload-v0.13.6) - 2026-10-23
+
+### Fixed
+
+- update sigstore to 0.15.1 and fix cargo audit findings ([#2977](https://github.com/conda/rattler/pull/2977))
+
+### Other
+
+- bump opendal to 0.59 ([#2979](https://github.com/conda/rattler/pull/2979))
+
 ## [0.13.5](https://github.com/conda/rattler/compare/rattler_upload-v0.13.4...rattler_upload-v0.13.5) - 2026-10-16
 
 ### Other
