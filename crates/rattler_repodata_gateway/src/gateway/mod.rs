@@ -548,6 +548,12 @@ impl GatewayInner {
 
         Ok(subdir)
     }
+
+    /// Returns true if any subdirectory for the given channel is known to be found.
+    pub(crate) fn has_found_subdir_for_channel(&self, channel: &Channel) -> bool {
+        self.subdirs
+            .any(|(c, _, _), state| c == channel && matches!(state.as_ref(), SubdirState::Found(_)))
+    }
 }
 
 #[cfg(test)]
@@ -1885,6 +1891,53 @@ mod test {
             "2.0.0",
             "should now be 2.0.0 after clearing disk cache"
         );
+    }
+
+    #[tokio::test]
+    async fn test_channel_missing_noarch_subdir_succeeds() {
+        // Create a temporary channel that has linux-64 repodata, but NO noarch directory.
+        let channel_dir = tempfile::tempdir().unwrap();
+        let subdir_path = channel_dir.path().join("linux-64");
+        std::fs::create_dir_all(&subdir_path).unwrap();
+
+        let repodata = make_repodata("testpkg", "1.0.0");
+        std::fs::write(subdir_path.join("repodata.json"), repodata).unwrap();
+
+        let server = SimpleChannelServer::new(channel_dir.path()).await;
+        let channel = server.channel();
+
+        let gateway = Gateway::new();
+
+        // Query both Linux64 and NoArch. Even though noarch is missing,
+        // because linux-64 exists, the query should succeed!
+        let records = gateway
+            .query(
+                vec![channel.clone()],
+                vec![Subdir::Linux64, Subdir::NoArch],
+                vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(all_records.len(), 1);
+        assert_eq!(
+            all_records[0].package_record.name.as_normalized(),
+            "testpkg"
+        );
+
+        // Also test who_needs on the same channel
+        let dependents = gateway
+            .who_needs(
+                vec![channel],
+                vec![Subdir::Linux64, Subdir::NoArch],
+                PackageName::from_str("testpkg").unwrap(),
+            )
+            .execute()
+            .await
+            .unwrap();
+        assert_eq!(dependents.len(), 0);
     }
 
     fn run_exports_missing(records: &[RepoDataRecord]) -> bool {
