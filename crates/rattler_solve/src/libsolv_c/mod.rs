@@ -1,7 +1,7 @@
 //! Provides an solver implementation based on the [`rattler_libsolv_c`] crate.
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     ffi::CString,
     mem::ManuallyDrop,
 };
@@ -297,19 +297,60 @@ impl super::SolverImpl for Solver {
 
         // Create a special pool for additional records. These are plain
         // candidates: unlike the locked and pinned records they are neither
-        // favored nor locked. The repo gets the highest priority so that strict
-        // channel priority never discards them in favor of a channel record.
-        let repo = Repo::new(&pool, "additional", highest_priority);
-        add_repodata_records(
-            &pool,
-            &repo,
-            task.additional_packages.iter().copied(),
-            task.exclude_newer.as_ref(),
-        )?;
+        // favored nor locked.
+        //
+        // Channel priority must not discard an additional record, but an
+        // additional record must not make strict channel priority discard a
+        // channel record either. Give each record the priority of the
+        // highest-priority channel that already contains its package name; if
+        // no channel contains it, fall back to the highest priority.
+        let mut additional_repos = Vec::new();
+        if !task.additional_packages.is_empty() {
+            let mut package_priority = HashMap::new();
 
-        // Also add the additional records to the repodata
-        repo_mapping.insert(repo.id(), repo_mapping.len());
-        all_repodata_records.push(task.additional_packages.clone());
+            for repodata in &repodatas {
+                let Some(tier) = repodata.priority_tier() else {
+                    continue;
+                };
+                let priority = if use_channel_priority {
+                    *tier_priority.get(&tier).unwrap()
+                } else {
+                    0
+                };
+
+                for record in repodata.records.iter().copied() {
+                    package_priority
+                        .entry(record.package_record.name.as_normalized())
+                        .and_modify(|existing: &mut i32| *existing = (*existing).max(priority))
+                        .or_insert(priority);
+                }
+            }
+
+            let mut by_priority: BTreeMap<i32, Vec<&RepoDataRecord>> = BTreeMap::new();
+            for record in task.additional_packages.iter().copied() {
+                let priority = package_priority
+                    .get(record.package_record.name.as_normalized())
+                    .copied()
+                    .unwrap_or(highest_priority);
+                by_priority.entry(priority).or_default().push(record);
+            }
+
+            // Create the highest-priority groups first and keep the repos alive
+            // until the solve has completed.
+            for (priority, records) in by_priority.into_iter().rev() {
+                let repo = Repo::new(&pool, format!("additional-{priority}"), priority);
+                add_repodata_records(
+                    &pool,
+                    &repo,
+                    records.iter().copied(),
+                    task.exclude_newer.as_ref(),
+                )?;
+
+                repo_mapping.insert(repo.id(), repo_mapping.len());
+                all_repodata_records.push(records);
+                additional_repos.push(repo);
+            }
+        }
 
         // Create data-structures for solving
         pool.create_whatprovides();
