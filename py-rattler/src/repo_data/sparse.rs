@@ -61,33 +61,15 @@ impl From<SparseRepoData> for PySparseRepoData {
 }
 
 #[pyclass(eq, from_py_object)]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Default)]
 pub enum PyPackageFormatSelection {
     OnlyTarBz2,
     OnlyConda,
+    #[default]
     PreferConda,
     PreferCondaWithWhl,
     Both,
-}
-
-impl Default for PyPackageFormatSelection {
-    fn default() -> Self {
-        PackageFormatSelection::default().into()
-    }
-}
-
-impl From<PackageFormatSelection> for PyPackageFormatSelection {
-    fn from(value: PackageFormatSelection) -> Self {
-        match value {
-            PackageFormatSelection::OnlyTarBz2 => PyPackageFormatSelection::OnlyTarBz2,
-            PackageFormatSelection::OnlyConda => PyPackageFormatSelection::OnlyConda,
-            PackageFormatSelection::PreferConda => PyPackageFormatSelection::PreferConda,
-            PackageFormatSelection::PreferCondaWithWhl => {
-                PyPackageFormatSelection::PreferCondaWithWhl
-            }
-            PackageFormatSelection::Both => PyPackageFormatSelection::Both,
-        }
-    }
+    All,
 }
 
 impl From<PyPackageFormatSelection> for PackageFormatSelection {
@@ -100,6 +82,7 @@ impl From<PyPackageFormatSelection> for PackageFormatSelection {
                 PackageFormatSelection::PreferCondaWithWhl
             }
             PyPackageFormatSelection::Both => PackageFormatSelection::Both,
+            PyPackageFormatSelection::All => PackageFormatSelection::All,
         }
     }
 }

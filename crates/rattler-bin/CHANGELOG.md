@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.9](https://github.com/conda/rattler/compare/rattler-bin-v0.5.8...rattler-bin-v0.5.9) - 2026-10-23
+
+### Added
+
+- add rattler_vfs crate ([#2566](https://github.com/conda/rattler/pull/2566))
+
 ## [0.5.8](https://github.com/conda/rattler/compare/rattler-bin-v0.5.7...rattler-bin-v0.5.8) - 2026-10-16
 
 ### Added
