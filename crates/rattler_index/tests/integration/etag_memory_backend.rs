@@ -29,7 +29,8 @@ use std::{
 
 use bytes::Bytes;
 use opendal::{
-    Buffer, Builder, Capability, EntryMode, Error, ErrorKind, Metadata, Operator, Result, raw::*,
+    Buffer, Builder, BytesRange, Capability, Error, ErrorKind, Metadata, MetadataBuilder,
+    OperationContext, Operator, Result, raw::*,
 };
 use rattler_digest::compute_bytes_digest;
 use tokio::sync::RwLock;
@@ -119,6 +120,14 @@ impl FileEntry {
         let digest = compute_bytes_digest::<rattler_digest::Md5>(data);
         format!("\"{}\"", hex::encode(digest))
     }
+
+    fn metadata(&self) -> Metadata {
+        let mut metadata = MetadataBuilder::file(self.content_length);
+        metadata
+            .etag(self.etag.clone())
+            .last_modified(self.last_modified);
+        metadata.build()
+    }
 }
 
 use std::{future::Future, pin::Pin};
@@ -175,7 +184,7 @@ impl Default for TestHooks {
 
 /// In-memory storage backend with `ETag` and conditional request support.
 ///
-/// Implements `opendal`'s `Access` trait to provide S3-like behavior for
+/// Implements `opendal`'s `Service` trait to provide S3-like behavior for
 /// testing, including `ETag` generation and validation of conditional HTTP
 /// requests.
 #[derive(Clone, Debug)]
@@ -201,224 +210,74 @@ impl ETagMemoryBackend {
             test_hooks: Some(hooks),
         }
     }
-}
 
-/// Builder for the `ETag` memory backend.
-///
-/// Supports configuring test hooks for synchronization in concurrent tests.
-#[derive(Default, Debug)]
-pub struct ETagMemoryBuilder {
-    test_hooks: Option<TestHooks>,
-}
-
-impl ETagMemoryBuilder {
-    pub fn with_test_hooks(mut self, hooks: TestHooks) -> Self {
-        self.test_hooks = Some(hooks);
-        self
-    }
-}
-
-impl Builder for ETagMemoryBuilder {
-    type Config = ();
-
-    fn build(self) -> Result<impl Access> {
-        if let Some(hooks) = self.test_hooks {
-            Ok(ETagMemoryBackend::with_test_hooks(hooks))
-        } else {
-            Ok(ETagMemoryBackend::new())
-        }
-    }
-}
-
-impl Access for ETagMemoryBackend {
-    type Reader = Buffer;
-    type Writer = ETagMemoryWriter;
-    type Lister = oio::HierarchyLister<ETagMemoryLister>;
-    type Deleter = oio::OneShotDeleter<ETagMemoryDeleter>;
-    type Copier = ();
-
-    fn info(&self) -> Arc<AccessorInfo> {
-        let info = AccessorInfo::default();
-        info.set_scheme(SCHEME_NAME)
-            .set_root("/")
-            .set_native_capability(Capability {
-                stat: true,
-                stat_with_if_match: true,
-                stat_with_if_none_match: true,
-                read: true,
-                read_with_if_match: true,
-                read_with_if_none_match: true,
-                write: true,
-                write_can_empty: true,
-                write_with_if_match: true,
-                write_with_if_none_match: true,
-                write_with_if_not_exists: true,
-                delete: true,
-                list: true,
-                create_dir: true,
-                ..Default::default()
-            });
-
-        info.into()
-    }
-
-    async fn stat(&self, path: &str, args: OpStat) -> Result<RpStat> {
-        // Test hook: call callback before operation
+    async fn run_hook(&self, path: &str, operation: Operation) {
         if let Some(hooks) = &self.test_hooks {
-            (hooks.on_operation)(path, Operation::BeforeStat).await;
+            (hooks.on_operation)(path, operation).await;
         }
+    }
 
-        let metadata = {
-            let storage = self.storage.read().await;
-            let entry_lock = if let Some(entry_lock) = storage.get(path).cloned() {
-                entry_lock
-            } else {
-                if let Some(hooks) = &self.test_hooks {
-                    (hooks.on_operation)(path, Operation::AfterStat).await;
-                }
+    /// Takes the write lock of the entry at `path`, creating an empty entry if
+    /// there is none, after checking the write conditions in `args`.
+    ///
+    /// The lock is held until the writer is closed, so concurrent writes to the
+    /// same path are serialized the way a conditional S3 PUT would be.
+    async fn lock_for_write(
+        &self,
+        path: &str,
+        args: &OpWrite,
+    ) -> Result<tokio::sync::OwnedRwLockWriteGuard<FileEntry>> {
+        // Test hook: call callback before operation
+        self.run_hook(path, Operation::BeforeWrite).await;
+
+        let mut storage = self.storage.write().await;
+        if let Some(entry_lock) = storage.get(path) {
+            let entry_lock = entry_lock.clone();
+            drop(storage);
+
+            // Acquire owned write lock - this will block if another write is in progress
+            let entry = entry_lock.write_owned().await;
+            check_if_match(&entry.etag, args.if_match(), " on write")?;
+
+            // Check if_none_match for create-only semantics
+            if let Some(if_none_match) = args.if_none_match()
+                && if_none_match == "*"
+            {
                 return Err(Error::new(
-                    ErrorKind::NotFound,
-                    format!("file not found: {path}"),
+                    ErrorKind::ConditionNotMatch,
+                    "if_none_match: file already exists",
                 ));
-            };
-            drop(storage);
-
-            let entry = entry_lock.read().await;
-            // Check conditions
-            check_if_match(&entry.etag, args.if_match(), "")?;
-            check_if_none_match(&entry.etag, args.if_none_match(), "")?;
-
-            Metadata::new(EntryMode::FILE)
-                .with_etag(entry.etag.clone())
-                .with_last_modified(entry.last_modified)
-                .with_content_length(entry.content_length)
-        }; // entry lock is dropped here
-
-        // Test hook: call callback after operation
-        if let Some(hooks) = &self.test_hooks {
-            (hooks.on_operation)(path, Operation::AfterStat).await;
-        }
-
-        Ok(RpStat::new(metadata))
-    }
-
-    async fn read(&self, path: &str, args: OpRead) -> Result<(RpRead, Self::Reader)> {
-        // Test hook: call callback before operation
-        if let Some(hooks) = &self.test_hooks {
-            (hooks.on_operation)(path, Operation::BeforeRead).await;
-        }
-
-        let (etag, last_modified, data) = {
-            let storage = self.storage.read().await;
-            let entry_lock = storage
-                .get(path)
-                .ok_or_else(|| Error::new(ErrorKind::NotFound, "file not found"))?
-                .clone();
-            drop(storage);
-
-            let entry = entry_lock.read().await;
-            (entry.etag.clone(), entry.last_modified, entry.data.clone())
-        }; // entry lock is dropped here
-
-        // Check conditions
-        check_if_match(&etag, args.if_match(), " on read")?;
-        check_if_none_match(&etag, args.if_none_match(), " on read")?;
-        check_if_unmodified_since(last_modified, args.if_unmodified_since())?;
-
-        // Test hook: call callback after operation
-        if let Some(hooks) = &self.test_hooks {
-            (hooks.on_operation)(path, Operation::AfterRead).await;
-        }
-
-        // opendal 0.57 requires RpRead to carry the object metadata.
-        let metadata = Metadata::new(EntryMode::FILE)
-            .with_etag(etag)
-            .with_last_modified(last_modified)
-            .with_content_length(data.len() as u64);
-        Ok((RpRead::new(metadata), Buffer::from(data)))
-    }
-
-    async fn write(&self, path: &str, args: OpWrite) -> Result<(RpWrite, Self::Writer)> {
-        // Test hook: call callback before operation
-        if let Some(hooks) = &self.test_hooks {
-            (hooks.on_operation)(path, Operation::BeforeWrite).await;
-        }
-
-        // Get or create the entry lock
-        let entry_lock = {
-            let mut storage = self.storage.write().await;
-            if let Some(entry_lock) = storage.get(path) {
-                let entry_lock = entry_lock.clone();
-                drop(storage);
-
-                // Acquire owned write lock - this will block if another write is in progress
-                let entry = entry_lock.write_owned().await;
-                check_if_match(&entry.etag, args.if_match(), " on write")?;
-
-                // Check if_none_match for create-only semantics
-                if let Some(if_none_match) = args.if_none_match()
-                    && if_none_match == "*"
-                {
-                    return Err(Error::new(
-                        ErrorKind::ConditionNotMatch,
-                        "if_none_match: file already exists",
-                    ));
-                }
-
-                // Check if_not_exists for create-only semantics
-                if args.if_not_exists() {
-                    return Err(Error::new(
-                        ErrorKind::ConditionNotMatch,
-                        "if_not_exists: file already exists",
-                    ));
-                }
-
-                entry
-            } else {
-                // File doesn't exist - check if_match (should fail)
-                if args.if_match().is_some() {
-                    return Err(Error::new(
-                        ErrorKind::ConditionNotMatch,
-                        "if_match specified but file doesn't exist",
-                    ));
-                }
-
-                // Create new entry lock and acquire owned write guard
-                let entry = Arc::new(RwLock::new(FileEntry::new(Bytes::new())));
-                storage.insert(path.to_owned(), entry.clone());
-                drop(storage);
-
-                entry.write_owned().await
             }
-        };
 
-        Ok((
-            RpWrite::new(),
-            ETagMemoryWriter {
-                path: path.to_owned(),
-                entry_lock,
-                buffer: oio::QueueBuf::new(),
-                test_hooks: self.test_hooks.clone(),
-            },
-        ))
+            // Check if_not_exists for create-only semantics
+            if args.if_not_exists() {
+                return Err(Error::new(
+                    ErrorKind::ConditionNotMatch,
+                    "if_not_exists: file already exists",
+                ));
+            }
+
+            Ok(entry)
+        } else {
+            // File doesn't exist - check if_match (should fail)
+            if args.if_match().is_some() {
+                return Err(Error::new(
+                    ErrorKind::ConditionNotMatch,
+                    "if_match specified but file doesn't exist",
+                ));
+            }
+
+            // Create new entry lock and acquire owned write guard
+            let entry = Arc::new(RwLock::new(FileEntry::new(Bytes::new())));
+            storage.insert(path.to_owned(), entry.clone());
+            drop(storage);
+
+            Ok(entry.write_owned().await)
+        }
     }
 
-    async fn create_dir(&self, path: &str, _args: OpCreateDir) -> Result<RpCreateDir> {
-        let mut directories = self.directories.write().await;
-        directories.insert(path.trim_end_matches('/').to_owned());
-        Ok(RpCreateDir::default())
-    }
-
-    async fn delete(&self) -> Result<(RpDelete, Self::Deleter)> {
-        Ok((
-            RpDelete::default(),
-            oio::OneShotDeleter::new(ETagMemoryDeleter {
-                storage: self.storage.clone(),
-            }),
-        ))
-    }
-
-    async fn list(&self, path: &str, _args: OpList) -> Result<(RpList, Self::Lister)> {
+    /// Collects the direct children of `path`, directories first.
+    async fn list_entries(&self, path: &str) -> Vec<ListEntry> {
         let storage = self.storage.read().await;
         let directories = self.directories.read().await;
 
@@ -485,12 +344,175 @@ impl Access for ETagMemoryBackend {
             });
         }
 
-        drop(storage);
-        drop(directories);
+        entries
+    }
+}
 
-        Ok((
-            RpList::default(),
-            oio::HierarchyLister::new(ETagMemoryLister { entries, index: 0 }, "/", false),
+/// Builder for the `ETag` memory backend.
+///
+/// Supports configuring test hooks for synchronization in concurrent tests.
+#[derive(Default, Debug)]
+pub struct ETagMemoryBuilder {
+    test_hooks: Option<TestHooks>,
+}
+
+impl ETagMemoryBuilder {
+    pub fn with_test_hooks(mut self, hooks: TestHooks) -> Self {
+        self.test_hooks = Some(hooks);
+        self
+    }
+}
+
+impl Builder for ETagMemoryBuilder {
+    type Config = ();
+
+    fn build(self) -> Result<impl Service> {
+        if let Some(hooks) = self.test_hooks {
+            Ok(ETagMemoryBackend::with_test_hooks(hooks))
+        } else {
+            Ok(ETagMemoryBackend::new())
+        }
+    }
+}
+
+impl Service for ETagMemoryBackend {
+    type Reader = oio::StreamReader<ETagMemoryReader>;
+    type Writer = ETagMemoryWriter;
+    type Lister = oio::HierarchyLister<ETagMemoryLister>;
+    type Deleter = oio::OneShotDeleter<ETagMemoryDeleter>;
+    type Copier = ();
+    type Composer = ();
+
+    fn info(&self) -> ServiceInfo {
+        ServiceInfo::new(SCHEME_NAME, "/", SCHEME_NAME)
+    }
+
+    fn capability(&self) -> Capability {
+        Capability {
+            stat: true,
+            stat_with_if_match: true,
+            stat_with_if_none_match: true,
+            read: true,
+            read_with_if_match: true,
+            read_with_if_none_match: true,
+            write: true,
+            write_can_empty: true,
+            write_with_if_match: true,
+            write_with_if_none_match: true,
+            write_with_if_not_exists: true,
+            delete: true,
+            list: true,
+            create_dir: true,
+            ..Default::default()
+        }
+    }
+
+    async fn stat(&self, _: &OperationContext, path: &str, args: OpStat) -> Result<RpStat> {
+        // Test hook: call callback before operation
+        self.run_hook(path, Operation::BeforeStat).await;
+
+        let metadata = {
+            let storage = self.storage.read().await;
+            let entry_lock = if let Some(entry_lock) = storage.get(path).cloned() {
+                entry_lock
+            } else {
+                self.run_hook(path, Operation::AfterStat).await;
+                return Err(Error::new(
+                    ErrorKind::NotFound,
+                    format!("file not found: {path}"),
+                ));
+            };
+            drop(storage);
+
+            let entry = entry_lock.read().await;
+            // Check conditions
+            check_if_match(&entry.etag, args.if_match(), "")?;
+            check_if_none_match(&entry.etag, args.if_none_match(), "")?;
+
+            entry.metadata()
+        }; // entry lock is dropped here
+
+        // Test hook: call callback after operation
+        self.run_hook(path, Operation::AfterStat).await;
+
+        Ok(RpStat::new(metadata))
+    }
+
+    fn read(&self, _: &OperationContext, path: &str, args: OpRead) -> Result<Self::Reader> {
+        Ok(oio::StreamReader::new(ETagMemoryReader {
+            backend: self.clone(),
+            path: path.to_owned(),
+            args,
+        }))
+    }
+
+    fn write(&self, _: &OperationContext, path: &str, args: OpWrite) -> Result<Self::Writer> {
+        // opendal 0.59 creates writers synchronously, so the entry lock and the
+        // write conditions are taken on the first `write` or `close`.
+        Ok(ETagMemoryWriter {
+            backend: self.clone(),
+            path: path.to_owned(),
+            args,
+            entry_lock: None,
+            buffer: oio::QueueBuf::new(),
+        })
+    }
+
+    async fn create_dir(
+        &self,
+        _: &OperationContext,
+        path: &str,
+        _args: OpCreateDir,
+    ) -> Result<RpCreateDir> {
+        let mut directories = self.directories.write().await;
+        directories.insert(path.trim_end_matches('/').to_owned());
+        Ok(RpCreateDir::default())
+    }
+
+    fn delete(&self, _: &OperationContext) -> Result<Self::Deleter> {
+        Ok(oio::OneShotDeleter::new(ETagMemoryDeleter {
+            storage: self.storage.clone(),
+        }))
+    }
+
+    fn list(&self, _: &OperationContext, path: &str, _args: OpList) -> Result<Self::Lister> {
+        // Listing has to read the storage locks, so the entries are collected
+        // on the first call to `next`.
+        Ok(oio::HierarchyLister::new(
+            ETagMemoryLister {
+                backend: self.clone(),
+                path: path.to_owned(),
+                entries: None,
+            },
+            "/",
+            false,
+        ))
+    }
+
+    fn copy(&self, _: &OperationContext, _: &str, _: &str, _: OpCopy) -> Result<Self::Copier> {
+        Err(Error::new(
+            ErrorKind::Unsupported,
+            "operation is not supported",
+        ))
+    }
+
+    async fn rename(
+        &self,
+        _: &OperationContext,
+        _: &str,
+        _: &str,
+        _: OpRename,
+    ) -> Result<RpRename> {
+        Err(Error::new(
+            ErrorKind::Unsupported,
+            "operation is not supported",
+        ))
+    }
+
+    async fn presign(&self, _: &OperationContext, _: &str, _: OpPresign) -> Result<RpPresign> {
+        Err(Error::new(
+            ErrorKind::Unsupported,
+            "operation is not supported",
         ))
     }
 }
@@ -513,35 +535,93 @@ impl ListEntry {
     }
 }
 
+/// Reader that checks the read conditions when the stream is opened
+pub struct ETagMemoryReader {
+    backend: ETagMemoryBackend,
+    path: String,
+    args: OpRead,
+}
+
+impl oio::StreamRead for ETagMemoryReader {
+    async fn open(&self, range: BytesRange) -> Result<(RpRead, Box<dyn oio::ReadStreamDyn>)> {
+        let path = self.path.as_str();
+
+        // Test hook: call callback before operation
+        self.backend.run_hook(path, Operation::BeforeRead).await;
+
+        let (metadata, last_modified, data) = {
+            let storage = self.backend.storage.read().await;
+            let entry_lock = storage
+                .get(path)
+                .ok_or_else(|| Error::new(ErrorKind::NotFound, "file not found"))?
+                .clone();
+            drop(storage);
+
+            let entry = entry_lock.read().await;
+            (entry.metadata(), entry.last_modified, entry.data.clone())
+        }; // entry lock is dropped here
+
+        // Check conditions
+        let etag = metadata.etag().unwrap_or_default();
+        check_if_match(etag, self.args.if_match(), " on read")?;
+        check_if_none_match(etag, self.args.if_none_match(), " on read")?;
+        check_if_unmodified_since(last_modified, self.args.if_unmodified_since())?;
+
+        // Test hook: call callback after operation
+        self.backend.run_hook(path, Operation::AfterRead).await;
+
+        let content = data.slice(range.to_content_range(data.len())?);
+        Ok((
+            RpRead::new(metadata),
+            Box::new(content) as Box<dyn oio::ReadStreamDyn>,
+        ))
+    }
+}
+
 /// Writer that stores data and generates `ETag` on completion
 pub struct ETagMemoryWriter {
-    entry_lock: tokio::sync::OwnedRwLockWriteGuard<FileEntry>,
-    buffer: oio::QueueBuf,
+    backend: ETagMemoryBackend,
     path: String,
-    test_hooks: Option<TestHooks>,
+    args: OpWrite,
+    entry_lock: Option<tokio::sync::OwnedRwLockWriteGuard<FileEntry>>,
+    buffer: oio::QueueBuf,
+}
+
+impl ETagMemoryWriter {
+    /// Takes the entry lock and checks the write conditions, once.
+    async fn lock(&mut self) -> Result<()> {
+        if self.entry_lock.is_none() {
+            let entry = self.backend.lock_for_write(&self.path, &self.args).await?;
+            self.entry_lock = Some(entry);
+        }
+        Ok(())
+    }
 }
 
 impl oio::Write for ETagMemoryWriter {
     async fn write(&mut self, bs: Buffer) -> Result<()> {
+        self.lock().await?;
         self.buffer.push(bs);
         Ok(())
     }
 
     async fn close(&mut self) -> Result<Metadata> {
+        self.lock().await?;
+
         let data = self.buffer.clone().collect().to_bytes();
         let new_entry = FileEntry::new(data);
+        let metadata = new_entry.metadata();
 
-        let metadata = Metadata::new(EntryMode::FILE)
-            .with_etag(new_entry.etag.clone())
-            .with_last_modified(new_entry.last_modified)
-            .with_content_length(new_entry.content_length);
-
-        *self.entry_lock = new_entry;
+        let entry_lock = self
+            .entry_lock
+            .as_mut()
+            .expect("the entry lock was taken above");
+        **entry_lock = new_entry;
 
         // Test hook: call callback after operation
-        if let Some(hooks) = &self.test_hooks {
-            (hooks.on_operation)(&self.path, Operation::AfterWrite).await;
-        }
+        self.backend
+            .run_hook(&self.path, Operation::AfterWrite)
+            .await;
 
         Ok(metadata)
     }
@@ -567,26 +647,28 @@ impl oio::OneShotDelete for ETagMemoryDeleter {
 
 /// Lister for `ETag` memory backend
 pub struct ETagMemoryLister {
-    entries: Vec<ListEntry>,
-    index: usize,
+    backend: ETagMemoryBackend,
+    path: String,
+    entries: Option<std::vec::IntoIter<ListEntry>>,
 }
 
 impl oio::List for ETagMemoryLister {
     async fn next(&mut self) -> Result<Option<oio::Entry>> {
-        if self.index >= self.entries.len() {
-            return Ok(None);
+        if self.entries.is_none() {
+            let entries = self.backend.list_entries(&self.path).await;
+            self.entries = Some(entries.into_iter());
         }
+        let Some(entry) = self.entries.as_mut().and_then(Iterator::next) else {
+            return Ok(None);
+        };
 
-        let entry = &self.entries[self.index];
-        self.index += 1;
-
-        // opendal 0.56's CompleteLister silently drops file entries whose
+        // opendal's CompleteLister silently drops file entries whose
         // content_length isn't set by issuing an extra stat() that may miss in
         // this stripped-path lister, so we populate it inline.
         let metadata = if entry.is_dir {
-            Metadata::new(EntryMode::DIR)
+            MetadataBuilder::dir().build()
         } else {
-            Metadata::new(EntryMode::FILE).with_content_length(entry.content_length)
+            MetadataBuilder::file(entry.content_length).build()
         };
         Ok(Some(oio::Entry::new(&entry.path, metadata)))
     }
@@ -599,9 +681,7 @@ mod tests {
     /// Validates basic read/write operations work correctly.
     #[tokio::test]
     async fn test_basic_read_write() {
-        let op = Operator::new(ETagMemoryBuilder::default())
-            .unwrap()
-            .finish();
+        let op = Operator::new(ETagMemoryBuilder::default()).unwrap();
 
         // Write a file
         op.write("test.txt", "hello world").await.unwrap();
@@ -614,9 +694,7 @@ mod tests {
     /// Validates that `ETag`s are generated and change when file content changes.
     #[tokio::test]
     async fn test_etag_generation() {
-        let op = Operator::new(ETagMemoryBuilder::default())
-            .unwrap()
-            .finish();
+        let op = Operator::new(ETagMemoryBuilder::default()).unwrap();
 
         op.write("test.txt", "hello").await.unwrap();
         let meta = op.stat("test.txt").await.unwrap();
@@ -639,9 +717,7 @@ mod tests {
     /// `ConditionNotMatch` when it doesn't.
     #[tokio::test]
     async fn test_conditional_read_with_if_match() {
-        let op = Operator::new(ETagMemoryBuilder::default())
-            .unwrap()
-            .finish();
+        let op = Operator::new(ETagMemoryBuilder::default()).unwrap();
 
         op.write("test.txt", "hello").await.unwrap();
         let meta = op.stat("test.txt").await.unwrap();
@@ -663,9 +739,7 @@ mod tests {
     /// `ConditionNotMatch` when it doesn't.
     #[tokio::test]
     async fn test_conditional_write_with_if_match() {
-        let op = Operator::new(ETagMemoryBuilder::default())
-            .unwrap()
-            .finish();
+        let op = Operator::new(ETagMemoryBuilder::default()).unwrap();
 
         op.write("test.txt", "v1").await.unwrap();
         let meta = op.stat("test.txt").await.unwrap();
@@ -687,9 +761,7 @@ mod tests {
     /// if-none-match="*" fail.
     #[tokio::test]
     async fn test_if_none_match_create_only() {
-        let op = Operator::new(ETagMemoryBuilder::default())
-            .unwrap()
-            .finish();
+        let op = Operator::new(ETagMemoryBuilder::default()).unwrap();
 
         // First write with if_none_match should succeed
         let result = op.write_with("test.txt", "v1").if_none_match("*").await;
