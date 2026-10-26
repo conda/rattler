@@ -493,6 +493,11 @@ pub struct CloudsmithOpts {
     /// The URL to the Cloudsmith API server
     #[arg(short, long, env = "CLOUDSMITH_API_URL")]
     pub url: Option<Url>,
+
+    /// If true, the uploaded package will overwrite any others with the same
+    /// attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+    #[arg(long, env = "CLOUDSMITH_REPUBLISH")]
+    pub republish: bool,
 }
 
 #[derive(Debug)]
@@ -502,11 +507,12 @@ pub struct CloudsmithData {
     pub repo: String,
     pub api_key: Option<String>,
     pub url: UrlWithTrailingSlash,
+    pub republish: bool,
 }
 
 impl From<CloudsmithOpts> for CloudsmithData {
     fn from(value: CloudsmithOpts) -> Self {
-        Self::new(value.owner, value.repo, value.api_key, value.url)
+        Self::new(value.owner, value.repo, value.api_key, value.url).with_republish(value.republish)
     }
 }
 
@@ -520,7 +526,14 @@ impl CloudsmithData {
             url: url
                 .unwrap_or_else(|| Url::parse("https://api.cloudsmith.io/v1").unwrap())
                 .into(),
+            republish: false,
         }
+    }
+
+    /// Set whether to overwrite existing packages.
+    pub fn with_republish(mut self, republish: bool) -> Self {
+        self.republish = republish;
+        self
     }
 }
 
