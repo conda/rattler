@@ -39,12 +39,6 @@ pub enum UnkeyedReason {
          3-24 characters of lowercase letters and digits only"
     )]
     InvalidAccountLabel(AzureHost),
-
-    #[error(
-        "`{0}` is not a valid Azure storage account name: account names are 3-24 characters of \
-         lowercase letters and digits only"
-    )]
-    MiscasedAccount(String),
 }
 
 impl AzureLocation {
@@ -109,7 +103,6 @@ pub fn locate(
         None => match derive(channel.host()) {
             Ok(key) => (key, KeySource::Derived),
             Err(reason) => {
-                let reason = miscased_account(channel, &is_configured).unwrap_or(reason);
                 return Ok(AzureLocation::Unkeyed {
                     channel: channel.clone(),
                     reason,
@@ -138,18 +131,6 @@ fn derive(host: &AzureHost) -> Result<AzureEndpointKey, UnkeyedReason> {
         (false, Ok(_)) => Err(UnkeyedReason::UnconfiguredHost(host.clone())),
         (false, Err(_)) => Err(UnkeyedReason::UnconfiguredHostWithoutAccount(host.clone())),
     }
-}
-
-/// The account segment when only its case keeps it from a configured
-/// path-style key.
-fn miscased_account(
-    channel: &AzureChannelUrl,
-    is_configured: impl Fn(&AzureEndpointKey) -> bool,
-) -> Option<UnkeyedReason> {
-    let written = segment(channel, 0)?;
-    let lowercased =
-        AzureEndpointKey::path_style(channel.host().clone(), &written.to_ascii_lowercase()).ok()?;
-    is_configured(&lowercased).then(|| UnkeyedReason::MiscasedAccount(written.to_string()))
 }
 
 fn segment(channel: &AzureChannelUrl, index: usize) -> Option<&str> {
