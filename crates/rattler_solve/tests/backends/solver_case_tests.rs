@@ -287,6 +287,10 @@ pub(super) fn solve_additional_packages<T: SolverImpl + Default>() {
         .version("1.0")
         .channel("lower")
         .build();
+    let foo_2_lower = PackageBuilder::new("foo")
+        .version("2.0")
+        .channel("lower")
+        .build();
     let foo_3_lower = PackageBuilder::new("foo")
         .version("3.0")
         .channel("lower")
@@ -347,8 +351,9 @@ pub(super) fn solve_additional_packages<T: SolverImpl + Default>() {
             .additional_packages([foo_3.clone()])
             .expect_present([("foo", "3.0")])
             .expect_absent([("foo", "2.0")]),
-        // Additional packages rank with the highest-priority tier even when
-        // their channel is a lower-priority channel of the solve.
+        // Additional packages rank with the highest-priority tier containing
+        // their package, even when their own channel is a lower-priority
+        // channel of the solve.
         SolverCase::new("flexible channel priority ignores the channel of additional packages")
             .repository([foo_2.clone()])
             .repository([foo_1_lower])
@@ -357,6 +362,25 @@ pub(super) fn solve_additional_packages<T: SolverImpl + Default>() {
             .additional_packages([foo_3_lower])
             .expect_present([("foo", "3.0")])
             .expect_absent([("foo", "2.0")]),
+        // The package only occurs in the lower-priority tier; the additional
+        // record must join that tier instead of ranking above it, so the
+        // newer channel version wins.
+        SolverCase::new("strict priority keeps updating packages from lower-priority channels")
+            .repository([bar.clone()])
+            .repository([foo_2_lower.clone()])
+            .specs(["foo"])
+            .channel_priority(ChannelPriority::Strict)
+            .additional_packages([foo_1.clone()])
+            .expect_present([("foo", "2.0")])
+            .expect_absent([("foo", "1.0")]),
+        SolverCase::new("flexible priority keeps updating packages from lower-priority channels")
+            .repository([bar.clone()])
+            .repository([foo_2_lower])
+            .specs(["foo"])
+            .channel_priority(ChannelPriority::Flexible)
+            .additional_packages([foo_1.clone()])
+            .expect_present([("foo", "2.0")])
+            .expect_absent([("foo", "1.0")]),
         SolverCase::new("additional package is used when the spec requires it")
             .repository([foo_2.clone()])
             .specs(["foo <2"])

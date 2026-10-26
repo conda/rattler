@@ -351,12 +351,13 @@ pub struct CondaDependencyProvider<'a> {
     /// [`ChannelPriority::Flexible`].
     channel_order: HashMap<Option<String>, u32>,
 
-    /// The solvables interned from the additional records. Under
-    /// [`ChannelPriority::Flexible`] these rank with the highest-priority tier
-    /// regardless of their channel, like the separate highest-priority repo
-    /// the libsolv backend puts them in. Tracking ids rather than channel
-    /// names leaves repodata records from the same channel at their own rank.
-    additional_solvables: HashSet<SolvableId>,
+    /// The channel-priority rank of each solvable interned from the additional
+    /// records. Under [`ChannelPriority::Flexible`] an additional record ranks
+    /// with the highest-priority tier that contains its package name, like the
+    /// per-package tier the libsolv backend places its additional repos in.
+    /// Tracking ids rather than channel names leaves repodata records from the
+    /// same channel at their own rank.
+    additional_ranks: HashMap<SolvableId, u32>,
 }
 
 impl<'a> CondaDependencyProvider<'a> {
@@ -432,6 +433,11 @@ impl<'a> CondaDependencyProvider<'a> {
         // rank == higher priority. Used by `ChannelPriority::Flexible`.
         let mut channel_order = HashMap::<Option<String>, u32>::new();
         let mut tier_order = HashMap::<PriorityTier<'a>, u32>::new();
+
+        // Maps each package name to the rank of the highest-priority tier that
+        // contains it. Only maintained for [`ChannelPriority::Flexible`], so
+        // additional records can rank with the tier containing their package.
+        let mut package_rank = HashMap::<&str, u32>::new();
 
         // A channel-specific spec that names one of these multichannels accepts
         // records from every channel of that multichannel.
@@ -529,12 +535,14 @@ impl<'a> CondaDependencyProvider<'a> {
                 let tier = PriorityTier::new(multi_channel, record.channel.as_deref());
 
                 // Only [`ChannelPriority::Flexible`] consults channel ranks.
-                if channel_priority == ChannelPriority::Flexible
-                    && !channel_order.contains_key(&record.channel)
-                {
+                if channel_priority == ChannelPriority::Flexible {
                     let next_rank = tier_order.len() as u32;
                     let rank = *tier_order.entry(tier).or_insert(next_rank);
-                    channel_order.insert(record.channel.clone(), rank);
+                    channel_order.entry(record.channel.clone()).or_insert(rank);
+                    package_rank
+                        .entry(record.package_record.name.as_normalized())
+                        .and_modify(|existing| *existing = (*existing).min(rank))
+                        .or_insert(rank);
                 }
 
                 // Exclusions the caller derived from outside the repodata, for
@@ -632,13 +640,18 @@ impl<'a> CondaDependencyProvider<'a> {
         // any record from the repodata. These records may represent packages
         // that are not in repodata for the current solve. But are already
         // installed in the prefix.
-        let mut additional_solvables = HashSet::with_capacity(additional_records.len());
+        let mut additional_ranks = HashMap::with_capacity(additional_records.len());
         for &additional_record in additional_records {
             let name =
                 pool.intern_package_name(NameType::from(&additional_record.package_record.name));
             let solvable =
                 pool.intern_solvable(name, SolverPackageRecord::Record(additional_record));
-            additional_solvables.insert(solvable);
+            // No channel contains the package, so it ranks with the top tier.
+            let rank = package_rank
+                .get(additional_record.package_record.name.as_normalized())
+                .copied()
+                .unwrap_or(0);
+            additional_ranks.insert(solvable, rank);
             let candidates = records.entry(name).or_default();
             candidates.candidates.push(solvable);
             exclude_if_requested(candidates, solvable, additional_record);
@@ -713,7 +726,7 @@ impl<'a> CondaDependencyProvider<'a> {
             dependency_overrides: override_map,
             channel_priority,
             channel_order,
-            additional_solvables,
+            additional_ranks,
         })
     }
 
