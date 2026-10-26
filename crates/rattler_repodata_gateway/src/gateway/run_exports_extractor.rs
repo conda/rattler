@@ -7,7 +7,12 @@ use std::{
 use bytes::Buf;
 use coalesced_map::CoalescedMap;
 use http::StatusCode;
-use rattler_conda_types::{RepoDataRecord, SubdirRunExportsJson, package::RunExportsJson};
+#[cfg(not(target_arch = "wasm32"))]
+use rattler_conda_types::package::PackageFile;
+use rattler_conda_types::{
+    RepoDataRecord, SubdirRunExportsJson,
+    package::{DistArchiveType, RunExportsJson},
+};
 use rattler_networking::LazyClient;
 use reqwest_middleware::ClientWithMiddleware;
 use thiserror::Error;
@@ -16,6 +21,45 @@ use tracing::instrument;
 use url::Url;
 
 use crate::reporter::{DownloadProgressGuard, DownloadReporter, ResponseReporterExt};
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::*;
+    use rattler_conda_types::{PackageRecord, VersionWithSource, package::DistArchiveIdentifier};
+    use rattler_networking::OfflineMiddleware;
+
+    #[tokio::test]
+    async fn wheels_have_no_run_exports() {
+        let root = tempfile::tempdir().unwrap();
+        let local_url = Url::from_file_path(root.path().join("missing.whl")).unwrap();
+        for url in [
+            local_url,
+            "https://example.invalid/download".parse().unwrap(),
+        ] {
+            let record = RepoDataRecord {
+                package_record: PackageRecord::new(
+                    "probe".parse().unwrap(),
+                    "1.0".parse::<VersionWithSource>().unwrap(),
+                    "0".parse().unwrap(),
+                ),
+                identifier: DistArchiveIdentifier::try_from_filename("probe-1.0-py3-none-any.whl")
+                    .unwrap(),
+                url,
+                channel: None,
+            };
+            let extractor = RunExportExtractor::default()
+                .with_client(
+                    reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+                        .with(OfflineMiddleware)
+                        .build()
+                        .into(),
+                )
+                .with_package_cache(rattler_cache::package_cache::PackageCache::new(root.path()));
+            assert!(extractor.extract(&record, None).await.unwrap().is_none());
+        }
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+    }
+}
 
 /// Type used for in-memory caching of `SubdirRunExportsJson`.
 pub(crate) type SubdirRunExportsCache = CoalescedMap<Url, Option<Arc<SubdirRunExportsJson>>>;
@@ -125,6 +169,11 @@ impl RunExportExtractor {
         record: &RepoDataRecord,
         progress_reporter: Option<Arc<dyn RunExportsReporter>>,
     ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
+        match record.identifier.archive_type {
+            DistArchiveType::Wheel(_) => return Ok(None),
+            DistArchiveType::Conda(_) => {}
+        }
+
         // If this is local package, try to read it directly from the package file
         // itself.
         if let Some(package_file) = Self::path_to_package(record) {
@@ -335,34 +384,18 @@ impl RunExportExtractor {
             .and_then(|reporter| reporter.create_package_download_reporter(record))
             .map(Arc::from);
 
-        let result = match record.identifier.archive_type {
-            rattler_conda_types::package::DistArchiveType::Wheel(_) => {
-                package_cache
-                    .get_or_fetch_wheel_from_url_with_retry(
-                        &record.package_record,
-                        record.url.clone(),
-                        client.clone(),
-                        rattler_networking::retry_policies::default_retry_policy(),
-                        reporter,
-                        self.max_concurrent_requests.clone(),
-                    )
-                    .await
-            }
-            rattler_conda_types::package::DistArchiveType::Conda(_) => {
-                package_cache
-                    .get_or_fetch_from_url_with_retry(
-                        &record.package_record,
-                        record.url.clone(),
-                        client.clone(),
-                        rattler_networking::retry_policies::default_retry_policy(),
-                        reporter,
-                        self.max_concurrent_requests.clone(),
-                    )
-                    .await
-            }
-        };
+        let result = package_cache
+            .get_or_fetch_from_url_with_retry(
+                &record.package_record,
+                record.url.clone(),
+                client.clone(),
+                rattler_networking::retry_policies::default_retry_policy(),
+                reporter,
+                self.max_concurrent_requests.clone(),
+            )
+            .await;
         match result {
-            Ok(package_dir) => Ok(<RunExportsJson as rattler_conda_types::package::PackageFile>::from_package_directory(package_dir.path()).ok()),
+            Ok(package_dir) => Ok(RunExportsJson::from_package_directory(package_dir.path()).ok()),
             Err(e) => Err(e.into()),
         }
     }

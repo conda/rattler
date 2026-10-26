@@ -1035,30 +1035,34 @@ async fn populate_cache(
             .get_or_fetch_from_path(&path, Some(&record.package_record), reporter)
             .await
             .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
-    } else if matches!(record.identifier.archive_type, DistArchiveType::Wheel(_)) {
-        cache
-            .get_or_fetch_wheel_from_url_with_retry(
-                &record.package_record,
-                record.url.clone(),
-                downloader,
-                default_retry_policy(),
-                reporter,
-                concurrent_requests_semaphore,
-            )
-            .await
-            .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
     } else {
-        cache
-            .get_or_fetch_from_url_with_retry(
-                &record.package_record,
-                record.url.clone(),
-                downloader,
-                default_retry_policy(),
-                reporter,
-                concurrent_requests_semaphore,
-            )
-            .await
-            .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
+        let result = match record.identifier.archive_type {
+            DistArchiveType::Wheel(_) => {
+                cache
+                    .get_or_fetch_wheel_from_url_with_retry(
+                        &record.package_record,
+                        record.url.clone(),
+                        downloader,
+                        default_retry_policy(),
+                        reporter,
+                        concurrent_requests_semaphore,
+                    )
+                    .await
+            }
+            DistArchiveType::Conda(_) => {
+                cache
+                    .get_or_fetch_from_url_with_retry(
+                        &record.package_record,
+                        record.url.clone(),
+                        downloader,
+                        default_retry_policy(),
+                        reporter,
+                        concurrent_requests_semaphore,
+                    )
+                    .await
+            }
+        };
+        result.map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
     }
 }
 

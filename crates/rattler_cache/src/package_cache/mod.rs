@@ -807,13 +807,16 @@ impl PackageCache {
         reporter: Option<Arc<dyn CacheReporter>>,
     ) -> Result<CacheMetadata, PackageCacheError> {
         let path_buf = path.to_path_buf();
-        let is_wheel = matches!(
-            DistArchiveType::try_from(path),
-            Some(DistArchiveType::Wheel(_))
-        );
+        let wheel_record = match DistArchiveType::try_from(path) {
+            Some(DistArchiveType::Wheel(_)) => Some(
+                record
+                    .ok_or_else(|| PackageCacheError::WheelRequiresRecord(path_buf.clone()))?
+                    .clone(),
+            ),
+            Some(DistArchiveType::Conda(_)) | None => None,
+        };
         let mut cache_key: CacheKey = match record {
             Some(record) => record.into(),
-            None if is_wheel => return Err(PackageCacheError::WheelRequiresRecord(path_buf)),
             None => CondaArchiveIdentifier::try_from_path(&path_buf)
                 .unwrap()
                 .into(),
@@ -821,8 +824,6 @@ impl PackageCache {
         if self.cache_origin {
             cache_key = cache_key.with_path(path);
         }
-
-        let wheel_record = record.filter(|_| is_wheel).cloned();
 
         self.get_or_fetch(
             cache_key,
@@ -917,7 +918,7 @@ impl PackageCache {
         .await
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     async fn fetch_from_url_with_retry(
         &self,
         mut cache_key: CacheKey,

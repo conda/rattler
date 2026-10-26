@@ -7,6 +7,7 @@ use rattler_conda_types::{
 };
 use rattler_digest::Sha256;
 use std::fs::File;
+use std::io::{self, Seek};
 use std::path::Path;
 
 /// Extracts the contents a `.tar.bz2` package archive at the specified path to a directory.
@@ -45,8 +46,14 @@ pub fn extract_wheel(
     destination: &Path,
     record: &PackageRecord,
 ) -> Result<ExtractResult, ExtractError> {
-    let file = File::open(archive)?;
-    crate::wheel::extract_wheel(file, destination, record)
+    let mut file = File::open(archive)?;
+    let result = crate::read::process_with_hashing::<ExtractError, _, _>(&mut file, |reader| {
+        io::copy(reader, &mut io::sink())?;
+        Ok(())
+    })?;
+    file.rewind()?;
+    crate::wheel::extract_wheel_from_seek(file, destination, record)?;
+    Ok(result)
 }
 
 /// Extracts the contents a package archive at the specified path to a directory. The type of

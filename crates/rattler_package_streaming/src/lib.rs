@@ -87,8 +87,8 @@ pub enum ExtractError {
     #[error("unsupported package archive format")]
     UnsupportedArchiveType,
 
-    #[error("invalid wheel archive: {0}")]
-    InvalidWheel(String),
+    #[error(transparent)]
+    WheelError(#[from] wheel::WheelError),
 
     #[error("the task was cancelled")]
     Cancelled,

@@ -3,9 +3,13 @@
 //! Libraries go into `site-packages/`, scripts into `python-scripts/`, headers
 //! into `include/`, and data into the package root. The conda linker handles
 //! noarch path remapping and entry points from the generated `info/link.json`.
+//! Headers retain conda-pypi's `include/` mapping; pip's Python-version-specific
+//! header paths depend on the target environment, which is unknown during caching.
+//! Declared license files are also copied into `info/licenses/` (CEP 34).
 //!
 //! `RECORD` describes the cache layout, not final installed paths; its original
-//! signatures are discarded.
+//! signatures are discarded. Original RECORD hashes are not verified; callers
+//! should verify the returned archive hashes against trusted repodata when available.
 
 use std::{
     collections::HashSet,
@@ -17,8 +21,8 @@ use std::{
 use rattler_conda_types::{
     NoArchType, PackageRecord,
     package::{
-        EntryPoint, IndexJson, LinkJson, NoArchLinks, PackageFile, PathType, PathsEntry, PathsJson,
-        PythonEntryPoints,
+        EntryPoint, IndexJson, LinkJson, NoArchLinks, PackageFile, ParseEntryPointError, PathType,
+        PathsEntry, PathsJson, PythonEntryPoints,
     },
 };
 use rattler_digest::{HashingReader, Sha256};
@@ -28,8 +32,10 @@ use zip::ZipArchive;
 
 use crate::{ExtractError, ExtractResult};
 
+mod licenses;
 mod record;
-use record::RecordManifest;
+#[cfg(test)]
+mod tests;
 
 const SITE_PACKAGES: &str = "site-packages";
 const PYTHON_SCRIPTS: &str = "python-scripts";
@@ -39,24 +45,52 @@ const INSTALLER: &str = "conda\n";
 const SPOOL_LIMIT: usize = 5 * 1024 * 1024;
 
 /// Bump when the converted layout changes to invalidate older cache entries.
-pub const CONVERSION_VERSION: u64 = 2;
+pub const CONVERSION_VERSION: u64 = 3;
+
+/// A wheel cannot be represented safely in the conda cache layout.
+#[derive(Debug, thiserror::Error)]
+pub enum WheelError {
+    /// Missing or malformed wheel metadata.
+    #[error("invalid wheel metadata: {0}")]
+    Metadata(String),
+    /// The distribution metadata does not match the channel record.
+    #[error("wheel {dist_info} does not match package {expected}")]
+    IdentityMismatch {
+        /// The wheel's distribution metadata directory.
+        dist_info: String,
+        /// The name and version from the channel record.
+        expected: String,
+    },
+    /// Generic noarch packages do not receive Python path remapping.
+    #[error("wheels require Python noarch path remapping, not noarch: generic")]
+    GenericNoArch,
+    /// Two files, or a file and a directory, share an output path.
+    #[error("wheel destination collision: {0}")]
+    DestinationCollision(PathBuf),
+    /// An archive contains multiple files with the same path.
+    #[error("duplicate wheel archive path: {0}")]
+    DuplicatePath(PathBuf),
+    /// A wheel payload would overwrite generated conda metadata.
+    #[error("wheel payload overlaps conda metadata: {0}")]
+    ReservedPath(PathBuf),
+    /// A wheel uses an unrecognized installation scheme.
+    #[error("unknown wheel .data scheme '{scheme}' for {path}")]
+    UnsupportedScheme {
+        /// The unknown scheme name.
+        scheme: String,
+        /// The original archive path.
+        path: PathBuf,
+    },
+    /// An entry point cannot be parsed by the conda linker.
+    #[error(transparent)]
+    EntryPoint(#[from] ParseEntryPointError),
+}
 
 /// Conversion metadata stored in `info/wheel.json` for cache invalidation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WheelJson {
     /// The [`CONVERSION_VERSION`] of the converter that wrote this entry.
     pub conversion_version: u64,
-
-    /// The wheel's `.dist-info` directory name.
-    pub dist_info: String,
-
-    /// Compatibility tags from the `WHEEL` file.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub tags: Vec<String>,
-
-    /// Archive SHA-256 from repodata, encoded as hex.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sha256: Option<String>,
 }
 
 impl PackageFile for WheelJson {
@@ -91,43 +125,38 @@ pub(crate) fn extract_wheel_without_hashing(
     let mut temp_file = SpooledTempFile::new(SPOOL_LIMIT);
     io::copy(&mut reader, &mut temp_file)?;
     temp_file.seek(SeekFrom::Start(0))?;
-    let mut archive = ZipArchive::new(temp_file)?;
+    extract_wheel_from_seek(temp_file, destination, record)
+}
 
-    let layout = WheelLayout::detect(&mut archive)?;
-    let plan = layout.plan(&mut archive)?;
-    let manifest = RecordManifest::read(&mut archive, &layout.dist_info)?;
+/// Converts a seekable wheel without copying or hashing the archive.
+pub(crate) fn extract_wheel_from_seek(
+    reader: impl Read + Seek,
+    destination: &Path,
+    record: &PackageRecord,
+) -> Result<(), ExtractError> {
+    let mut archive = ZipArchive::new(reader)?;
+    if record.noarch.is_generic() {
+        return Err(WheelError::GenericNoArch.into());
+    }
+    let layout = WheelLayout::detect(&mut archive, record)?;
+    let WheelPlan {
+        entries,
+        entry_points,
+        licenses,
+    } = layout.plan(&mut archive)?;
     std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
-    let mut paths = Vec::with_capacity(plan.len() + 2);
-    let mut entry_points = Vec::new();
+    let mut paths = Vec::with_capacity(entries.len() + 2);
 
-    for PlannedEntry {
-        index,
-        archive_path,
-        target,
-    } in plan
-    {
-        let file = archive.by_index(index)?;
-        let mode = file.unix_mode();
-        let mut source = manifest.reader(&archive_path, file);
-        let Some(target) = target else {
-            // Validate even files that are replaced or discarded.
-            io::copy(&mut source, &mut io::sink())?;
-            source.verify()?;
-            continue;
-        };
+    for PlannedEntry { index, target } in entries {
+        let mut source = archive.by_index(index)?;
+        let mode = source.unix_mode();
 
-        let entry = if layout.is_dist_info_file(&archive_path, "entry_points.txt") {
-            let mut text = String::new();
-            source.read_to_string(&mut text)?;
-            source.verify()?;
-            entry_points = parse_entry_points(&text)?;
-            write_entry(destination, target, text.as_bytes(), mode)?
-        } else {
-            let entry = write_entry(destination, target, &mut source, mode)?;
-            source.verify()?;
-            entry
-        };
-        paths.push(entry);
+        paths.push(write_entry(destination, target, &mut source, mode)?);
+    }
+
+    for PlannedEntry { index, target } in licenses {
+        // Package metadata is not linked into the environment or listed in RECORD.
+        write_entry(destination, target, archive.by_index(index)?, None)?;
     }
 
     let installer_path = Path::new(SITE_PACKAGES)
@@ -151,15 +180,23 @@ pub(crate) fn extract_wheel_without_hashing(
         None,
     )?);
     paths.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
-    write_info(destination, record, &layout, paths, entry_points)
+    write_info(destination, record, paths, entry_points)
 }
 
+/// An archive member and its validated destination.
 struct PlannedEntry {
     index: usize,
-    archive_path: PathBuf,
-    target: Option<PathBuf>,
+    target: PathBuf,
 }
 
+/// Validated payload destinations and linker-generated scripts.
+struct WheelPlan {
+    entries: Vec<PlannedEntry>,
+    entry_points: Vec<EntryPoint>,
+    licenses: Vec<PlannedEntry>,
+}
+
+/// Reserves file and directory paths to reject clobbers before extraction.
 #[derive(Default)]
 struct Destinations {
     files: HashSet<PathBuf>,
@@ -167,12 +204,19 @@ struct Destinations {
 }
 
 impl Destinations {
+    fn insert_payload(&mut self, path: &Path) -> Result<(), ExtractError> {
+        self.insert(path)?;
+        if let Ok(script) = path.strip_prefix(PYTHON_SCRIPTS) {
+            // Noarch Python scripts can be linked on either platform.
+            self.insert(&Path::new("bin").join(script))?;
+            self.insert(&Path::new("Scripts").join(script))?;
+        }
+        Ok(())
+    }
+
     fn insert(&mut self, path: &Path) -> Result<(), ExtractError> {
         if self.files.contains(path) || self.directories.contains(path) {
-            return Err(ExtractError::InvalidWheel(format!(
-                "destination collision: {}",
-                path.display()
-            )));
+            return Err(WheelError::DestinationCollision(path.to_path_buf()).into());
         }
         for parent in path
             .ancestors()
@@ -180,10 +224,7 @@ impl Destinations {
             .filter(|p| !p.as_os_str().is_empty())
         {
             if self.files.contains(parent) {
-                return Err(ExtractError::InvalidWheel(format!(
-                    "file/directory collision: {}",
-                    parent.display()
-                )));
+                return Err(WheelError::DestinationCollision(parent.to_path_buf()).into());
             }
             self.directories.insert(parent.to_path_buf());
         }
@@ -198,12 +239,13 @@ struct WheelLayout {
     dist_info: PathBuf,
     /// `{name}-{version}.data`
     data: PathBuf,
-    /// The `Tag:` values of the `WHEEL` file.
-    tags: Vec<String>,
 }
 
 impl WheelLayout {
-    fn detect<R: Read + Seek>(archive: &mut ZipArchive<R>) -> Result<Self, ExtractError> {
+    fn detect<R: Read + Seek>(
+        archive: &mut ZipArchive<R>,
+        record: &PackageRecord,
+    ) -> Result<Self, ExtractError> {
         let mut dist_info: Option<String> = None;
         for name in archive.file_names() {
             let name = name?;
@@ -215,23 +257,36 @@ impl WheelLayout {
             };
             match &dist_info {
                 Some(existing) if existing != stem => {
-                    return Err(ExtractError::InvalidWheel(format!(
+                    return Err(WheelError::Metadata(format!(
                         "multiple .dist-info directories: {existing}.dist-info and {first}"
-                    )));
+                    ))
+                    .into());
                 }
                 Some(_) => {}
                 None => dist_info = Some(stem.to_owned()),
             }
         }
         let Some(stem) = dist_info else {
-            return Err(ExtractError::InvalidWheel(
-                "no .dist-info directory".to_string(),
-            ));
+            return Err(WheelError::Metadata("no .dist-info directory".into()).into());
         };
+        let (name, version) = stem.rsplit_once('-').ok_or_else(|| {
+            WheelError::Metadata(format!("invalid .dist-info directory: {stem}.dist-info"))
+        })?;
+        let version = pep440_rs::Version::from_str(version)
+            .map_err(|err| WheelError::Metadata(format!("invalid wheel version: {err}")))?;
+        let expected_version = pep440_rs::Version::from_str(&record.version.to_string())
+            .map_err(|err| WheelError::Metadata(format!("invalid record version: {err}")))?;
+        if normalize_name(name) != normalize_name(record.name.as_source())
+            || version != expected_version
+        {
+            return Err(WheelError::IdentityMismatch {
+                dist_info: format!("{stem}.dist-info"),
+                expected: format!("{} {}", record.name.as_source(), record.version),
+            }
+            .into());
+        }
         let Some(wheel_index) = archive.index_for_name(&format!("{stem}.dist-info/WHEEL")) else {
-            return Err(ExtractError::InvalidWheel(format!(
-                "{stem}.dist-info/WHEEL is missing"
-            )));
+            return Err(WheelError::Metadata(format!("{stem}.dist-info/WHEEL is missing")).into());
         };
         let mut wheel_txt = String::new();
         archive
@@ -243,9 +298,10 @@ impl WheelLayout {
             .filter(|(key, _)| key.trim().eq_ignore_ascii_case("Wheel-Version"))
             .map(|(_, value)| value.trim());
         let (Some(version), None) = (versions.next(), versions.next()) else {
-            return Err(ExtractError::InvalidWheel(
+            return Err(WheelError::Metadata(
                 "WHEEL must contain exactly one Wheel-Version".into(),
-            ));
+            )
+            .into());
         };
         let (major, minor) = version
             .split_once('.')
@@ -258,13 +314,11 @@ impl WheelLayout {
             .and_then(|(major, minor)| {
                 Some((major.parse::<u64>().ok()?, minor.parse::<u64>().ok()?))
             })
-            .ok_or_else(|| {
-                ExtractError::InvalidWheel(format!("invalid Wheel-Version: {version}"))
-            })?;
+            .ok_or_else(|| WheelError::Metadata(format!("invalid Wheel-Version: {version}")))?;
         if major != 1 {
-            return Err(ExtractError::InvalidWheel(format!(
-                "unsupported Wheel-Version: {version}"
-            )));
+            return Err(
+                WheelError::Metadata(format!("unsupported Wheel-Version: {version}")).into(),
+            );
         }
         if minor > 0 {
             tracing::warn!(
@@ -272,25 +326,32 @@ impl WheelLayout {
                 "wheel version is newer than supported version 1.0"
             );
         }
-        let tags = wheel_txt
-            .lines()
-            .filter_map(|line| line.split_once(':'))
-            .filter(|(key, _)| key.trim().eq_ignore_ascii_case("Tag"))
-            .map(|(_, value)| value.trim().to_string())
-            .collect();
         Ok(Self {
             dist_info: PathBuf::from(format!("{stem}.dist-info")),
             data: PathBuf::from(format!("{stem}.data")),
-            tags,
         })
     }
 
     /// Reject conflicting destinations before writing files.
-    fn plan<R: Read + Seek>(
-        &self,
-        archive: &mut ZipArchive<R>,
-    ) -> Result<Vec<PlannedEntry>, ExtractError> {
+    fn plan<R: Read + Seek>(&self, archive: &mut ZipArchive<R>) -> Result<WheelPlan, ExtractError> {
+        let mut entry_points = Vec::new();
+        if let Some(index) =
+            archive.index_for_name(&format!("{}/entry_points.txt", self.dist_info.display()))
+        {
+            let mut text = String::new();
+            archive.by_index(index)?.read_to_string(&mut text)?;
+            entry_points = parse_entry_points(&text)?;
+        }
         let mut destinations = Destinations::default();
+        for entry_point in &entry_points {
+            for name in [
+                entry_point.command.clone(),
+                format!("{}.exe", entry_point.command),
+                format!("{}-script.py", entry_point.command),
+            ] {
+                destinations.insert_payload(&Path::new(PYTHON_SCRIPTS).join(name))?;
+            }
+        }
         for name in ["INSTALLER", "RECORD"] {
             destinations.insert(&Path::new(SITE_PACKAGES).join(&self.dist_info).join(name))?;
         }
@@ -312,27 +373,25 @@ impl WheelLayout {
                 .enclosed_name()
                 .ok_or_else(|| ExtractError::InvalidArchivePath(PathBuf::from(name.as_ref())))?;
             if !sources.insert(archive_path.clone()) {
-                return Err(ExtractError::InvalidWheel(format!(
-                    "duplicate archive path: {name}"
-                )));
+                return Err(WheelError::DuplicatePath(archive_path).into());
             }
-            let target = self.target_path(&archive_path)?;
-            if let Some(target) = &target {
-                if target.starts_with("info") {
-                    return Err(ExtractError::InvalidWheel(format!(
-                        "wheel payload overlaps conda metadata: {}",
-                        target.display()
-                    )));
-                }
-                destinations.insert(target)?;
+            let Some(target) = self.target_path(&archive_path)? else {
+                continue;
+            };
+            if target.components().next().is_some_and(|component| {
+                let root = component.as_os_str().to_string_lossy();
+                root.eq_ignore_ascii_case("info") || root.eq_ignore_ascii_case("conda-meta")
+            }) {
+                return Err(WheelError::ReservedPath(target).into());
             }
-            plan.push(PlannedEntry {
-                index,
-                archive_path,
-                target,
-            });
+            destinations.insert_payload(&target)?;
+            plan.push(PlannedEntry { index, target });
         }
-        Ok(plan)
+        Ok(WheelPlan {
+            entries: plan,
+            entry_points,
+            licenses: licenses::plan(archive, &self.dist_info, &mut destinations)?,
+        })
     }
 
     fn is_dist_info_file(&self, archive_path: &Path, file_name: &str) -> bool {
@@ -341,6 +400,12 @@ impl WheelLayout {
 
     /// Maps wheel paths to conda paths, skipping replaced or discarded metadata.
     fn target_path(&self, archive_path: &Path) -> Result<Option<PathBuf>, ExtractError> {
+        if archive_path
+            .components()
+            .any(|component| component.as_os_str() == "__pycache__")
+        {
+            return Ok(None);
+        }
         if ["INSTALLER", "RECORD", "RECORD.jws", "RECORD.p7s"]
             .iter()
             .any(|name| self.is_dist_info_file(archive_path, name))
@@ -370,14 +435,30 @@ impl WheelLayout {
             "headers" => Path::new("include").join(rest),
             "data" => rest,
             other => {
-                return Err(ExtractError::InvalidWheel(format!(
-                    "unknown .data scheme '{other}' for {}",
-                    archive_path.display()
-                )));
+                return Err(WheelError::UnsupportedScheme {
+                    scheme: other.to_owned(),
+                    path: archive_path.to_path_buf(),
+                }
+                .into());
             }
         };
         Ok(Some(target))
     }
+}
+
+/// PEP 503 names are case-insensitive and collapse runs of `-`, `_`, and `.`.
+fn normalize_name(name: &str) -> String {
+    let mut normalized = String::with_capacity(name.len());
+    for character in name.chars() {
+        if matches!(character, '-' | '_' | '.') {
+            if !normalized.ends_with('-') {
+                normalized.push('-');
+            }
+        } else {
+            normalized.push(character.to_ascii_lowercase());
+        }
+    }
+    normalized
 }
 
 /// Writes a file and computes its `paths.json` entry.
@@ -391,18 +472,23 @@ fn write_entry(
     if let Some(parent) = full_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let mut file = std::fs::File::create_new(&full_path)?;
-    let mut hashing = HashingReader::<_, Sha256>::new(&mut content);
-    let size_in_bytes = io::copy(&mut hashing, &mut file)?;
-    let (_, sha256) = hashing.finalize();
-
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
     #[cfg(unix)]
-    if let Some(mode) = unix_mode {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&full_path, std::fs::Permissions::from_mode(mode & 0o777))?;
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(if unix_mode.is_some_and(|mode| mode & 0o111 != 0) {
+            0o777
+        } else {
+            0o666
+        });
     }
     #[cfg(not(unix))]
     let _ = unix_mode;
+    let mut file = options.open(&full_path)?;
+    let mut hashing = HashingReader::<_, Sha256>::new(&mut content);
+    let size_in_bytes = io::copy(&mut hashing, &mut file)?;
+    let (_, sha256) = hashing.finalize();
 
     Ok(PathsEntry {
         relative_path,
@@ -432,9 +518,7 @@ fn parse_entry_points(entry_points_txt: &str) -> Result<Vec<EntryPoint>, Extract
         }
         // `name = module:function [extra1, extra2]`: extras do not apply here.
         let spec = line.split_once('[').map_or(line, |(spec, _)| spec).trim();
-        let entry_point = EntryPoint::from_str(spec).map_err(|err| {
-            ExtractError::InvalidWheel(format!("invalid entry point '{line}': {err}"))
-        })?;
+        let entry_point = EntryPoint::from_str(spec).map_err(WheelError::from)?;
         entry_points.push(entry_point);
     }
     Ok(entry_points)
@@ -444,7 +528,6 @@ fn parse_entry_points(entry_points_txt: &str) -> Result<Vec<EntryPoint>, Extract
 fn write_info(
     destination: &Path,
     record: &PackageRecord,
-    layout: &WheelLayout,
     paths: Vec<PathsEntry>,
     entry_points: Vec<EntryPoint>,
 ) -> Result<(), ExtractError> {
@@ -461,11 +544,7 @@ fn write_info(
         license_family: record.license_family.clone(),
         name: record.name.clone(),
         // Wheel layout uses noarch Python path remapping.
-        noarch: if record.noarch.is_none() {
-            NoArchType::python()
-        } else {
-            record.noarch
-        },
+        noarch: NoArchType::python(),
         platform: None,
         purls: record.purls.clone(),
         python_site_packages_path: None,
@@ -485,9 +564,6 @@ fn write_info(
     };
     let wheel_json = WheelJson {
         conversion_version: CONVERSION_VERSION,
-        dist_info: layout.dist_info.to_string_lossy().into_owned(),
-        tags: layout.tags.clone(),
-        sha256: record.sha256.map(hex::encode),
     };
 
     write_json(destination, IndexJson::package_path(), &index_json)?;
