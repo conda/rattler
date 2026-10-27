@@ -558,6 +558,16 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
+        fn test_min_age_exemption_until() {
+            crate::min_age_tests::solve_min_age_exemption_until::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exemption_until_combined() {
+            crate::min_age_tests::solve_min_age_exemption_until_combined::<$T>();
+        }
+
+        #[test]
         fn test_min_age_exemption_not_transitive() {
             crate::min_age_tests::solve_min_age_exemption_not_transitive::<$T>();
         }
@@ -684,6 +694,11 @@ macro_rules! solver_backend_tests {
         #[test]
         fn test_indexed_timestamp_cutoffs() {
             crate::timestamp_policy_tests::indexed_timestamp_cutoffs::<$T>();
+        }
+
+        #[test]
+        fn test_exemption_cutoffs() {
+            crate::timestamp_policy_tests::exemption_cutoffs::<$T>();
         }
 
         #[test]
