@@ -41,6 +41,8 @@ use crate::validation::{ValidationMode, validate_package_directory};
 mod cache_key;
 mod cache_lock;
 mod reporter;
+#[cfg(test)]
+mod wheel_cache_tests;
 
 #[derive(Clone)]
 enum UrlExtractor {
@@ -55,6 +57,11 @@ enum UrlExtractor {
 /// package is found in the cache it is returned immediately. However, if the
 /// cache is stale a user defined function is called to populate the cache. This
 /// separates the concerns between caching and fetching of the content.
+///
+/// Conda entries live directly under each layer root. Converted wheels live under
+/// `wheels-v<CONVERSION_VERSION>/`, allowing different converters to coexist.
+/// Legacy unversioned wheels and other conversion versions are left untouched;
+/// a miss downloads/converts again (or re-extracts a local wheel) in a writable layer.
 #[derive(Clone)]
 pub struct PackageCache {
     inner: Arc<PackageCacheInner>,
@@ -117,7 +124,7 @@ impl PackageCacheLayerFilter {
 /// A snapshot of the packages present in a [`PackageCache`] at the moment it
 /// was created.
 ///
-/// Building the snapshot reads each layer directory once, which is far cheaper
+/// Building the snapshot reads each layer root and its current wheel namespace, which is far cheaper
 /// than probing packages one by one. In exchange the snapshot is fixed: a
 /// package added to the cache afterwards is not reported as present. Create a
 /// new snapshot when a current view is needed.
@@ -127,13 +134,13 @@ impl PackageCacheLayerFilter {
 /// is reported as present and is only rejected by validation on use.
 #[derive(Debug, Clone)]
 pub struct CacheIndex {
-    /// Directory names as produced by [`CacheKey::to_path_segment`], mapped to
+    /// Relative paths as produced by [`CacheKey::relative_path`], mapped to
     /// the sha256 and filter of each layer holding that entry. A sha256 is
     /// absent when the entry predates hash recording or its metadata could not
     /// be read. Every layer holding the name contributes, in layer order:
     /// lookup walks past a filtered or hash-mismatching layer, so the index
     /// must too.
-    entries: HashMap<String, Vec<CacheIndexEntry>>,
+    entries: HashMap<PathBuf, Vec<CacheIndexEntry>>,
     cache_origin: bool,
 }
 
@@ -153,15 +160,19 @@ impl CacheIndex {
     ///
     /// A `file:` URL is looked up by its path, because that is how the
     /// installer stores it: local packages go through
-    /// [`PackageCache::get_or_fetch_from_path`], everything else through
-    /// [`PackageCache::get_or_fetch_from_url_with_retry`].
+    /// [`PackageCache::get_or_fetch_from_path`]; remote packages select their
+    /// namespace using the record's archive type, not the URL extension.
     pub fn contains_record(&self, record: &RepoDataRecord) -> bool {
+        let key = match record.identifier.archive_type {
+            DistArchiveType::Conda(_) => CacheKey::from(&record.package_record),
+            DistArchiveType::Wheel(_) => CacheKey::from_wheel_record(&record.package_record),
+        };
         if record.url.scheme() == "file"
             && let Ok(path) = record.url.to_file_path()
         {
-            return self.contains_path(&record.package_record, &path);
+            return self.contains_path(key, &path);
         }
-        self.contains_url(&record.package_record, &record.url)
+        self.contains_url(key, &record.url)
     }
 
     /// Returns whether a package fetched from `url` is present in the cache.
@@ -170,6 +181,8 @@ impl CacheIndex {
     /// always matches the way
     /// [`PackageCache::get_or_fetch_from_url_with_retry`] stores packages. It
     /// only affects caches built with [`PackageCache::with_cached_origin`].
+    /// For wheels, pass [`CacheKey::from_wheel_record`] or use [`Self::contains_record`];
+    /// URLs, including extensionless download endpoints, do not determine the format.
     pub fn contains_url(&self, pkg: impl Into<CacheKey>, url: &Url) -> bool {
         let mut cache_key = pkg.into();
         if self.cache_origin {
@@ -183,7 +196,10 @@ impl CacheIndex {
     /// The path counterpart of [`Self::contains_url`], matching the way
     /// [`PackageCache::get_or_fetch_from_path`] stores packages.
     pub fn contains_path(&self, pkg: impl Into<CacheKey>, path: &Path) -> bool {
-        let mut cache_key = pkg.into();
+        let mut cache_key = match DistArchiveType::try_from(path) {
+            Some(DistArchiveType::Wheel(_)) => pkg.into().with_wheel_namespace(),
+            Some(DistArchiveType::Conda(_)) | None => pkg.into(),
+        };
         if self.cache_origin {
             cache_key = cache_key.with_path(path);
         }
@@ -191,10 +207,10 @@ impl CacheIndex {
     }
 
     fn contains_key(&self, cache_key: &CacheKey) -> bool {
-        let Ok(segment) = cache_key.to_path_segment() else {
+        let Ok(relative_path) = cache_key.relative_path() else {
             return false;
         };
-        let Some(cached_sha256s) = self.entries.get(&segment) else {
+        let Some(cached_sha256s) = self.entries.get(&relative_path) else {
             return false;
         };
 
@@ -225,6 +241,7 @@ impl CacheIndex {
 /// A key that defines the actual location of the package in the cache.
 #[derive(Debug, Hash, Clone, Eq, PartialEq)]
 pub struct BucketKey {
+    namespace: cache_key::CacheNamespace,
     name: String,
     version: String,
     build_string: String,
@@ -234,6 +251,7 @@ pub struct BucketKey {
 impl From<CacheKey> for BucketKey {
     fn from(key: CacheKey) -> Self {
         Self {
+            namespace: key.namespace,
             name: key.name,
             version: key.version,
             build_string: key.build_string,
@@ -402,6 +420,23 @@ impl PackageCacheLayer {
             || is_mounted_readonly(&self.path)
     }
 
+    /// A writable layer may still contain a read-only wheel namespace.
+    fn is_readonly_for(&self, key: &CacheKey) -> bool {
+        if self.is_readonly() {
+            return true;
+        }
+        match key.namespace {
+            cache_key::CacheNamespace::Conda => false,
+            cache_key::CacheNamespace::Wheel(_) => {
+                let namespace = self.path.join(key.namespace.directory());
+                namespace
+                    .metadata()
+                    .is_ok_and(|m| m.permissions().readonly())
+                    || is_mounted_readonly(&namespace)
+            }
+        }
+    }
+
     /// Validate the packages.
     ///
     /// An entry this cache object has not touched before is validated from
@@ -418,7 +453,7 @@ impl PackageCacheLayer {
             .or_default()
             .clone();
         let mut cache_entry = cache_entry.lock().await;
-        let cache_path = self.path.join(cache_key.to_path_segment()?);
+        let cache_path = self.path.join(cache_key.relative_path()?);
 
         match validate_package_common::<
             fn(PathBuf) -> _,
@@ -462,7 +497,7 @@ impl PackageCacheLayer {
             .clone();
 
         let mut cache_entry = entry.lock().await;
-        let cache_path = self.path.join(cache_key.to_path_segment()?);
+        let cache_path = self.path.join(cache_key.relative_path()?);
 
         match validate_package_common(
             cache_path,
@@ -612,29 +647,39 @@ impl PackageCache {
         let cache_origin = self.cache_origin;
 
         let scan = tokio::task::spawn_blocking(move || {
-            let mut entries: HashMap<String, Vec<CacheIndexEntry>> = HashMap::new();
+            let mut entries: HashMap<PathBuf, Vec<CacheIndexEntry>> = HashMap::new();
             for (layer_path, filter) in layers {
-                let dir = match fs_err::read_dir(&layer_path) {
-                    Ok(dir) => dir,
-                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
-                    Err(err) => return Err(err),
-                };
-
-                for entry in dir {
-                    let entry = entry?;
-                    if entry.file_type()?.is_dir()
-                        && let Some(name) = entry.file_name().to_str()
-                    {
-                        let sha256 = cache_lock::peek_sha256(&entry.path());
-                        // Every layer holding the name contributes: lookup
-                        // walks past a layer whose hash does not match.
-                        entries
-                            .entry(name.to_owned())
-                            .or_default()
-                            .push(CacheIndexEntry {
-                                sha256,
-                                filter: filter.clone(),
-                            });
+                for namespace in [
+                    cache_key::CacheNamespace::Conda,
+                    cache_key::CacheNamespace::Wheel(
+                        rattler_package_streaming::wheel::CONVERSION_VERSION,
+                    ),
+                ] {
+                    let directory = namespace.directory();
+                    let dir = match fs_err::read_dir(layer_path.join(&directory)) {
+                        Ok(dir) => dir,
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+                        Err(err) => return Err(err),
+                    };
+                    for entry in dir {
+                        let entry = entry?;
+                        if entry.file_type()?.is_dir()
+                            && let Some(name) = entry.file_name().to_str()
+                        {
+                            if namespace == cache_key::CacheNamespace::Conda
+                                && cache_key::CacheNamespace::is_wheel_directory(name)
+                            {
+                                continue;
+                            }
+                            let sha256 = cache_lock::peek_sha256(&entry.path());
+                            // Keep all layers: lookup can skip a filtered or hash-mismatching entry.
+                            entries.entry(directory.join(name)).or_default().push(
+                                CacheIndexEntry {
+                                    sha256,
+                                    filter: filter.clone(),
+                                },
+                            );
+                        }
                     }
                 }
             }
@@ -712,7 +757,7 @@ impl PackageCache {
         let cache_key = pkg.into();
 
         // Reject keys that could escape the cache root (GHSA-h672-p7h7-97v9).
-        let cache_segment = cache_key.to_path_segment()?;
+        let relative_path = cache_key.relative_path()?;
 
         for layer in self
             .inner
@@ -720,7 +765,7 @@ impl PackageCache {
             .iter()
             .filter(|layer| layer.accepts(&cache_key))
         {
-            let cache_path = layer.path.join(&cache_segment);
+            let cache_path = layer.path.join(&relative_path);
 
             if cache_path.exists() {
                 match layer.try_validate(&cache_key).await {
@@ -754,7 +799,7 @@ impl PackageCache {
             .layers
             .iter()
             .filter(|layer| layer.accepts(&cache_key))
-            .find(|layer| !layer.is_readonly())
+            .find(|layer| !layer.is_readonly_for(&cache_key))
         {
             return match layer.validate_or_fetch(fetch, &cache_key, reporter).await {
                 Ok(cache_metadata) => Ok(cache_metadata),
@@ -816,6 +861,7 @@ impl PackageCache {
             Some(DistArchiveType::Conda(_)) | None => None,
         };
         let mut cache_key: CacheKey = match record {
+            Some(record) if wheel_record.is_some() => CacheKey::from_wheel_record(record),
             Some(record) => record.into(),
             None => CondaArchiveIdentifier::try_from_path(&path_buf)
                 .unwrap()
@@ -907,7 +953,7 @@ impl PackageCache {
         concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
     ) -> Result<CacheMetadata, PackageCacheError> {
         self.fetch_from_url_with_retry(
-            CacheKey::from(record),
+            CacheKey::from_wheel_record(record),
             url,
             client,
             retry_policy,
@@ -1179,25 +1225,28 @@ where
     Fut: Future<Output = Result<(), E>> + 'static,
     E: Error + Send + Sync + 'static,
 {
-    // Open the cache metadata file to read/write revision and hash information.
+    // Only population may create directories or open metadata for writing.
     // Concurrent access is coordinated via the global cache lock.
     let lock_file_path = cache_lock::metadata_path(&path);
-
-    // Ensure the directory containing the lock-file exists.
-    if let Some(root_dir) = lock_file_path.parent() {
-        tokio_fs::create_dir_all(root_dir)
-            .map_err(|e| {
-                PackageCacheLayerError::LockError(
-                    format!("failed to create cache directory: '{}'", root_dir.display()),
-                    e,
-                )
-            })
-            .await?;
-    }
-
-    let mut metadata = CacheMetadataFile::acquire(&lock_file_path).await?;
-    let cache_revision = metadata.read_revision()?;
-    let locked_sha256 = metadata.read_sha256()?;
+    let mut metadata = if fetch.is_some() {
+        if let Some(root_dir) = lock_file_path.parent() {
+            tokio_fs::create_dir_all(root_dir)
+                .map_err(|e| {
+                    PackageCacheLayerError::LockError(
+                        format!("failed to create cache directory: '{}'", root_dir.display()),
+                        e,
+                    )
+                })
+                .await?;
+        }
+        Some(CacheMetadataFile::acquire(&lock_file_path).await?)
+    } else {
+        CacheMetadataFile::open_existing(&lock_file_path).await?
+    };
+    let (cache_revision, locked_sha256) = match metadata.as_mut() {
+        Some(metadata) => (metadata.read_revision()?, metadata.read_sha256()?),
+        None => (0, None),
+    };
 
     let hash_mismatch = cache_lock::sha256_mismatch(given_sha, locked_sha256.as_ref());
 
@@ -1208,7 +1257,7 @@ where
         let reporter = reporter.as_deref().map(|r| (r, r.on_validate_start()));
 
         // If we know the revision is already valid we can return immediately.
-        if known_valid_revision == Some(cache_revision) {
+        if metadata.is_some() && known_valid_revision == Some(cache_revision) {
             if let Some((reporter, index)) = reporter {
                 reporter.on_validate_complete(index);
             }
@@ -1276,6 +1325,8 @@ where
         // Write the new revision
         let new_revision = cache_revision + 1;
         metadata
+            .as_mut()
+            .expect("fetching opens writable cache metadata")
             .write_revision_and_sha(new_revision, given_sha)
             .await?;
 
@@ -1752,8 +1803,10 @@ mod test {
         )
         .await
         .unwrap();
-        let router =
-            Router::new().route_service("/download", tower_http::services::ServeFile::new(wheel));
+        let router = Router::new().route_service(
+            "/download",
+            tower_http::services::ServeFile::new(wheel.clone()),
+        );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = Url::parse(&format!(
             "http://{}/download",
@@ -1784,8 +1837,66 @@ mod test {
             )
             .await
             .unwrap();
+        let old_revision = cached.revision();
+        std::fs::write(
+            cached.path().join(WheelJson::package_path()),
+            serde_json::to_vec(&WheelJson {
+                conversion_version: CONVERSION_VERSION - 1,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        // An inconsistent marker in the current namespace must still trigger a download.
+        let cached = PackageCache::new(packages_dir.path())
+            .get_or_fetch_wheel_from_url_with_retry(
+                &record,
+                url.clone(),
+                ClientBuilder::new(Client::default()).build().into(),
+                DoNotRetryPolicy,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(cached.revision(), old_revision + 1);
         server.abort();
         let _ = server.await;
+        assert_eq!(
+            cached.path(),
+            packages_dir.path().join(format!(
+                "wheels-v{CONVERSION_VERSION}/cowsay-6.1-py3_none_any_0"
+            ))
+        );
+        assert!(
+            PackageCache::new(packages_dir.path())
+                .index()
+                .await
+                .unwrap()
+                .contains_url(super::CacheKey::from_wheel_record(&record), &url)
+        );
+
+        let local_dir = tempdir().unwrap();
+        let local_wheel = local_dir.path().join("cowsay-6.1-py3-none-any.whl");
+        std::fs::copy(&wheel, &local_wheel).unwrap();
+        let local_cache = PackageCache::new(local_dir.path().join("pkgs"));
+        let local = local_cache
+            .get_or_fetch_from_path(&local_wheel, Some(&record), None)
+            .await
+            .unwrap();
+        assert_eq!(
+            local.path(),
+            local_dir.path().join(format!(
+                "pkgs/wheels-v{CONVERSION_VERSION}/cowsay-6.1-py3_none_any_0"
+            ))
+        );
+        assert!(
+            local_cache
+                .index()
+                .await
+                .unwrap()
+                .contains_path(&record, &local_wheel)
+        );
+        validate_package_directory(local.path(), ValidationMode::Full).unwrap();
 
         let (index, _) = validate_package_directory(cached.path(), ValidationMode::Full).unwrap();
         assert_eq!(index.name, record.name);
