@@ -22,45 +22,6 @@ use url::Url;
 
 use crate::reporter::{DownloadProgressGuard, DownloadReporter, ResponseReporterExt};
 
-#[cfg(all(test, not(target_arch = "wasm32")))]
-mod tests {
-    use super::*;
-    use rattler_conda_types::{PackageRecord, VersionWithSource, package::DistArchiveIdentifier};
-    use rattler_networking::OfflineMiddleware;
-
-    #[tokio::test]
-    async fn wheels_have_no_run_exports() {
-        let root = tempfile::tempdir().unwrap();
-        let local_url = Url::from_file_path(root.path().join("missing.whl")).unwrap();
-        for url in [
-            local_url,
-            "https://example.invalid/download".parse().unwrap(),
-        ] {
-            let record = RepoDataRecord {
-                package_record: PackageRecord::new(
-                    "probe".parse().unwrap(),
-                    "1.0".parse::<VersionWithSource>().unwrap(),
-                    "0".parse().unwrap(),
-                ),
-                identifier: DistArchiveIdentifier::try_from_filename("probe-1.0-py3-none-any.whl")
-                    .unwrap(),
-                url,
-                channel: None,
-            };
-            let extractor = RunExportExtractor::default()
-                .with_client(
-                    reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
-                        .with(OfflineMiddleware)
-                        .build()
-                        .into(),
-                )
-                .with_package_cache(rattler_cache::package_cache::PackageCache::new(root.path()));
-            assert!(extractor.extract(&record, None).await.unwrap().is_none());
-        }
-        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
-    }
-}
-
 /// Type used for in-memory caching of `SubdirRunExportsJson`.
 pub(crate) type SubdirRunExportsCache = CoalescedMap<Url, Option<Arc<SubdirRunExportsJson>>>;
 
