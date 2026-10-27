@@ -45,7 +45,7 @@ const INSTALLER: &str = "conda\n";
 const SPOOL_LIMIT: usize = 5 * 1024 * 1024;
 
 /// Bump when the converted layout changes to invalidate older cache entries.
-pub const CONVERSION_VERSION: u64 = 3;
+pub const CONVERSION_VERSION: u64 = 1;
 
 /// A wheel cannot be represented safely in the conda cache layout.
 #[derive(Debug, thiserror::Error)]
