@@ -211,7 +211,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false }
 tracing-test = { version = "0.2" }
 trybuild = { version = "1" }
-typed-path = { version = "0.12" }
+typed-path = { version = "0.13" }
 url = { version = "2" }
 urlencoding = "2"
 unicode-normalization = "0.1"
