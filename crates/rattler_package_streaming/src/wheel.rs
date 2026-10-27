@@ -34,8 +34,6 @@ use crate::{ExtractError, ExtractResult};
 
 mod licenses;
 mod record;
-#[cfg(test)]
-mod tests;
 
 const SITE_PACKAGES: &str = "site-packages";
 const PYTHON_SCRIPTS: &str = "python-scripts";

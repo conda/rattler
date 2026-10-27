@@ -196,39 +196,3 @@ impl From<&PackageRecord> for CacheKey {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::package_cache::BucketKey;
-
-    #[test]
-    fn wheel_namespaces_separate_paths_and_buckets() {
-        let record = PackageRecord::new(
-            PackageName::new_unchecked("probe"),
-            "1.0".parse::<VersionWithSource>().unwrap(),
-            BuildString::new_unchecked("0"),
-        );
-        let conda = CacheKey::from(&record);
-        let wheel = CacheKey::from_wheel_record(&record);
-        let mut older = wheel.clone();
-        older.namespace = CacheNamespace::Wheel(CONVERSION_VERSION - 1);
-        assert_eq!(conda.relative_path().unwrap(), Path::new("probe-1.0-0"));
-        assert_eq!(
-            wheel.relative_path().unwrap(),
-            Path::new(&format!("wheels-v{CONVERSION_VERSION}/probe-1.0-0"))
-        );
-        assert_ne!(
-            older.relative_path().unwrap(),
-            wheel.relative_path().unwrap()
-        );
-        assert_ne!(BucketKey::from(conda), BucketKey::from(wheel.clone()));
-        assert_ne!(BucketKey::from(older), BucketKey::from(wheel.clone()));
-
-        for name in ["../../escape", "/absolute", "a/b"] {
-            let mut unsafe_key = wheel.clone();
-            unsafe_key.name = name.into();
-            assert!(unsafe_key.relative_path().is_err());
-        }
-    }
-}

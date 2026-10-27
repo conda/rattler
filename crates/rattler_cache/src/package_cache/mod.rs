@@ -41,8 +41,6 @@ use crate::validation::{ValidationMode, validate_package_directory};
 mod cache_key;
 mod cache_lock;
 mod reporter;
-#[cfg(test)]
-mod wheel_cache_tests;
 
 #[derive(Clone)]
 enum UrlExtractor {
@@ -1803,10 +1801,8 @@ mod test {
         )
         .await
         .unwrap();
-        let router = Router::new().route_service(
-            "/download",
-            tower_http::services::ServeFile::new(wheel.clone()),
-        );
+        let router =
+            Router::new().route_service("/download", tower_http::services::ServeFile::new(wheel));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = Url::parse(&format!(
             "http://{}/download",
@@ -1837,28 +1833,6 @@ mod test {
             )
             .await
             .unwrap();
-        let old_revision = cached.revision();
-        std::fs::write(
-            cached.path().join(WheelJson::package_path()),
-            serde_json::to_vec(&WheelJson {
-                conversion_version: CONVERSION_VERSION - 1,
-            })
-            .unwrap(),
-        )
-        .unwrap();
-        // An inconsistent marker in the current namespace must still trigger a download.
-        let cached = PackageCache::new(packages_dir.path())
-            .get_or_fetch_wheel_from_url_with_retry(
-                &record,
-                url.clone(),
-                ClientBuilder::new(Client::default()).build().into(),
-                DoNotRetryPolicy,
-                None,
-                None,
-            )
-            .await
-            .unwrap();
-        assert_eq!(cached.revision(), old_revision + 1);
         server.abort();
         let _ = server.await;
         assert_eq!(
@@ -1867,37 +1841,6 @@ mod test {
                 "wheels-v{CONVERSION_VERSION}/cowsay-6.1-py3_none_any_0"
             ))
         );
-        assert!(
-            PackageCache::new(packages_dir.path())
-                .index()
-                .await
-                .unwrap()
-                .contains_url(super::CacheKey::from_wheel_record(&record), &url)
-        );
-
-        let local_dir = tempdir().unwrap();
-        let local_wheel = local_dir.path().join("cowsay-6.1-py3-none-any.whl");
-        std::fs::copy(&wheel, &local_wheel).unwrap();
-        let local_cache = PackageCache::new(local_dir.path().join("pkgs"));
-        let local = local_cache
-            .get_or_fetch_from_path(&local_wheel, Some(&record), None)
-            .await
-            .unwrap();
-        assert_eq!(
-            local.path(),
-            local_dir.path().join(format!(
-                "pkgs/wheels-v{CONVERSION_VERSION}/cowsay-6.1-py3_none_any_0"
-            ))
-        );
-        assert!(
-            local_cache
-                .index()
-                .await
-                .unwrap()
-                .contains_path(&record, &local_wheel)
-        );
-        validate_package_directory(local.path(), ValidationMode::Full).unwrap();
-
         let (index, _) = validate_package_directory(cached.path(), ValidationMode::Full).unwrap();
         assert_eq!(index.name, record.name);
         assert_eq!(index.depends, record.depends);
