@@ -859,7 +859,7 @@ mod test {
         ),);
     }
     #[test]
-    fn test_cloudsmith_opts_force_and_republish_alias() {
+    fn test_cloudsmith_opts_force() {
         use crate::upload::opt::CloudsmithOpts;
         use clap::Parser;
 
@@ -873,17 +873,6 @@ mod test {
         ])
         .unwrap();
         assert!(opts_force.force);
-
-        let opts_alias = CloudsmithOpts::try_parse_from([
-            "cloudsmith",
-            "--owner",
-            "test-owner",
-            "--repo",
-            "test-repo",
-            "--republish",
-        ])
-        .unwrap();
-        assert!(opts_alias.force);
 
         let opts_default = CloudsmithOpts::try_parse_from([
             "cloudsmith",

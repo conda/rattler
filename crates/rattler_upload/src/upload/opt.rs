@@ -495,7 +495,7 @@ pub struct CloudsmithOpts {
     pub url: Option<Url>,
 
     /// Force overwrite existing packages
-    #[arg(long, alias = "republish", env = "CLOUDSMITH_FORCE")]
+    #[arg(long, env = "CLOUDSMITH_FORCE")]
     pub force: bool,
 }
 
@@ -533,11 +533,6 @@ impl CloudsmithData {
     pub fn with_force(mut self, force: ForceOverwrite) -> Self {
         self.force = force;
         self
-    }
-
-    /// Set whether to overwrite existing packages (alias for `with_force`).
-    pub fn with_republish(self, republish: bool) -> Self {
-        self.with_force(republish.into())
     }
 }
 
