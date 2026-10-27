@@ -8,10 +8,15 @@
 //! with any `OpenDAL` backend, using conditional reads when supported (S3, HTTP) or simple
 //! reads as fallback (filesystem).
 
-use std::{sync::Arc, time::SystemTime};
+use std::{
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+    time::SystemTime,
+};
 
 use bytes::Bytes;
-use futures::stream::BoxStream;
+use futures::{Stream, StreamExt, TryStreamExt, stream::BoxStream};
 use opendal::{Operator, raw::Timestamp};
 use rattler_networking::retry_policies::default_retry_policy;
 use retry_policies::{RetryDecision, RetryPolicy};
@@ -171,7 +176,15 @@ impl PackageRecordCache {
 }
 
 /// A package file that is being streamed from storage.
-pub type PackageStream = BoxStream<'static, std::io::Result<Bytes>>;
+pub struct PackageStream(BoxStream<'static, std::io::Result<Bytes>>);
+
+impl Stream for PackageStream {
+    type Item = std::io::Result<Bytes>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.0.as_mut().poll_next(cx)
+    }
+}
 
 /// Read a package file with retry logic for handling concurrent modifications.
 ///
@@ -198,17 +211,49 @@ pub async fn read_package_with_retry(
     .await
 }
 
-/// Like [`read_package_with_retry`], but returns the package as a stream instead
-/// of reading the whole file into memory.
-pub async fn open_package_with_retry(
-    op: &Operator,
-    path: &str,
-    initial_metadata: RepodataFileMetadata,
-) -> opendal::Result<(PackageStream, RepodataFileMetadata)> {
-    retry_on_concurrent_modification(op, path, initial_metadata, |metadata| async move {
-        crate::utils::open_stream_with_metadata_check(op, path, &metadata).await
-    })
-    .await
+impl PackageStream {
+    /// Opens a package stream, retrying concurrent modifications as in
+    /// [`read_package_with_retry`].
+    pub async fn open_with_retry(
+        op: &Operator,
+        path: &str,
+        initial_metadata: RepodataFileMetadata,
+    ) -> opendal::Result<(Self, RepodataFileMetadata)> {
+        retry_on_concurrent_modification(op, path, initial_metadata, |metadata| async move {
+            Self::open(op, path, &metadata).await
+        })
+        .await
+    }
+
+    /// Opens a stream and polls its first chunk so conditional request errors
+    /// reach the retry loop before archive parsing begins.
+    async fn open(
+        op: &Operator,
+        path: &str,
+        metadata: &RepodataFileMetadata,
+    ) -> opendal::Result<Self> {
+        let mut reader = op.reader_with(path);
+        if metadata.precondition_checks.is_enabled() {
+            if let Some(etag) = &metadata.etag {
+                reader = reader.if_match(etag);
+            } else if let Some(last_modified) = metadata.last_modified {
+                reader = reader.if_unmodified_since(last_modified);
+            }
+        }
+        let mut stream = reader.await?.into_bytes_stream(..).await?;
+        let first_chunk = stream.try_next().await.map_err(|err| {
+            // Recover the OpenDAL error so the retry loop can inspect its kind.
+            err.downcast::<opendal::Error>().unwrap_or_else(|err| {
+                opendal::Error::new(opendal::ErrorKind::Unexpected, "failed to read file")
+                    .set_source(err)
+            })
+        })?;
+        Ok(Self(
+            futures::stream::iter(first_chunk.map(Ok))
+                .chain(stream)
+                .boxed(),
+        ))
+    }
 }
 
 /// Runs `attempt` with conditional checks based on `initial_metadata`, retrying

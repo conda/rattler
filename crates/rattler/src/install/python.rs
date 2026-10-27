@@ -106,12 +106,9 @@ impl PythonInfo {
         // Shebangs cannot be larger than 127 characters and executables with spaces are
         // problematic.
         if target_path.len() > 127 - 2 || target_path.contains(' ') {
-            format!(
-                "#!/bin/sh\n'''exec' \"{}\" \"$0\" \"$@\" #'''",
-                &target_path
-            )
+            format!("#!/bin/sh\n'''exec' \"{target_path}\" \"$0\" \"$@\" #'''")
         } else {
-            format!("#!{}", &target_path)
+            format!("#!{target_path}")
         }
     }
 

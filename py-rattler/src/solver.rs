@@ -12,7 +12,7 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::{PackageRecord, ParseStrictness, RepoDataRecord, VersionSpec};
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{
-    ExcludeNewer, RepoDataIter, SolveStrategy, SolverImpl, SolverTask, TimestampPolicy,
+    ChannelRepoData, ExcludeNewer, SolveStrategy, SolverImpl, SolverTask, TimestampPolicy,
     resolvo::Solver,
 };
 use tokio::task::JoinError;
@@ -100,7 +100,7 @@ fn patch_python_with_pip(record: &RepoDataRecord) -> Option<RepoDataRecord> {
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-#[pyo3(signature = (sources, platforms, specs, constraints, gateway, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, channel_relations=None, channel_relations_max_depth=None, add_pip_as_python_dependency=false, timestamp_policy="require-timestamp")
+#[pyo3(signature = (sources, platforms, specs, constraints, gateway, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, channel_relations=None, channel_relations_max_depth=None, add_pip_as_python_dependency=false, timestamp_policy="require-timestamp", package_format_selection=None)
 )]
 pub fn py_solve<'a>(
     py: Python<'a>,
@@ -121,6 +121,7 @@ pub fn py_solve<'a>(
     channel_relations_max_depth: Option<usize>,
     add_pip_as_python_dependency: bool,
     timestamp_policy: &str,
+    package_format_selection: Option<PyPackageFormatSelection>,
 ) -> PyResult<Bound<'a, PyAny>> {
     // Convert Python sources to Rust Source enum
     let rust_sources: Vec<rattler_repodata_gateway::Source> = sources
@@ -151,6 +152,9 @@ pub fn py_solve<'a>(
         if add_pip_as_python_dependency {
             query = query.with_record_patch(patch_python_with_pip);
         }
+        if let Some(package_format_selection) = package_format_selection {
+            query = query.package_format_selection(package_format_selection.into());
+        }
         let output = query.execute().await.map_err(PyRattlerError::from)?;
         emit_gateway_warnings(output.warnings)?;
         let available_packages = output.repodata;
@@ -168,7 +172,10 @@ pub fn py_solve<'a>(
             let task = SolverTask {
                 available_packages: available_packages
                     .iter()
-                    .map(RepoDataIter)
+                    .map(|repo_data| ChannelRepoData {
+                        records: repo_data,
+                        multi_channel: repo_data.multi_channel(),
+                    })
                     .collect::<Vec<_>>(),
                 locked_packages: locked_arcs.iter().map(AsRef::as_ref).collect(),
                 pinned_packages: pinned_arcs.iter().map(AsRef::as_ref).collect(),
@@ -211,12 +218,13 @@ pub fn py_solve<'a>(
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-#[pyo3(signature = (specs, sparse_repodata, constraints, locked_packages, pinned_packages, virtual_packages, channel_priority, package_format_selection, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, add_pip_as_python_dependency=false, timestamp_policy="require-timestamp")
+#[pyo3(signature = (specs, sparse_repodata, multi_sources, constraints, locked_packages, pinned_packages, virtual_packages, channel_priority, package_format_selection, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, add_pip_as_python_dependency=false, timestamp_policy="require-timestamp")
 )]
 pub fn py_solve_with_sparse_repodata<'py>(
     py: Python<'py>,
     specs: Vec<PyMatchSpec>,
     sparse_repodata: Vec<Bound<'py, PySparseRepoData>>,
+    multi_sources: Vec<Option<String>>,
     constraints: Vec<PyMatchSpec>,
     locked_packages: Vec<PyRecord>,
     pinned_packages: Vec<PyRecord>,
@@ -230,6 +238,13 @@ pub fn py_solve_with_sparse_repodata<'py>(
     add_pip_as_python_dependency: bool,
     timestamp_policy: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
+    // `multi_sources` names the group of every entry in `sparse_repodata`.
+    if multi_sources.len() != sparse_repodata.len() {
+        return Err(PyValueError::new_err(
+            "expected a group entry for every sparse repodata",
+        ));
+    }
+
     // Acquire read locks on the SparseRepoData instances. This allows us to safely access the
     // object in another thread.
     let repo_data_locks = sparse_repodata
@@ -279,7 +294,11 @@ pub fn py_solve_with_sparse_repodata<'py>(
             let task = SolverTask {
                 available_packages: available_packages
                     .iter()
-                    .map(RepoDataIter)
+                    .zip(&multi_sources)
+                    .map(|(records, multi_channel)| ChannelRepoData {
+                        records,
+                        multi_channel: multi_channel.as_deref(),
+                    })
                     .collect::<Vec<_>>(),
                 locked_packages: locked_arcs.iter().map(AsRef::as_ref).collect(),
                 pinned_packages: pinned_arcs.iter().map(AsRef::as_ref).collect(),

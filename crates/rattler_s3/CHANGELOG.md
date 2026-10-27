@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1](https://github.com/conda/rattler/compare/rattler_s3-v0.4.0...rattler_s3-v0.4.1) - 2026-10-27
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.4.0](https://github.com/conda/rattler/compare/rattler_s3-v0.3.7...rattler_s3-v0.4.0) - 2026-10-23
+
+### Changed
+
+- **BREAKING:** `S3CredentialSource::opendal_builder` returns the `opendal` 0.59 `S3` builder; the new `S3CredentialSource::opendal_operator` builds an operator with its own HTTP transport, which `opendal` 0.59 no longer installs by default ([#2979](https://github.com/conda/rattler/pull/2979))
+
+### Other
+
+- bump opendal to 0.59 ([#2979](https://github.com/conda/rattler/pull/2979))
+
+## [0.3.7](https://github.com/conda/rattler/compare/rattler_s3-v0.3.6...rattler_s3-v0.3.7) - 2026-10-16
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.3.6](https://github.com/conda/rattler/compare/rattler_s3-v0.3.5...rattler_s3-v0.3.6) - 2026-10-13
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.3.5](https://github.com/conda/rattler/compare/rattler_s3-v0.3.4...rattler_s3-v0.3.5) - 2026-10-09
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.3.4](https://github.com/conda/rattler/compare/rattler_s3-v0.3.3...rattler_s3-v0.3.4) - 2026-10-07
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.3.3](https://github.com/conda/rattler/compare/rattler_s3-v0.3.2...rattler_s3-v0.3.3) - 2026-10-06
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.3.2](https://github.com/conda/rattler/compare/rattler_s3-v0.3.1...rattler_s3-v0.3.2) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+
+## [0.3.1](https://github.com/conda/rattler/compare/rattler_s3-v0.3.0...rattler_s3-v0.3.1) - 2026-10-05
+
+### Other
+
+- updated the following local packages: rattler_networking
+
 ## [0.3.0](https://github.com/conda/rattler/compare/rattler_s3-v0.2.16...rattler_s3-v0.3.0) - 2026-09-29
 
 ### Added

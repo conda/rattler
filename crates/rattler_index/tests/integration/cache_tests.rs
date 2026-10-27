@@ -4,7 +4,7 @@ use futures::TryStreamExt;
 use opendal::Operator;
 use rattler_index::{
     RepodataFileMetadata,
-    cache::{open_package_with_retry, read_package_with_retry},
+    cache::{PackageStream, read_package_with_retry},
 };
 
 use super::etag_memory_backend::ETagMemoryBuilder;
@@ -20,9 +20,7 @@ use super::etag_memory_backend::ETagMemoryBuilder;
 /// 5. Verifies the function retries and succeeds with v2 content and metadata
 #[tokio::test]
 async fn test_read_package_with_retry_success_after_etag_change() {
-    let op = Operator::new(ETagMemoryBuilder::default())
-        .unwrap()
-        .finish();
+    let op = Operator::new(ETagMemoryBuilder::default()).unwrap();
 
     let path = "test/package.tar.bz2";
     let content_v1 = "version 1 content";
@@ -73,9 +71,7 @@ async fn test_read_package_with_retry_success_after_etag_change() {
 /// instead propagated immediately to the caller.
 #[tokio::test]
 async fn test_read_package_with_retry_propagates_other_errors() {
-    let op = Operator::new(ETagMemoryBuilder::default())
-        .unwrap()
-        .finish();
+    let op = Operator::new(ETagMemoryBuilder::default()).unwrap();
 
     let path = "nonexistent/file.tar.bz2";
 
@@ -94,7 +90,7 @@ async fn test_read_package_with_retry_propagates_other_errors() {
     assert_eq!(result.unwrap_err().kind(), opendal::ErrorKind::NotFound);
 }
 
-/// Validates that `open_package_with_retry` retries when the file changed
+/// Validates that `PackageStream::open_with_retry` retries when the file changed
 /// since it was stated, just like `read_package_with_retry`.
 ///
 /// `OpenDAL` opens streams lazily, so this checks that the precondition
@@ -102,9 +98,7 @@ async fn test_read_package_with_retry_propagates_other_errors() {
 /// being read.
 #[tokio::test]
 async fn test_open_package_with_retry_success_after_etag_change() {
-    let op = Operator::new(ETagMemoryBuilder::default())
-        .unwrap()
-        .finish();
+    let op = Operator::new(ETagMemoryBuilder::default()).unwrap();
 
     let path = "test/package.tar.bz2";
     let content_v1 = "version 1 content";
@@ -122,7 +116,7 @@ async fn test_open_package_with_retry_success_after_etag_change() {
         precondition_checks: rattler_index::PreconditionChecks::Enabled,
     };
 
-    let (stream, final_metadata) = open_package_with_retry(&op, path, old_metadata)
+    let (stream, final_metadata) = PackageStream::open_with_retry(&op, path, old_metadata)
         .await
         .unwrap();
     let content: Vec<u8> = stream

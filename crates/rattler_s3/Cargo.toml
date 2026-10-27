@@ -1,6 +1,6 @@
 [package]
 name = "rattler_s3"
-version = "0.3.0"
+version = "0.4.1"
 description = "A crate to streamline interaction with S3 storage for rattler"
 categories.workspace = true
 homepage.workspace = true
@@ -15,10 +15,19 @@ default = ["rustls"]
 # This feature is provided for API compatibility with other rattler crates but
 # will use rustls under the hood.
 native-tls = ["rustls"]
-rustls = ["aws-smithy-http-client/rustls-aws-lc", "opendal?/reqwest-rustls-tls"]
+rustls = [
+  "aws-smithy-http-client/rustls-aws-lc",
+  "opendal?/reqwest-rustls-tls",
+  "opendal-http-transport-reqwest?/rustls",
+]
 # Build `opendal` S3 operators that sign their requests with credentials of this
 # crate, see `S3CredentialSource::opendal_builder`.
-opendal = ["dep:opendal", "dep:reqsign-aws-v4", "dep:reqsign-core"]
+opendal = [
+  "dep:opendal",
+  "dep:opendal-http-transport-reqwest",
+  "dep:reqsign-aws-v4",
+  "dep:reqsign-core",
+]
 
 [dependencies]
 clap = { workspace = true, optional = true }
@@ -39,6 +48,7 @@ aws-credential-types = { workspace = true }
 rattler_networking = { workspace = true, default-features = false, features = ["s3"] }
 
 opendal = { workspace = true, optional = true, features = ["services-s3"] }
+opendal-http-transport-reqwest = { workspace = true, optional = true }
 reqsign-aws-v4 = { workspace = true, optional = true }
 reqsign-core = { workspace = true, optional = true }
 

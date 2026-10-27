@@ -28,11 +28,12 @@ use super::{
     GatewayError, GatewayInner,
     boxed::{BoxFuture, BoxStream, box_future, box_stream},
     local_subdir::LocalSubdirClient,
-    source::{CustomSourceClient, Source},
+    source::{CustomSourceClient, ExpandedSource, Source},
     subdir::{SubdirData, SubdirState},
 };
 use crate::{
     Reporter,
+    sparse::PackageFormatSelection,
     who_needs::{Dependent, WhoNeedsTarget, who_needs},
 };
 
@@ -60,6 +61,9 @@ const NAME_BATCH_SIZE: usize = 100;
 ///
 /// Channel sources always use full repodata, even if sharding is enabled
 /// or a previous query has already loaded a sharded subdir.
+///
+/// The records are scanned in the default
+/// [`PackageFormatSelection`](crate::sparse::PackageFormatSelection).
 ///
 /// The matches themselves can still be numerous enough to dominate memory —
 /// half a million records depend on `python` in conda-forge. Use
@@ -259,9 +263,9 @@ async fn resolve_subdirs(
         FuturesUnordered::new();
     let mut subdirs: Vec<IndexedSubdir> = Vec::new();
 
-    for (source_index, source) in sources.into_iter().enumerate() {
+    for (source_index, (_, source)) in ExpandedSource::expand(sources).into_iter().enumerate() {
         match source {
-            Source::Channel(channel) => {
+            ExpandedSource::Channel(channel, _) => {
                 let gateway = gateway.clone();
                 let reporter = reporter.clone();
                 pending.push(box_future(async move {
@@ -271,14 +275,14 @@ async fn resolve_subdirs(
                     Ok((source_index, subdir))
                 }));
             }
-            Source::Custom(custom_source) => {
+            ExpandedSource::Custom(custom_source, _) => {
                 let client = CustomSourceClient::new(custom_source, platform);
                 subdirs.push((
                     source_index,
                     Arc::new(SubdirState::Found(SubdirData::from_client(client))),
                 ));
             }
-            Source::SparseRepoData(sparse_list) => {
+            ExpandedSource::SparseRepoData(sparse_list, _) => {
                 let subdir = match sparse_list
                     .iter()
                     .find(|sparse| platform.as_str() == sparse.subdir())
@@ -325,7 +329,7 @@ fn scan_subdir(
 ) -> BoxStream<Result<Dependent, GatewayError>> {
     let names: Vec<PackageName> = match subdir.as_ref() {
         SubdirState::Found(subdir_data) => subdir_data
-            .package_names()
+            .package_names(PackageFormatSelection::default())
             .into_iter()
             .filter_map(|name| PackageName::try_from(name).ok())
             .collect(),
@@ -349,7 +353,7 @@ fn scan_subdir(
                     let mut matches = Vec::new();
                     for name in batch {
                         let records = subdir_data
-                            .fetch_package_records_uncached(&name, reporter.as_deref())
+                            .scan_package_records(&name, reporter.as_deref())
                             .await?;
                         matches.extend(who_needs(&records, &target));
                         // The scanned records are dropped here; only the
@@ -478,7 +482,7 @@ mod tests {
         let cuda = rattler_conda_types::GenericVirtualPackage {
             name: PackageName::from_str("__cuda").unwrap(),
             version: rattler_conda_types::Version::from_str("12.5").unwrap(),
-            build_string: "0".to_string(),
+            build_string: "0".parse().unwrap(),
         };
         insta::assert_snapshot!(
             who_needs_dummy("dummy", Subdir::Linux64, cuda.into()).await,
@@ -698,6 +702,7 @@ mod tests {
                 created_at: None,
                 repodata_revisions: RepodataRevisions::default(),
                 channel_relations: None,
+                virtual_package_detectors: None,
             },
             shards: [("missing-shard".into(), [0u8; 32].into())]
                 .into_iter()

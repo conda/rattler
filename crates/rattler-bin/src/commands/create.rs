@@ -9,11 +9,13 @@ use rattler_solve::SolverTask;
 
 use crate::{
     commands::{
+        detectors::{DetectorContext, detect_virtual_packages},
         gateway::{build_gateway, load_config},
+        hyperlink,
         progress::{wrap_in_async_progress, wrap_in_progress},
     },
     global_multi_progress,
-    solver_args::SolverArgs,
+    solver_args::{SolverArgs, task_for_repodata},
 };
 
 /// Create a conda environment from package listing
@@ -90,15 +92,22 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     let gateway = build_gateway(download_client.clone(), &config, offline, true)?;
 
     let start_load_repo_data = Instant::now();
-    let repo_data = wrap_in_async_progress(
-        "loading repodata",
-        gateway
-            .query(channels, [install_platform, Subdir::NoArch], specs.clone())
-            .recursive(true),
-    )
-    .await
-    .into_diagnostic()
-    .context("failed to load repodata")?;
+    let mut query = gateway
+        .query(
+            channels.iter().cloned(),
+            [install_platform, Subdir::NoArch],
+            specs.clone(),
+        )
+        .recursive(true);
+    if !opt.solver.has_explicit_virtual_packages() {
+        query = query
+            .virtual_package_detectors(install_platform)
+            .constraints(constraints.iter().cloned());
+    }
+    let mut repo_data = wrap_in_async_progress("loading repodata", query)
+        .await
+        .into_diagnostic()
+        .context("failed to load repodata")?;
 
     // Surface any non-fatal CEP-42 channel-relation problems.
     for warning in &repo_data.warnings {
@@ -113,12 +122,16 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
         start_load_repo_data.elapsed()
     );
 
-    // Determine virtual packages of the system. These packages define the
-    // capabilities of the system. Some packages depend on these virtual
-    // packages to indicate compatibility with the hardware of the system.
-    let virtual_packages = wrap_in_progress("determining virtual packages", || {
-        opt.solver.virtual_packages()
-    })?;
+    let virtual_packages = detect_virtual_packages(
+        &opt.solver,
+        DetectorContext {
+            gateway: &gateway,
+            config: &config,
+            download_client: &download_client,
+            detectors: repo_data.virtual_package_detectors.take(),
+        },
+    )
+    .await?;
 
     println!(
         "Virtual packages:\n{}\n",
@@ -154,7 +167,7 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
         strategy: opt.solver.strategy(),
         channel_priority: opt.solver.channel_priority(),
         exclude_newer,
-        ..SolverTask::from_iter(&repo_data)
+        ..task_for_repodata(&repo_data)
     };
 
     // Next, use a solver to solve this specific problem. This provides us with all
@@ -234,28 +247,23 @@ fn print_transaction(
     features: HashMap<PackageName, Vec<String>>,
 ) {
     let format_record = |r: &RepoDataRecord| {
-        let direct_url_print = if let Some(channel) = &r.channel {
-            channel.clone()
-        } else {
-            String::new()
-        };
+        let name = r.package_record.name.as_normalized();
+        let name = hyperlink::maybe_link(hyperlink::package_page(r.channel.as_deref(), name), name);
+        let channel = r.channel.as_deref().map_or_else(String::new, |channel| {
+            hyperlink::maybe_link(hyperlink::channel_page(channel), channel)
+        });
 
         if let Some(features) = features.get(&r.package_record.name) {
             format!(
-                "{}[{}] {} {} {}",
-                r.package_record.name.as_normalized(),
+                "{name}[{}] {} {} {channel}",
                 features.join(", "),
                 r.package_record.version,
                 r.package_record.build,
-                direct_url_print,
             )
         } else {
             format!(
-                "{} {} {} {}",
-                r.package_record.name.as_normalized(),
-                r.package_record.version,
-                r.package_record.build,
-                direct_url_print,
+                "{name} {} {} {channel}",
+                r.package_record.version, r.package_record.build,
             )
         }
     };

@@ -38,9 +38,10 @@ use rattler_conda_types::{
     ParseMatchSpecOptions, PatchInstructions, RepoData, Shard, ShardedRepodata, ShardedSubdirInfo,
     Subdir, UrlOrPath, V3Extensions, V3Packages, Version, WhlPackageRecord,
     package::{
-        CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
-        RunExportsJson, ValidatedMatchSpecs, WheelArchiveType,
+        BuildString, CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson,
+        PackageFile, ValidatedMatchSpecs, WheelArchiveType,
     },
+    virtual_package_detector::DetectorRegistrationMetadata,
 };
 pub use rattler_conda_types::{
     RepodataRevision, RepodataRevisionMetadata, RepodataRevisionSelection, RepodataRevisions,
@@ -50,21 +51,21 @@ pub use rattler_config::config::index::{
 };
 use rattler_digest::Sha256Hash;
 use rattler_package_streaming::{
-    read,
-    seek::{self, stream_conda_content},
+    ExtractResult,
+    read::PackageMetadata,
+    seek::stream_conda_content,
+    tokio::async_read::{read_conda_metadata_via_buffering, read_package_metadata},
 };
 #[cfg(feature = "s3")]
 use rattler_s3::S3CredentialSource;
 use retry_policies::{Jitter, RetryDecision, RetryPolicy, policies::ExponentialBackoff};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use tempfile::SpooledTempFile;
 use tokio::sync::Semaphore;
-use tokio_util::io::{StreamReader, SyncIoBridge};
+use tokio_util::io::StreamReader;
 use tracing::Instrument;
 #[cfg(feature = "s3")]
 use url::Url;
-use zip::{read::read_zipfile_from_stream, result::ZipError};
 
 /// Metadata published while indexing a channel.
 ///
@@ -77,6 +78,8 @@ pub struct ChannelMetadata {
     pub base_url: Option<String>,
     /// The `info.channel_relations` value written to `repodata.json`.
     pub channel_relations: Option<ChannelRelations>,
+    /// The `info.virtual_package_detectors` value written to `repodata.json`.
+    pub virtual_package_detectors: Option<DetectorRegistrationMetadata>,
     /// CEP-6 notices to write to the channel root.
     ///
     /// `None` leaves an existing `notices.json` untouched, while `Some` writes
@@ -93,6 +96,11 @@ impl ChannelMetadata {
                 .channel_relations
                 .clone()
                 .filter(|relations| !relations.is_empty()),
+            virtual_package_detectors: config
+                .virtual_package_detectors
+                .as_ref()
+                .filter(|detectors| !detectors.is_empty())
+                .cloned(),
             notices: config.notices.clone(),
         }
     }
@@ -190,28 +198,20 @@ pub fn package_record_from_index_json<T: Read>(
     index_json_reader: &mut T,
 ) -> std::io::Result<PackageRecord> {
     let package_as_bytes = package_as_bytes.as_ref();
-    let digest = PackageDigest {
+    let digest = ExtractResult {
         sha256: rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(package_as_bytes),
         md5: rattler_digest::compute_bytes_digest::<rattler_digest::Md5>(package_as_bytes),
-        size: package_as_bytes.len() as u64,
+        total_size: package_as_bytes.len() as u64,
     };
     indexed_package_record_from_index_json(IndexJson::from_reader(index_json_reader)?, digest)
         .map(|indexed| indexed.record)
-}
-
-/// The hashes and size of a complete package archive.
-#[derive(Default)]
-struct PackageDigest {
-    sha256: Sha256Hash,
-    md5: rattler_digest::Md5Hash,
-    size: u64,
 }
 
 /// Build an indexed package record from a package's `index.json` and the
 /// digest of the archive that contains it.
 fn indexed_package_record_from_index_json(
     index_json: IndexJson,
-    digest: PackageDigest,
+    digest: ExtractResult,
 ) -> std::io::Result<IndexedPackageRecord> {
     let validated = index_json
         .into_validated()
@@ -227,7 +227,7 @@ fn indexed_package_record_from_index_json(
         subdir: index.subdir.unwrap_or_else(|| "unknown".to_string()),
         md5: Some(digest.md5),
         sha256: Some(digest.sha256),
-        size: Some(digest.size),
+        size: Some(digest.total_size),
         arch: index.arch,
         platform: index.platform,
         depends: index.depends,
@@ -309,8 +309,11 @@ pub fn package_record_from_tar_bz2(file: &Path) -> std::io::Result<PackageRecord
 /// This function will look for the `info/index.json` file in the conda package
 /// and extract the package record from it.
 pub fn package_record_from_tar_bz2_reader(reader: impl BufRead) -> std::io::Result<PackageRecord> {
-    indexed_package_record_from_reader(reader, CondaArchiveType::TarBz2)
-        .map(|indexed| indexed.record)
+    indexed_package_record(PackageMetadata::from_reader(
+        reader,
+        CondaArchiveType::TarBz2,
+    ))
+    .map(|indexed| indexed.record)
 }
 
 /// Extract the package record from a `.conda` package file.
@@ -318,7 +321,8 @@ pub fn package_record_from_tar_bz2_reader(reader: impl BufRead) -> std::io::Resu
 /// and extract the package record from it.
 pub fn package_record_from_conda(file: &Path) -> std::io::Result<PackageRecord> {
     let reader = fs::File::open(file)?;
-    indexed_package_record_from_seekable_conda(BufReader::new(reader)).map(|indexed| indexed.record)
+    indexed_package_record(PackageMetadata::from_seekable_conda(BufReader::new(reader)))
+        .map(|indexed| indexed.record)
 }
 
 /// Extract the package record from a conda package archive.
@@ -344,171 +348,21 @@ pub fn package_record_from_archive(file: &Path) -> std::io::Result<PackageRecord
 /// The reader cannot be read twice, so the package is first copied to a
 /// temporary file. This also handles packages that use zip data descriptors.
 pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result<PackageRecord> {
-    indexed_package_record_from_spooled_conda(reader).map(|indexed| indexed.record)
+    indexed_package_record(PackageMetadata::from_conda_via_buffering(reader))
+        .map(|indexed| indexed.record)
 }
 
-/// Read a package archive in a single pass and build its indexed record.
-///
-/// The archive is hashed as it streams through and only the metadata files the
-/// index needs are kept, so memory use does not grow with the size of the
-/// package.
-fn indexed_package_record_from_reader(
-    reader: impl Read,
-    archive_type: CondaArchiveType,
+/// Build an indexed record from the metadata and digest returned by the archive reader.
+fn indexed_package_record(
+    result: Result<(PackageMetadata, ExtractResult), rattler_package_streaming::ExtractError>,
 ) -> std::io::Result<IndexedPackageRecord> {
-    let mut reader = DigestReader::new(reader);
-
-    let (index_json, run_exports) = match archive_type {
-        CondaArchiveType::TarBz2 => (read_index_json_from_tar_bz2(&mut reader)?, None),
-        CondaArchiveType::Conda => read_info_from_conda(&mut reader)?,
-    };
-
-    // The hashes cover the whole archive, so read whatever the parser did not.
-    std::io::copy(&mut reader, &mut std::io::sink())?;
-
-    let mut indexed = indexed_package_record_from_index_json(index_json, reader.finalize())?;
-    indexed.record.run_exports = run_exports;
+    let (metadata, digest) = result.map_err(|err| match err {
+        rattler_package_streaming::ExtractError::IoError(err) => err,
+        err => std::io::Error::other(err),
+    })?;
+    let mut indexed = indexed_package_record_from_index_json(metadata.index, digest)?;
+    indexed.record.run_exports = metadata.run_exports;
     Ok(indexed)
-}
-
-/// Build the indexed record of a `.conda` package from a seekable reader.
-///
-/// Unlike [`indexed_package_record_from_reader`] this finds the info section
-/// through the zip index at the end of the archive, so it also works for
-/// packages that use zip data descriptors. The archive is read twice: once to
-/// hash it and once to read the info section.
-fn indexed_package_record_from_seekable_conda(
-    mut reader: impl Read + Seek,
-) -> std::io::Result<IndexedPackageRecord> {
-    reader.rewind()?;
-    let mut digest_reader = DigestReader::new(&mut reader);
-    std::io::copy(&mut digest_reader, &mut std::io::sink())?;
-    let digest = digest_reader.finalize();
-
-    reader.rewind()?;
-    let mut archive = seek::stream_conda_info(&mut reader).map_err(std::io::Error::other)?;
-    let (index_json, run_exports) = read_info_from_tar(&mut archive)?;
-
-    let mut indexed = indexed_package_record_from_index_json(index_json, digest)?;
-    indexed.record.run_exports = run_exports;
-    Ok(indexed)
-}
-
-/// Copy a `.conda` package into a temporary file and build its indexed record
-/// from there.
-///
-/// The temporary file only stays in memory while it is small, so memory use
-/// stays bounded for large packages.
-fn indexed_package_record_from_spooled_conda(
-    mut reader: impl Read,
-) -> std::io::Result<IndexedPackageRecord> {
-    let mut file = SpooledTempFile::new(SPOOLED_PACKAGE_MEMORY_LIMIT);
-    std::io::copy(&mut reader, &mut file)?;
-    indexed_package_record_from_seekable_conda(file)
-}
-
-/// How much of a package is kept in memory before it is spooled to disk.
-const SPOOLED_PACKAGE_MEMORY_LIMIT: usize = 5 * 1024 * 1024;
-
-/// The message the zip crate uses for an entry whose size is only written after
-/// its data (a "data descriptor"). Such an entry cannot be read as a stream.
-/// See <https://github.com/conda/rattler/issues/794>.
-const DATA_DESCRIPTOR_ERROR_MESSAGE: &str = "The file length is not available in the local header";
-
-/// Returns true if streaming a `.conda` package failed because it uses zip
-/// data descriptors.
-fn is_data_descriptor_error(err: &std::io::Error) -> bool {
-    matches!(
-        err.get_ref().and_then(|inner| inner.downcast_ref::<ZipError>()),
-        Some(ZipError::UnsupportedArchive(message)) if *message == DATA_DESCRIPTOR_ERROR_MESSAGE
-    )
-}
-
-/// Read `info/index.json` from a streamed `.tar.bz2` package.
-fn read_index_json_from_tar_bz2(reader: impl Read) -> std::io::Result<IndexJson> {
-    let mut archive = read::stream_tar_bz2(reader);
-    for entry in archive.entries()?.flatten() {
-        let mut entry = entry;
-        let path = entry.path()?;
-        if path.as_os_str().eq("info/index.json") {
-            return IndexJson::from_reader(&mut entry);
-        }
-    }
-    Err(std::io::Error::other("No index.json found"))
-}
-
-/// Read `info/index.json` and `info/run_exports.json` from a streamed `.conda`
-/// package by walking its zip entries in order.
-fn read_info_from_conda(
-    mut reader: impl Read,
-) -> std::io::Result<(IndexJson, Option<RunExportsJson>)> {
-    let mut info = None;
-    while let Some(mut file) = read_zipfile_from_stream(&mut reader)? {
-        if info.is_none() && file.name().starts_with("info-") && file.name().ends_with(".tar.zst") {
-            let decoder = zstd::stream::read::Decoder::new(&mut file)?;
-            info = Some(read_info_from_tar(&mut tar::Archive::new(decoder))?);
-        }
-        // Skip the rest of the entry so the next one can be read.
-        std::io::copy(&mut file, &mut std::io::sink())?;
-    }
-    info.ok_or_else(|| std::io::Error::other("No info section found in .conda package"))
-}
-
-/// Read `info/index.json` and `info/run_exports.json` from the info section of
-/// a package.
-fn read_info_from_tar(
-    archive: &mut tar::Archive<impl Read>,
-) -> std::io::Result<(IndexJson, Option<RunExportsJson>)> {
-    let mut index_json = None;
-    let mut run_exports_json = None;
-    for entry in archive.entries()?.flatten() {
-        let mut entry = entry;
-        let path = entry.path()?;
-        if path.as_os_str().eq("info/index.json") {
-            index_json = Some(IndexJson::from_reader(&mut entry)?);
-        } else if path.as_os_str().eq("info/run_exports.json") {
-            run_exports_json = Some(RunExportsJson::from_reader(&mut entry)?);
-        }
-    }
-
-    let index_json = index_json.ok_or_else(|| std::io::Error::other("No index.json found"))?;
-    Ok((index_json, run_exports_json))
-}
-
-/// Computes the hashes and size of everything read through it.
-struct DigestReader<R: Read> {
-    inner: rattler_digest::HashingReader<
-        rattler_digest::HashingReader<R, rattler_digest::Sha256>,
-        rattler_digest::Md5,
-    >,
-    size: u64,
-}
-
-impl<R: Read> DigestReader<R> {
-    fn new(reader: R) -> Self {
-        Self {
-            inner: rattler_digest::HashingReader::new(rattler_digest::HashingReader::new(reader)),
-            size: 0,
-        }
-    }
-
-    fn finalize(self) -> PackageDigest {
-        let (sha256_reader, md5) = self.inner.finalize();
-        let (_, sha256) = sha256_reader.finalize();
-        PackageDigest {
-            sha256,
-            md5,
-            size: self.size,
-        }
-    }
-}
-
-impl<R: Read> Read for DigestReader<R> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let read = self.inner.read(buf)?;
-        self.size += read as u64;
-        Ok(read)
-    }
 }
 
 /// Stream a package from storage and build its indexed record.
@@ -534,42 +388,22 @@ async fn read_package_record(
         }
     };
 
-    let (stream, metadata) = cache::open_package_with_retry(op, path, metadata)
+    let (stream, metadata) = cache::PackageStream::open_with_retry(op, path, metadata)
         .await
-        .map_err(|e| std::io::Error::other(e.to_string()))?;
-    let reader = blocking_reader(stream);
-    match run_blocking(move || indexed_package_record_from_reader(reader, archive_type)).await {
-        Err(err) if is_data_descriptor_error(&err) => {
+        .map_err(std::io::Error::other)?;
+    let result = read_package_metadata(StreamReader::new(stream), archive_type).await;
+    match result {
+        Err(err) if err.is_data_descriptor_error() => {
             tracing::warn!(
                 "{path} uses zip data descriptors and cannot be streamed, spooling it to a temporary file instead"
             );
-            let (stream, metadata) = cache::open_package_with_retry(op, path, metadata)
+            let (stream, metadata) = cache::PackageStream::open_with_retry(op, path, metadata)
                 .await
-                .map_err(|e| std::io::Error::other(e.to_string()))?;
-            let reader = blocking_reader(stream);
-            let record =
-                run_blocking(move || indexed_package_record_from_spooled_conda(reader)).await?;
-            Ok((record, metadata))
+                .map_err(std::io::Error::other)?;
+            let result = read_conda_metadata_via_buffering(StreamReader::new(stream)).await;
+            Ok((indexed_package_record(result)?, metadata))
         }
-        result => Ok((result?, metadata)),
-    }
-}
-
-/// Turns a package stream into a reader for use on a blocking thread.
-fn blocking_reader(stream: cache::PackageStream) -> impl Read + Send + 'static {
-    BufReader::new(SyncIoBridge::new(StreamReader::new(stream)))
-}
-
-/// Runs `f` on a blocking thread, re-raising it if it panics.
-async fn run_blocking<T: Send + 'static>(
-    f: impl FnOnce() -> std::io::Result<T> + Send + 'static,
-) -> std::io::Result<T> {
-    match tokio::task::spawn_blocking(f).await {
-        Ok(result) => result,
-        Err(err) => match err.try_into_panic() {
-            Ok(panic) => std::panic::resume_unwind(panic),
-            Err(err) => Err(std::io::Error::other(err)),
-        },
+        result => Ok((indexed_package_record(result)?, metadata)),
     }
 }
 
@@ -1162,6 +996,7 @@ async fn index_subdir_inner(
                 &v3,
             ),
             channel_relations: channel_metadata.channel_relations,
+            virtual_package_detectors: channel_metadata.virtual_package_detectors,
         }),
         packages,
         conda_packages,
@@ -1415,11 +1250,6 @@ fn render_record_matchspecs_for_revision(
     matchspecs: Option<ValidatedMatchSpecs>,
     revision: RepodataRevision,
 ) -> Result<(), RepodataError> {
-    if revision.uses_legacy_package_layout() && !record.flags.is_empty() {
-        return Err(RepodataError::Other(anyhow::anyhow!(
-            "legacy repodata cannot represent package flags"
-        )));
-    }
     for flag in &record.flags {
         flag.validate().map_err(anyhow::Error::from)?;
     }
@@ -1527,7 +1357,7 @@ fn validate_patch_instructions(instructions: &PatchInstructions) -> Result<(), R
         let mut record = PackageRecord::new(
             PackageName::new_unchecked("patch"),
             Version::major(0),
-            String::new(),
+            BuildString::new_unchecked("0"),
         );
         record.apply_patch(patch);
         render_record_matchspecs_for_revision(&mut record, None, revision)
@@ -1817,6 +1647,10 @@ pub async fn write_repodata(
             .info
             .as_ref()
             .and_then(|info| info.channel_relations.clone());
+        let sharded_virtual_package_detectors = repodata
+            .info
+            .as_ref()
+            .and_then(|info| info.virtual_package_detectors.clone());
         for (k, package_record) in repodata.conda_packages {
             let package_name = package_record.name.as_normalized();
             let shard = shards_by_package_names
@@ -1879,6 +1713,7 @@ pub async fn write_repodata(
                 created_at: Some(jiff::Timestamp::now()),
                 repodata_revisions: sharded_repodata_revisions,
                 channel_relations: sharded_channel_relations,
+                virtual_package_detectors: sharded_virtual_package_detectors,
             },
             shards: shards
                 .iter()
@@ -1991,7 +1826,7 @@ pub async fn index_fs_with_channel_metadata(
     // enumeration since it doesn't parse as a `Subdir`.
     config.atomic_write_dir = Some(root.join(".tmp").to_string_lossy().to_string());
     let builder = config.into_builder();
-    let op = Operator::new(builder)?.finish();
+    let op = Operator::new(builder)?;
     index_with_channel_metadata(
         target_platform,
         op,
@@ -2049,9 +1884,9 @@ fn s3_operator(credentials: &S3CredentialSource, channel: &Url) -> Result<Operat
     let bucket = channel
         .host_str()
         .ok_or(anyhow::anyhow!("No bucket in S3 URL"))?;
-    let builder = credentials.opendal_builder(bucket, channel.path());
+    let operator = credentials.opendal_operator(bucket, channel.path())?;
 
-    Ok(Operator::new(builder)?.layer(RetryLayer::new()).finish())
+    Ok(operator.layer(RetryLayer::new()))
 }
 
 /// Create a new `repodata.json` for all packages in the channel at the given S3
@@ -2355,6 +2190,7 @@ pub async fn ensure_channel_initialized_with_channel_metadata(
             base_url: channel_metadata.base_url,
             repodata_revisions: RepodataRevisions::new(),
             channel_relations: channel_metadata.channel_relations,
+            virtual_package_detectors: channel_metadata.virtual_package_detectors,
         }),
         packages: IndexMap::default(),
         conda_packages: IndexMap::default(),
@@ -2402,7 +2238,7 @@ pub async fn ensure_channel_initialized_fs_with_channel_metadata(
     config.root = Some(root.to_string_lossy().to_string());
     // Atomic writes, see `index_fs_with_channel_metadata`.
     config.atomic_write_dir = Some(root.join(".tmp").to_string_lossy().to_string());
-    let op = Operator::new(config.into_builder())?.finish();
+    let op = Operator::new(config.into_builder())?;
     ensure_channel_initialized_with_channel_metadata(&op, channel_metadata).await
 }
 
@@ -2449,7 +2285,7 @@ mod tests {
         let package_record = PackageRecord::new(
             PackageName::new_unchecked("demo"),
             Version::from_str("1.0").unwrap(),
-            "py_0".to_string(),
+            "py_0".parse::<BuildString>().unwrap(),
         );
         let wheel_url = UrlOrPath::Path("demo-1.0-py_0.whl".to_string());
 
@@ -2646,7 +2482,7 @@ mod tests {
         let channel = tempfile::tempdir().unwrap();
         let mut config = FsConfig::default();
         config.root = Some(channel.path().to_string_lossy().to_string());
-        let op = Operator::new(config.into_builder()).unwrap().finish();
+        let op = Operator::new(config.into_builder()).unwrap();
         op.create_dir("noarch/").await.unwrap();
         op.write("noarch/repodata_from_packages.json", "source sentinel")
             .await
@@ -2669,7 +2505,7 @@ mod tests {
             PackageRecord::new(
                 PackageName::new_unchecked("v3-demo"),
                 Version::from_str("1.0").unwrap(),
-                "0".to_string(),
+                "0".parse::<BuildString>().unwrap(),
             ),
         );
         let patch = serde_json::from_value::<PatchInstructions>(serde_json::json!({
@@ -2758,7 +2594,7 @@ mod tests {
             record: PackageRecord::new(
                 PackageName::new_unchecked("demo"),
                 Version::from_str("1.0").unwrap(),
-                "0".to_string(),
+                "0".parse::<BuildString>().unwrap(),
             ),
             repodata_revision: RepodataRevision::from(4),
             matchspecs: None,
@@ -2784,7 +2620,7 @@ mod tests {
             record: PackageRecord::new(
                 PackageName::new_unchecked("demo"),
                 Version::from_str("1.0").unwrap(),
-                "0".to_string(),
+                "0".parse::<BuildString>().unwrap(),
             ),
             repodata_revision: RepodataRevision::V3,
             matchspecs: None,
@@ -2817,7 +2653,7 @@ mod tests {
         let mut record = PackageRecord::new(
             PackageName::new_unchecked("demo"),
             Version::from_str("1.0").unwrap(),
-            "0".to_string(),
+            "0".parse::<BuildString>().unwrap(),
         );
         record.depends = vec!["python[extras=[\"test\"]]".to_string()];
         repodata.packages.insert(
@@ -2846,8 +2682,15 @@ mod tests {
             }"#,
         ))
         .unwrap();
-        let indexed =
-            indexed_package_record_from_index_json(index_json, PackageDigest::default()).unwrap();
+        let indexed = indexed_package_record_from_index_json(
+            index_json,
+            ExtractResult {
+                sha256: rattler_digest::Sha256Hash::default(),
+                md5: rattler_digest::Md5Hash::default(),
+                total_size: 0,
+            },
+        )
+        .unwrap();
         assert_eq!(indexed.repodata_revision, RepodataRevision::Legacy);
 
         let mut v3 = V3Packages::default();
@@ -2873,7 +2716,7 @@ mod tests {
         let mut record = PackageRecord::new(
             PackageName::new_unchecked("demo"),
             Version::from_str("1.0").unwrap(),
-            "0".to_string(),
+            "0".parse::<BuildString>().unwrap(),
         );
         let patch = serde_json::from_value(serde_json::json!({
             "depends": ["python >=3.10"],
@@ -2908,7 +2751,7 @@ mod tests {
         let mut record = PackageRecord::new(
             PackageName::new_unchecked("demo"),
             Version::from_str("1.0").unwrap(),
-            "0".to_string(),
+            "0".parse::<BuildString>().unwrap(),
         );
         record.depends = vec!["python >=3.10".to_string()];
         record.constrains = vec!["python >=3.10".to_string()];
@@ -2939,13 +2782,47 @@ mod tests {
     }
 
     #[test]
+    fn legacy_records_with_flags_are_indexed_into_legacy_maps() {
+        let filename = DistArchiveIdentifier::try_from_filename("demo-1.0-0.conda").unwrap();
+        let mut record = PackageRecord::new(
+            PackageName::new_unchecked("demo"),
+            Version::from_str("1.0").unwrap(),
+            "0".parse::<BuildString>().unwrap(),
+        );
+        record.flags = vec![Flag::new_unchecked("cuda")];
+
+        let mut conda_packages = IndexMap::default();
+        let mut v3 = V3Packages::default();
+        insert_package_record_by_revision(
+            &mut IndexMap::default(),
+            &mut conda_packages,
+            &mut v3,
+            filename.clone(),
+            IndexedPackageRecord {
+                record,
+                repodata_revision: RepodataRevision::Legacy,
+                matchspecs: None,
+                wheel_url: None,
+            },
+            RepodataRevision::Legacy,
+        )
+        .unwrap();
+
+        assert!(v3.is_empty());
+        assert_eq!(
+            conda_packages[&filename].flags,
+            [Flag::new_unchecked("cuda")]
+        );
+    }
+
+    #[test]
     fn indexer_only_produces_legacy_and_v3_package_layouts() {
         let filename = DistArchiveIdentifier::try_from_filename("demo-1.0-0.tar.bz2").unwrap();
         let indexed_record = |revision| IndexedPackageRecord {
             record: PackageRecord::new(
                 PackageName::new_unchecked("demo"),
                 Version::from_str("1.0").unwrap(),
-                "0".to_string(),
+                "0".parse::<BuildString>().unwrap(),
             ),
             repodata_revision: revision,
             matchspecs: None,

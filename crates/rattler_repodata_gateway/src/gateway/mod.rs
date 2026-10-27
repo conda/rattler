@@ -3,6 +3,7 @@ mod boxed;
 mod builder;
 mod channel_config;
 mod channel_expander;
+mod channel_expansion;
 mod channel_notices;
 mod channel_relations;
 #[cfg(not(target_arch = "wasm32"))]
@@ -19,6 +20,7 @@ mod sharded_subdir;
 mod source;
 mod subdir;
 mod subdir_builder;
+mod virtual_package_detectors_query;
 mod warning;
 mod who_needs_query;
 
@@ -37,7 +39,9 @@ use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use error::GatewayError;
 #[cfg(feature = "indicatif")]
 pub use indicatif::{IndicatifReporter, IndicatifReporterBuilder};
-pub use query::{NamesQuery, NamesQueryOutput, RepoDataQuery, RepoDataQueryOutput};
+pub use query::{
+    NamesQuery, NamesQueryOutput, QueryVirtualPackageDetectors, RepoDataQuery, RepoDataQueryOutput,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, ChannelRelations, MatchSpec, RepoDataRecord, Subdir};
@@ -45,9 +49,14 @@ use rattler_networking::LazyClient;
 pub use repo_data::{RemovedPackages, RepoData};
 use run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
 pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
-pub use source::{RepoDataSource, Source};
+pub use source::{MultiSource, MultiSourceError, RepoDataSource, Source};
 use subdir::SubdirState;
 use tracing::{Level, instrument};
+pub use virtual_package_detectors_query::{
+    AcceptedDetectorRegistration, RegistrationConflict, RegistrationConflictKind,
+    RejectedDetectorRegistration, VirtualPackageDetectorWarning, VirtualPackageDetectorsOutput,
+    VirtualPackageDetectorsQuery,
+};
 pub use warning::GatewayWarning;
 pub use who_needs_query::WhoNeedsQuery;
 
@@ -128,6 +137,8 @@ impl Gateway {
     /// The `sources` parameter accepts any type that implements `Into<Source>`.
     /// This includes:
     /// - `Channel` - traditional conda channels
+    /// - `MultiSource` - a named group of sources, each queried as if it was
+    ///   passed on its own; see [`RepoData::multi_channel`]
     /// - `Arc<dyn RepoDataSource>` - custom repodata sources
     /// - `Source` - the enum itself
     ///
@@ -191,6 +202,38 @@ impl Gateway {
             self.inner.clone(),
             channels.into_iter().map(Into::into).collect(),
             platforms.into_iter().collect(),
+        )
+    }
+
+    /// The package cache this gateway shares with the installers it feeds.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn package_cache(&self) -> &PackageCache {
+        &self.inner.package_cache
+    }
+
+    /// Collects the virtual package detectors that `channels` and the
+    /// channels they relate to register for the supplied `subdirs`.
+    ///
+    /// Registrations of these subdirs are combined per channel and accepted
+    /// or rejected in CEP 42 channel order. Duplicate subdirs are ignored,
+    /// and no subdirs are added implicitly. To include platform-independent
+    /// registrations, pass `Subdir::NoArch` explicitly alongside the target.
+    /// See [`VirtualPackageDetectorsQuery`] for the options and output.
+    pub fn virtual_package_detectors<AsChannel, ChannelIter, SubdirIter>(
+        &self,
+        channels: ChannelIter,
+        subdirs: SubdirIter,
+    ) -> VirtualPackageDetectorsQuery
+    where
+        AsChannel: Into<Channel>,
+        ChannelIter: IntoIterator<Item = AsChannel>,
+        SubdirIter: IntoIterator<Item = Subdir>,
+    {
+        VirtualPackageDetectorsQuery::new(
+            self.inner.clone(),
+            channels.into_iter().map(Into::into).collect(),
+            subdirs.into_iter().collect(),
+            None,
         )
     }
 
@@ -510,26 +553,37 @@ impl GatewayInner {
 #[cfg(test)]
 mod test {
     use std::{
+        collections::{BTreeMap, HashMap},
+        future::IntoFuture,
         path::{Path, PathBuf},
         str::FromStr,
-        sync::{Arc, Mutex},
+        sync::{
+            Arc, Mutex,
+            atomic::{AtomicUsize, Ordering},
+        },
         time::Instant,
     };
 
     use assert_matches::assert_matches;
     use dashmap::DashSet;
+    use itertools::Itertools;
     use rattler_cache::{default_cache_dir, package_cache::PackageCache};
     use rattler_conda_types::{
         Channel, ChannelConfig, MatchSpec, PackageName,
         ParseStrictness::{Lenient, Strict},
-        RepoDataRecord, Subdir,
+        ParseStrictnessWithNameMatcher, RepoDataRecord, RepodataRevisions, Shard, ShardedRepodata,
+        ShardedSubdirInfo, Subdir,
     };
     use rstest::rstest;
     use url::Url;
 
+    use super::Source;
     use crate::{
         DownloadReporter, GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
-        UnsupportedRepodataRevision, fetch::CacheAction, gateway::Gateway,
+        UnsupportedRepodataRevision,
+        fetch::CacheAction,
+        gateway::Gateway,
+        sparse::{PackageFormatSelection, SparseRepoData},
         utils::simple_channel_server::SimpleChannelServer,
     };
     use rattler_conda_types::RepodataRevision;
@@ -2043,7 +2097,8 @@ mod test {
         extra_depends: &[(&str, &[&str])],
     ) -> RepoDataRecord {
         use rattler_conda_types::{
-            PackageRecord, VersionWithSource, package::DistArchiveIdentifier,
+            PackageRecord, VersionWithSource,
+            package::{BuildString, DistArchiveIdentifier},
         };
 
         let mut extra_depends_map: std::collections::BTreeMap<String, Vec<String>> =
@@ -2059,7 +2114,7 @@ mod test {
             attestations_sha256: None,
             name: PackageName::from_str(name).unwrap(),
             version: VersionWithSource::from_str(version).unwrap(),
-            build: "0".to_string(),
+            build: "0".parse::<BuildString>().unwrap(),
             build_number: 0,
             subdir: subdir.to_string(),
             md5: None,
@@ -2291,6 +2346,117 @@ mod test {
             "should have custom-pkg from mock source"
         );
         assert_eq!(custom_records[0].package_record.version.as_str(), "1.0.0");
+    }
+
+    fn multichannel_test_channel(name: &str) -> Channel {
+        Channel::try_from_directory(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../test-data/channels/{name}")),
+        )
+        .unwrap()
+    }
+
+    fn multichannel_test_sparse_repo_data(name: &str) -> Arc<crate::sparse::SparseRepoData> {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
+            "../../test-data/channels/{name}/noarch/repodata.json"
+        ));
+        Arc::new(
+            crate::sparse::SparseRepoData::from_file(
+                multichannel_test_channel(name),
+                "noarch",
+                path,
+                None,
+            )
+            .unwrap(),
+        )
+    }
+
+    /// One line per bucket: the multichannel it is marked with and the
+    /// channel its records refer to.
+    fn render_multichannel_buckets(output: &[RepoData]) -> String {
+        output
+            .iter()
+            .map(|repo_data| {
+                let channels = repo_data
+                    .iter()
+                    .filter_map(|record| record.channel.as_deref())
+                    .map(|channel| channel.trim_end_matches('/').rsplit('/').next().unwrap())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{} | {channels}", repo_data.multi_channel().unwrap_or("-"))
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Every source of a group is queried as if it was passed on its own, and
+    /// its records end up in their own bucket, in the order of the group,
+    /// marked with the name of the group.
+    #[rstest]
+    #[case::channels(false)]
+    #[case::sparse_repo_data(true)]
+    #[tokio::test]
+    async fn test_multi_source(#[case] sparse: bool) {
+        let source = |name: &str| {
+            if sparse {
+                super::Source::from(multichannel_test_sparse_repo_data(name))
+            } else {
+                super::Source::from(multichannel_test_channel(name))
+            }
+        };
+        let multi_source = super::MultiSource::new(
+            "grp",
+            vec![source("multichannel-b"), source("multichannel-a")],
+        )
+        .unwrap();
+
+        let output = Gateway::new()
+            .query(
+                vec![super::Source::from(multi_source), source("multichannel-c")],
+                vec![Subdir::NoArch],
+                vec![PackageName::from_str("pkg").unwrap()],
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        insta::allow_duplicates! {
+            insta::assert_snapshot!(render_multichannel_buckets(&output), @r"
+            grp | multichannel-b
+            grp | multichannel-a
+            - | multichannel-c
+            ");
+        }
+    }
+
+    #[test]
+    fn test_invalid_multi_source() {
+        let channel = || super::Source::from(multichannel_test_channel("multichannel-a"));
+        let sparse = || super::Source::from(multichannel_test_sparse_repo_data("multichannel-a"));
+        let nested = super::MultiSource::new("inner", vec![channel()]).unwrap();
+
+        let errors = [
+            super::MultiSource::new("grp", Vec::new()),
+            super::MultiSource::new("grp", vec![channel(), super::Source::from(nested)]),
+            super::MultiSource::new("grp", vec![channel(), channel()]),
+            super::MultiSource::new("grp", vec![sparse(), sparse()]),
+        ]
+        .into_iter()
+        .map(|result| {
+            result.err().unwrap().to_string().replace(
+                &multichannel_test_channel("multichannel-a")
+                    .base_url
+                    .to_string(),
+                "[CHANNEL]",
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+        insta::assert_snapshot!(errors, @r"
+        multichannel 'grp' does not contain any sources
+        multichannel 'grp' cannot contain another multichannel ('inner')
+        multichannel 'grp' contains '[CHANNEL]' more than once
+        multichannel 'grp' contains 'noarch' of '[CHANNEL]' more than once
+        ");
     }
 
     /// Test that ensures `run_exports` fallback works when `run_exports.json` exists
@@ -4475,6 +4641,49 @@ mod test {
         }
     }
 
+    /// The channels of a multichannel share one priority tier, so a channel
+    /// that a member relates to must outrank or be outranked by the whole
+    /// multichannel: a `base` of any member comes before the first member and
+    /// an `overrides` target comes after the last one. The related channels
+    /// do not join the multichannel.
+    #[tokio::test]
+    async fn test_cep42_relations_of_multichannel_members_surround_the_multichannel() {
+        let dir = tempfile::tempdir().unwrap();
+        write_test_subdir(&dir.path().join("a"), "shared", "1.0.0", None, Some("../y"));
+        write_test_subdir(&dir.path().join("b"), "shared", "2.0.0", Some("../x"), None);
+        write_test_subdir(&dir.path().join("x"), "shared", "3.0.0", None, None);
+        write_test_subdir(&dir.path().join("y"), "shared", "4.0.0", None, None);
+        write_test_subdir(&dir.path().join("c"), "shared", "5.0.0", None, None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let channel = |name: &str| {
+            super::Source::from(Channel::from_url(
+                server.url().join(&format!("{name}/")).unwrap(),
+            ))
+        };
+        let multi_source =
+            super::MultiSource::new("grp", vec![channel("a"), channel("b")]).unwrap();
+
+        let output = Gateway::new()
+            .query(
+                vec![super::Source::from(multi_source), channel("c")],
+                vec![Subdir::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+
+        insta::assert_snapshot!(render_multichannel_buckets(&output.repodata), @r"
+        - | x
+        grp | a
+        grp | b
+        - | y
+        - | c
+        ");
+    }
+
     /// One malformed declaration must produce ONE warning, not one
     /// per queried platform.
     #[tokio::test]
@@ -4572,6 +4781,524 @@ mod test {
             )),
             "expected UserOrderConflict warning; got {:?}",
             output.warnings,
+        );
+    }
+
+    /// The `format-selection` test channel. It has builds of `foo` in every
+    /// combination of archive formats, with removed files and with a file
+    /// listed both in a legacy map and in `v3`. `foo-10-0.whl.conda` has a
+    /// build string that ends in `.whl`; it must not be mistaken for the
+    /// removed `foo-10-0.conda`. It also has `bar`, a dependency of
+    /// `foo-2-0.tar.bz2` only, and `wheelonly`, a package that only has a
+    /// wheel.
+    fn format_selection_channel_dir() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/channels/format-selection")
+    }
+
+    fn format_selection_channel() -> Channel {
+        Channel::try_from_directory(&format_selection_channel_dir()).unwrap()
+    }
+
+    /// Renders records as their sorted file names. A record with a license is
+    /// annotated with it, which tells the legacy and `v3` entries of the same
+    /// file in the `format-selection` channel apart.
+    fn render_file_names<'r>(records: impl IntoIterator<Item = &'r RepoDataRecord>) -> String {
+        records
+            .into_iter()
+            .map(|record| match &record.package_record.license {
+                Some(license) => format!("{} ({license})", record.identifier.to_file_name()),
+                None => record.identifier.to_file_name(),
+            })
+            .sorted()
+            .join("\n")
+    }
+
+    /// Returns the shard of the package with the given name.
+    fn shard_of<'s>(shards: &'s mut BTreeMap<String, Shard>, name: &PackageName) -> &'s mut Shard {
+        shards.entry(name.as_normalized().to_owned()).or_default()
+    }
+
+    /// Serves the records of a `noarch` repodata.json as sharded repodata and
+    /// counts how many shards are downloaded.
+    struct ShardedChannelServer {
+        url: Url,
+        shard_requests: Arc<AtomicUsize>,
+        _shutdown: tokio::sync::oneshot::Sender<()>,
+    }
+
+    impl ShardedChannelServer {
+        async fn new(repodata_path: &Path) -> Self {
+            let repodata: rattler_conda_types::RepoData =
+                serde_json::from_str(&fs_err::read_to_string(repodata_path).unwrap()).unwrap();
+
+            let mut shards: BTreeMap<String, Shard> = BTreeMap::new();
+            for (identifier, record) in repodata.packages {
+                shard_of(&mut shards, &record.name)
+                    .packages
+                    .insert(identifier, record);
+            }
+            for (identifier, record) in repodata.conda_packages {
+                shard_of(&mut shards, &record.name)
+                    .conda_packages
+                    .insert(identifier, record);
+            }
+            for (identifier, record) in repodata.v3.tar_bz2 {
+                shard_of(&mut shards, &record.name)
+                    .v3
+                    .tar_bz2
+                    .insert(identifier, record);
+            }
+            for (identifier, record) in repodata.v3.conda {
+                shard_of(&mut shards, &record.name)
+                    .v3
+                    .conda
+                    .insert(identifier, record);
+            }
+            for (identifier, record) in repodata.v3.whl {
+                shard_of(&mut shards, &record.package_record.name)
+                    .v3
+                    .whl
+                    .insert(identifier, record);
+            }
+            for identifier in repodata.removed {
+                let name = PackageName::new_unchecked(identifier.identifier.name.as_str());
+                shard_of(&mut shards, &name).removed.insert(identifier);
+            }
+
+            let mut shard_hashes = ahash::HashMap::default();
+            let mut shard_files = HashMap::new();
+            for (name, shard) in shards {
+                let bytes =
+                    zstd::encode_all(rmp_serde::to_vec_named(&shard).unwrap().as_slice(), 0)
+                        .unwrap();
+                let hash = rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(&bytes);
+                shard_files.insert(format!("{}.msgpack.zst", hex::encode(hash)), bytes);
+                shard_hashes.insert(name, hash);
+            }
+            let index = ShardedRepodata {
+                info: ShardedSubdirInfo {
+                    subdir: "noarch".into(),
+                    base_url: "./".into(),
+                    shards_base_url: "./shards/".into(),
+                    created_at: None,
+                    repodata_revisions: RepodataRevisions::default(),
+                    channel_relations: None,
+                    virtual_package_detectors: None,
+                },
+                shards: shard_hashes,
+            };
+            let index_bytes =
+                zstd::encode_all(rmp_serde::to_vec_named(&index).unwrap().as_slice(), 0).unwrap();
+
+            let shard_requests = Arc::new(AtomicUsize::new(0));
+            let app = axum::Router::new()
+                .route(
+                    "/noarch/repodata_shards.msgpack.zst",
+                    axum::routing::get(move || std::future::ready(index_bytes.clone())),
+                )
+                .route(
+                    "/noarch/shards/{file}",
+                    axum::routing::get({
+                        let shard_requests = shard_requests.clone();
+                        move |axum::extract::Path(file): axum::extract::Path<String>| {
+                            shard_requests.fetch_add(1, Ordering::SeqCst);
+                            std::future::ready(
+                                shard_files
+                                    .get(&file)
+                                    .cloned()
+                                    .ok_or(axum::http::StatusCode::NOT_FOUND),
+                            )
+                        }
+                    }),
+                );
+
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let (shutdown, shutdown_received) = tokio::sync::oneshot::channel();
+            tokio::spawn(
+                axum::serve(listener, app)
+                    .with_graceful_shutdown(async {
+                        shutdown_received.await.ok();
+                    })
+                    .into_future(),
+            );
+
+            Self {
+                url: Url::parse(&format!("http://localhost:{port}")).unwrap(),
+                shard_requests,
+                _shutdown: shutdown,
+            }
+        }
+
+        fn channel(&self) -> Channel {
+            Channel::from_url(self.url.clone())
+        }
+
+        fn shard_request_count(&self) -> usize {
+            self.shard_requests.load(Ordering::SeqCst)
+        }
+    }
+
+    /// A gateway that never caches shards on disk, so every shard it parses
+    /// is downloaded from the server.
+    fn gateway_without_disk_cache(cache_dir: &Path) -> Gateway {
+        Gateway::builder()
+            .with_client(reqwest::Client::builder().no_proxy().build().unwrap())
+            .with_cache_dir(cache_dir)
+            .with_channel_config(super::ChannelConfig {
+                default: SourceConfig {
+                    cache_action: CacheAction::NoCache,
+                    ..SourceConfig::default()
+                },
+                per_channel: std::collections::HashMap::default(),
+            })
+            .finish()
+    }
+
+    /// Every kind of source returns the same records of `foo` for the same
+    /// package format selection.
+    #[rstest]
+    #[tokio::test]
+    async fn package_format_selection_is_the_same_for_every_source(
+        #[values(
+            PackageFormatSelection::OnlyTarBz2,
+            PackageFormatSelection::OnlyConda,
+            PackageFormatSelection::PreferConda,
+            PackageFormatSelection::PreferCondaWithWhl,
+            PackageFormatSelection::Both,
+            PackageFormatSelection::All
+        )]
+        selection: PackageFormatSelection,
+    ) {
+        let foo = PackageName::new_unchecked("foo");
+        let sparse = Arc::new(
+            SparseRepoData::from_file(
+                format_selection_channel(),
+                "noarch",
+                format_selection_channel_dir().join("noarch/repodata.json"),
+                None,
+            )
+            .unwrap(),
+        );
+        let expected = render_file_names(&sparse.load_records(&foo, selection).unwrap());
+
+        // A custom source has no notion of removed files or of legacy and
+        // `v3` entries, so it serves the files that remain after both are
+        // applied.
+        let mut custom_source = MockRepoDataSource::new();
+        for record in sparse
+            .load_records(&foo, PackageFormatSelection::All)
+            .unwrap()
+        {
+            custom_source.add_record(Subdir::NoArch, record);
+        }
+
+        let server =
+            ShardedChannelServer::new(&format_selection_channel_dir().join("noarch/repodata.json"))
+                .await;
+        let cache_dir = tempfile::tempdir().unwrap();
+        let gateway = gateway_without_disk_cache(cache_dir.path());
+
+        let sources: [(&str, Source); 4] = [
+            ("local channel", format_selection_channel().into()),
+            (
+                "sparse repodata",
+                Source::SparseRepoData(vec![sparse.clone()]),
+            ),
+            ("sharded channel", server.channel().into()),
+            ("custom source", Source::Custom(Arc::new(custom_source))),
+        ];
+        for (description, source) in sources {
+            let output = gateway
+                .query([source], [Subdir::NoArch], [foo.clone()])
+                .recursive(false)
+                .package_format_selection(selection)
+                .await
+                .unwrap();
+            assert_eq!(
+                render_file_names(output.iter().flat_map(RepoData::iter)),
+                expected,
+                "{description} disagrees on {selection}"
+            );
+        }
+
+        insta::with_settings!({snapshot_suffix => selection.to_string()}, {
+            insta::assert_snapshot!(expected);
+        });
+    }
+
+    /// Requesting several selections of the same package through one gateway
+    /// reuses the records the selections share, and fetches a shard only
+    /// once.
+    #[tokio::test]
+    async fn package_format_selections_share_cached_records() {
+        let foo = PackageName::new_unchecked("foo");
+        let server =
+            ShardedChannelServer::new(&format_selection_channel_dir().join("noarch/repodata.json"))
+                .await;
+        let cache_dir = tempfile::tempdir().unwrap();
+        let gateway = gateway_without_disk_cache(cache_dir.path());
+
+        for channel in [format_selection_channel(), server.channel()] {
+            let mut first_seen: HashMap<String, Arc<RepoDataRecord>> = HashMap::new();
+            for selection in [
+                PackageFormatSelection::PreferConda,
+                PackageFormatSelection::Both,
+                PackageFormatSelection::All,
+            ] {
+                let output = gateway
+                    .query([channel.clone()], [Subdir::NoArch], [foo.clone()])
+                    .recursive(false)
+                    .package_format_selection(selection)
+                    .await
+                    .unwrap();
+                for record in output.iter().flat_map(RepoData::iter_arc) {
+                    let file_name = record.identifier.to_file_name();
+                    let first = first_seen
+                        .entry(file_name.clone())
+                        .or_insert_with(|| record.clone());
+                    assert!(
+                        Arc::ptr_eq(first, record),
+                        "{file_name} of {} was parsed again for {selection}",
+                        channel.base_url
+                    );
+                }
+            }
+        }
+
+        assert_eq!(server.shard_request_count(), 1);
+    }
+
+    /// A recursive query only follows the dependencies of selected records:
+    /// `bar` is only a dependency of `foo-2-0.tar.bz2`, which `PreferConda`
+    /// drops in favor of `foo-2-0.conda`.
+    #[rstest]
+    #[case::prefer_conda(PackageFormatSelection::PreferConda, &["foo"])]
+    #[case::both(PackageFormatSelection::Both, &["bar", "foo"])]
+    #[tokio::test]
+    async fn recursive_query_follows_only_selected_records(
+        #[case] selection: PackageFormatSelection,
+        #[case] expected_names: &[&str],
+    ) {
+        let output = Gateway::new()
+            .query(
+                [format_selection_channel()],
+                [Subdir::NoArch],
+                [PackageName::new_unchecked("foo")],
+            )
+            .recursive(true)
+            .package_format_selection(selection)
+            .await
+            .unwrap();
+
+        let names: Vec<&str> = output
+            .iter()
+            .flat_map(RepoData::iter)
+            .map(|record| record.package_record.name.as_normalized())
+            .sorted()
+            .dedup()
+            .collect();
+        assert_eq!(names, expected_names);
+    }
+
+    /// A pattern query expands to the names of the packages that have records
+    /// in the selection, so a package that only has a wheel is found once the
+    /// selection uses wheels.
+    #[rstest]
+    #[case::prefer_conda(PackageFormatSelection::PreferConda, "")]
+    #[case::all(PackageFormatSelection::All, "wheelonly-1-0.whl")]
+    #[tokio::test]
+    async fn pattern_query_finds_wheel_only_packages(
+        #[case] selection: PackageFormatSelection,
+        #[case] expected: &str,
+    ) {
+        let spec = MatchSpec::from_str(
+            "wheel*",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+
+        let output = Gateway::new()
+            .query([format_selection_channel()], [Subdir::NoArch], [spec])
+            .recursive(false)
+            .package_format_selection(selection)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            render_file_names(output.iter().flat_map(RepoData::iter)),
+            expected
+        );
+    }
+
+    /// A names query on a `repodata.json` channel only lists the packages
+    /// with records in the selection. `bar` only has a `.conda` file and
+    /// `wheelonly` only a wheel.
+    #[rstest]
+    #[case::prefer_conda(PackageFormatSelection::PreferConda, &["bar", "foo"])]
+    #[case::only_tar_bz2(PackageFormatSelection::OnlyTarBz2, &["foo"])]
+    #[case::all(PackageFormatSelection::All, &["bar", "foo", "wheelonly"])]
+    #[tokio::test]
+    async fn names_query_lists_packages_in_the_selection(
+        #[case] selection: PackageFormatSelection,
+        #[case] expected: &[&str],
+    ) {
+        let output = Gateway::new()
+            .names([format_selection_channel()], [Subdir::NoArch])
+            .package_format_selection(selection)
+            .await
+            .unwrap();
+
+        let names: Vec<&str> = output
+            .names
+            .iter()
+            .map(PackageName::as_normalized)
+            .sorted()
+            .collect();
+        assert_eq!(names, expected);
+    }
+
+    #[tokio::test]
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn package_fetches_run_while_channel_discovery_is_pending() {
+        use axum::{Router, routing::get};
+        use std::time::Duration;
+        use tokio::{net::TcpListener, sync::Notify, time::timeout};
+
+        struct UnblockingSource(Arc<Notify>);
+
+        #[async_trait::async_trait]
+        impl super::RepoDataSource for UnblockingSource {
+            async fn fetch_package_records(
+                &self,
+                _platform: Subdir,
+                _name: &PackageName,
+            ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
+                self.0.notify_one();
+                Ok(vec![Arc::new(make_test_record(
+                    "shared", "9.0.0", "linux-64",
+                ))])
+            }
+
+            fn package_names(&self, _platform: Subdir) -> Vec<String> {
+                vec!["shared".to_string()]
+            }
+        }
+
+        // Discovery cannot finish until an independent package fetch runs.
+        let package_fetched = Arc::new(Notify::new());
+        let wait_for_package = package_fetched.clone();
+        let app = Router::new().route(
+            "/linux-64/repodata.json",
+            get(move || {
+                let wait_for_package = wait_for_package.clone();
+                async move {
+                    wait_for_package.notified().await;
+                    r#"{"info":{"subdir":"linux-64"},"packages":{},"packages.conda":{}}"#
+                }
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let channel = Channel::from_url(Url::parse(&format!("http://{address}/")).unwrap());
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(UnblockingSource(package_fetched));
+        let gateway = Gateway::new();
+        let result = timeout(
+            Duration::from_secs(5),
+            gateway
+                .query(
+                    [
+                        super::Source::Channel(channel),
+                        super::Source::Custom(source),
+                    ],
+                    [Subdir::Linux64],
+                    [PackageName::try_from("shared").unwrap()],
+                )
+                .execute(),
+        )
+        .await;
+        server.abort();
+        let output = result
+            .expect("discovery blocked independent package fetching")
+            .unwrap();
+        assert!(output[0].is_empty());
+        assert_eq!(
+            output[1]
+                .iter()
+                .map(|record| record.package_record.version.as_str())
+                .collect::<Vec<_>>(),
+            ["9.0.0"],
+        );
+    }
+
+    #[tokio::test]
+    async fn custom_source_records_contribute_detector_demand_without_registration_origins() {
+        let dir = tempfile::tempdir().unwrap();
+        for platform in [Subdir::Linux64, Subdir::NoArch] {
+            let subdir = dir.path().join(platform.as_str());
+            std::fs::create_dir_all(&subdir).unwrap();
+            let registrations = if platform == Subdir::NoArch {
+                serde_json::json!({"custom-detect": ["__custom"], "extra-detect": ["__extra"]})
+            } else {
+                serde_json::json!({})
+            };
+            std::fs::write(subdir.join("repodata.json"), serde_json::to_vec(&serde_json::json!({
+                "info": {"subdir": platform.as_str(), "virtual_package_detectors": registrations},
+                "packages": {}, "packages.conda": {},
+            })).unwrap()).unwrap();
+        }
+        let channel = Channel::from_url(Url::from_directory_path(dir.path()).unwrap());
+        let mut source = MockRepoDataSource::new();
+        let mut record = make_test_record("consumer", "1", "linux-64");
+        record.package_record.depends = vec!["__custom >=1".to_string()];
+        source.add_record(Subdir::Linux64, record);
+        let output = Gateway::new()
+            .query(
+                [
+                    super::Source::Custom(Arc::new(source)),
+                    super::Source::Channel(channel.clone()),
+                ],
+                [Subdir::Linux64],
+                [PackageName::new_unchecked("consumer")],
+            )
+            .virtual_package_detectors(Subdir::Linux64)
+            .constraints([MatchSpec::from_str("__extra >=1", Lenient).unwrap()])
+            .await
+            .unwrap();
+        assert_eq!(
+            output.repodata[0]
+                .iter()
+                .map(|r| r.package_record.name.as_normalized())
+                .collect::<Vec<_>>(),
+            ["consumer"]
+        );
+        assert!(output.repodata[1].is_empty());
+        let detectors = output.virtual_package_detectors.unwrap();
+        assert_eq!(
+            detectors
+                .wanted_names
+                .iter()
+                .map(PackageName::as_normalized)
+                .collect::<Vec<_>>(),
+            ["__custom", "__extra"]
+        );
+        assert!(
+            detectors
+                .registrations
+                .iter()
+                .all(|r| r.origin() == &channel.base_url)
+        );
+        assert_eq!(
+            detectors
+                .registrations
+                .iter()
+                .map(|r| r.registration.detector.as_normalized())
+                .collect::<Vec<_>>(),
+            ["custom-detect", "extra-detect"]
         );
     }
 }

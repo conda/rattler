@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.6](https://github.com/conda/rattler/compare/rattler_menuinst-v0.4.5...rattler_menuinst-v0.4.6) - 2026-10-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.4.5](https://github.com/conda/rattler/compare/rattler_menuinst-v0.4.4...rattler_menuinst-v0.4.5) - 2026-10-16
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.4.4](https://github.com/conda/rattler/compare/rattler_menuinst-v0.4.3...rattler_menuinst-v0.4.4) - 2026-10-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.4.3](https://github.com/conda/rattler/compare/rattler_menuinst-v0.4.2...rattler_menuinst-v0.4.3) - 2026-10-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.4.2](https://github.com/conda/rattler/compare/rattler_menuinst-v0.4.1...rattler_menuinst-v0.4.2) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+
+## [0.4.1](https://github.com/conda/rattler/compare/rattler_menuinst-v0.4.0...rattler_menuinst-v0.4.1) - 2026-10-05
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
 ## [0.4.0](https://github.com/conda/rattler/compare/rattler_menuinst-v0.3.1...rattler_menuinst-v0.4.0) - 2026-09-29
 
 ### Other

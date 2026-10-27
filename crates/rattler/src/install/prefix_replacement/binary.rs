@@ -11,8 +11,8 @@ use rattler_conda_types::package::{
 };
 
 use super::{
-    CStringPatch, EncodedPrefix, InconsistentOffsetsError, OffsetReplaceError, encoded_prefix_for,
-    reject_growing_prefix, write_replacement_range,
+    CStringOccurrences, CStringPatch, EncodedPrefix, InconsistentOffsetsError, OffsetReplaceError,
+    encoded_prefix_for, reject_growing_prefix, write_replacement_range,
 };
 
 /// Given the contents of a file, copies it to the `destination` and in the process replace any
@@ -41,6 +41,28 @@ pub fn copy_and_replace_cstring_placeholder(
     reject_growing_prefix(patches.iter().map(|patch| patch.prefix))?;
 
     write_patched_cstrings(destination, source_bytes, &patches)
+}
+
+/// Finds the c-strings that search-based binary replacement patches, under every encoding the
+/// draft CEP defines and ordered by position in the file.
+///
+/// This exposes the search [`copy_and_replace_cstring_placeholder`] performs, including how it
+/// resolves overlapping candidates of different encodings, so that callers patching files lazily,
+/// such as the mount-time ranged reads in `rattler_vfs`, stay byte-identical with it.
+pub fn find_cstring_occurrences(
+    source_bytes: &[u8],
+    prefix_placeholder: &str,
+) -> Vec<CStringOccurrences> {
+    // Only the placeholder is searched for, so the target prefix does not matter here.
+    let prefixes = EncodedPrefix::all(prefix_placeholder, "");
+    find_cstring_patches(source_bytes, &prefixes)
+        .into_iter()
+        .map(|patch| CStringOccurrences {
+            offsets: patch.offsets.into_owned(),
+            nul_pos: patch.nul_pos,
+            encoding: patch.prefix.encoding,
+        })
+        .collect()
 }
 
 /// Finds every c-string that contains a placeholder occurrence, under every encoding, ordered by

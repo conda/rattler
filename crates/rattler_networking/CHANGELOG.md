@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.3](https://github.com/conda/rattler/compare/rattler_networking-v0.34.2...rattler_networking-v0.34.3) - 2026-10-27
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.34.2](https://github.com/conda/rattler/compare/rattler_networking-v0.34.1...rattler_networking-v0.34.2) - 2026-10-16
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.34.1](https://github.com/conda/rattler/compare/rattler_networking-v0.34.0...rattler_networking-v0.34.1) - 2026-10-13
+
+### Added
+
+- *(rattler_networking)* fetch sharded repodata from OCI mirrors ([#2855](https://github.com/conda/rattler/pull/2855))
+
+## [0.34.0](https://github.com/conda/rattler/compare/rattler_networking-v0.33.1...rattler_networking-v0.34.0) - 2026-10-09
+
+### Added
+
+- *(auth)* [**breaking**] reuse host credentials for explicit API origins ([#2920](https://github.com/conda/rattler/pull/2920))
+
+## [0.33.1](https://github.com/conda/rattler/compare/rattler_networking-v0.33.0...rattler_networking-v0.33.1) - 2026-10-07
+
+### Other
+
+- bump rust to 1.98.1 ([#2906](https://github.com/conda/rattler/pull/2906))
+
+## [0.33.0](https://github.com/conda/rattler/compare/rattler_networking-v0.32.1...rattler_networking-v0.33.0) - 2026-10-06
+
+### Added
+
+- *(auth)* [**breaking**] Add RFC 8693 workload-identity login ([#2897](https://github.com/conda/rattler/pull/2897))
+
+## [0.32.1](https://github.com/conda/rattler/compare/rattler_networking-v0.32.0...rattler_networking-v0.32.1) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+
+## [0.32.0](https://github.com/conda/rattler/compare/rattler_networking-v0.31.0...rattler_networking-v0.32.0) - 2026-10-05
+
+### Added
+
+- *(auth)* support audiences in existing OAuth flows ([#2880](https://github.com/conda/rattler/pull/2880))
+
 ## [0.31.0](https://github.com/conda/rattler/compare/rattler_networking-v0.30.10...rattler_networking-v0.31.0) - 2026-09-29
 
 ### Added

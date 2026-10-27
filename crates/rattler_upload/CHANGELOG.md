@@ -7,6 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.1](https://github.com/conda/rattler/compare/rattler_upload-v0.14.0...rattler_upload-v0.14.1) - 2026-10-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming, rattler_solve, rattler_config, rattler_s3
+
+## [0.14.0](https://github.com/conda/rattler/compare/rattler_upload-v0.13.5...rattler_upload-v0.14.0) - 2026-10-23
+
+### Changed
+
+- **BREAKING:** `S3Opts::credentials` is a `rattler_s3` 0.4 `S3CredentialsOpts` ([#2979](https://github.com/conda/rattler/pull/2979))
+
+### Fixed
+
+- update sigstore to 0.15.1 and fix cargo audit findings ([#2977](https://github.com/conda/rattler/pull/2977))
+
+### Other
+
+- bump opendal to 0.59 ([#2979](https://github.com/conda/rattler/pull/2979))
+
+## [0.13.5](https://github.com/conda/rattler/compare/rattler_upload-v0.13.4...rattler_upload-v0.13.5) - 2026-10-16
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming, rattler_solve, rattler_config, rattler_networking, rattler_s3
+
+## [0.13.4](https://github.com/conda/rattler/compare/rattler_upload-v0.13.3...rattler_upload-v0.13.4) - 2026-10-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming, rattler_solve, rattler_config, rattler_s3
+
+## [0.13.3](https://github.com/conda/rattler/compare/rattler_upload-v0.13.2...rattler_upload-v0.13.3) - 2026-10-09
+
+### Other
+
+- updated the following local packages: rattler_networking, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.13.2](https://github.com/conda/rattler/compare/rattler_upload-v0.13.1...rattler_upload-v0.13.2) - 2026-10-07
+
+### Other
+
+- updated the following local packages: rattler_solve
+
+## [0.13.1](https://github.com/conda/rattler/compare/rattler_upload-v0.13.0...rattler_upload-v0.13.1) - 2026-10-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_solve, rattler_config, rattler_package_streaming, rattler_s3
+
+## [0.13.0](https://github.com/conda/rattler/compare/rattler_upload-v0.12.2...rattler_upload-v0.13.0) - 2026-10-06
+
+### Added
+
+- *(auth)* [**breaking**] Add RFC 8693 workload-identity login ([#2897](https://github.com/conda/rattler/pull/2897))
+
+## [0.12.2](https://github.com/conda/rattler/compare/rattler_upload-v0.12.1...rattler_upload-v0.12.2) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+
+## [0.12.1](https://github.com/conda/rattler/compare/rattler_upload-v0.12.0...rattler_upload-v0.12.1) - 2026-10-05
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_solve, rattler_package_streaming, rattler_s3
+
 ## [0.12.0](https://github.com/conda/rattler/compare/rattler_upload-v0.11.0...rattler_upload-v0.12.0) - 2026-09-29
 
 ### Added

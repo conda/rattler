@@ -1872,12 +1872,14 @@ mod tests {
 
     #[test]
     fn test_license_family_matching() {
-        use crate::{PackageName, PackageRecord, Version, match_spec::Matches};
+        use crate::{
+            PackageName, PackageRecord, Version, match_spec::Matches, package::BuildString,
+        };
 
         let mut record = PackageRecord::new(
             PackageName::from_str("numpy").unwrap(),
             Version::from_str("1.24.0").unwrap(),
-            "py310h1234_0".to_string(),
+            "py310h1234_0".parse::<BuildString>().unwrap(),
         );
         record.license_family = Some("MIT".to_string());
 

@@ -37,10 +37,12 @@ pub async fn extract_tar_bz2(
     reader: impl AsyncRead + Unpin,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
-    extract_blocking(reader, destination, |reader, destination| {
-        crate::read::extract_tar_bz2_without_hashing(reader, destination)
+    let destination = destination.to_path_buf();
+    process_blocking(reader, move |reader| {
+        crate::read::extract_tar_bz2_without_hashing(reader, &destination)
     })
     .await
+    .map(|(_, result)| result)
 }
 
 /// Extracts the contents of a `.conda` package archive, decompressing the
@@ -49,10 +51,12 @@ pub async fn extract_conda(
     reader: impl AsyncRead + Unpin,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
-    extract_blocking(reader, destination, |reader, destination| {
-        crate::read::extract_conda_via_streaming_without_hashing(reader, destination)
+    let destination = destination.to_path_buf();
+    process_blocking(reader, move |reader| {
+        crate::read::extract_conda_via_streaming_without_hashing(reader, &destination)
     })
     .await
+    .map(|(_, result)| result)
 }
 
 /// Extracts the contents of a `.conda` package archive by fully reading the
@@ -62,8 +66,31 @@ pub async fn extract_conda_via_buffering(
     reader: impl AsyncRead + Unpin,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
-    extract_blocking(reader, destination, |reader, destination| {
-        crate::read::extract_conda_via_buffering_without_hashing(reader, destination)
+    let destination = destination.to_path_buf();
+    process_blocking(reader, move |reader| {
+        crate::read::extract_conda_via_buffering_without_hashing(reader, &destination)
+    })
+    .await
+    .map(|(_, result)| result)
+}
+
+/// Reads package metadata and hashes the complete async stream without extracting files.
+pub async fn read_package_metadata(
+    reader: impl AsyncRead + Unpin,
+    archive_type: rattler_conda_types::package::CondaArchiveType,
+) -> Result<(crate::read::PackageMetadata, ExtractResult), ExtractError> {
+    process_blocking(reader, move |reader| {
+        crate::read::PackageMetadata::read_from(reader, archive_type)
+    })
+    .await
+}
+
+/// Reads `.conda` metadata through a bounded spool, supporting ZIP data descriptors.
+pub async fn read_conda_metadata_via_buffering(
+    reader: impl AsyncRead + Unpin,
+) -> Result<(crate::read::PackageMetadata, ExtractResult), ExtractError> {
+    process_blocking(reader, |reader| {
+        crate::read::PackageMetadata::read_conda_via_buffering(reader)
     })
     .await
 }
@@ -128,9 +155,9 @@ impl Drop for CancelOnDrop {
     }
 }
 
-fn flatten_worker_result(
-    joined: Result<Result<(), ExtractError>, tokio::task::JoinError>,
-) -> Result<(), ExtractError> {
+fn flatten_worker_result<T>(
+    joined: Result<Result<T, ExtractError>, tokio::task::JoinError>,
+) -> Result<T, ExtractError> {
     match joined {
         Ok(result) => result,
         Err(err) => {
@@ -142,7 +169,7 @@ fn flatten_worker_result(
     }
 }
 
-/// Runs a blocking extractor on a worker thread while pumping and hashing
+/// Runs a blocking reader closure on a worker thread while pumping and hashing
 /// `reader` on the async runtime.
 ///
 /// The worker reads to the end so the pump hashes the whole stream. If the
@@ -154,11 +181,15 @@ fn flatten_worker_result(
 /// worker thread finishes first.
 ///
 /// Must be called from within a tokio runtime.
-async fn extract_blocking<R: AsyncRead + Unpin>(
+pub async fn process_blocking<R, T, F>(
     reader: R,
-    destination: &Path,
-    extract: fn(Box<dyn Read + Send>, &Path) -> Result<(), ExtractError>,
-) -> Result<ExtractResult, ExtractError> {
+    process: F,
+) -> Result<(T, ExtractResult), ExtractError>
+where
+    R: AsyncRead + Unpin,
+    T: Send + 'static,
+    F: FnOnce(&mut dyn Read) -> Result<T, ExtractError> + Send + 'static,
+{
     let (sender, receiver) = tokio::sync::mpsc::channel(CHUNKS_IN_FLIGHT);
     let cancelled = Arc::new(AtomicBool::new(false));
     let cancel_guard = CancelOnDrop(cancelled.clone());
@@ -168,8 +199,14 @@ async fn extract_blocking<R: AsyncRead + Unpin>(
         position: 0,
         cancelled,
     };
-    let destination = destination.to_path_buf();
-    let mut worker = tokio::task::spawn_blocking(move || extract(Box::new(chunks), &destination));
+    let mut worker = tokio::task::spawn_blocking(move || {
+        let mut reader = chunks;
+        let result = process(&mut reader)?;
+        // Metadata readers can finish before the archive ends. Drain the rest
+        // so the pump hashes every byte, including trailing archive data.
+        std::io::copy(&mut reader, &mut std::io::sink())?;
+        Ok(result)
+    });
 
     let pump = async move {
         let mut reader = reader;
@@ -211,8 +248,8 @@ async fn extract_blocking<R: AsyncRead + Unpin>(
     let pump = std::pin::pin!(pump);
     match future::select(pump, &mut worker).await {
         Either::Left((Ok(result), worker)) => {
-            flatten_worker_result(worker.await)?;
-            Ok(result)
+            let value = flatten_worker_result(worker.await)?;
+            Ok((value, result))
         }
         Either::Left((Err(err), worker)) => {
             // The pump and its sender are gone. Stop the worker and wait for
@@ -222,8 +259,8 @@ async fn extract_blocking<R: AsyncRead + Unpin>(
             Err(ExtractError::IoError(err))
         }
         Either::Right((joined, pump)) => {
-            flatten_worker_result(joined)?;
-            pump.await.map_err(ExtractError::IoError)
+            let value = flatten_worker_result(joined)?;
+            Ok((value, pump.await.map_err(ExtractError::IoError)?))
         }
     }
 }

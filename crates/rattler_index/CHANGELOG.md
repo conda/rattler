@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.1](https://github.com/conda/rattler/compare/rattler_index-v0.34.0...rattler_index-v0.34.1) - 2026-10-27
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.34.0](https://github.com/conda/rattler/compare/rattler_index-v0.33.5...rattler_index-v0.34.0) - 2026-10-23
+
+### Changed
+
+- **BREAKING:** `write_channel_notices` and `ensure_channel_initialized` take an `opendal` 0.59 `Operator`, and `RepodataFileMetadata::last_modified` is an `opendal` 0.59 `Timestamp` ([#2979](https://github.com/conda/rattler/pull/2979))
+
+### Other
+
+- bump opendal to 0.59 ([#2979](https://github.com/conda/rattler/pull/2979))
+
+## [0.33.5](https://github.com/conda/rattler/compare/rattler_index-v0.33.4...rattler_index-v0.33.5) - 2026-10-16
+
+### Fixed
+
+- index packages with flags into legacy repodata ([#2946](https://github.com/conda/rattler/pull/2946))
+
+## [0.33.4](https://github.com/conda/rattler/compare/rattler_index-v0.33.3...rattler_index-v0.33.4) - 2026-10-13
+
+### Other
+
+- Add `BuildString` to rattler_conda_types ([#2430](https://github.com/conda/rattler/pull/2430))
+
+## [0.33.3](https://github.com/conda/rattler/compare/rattler_index-v0.33.2...rattler_index-v0.33.3) - 2026-10-09
+
+### Other
+
+- updated the following local packages: rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.33.2](https://github.com/conda/rattler/compare/rattler_index-v0.33.1...rattler_index-v0.33.2) - 2026-10-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_config, rattler_package_streaming, rattler_s3
+
+## [0.33.1](https://github.com/conda/rattler/compare/rattler_index-v0.33.0...rattler_index-v0.33.1) - 2026-10-06
+
+### Other
+
+- updated the following local packages: rattler_config, rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.33.0](https://github.com/conda/rattler/compare/rattler_index-v0.32.1...rattler_index-v0.33.0) - 2026-10-05
+
+### Added
+
+- add rattler_virtual_package_detectors ([#2863](https://github.com/conda/rattler/pull/2863))
+- *(config)* configure virtual package detectors ([#2862](https://github.com/conda/rattler/pull/2862))
+
+## [0.32.1](https://github.com/conda/rattler/compare/rattler_index-v0.32.0...rattler_index-v0.32.1) - 2026-10-05
+
+### Added
+
+- *(conda-types)* parse virtual package detector registrations ([#2859](https://github.com/conda/rattler/pull/2859))
+- emit consistent v3 repodata ([#2668](https://github.com/conda/rattler/pull/2668))
+
+### Fixed
+
+- use CMake for aws-lc-sys in Conda builds to preserve jitterentropy's required optimization flags
+
 ## [0.32.0](https://github.com/conda/rattler/compare/rattler_index-v0.31.7...rattler_index-v0.32.0) - 2026-09-29
 
 ### Added

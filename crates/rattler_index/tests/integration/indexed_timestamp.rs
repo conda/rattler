@@ -323,9 +323,7 @@ async fn forced_retry_preserves_concurrent_publication_with_cached_metadata() {
             }
         }),
     };
-    let op = Operator::new(ETagMemoryBuilder::default().with_test_hooks(hooks))
-        .unwrap()
-        .finish();
+    let op = Operator::new(ETagMemoryBuilder::default().with_test_hooks(hooks)).unwrap();
     operator.set(op.clone()).unwrap();
     op.write(&format!("noarch/{filename}"), fs::read(path).unwrap())
         .await

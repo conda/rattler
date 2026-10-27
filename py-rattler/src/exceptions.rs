@@ -2,6 +2,7 @@ use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyUserWarning};
 
 create_exception!(exceptions, InvalidVersionError, PyException);
+create_exception!(exceptions, VirtualPackageOverrideError, PyException);
 create_exception!(exceptions, InvalidVersionSpecError, PyException);
 create_exception!(exceptions, InvalidMatchSpecError, PyException);
 create_exception!(exceptions, CanonicalMatchSpecError, PyException);

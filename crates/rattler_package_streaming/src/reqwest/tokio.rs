@@ -12,17 +12,8 @@ use tokio::io::BufReader;
 use tokio_util::{either::Either, io::StreamReader};
 use tracing;
 use url::Url;
-use zip::result::ZipError;
 
 use crate::{DownloadReporter, ExtractError, ExtractResult};
-
-/// zip files may use data descriptors to signal that the decompressor needs to
-/// seek ahead in the buffer to find the compressed data length.
-/// Since we stream the package over a non seek-able HTTP connection, this
-/// condition will cause an error during decompression. In this case, we
-/// fallback to reading the whole data to a buffer before attempting
-/// decompression. Read more in <https://github.com/conda/rattler/issues/794>
-const DATA_DESCRIPTOR_ERROR_MESSAGE: &str = "The file length is not available in the local header";
 
 fn error_for_status(response: reqwest::Response) -> reqwest_middleware::Result<Response> {
     response
@@ -168,9 +159,7 @@ pub async fn extract_conda(
             Ok(result)
         }
         // https://github.com/conda/rattler/issues/794
-        Err(ExtractError::ZipError(ZipError::UnsupportedArchive(zip_error)))
-            if (zip_error.contains(DATA_DESCRIPTOR_ERROR_MESSAGE)) =>
-        {
+        Err(err) if err.is_data_descriptor_error() => {
             tracing::warn!(
                 "Failed to stream decompress conda package from '{}' due to the presence of zip data descriptors. Falling back to non streaming decompression",
                 url

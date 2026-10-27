@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use futures::future::OptionFuture;
 use rattler_conda_types::{
-    Channel, ChannelRelations, PackageName, RepodataRevisions, ShardedRepodata,
+    Channel, ChannelRelations, DetectorRegistrationMetadata, PackageName, RepodataRevisions,
+    ShardedRepodata,
 };
 use rattler_networking::LazyClient;
 use url::Url;
@@ -19,9 +20,10 @@ use crate::{
         sharded_subdir::{
             decode_zst_bytes_async, is_missing_sharded_repodata_status, parse_records,
         },
-        subdir::{PackageRecords, SubdirClient},
+        subdir::{FetchedPackage, SubdirClient},
     },
-    reporter::ResponseReporterExt,
+    reporter::{DownloadProgressGuard, ResponseReporterExt},
+    sparse::{FormatBucketSet, PackageFormatSelection},
     utils::js_fetch::JsFetcher,
 };
 
@@ -119,11 +121,12 @@ impl SubdirClient for ShardedSubdir {
     async fn fetch_package_records(
         &self,
         name: &PackageName,
+        _buckets: FormatBucketSet,
         reporter: Option<&dyn Reporter>,
-    ) -> Result<PackageRecords, GatewayError> {
+    ) -> Result<FetchedPackage, GatewayError> {
         // Find the shard that contains the package
         let Some(shard) = self.sharded_repodata.shards.get(name.as_normalized()) else {
-            return Ok(PackageRecords::default());
+            return Ok(FetchedPackage::empty());
         };
 
         // Download the shard
@@ -150,9 +153,10 @@ impl SubdirClient for ShardedSubdir {
                         .build()
                         .expect("failed to build shard request");
 
-                    let reporter = reporter
-                        .and_then(Reporter::download_reporter)
-                        .map(|r| (r, r.on_download_start(&shard_url)));
+                    let download = DownloadProgressGuard::start(
+                        reporter.and_then(Reporter::download_reporter),
+                        &shard_url,
+                    );
                     let shard_response = self
                         .client
                         .client()
@@ -162,13 +166,11 @@ impl SubdirClient for ShardedSubdir {
                         .map_err(FetchRepoDataError::from)?;
 
                     let bytes = shard_response
-                        .bytes_with_progress(reporter)
+                        .bytes_with_progress(download.reporter())
                         .await
                         .map_err(FetchRepoDataError::from)?;
 
-                    if let Some((reporter, index)) = reporter {
-                        reporter.on_download_complete(&shard_url, index);
-                    }
+                    download.finish(&shard_url);
 
                     bytes::Bytes::from(bytes)
                 }
@@ -177,7 +179,7 @@ impl SubdirClient for ShardedSubdir {
 
         let shard_bytes = decode_zst_bytes_async(shard_bytes, shard_url).await?;
 
-        // Parse the records from the shard (includes dep extraction)
+        // Parse the records from the shard
         parse_records(
             shard_bytes,
             self.channel.base_url.clone(),
@@ -186,7 +188,7 @@ impl SubdirClient for ShardedSubdir {
         .await
     }
 
-    fn package_names(&self) -> Vec<String> {
+    fn package_names(&self, _selection: PackageFormatSelection) -> Vec<String> {
         self.sharded_repodata.shards.keys().cloned().collect()
     }
 
@@ -196,5 +198,12 @@ impl SubdirClient for ShardedSubdir {
 
     fn channel_relations(&self) -> Option<&ChannelRelations> {
         self.sharded_repodata.info.channel_relations.as_ref()
+    }
+
+    fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
+        self.sharded_repodata
+            .info
+            .virtual_package_detectors
+            .as_ref()
     }
 }

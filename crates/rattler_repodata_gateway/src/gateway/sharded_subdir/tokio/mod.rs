@@ -16,15 +16,17 @@ use crate::{
     fetch::{CacheAction, FetchRepoDataError},
     gateway::{
         error::SubdirNotFoundError,
-        subdir::{PackageRecords, SubdirClient},
+        subdir::{FetchedPackage, SubdirClient},
     },
-    reporter::ResponseReporterExt,
+    reporter::{DownloadProgressGuard, ResponseReporterExt},
+    sparse::{FormatBucketSet, PackageFormatSelection},
 };
 use fs_err::tokio as tokio_fs;
 use futures::future::OptionFuture;
 use http::{HeaderValue, header::CACHE_CONTROL};
 use rattler_conda_types::{
-    Channel, ChannelRelations, PackageName, RepodataRevisions, ShardedRepodata,
+    Channel, ChannelRelations, DetectorRegistrationMetadata, PackageName, RepodataRevisions,
+    ShardedRepodata,
 };
 use rattler_networking::LazyClient;
 use simple_spawn_blocking::tokio::run_blocking_task;
@@ -114,7 +116,7 @@ impl ShardedSubdir {
             .map_err(|_e| {
                 GatewayError::Generic(format!(
                     "shard index contains invalid `shards_base_url`: {}",
-                    &sharded_repodata.info.shards_base_url
+                    sharded_repodata.info.shards_base_url
                 ))
             })?;
         let package_base_url = Url::options()
@@ -123,7 +125,7 @@ impl ShardedSubdir {
             .map_err(|_e| {
                 GatewayError::Generic(format!(
                     "shard index contains invalid `base_url`: {}",
-                    &sharded_repodata.info.base_url
+                    sharded_repodata.info.base_url
                 ))
             })?;
 
@@ -194,11 +196,12 @@ impl SubdirClient for ShardedSubdir {
     async fn fetch_package_records(
         &self,
         name: &PackageName,
+        _buckets: FormatBucketSet,
         reporter: Option<&dyn Reporter>,
-    ) -> Result<PackageRecords, GatewayError> {
+    ) -> Result<FetchedPackage, GatewayError> {
         // Find the shard that contains the package
         let Some(shard) = self.sharded_repodata.shards.get(name.as_normalized()) else {
-            return Ok(PackageRecords::default());
+            return Ok(FetchedPackage::empty());
         };
 
         // Check if we already have the shard in the cache.
@@ -243,7 +246,7 @@ impl SubdirClient for ShardedSubdir {
             // shard *index* is a different matter and stays an error either
             // way: without it nothing is known about the subdir at all.
             if self.cache_policy.missing_shards_are_empty {
-                return Ok(PackageRecords::default());
+                return Ok(FetchedPackage::empty());
             }
             return Err(GatewayError::ShardNotCached(name.as_source().to_string()));
         }
@@ -269,9 +272,10 @@ impl SubdirClient for ShardedSubdir {
                     .map(tokio::sync::Semaphore::acquire),
             )
             .await;
-            let reporter = reporter
-                .and_then(Reporter::download_reporter)
-                .map(|r| (r, r.on_download_start(&shard_url)));
+            let download = DownloadProgressGuard::start(
+                reporter.and_then(Reporter::download_reporter),
+                &shard_url,
+            );
             let shard_response = self
                 .client
                 .client()
@@ -281,13 +285,11 @@ impl SubdirClient for ShardedSubdir {
                 .map_err(FetchRepoDataError::from)?;
 
             let bytes = shard_response
-                .bytes_with_progress(reporter)
+                .bytes_with_progress(download.reporter())
                 .await
                 .map_err(FetchRepoDataError::from)?;
 
-            if let Some((reporter, index)) = reporter {
-                reporter.on_download_complete(&shard_url, index);
-            }
+            download.finish(&shard_url);
 
             bytes
         };
@@ -310,7 +312,7 @@ impl SubdirClient for ShardedSubdir {
         Ok(records)
     }
 
-    fn package_names(&self) -> Vec<String> {
+    fn package_names(&self, _selection: PackageFormatSelection) -> Vec<String> {
         self.sharded_repodata.shards.keys().cloned().collect()
     }
 
@@ -320,6 +322,13 @@ impl SubdirClient for ShardedSubdir {
 
     fn channel_relations(&self) -> Option<&ChannelRelations> {
         self.sharded_repodata.info.channel_relations.as_ref()
+    }
+
+    fn virtual_package_detectors(&self) -> Option<&DetectorRegistrationMetadata> {
+        self.sharded_repodata
+            .info
+            .virtual_package_detectors
+            .as_ref()
     }
 }
 

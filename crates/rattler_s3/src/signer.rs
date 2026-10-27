@@ -5,9 +5,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use aws_credential_types::provider::{ProvideCredentials, SharedCredentialsProvider};
 use opendal::{
-    Configurator,
+    Configurator, HttpTransporter, Operator,
     services::{S3, S3Config},
 };
+use opendal_http_transport_reqwest::ReqwestTransport;
 use reqsign_core::{ProvideCredentialChain, time::Timestamp};
 
 use crate::{S3AddressingStyle, S3CredentialSource};
@@ -34,6 +35,20 @@ impl S3CredentialSource {
             ProvideCredentialChain::new()
                 .push(AwsSdkCredentialProvider(self.credentials_provider.clone())),
         )
+    }
+
+    /// Create an `opendal` S3 operator for `bucket`, rooted at `root`, see
+    /// [`Self::opendal_builder`].
+    ///
+    /// `opendal` has no HTTP transport unless one is installed, and installing
+    /// it process-wide would take that choice away from the application, so
+    /// the operator gets its own `reqwest` transport.
+    pub fn opendal_operator(&self, bucket: &str, root: &str) -> opendal::Result<Operator> {
+        let operator = Operator::new(self.opendal_builder(bucket, root))?;
+        let context = operator
+            .context()
+            .with_http_transport(HttpTransporter::new(ReqwestTransport::default()));
+        Ok(operator.with_context(context))
     }
 }
 

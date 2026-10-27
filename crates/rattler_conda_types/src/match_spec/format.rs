@@ -268,8 +268,20 @@ fn string_matcher_is_canonical(matcher: &StringMatcher) -> bool {
     let regex = classifies_as_regex(&text);
     let glob = !regex && text.contains('*');
     match matcher {
+        StringMatcher::Any => true,
         StringMatcher::Exact(_) => !regex && !glob,
-        StringMatcher::Glob(_) => glob,
+        StringMatcher::Prefix(s) | StringMatcher::Suffix(s) => {
+            !s.is_empty() && super::matcher::is_glob_literal(s) && !regex
+        }
+        StringMatcher::Glob(_) => {
+            glob && text != "*"
+                && !text
+                    .strip_suffix('*')
+                    .is_some_and(super::matcher::is_glob_literal)
+                && !text
+                    .strip_prefix('*')
+                    .is_some_and(super::matcher::is_glob_literal)
+        }
         StringMatcher::Regex(_) => regex,
     }
 }
