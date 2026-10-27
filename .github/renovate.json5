@@ -5,11 +5,11 @@
   commitMessagePrefix: "chore(ci):",
   ignorePaths: ["**/test-data/**"],
   labels: ["dependencies"],
-  schedule: ["before 4am on Tuesday"],
-  prHourlyLimit: 2,
+  schedule: ["before 4am"],
+  prHourlyLimit: 10,
   lockFileMaintenance: {
     enabled: true,
-    schedule: ["before 4am on Tuesday"],
+    schedule: ["before 4am"],
   },
   cargo: {
     // See https://docs.renovatebot.com/configuration-options/#rangestrategy
