@@ -228,7 +228,7 @@ windows-native-keyring-store = "1"
 winver = { version = "1" }
 xxhash-rust = "0.8"
 zip = { version = "9.0.3", default-features = false }
-zstd = { version = "0.13", default-features = false }
+zstd = { version = "0.14", default-features = false }
 
 # These are the all the crates defined in the workspace. We pin all of them together because they are always updated in tandem.
 coalesced_map = { path = "crates/coalesced_map", version = "=0.1.4", default-features = false }
