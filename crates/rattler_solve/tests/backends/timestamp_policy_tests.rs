@@ -69,6 +69,8 @@ pub fn exemption_cutoffs<T: SolverImpl + Default>() {
         // Records after it fall back to the cutoff of the package.
         assert_allowed::<T>(record(None, Some(NEW)), config.clone(), false);
         assert_allowed::<T>(record(Some(OLD), Some(NEW)), config.clone(), false);
+        // The index time takes precedence over a later build time.
+        assert_allowed::<T>(record(Some(NEW), Some(CUTOFF)), config.clone(), true);
         // A record without a timestamp cannot be shown to be older than the
         // cutoff of the exemption, only the policy can allow it.
         assert_allowed::<T>(record(None, None), config, missing_allowed);

@@ -563,6 +563,11 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
+        fn test_min_age_exemption_until_combined() {
+            crate::min_age_tests::solve_min_age_exemption_until_combined::<$T>();
+        }
+
+        #[test]
         fn test_min_age_exemption_not_transitive() {
             crate::min_age_tests::solve_min_age_exemption_not_transitive::<$T>();
         }

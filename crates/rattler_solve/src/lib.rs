@@ -375,7 +375,7 @@ impl ExcludeNewer {
     /// exempt. The channel is compared by its canonical URL, so a multichannel
     /// name never matches; use the name or URL of the underlying channel.
     ///
-    /// Adding an exemption for a spec that is already exempt replaces it.
+    /// Adding an exemption for an equal spec replaces the existing one.
     pub fn with_exemption(self, spec: MatchSpec) -> Result<Self, InvalidExemptionError> {
         self.insert_exemption(spec, None)
     }
@@ -390,8 +390,13 @@ impl ExcludeNewer {
     /// than `cutoff`. Records that are not exempt are subject to the
     /// effective cutoff of their package and channel as usual.
     ///
+    /// The build timestamp is set by whoever builds the package, so a later
+    /// build with a backdated timestamp can still be exempt. Use
+    /// [`TimestampPolicy::RequireIndexedTimestamp`] to only trust the time the
+    /// channel indexed a record.
+    ///
     /// The spec has the same restrictions as for [`Self::with_exemption`].
-    /// Adding an exemption for a spec that is already exempt replaces it.
+    /// Adding an exemption for an equal spec replaces the existing one.
     pub fn with_exemption_until(
         self,
         spec: MatchSpec,
