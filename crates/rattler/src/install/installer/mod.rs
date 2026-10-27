@@ -4,6 +4,7 @@ mod indicatif;
 mod reporter;
 pub(crate) mod result_record;
 
+use rattler_package_streaming::reqwest::DownloadOptions;
 use std::{
     collections::{HashMap, HashSet},
     future::ready,
@@ -81,6 +82,7 @@ pub struct Installer {
     execute_link_scripts: bool,
     io_semaphore: Option<Arc<Semaphore>>,
     concurrent_requests_semaphore: Option<Arc<Semaphore>>,
+    download_options: Option<DownloadOptions>,
     reporter: Option<Arc<dyn Reporter>>,
     target_platform: Option<Subdir>,
     apple_code_sign_behavior: AppleCodeSignBehavior,
@@ -198,11 +200,29 @@ impl Installer {
         self
     }
 
+    /// Download large packages in parallel ranges as `options` describe,
+    /// instead of the options of the package cache.
+    #[must_use]
+    pub fn with_download_options(self, options: DownloadOptions) -> Self {
+        Self {
+            download_options: Some(options),
+            ..self
+        }
+    }
+
+    /// Download large packages in parallel ranges as `options` describe. See
+    /// [`Installer::with_download_options`].
+    pub fn set_download_options(&mut self, options: DownloadOptions) -> &mut Self {
+        self.download_options = Some(options);
+        self
+    }
+
     /// Apply the shared rattler configuration (see [`rattler_config`]) to
     /// this installer: the link options are derived from the
     /// `allow-*-links` keys, the maximum number of concurrent requests from
-    /// `concurrency.downloads`, and link-script execution from
-    /// `run-post-link-scripts`.
+    /// `concurrency.downloads`, how large packages are downloaded in parallel
+    /// ranges from `concurrency.download-part*`, and link-script execution
+    /// from `run-post-link-scripts`.
     ///
     /// Accepts a [`rattler_config::config::CommonConfig`]; a
     /// `&ConfigBase<T>` of any extension coerces into it.
@@ -219,6 +239,10 @@ impl Installer {
     pub fn set_config(&mut self, config: &rattler_config::config::CommonConfig) -> &mut Self {
         self.set_link_options(LinkOptions::from(config));
         self.set_max_concurrent_requests(config.concurrency.downloads);
+        self.set_download_options(DownloadOptions::new(
+            config.concurrency.download_part_size,
+            config.concurrency.download_parts,
+        ));
         if let Some(run_post_link_scripts) = &config.run_post_link_scripts {
             self.set_execute_link_scripts(matches!(
                 run_post_link_scripts,
@@ -684,13 +708,16 @@ impl Installer {
             .into_prefix_record(&prefix)
             .map_err(InstallerError::FailedToDetectInstalledPackages)?;
 
-        let package_cache = self.package_cache.unwrap_or_else(|| {
+        let mut package_cache = self.package_cache.unwrap_or_else(|| {
             PackageCache::new(
                 default_cache_dir()
                     .expect("failed to determine default cache directory")
                     .join(rattler_cache::PACKAGE_CACHE_DIR),
             )
         });
+        if let Some(options) = self.download_options {
+            package_cache = package_cache.with_download_options(options);
+        }
 
         // Acquire a global lock on the package cache for the entire installation.
         // This significantly reduces overhead by avoiding per-package locking.
