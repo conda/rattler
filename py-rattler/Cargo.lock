@@ -248,9 +248,9 @@ dependencies = [
 
 [[package]]
 name = "async-compression"
-version = "0.4.43"
+version = "0.4.51"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3976abdc8fe7d1133d43d304afd42abdf5bc3e1319d263d223bde07b5efc4be8"
+checksum = "9d5755640120b24961f8231e05892e4a4f7e0d04e8aeca161508c9c397946970"
 dependencies = [
  "compression-codecs",
  "compression-core",
@@ -1159,9 +1159,9 @@ dependencies = [
 
 [[package]]
 name = "compression-codecs"
-version = "0.4.38"
+version = "0.4.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce2548391e9c1929c21bf6aa2680af86fe4c1b33e6cea9ac1cfeec0bd11218cf"
+checksum = "cae36683101b2899f48bd31f8db9839437356188e3b1ff23096e73dab09ba8fe"
 dependencies = [
  "bzip2",
  "compression-core",
@@ -1173,9 +1173,9 @@ dependencies = [
 
 [[package]]
 name = "compression-core"
-version = "0.4.32"
+version = "0.4.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc14f565cf027a105f7a44ccf9e5b424348421a1d8952a8fc9d499d313107789"
+checksum = "2ebdda89edc534bf8d5dd2857562633b6495557e5846552ade994b99ed13c36a"
 
 [[package]]
 name = "configparser"
@@ -1585,7 +1585,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1732,7 +1732,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1774,12 +1774,12 @@ dependencies = [
 
 [[package]]
 name = "file_url"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "itertools 0.15.0",
  "percent-encoding",
  "thiserror 2.0.20",
- "typed-path",
+ "typed-path 0.13.0",
  "url",
 ]
 
@@ -2877,7 +2877,7 @@ version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a1886916523694cd6ea3d175f03a1e5010699a2a4cc13696d83d7bea1d80638"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3885,7 +3885,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4005,7 +4005,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.55.0"
+version = "0.55.1"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -4063,7 +4063,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.10.20"
+version = "0.10.21"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4096,7 +4096,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.57.1"
+version = "0.58.0"
 dependencies = [
  "ahash",
  "core-foundation 0.10.1",
@@ -4131,7 +4131,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "tracing",
- "typed-path",
+ "typed-path 0.13.0",
  "url",
 ]
 
@@ -4148,7 +4148,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "dirs",
  "fs-err",
@@ -4182,7 +4182,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_environment_digest"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "hex",
  "rattler_conda_types",
@@ -4191,7 +4191,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.34.0"
+version = "0.34.1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4229,7 +4229,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.34.8"
+version = "0.34.9"
 dependencies = [
  "ahash",
  "file_url",
@@ -4250,7 +4250,7 @@ dependencies = [
  "serde_yaml",
  "thiserror 2.0.20",
  "tracing",
- "typed-path",
+ "typed-path 0.13.0",
  "url",
  "xxhash-rust",
 ]
@@ -4265,7 +4265,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "configparser",
  "dirs",
@@ -4294,7 +4294,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.34.2"
+version = "0.34.3"
 dependencies = [
  "ambient-id",
  "apple-native-keyring-store",
@@ -4333,7 +4333,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.27.15"
+version = "0.27.16"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-tokio-tar",
@@ -4406,7 +4406,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.36.6"
+version = "0.37.0"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4474,7 +4474,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4493,7 +4493,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.29.5"
+version = "0.29.6"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4514,7 +4514,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_sigstore"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "astral-reqwest-middleware",
  "futures",
@@ -4536,7 +4536,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "11.2.3"
+version = "12.0.0"
 dependencies = [
  "futures",
  "hex",
@@ -4554,7 +4554,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_package_detectors"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-trait",
  "fs-err",
@@ -4584,7 +4584,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "8.1.3"
+version = "8.1.4"
 dependencies = [
  "archspec",
  "libloading",
@@ -4941,7 +4941,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4999,7 +4999,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5813,10 +5813,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6173,9 +6173,15 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "typed-path"
-version = "0.12.3"
+version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e28f89b80c87b8fb0cf04ab448d5dd0dd0ade2f8891bae878de66a75a28600e"
+checksum = "54ec2755506471f54baf5e4bb5499d8e510cc1caf271270e778a736bd2d7336c"
+
+[[package]]
+name = "typed-path"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ce898823d8cd0f028662d2f349694b1af0a5cc9be83f1d213a00d3147445e1e"
 
 [[package]]
 name = "typeid"
@@ -6520,7 +6526,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7010,7 +7016,7 @@ dependencies = [
  "memchr",
  "nix",
  "time",
- "typed-path",
+ "typed-path 0.12.4",
  "zopfli",
 ]
 
@@ -7040,27 +7046,27 @@ dependencies = [
 
 [[package]]
 name = "zstd"
-version = "0.13.3"
+version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e91ee311a569c327171651566e07972200e76fcfe2242a4fa446149a3881c08a"
+checksum = "db3ae9bf90af6e40197bef767eeefc46ad6397420fe873830bd85e5fbbfb3c70"
 dependencies = [
  "zstd-safe",
 ]
 
 [[package]]
 name = "zstd-safe"
-version = "7.2.4"
+version = "8.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f49c4d5f0abb602a93fb8736af2a4f4dd9512e36f7f570d66e65ff867ed3b9d"
+checksum = "ded520f16b29e1a9b771c722221b2b0a0398c2316d9bb3c42b458a5414d7434b"
 dependencies = [
  "zstd-sys",
 ]
 
 [[package]]
 name = "zstd-sys"
-version = "2.0.16+zstd.1.5.7"
+version = "2.1.2+zstd.1.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91e19ebc2adc8f83e43039e79776e3fda8ca919132d68a1fed6a5faca2683748"
+checksum = "481ada9c543b2323cbb7bbdbb5249177fbf0188ed959ed2c15e4b22421c84ed3"
 dependencies = [
  "cc",
  "pkg-config",

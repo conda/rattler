@@ -1,6 +1,6 @@
 [package]
 name = "rattler_environment_digest"
-version = "0.1.3"
+version = "0.1.4"
 edition.workspace = true
 authors = ["Julian Hofer <julian@prefix.dev>"]
 description = "Stable fingerprints of resolved Conda environments"
