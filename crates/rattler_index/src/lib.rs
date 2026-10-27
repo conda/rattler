@@ -51,10 +51,8 @@ pub use rattler_config::config::index::{
 };
 use rattler_digest::Sha256Hash;
 use rattler_package_streaming::{
-    ExtractResult,
-    read::PackageMetadata,
-    seek::stream_conda_content,
-    tokio::async_read::{read_conda_metadata_via_buffering, read_package_metadata},
+    ExtractResult, read::PackageMetadata, seek::stream_conda_content,
+    tokio::async_read::process_blocking,
 };
 #[cfg(feature = "s3")]
 use rattler_s3::S3CredentialSource;
@@ -391,7 +389,10 @@ async fn read_package_record(
     let (stream, metadata) = cache::PackageStream::open_with_retry(op, path, metadata)
         .await
         .map_err(std::io::Error::other)?;
-    let result = read_package_metadata(StreamReader::new(stream), archive_type).await;
+    let result = process_blocking(StreamReader::new(stream), move |reader| {
+        PackageMetadata::from_reader(reader, archive_type)
+    })
+    .await;
     match result {
         Err(err) if err.is_data_descriptor_error() => {
             tracing::warn!(
@@ -400,7 +401,10 @@ async fn read_package_record(
             let (stream, metadata) = cache::PackageStream::open_with_retry(op, path, metadata)
                 .await
                 .map_err(std::io::Error::other)?;
-            let result = read_conda_metadata_via_buffering(StreamReader::new(stream)).await;
+            let result = process_blocking(StreamReader::new(stream), |reader| {
+                PackageMetadata::from_conda_via_buffering(reader)
+            })
+            .await;
             Ok((indexed_package_record(result)?, metadata))
         }
         result => Ok((indexed_package_record(result)?, metadata)),

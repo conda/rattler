@@ -220,39 +220,31 @@ impl PackageStream {
         initial_metadata: RepodataFileMetadata,
     ) -> opendal::Result<(Self, RepodataFileMetadata)> {
         retry_on_concurrent_modification(op, path, initial_metadata, |metadata| async move {
-            Self::open(op, path, &metadata).await
+            let mut reader = op.reader_with(path);
+            if metadata.precondition_checks.is_enabled() {
+                if let Some(etag) = &metadata.etag {
+                    reader = reader.if_match(etag);
+                } else if let Some(last_modified) = metadata.last_modified {
+                    reader = reader.if_unmodified_since(last_modified);
+                }
+            }
+            let mut stream = reader.await?.into_bytes_stream(..).await?;
+            // Poll the first chunk so conditional request errors reach the retry
+            // loop before archive parsing begins.
+            let first_chunk = stream.try_next().await.map_err(|err| {
+                // Recover the OpenDAL error so the retry loop can inspect its kind.
+                err.downcast::<opendal::Error>().unwrap_or_else(|err| {
+                    opendal::Error::new(opendal::ErrorKind::Unexpected, "failed to read file")
+                        .set_source(err)
+                })
+            })?;
+            Ok(Self(
+                futures::stream::iter(first_chunk.map(Ok))
+                    .chain(stream)
+                    .boxed(),
+            ))
         })
         .await
-    }
-
-    /// Opens a stream and polls its first chunk so conditional request errors
-    /// reach the retry loop before archive parsing begins.
-    async fn open(
-        op: &Operator,
-        path: &str,
-        metadata: &RepodataFileMetadata,
-    ) -> opendal::Result<Self> {
-        let mut reader = op.reader_with(path);
-        if metadata.precondition_checks.is_enabled() {
-            if let Some(etag) = &metadata.etag {
-                reader = reader.if_match(etag);
-            } else if let Some(last_modified) = metadata.last_modified {
-                reader = reader.if_unmodified_since(last_modified);
-            }
-        }
-        let mut stream = reader.await?.into_bytes_stream(..).await?;
-        let first_chunk = stream.try_next().await.map_err(|err| {
-            // Recover the OpenDAL error so the retry loop can inspect its kind.
-            err.downcast::<opendal::Error>().unwrap_or_else(|err| {
-                opendal::Error::new(opendal::ErrorKind::Unexpected, "failed to read file")
-                    .set_source(err)
-            })
-        })?;
-        Ok(Self(
-            futures::stream::iter(first_chunk.map(Ok))
-                .chain(stream)
-                .boxed(),
-        ))
     }
 }
 

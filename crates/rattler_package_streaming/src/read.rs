@@ -61,7 +61,9 @@ impl PackageMetadata {
     pub fn from_conda_via_buffering(
         reader: impl Read,
     ) -> Result<(Self, ExtractResult), ExtractError> {
-        process_with_hashing(reader, |reader| Self::read_conda_via_buffering(reader))
+        process_with_hashing(reader, |reader| {
+            Self::from_tar(&mut crate::seek::stream_conda_info(spool(reader)?)?)
+        })
     }
 
     /// Hashes a seekable `.conda` archive and reads metadata through its central directory.
@@ -77,7 +79,7 @@ impl PackageMetadata {
 
     /// Reads metadata without hashing the archive. The caller must drain the
     /// remaining bytes when computing an archive digest.
-    pub(crate) fn read_from(
+    fn read_from(
         mut reader: impl Read,
         archive_type: CondaArchiveType,
     ) -> Result<Self, ExtractError> {
@@ -105,12 +107,6 @@ impl PackageMetadata {
                 Err(ExtractError::MissingComponent)
             }
         }
-    }
-
-    /// Reads `.conda` metadata through a bounded spool without computing hashes.
-    pub(crate) fn read_conda_via_buffering(reader: impl Read) -> Result<Self, ExtractError> {
-        let mut file = spool(reader)?;
-        Self::from_tar(&mut crate::seek::stream_conda_info(&mut file)?)
     }
 
     fn from_tar(archive: &mut tar::Archive<impl Read>) -> Result<Self, ExtractError> {

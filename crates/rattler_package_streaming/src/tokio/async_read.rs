@@ -17,7 +17,6 @@ use std::{
 #[cfg(feature = "reqwest")]
 use futures_util::StreamExt;
 use futures_util::future::{self, Either};
-use rattler_digest::{Md5, Sha256, digest::Digest};
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 use crate::{ExtractError, ExtractResult};
@@ -39,10 +38,9 @@ pub async fn extract_tar_bz2(
 ) -> Result<ExtractResult, ExtractError> {
     let destination = destination.to_path_buf();
     process_blocking(reader, move |reader| {
-        crate::read::extract_tar_bz2_without_hashing(reader, &destination)
+        crate::read::extract_tar_bz2(reader, &destination)
     })
     .await
-    .map(|(_, result)| result)
 }
 
 /// Extracts the contents of a `.conda` package archive, decompressing the
@@ -53,10 +51,9 @@ pub async fn extract_conda(
 ) -> Result<ExtractResult, ExtractError> {
     let destination = destination.to_path_buf();
     process_blocking(reader, move |reader| {
-        crate::read::extract_conda_via_streaming_without_hashing(reader, &destination)
+        crate::read::extract_conda_via_streaming(reader, &destination)
     })
     .await
-    .map(|(_, result)| result)
 }
 
 /// Extracts the contents of a `.conda` package archive by fully reading the
@@ -68,29 +65,7 @@ pub async fn extract_conda_via_buffering(
 ) -> Result<ExtractResult, ExtractError> {
     let destination = destination.to_path_buf();
     process_blocking(reader, move |reader| {
-        crate::read::extract_conda_via_buffering_without_hashing(reader, &destination)
-    })
-    .await
-    .map(|(_, result)| result)
-}
-
-/// Reads package metadata and hashes the complete async stream without extracting files.
-pub async fn read_package_metadata(
-    reader: impl AsyncRead + Unpin,
-    archive_type: rattler_conda_types::package::CondaArchiveType,
-) -> Result<(crate::read::PackageMetadata, ExtractResult), ExtractError> {
-    process_blocking(reader, move |reader| {
-        crate::read::PackageMetadata::read_from(reader, archive_type)
-    })
-    .await
-}
-
-/// Reads `.conda` metadata through a bounded spool, supporting ZIP data descriptors.
-pub async fn read_conda_metadata_via_buffering(
-    reader: impl AsyncRead + Unpin,
-) -> Result<(crate::read::PackageMetadata, ExtractResult), ExtractError> {
-    process_blocking(reader, |reader| {
-        crate::read::PackageMetadata::read_conda_via_buffering(reader)
+        crate::read::extract_conda_via_buffering(reader, &destination)
     })
     .await
 }
@@ -169,11 +144,10 @@ fn flatten_worker_result<T>(
     }
 }
 
-/// Runs a blocking reader closure on a worker thread while pumping and hashing
-/// `reader` on the async runtime.
+/// Runs a blocking reader closure while pumping `reader` through a bounded channel.
 ///
-/// The worker reads to the end so the pump hashes the whole stream. If the
-/// worker stops reading early, for example because the archive is invalid, the
+/// The worker drains unread bytes after the closure returns. If the
+/// closure fails, for example because the archive is invalid, the
 /// channel closes and the pump stops. If the reader fails, the worker is told
 /// to stop and awaited before the error is returned, so the destination is not
 /// written to after this function returns. Dropping the returned future tells
@@ -181,10 +155,7 @@ fn flatten_worker_result<T>(
 /// worker thread finishes first.
 ///
 /// Must be called from within a tokio runtime.
-pub async fn process_blocking<R, T, F>(
-    reader: R,
-    process: F,
-) -> Result<(T, ExtractResult), ExtractError>
+pub async fn process_blocking<R, T, F>(reader: R, process: F) -> Result<T, ExtractError>
 where
     R: AsyncRead + Unpin,
     T: Send + 'static,
@@ -202,26 +173,19 @@ where
     let mut worker = tokio::task::spawn_blocking(move || {
         let mut reader = chunks;
         let result = process(&mut reader)?;
-        // Metadata readers can finish before the archive ends. Drain the rest
-        // so the pump hashes every byte, including trailing archive data.
+        // Finish consuming the source even if the closure returns early.
         std::io::copy(&mut reader, &mut std::io::sink())?;
         Ok(result)
     });
 
     let pump = async move {
         let mut reader = reader;
-        let mut sha256 = Sha256::new();
-        let mut md5 = Md5::new();
-        let mut total_size = 0;
         loop {
             let mut chunk = vec![0u8; CHUNK_SIZE];
             let read = read_exact_or_eof(&mut reader, &mut chunk).await?;
             if read == 0 {
                 break;
             }
-            sha256.update(&chunk[..read]);
-            md5.update(&chunk[..read]);
-            total_size += read as u64;
             chunk.truncate(read);
             // A closed channel means the worker stopped reading.
             if sender.send(chunk).await.is_err() || read < CHUNK_SIZE {
@@ -229,17 +193,7 @@ where
             }
         }
         // Dropping the sender signals end-of-file to the worker.
-        if total_size == 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "no data was read from the package stream - the stream may have been truncated",
-            ));
-        }
-        Ok::<_, std::io::Error>(ExtractResult {
-            sha256: sha256.finalize(),
-            md5: md5.finalize(),
-            total_size,
-        })
+        Ok::<_, std::io::Error>(())
     };
 
     // The pump is polled first so a read error is reported instead of the
@@ -247,10 +201,7 @@ where
     // early.
     let pump = std::pin::pin!(pump);
     match future::select(pump, &mut worker).await {
-        Either::Left((Ok(result), worker)) => {
-            let value = flatten_worker_result(worker.await)?;
-            Ok((value, result))
-        }
+        Either::Left((Ok(()), worker)) => flatten_worker_result(worker.await),
         Either::Left((Err(err), worker)) => {
             // The pump and its sender are gone. Stop the worker and wait for
             // it so nothing touches the destination after we return.
@@ -260,7 +211,8 @@ where
         }
         Either::Right((joined, pump)) => {
             let value = flatten_worker_result(joined)?;
-            Ok((value, pump.await.map_err(ExtractError::IoError)?))
+            pump.await.map_err(ExtractError::IoError)?;
+            Ok(value)
         }
     }
 }

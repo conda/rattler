@@ -1421,94 +1421,62 @@ async fn test_sharded_repodata_is_deterministic() {
     );
 }
 
-/// Validates that the hashes and size in a package record cover the whole
-/// archive, for both package formats. The archive is streamed while it is
-/// parsed, so the parts the parser does not need must still be hashed.
-#[test]
-fn test_package_record_hashes_cover_whole_archive() {
-    for package in [
-        "clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2",
-        "clobber/clobber-fd-1-0.1.0-h4616a5c_0.conda",
-    ] {
-        let path = test_data_dir().join(package);
-        let record = rattler_index::package_record_from_archive(&path).unwrap();
-
-        assert_eq!(
-            record.sha256,
-            Some(rattler_digest::compute_file_digest::<rattler_digest::Sha256>(&path).unwrap()),
-            "{package}"
-        );
-        assert_eq!(
-            record.md5,
-            Some(rattler_digest::compute_file_digest::<rattler_digest::Md5>(&path).unwrap()),
-            "{package}"
-        );
-        assert_eq!(
-            record.size,
-            Some(fs::metadata(&path).unwrap().len()),
-            "{package}"
-        );
-    }
-}
-
-/// Rewrites a `.conda` package so that every zip entry uses a data descriptor:
-/// the entry size is written after its data instead of in its local header.
-/// Some real packages look like this, and they cannot be read as a stream.
-fn rewrite_with_data_descriptors(source: &Path, destination: &Path) {
-    let mut archive = zip::ZipArchive::new(File::open(source).unwrap()).unwrap();
-    let mut writer = zip::ZipWriter::new_stream(File::create(destination).unwrap());
-    let options =
-        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-    for index in 0..archive.len() {
-        let mut entry = archive.by_index(index).unwrap();
-        writer.start_file(entry.name().unwrap(), options).unwrap();
-        std::io::copy(&mut entry, &mut writer).unwrap();
-    }
-    writer.finish().unwrap();
-}
-
-/// Validates that `.conda` packages with zip data descriptors are still indexed
-/// correctly. They cannot be streamed, so indexing falls back to reading them
-/// through the zip index at the end of the archive.
+/// Checks whole-archive hashes through both local readers and channel indexing,
+/// including ZIP data descriptors that require the buffered fallback.
 #[tokio::test]
-async fn test_index_conda_with_data_descriptors() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let noarch = temp_dir.path().join("noarch");
-    fs::create_dir(&noarch).unwrap();
-    let package_name = "clobber-fd-1-0.1.0-h4616a5c_0.conda";
-    let package_path = noarch.join(package_name);
-    rewrite_with_data_descriptors(
-        &test_data_dir().join("clobber").join(package_name),
-        &package_path,
-    );
+async fn test_package_record_hashes_cover_whole_archive() {
+    for (package, descriptors) in [
+        ("clobber-1-0.1.0-h4616a5c_0.tar.bz2", false),
+        ("clobber-fd-1-0.1.0-h4616a5c_0.conda", false),
+        ("clobber-fd-1-0.1.0-h4616a5c_0.conda", true),
+    ] {
+        let source = test_data_dir().join("clobber").join(package);
+        let temp_dir = tempfile::tempdir().unwrap();
+        let noarch = temp_dir.path().join("noarch");
+        fs::create_dir(&noarch).unwrap();
+        let filename = source.file_name().unwrap().to_str().unwrap();
+        let path = noarch.join(filename);
+        if descriptors {
+            let mut archive = zip::ZipArchive::new(File::open(&source).unwrap()).unwrap();
+            let mut writer = zip::ZipWriter::new_stream(File::create(&path).unwrap());
+            for i in 0..archive.len() {
+                let mut entry = archive.by_index(i).unwrap();
+                writer
+                    .start_file(
+                        entry.name().unwrap(),
+                        zip::write::SimpleFileOptions::default()
+                            .compression_method(zip::CompressionMethod::Stored),
+                    )
+                    .unwrap();
+                std::io::copy(&mut entry, &mut writer).unwrap();
+            }
+            writer.finish().unwrap();
+        } else {
+            fs::copy(&source, &path).unwrap();
+        }
+        let source = path;
+        let sha256 =
+            rattler_digest::compute_file_digest::<rattler_digest::Sha256>(&source).unwrap();
+        let md5 = rattler_digest::compute_file_digest::<rattler_digest::Md5>(&source).unwrap();
+        let size = fs::metadata(&source).unwrap().len();
+        let record = rattler_index::package_record_from_archive(&source).unwrap();
+        assert_eq!(record.sha256, Some(sha256));
+        assert_eq!(record.md5, Some(md5));
+        assert_eq!(record.size, Some(size));
 
-    // Make sure the package really cannot be read as a stream.
-    let mut file = File::open(&package_path).unwrap();
-    let err = zip::read::read_zipfile_from_stream(&mut file).unwrap_err();
-    assert!(
-        err.to_string()
-            .contains("The file length is not available in the local header")
-    );
-
-    let expected_sha256 =
-        rattler_digest::compute_file_digest::<rattler_digest::Sha256>(&package_path).unwrap();
-    let expected_md5 =
-        rattler_digest::compute_file_digest::<rattler_digest::Md5>(&package_path).unwrap();
-    let expected_size = fs::metadata(&package_path).unwrap().len();
-
-    let record = rattler_index::package_record_from_archive(&package_path).unwrap();
-    assert_eq!(record.sha256, Some(expected_sha256));
-    assert_eq!(record.md5, Some(expected_md5));
-    assert_eq!(record.size, Some(expected_size));
-
-    index_fs(noarch_index_config(temp_dir.path()))
-        .await
-        .unwrap();
-
-    let repodata: Value =
-        serde_json::from_reader(File::open(noarch.join("repodata.json")).unwrap()).unwrap();
-    let entry = &repodata["packages.conda"][package_name];
-    assert_eq!(entry["sha256"], hex::encode(expected_sha256));
-    assert_eq!(entry["md5"], hex::encode(expected_md5));
-    assert_eq!(entry["size"], expected_size);
+        index_fs(noarch_index_config(temp_dir.path()))
+            .await
+            .unwrap();
+        let repodata: Value =
+            serde_json::from_reader(File::open(noarch.join("repodata.json")).unwrap()).unwrap();
+        let packages = if filename.ends_with(".conda") {
+            "packages.conda"
+        } else {
+            "packages"
+        };
+        let entry = &repodata[packages][filename];
+        assert_eq!(entry["sha256"], hex::encode(sha256));
+        assert_eq!(entry["md5"], hex::encode(md5));
+        assert_eq!(entry["size"], size);
+    }
 }
