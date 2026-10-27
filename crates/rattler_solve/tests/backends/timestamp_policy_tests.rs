@@ -52,6 +52,29 @@ pub fn missing_timestamps<T: SolverImpl + Default>() {
     }
 }
 
+pub fn exemption_cutoffs<T: SolverImpl + Default>() {
+    use TimestampPolicy::*;
+    for (policy, missing_allowed, build_allowed) in [
+        (AllowMissing, true, true),
+        (RequireTimestamp, false, true),
+        (RequireIndexedTimestamp, false, false),
+    ] {
+        let config = ExcludeNewer::from_datetime(OLD.parse().unwrap())
+            .with_timestamp_policy(policy)
+            .with_exemption_until("foo".parse().unwrap(), CUTOFF.parse().unwrap())
+            .unwrap();
+        // Records up to the cutoff of the exemption are exempt.
+        assert_allowed::<T>(record(None, Some(CUTOFF)), config.clone(), true);
+        assert_allowed::<T>(record(Some(CUTOFF), None), config.clone(), build_allowed);
+        // Records after it fall back to the cutoff of the package.
+        assert_allowed::<T>(record(None, Some(NEW)), config.clone(), false);
+        assert_allowed::<T>(record(Some(OLD), Some(NEW)), config.clone(), false);
+        // A record without a timestamp cannot be shown to be older than the
+        // cutoff of the exemption, only the policy can allow it.
+        assert_allowed::<T>(record(None, None), config, missing_allowed);
+    }
+}
+
 pub fn indexed_timestamp_cutoffs<T: SolverImpl + Default>() {
     for policy in [
         TimestampPolicy::AllowMissing,

@@ -324,6 +324,46 @@ pub fn solve_min_age_exemption_build<T: SolverImpl + Default>() {
         .run::<T>();
 }
 
+/// Test that an exemption with a cutoff does not allow builds of the exempt
+/// version that were published after the cutoff.
+pub fn solve_min_age_exemption_until<T: SolverImpl + Default>() {
+    let repo = vec![
+        PackageBuilder::new("pkg-a")
+            .version("1.0")
+            .timestamp("2020-01-15T12:00:00Z")
+            .build(),
+        PackageBuilder::new("pkg-a")
+            .version("2.0")
+            .build_string("h123456_0")
+            .timestamp("2024-06-15T12:00:00Z")
+            .build(),
+        PackageBuilder::new("pkg-a")
+            .version("2.0")
+            .build_string("h123456_1")
+            .build_number(1)
+            .timestamp("2024-06-16T12:00:00Z")
+            .build(),
+    ];
+
+    let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
+    let config = exclude_newer_duration_config(min_age)
+        .with_exemption_until(
+            "pkg-a ==2.0".parse().unwrap(),
+            "2024-06-15T12:00:00Z".parse().unwrap(),
+        )
+        .unwrap();
+
+    SolverCase::new("min_age exemption until")
+        .repository(repo)
+        .specs(["pkg-a"])
+        .exclude_newer(config)
+        // The solver would prefer build number 1, but it was published after
+        // the cutoff of the exemption
+        .expect_present([("pkg-a", "2.0", "h123456_0")])
+        .expect_absent([("pkg-a", "2.0", "h123456_1")])
+        .run::<T>();
+}
+
 /// Test that an exemption does not extend to the dependencies of the exempt
 /// package.
 pub fn solve_min_age_exemption_not_transitive<T: SolverImpl + Default>() {

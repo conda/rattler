@@ -11,7 +11,7 @@ mod priority_tier;
 #[cfg(feature = "resolvo")]
 pub mod resolvo;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::{
     Arc,
@@ -213,7 +213,10 @@ pub enum InvalidExemptionError {
 /// never excluded, regardless of their timestamp. This allows a single vetted
 /// release (for example an urgent security fix) without lowering the cutoff
 /// for every future release of that package. A broad spec such as `pkg` or
-/// `pkg >=1` exempts every matching release, including future ones.
+/// `pkg >=1` exempts every matching release, including future ones. Use
+/// [`Self::with_exemption_until`] to only exempt the matching records
+/// published up to a cutoff, such as the releases that existed when they were
+/// vetted.
 ///
 /// # Example
 ///
@@ -243,8 +246,9 @@ pub struct ExcludeNewer {
     /// Deprecated in favor of [`Self::exemptions`].
     package_cutoffs: HashMap<PackageName, Timestamp>,
 
-    /// Records matching any of these specs are never excluded.
-    exemptions: HashSet<MatchSpec>,
+    /// Records matching any of these specs are never excluded, unless the
+    /// spec has a cutoff and the record is newer than it.
+    exemptions: HashMap<MatchSpec, Option<Timestamp>>,
 
     /// Timestamp policy shared by all packages and channels.
     timestamp_policy: TimestampPolicy,
@@ -263,7 +267,7 @@ impl ExcludeNewer {
             cutoff,
             channel_cutoffs: HashMap::new(),
             package_cutoffs: HashMap::new(),
-            exemptions: HashSet::new(),
+            exemptions: HashMap::new(),
             timestamp_policy: TimestampPolicy::default(),
         }
     }
@@ -280,7 +284,7 @@ impl ExcludeNewer {
             cutoff: Self::cutoff_from_duration(duration, now),
             channel_cutoffs: HashMap::new(),
             package_cutoffs: HashMap::new(),
-            exemptions: HashSet::new(),
+            exemptions: HashMap::new(),
             timestamp_policy: TimestampPolicy::default(),
         }
     }
@@ -370,25 +374,57 @@ impl ExcludeNewer {
     /// If the spec has a channel, only records from exactly that channel are
     /// exempt. The channel is compared by its canonical URL, so a multichannel
     /// name never matches; use the name or URL of the underlying channel.
-    pub fn with_exemption(mut self, spec: MatchSpec) -> Result<Self, InvalidExemptionError> {
+    ///
+    /// Adding an exemption for a spec that is already exempt replaces it.
+    pub fn with_exemption(self, spec: MatchSpec) -> Result<Self, InvalidExemptionError> {
+        self.insert_exemption(spec, None)
+    }
+
+    /// Exempts records matching `spec` that were published up to `cutoff`
+    /// from the cutoff of the package and channel.
+    ///
+    /// Unlike [`Self::with_exemption`], a record matching `spec` that is
+    /// newer than `cutoff`, such as a later build of an exempt version, is not
+    /// exempt. A record without a timestamp, as selected by the timestamp
+    /// policy, is not exempt either, because it cannot be shown to be older
+    /// than `cutoff`. Records that are not exempt are subject to the
+    /// effective cutoff of their package and channel as usual.
+    ///
+    /// The spec has the same restrictions as for [`Self::with_exemption`].
+    /// Adding an exemption for a spec that is already exempt replaces it.
+    pub fn with_exemption_until(
+        self,
+        spec: MatchSpec,
+        cutoff: Timestamp,
+    ) -> Result<Self, InvalidExemptionError> {
+        self.insert_exemption(spec, Some(cutoff))
+    }
+
+    fn insert_exemption(
+        mut self,
+        spec: MatchSpec,
+        cutoff: Option<Timestamp>,
+    ) -> Result<Self, InvalidExemptionError> {
         if spec.name.as_exact().is_none() {
             return Err(InvalidExemptionError::NotExactName(spec.to_string()));
         }
         if spec.extras.is_some() || spec.condition.is_some() || spec.namespace.is_some() {
             return Err(InvalidExemptionError::UnsupportedField(spec.to_string()));
         }
-        self.exemptions.insert(spec);
+        self.exemptions.insert(spec, cutoff);
         Ok(self)
     }
 
-    /// Returns whether a record matches one of the exemptions.
-    fn is_exempt(&self, record: &RepoDataRecord) -> bool {
-        self.exemptions.iter().any(|spec| {
+    /// Returns whether a record with the given `timestamp`, as selected by
+    /// the timestamp policy, matches one of the exemptions.
+    fn is_exempt(&self, record: &RepoDataRecord, timestamp: Option<Timestamp>) -> bool {
+        self.exemptions.iter().any(|(spec, cutoff)| {
             // `MatchSpec::matches` ignores the channel, subdir, and file name,
             // so check them here.
             // TODO: these checks may belong in `MatchSpec::matches` itself,
             // which the solver also uses for ordinary specs.
-            spec.matches(record)
+            cutoff.is_none_or(|cutoff| timestamp.is_some_and(|timestamp| timestamp <= cutoff))
+                && spec.matches(record)
                 && spec
                     .subdir
                     .as_ref()
@@ -425,17 +461,19 @@ impl ExcludeNewer {
 
     /// Returns why a record is excluded, preserving timestamp provenance.
     pub fn exclusion_reason(&self, record: &RepoDataRecord) -> Option<TimestampExclusionReason> {
-        if self.is_exempt(record) {
-            return None;
-        }
         let package = &record.package_record;
         let timestamp = match self.timestamp_policy {
-            TimestampPolicy::RequireIndexedTimestamp => match package.indexed_timestamp {
-                Some(timestamp) => Some(timestamp),
-                None => return Some(TimestampExclusionReason::MissingIndexedTimestamp),
-            },
+            TimestampPolicy::RequireIndexedTimestamp => package.indexed_timestamp,
             _ => package.indexed_timestamp.or(package.timestamp),
-        };
+        }
+        .map(Timestamp::from);
+        if self.is_exempt(record, timestamp) {
+            return None;
+        }
+        if self.timestamp_policy == TimestampPolicy::RequireIndexedTimestamp && timestamp.is_none()
+        {
+            return Some(TimestampExclusionReason::MissingIndexedTimestamp);
+        }
         let cutoff = self.cutoff_for_package(&package.name, record.channel.as_deref());
         match timestamp {
             Some(timestamp) if timestamp > cutoff => {
