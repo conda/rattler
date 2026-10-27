@@ -494,10 +494,9 @@ pub struct CloudsmithOpts {
     #[arg(short, long, env = "CLOUDSMITH_API_URL")]
     pub url: Option<Url>,
 
-    /// If true, the uploaded package will overwrite any others with the same
-    /// attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
-    #[arg(long, env = "CLOUDSMITH_REPUBLISH")]
-    pub republish: bool,
+    /// Force overwrite existing packages
+    #[arg(long, alias = "republish", env = "CLOUDSMITH_FORCE")]
+    pub force: bool,
 }
 
 #[derive(Debug)]
@@ -507,12 +506,12 @@ pub struct CloudsmithData {
     pub repo: String,
     pub api_key: Option<String>,
     pub url: UrlWithTrailingSlash,
-    pub republish: bool,
+    pub force: ForceOverwrite,
 }
 
 impl From<CloudsmithOpts> for CloudsmithData {
     fn from(value: CloudsmithOpts) -> Self {
-        Self::new(value.owner, value.repo, value.api_key, value.url).with_republish(value.republish)
+        Self::new(value.owner, value.repo, value.api_key, value.url).with_force(value.force.into())
     }
 }
 
@@ -526,14 +525,19 @@ impl CloudsmithData {
             url: url
                 .unwrap_or_else(|| Url::parse("https://api.cloudsmith.io/v1").unwrap())
                 .into(),
-            republish: false,
+            force: ForceOverwrite(false),
         }
     }
 
     /// Set whether to overwrite existing packages.
-    pub fn with_republish(mut self, republish: bool) -> Self {
-        self.republish = republish;
+    pub fn with_force(mut self, force: ForceOverwrite) -> Self {
+        self.force = force;
         self
+    }
+
+    /// Set whether to overwrite existing packages (alias for `with_force`).
+    pub fn with_republish(self, republish: bool) -> Self {
+        self.with_force(republish.into())
     }
 }
 

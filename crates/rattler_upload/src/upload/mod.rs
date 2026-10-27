@@ -345,7 +345,10 @@ pub async fn upload_package_to_cloudsmith(
         }
 
         let pkg_response = client
-            .create_package(&upload_response.identifier, cloudsmith_data.republish)
+            .create_package(
+                &upload_response.identifier,
+                cloudsmith_data.force.is_enabled(),
+            )
             .await?;
         info!(
             "Package created: slug_perm={}, slug={}",
@@ -822,7 +825,7 @@ mod test {
             Some("test-api-key".to_string()),
             Some(base_url),
         )
-        .with_republish(true);
+        .with_force(true.into());
 
         let result = super::upload_package_to_cloudsmith(
             &storage,
@@ -854,5 +857,42 @@ mod test {
             result.unwrap_err(),
             super::cloudsmith::CloudsmithError::MissingApiKey
         ),);
+    }
+    #[test]
+    fn test_cloudsmith_opts_force_and_republish_alias() {
+        use crate::upload::opt::CloudsmithOpts;
+        use clap::Parser;
+
+        let opts_force = CloudsmithOpts::try_parse_from([
+            "cloudsmith",
+            "--owner",
+            "test-owner",
+            "--repo",
+            "test-repo",
+            "--force",
+        ])
+        .unwrap();
+        assert!(opts_force.force);
+
+        let opts_alias = CloudsmithOpts::try_parse_from([
+            "cloudsmith",
+            "--owner",
+            "test-owner",
+            "--repo",
+            "test-repo",
+            "--republish",
+        ])
+        .unwrap();
+        assert!(opts_alias.force);
+
+        let opts_default = CloudsmithOpts::try_parse_from([
+            "cloudsmith",
+            "--owner",
+            "test-owner",
+            "--repo",
+            "test-repo",
+        ])
+        .unwrap();
+        assert!(!opts_default.force);
     }
 }
