@@ -17,6 +17,12 @@ use zip::read::{ZipArchive, ZipFile, read_zipfile_from_stream};
 /// that do not support timestamps before 1980.
 const SAFE_MTIME_FLOOR: u64 = 315_532_800;
 
+/// The message of the [`zip::result::ZipError::UnsupportedArchive`] error
+/// raised when a zip entry uses a data descriptor, which cannot be read while
+/// streaming.
+pub(crate) const DATA_DESCRIPTOR_ERROR_MESSAGE: &str =
+    "The file length is not available in the local header";
+
 /// Returns the `.tar.bz2` as a decompressed `tar::Archive`. The `tar::Archive` can be used to
 /// extract the files from it, or perform introspection.
 pub fn stream_tar_bz2(reader: impl Read) -> tar::Archive<impl Read + Sized> {

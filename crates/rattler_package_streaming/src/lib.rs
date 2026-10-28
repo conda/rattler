@@ -4,6 +4,7 @@
 
 use simple_spawn_blocking::Cancelled;
 use std::path::PathBuf;
+use tar_framing::FrameErrorInner;
 use zip::result::ZipError;
 
 use rattler_digest::{Md5Hash, Sha256Hash};
@@ -91,6 +92,9 @@ pub enum ExtractError {
 
     #[error("could not parse archive member {0}: {1}")]
     ArchiveMemberParseError(PathBuf, #[source] std::io::Error),
+
+    #[error("invalid tar archive: {0}")]
+    TarDecodeError(#[source] tar_codec::DecodeError),
 }
 
 impl From<ZipError> for ExtractError {
@@ -98,6 +102,33 @@ impl From<ZipError> for ExtractError {
         match value {
             ZipError::Io(io) => Self::IoError(io),
             e => Self::ZipError(e),
+        }
+    }
+}
+
+impl From<tar_codec::DecodeError> for ExtractError {
+    fn from(err: tar_codec::DecodeError) -> Self {
+        match err {
+            tar_codec::DecodeError::Framing(frame) => {
+                // A stream that ends early is reported like any other read
+                // failure so that `should_retry` treats it as transient.
+                if matches!(
+                    frame.inner,
+                    FrameErrorInner::IncompleteBlock { .. }
+                        | FrameErrorInner::TruncatedPayload { .. }
+                ) {
+                    return Self::IoError(std::io::Error::new(
+                        std::io::ErrorKind::UnexpectedEof,
+                        frame,
+                    ));
+                }
+                match frame.inner {
+                    // The reader itself failed; surface its error unchanged.
+                    FrameErrorInner::Io { source } => Self::IoError(source),
+                    _ => Self::TarDecodeError(tar_codec::DecodeError::Framing(frame)),
+                }
+            }
+            err => Self::TarDecodeError(err),
         }
     }
 }

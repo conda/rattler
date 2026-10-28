@@ -14,8 +14,6 @@ use std::{
     },
 };
 
-#[cfg(feature = "reqwest")]
-use futures_util::StreamExt;
 use futures_util::future::{self, Either};
 use rattler_digest::{Md5, Sha256, digest::Digest};
 use tokio::io::{AsyncRead, AsyncReadExt};
@@ -230,23 +228,23 @@ async fn extract_blocking<R: AsyncRead + Unpin>(
 
 /// Async equivalent of [`crate::seek::get_file_from_archive`].
 ///
-/// Iterates entries of a tar archive, returning the contents of the first
-/// entry whose path matches `file_name`. Because the reader is streaming,
-/// only the bytes up to (and including) the target entry are consumed.
+/// Iterates the entries of a tar stream, returning the contents of the first
+/// entry whose path matches `file_name`. Because the reader is streaming, only
+/// the bytes up to (and including) the target entry are consumed.
 #[cfg(feature = "reqwest")]
-pub(crate) async fn get_file_from_tar_archive<R: tokio::io::AsyncRead + Unpin>(
-    archive: &mut tokio_tar::Archive<R>,
+pub(crate) async fn get_file_from_tar_archive<R: AsyncRead + Unpin>(
+    reader: R,
     file_name: &Path,
 ) -> Result<Option<Vec<u8>>, ExtractError> {
+    use tar_codec::Archive as _;
+
     let target = crate::archive::normalize(file_name)?;
-    let mut entries = archive.entries().map_err(ExtractError::IoError)?;
-    while let Some(entry) = entries.next().await {
-        let mut entry = entry.map_err(ExtractError::IoError)?;
-        let path = entry.path().map_err(ExtractError::IoError)?;
+    let mut archive = super::shared::open_tar(reader);
+    while let Some(mut member) = archive.next_member().await? {
         // Normalized comparison, matching the sparse path in `crate::archive`.
-        if crate::archive::normalize(&path)? == target {
-            drop(path);
-            return crate::archive::read_raw_entry_contents(&mut entry)
+        let path = crate::archive::normalize(Path::new(&member.metadata().path))?.into_owned();
+        if path == target {
+            return super::shared::read_member(&mut member, &path)
                 .await
                 .map(Some);
         }

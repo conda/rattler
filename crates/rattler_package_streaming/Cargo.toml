@@ -48,7 +48,8 @@ astral_async_zip = { workspace = true, features = [
   "tokio",
   "tokio-fs",
 ] }
-astral-tokio-tar = { workspace = true }
+tar-codec = { workspace = true }
+tar-framing = { workspace = true }
 bytes = { workspace = true }
 async-compression = { workspace = true }
 zstd = { workspace = true, default-features = false }

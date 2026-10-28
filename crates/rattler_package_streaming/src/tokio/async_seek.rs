@@ -3,67 +3,35 @@
 
 use std::path::Path;
 
-use async_zip::base::read::seek::ZipFileReader;
-use tokio::io::{AsyncRead, AsyncSeek};
-use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
+use tokio::io::{AsyncRead, AsyncSeek, AsyncSeekExt};
+use zip::result::ZipError;
 
 use crate::ExtractError;
+use crate::read::DATA_DESCRIPTOR_ERROR_MESSAGE;
 
-use super::shared::{DEFAULT_BUF_SIZE, extract_tar_zst_entry};
-
-/// Extracts the contents of a `.conda` package archive using the seek-based API.
-/// This is more efficient than streaming when the entire file is available (e.g., from disk or memory).
+/// Extracts the contents of a `.conda` package archive from a seekable reader.
+///
+/// The archive is extracted while it is read, on the same code path as
+/// [`super::async_read::extract_conda`]. Archives that use zip data
+/// descriptors cannot be extracted that way; the reader is then rewound and
+/// the archive is buffered before extraction.
 ///
 /// This function only performs extraction and does NOT compute hashes or track size.
 /// Use this when you've already computed hashes separately or don't need them.
 pub async fn extract_conda(
-    reader: impl AsyncRead + AsyncSeek + Send + Unpin + 'static,
+    mut reader: impl AsyncRead + AsyncSeek + Send + Unpin + 'static,
     destination: &Path,
 ) -> Result<(), ExtractError> {
-    // Ensure the destination directory exists
-    tokio::fs::create_dir_all(destination)
-        .await
-        .map_err(ExtractError::CouldNotCreateDestination)?;
-
-    // Clone destination for the async block
-    let destination = destination.to_owned();
-
-    // Convert to futures traits for async_zip (which uses futures traits)
-    let mut compat_reader = reader.compat();
-    let mut buf_reader =
-        futures::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, &mut compat_reader);
-
-    // Create a ZIP reader using the seek API
-    let mut zip_reader = ZipFileReader::new(&mut buf_reader)
-        .await
-        .map_err(|e| ExtractError::IoError(std::io::Error::other(e)))?;
-
-    // Process each ZIP entry
-    let num_entries = zip_reader.file().entries().len();
-    for index in 0..num_entries {
-        let entry = zip_reader.file().entries().get(index).ok_or_else(|| {
-            ExtractError::IoError(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "entry not found",
-            ))
-        })?;
-
-        let filename = entry.filename().as_str().map_err(|e| {
-            ExtractError::IoError(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
-        })?;
-
-        // Only extract .tar.zst files
-        if filename.ends_with(".tar.zst") {
-            let entry_reader = zip_reader
-                .reader_with_entry(index)
+    match super::async_read::extract_conda(&mut reader, destination).await {
+        Ok(_) => Ok(()),
+        Err(ExtractError::ZipError(ZipError::UnsupportedArchive(message)))
+            if message.contains(DATA_DESCRIPTOR_ERROR_MESSAGE) =>
+        {
+            reader.rewind().await.map_err(ExtractError::IoError)?;
+            super::async_read::extract_conda_via_buffering(reader, destination)
                 .await
-                .map_err(|e| ExtractError::IoError(std::io::Error::other(e)))?;
-
-            // Convert from futures traits to tokio traits
-            let mut compat_entry = entry_reader.compat();
-            extract_tar_zst_entry(&mut compat_entry, &destination).await?;
+                .map(|_| ())
         }
+        Err(err) => Err(err),
     }
-
-    Ok(())
 }

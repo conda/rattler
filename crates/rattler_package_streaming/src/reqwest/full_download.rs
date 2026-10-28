@@ -55,8 +55,7 @@ pub async fn fetch_file_from_remote_full_download(
         CondaArchiveType::TarBz2 => {
             let buf_reader = tokio::io::BufReader::new(stream_reader);
             let decoder = BzDecoder::new(buf_reader);
-            let mut archive = tokio_tar::Archive::new(decoder);
-            get_file_from_tar_archive(&mut archive, target_path).await?
+            get_file_from_tar_archive(decoder, target_path).await?
         }
         CondaArchiveType::Conda => {
             // async_zip uses futures IO traits, so bridge tokio → futures
@@ -81,8 +80,7 @@ pub async fn fetch_file_from_remote_full_download(
                     let compat_entry = entry.reader_mut().compat();
                     let buf_entry = tokio::io::BufReader::new(compat_entry);
                     let decoder = ZstdDecoder::new(buf_entry);
-                    let mut archive = tokio_tar::Archive::new(decoder);
-                    found = get_file_from_tar_archive(&mut archive, target_path).await?;
+                    found = get_file_from_tar_archive(decoder, target_path).await?;
                     break;
                 }
 

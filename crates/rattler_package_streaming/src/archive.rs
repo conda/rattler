@@ -66,6 +66,11 @@ use tracing::debug;
 use url::Url;
 
 use crate::ExtractError;
+use crate::tokio::shared::describe_link as describe_link_target;
+
+mod cursor;
+
+use cursor::TarCursor;
 
 /// Bytes fetched from the end of a remote archive on open: enough for the
 /// ZIP central directory, with the surplus acting as a cache that often
@@ -77,9 +82,6 @@ const STREAM_BUF_SIZE: usize = 128 * 1024;
 
 /// Signature of a ZIP local file header (`PK\x03\x04`).
 const LOCAL_HEADER_MAGIC: [u8; 4] = [0x50, 0x4b, 0x03, 0x04];
-
-/// Cap for upfront buffer allocations based on (untrusted) tar header sizes.
-const MAX_PREALLOC: u64 = 4 * 1024 * 1024;
 
 /// The two sections of a conda package.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -232,7 +234,6 @@ pub struct PackageArchive {
 
 /// A boxed reader used for the section decompression pipelines.
 type DynReader = Box<dyn AsyncRead + Send + Unpin>;
-type RawSectionEntry = tokio_tar::Entry<tokio_tar::Archive<DynReader>>;
 
 /// The kind of an entry in a package archive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -262,8 +263,14 @@ impl ArchiveEntryKind {
 /// The underlying tar implementation is intentionally hidden so it can be
 /// changed without affecting callers.
 pub struct SectionEntry {
-    inner: RawSectionEntry,
+    cursor: Arc<tokio::sync::Mutex<TarCursor>>,
+    /// Identifies the entry within its stream. The body can only be read
+    /// while this is the current entry of the stream.
+    generation: u64,
     path: PathBuf,
+    kind: ArchiveEntryKind,
+    size: u64,
+    link_target: Option<PathBuf>,
 }
 
 impl SectionEntry {
@@ -274,38 +281,34 @@ impl SectionEntry {
 
     /// Returns the entry kind.
     pub fn kind(&self) -> ArchiveEntryKind {
-        let kind = self.inner.header().entry_type();
-        if kind.is_file() {
-            ArchiveEntryKind::File
-        } else if kind.is_dir() {
-            ArchiveEntryKind::Directory
-        } else if kind.is_symlink() {
-            ArchiveEntryKind::Symlink
-        } else if kind.is_hard_link() {
-            ArchiveEntryKind::Hardlink
-        } else {
-            ArchiveEntryKind::Other
-        }
+        self.kind
     }
 
     /// Returns the declared entry size.
     pub fn size(&self) -> Result<u64, ExtractError> {
-        Ok(self.inner.header().size()?)
+        Ok(self.size)
     }
 
     /// Returns the raw link target for a symbolic or hard link.
     pub fn link_target(&self) -> Result<Option<PathBuf>, ExtractError> {
-        Ok(self.inner.link_name()?.map(std::borrow::Cow::into_owned))
+        Ok(self.link_target.clone())
     }
 
     /// Reads the complete entry body.
     ///
-    /// Links are surfaced by the iterator but are never followed.
+    /// Links are surfaced by the iterator but are never followed. The body is
+    /// only available until the stream advances to the next entry.
     pub async fn read(&mut self) -> Result<Vec<u8>, ExtractError> {
         if let Some(link) = describe_link(self)? {
             return Err(ExtractError::LinksNotFollowed(vec![link]));
         }
-        read_raw_entry_contents(&mut self.inner).await
+        let mut cursor = self.cursor.lock().await;
+        if cursor.generation() != self.generation {
+            return Err(ExtractError::IoError(std::io::Error::other(
+                "the entry cannot be read because the stream has advanced past it",
+            )));
+        }
+        cursor.read().await
     }
 }
 
@@ -813,7 +816,7 @@ impl PackageArchive {
 
 /// A streaming view over the tar entries of one package section.
 pub struct SectionStream {
-    entries: tokio_tar::Entries<DynReader>,
+    cursor: Arc<tokio::sync::Mutex<TarCursor>>,
     /// For `.tar.bz2` archives (one flat tar), entries are filtered to the
     /// requested section. `None` yields every entry.
     filter: Option<Section>,
@@ -821,29 +824,31 @@ pub struct SectionStream {
 
 impl SectionStream {
     fn new(reader: DynReader, filter: Option<Section>) -> Self {
-        let mut archive = tokio_tar::Archive::new(reader);
-        let entries = archive
-            .entries()
-            .expect("entries() cannot fail on a fresh archive");
-        Self { entries, filter }
+        Self {
+            cursor: Arc::new(tokio::sync::Mutex::new(TarCursor::new(reader))),
+            filter,
+        }
     }
 
     /// Advances to the next tar entry of the section, or `None` at the end of
     /// the section.
     pub async fn next_entry(&mut self) -> Result<Option<SectionEntry>, ExtractError> {
-        use futures_util::StreamExt;
-        while let Some(entry) = self.entries.next().await {
-            let entry = entry?;
-            let path = {
-                let path = entry.path()?;
-                normalize(&path)?.into_owned()
-            };
+        let mut cursor = self.cursor.lock().await;
+        while let Some(member) = cursor.next().await? {
+            let path = normalize(Path::new(&member.path))?.into_owned();
             if let Some(section) = self.filter
                 && Section::containing(&path) != section
             {
                 continue;
             }
-            return Ok(Some(SectionEntry { inner: entry, path }));
+            return Ok(Some(SectionEntry {
+                cursor: Arc::clone(&self.cursor),
+                generation: cursor.generation(),
+                path,
+                kind: member.kind,
+                size: member.size,
+                link_target: member.link_target.map(PathBuf::from),
+            }));
         }
         Ok(None)
     }
@@ -940,35 +945,7 @@ fn describe_link(entry: &SectionEntry) -> Result<Option<String>, ExtractError> {
         .link_target()?
         .map(|target| target.display().to_string())
         .unwrap_or_default();
-    Ok(Some(format!(
-        "'{}' (links to '{target}')",
-        entry.path().display()
-    )))
-}
-
-/// Reads the contents of a raw tar entry while capping the upfront allocation
-/// derived from its untrusted header.
-pub(crate) async fn read_raw_entry_contents<R: AsyncRead + Unpin>(
-    entry: &mut tokio_tar::Entry<R>,
-) -> Result<Vec<u8>, ExtractError> {
-    let kind = entry.header().entry_type();
-    if kind.is_symlink() || kind.is_hard_link() {
-        let path = normalize(&entry.path()?)?.into_owned();
-        let target = entry
-            .link_name()?
-            .map(std::borrow::Cow::into_owned)
-            .unwrap_or_default();
-        return Err(ExtractError::LinksNotFollowed(vec![format!(
-            "'{}' (links to '{}')",
-            path.display(),
-            target.display()
-        )]));
-    }
-
-    let size = entry.header().size()?;
-    let mut buf = Vec::with_capacity(size.min(MAX_PREALLOC) as usize);
-    entry.read_to_end(&mut buf).await?;
-    Ok(buf)
+    Ok(Some(describe_link_target(entry.path(), &target)))
 }
 
 /// Parses the raw bytes of a typed [`PackageFile`].
