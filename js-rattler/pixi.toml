@@ -23,7 +23,7 @@ test = { cmd="npm run test", depends-on = ["build","build-types"] }
 test-debug = { cmd="npm run test:debug", depends-on = ["build-debug", "build-types"] }
 
 [dependencies]
-nodejs = ">=25.7.0,<25.8"
+nodejs = ">=25.9,<25.10"
 rust = ">=1.98.1,<1.99"
 rust-std-wasm32-unknown-unknown = ">=1.94.0,<2"
 wasm-pack = ">=0.14.0,<0.15"
