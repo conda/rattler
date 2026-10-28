@@ -1656,7 +1656,7 @@ mod tests {
             (b" with spaces \n", " with spaces "),
             (b"two\nlines", "two\nlines"),
         ];
-        for (input, expected) in cases {
+        for &(input, expected) in cases {
             let mut args = stdin_args(|a| a.token_stdin = true);
             args.read_stdin_secret(input).unwrap();
             assert_eq!(args.token.as_deref(), Some(expected));
