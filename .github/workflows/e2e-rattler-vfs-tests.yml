@@ -59,7 +59,7 @@ jobs:
       # ~/Library/Caches on macOS, ~/AppData/Local on Windows. Only the
       # path for the current OS exists; actions/cache ignores the others.
       - name: Cache conda packages
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cache/rattler/cache/pkgs
