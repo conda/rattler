@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ExcludeNewerExemption","ExcludeNewerExemptionField"],"struct":["ExcludeNewerConfig"]};
