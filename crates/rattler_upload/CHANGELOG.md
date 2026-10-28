@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0](https://github.com/conda/rattler/compare/rattler_upload-v0.14.1...rattler_upload-v0.15.0) - 2026-10-28
+
+### Added
+
+- *(upload)* support `--force` (republish) in cloudsmith upload ([#2461](https://github.com/conda/rattler/pull/2461)) ([#2984](https://github.com/conda/rattler/pull/2984))
+
 ## [0.14.1](https://github.com/conda/rattler/compare/rattler_upload-v0.14.0...rattler_upload-v0.14.1) - 2026-10-27
 
 ### Other
