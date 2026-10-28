@@ -198,7 +198,15 @@ async fn drive(mut archive: TarArchive<DynReader>, mut requests: mpsc::Unbounded
                     } else if let Some(result) = unread.take() {
                         result
                     } else {
-                        read_member(&mut member, &path).await
+                        let result = read_member(&mut member, &path).await;
+                        // A stream error must not let the next request look
+                        // like a clean end of the archive.
+                        if let Err(err) = &result
+                            && !matches!(err, ExtractError::LinksNotFollowed(_))
+                        {
+                            failed = true;
+                        }
+                        result
                     };
                     if let Err(unsent) = reply.send(result) {
                         unread = Some(unsent);
@@ -243,7 +251,7 @@ mod tests {
     use super::super::{ArchiveEntryKind, SectionStream};
     use crate::ExtractError;
 
-    /// Returns `Pending` on every other poll so futures can be dropped midway.
+    /// Returns `Pending` before every read so futures can be dropped midway.
     struct Stuttering {
         data: Vec<u8>,
         position: usize,
@@ -262,7 +270,11 @@ mod tests {
                 return Poll::Pending;
             }
             self.stall = true;
-            let len = buf.remaining().min(self.data.len() - self.position);
+            // One block per read, so every member needs reads of its own.
+            let len = buf
+                .remaining()
+                .min(512)
+                .min(self.data.len() - self.position);
             buf.put_slice(&self.data[self.position..self.position + len]);
             self.position += len;
             Poll::Ready(Ok(()))
@@ -286,7 +298,7 @@ mod tests {
             Box::new(Stuttering {
                 data,
                 position: 0,
-                stall: false,
+                stall: true,
             }),
             None,
         )
