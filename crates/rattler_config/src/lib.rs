@@ -674,6 +674,16 @@ mod tests {
             ExcludeNewerExemption::Version("1.10".to_string())
         );
 
+        // Exemptions cannot be added to a bare cutoff key by key.
+        config.set("exclude-newer", Some("7d".to_string())).unwrap();
+        config
+            .set("exclude-newer.exemptions.ruff", Some("*".to_string()))
+            .unwrap_err();
+        assert_eq!(
+            config.exclude_newer,
+            Some(ExcludeNewerConfig::from_cutoff("7d"))
+        );
+
         config.set("exclude-newer", None).unwrap();
         assert_eq!(config.exclude_newer, None);
     }

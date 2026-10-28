@@ -35,6 +35,10 @@ use serde::{
 /// `exclude-newer = 2026-10-12`, is rejected with a misleading error such as
 /// ``missing field `cutoff` ``, because the `toml` crate passes dates to a
 /// visitor as a map.
+///
+/// Editing a key inside the table, e.g. `exclude-newer.exemptions.ruff`,
+/// requires the table form. To add exemptions to a bare cutoff, set the whole
+/// value, e.g. `{"cutoff": "7d", "exemptions": {"ruff": "*"}}`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExcludeNewerConfig {
     /// Packages uploaded after this cutoff are excluded, e.g. `7d`.
