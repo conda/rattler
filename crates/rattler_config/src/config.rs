@@ -22,8 +22,9 @@ use url::Url;
 
 use crate::config::s3::S3OptionsMap;
 use crate::config::{
-    build::BuildConfig, concurrency::ConcurrencyConfig, index::IndexConfig, proxy::ProxyConfig,
-    repodata_config::RepodataConfig, run_post_link_scripts::RunPostLinkScripts,
+    build::BuildConfig, concurrency::ConcurrencyConfig, exclude_newer::ExcludeNewerConfig,
+    index::IndexConfig, proxy::ProxyConfig, repodata_config::RepodataConfig,
+    run_post_link_scripts::RunPostLinkScripts,
     virtual_package_detectors::VirtualPackageDetectorsConfig,
 };
 use crate::locations::{ConfigLayer, ConfigLocation};
@@ -31,6 +32,7 @@ use crate::locations::{ConfigLayer, ConfigLocation};
 pub mod build;
 pub mod channel_config;
 pub mod concurrency;
+pub mod exclude_newer;
 pub mod index;
 pub mod proxy;
 pub mod repodata_config;
@@ -146,6 +148,13 @@ pub struct CommonConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_channels: Option<Vec<NamedChannelOrUrl>>,
 
+    /// The `exclude-newer` configuration to start from when nothing more
+    /// specific is configured, e.g. for a new workspace or a one-off
+    /// environment. Each tool decides where it applies.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exclude_newer: Option<ExcludeNewerConfig>,
+
     /// Path to the file containing the authentication token.
     #[serde(default)]
     #[serde(alias = "authentication_override_file")] // BREAK: remove to stop supporting snake_case alias
@@ -251,6 +260,7 @@ impl Default for CommonConfig {
     fn default() -> Self {
         Self {
             default_channels: None,
+            exclude_newer: None,
             authentication_override_file: None,
             tls_no_verify: None,
             tls_root_certs: None,
@@ -295,6 +305,11 @@ impl Config for CommonConfig {
                 .default_channels
                 .as_ref()
                 .or(self.default_channels.as_ref())
+                .cloned(),
+            exclude_newer: other
+                .exclude_newer
+                .as_ref()
+                .or(self.exclude_newer.as_ref())
                 .cloned(),
             authentication_override_file: other
                 .authentication_override_file
@@ -344,6 +359,7 @@ impl Config for CommonConfig {
     fn keys(&self) -> Vec<String> {
         let mut keys = vec![
             "default-channels".to_string(),
+            "exclude-newer".to_string(),
             "authentication-override-file".to_string(),
             "tls-no-verify".to_string(),
             "tls-root-certs".to_string(),
