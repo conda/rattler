@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CONVERSION_VERSION"],"enum":["WheelError"],"fn":["extract_wheel"],"struct":["WheelJson"]};

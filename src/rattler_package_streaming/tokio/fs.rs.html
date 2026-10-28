@@ -1,19 +1,19 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/rattler_package_streaming/src/tokio/fs.rs`."><title>fs.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-1ed95124.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="rattler_package_streaming" data-themes="" data-resource-suffix="" data-rustdoc-version="1.98.1 (48a229cea 2026-09-01)" data-channel="1.98.1" data-search-js="search-9944d736.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><meta name="robots" content="noindex">
 
-</head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">rattler_package_streaming/tokio/</div>fs.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-2"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Functions that enable extracting or streaming a Conda package from local
+</head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">rattler_package_streaming/tokio/</div>fs.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Functions that enable extracting or streaming a Conda package from local
 <a href=#2 id=2 data-nosnippet>2</a>//! files in an async context. Extraction runs on a blocking worker thread
 <a href=#3 id=3 data-nosnippet>3</a>//! with plain file I/O, which is the fastest path for a file that is already
 <a href=#4 id=4 data-nosnippet>4</a>//! on disk.
 <a href=#5 id=5 data-nosnippet>5</a>
 <a href=#6 id=6 data-nosnippet>6</a></span><span class="kw">use crate</span>::{ExtractError, ExtractResult};
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>rattler_conda_types::package::CondaArchiveType;
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>rattler_conda_types::{PackageRecord, package::CondaArchiveType};
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>std::path::Path;
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a><span class="doccomment">/// Runs a blocking extractor on a worker thread.
 <a href=#11 id=11 data-nosnippet>11</a></span><span class="kw">async fn </span>spawn_extract(
 <a href=#12 id=12 data-nosnippet>12</a>    archive: <span class="kw-2">&amp;</span>Path,
 <a href=#13 id=13 data-nosnippet>13</a>    destination: <span class="kw-2">&amp;</span>Path,
-<a href=#14 id=14 data-nosnippet>14</a>    extract: <span class="kw">fn</span>(<span class="kw-2">&amp;</span>Path, <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;ExtractResult, ExtractError&gt;,
+<a href=#14 id=14 data-nosnippet>14</a>    extract: <span class="kw">impl </span>FnOnce(<span class="kw-2">&amp;</span>Path, <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;ExtractResult, ExtractError&gt; + Send + <span class="lifetime">'static</span>,
 <a href=#15 id=15 data-nosnippet>15</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ExtractResult, ExtractError&gt; {
 <a href=#16 id=16 data-nosnippet>16</a>    <span class="kw">let </span>archive = archive.to_owned();
 <a href=#17 id=17 data-nosnippet>17</a>    <span class="kw">let </span>destination = destination.to_owned();
@@ -70,25 +70,38 @@
 <a href=#68 id=68 data-nosnippet>68</a>    spawn_extract(archive, destination, <span class="kw">crate</span>::fs::extract_conda).<span class="kw">await
 <a href=#69 id=69 data-nosnippet>69</a></span>}
 <a href=#70 id=70 data-nosnippet>70</a>
-<a href=#71 id=71 data-nosnippet>71</a><span class="doccomment">/// Extracts the contents a package archive at the specified path to a directory. The type of
-<a href=#72 id=72 data-nosnippet>72</a>/// package is determined based on the file extension of the archive path.
-<a href=#73 id=73 data-nosnippet>73</a>///
-<a href=#74 id=74 data-nosnippet>74</a>/// ```rust,no_run
-<a href=#75 id=75 data-nosnippet>75</a>/// # #[tokio::main]
-<a href=#76 id=76 data-nosnippet>76</a>/// # async fn main() {
-<a href=#77 id=77 data-nosnippet>77</a>/// # use std::path::Path;
-<a href=#78 id=78 data-nosnippet>78</a>/// use rattler_package_streaming::tokio::fs::extract;
-<a href=#79 id=79 data-nosnippet>79</a>/// let _ = extract(
-<a href=#80 id=80 data-nosnippet>80</a>///     Path::new("conda-forge/win-64/python-3.11.0-hcf16a7b_0_cpython.conda"),
-<a href=#81 id=81 data-nosnippet>81</a>///     Path::new("/tmp"))
-<a href=#82 id=82 data-nosnippet>82</a>///     .await
-<a href=#83 id=83 data-nosnippet>83</a>///     .unwrap();
-<a href=#84 id=84 data-nosnippet>84</a>/// # }
-<a href=#85 id=85 data-nosnippet>85</a>/// ```
-<a href=#86 id=86 data-nosnippet>86</a></span><span class="kw">pub async fn </span>extract(archive: <span class="kw-2">&amp;</span>Path, destination: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;ExtractResult, ExtractError&gt; {
-<a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">match </span>CondaArchiveType::try_from(archive).ok_or(ExtractError::UnsupportedArchiveType)<span class="question-mark">? </span>{
-<a href=#88 id=88 data-nosnippet>88</a>        CondaArchiveType::TarBz2 =&gt; extract_tar_bz2(archive, destination).<span class="kw">await</span>,
-<a href=#89 id=89 data-nosnippet>89</a>        CondaArchiveType::Conda =&gt; extract_conda(archive, destination).<span class="kw">await</span>,
-<a href=#90 id=90 data-nosnippet>90</a>    }
-<a href=#91 id=91 data-nosnippet>91</a>}
+<a href=#71 id=71 data-nosnippet>71</a><span class="doccomment">/// Extracts a wheel into the [`crate::wheel`] conda layout on a blocking worker.
+<a href=#72 id=72 data-nosnippet>72</a></span><span class="kw">pub async fn </span>extract_wheel(
+<a href=#73 id=73 data-nosnippet>73</a>    archive: <span class="kw-2">&amp;</span>Path,
+<a href=#74 id=74 data-nosnippet>74</a>    destination: <span class="kw-2">&amp;</span>Path,
+<a href=#75 id=75 data-nosnippet>75</a>    record: <span class="kw-2">&amp;</span>PackageRecord,
+<a href=#76 id=76 data-nosnippet>76</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ExtractResult, ExtractError&gt; {
+<a href=#77 id=77 data-nosnippet>77</a>    <span class="kw">let </span>record = record.clone();
+<a href=#78 id=78 data-nosnippet>78</a>    spawn_extract(archive, destination, <span class="kw">move </span>|archive, destination| {
+<a href=#79 id=79 data-nosnippet>79</a>        <span class="kw">crate</span>::fs::extract_wheel(archive, destination, <span class="kw-2">&amp;</span>record)
+<a href=#80 id=80 data-nosnippet>80</a>    })
+<a href=#81 id=81 data-nosnippet>81</a>    .<span class="kw">await
+<a href=#82 id=82 data-nosnippet>82</a></span>}
+<a href=#83 id=83 data-nosnippet>83</a>
+<a href=#84 id=84 data-nosnippet>84</a><span class="doccomment">/// Extracts the contents a package archive at the specified path to a directory. The type of
+<a href=#85 id=85 data-nosnippet>85</a>/// package is determined based on the file extension of the archive path.
+<a href=#86 id=86 data-nosnippet>86</a>///
+<a href=#87 id=87 data-nosnippet>87</a>/// ```rust,no_run
+<a href=#88 id=88 data-nosnippet>88</a>/// # #[tokio::main]
+<a href=#89 id=89 data-nosnippet>89</a>/// # async fn main() {
+<a href=#90 id=90 data-nosnippet>90</a>/// # use std::path::Path;
+<a href=#91 id=91 data-nosnippet>91</a>/// use rattler_package_streaming::tokio::fs::extract;
+<a href=#92 id=92 data-nosnippet>92</a>/// let _ = extract(
+<a href=#93 id=93 data-nosnippet>93</a>///     Path::new("conda-forge/win-64/python-3.11.0-hcf16a7b_0_cpython.conda"),
+<a href=#94 id=94 data-nosnippet>94</a>///     Path::new("/tmp"))
+<a href=#95 id=95 data-nosnippet>95</a>///     .await
+<a href=#96 id=96 data-nosnippet>96</a>///     .unwrap();
+<a href=#97 id=97 data-nosnippet>97</a>/// # }
+<a href=#98 id=98 data-nosnippet>98</a>/// ```
+<a href=#99 id=99 data-nosnippet>99</a></span><span class="kw">pub async fn </span>extract(archive: <span class="kw-2">&amp;</span>Path, destination: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;ExtractResult, ExtractError&gt; {
+<a href=#100 id=100 data-nosnippet>100</a>    <span class="kw">match </span>CondaArchiveType::try_from(archive).ok_or(ExtractError::UnsupportedArchiveType)<span class="question-mark">? </span>{
+<a href=#101 id=101 data-nosnippet>101</a>        CondaArchiveType::TarBz2 =&gt; extract_tar_bz2(archive, destination).<span class="kw">await</span>,
+<a href=#102 id=102 data-nosnippet>102</a>        CondaArchiveType::Conda =&gt; extract_conda(archive, destination).<span class="kw">await</span>,
+<a href=#103 id=103 data-nosnippet>103</a>    }
+<a href=#104 id=104 data-nosnippet>104</a>}
 </code></pre></div></section></main></body></html>

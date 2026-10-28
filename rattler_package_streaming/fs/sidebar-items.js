@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["LocalPackageRecordError"],"fn":["extract","extract_conda","extract_tar_bz2","repodata_record_from_package_archive"]};
+window.SIDEBAR_ITEMS = {"enum":["LocalPackageRecordError"],"fn":["extract","extract_conda","extract_tar_bz2","extract_wheel","repodata_record_from_package_archive"]};
