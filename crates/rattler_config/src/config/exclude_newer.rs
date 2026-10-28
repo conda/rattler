@@ -83,7 +83,11 @@ impl ExcludeNewerConfig {
 #[serde(rename_all = "kebab-case")]
 struct ExcludeNewerTable {
     cutoff: String,
-    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    #[serde(
+        default,
+        skip_serializing_if = "IndexMap::is_empty",
+        deserialize_with = "deserialize_exemptions"
+    )]
     exemptions: IndexMap<PackageName, ExcludeNewerExemption>,
 }
 
@@ -155,6 +159,40 @@ impl<'de> Deserialize<'de> for ExcludeNewerExemption {
 
         deserializer.deserialize_any(ExemptionVisitor)
     }
+}
+
+/// Deserializes the exemptions of an [`ExcludeNewerConfig`]. Package names are
+/// compared normalized, so names that differ only in case are rejected as
+/// duplicates instead of silently overwriting each other.
+fn deserialize_exemptions<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<IndexMap<PackageName, ExcludeNewerExemption>, D::Error> {
+    struct ExemptionsVisitor;
+
+    impl<'de> Visitor<'de> for ExemptionsVisitor {
+        type Value = IndexMap<PackageName, ExcludeNewerExemption>;
+
+        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("a table of exemptions")
+        }
+
+        fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+            let mut exemptions = Self::Value::new();
+            while let Some(name) = map.next_key::<PackageName>()? {
+                if let Some((existing, _)) = exemptions.get_key_value(&name) {
+                    return Err(de::Error::custom(format!(
+                        "duplicate exemption for `{}`, already exempted as `{}`",
+                        name.as_source(),
+                        existing.as_source(),
+                    )));
+                }
+                exemptions.insert(name, map.next_value()?);
+            }
+            Ok(exemptions)
+        }
+    }
+
+    deserializer.deserialize_map(ExemptionsVisitor)
 }
 
 impl<'de> Deserialize<'de> for ExcludeNewerConfig {
@@ -262,6 +300,20 @@ mod tests {
                 "accepted {exemption}"
             );
         }
+    }
+
+    #[test]
+    fn test_parse_duplicate_exemption() {
+        let error = toml::from_str::<Document>(
+            r#"exclude-newer = { cutoff = "7d", exemptions = { Ruff = "*", ruff = "==1" } }"#,
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("duplicate exemption for `ruff`, already exempted as `Ruff`"),
+            "{error}"
+        );
     }
 
     #[test]
