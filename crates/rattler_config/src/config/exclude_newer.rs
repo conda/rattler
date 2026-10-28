@@ -30,6 +30,11 @@ use serde::{
 /// resolves to). Each tool parses them with its own `exclude-newer` parser:
 /// the cutoff is usually an RFC 3339 timestamp, a date or a duration, and an
 /// exemption is a version or a table that selects the exempt releases.
+///
+/// Dates must be quoted. An unquoted TOML date, e.g.
+/// `exclude-newer = 2026-10-12`, is rejected with a misleading error such as
+/// ``missing field `cutoff` ``, because the `toml` crate passes dates to a
+/// visitor as a map.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExcludeNewerConfig {
     /// Packages uploaded after this cutoff are excluded, e.g. `7d`.
