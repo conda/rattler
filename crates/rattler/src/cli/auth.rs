@@ -1628,45 +1628,46 @@ mod tests {
     #[test]
     fn test_stdin_secret_goes_to_the_matching_argument() {
         let mut args = stdin_args(|a| a.token_stdin = true);
-        args.read_stdin_secret("tok_123\n".as_bytes()).unwrap();
+        args.read_stdin_secret(b"tok_123\n").unwrap();
         assert_eq!(args.token.as_deref(), Some("tok_123"));
         assert!(args.password.is_none() && args.conda_token.is_none());
 
         let mut args = stdin_args(|a| a.password_stdin = true);
-        args.read_stdin_secret("hunter2\n".as_bytes()).unwrap();
+        args.read_stdin_secret(b"hunter2\n").unwrap();
         assert_eq!(args.password.as_deref(), Some("hunter2"));
         assert!(args.token.is_none());
 
         let mut args = stdin_args(|a| a.conda_token_stdin = true);
-        args.read_stdin_secret("conda-tok\n".as_bytes()).unwrap();
+        args.read_stdin_secret(b"conda-tok\n").unwrap();
         assert_eq!(args.conda_token.as_deref(), Some("conda-tok"));
 
         let mut args = stdin_args(|a| a.s3_secret_access_key_stdin = true);
-        args.read_stdin_secret("s3-secret\n".as_bytes()).unwrap();
+        args.read_stdin_secret(b"s3-secret\n").unwrap();
         assert_eq!(args.s3_secret_access_key.as_deref(), Some("s3-secret"));
     }
 
     #[test]
     fn test_stdin_secret_only_loses_one_trailing_line_break() {
-        for (input, expected) in [
-            ("secret", "secret"),
-            ("secret\n", "secret"),
-            ("secret\r\n", "secret"),
-            ("secret\n\n", "secret\n"),
-            (" with spaces \n", " with spaces "),
-            ("two\nlines", "two\nlines"),
-        ] {
+        let cases = [
+            ("secret".as_bytes(), "secret"),
+            ("secret\n".as_bytes(), "secret"),
+            ("secret\r\n".as_bytes(), "secret"),
+            ("secret\n\n".as_bytes(), "secret\n"),
+            (" with spaces \n".as_bytes(), " with spaces "),
+            ("two\nlines".as_bytes(), "two\nlines"),
+        ];
+        for (input, expected) in cases {
             let mut args = stdin_args(|a| a.token_stdin = true);
-            args.read_stdin_secret(input.as_bytes()).unwrap();
-            assert_eq!(args.token.as_deref(), Some(expected), "input {input:?}");
+            args.read_stdin_secret(input).unwrap();
+            assert_eq!(args.token.as_deref(), Some(expected));
         }
     }
 
     #[test]
     fn test_empty_stdin_secret_is_an_error() {
-        for input in ["", "\n", "\r\n"] {
+        for input in ["", "\n", "\r\n"].map(|s| s.as_bytes()) {
             let mut args = stdin_args(|a| a.token_stdin = true);
-            let error = args.read_stdin_secret(input.as_bytes()).unwrap_err();
+            let error = args.read_stdin_secret(input).unwrap_err();
             assert!(
                 matches!(error, AuthenticationCLIError::EmptyStdinSecret),
                 "input {input:?}: {error:?}"
