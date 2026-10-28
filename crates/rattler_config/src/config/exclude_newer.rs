@@ -40,6 +40,10 @@ pub struct ExcludeNewerConfig {
     pub exemptions: IndexMap<PackageName, toml::Value>,
 }
 
+// The exemptions are versions or tables of strings, never floats, so the
+// comparison is an equivalence relation.
+impl Eq for ExcludeNewerConfig {}
+
 impl ExcludeNewerConfig {
     /// Creates a configuration that consists of a cutoff only, e.g. `7d`.
     pub fn from_cutoff(cutoff: impl Into<String>) -> Self {
