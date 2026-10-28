@@ -13,6 +13,7 @@ expression: "(unused, normalized(config))"
                     ),
                 ],
             ),
+            default_exclude_newer: None,
             authentication_override_file: Some(
                 "/path/to/auth.json",
             ),
