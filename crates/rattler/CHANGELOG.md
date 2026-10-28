@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.55.2](https://github.com/conda/rattler/compare/rattler-v0.55.1...rattler-v0.55.2) - 2026-10-28
+
+### Added
+
+- *(cache)* download and cache wheels as extracted conda packages ([#2964](https://github.com/conda/rattler/pull/2964))
+
 ## [0.55.1](https://github.com/conda/rattler/compare/rattler-v0.55.0...rattler-v0.55.1) - 2026-10-27
 
 ### Other
