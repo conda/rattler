@@ -634,7 +634,7 @@ mod tests {
 
     #[test]
     fn test_edit_exclude_newer() {
-        use crate::config::exclude_newer::ExcludeNewerConfig;
+        use crate::config::exclude_newer::{ExcludeNewerConfig, ExcludeNewerExemption};
 
         let mut config = TestConfig::default();
 
@@ -663,6 +663,16 @@ mod tests {
         let exclude_newer = config.exclude_newer.as_ref().unwrap();
         assert_eq!(exclude_newer.cutoff, "1d");
         assert_eq!(exclude_newer.exemptions.len(), 1);
+
+        // An exemption that looks like a number is kept as a version.
+        config
+            .set("exclude-newer.exemptions.ruff", Some("1.10".to_string()))
+            .unwrap();
+        assert_eq!(
+            config.exclude_newer.as_ref().unwrap().exemptions
+                [&rattler_conda_types::PackageName::new_unchecked("ruff")],
+            ExcludeNewerExemption::Version("1.10".to_string())
+        );
 
         config.set("exclude-newer", None).unwrap();
         assert_eq!(config.exclude_newer, None);

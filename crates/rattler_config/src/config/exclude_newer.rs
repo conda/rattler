@@ -4,7 +4,7 @@ use indexmap::IndexMap;
 use rattler_conda_types::PackageName;
 use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
-    de::{self, MapAccess, Visitor, value::MapAccessDeserializer},
+    de::{self, MapAccess, SeqAccess, Visitor, value::MapAccessDeserializer},
 };
 
 /// The `exclude-newer` configuration that rattler-based tools start from when
@@ -30,19 +30,38 @@ use serde::{
 /// resolves to). Each tool parses them with its own `exclude-newer` parser:
 /// the cutoff is usually an RFC 3339 timestamp, a date or a duration, and an
 /// exemption is a version or a table that selects the exempt releases.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExcludeNewerConfig {
     /// Packages uploaded after this cutoff are excluded, e.g. `7d`.
     pub cutoff: String,
 
     /// The releases of a package that are not excluded, regardless of their
     /// timestamp, e.g. `ruff = "*"`.
-    pub exemptions: IndexMap<PackageName, toml::Value>,
+    pub exemptions: IndexMap<PackageName, ExcludeNewerExemption>,
 }
 
-// The exemptions are versions or tables of strings, never floats, so the
-// comparison is an equivalence relation.
-impl Eq for ExcludeNewerConfig {}
+/// The releases of a package that are exempt from the `exclude-newer` cutoff.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+pub enum ExcludeNewerExemption {
+    /// A version spec, e.g. `"*"` or `"==1.43.1"`.
+    Version(String),
+
+    /// Match spec fields that select the exempt releases, e.g.
+    /// `{ version = "==1.43.1", cutoff = "2026-10-12" }`.
+    Fields(IndexMap<String, ExcludeNewerExemptionField>),
+}
+
+/// The value of a match spec field of an [`ExcludeNewerExemption`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+pub enum ExcludeNewerExemptionField {
+    /// A single value, e.g. `version = "==1.43.1"`.
+    Single(String),
+
+    /// A list of values, e.g. `flags = ["cuda"]`.
+    List(Vec<String>),
+}
 
 impl ExcludeNewerConfig {
     /// Creates a configuration that consists of a cutoff only, e.g. `7d`.
@@ -60,7 +79,7 @@ impl ExcludeNewerConfig {
 struct ExcludeNewerTable {
     cutoff: String,
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
-    exemptions: IndexMap<PackageName, toml::Value>,
+    exemptions: IndexMap<PackageName, ExcludeNewerExemption>,
 }
 
 impl Serialize for ExcludeNewerConfig {
@@ -74,6 +93,62 @@ impl Serialize for ExcludeNewerConfig {
             exemptions: self.exemptions.clone(),
         }
         .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ExcludeNewerExemptionField {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct FieldVisitor;
+
+        impl<'de> Visitor<'de> for FieldVisitor {
+            type Value = ExcludeNewerExemptionField;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("a string or an array of strings")
+            }
+
+            fn visit_str<E: de::Error>(self, value: &str) -> Result<Self::Value, E> {
+                Ok(ExcludeNewerExemptionField::Single(value.to_string()))
+            }
+
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                let mut values = Vec::new();
+                while let Some(value) = seq.next_element()? {
+                    values.push(value);
+                }
+                Ok(ExcludeNewerExemptionField::List(values))
+            }
+        }
+
+        deserializer.deserialize_any(FieldVisitor)
+    }
+}
+
+impl<'de> Deserialize<'de> for ExcludeNewerExemption {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct ExemptionVisitor;
+
+        impl<'de> Visitor<'de> for ExemptionVisitor {
+            type Value = ExcludeNewerExemption;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("a version string or a table of match spec fields")
+            }
+
+            fn visit_str<E: de::Error>(self, version: &str) -> Result<Self::Value, E> {
+                Ok(ExcludeNewerExemption::Version(version.to_string()))
+            }
+
+            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+                let mut fields = IndexMap::new();
+                while let Some(key) = map.next_key::<String>()? {
+                    fields.insert(key, map.next_value()?);
+                }
+                Ok(ExcludeNewerExemption::Fields(fields))
+            }
+        }
+
+        deserializer.deserialize_any(ExemptionVisitor)
     }
 }
 
@@ -139,9 +214,49 @@ mod tests {
         assert_eq!(config.exemptions.len(), 2);
         assert_eq!(
             config.exemptions[&PackageName::new_unchecked("ruff")],
-            toml::Value::String("*".to_string())
+            ExcludeNewerExemption::Version("*".to_string())
         );
-        assert!(config.exemptions[&PackageName::new_unchecked("polars")].is_table());
+        assert_eq!(
+            config.exemptions[&PackageName::new_unchecked("polars")],
+            ExcludeNewerExemption::Fields(IndexMap::from([
+                (
+                    "version".to_string(),
+                    ExcludeNewerExemptionField::Single("==1.43.1".to_string())
+                ),
+                (
+                    "cutoff".to_string(),
+                    ExcludeNewerExemptionField::Single("2026-10-12".to_string())
+                ),
+            ]))
+        );
+    }
+
+    #[test]
+    fn test_parse_exemption_list_field() {
+        let document: Document = toml::from_str(
+            r#"exclude-newer = { cutoff = "7d", exemptions = { pytorch = { flags = ["cuda"] } } }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            document.exclude_newer.exemptions[&PackageName::new_unchecked("pytorch")],
+            ExcludeNewerExemption::Fields(IndexMap::from([(
+                "flags".to_string(),
+                ExcludeNewerExemptionField::List(vec!["cuda".to_string()])
+            )]))
+        );
+    }
+
+    #[test]
+    fn test_parse_exemption_rejects_non_strings() {
+        for exemption in ["1.1", "nan", "2", "true", "{ version = 1 }"] {
+            let input = format!(
+                r#"exclude-newer = {{ cutoff = "7d", exemptions = {{ ruff = {exemption} }} }}"#
+            );
+            assert!(
+                toml::from_str::<Document>(&input).is_err(),
+                "accepted {exemption}"
+            );
+        }
     }
 
     #[test]
