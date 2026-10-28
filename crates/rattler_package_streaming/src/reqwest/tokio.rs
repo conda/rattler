@@ -3,7 +3,6 @@
 
 use std::{path::Path, sync::Arc};
 
-use fs_err::tokio as tokio_fs;
 use futures_util::stream::TryStreamExt;
 use rattler_conda_types::{PackageRecord, package::CondaArchiveType};
 use rattler_digest::Sha256Hash;
@@ -30,6 +29,23 @@ fn error_for_status(response: reqwest::Response) -> reqwest_middleware::Result<R
         .map_err(reqwest_middleware::Error::Reqwest)
 }
 
+/// Opens the file a `file://` URL points to.
+#[cfg(not(target_arch = "wasm32"))]
+async fn open_local_file(url: &Url) -> Result<fs_err::tokio::File, ExtractError> {
+    fs_err::tokio::File::open(url.to_file_path().expect("Could not convert to file path"))
+        .await
+        .map_err(ExtractError::IoError)
+}
+
+/// `file://` URLs cannot be opened on wasm32: there is no local filesystem.
+#[cfg(target_arch = "wasm32")]
+async fn open_local_file(_url: &Url) -> Result<tokio::io::Empty, ExtractError> {
+    Err(ExtractError::IoError(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "file:// URLs are not supported on wasm32",
+    )))
+}
+
 async fn get_reader(
     url: Url,
     client: reqwest_middleware::ClientWithMiddleware,
@@ -41,11 +57,7 @@ async fn get_reader(
     }
 
     if url.scheme() == "file" {
-        let file =
-            tokio_fs::File::open(url.to_file_path().expect("Could not convert to file path"))
-                .await
-                .map_err(ExtractError::IoError)?;
-
+        let file = open_local_file(&url).await?;
         Ok(Either::Left(BufReader::new(file)))
     } else {
         // Send the request for the file

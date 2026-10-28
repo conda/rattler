@@ -161,8 +161,8 @@ pub async fn repodata_record_from_package_archive(
         // relative paths first (the file must exist at this point since we
         // already read its `index.json` above).
         let absolute_path = std::fs::canonicalize(package_path)?;
-        let url = url::Url::from_file_path(&absolute_path)
-            .map_err(|()| LocalPackageRecordError::InvalidPath(package_path.to_path_buf()))?;
+        let url = file_path_to_url(&absolute_path)
+            .ok_or_else(|| LocalPackageRecordError::InvalidPath(package_path.to_path_buf()))?;
 
         Ok(RepoDataRecord {
             package_record,
@@ -172,6 +172,19 @@ pub async fn repodata_record_from_package_archive(
         })
     })
     .await
+}
+
+/// Converts an absolute path into a `file://` URL.
+#[cfg(not(target_arch = "wasm32"))]
+fn file_path_to_url(path: &Path) -> Option<url::Url> {
+    url::Url::from_file_path(path).ok()
+}
+
+/// `Url::from_file_path` does not exist on wasm32, which has no local
+/// filesystem to point at.
+#[cfg(target_arch = "wasm32")]
+fn file_path_to_url(_path: &Path) -> Option<url::Url> {
+    None
 }
 
 #[cfg(test)]

@@ -5,10 +5,8 @@ use std::path::Path;
 use async_compression::tokio::bufread::ZstdDecoder;
 use futures_util::stream::StreamExt;
 
+use super::DEFAULT_BUF_SIZE;
 use crate::ExtractError;
-
-/// Buffer size for async I/O operations (128KB).
-pub(super) const DEFAULT_BUF_SIZE: usize = 128 * 1024;
 
 /// Unix permission bits for executable files (user, group, and other execute bits).
 #[cfg(unix)]
