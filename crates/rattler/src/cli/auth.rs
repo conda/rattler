@@ -1628,27 +1628,27 @@ mod tests {
     #[test]
     fn test_stdin_secret_goes_to_the_matching_argument() {
         let mut args = stdin_args(|a| a.token_stdin = true);
-        args.read_stdin_secret(b"tok_123\n").unwrap();
+        args.read_stdin_secret(&b"tok_123\n"[..]).unwrap();
         assert_eq!(args.token.as_deref(), Some("tok_123"));
         assert!(args.password.is_none() && args.conda_token.is_none());
 
         let mut args = stdin_args(|a| a.password_stdin = true);
-        args.read_stdin_secret(b"hunter2\n").unwrap();
+        args.read_stdin_secret(&b"hunter2\n"[..]).unwrap();
         assert_eq!(args.password.as_deref(), Some("hunter2"));
         assert!(args.token.is_none());
 
         let mut args = stdin_args(|a| a.conda_token_stdin = true);
-        args.read_stdin_secret(b"conda-tok\n").unwrap();
+        args.read_stdin_secret(&b"conda-tok\n"[..]).unwrap();
         assert_eq!(args.conda_token.as_deref(), Some("conda-tok"));
 
         let mut args = stdin_args(|a| a.s3_secret_access_key_stdin = true);
-        args.read_stdin_secret(b"s3-secret\n").unwrap();
+        args.read_stdin_secret(&b"s3-secret\n"[..]).unwrap();
         assert_eq!(args.s3_secret_access_key.as_deref(), Some("s3-secret"));
     }
 
     #[test]
     fn test_stdin_secret_only_loses_one_trailing_line_break() {
-        let cases = [
+        let cases: &[(&[u8], &str)] = &[
             (b"secret", "secret"),
             (b"secret\n", "secret"),
             (b"secret\r\n", "secret"),
