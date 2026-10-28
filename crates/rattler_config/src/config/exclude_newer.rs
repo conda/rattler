@@ -14,13 +14,13 @@ use serde::{
 /// In the configuration this is either a bare cutoff:
 ///
 /// ```toml
-/// default-exclude-newer = "7d"
+/// exclude-newer = "7d"
 /// ```
 ///
 /// or a table with a cutoff and exemptions:
 ///
 /// ```toml
-/// [default-exclude-newer]
+/// [exclude-newer]
 /// cutoff = "7d"
 /// exemptions = { ruff = "*" }
 /// ```
@@ -108,14 +108,14 @@ mod tests {
     #[derive(Debug, Serialize, Deserialize)]
     #[serde(rename_all = "kebab-case")]
     struct Document {
-        default_exclude_newer: ExcludeNewerConfig,
+        exclude_newer: ExcludeNewerConfig,
     }
 
     #[test]
     fn test_parse_cutoff() {
-        let document: Document = toml::from_str(r#"default-exclude-newer = "7d""#).unwrap();
+        let document: Document = toml::from_str(r#"exclude-newer = "7d""#).unwrap();
         assert_eq!(
-            document.default_exclude_newer,
+            document.exclude_newer,
             ExcludeNewerConfig::from_cutoff("7d")
         );
     }
@@ -124,13 +124,13 @@ mod tests {
     fn test_parse_table() {
         let document: Document = toml::from_str(
             r#"
-            [default-exclude-newer]
+            [exclude-newer]
             cutoff = "7d"
             exemptions = { ruff = "*", polars = { version = "==1.43.1", cutoff = "2026-10-12" } }
             "#,
         )
         .unwrap();
-        let config = document.default_exclude_newer;
+        let config = document.exclude_newer;
         assert_eq!(config.cutoff, "7d");
         assert_eq!(config.exemptions.len(), 2);
         assert_eq!(
@@ -144,7 +144,7 @@ mod tests {
     fn test_parse_table_requires_cutoff() {
         let error = toml::from_str::<Document>(
             r#"
-            [default-exclude-newer]
+            [exclude-newer]
             exemptions = { ruff = "*" }
             "#,
         )
@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn test_parse_invalid_type() {
-        let error = toml::from_str::<Document>("default-exclude-newer = 7").unwrap_err();
+        let error = toml::from_str::<Document>("exclude-newer = 7").unwrap_err();
         assert!(
             error
                 .to_string()
@@ -165,8 +165,8 @@ mod tests {
     #[test]
     fn test_serialize_roundtrip() {
         for input in [
-            "default-exclude-newer = \"7d\"\n",
-            "[default-exclude-newer]\ncutoff = \"7d\"\n\n[default-exclude-newer.exemptions]\nruff = \"*\"\n",
+            "exclude-newer = \"7d\"\n",
+            "[exclude-newer]\ncutoff = \"7d\"\n\n[exclude-newer.exemptions]\nruff = \"*\"\n",
         ] {
             let document: Document = toml::from_str(input).unwrap();
             assert_eq!(toml::to_string(&document).unwrap(), input);

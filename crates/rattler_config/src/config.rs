@@ -153,7 +153,7 @@ pub struct CommonConfig {
     /// environment. Each tool decides where it applies.
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub default_exclude_newer: Option<ExcludeNewerConfig>,
+    pub exclude_newer: Option<ExcludeNewerConfig>,
 
     /// Path to the file containing the authentication token.
     #[serde(default)]
@@ -260,7 +260,7 @@ impl Default for CommonConfig {
     fn default() -> Self {
         Self {
             default_channels: None,
-            default_exclude_newer: None,
+            exclude_newer: None,
             authentication_override_file: None,
             tls_no_verify: None,
             tls_root_certs: None,
@@ -306,10 +306,10 @@ impl Config for CommonConfig {
                 .as_ref()
                 .or(self.default_channels.as_ref())
                 .cloned(),
-            default_exclude_newer: other
-                .default_exclude_newer
+            exclude_newer: other
+                .exclude_newer
                 .as_ref()
-                .or(self.default_exclude_newer.as_ref())
+                .or(self.exclude_newer.as_ref())
                 .cloned(),
             authentication_override_file: other
                 .authentication_override_file
@@ -359,7 +359,7 @@ impl Config for CommonConfig {
     fn keys(&self) -> Vec<String> {
         let mut keys = vec![
             "default-channels".to_string(),
-            "default-exclude-newer".to_string(),
+            "exclude-newer".to_string(),
             "authentication-override-file".to_string(),
             "tls-no-verify".to_string(),
             "tls-root-certs".to_string(),

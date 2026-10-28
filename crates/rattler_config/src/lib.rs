@@ -633,49 +633,47 @@ mod tests {
     }
 
     #[test]
-    fn test_edit_default_exclude_newer() {
+    fn test_edit_exclude_newer() {
         use crate::config::exclude_newer::ExcludeNewerConfig;
 
         let mut config = TestConfig::default();
 
         // A plain value is a cutoff.
-        config
-            .set("default-exclude-newer", Some("7d".to_string()))
-            .unwrap();
+        config.set("exclude-newer", Some("7d".to_string())).unwrap();
         assert_eq!(
-            config.default_exclude_newer,
+            config.exclude_newer,
             Some(ExcludeNewerConfig::from_cutoff("7d"))
         );
 
         // A table is given as JSON.
         config
             .set(
-                "default-exclude-newer",
+                "exclude-newer",
                 Some(r#"{"cutoff": "14d", "exemptions": {"ruff": "*"}}"#.to_string()),
             )
             .unwrap();
-        let default_exclude_newer = config.default_exclude_newer.as_ref().unwrap();
-        assert_eq!(default_exclude_newer.cutoff, "14d");
-        assert_eq!(default_exclude_newer.exemptions.len(), 1);
+        let exclude_newer = config.exclude_newer.as_ref().unwrap();
+        assert_eq!(exclude_newer.cutoff, "14d");
+        assert_eq!(exclude_newer.exemptions.len(), 1);
 
         // The cutoff of the table can be set on its own.
         config
-            .set("default-exclude-newer.cutoff", Some("1d".to_string()))
+            .set("exclude-newer.cutoff", Some("1d".to_string()))
             .unwrap();
-        let default_exclude_newer = config.default_exclude_newer.as_ref().unwrap();
-        assert_eq!(default_exclude_newer.cutoff, "1d");
-        assert_eq!(default_exclude_newer.exemptions.len(), 1);
+        let exclude_newer = config.exclude_newer.as_ref().unwrap();
+        assert_eq!(exclude_newer.cutoff, "1d");
+        assert_eq!(exclude_newer.exemptions.len(), 1);
 
-        config.set("default-exclude-newer", None).unwrap();
-        assert_eq!(config.default_exclude_newer, None);
+        config.set("exclude-newer", None).unwrap();
+        assert_eq!(config.exclude_newer, None);
     }
 
     #[test]
-    fn test_merge_default_exclude_newer() {
-        let (config1, _) = TestConfig::from_toml_str(r#"default-exclude-newer = "7d""#).unwrap();
+    fn test_merge_exclude_newer() {
+        let (config1, _) = TestConfig::from_toml_str(r#"exclude-newer = "7d""#).unwrap();
         let (config2, _) = TestConfig::from_toml_str(
             r#"
-            [default-exclude-newer]
+            [exclude-newer]
             cutoff = "1d"
             exemptions = { ruff = "*" }
             "#,
@@ -684,14 +682,14 @@ mod tests {
 
         // The value is replaced as a whole, not merged.
         let merged = config1.clone().merge_config(&config2).unwrap();
-        assert_eq!(merged.default_exclude_newer, config2.default_exclude_newer);
+        assert_eq!(merged.exclude_newer, config2.exclude_newer);
         let merged = config2.merge_config(&config1).unwrap();
-        assert_eq!(merged.default_exclude_newer, config1.default_exclude_newer);
+        assert_eq!(merged.exclude_newer, config1.exclude_newer);
         let merged = config1
             .clone()
             .merge_config(&TestConfig::default())
             .unwrap();
-        assert_eq!(merged.default_exclude_newer, config1.default_exclude_newer);
+        assert_eq!(merged.exclude_newer, config1.exclude_newer);
     }
 
     #[test]
