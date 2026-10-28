@@ -1649,12 +1649,12 @@ mod tests {
     #[test]
     fn test_stdin_secret_only_loses_one_trailing_line_break() {
         let cases = [
-            ("secret".as_bytes(), "secret"),
-            ("secret\n".as_bytes(), "secret"),
-            ("secret\r\n".as_bytes(), "secret"),
-            ("secret\n\n".as_bytes(), "secret\n"),
-            (" with spaces \n".as_bytes(), " with spaces "),
-            ("two\nlines".as_bytes(), "two\nlines"),
+            (b"secret", "secret"),
+            (b"secret\n", "secret"),
+            (b"secret\r\n", "secret"),
+            (b"secret\n\n", "secret\n"),
+            (b" with spaces \n", " with spaces "),
+            (b"two\nlines", "two\nlines"),
         ];
         for (input, expected) in cases {
             let mut args = stdin_args(|a| a.token_stdin = true);
@@ -1665,7 +1665,7 @@ mod tests {
 
     #[test]
     fn test_empty_stdin_secret_is_an_error() {
-        for input in ["", "\n", "\r\n"].map(|s| s.as_bytes()) {
+        for input in [b"" as &[u8], b"\n", b"\r\n"].iter().copied() {
             let mut args = stdin_args(|a| a.token_stdin = true);
             let error = args.read_stdin_secret(input).unwrap_err();
             assert!(
