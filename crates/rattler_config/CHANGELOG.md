@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0](https://github.com/conda/rattler/compare/rattler_config-v0.9.5...rattler_config-v0.10.0) - 2026-10-28
+
+### Added
+
+- *(config)* add exclude-newer to the shared configuration ([#3020](https://github.com/conda/rattler/pull/3020))
+
 ## [0.9.5](https://github.com/conda/rattler/compare/rattler_config-v0.9.4...rattler_config-v0.9.5) - 2026-10-27
 
 ### Other
