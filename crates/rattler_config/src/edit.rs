@@ -8,9 +8,10 @@
 //! without any per-field code. Unknown keys are rejected using the same
 //! detection that [`ConfigBase::from_toml_str`] uses when loading files.
 
-use std::path::Path;
+use std::{path::Path, str::FromStr};
 
 use crate::config::{Config, ConfigBase};
+use rattler_conda_types::PackageName;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -122,6 +123,63 @@ fn remove_path(table: &mut toml::Table, segments: &[String]) -> bool {
     current.remove(last).is_some()
 }
 
+/// Prepares an edit of a key inside `exclude-newer`, which `set` cannot do on
+/// the serialized configuration alone:
+/// - A cutoff without exemptions is serialized on its own, e.g.
+///   `exclude-newer = "7d"`. It is expanded into its table form, so that
+///   e.g. `exclude-newer.exemptions.ruff` keeps the cutoff.
+/// - Exemptions are keyed by package name, which is compared normalized. An
+///   exemption whose name only differs from the edited one in case is renamed
+///   to the edited name, so that e.g. setting `exemptions.Ruff` replaces
+///   `ruff` and setting `exemptions.Ruff.build` keeps the other fields of
+///   `ruff`.
+fn prepare_exclude_newer_edit(table: &mut toml::Table, segments: &[String]) {
+    let [first, rest @ ..] = segments else {
+        return;
+    };
+    if first != "exclude-newer" || rest.is_empty() {
+        return;
+    }
+    let Some(exclude_newer) = table.get_mut(first) else {
+        return;
+    };
+    if let toml::Value::String(cutoff) = exclude_newer {
+        let cutoff = std::mem::take(cutoff);
+        *exclude_newer = toml::Value::Table(toml::Table::from_iter([(
+            "cutoff".to_string(),
+            toml::Value::String(cutoff),
+        )]));
+    }
+
+    let [exemptions_key, edited, ..] = rest else {
+        return;
+    };
+    let Ok(name) = PackageName::from_str(edited) else {
+        return;
+    };
+    if exemptions_key != "exemptions" {
+        return;
+    }
+    let Some(exemptions) = exclude_newer
+        .get_mut("exemptions")
+        .and_then(toml::Value::as_table_mut)
+    else {
+        return;
+    };
+    let existing = exemptions
+        .keys()
+        .find(|existing| PackageName::from_str(existing).ok().as_ref() == Some(&name))
+        .cloned();
+    if let Some(existing) = existing
+        && existing != *edited
+    {
+        let exemption = exemptions
+            .remove(&existing)
+            .expect("the key was just found");
+        exemptions.insert(edited.clone(), exemption);
+    }
+}
+
 /// Does `key` address (part of) one of the `known` dotted key paths?
 fn is_known_key(key: &str, known: &[String]) -> bool {
     known.iter().any(|k| {
@@ -162,6 +220,7 @@ where
         }
 
         let mut table = toml::Table::try_from(&*self)?;
+        prepare_exclude_newer_edit(&mut table, &segments);
 
         if let Some(raw) = value {
             let parsed = parse_value(&raw);

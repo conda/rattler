@@ -5517,9 +5517,12 @@ version = "0.10.0"
 dependencies = [
  "dirs",
  "fs-err",
+ "humantime",
  "indexmap 2.14.2",
  "insta",
+ "jiff",
  "rattler_conda_types",
+ "rattler_digest",
  "serde",
  "serde_ignored",
  "serde_json",

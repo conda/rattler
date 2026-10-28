@@ -674,18 +674,149 @@ mod tests {
             ExcludeNewerExemption::Version("1.10".to_string())
         );
 
-        // Exemptions cannot be added to a bare cutoff key by key.
+        // Exemptions can be added to a bare cutoff key by key, which keeps the
+        // cutoff.
         config.set("exclude-newer", Some("7d".to_string())).unwrap();
         config
             .set("exclude-newer.exemptions.ruff", Some("*".to_string()))
-            .unwrap_err();
+            .unwrap();
+        let exclude_newer = config.exclude_newer.as_ref().unwrap();
+        assert_eq!(exclude_newer.cutoff, "7d");
+        assert_eq!(
+            exclude_newer.exemptions[&rattler_conda_types::PackageName::new_unchecked("ruff")],
+            ExcludeNewerExemption::Version("*".to_string())
+        );
+
+        // So can the cutoff.
+        config.set("exclude-newer", Some("7d".to_string())).unwrap();
+        config
+            .set("exclude-newer.cutoff", Some("14d".to_string()))
+            .unwrap();
         assert_eq!(
             config.exclude_newer,
-            Some(ExcludeNewerConfig::from_cutoff("7d"))
+            Some(ExcludeNewerConfig::from_cutoff("14d"))
         );
 
         config.set("exclude-newer", None).unwrap();
         assert_eq!(config.exclude_newer, None);
+    }
+
+    #[test]
+    fn test_edit_exclude_newer_exemption_names_are_normalized() {
+        use crate::config::exclude_newer::{ExcludeNewerExemption, ExcludeNewerExemptionField};
+
+        let mut config = TestConfig::default();
+        config
+            .set(
+                "exclude-newer",
+                Some(
+                    r#"{"cutoff": "7d", "exemptions": {"ruff": {"version": "*", "build": "py*"}}}"#
+                        .to_string(),
+                ),
+            )
+            .unwrap();
+
+        // A field of an exemption that is written in a different case keeps
+        // the other fields, under the name as it is edited.
+        config
+            .set(
+                "exclude-newer.exemptions.Ruff.version",
+                Some("==1".to_string()),
+            )
+            .unwrap();
+        let exemptions = &config.exclude_newer.as_ref().unwrap().exemptions;
+        assert_eq!(exemptions.len(), 1);
+        let (name, exemption) = exemptions.first().unwrap();
+        assert_eq!(name.as_source(), "Ruff");
+        assert_eq!(
+            exemption,
+            &ExcludeNewerExemption::Fields(indexmap::IndexMap::from([
+                (
+                    "build".to_string(),
+                    ExcludeNewerExemptionField::Single("py*".to_string())
+                ),
+                (
+                    "version".to_string(),
+                    ExcludeNewerExemptionField::Single("==1".to_string())
+                ),
+            ]))
+        );
+
+        // Setting an exemption replaces it.
+        config
+            .set("exclude-newer.exemptions.RUFF", Some("*".to_string()))
+            .unwrap();
+        let exemptions = &config.exclude_newer.as_ref().unwrap().exemptions;
+        assert_eq!(exemptions.len(), 1);
+        assert_eq!(exemptions.first().unwrap().0.as_source(), "RUFF");
+
+        // Unsetting it removes it, and the cutoff is left on its own.
+        config.set("exclude-newer.exemptions.ruff", None).unwrap();
+        assert_eq!(
+            config.exclude_newer,
+            Some(crate::config::exclude_newer::ExcludeNewerConfig::from_cutoff("7d"))
+        );
+    }
+
+    #[test]
+    fn test_edit_exclude_newer_rejects_invalid_values() {
+        let mut config = TestConfig::default();
+        config.set("exclude-newer", Some("7d".to_string())).unwrap();
+
+        for (key, value) in [
+            ("exclude-newer", "7 weeks ago"),
+            ("exclude-newer.cutoff", "yesterday"),
+            ("exclude-newer.exemptions.ruff", ">>>"),
+            ("exclude-newer.exemptions.ruff.bogus", "*"),
+            ("exclude-newer.exemptions.ruff.cutoff", "7d"),
+            (
+                "exclude-newer",
+                r#"{"cutoff": "7d", "exemptions": {"ruff": {}}}"#,
+            ),
+        ] {
+            let error = config.set(key, Some(value.to_string())).unwrap_err();
+            assert!(
+                matches!(error, crate::edit::ConfigEditError::InvalidValue { .. }),
+                "{key} = {value}: {error}"
+            );
+        }
+
+        // An unknown key of the table is rejected like any other unknown key.
+        let error = config
+            .set(
+                "exclude-newer",
+                Some(r#"{"cutoff": "7d", "bogus": 1}"#.to_string()),
+            )
+            .unwrap_err();
+        assert!(
+            matches!(error, crate::edit::ConfigEditError::UnknownKey { .. }),
+            "{error}"
+        );
+
+        assert_eq!(
+            config.exclude_newer,
+            Some(crate::config::exclude_newer::ExcludeNewerConfig::from_cutoff("7d"))
+        );
+    }
+
+    #[test]
+    fn test_unknown_exclude_newer_key_is_reported() {
+        let (config, unused) = TestConfig::from_toml_str(
+            r#"
+            [exclude-newer]
+            cutoff = "7d"
+            exemption = { ruff = "*" }
+            "#,
+        )
+        .unwrap();
+        assert_eq!(
+            config.exclude_newer,
+            Some(crate::config::exclude_newer::ExcludeNewerConfig::from_cutoff("7d"))
+        );
+        assert_eq!(
+            unused.into_iter().collect::<Vec<_>>(),
+            vec!["exclude-newer.exemption".to_string()]
+        );
     }
 
     #[test]

@@ -286,6 +286,26 @@ fn prefixed_keys(prefix: &str, keys: Vec<String>) -> Vec<String> {
     keys.into_iter().map(|k| format!("{prefix}.{k}")).collect()
 }
 
+/// Formats the path of an ignored key as a dotted key, e.g.
+/// `exclude-newer.exemption`. Unlike the `Display` of the path, this leaves out
+/// the `?` that marks a value inside an `Option`.
+fn key_path(path: &serde_ignored::Path<'_>) -> String {
+    use serde_ignored::Path;
+
+    let (parent, segment) = match path {
+        Path::Root => return String::new(),
+        Path::Seq { parent, index } => (parent, index.to_string()),
+        Path::Map { parent, key } => (parent, key.clone()),
+        Path::Some { parent }
+        | Path::NewtypeStruct { parent }
+        | Path::NewtypeVariant { parent } => return key_path(parent),
+    };
+    match key_path(parent) {
+        parent if parent.is_empty() => segment,
+        parent => format!("{parent}.{segment}"),
+    }
+}
+
 /// Is `key` equal to, or nested inside, one of the `ignored` paths?
 fn covered_by(key: &str, ignored: &BTreeSet<String>) -> bool {
     ignored.iter().any(|path| {
@@ -346,6 +366,11 @@ impl Config for CommonConfig {
     }
 
     fn validate(&self) -> Result<(), ValidationError> {
+        if let Some(exclude_newer) = &self.exclude_newer {
+            exclude_newer.validate().map_err(|err| {
+                ValidationError::InvalidValue("exclude-newer".to_string(), err.to_string())
+            })?;
+        }
         self.build.validate()?;
         self.repodata_config.validate()?;
         self.concurrency.validate()?;
@@ -477,7 +502,7 @@ where
         let common: CommonConfig = serde_ignored::deserialize(
             toml::de::Deserializer::parse(input)?,
             |path: serde_ignored::Path<'_>| {
-                unknown_to_common.insert(path.to_string());
+                unknown_to_common.insert(key_path(&path));
             },
         )?;
 
@@ -485,7 +510,7 @@ where
         let extensions: T = serde_ignored::deserialize(
             toml::de::Deserializer::parse(input)?,
             |path: serde_ignored::Path<'_>| {
-                unknown_to_extension.insert(path.to_string());
+                unknown_to_extension.insert(key_path(&path));
             },
         )?;
 
@@ -542,7 +567,7 @@ where
         let common: CommonConfig = serde_ignored::deserialize(
             toml::de::Deserializer::parse(input)?,
             |path: serde_ignored::Path<'_>| {
-                unknown.insert(path.to_string());
+                unknown.insert(key_path(&path));
             },
         )?;
 
