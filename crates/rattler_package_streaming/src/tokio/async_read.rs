@@ -17,7 +17,6 @@ use std::{
 #[cfg(feature = "reqwest")]
 use futures_util::StreamExt;
 use futures_util::future::{self, Either};
-use rattler_digest::{Md5, Sha256, digest::Digest};
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 use crate::{ExtractError, ExtractResult};
@@ -37,8 +36,9 @@ pub async fn extract_tar_bz2(
     reader: impl AsyncRead + Unpin,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
-    extract_blocking(reader, destination, |reader, destination| {
-        crate::read::extract_tar_bz2_without_hashing(reader, destination)
+    let destination = destination.to_path_buf();
+    process_blocking(reader, move |reader| {
+        crate::read::extract_tar_bz2(reader, &destination)
     })
     .await
 }
@@ -49,8 +49,9 @@ pub async fn extract_conda(
     reader: impl AsyncRead + Unpin,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
-    extract_blocking(reader, destination, |reader, destination| {
-        crate::read::extract_conda_via_streaming_without_hashing(reader, destination)
+    let destination = destination.to_path_buf();
+    process_blocking(reader, move |reader| {
+        crate::read::extract_conda_via_streaming(reader, &destination)
     })
     .await
 }
@@ -62,8 +63,9 @@ pub async fn extract_conda_via_buffering(
     reader: impl AsyncRead + Unpin,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
-    extract_blocking(reader, destination, |reader, destination| {
-        crate::read::extract_conda_via_buffering_without_hashing(reader, destination)
+    let destination = destination.to_path_buf();
+    process_blocking(reader, move |reader| {
+        crate::read::extract_conda_via_buffering(reader, &destination)
     })
     .await
 }
@@ -128,9 +130,9 @@ impl Drop for CancelOnDrop {
     }
 }
 
-fn flatten_worker_result(
-    joined: Result<Result<(), ExtractError>, tokio::task::JoinError>,
-) -> Result<(), ExtractError> {
+fn flatten_worker_result<T>(
+    joined: Result<Result<T, ExtractError>, tokio::task::JoinError>,
+) -> Result<T, ExtractError> {
     match joined {
         Ok(result) => result,
         Err(err) => {
@@ -142,11 +144,10 @@ fn flatten_worker_result(
     }
 }
 
-/// Runs a blocking extractor on a worker thread while pumping and hashing
-/// `reader` on the async runtime.
+/// Runs a blocking reader closure while pumping `reader` through a bounded channel.
 ///
-/// The worker reads to the end so the pump hashes the whole stream. If the
-/// worker stops reading early, for example because the archive is invalid, the
+/// The worker drains unread bytes after the closure returns. If the
+/// closure fails, for example because the archive is invalid, the
 /// channel closes and the pump stops. If the reader fails, the worker is told
 /// to stop and awaited before the error is returned, so the destination is not
 /// written to after this function returns. Dropping the returned future tells
@@ -154,11 +155,12 @@ fn flatten_worker_result(
 /// worker thread finishes first.
 ///
 /// Must be called from within a tokio runtime.
-async fn extract_blocking<R: AsyncRead + Unpin>(
-    reader: R,
-    destination: &Path,
-    extract: fn(Box<dyn Read + Send>, &Path) -> Result<(), ExtractError>,
-) -> Result<ExtractResult, ExtractError> {
+pub async fn process_blocking<R, T, F>(reader: R, process: F) -> Result<T, ExtractError>
+where
+    R: AsyncRead + Unpin,
+    T: Send + 'static,
+    F: FnOnce(&mut dyn Read) -> Result<T, ExtractError> + Send + 'static,
+{
     let (sender, receiver) = tokio::sync::mpsc::channel(CHUNKS_IN_FLIGHT);
     let cancelled = Arc::new(AtomicBool::new(false));
     let cancel_guard = CancelOnDrop(cancelled.clone());
@@ -168,23 +170,22 @@ async fn extract_blocking<R: AsyncRead + Unpin>(
         position: 0,
         cancelled,
     };
-    let destination = destination.to_path_buf();
-    let mut worker = tokio::task::spawn_blocking(move || extract(Box::new(chunks), &destination));
+    let mut worker = tokio::task::spawn_blocking(move || {
+        let mut reader = chunks;
+        let result = process(&mut reader)?;
+        // Finish consuming the source even if the closure returns early.
+        std::io::copy(&mut reader, &mut std::io::sink())?;
+        Ok(result)
+    });
 
     let pump = async move {
         let mut reader = reader;
-        let mut sha256 = Sha256::new();
-        let mut md5 = Md5::new();
-        let mut total_size = 0;
         loop {
             let mut chunk = vec![0u8; CHUNK_SIZE];
             let read = read_exact_or_eof(&mut reader, &mut chunk).await?;
             if read == 0 {
                 break;
             }
-            sha256.update(&chunk[..read]);
-            md5.update(&chunk[..read]);
-            total_size += read as u64;
             chunk.truncate(read);
             // A closed channel means the worker stopped reading.
             if sender.send(chunk).await.is_err() || read < CHUNK_SIZE {
@@ -192,17 +193,7 @@ async fn extract_blocking<R: AsyncRead + Unpin>(
             }
         }
         // Dropping the sender signals end-of-file to the worker.
-        if total_size == 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "no data was read from the package stream - the stream may have been truncated",
-            ));
-        }
-        Ok::<_, std::io::Error>(ExtractResult {
-            sha256: sha256.finalize(),
-            md5: md5.finalize(),
-            total_size,
-        })
+        Ok::<_, std::io::Error>(())
     };
 
     // The pump is polled first so a read error is reported instead of the
@@ -210,10 +201,7 @@ async fn extract_blocking<R: AsyncRead + Unpin>(
     // early.
     let pump = std::pin::pin!(pump);
     match future::select(pump, &mut worker).await {
-        Either::Left((Ok(result), worker)) => {
-            flatten_worker_result(worker.await)?;
-            Ok(result)
-        }
+        Either::Left((Ok(()), worker)) => flatten_worker_result(worker.await),
         Either::Left((Err(err), worker)) => {
             // The pump and its sender are gone. Stop the worker and wait for
             // it so nothing touches the destination after we return.
@@ -222,8 +210,9 @@ async fn extract_blocking<R: AsyncRead + Unpin>(
             Err(ExtractError::IoError(err))
         }
         Either::Right((joined, pump)) => {
-            flatten_worker_result(joined)?;
-            pump.await.map_err(ExtractError::IoError)
+            let value = flatten_worker_result(joined)?;
+            pump.await.map_err(ExtractError::IoError)?;
+            Ok(value)
         }
     }
 }

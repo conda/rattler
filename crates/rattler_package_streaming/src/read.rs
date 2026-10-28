@@ -2,6 +2,7 @@
 //! [`std::io::Read`] trait.
 
 use super::{ExtractError, ExtractResult};
+use rattler_conda_types::package::{CondaArchiveType, IndexJson, PackageFile, RunExportsJson};
 use std::io::{Seek, SeekFrom, copy};
 use std::mem::ManuallyDrop;
 use std::{
@@ -31,6 +32,112 @@ pub(crate) fn stream_tar_zst(
     Ok(tar::Archive::new(zstd::stream::read::Decoder::new(reader)?))
 }
 
+/// Package metadata retained when inspecting an archive without extracting its payload.
+#[derive(Debug)]
+pub struct PackageMetadata {
+    /// The package's required `info/index.json`.
+    pub index: IndexJson,
+    /// Optional run exports from a `.conda` info section.
+    pub run_exports: Option<RunExportsJson>,
+}
+
+impl PackageMetadata {
+    /// Reads metadata and hashes a complete archive with bounded memory use.
+    ///
+    /// `.conda` archives using data descriptors must be reopened and read with
+    /// [`Self::from_conda_via_buffering`]. As with the indexer's legacy readers,
+    /// `.tar.bz2` packages only return `index.json`.
+    pub fn from_reader(
+        reader: impl Read,
+        archive_type: CondaArchiveType,
+    ) -> Result<(Self, ExtractResult), ExtractError> {
+        process_with_hashing(reader, |reader| Self::read_from(reader, archive_type))
+    }
+
+    /// Spools a `.conda` archive before reading its central directory.
+    ///
+    /// The spool stays in memory up to 5 MB, then spills to disk. This also
+    /// supports ZIP data descriptors on readers that cannot be reopened.
+    pub fn from_conda_via_buffering(
+        reader: impl Read,
+    ) -> Result<(Self, ExtractResult), ExtractError> {
+        process_with_hashing(reader, |reader| {
+            Self::from_tar(&mut crate::seek::stream_conda_info(spool(reader)?)?)
+        })
+    }
+
+    /// Hashes a seekable `.conda` archive and reads metadata through its central directory.
+    pub fn from_seekable_conda(
+        mut reader: impl Read + Seek,
+    ) -> Result<(Self, ExtractResult), ExtractError> {
+        reader.rewind()?;
+        let (_, digest) = process_with_hashing(&mut reader, |_| Ok::<_, ExtractError>(()))?;
+        reader.rewind()?;
+        let metadata = Self::from_tar(&mut crate::seek::stream_conda_info(reader)?)?;
+        Ok((metadata, digest))
+    }
+
+    /// Reads metadata without hashing the archive. The caller must drain the
+    /// remaining bytes when computing an archive digest.
+    fn read_from(
+        mut reader: impl Read,
+        archive_type: CondaArchiveType,
+    ) -> Result<Self, ExtractError> {
+        match archive_type {
+            CondaArchiveType::TarBz2 => {
+                let mut archive = stream_tar_bz2(reader);
+                for entry in archive.entries()? {
+                    let mut entry = entry?;
+                    if entry.path()?.as_os_str() == "info/index.json" {
+                        return Ok(Self {
+                            index: IndexJson::from_reader(&mut entry)?,
+                            run_exports: None,
+                        });
+                    }
+                }
+                Err(ExtractError::MissingComponent)
+            }
+            CondaArchiveType::Conda => {
+                while let Some(mut file) = read_zipfile_from_stream(&mut reader)? {
+                    if file.name()?.starts_with("info-") && file.name()?.ends_with(".tar.zst") {
+                        return Self::from_tar(&mut stream_tar_zst(&mut file)?);
+                    }
+                    copy(&mut file, &mut std::io::sink())?;
+                }
+                Err(ExtractError::MissingComponent)
+            }
+        }
+    }
+
+    fn from_tar(archive: &mut tar::Archive<impl Read>) -> Result<Self, ExtractError> {
+        let mut index = None;
+        let mut run_exports = None;
+        for entry in archive.entries()? {
+            let mut entry = entry?;
+            match entry.path()?.to_str() {
+                Some("info/index.json") => index = Some(IndexJson::from_reader(&mut entry)?),
+                Some("info/run_exports.json") => {
+                    run_exports = Some(RunExportsJson::from_reader(&mut entry)?);
+                }
+                _ => {}
+            }
+        }
+        Ok(Self {
+            index: index.ok_or(ExtractError::MissingComponent)?,
+            run_exports,
+        })
+    }
+}
+
+/// Copies an archive into a seekable spool with bounded memory use.
+fn spool(mut reader: impl Read) -> Result<SpooledTempFile, ExtractError> {
+    // Create a SpooledTempFile with a 5MB limit
+    let mut temp_file = SpooledTempFile::new(5 * 1024 * 1024);
+    copy(&mut reader, &mut temp_file)?;
+    temp_file.seek(SeekFrom::Start(0))?;
+    Ok(temp_file)
+}
+
 /// Extracts the contents a `.tar.bz2` package archive.
 pub fn extract_tar_bz2(
     reader: impl Read,
@@ -39,6 +146,7 @@ pub fn extract_tar_bz2(
     process_with_hashing(reader, |reader| {
         extract_tar_bz2_without_hashing(reader, destination)
     })
+    .map(|(_, result)| result)
 }
 
 /// Extracts a `.tar.bz2` package without computing its package hashes.
@@ -70,6 +178,7 @@ pub fn extract_conda_via_streaming(
     process_with_hashing(reader, |reader| {
         extract_conda_via_streaming_without_hashing(reader, destination)
     })
+    .map(|(_, result)| result)
 }
 
 /// Extracts a `.conda` package without computing its package hashes.
@@ -93,6 +202,7 @@ pub fn extract_conda_via_buffering(
     process_with_hashing(reader, |reader| {
         extract_conda_via_buffering_without_hashing(reader, destination)
     })
+    .map(|(_, result)| result)
 }
 
 /// Extracts a buffered `.conda` package without computing its package hashes.
@@ -106,11 +216,7 @@ pub(crate) fn extract_conda_via_buffering_without_hashing(
     }
     std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
 
-    // Create a SpooledTempFile with a 5MB limit
-    let mut temp_file = SpooledTempFile::new(5 * 1024 * 1024);
-    copy(&mut reader, &mut temp_file)?;
-    temp_file.seek(SeekFrom::Start(0))?;
-    let mut archive = ZipArchive::new(temp_file)?;
+    let mut archive = ZipArchive::new(spool(&mut reader)?)?;
 
     for index in 0..archive.len() {
         let file = archive.by_index(index)?;
@@ -464,8 +570,8 @@ impl<R: tokio::io::AsyncRead + Unpin> tokio::io::AsyncRead for SizeCountingReade
     }
 }
 
-/// Helper function to compute hashes and size while processing a tar archive
-fn process_with_hashing<E, R, F>(reader: R, processor: F) -> Result<ExtractResult, E>
+/// Computes hashes and size while processing an archive, draining any unread bytes.
+fn process_with_hashing<E, R, F, T>(reader: R, processor: F) -> Result<(T, ExtractResult), E>
 where
     R: Read,
     E: From<std::io::Error>,
@@ -476,7 +582,7 @@ where
                 rattler_digest::Md5,
             >,
         >,
-    ) -> Result<(), E>,
+    ) -> Result<T, E>,
 {
     // Wrap the reading in additional readers that will compute the hashes of the file while its
     // being read, and count the total size.
@@ -485,9 +591,9 @@ where
         rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
     let mut size_reader = SizeCountingReader::new(&mut md5_reader);
 
-    // Every extractor reads its input to the end, so the hashes cover the
-    // whole stream once it returns.
-    processor(&mut size_reader)?;
+    let value = processor(&mut size_reader)?;
+    // Metadata readers can stop early; hashes must cover the whole archive.
+    copy(&mut size_reader, &mut std::io::sink())?;
 
     // Get the size and hashes
     let (_, total_size) = size_reader.finalize();
@@ -504,9 +610,12 @@ where
     let (sha256_reader, md5) = md5_reader.finalize();
     let (_, sha256) = sha256_reader.finalize();
 
-    Ok(ExtractResult {
-        sha256,
-        md5,
-        total_size,
-    })
+    Ok((
+        value,
+        ExtractResult {
+            sha256,
+            md5,
+            total_size,
+        },
+    ))
 }

@@ -1,7 +1,11 @@
 //! Integration tests for the `PackageRecordCache` and `read_package_with_retry`
 
+use futures::TryStreamExt;
 use opendal::Operator;
-use rattler_index::{RepodataFileMetadata, cache::read_package_with_retry};
+use rattler_index::{
+    RepodataFileMetadata,
+    cache::{PackageStream, read_package_with_retry},
+};
 
 use super::etag_memory_backend::ETagMemoryBuilder;
 
@@ -46,6 +50,19 @@ async fn test_read_package_with_retry_success_after_etag_change() {
         file_existed: true,
         precondition_checks: rattler_index::PreconditionChecks::Enabled,
     };
+
+    // Streams open lazily; polling the first chunk must catch stale metadata
+    // in the same retry loop as buffered reads.
+    let (stream, metadata) = PackageStream::open_with_retry(&op, path, old_metadata.clone())
+        .await
+        .unwrap();
+    let content = stream
+        .map_ok(|chunk| chunk.to_vec())
+        .try_concat()
+        .await
+        .unwrap();
+    assert_eq!(content, content_v2.as_bytes());
+    assert_eq!(metadata.etag, etag_v2);
 
     let result = read_package_with_retry(&op, path, old_metadata).await;
 

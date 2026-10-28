@@ -109,6 +109,14 @@ impl From<Cancelled> for ExtractError {
 }
 
 impl ExtractError {
+    /// Whether streaming failed because ZIP entry sizes require a central directory.
+    ///
+    /// See <https://github.com/conda/rattler/issues/794>.
+    pub fn is_data_descriptor_error(&self) -> bool {
+        matches!(self, Self::ZipError(ZipError::UnsupportedArchive(message))
+            if message.contains("The file length is not available in the local header"))
+    }
+
     /// Returns true if this error is transient and the operation should be retried.
     ///
     /// This checks for common transient I/O errors like broken pipes,

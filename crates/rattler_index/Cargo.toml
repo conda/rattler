@@ -70,6 +70,7 @@ serde_json = { workspace = true }
 sha2 = { workspace = true }
 tar = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+tokio-util = { workspace = true, features = ["io"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 url = { workspace = true }
@@ -77,6 +78,7 @@ zstd = { workspace = true }
 retry-policies = { workspace = true }
 
 [dev-dependencies]
+zip = { workspace = true }
 rattler_repodata_gateway = { path = "../rattler_repodata_gateway", default-features = false, features = [
   "sparse",
 ] }

@@ -25,7 +25,6 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use bytes::buf::Buf;
 use fs_err::{self as fs};
 use futures::{StreamExt, stream::FuturesUnordered};
 use indexmap::IndexMap;
@@ -40,7 +39,7 @@ use rattler_conda_types::{
     Subdir, UrlOrPath, V3Extensions, V3Packages, Version, WhlPackageRecord,
     package::{
         BuildString, CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson,
-        PackageFile, RunExportsJson, ValidatedMatchSpecs, WheelArchiveType,
+        PackageFile, ValidatedMatchSpecs, WheelArchiveType,
     },
     virtual_package_detector::DetectorRegistrationMetadata,
 };
@@ -52,8 +51,8 @@ pub use rattler_config::config::index::{
 };
 use rattler_digest::Sha256Hash;
 use rattler_package_streaming::{
-    read,
-    seek::{self, stream_conda_content},
+    ExtractResult, read::PackageMetadata, seek::stream_conda_content,
+    tokio::async_read::process_blocking,
 };
 #[cfg(feature = "s3")]
 use rattler_s3::S3CredentialSource;
@@ -61,6 +60,7 @@ use retry_policies::{Jitter, RetryDecision, RetryPolicy, policies::ExponentialBa
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
+use tokio_util::io::StreamReader;
 use tracing::Instrument;
 #[cfg(feature = "s3")]
 use url::Url;
@@ -195,25 +195,27 @@ pub fn package_record_from_index_json<T: Read>(
     package_as_bytes: impl AsRef<[u8]>,
     index_json_reader: &mut T,
 ) -> std::io::Result<PackageRecord> {
-    indexed_package_record_from_index_json(package_as_bytes, index_json_reader)
+    let package_as_bytes = package_as_bytes.as_ref();
+    let digest = ExtractResult {
+        sha256: rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(package_as_bytes),
+        md5: rattler_digest::compute_bytes_digest::<rattler_digest::Md5>(package_as_bytes),
+        total_size: package_as_bytes.len() as u64,
+    };
+    indexed_package_record_from_index_json(IndexJson::from_reader(index_json_reader)?, digest)
         .map(|indexed| indexed.record)
 }
 
-/// Extract an indexed package record from an `index.json` file.
-fn indexed_package_record_from_index_json<T: Read>(
-    package_as_bytes: impl AsRef<[u8]>,
-    index_json_reader: &mut T,
+/// Build an indexed package record from a package's `index.json` and the
+/// digest of the archive that contains it.
+fn indexed_package_record_from_index_json(
+    index_json: IndexJson,
+    digest: ExtractResult,
 ) -> std::io::Result<IndexedPackageRecord> {
-    let validated = IndexJson::from_reader(index_json_reader)?
+    let validated = index_json
         .into_validated()
         .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
     let repodata_revision = validated.required_repodata_revision();
     let (index, matchspecs) = validated.into_parts();
-
-    let sha256_result =
-        rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(&package_as_bytes);
-    let md5_result = rattler_digest::compute_bytes_digest::<rattler_digest::Md5>(&package_as_bytes);
-    let size = package_as_bytes.as_ref().len();
 
     let package_record = PackageRecord {
         name: index.name,
@@ -221,9 +223,9 @@ fn indexed_package_record_from_index_json<T: Read>(
         build: index.build,
         build_number: index.build_number,
         subdir: index.subdir.unwrap_or_else(|| "unknown".to_string()),
-        md5: Some(md5_result),
-        sha256: Some(sha256_result),
-        size: Some(size as u64),
+        md5: Some(digest.md5),
+        sha256: Some(digest.sha256),
+        size: Some(digest.total_size),
         arch: index.arch,
         platform: index.platform,
         depends: index.depends,
@@ -305,17 +307,11 @@ pub fn package_record_from_tar_bz2(file: &Path) -> std::io::Result<PackageRecord
 /// This function will look for the `info/index.json` file in the conda package
 /// and extract the package record from it.
 pub fn package_record_from_tar_bz2_reader(reader: impl BufRead) -> std::io::Result<PackageRecord> {
-    let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
-    let reader = Cursor::new(&bytes);
-    let mut archive = read::stream_tar_bz2(reader);
-    for entry in archive.entries()?.flatten() {
-        let mut entry = entry;
-        let path = entry.path()?;
-        if path.as_os_str().eq("info/index.json") {
-            return package_record_from_index_json(&bytes, &mut entry);
-        }
-    }
-    Err(std::io::Error::other("No index.json found"))
+    indexed_package_record(PackageMetadata::from_reader(
+        reader,
+        CondaArchiveType::TarBz2,
+    ))
+    .map(|indexed| indexed.record)
 }
 
 /// Extract the package record from a `.conda` package file.
@@ -323,7 +319,8 @@ pub fn package_record_from_tar_bz2_reader(reader: impl BufRead) -> std::io::Resu
 /// and extract the package record from it.
 pub fn package_record_from_conda(file: &Path) -> std::io::Result<PackageRecord> {
     let reader = fs::File::open(file)?;
-    package_record_from_conda_reader(BufReader::new(reader))
+    indexed_package_record(PackageMetadata::from_seekable_conda(BufReader::new(reader)))
+        .map(|indexed| indexed.record)
 }
 
 /// Extract the package record from a conda package archive.
@@ -342,98 +339,75 @@ pub fn package_record_from_archive(file: &Path) -> std::io::Result<PackageRecord
     }
 }
 
-fn read_indexed_json_from_archive(
-    bytes: &Vec<u8>,
-    archive: &mut tar::Archive<impl Read>,
-) -> std::io::Result<IndexedPackageRecord> {
-    let mut index_json = None;
-    let mut run_exports_json = None;
-    for entry in archive.entries()?.flatten() {
-        let mut entry = entry;
-        let path = entry.path()?;
-        if path.as_os_str().eq("info/index.json") {
-            index_json = Some(indexed_package_record_from_index_json(bytes, &mut entry)?);
-        } else if path.as_os_str().eq("info/run_exports.json") {
-            run_exports_json = Some(RunExportsJson::from_reader(&mut entry)?);
-        }
-    }
-
-    if let Some(mut index_json) = index_json {
-        index_json.record.run_exports = run_exports_json;
-        return Ok(index_json);
-    }
-
-    Err(std::io::Error::other("No index.json found"))
-}
-
-fn read_index_json_from_archive(
-    bytes: &Vec<u8>,
-    archive: &mut tar::Archive<impl Read>,
-) -> std::io::Result<PackageRecord> {
-    read_indexed_json_from_archive(bytes, archive).map(|indexed| indexed.record)
-}
-
 /// Extract the package record from a `.conda` package file content.
 /// This function will look for the `info/index.json` file in the conda package
 /// and extract the package record from it.
+///
+/// The reader cannot be read twice, so the package is first copied to a
+/// temporary file. This also handles packages that use zip data descriptors.
 pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result<PackageRecord> {
-    let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
-    let reader = Cursor::new(&bytes);
-    let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
-    read_index_json_from_archive(&bytes, &mut archive)
+    indexed_package_record(PackageMetadata::from_conda_via_buffering(reader))
+        .map(|indexed| indexed.record)
 }
 
-fn indexed_package_record_from_tar_bz2_reader(
-    reader: impl BufRead,
+/// Build an indexed record from the metadata and digest returned by the archive reader.
+fn indexed_package_record(
+    result: Result<(PackageMetadata, ExtractResult), rattler_package_streaming::ExtractError>,
 ) -> std::io::Result<IndexedPackageRecord> {
-    let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
-    let reader = Cursor::new(&bytes);
-    let mut archive = read::stream_tar_bz2(reader);
-    for entry in archive.entries()?.flatten() {
-        let mut entry = entry;
-        let path = entry.path()?;
-        if path.as_os_str().eq("info/index.json") {
-            return indexed_package_record_from_index_json(&bytes, &mut entry);
-        }
-    }
-    Err(std::io::Error::other("No index.json found"))
+    let (metadata, digest) = result.map_err(|err| match err {
+        rattler_package_streaming::ExtractError::IoError(err) => err,
+        err => std::io::Error::other(err),
+    })?;
+    let mut indexed = indexed_package_record_from_index_json(metadata.index, digest)?;
+    indexed.record.run_exports = metadata.run_exports;
+    Ok(indexed)
 }
 
-fn indexed_package_record_from_conda_reader(
-    reader: impl BufRead,
-) -> std::io::Result<IndexedPackageRecord> {
-    let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
-    let reader = Cursor::new(&bytes);
-    let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
-    read_indexed_json_from_archive(&bytes, &mut archive)
-}
-
-/// Parse a package file buffer based on its filename extension.
+/// Stream a package from storage and build its indexed record.
 ///
-/// # Arguments
+/// Parsing is blocking, so it runs on a blocking thread that pulls bytes from
+/// the stream as it needs them. A `.conda` package that uses zip data
+/// descriptors cannot be parsed as a stream; it is read again and spooled to a
+/// temporary file instead.
 ///
-/// * `buffer` - The file contents to parse
-/// * `filename` - The filename (used to determine archive type)
-///
-/// # Returns
-///
-/// Returns the parsed `PackageRecord`.
-fn parse_package_buffer(
-    buffer: opendal::Buffer,
+/// Returns the record together with the metadata of the version that was read.
+async fn read_package_record(
+    op: &Operator,
+    path: &str,
     filename: &str,
-) -> std::io::Result<IndexedPackageRecord> {
-    let reader = buffer.reader();
-    let archive_type = DistArchiveType::try_from(filename).unwrap();
-    match archive_type {
-        DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
-            indexed_package_record_from_tar_bz2_reader(reader)
+    metadata: RepodataFileMetadata,
+) -> std::io::Result<(IndexedPackageRecord, RepodataFileMetadata)> {
+    let archive_type = match DistArchiveType::try_from(filename).unwrap() {
+        DistArchiveType::Conda(archive_type) => archive_type,
+        DistArchiveType::Wheel(WheelArchiveType::Whl) => {
+            return Err(std::io::Error::other(
+                "Package type \".whl\" not yet supported.",
+            ));
         }
-        DistArchiveType::Conda(CondaArchiveType::Conda) => {
-            indexed_package_record_from_conda_reader(reader)
+    };
+
+    let (stream, metadata) = cache::PackageStream::open_with_retry(op, path, metadata)
+        .await
+        .map_err(std::io::Error::other)?;
+    let result = process_blocking(StreamReader::new(stream), move |reader| {
+        PackageMetadata::from_reader(reader, archive_type)
+    })
+    .await;
+    match result {
+        Err(err) if err.is_data_descriptor_error() => {
+            tracing::warn!(
+                "{path} uses zip data descriptors and cannot be streamed, spooling it to a temporary file instead"
+            );
+            let (stream, metadata) = cache::PackageStream::open_with_retry(op, path, metadata)
+                .await
+                .map_err(std::io::Error::other)?;
+            let result = process_blocking(StreamReader::new(stream), |reader| {
+                PackageMetadata::from_conda_via_buffering(reader)
+            })
+            .await;
+            Ok((indexed_package_record(result)?, metadata))
         }
-        DistArchiveType::Wheel(WheelArchiveType::Whl) => Err(std::io::Error::other(
-            "Package type \".whl\" not yet supported.",
-        )),
+        result => Ok((indexed_package_record(result)?, metadata)),
     }
 }
 
@@ -475,9 +449,10 @@ async fn read_and_parse_package(
             last_modified,
         }) => {
             // Cache miss - read file with retry logic
-            let (buffer, final_metadata) = cache::read_package_with_retry(
+            let (record, final_metadata) = read_package_record(
                 op,
                 &file_path,
+                filename,
                 RepodataFileMetadata {
                     etag,
                     last_modified,
@@ -485,11 +460,7 @@ async fn read_and_parse_package(
                     precondition_checks: PreconditionChecks::Enabled, // Always enabled for cache reads
                 },
             )
-            .await
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
-
-            // Parse package
-            let record = parse_package_buffer(buffer, filename)?;
+            .await?;
 
             // Store in cache using filename as key
             cache
@@ -506,11 +477,15 @@ async fn read_and_parse_package(
         Err(e) => {
             tracing::warn!("Cache stat failed for {file_path}: {e}, proceeding without cache");
             // Fall back to direct read without cache
-            let buffer = op
-                .read(&file_path)
+            let metadata = RepodataFileMetadata {
+                etag: None,
+                last_modified: None,
+                file_existed: true,
+                precondition_checks: PreconditionChecks::Disabled,
+            };
+            read_package_record(op, &file_path, filename, metadata)
                 .await
-                .map_err(|e| std::io::Error::other(e.to_string()))?;
-            parse_package_buffer(buffer, filename)
+                .map(|(record, _)| record)
         }
     }
 }
@@ -2701,7 +2676,7 @@ mod tests {
     #[test]
     fn latest_assignment_canonicalizes_validated_legacy_index_json() {
         let filename = DistArchiveIdentifier::try_from_filename("demo-1.0-0.tar.bz2").unwrap();
-        let mut index_json = Cursor::new(
+        let index_json = IndexJson::from_reader(Cursor::new(
             br#"{
                 "build": "0",
                 "build_number": 0,
@@ -2709,8 +2684,17 @@ mod tests {
                 "name": "demo",
                 "version": "1.0"
             }"#,
-        );
-        let indexed = indexed_package_record_from_index_json(b"package", &mut index_json).unwrap();
+        ))
+        .unwrap();
+        let indexed = indexed_package_record_from_index_json(
+            index_json,
+            ExtractResult {
+                sha256: rattler_digest::Sha256Hash::default(),
+                md5: rattler_digest::Md5Hash::default(),
+                total_size: 0,
+            },
+        )
+        .unwrap();
         assert_eq!(indexed.repodata_revision, RepodataRevision::Legacy);
 
         let mut v3 = V3Packages::default();

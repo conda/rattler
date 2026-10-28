@@ -1420,3 +1420,63 @@ async fn test_sharded_repodata_is_deterministic() {
          reindexing an unchanged channel (expected 1)"
     );
 }
+
+/// Checks whole-archive hashes through both local readers and channel indexing,
+/// including ZIP data descriptors that require the buffered fallback.
+#[tokio::test]
+async fn test_package_record_hashes_cover_whole_archive() {
+    for (package, descriptors) in [
+        ("clobber-1-0.1.0-h4616a5c_0.tar.bz2", false),
+        ("clobber-fd-1-0.1.0-h4616a5c_0.conda", false),
+        ("clobber-fd-1-0.1.0-h4616a5c_0.conda", true),
+    ] {
+        let source = test_data_dir().join("clobber").join(package);
+        let temp_dir = tempfile::tempdir().unwrap();
+        let noarch = temp_dir.path().join("noarch");
+        fs::create_dir(&noarch).unwrap();
+        let filename = source.file_name().unwrap().to_str().unwrap();
+        let path = noarch.join(filename);
+        if descriptors {
+            let mut archive = zip::ZipArchive::new(File::open(&source).unwrap()).unwrap();
+            let mut writer = zip::ZipWriter::new_stream(File::create(&path).unwrap());
+            for i in 0..archive.len() {
+                let mut entry = archive.by_index(i).unwrap();
+                writer
+                    .start_file(
+                        entry.name().unwrap(),
+                        zip::write::SimpleFileOptions::default()
+                            .compression_method(zip::CompressionMethod::Stored),
+                    )
+                    .unwrap();
+                std::io::copy(&mut entry, &mut writer).unwrap();
+            }
+            writer.finish().unwrap();
+        } else {
+            fs::copy(&source, &path).unwrap();
+        }
+        let source = path;
+        let sha256 =
+            rattler_digest::compute_file_digest::<rattler_digest::Sha256>(&source).unwrap();
+        let md5 = rattler_digest::compute_file_digest::<rattler_digest::Md5>(&source).unwrap();
+        let size = fs::metadata(&source).unwrap().len();
+        let record = rattler_index::package_record_from_archive(&source).unwrap();
+        assert_eq!(record.sha256, Some(sha256));
+        assert_eq!(record.md5, Some(md5));
+        assert_eq!(record.size, Some(size));
+
+        index_fs(noarch_index_config(temp_dir.path()))
+            .await
+            .unwrap();
+        let repodata: Value =
+            serde_json::from_reader(File::open(noarch.join("repodata.json")).unwrap()).unwrap();
+        let packages = if filename.ends_with(".conda") {
+            "packages.conda"
+        } else {
+            "packages"
+        };
+        let entry = &repodata[packages][filename];
+        assert_eq!(entry["sha256"], hex::encode(sha256));
+        assert_eq!(entry["md5"], hex::encode(md5));
+        assert_eq!(entry["size"], size);
+    }
+}
