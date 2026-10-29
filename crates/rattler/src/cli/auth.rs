@@ -99,7 +99,7 @@ struct LoginArgs {
     // -- OAuth/OIDC --
     /// Log in interactively with OAuth/OIDC (browser or device code)
     #[cfg(feature = "oauth")]
-    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id", "workload_identity"], help_heading = "OAuth/OIDC Authentication")]
+    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "token_stdin", "password_stdin", "conda_token_stdin", "s3_access_key_id", "workload_identity"], help_heading = "OAuth/OIDC Authentication")]
     oauth: bool,
 
     /// OIDC issuer URL (defaults to <https://{host>})
@@ -143,7 +143,7 @@ struct LoginArgs {
     #[cfg(feature = "oauth")]
     #[clap(
         long,
-        conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id", "workload_identity"],
+        conflicts_with_all = ["token", "username", "password", "conda_token", "token_stdin", "password_stdin", "conda_token_stdin", "s3_access_key_id", "workload_identity"],
         help_heading = "OAuth/OIDC Authentication"
     )]
     oauth_audience: Option<String>,
@@ -151,7 +151,7 @@ struct LoginArgs {
     // -- Workload identity --
     /// Log in non-interactively by exchanging the CI provider's OIDC ID
     /// token (GitHub Actions, GitLab CI, ...) for an access token
-    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id"], help_heading = "Workload Identity (CI, non-interactive)")]
+    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "token_stdin", "password_stdin", "conda_token_stdin", "s3_access_key_id"], help_heading = "Workload Identity (CI, non-interactive)")]
     workload_identity: bool,
 
     /// Audience requested in the OIDC ID token (defaults to the host, or
@@ -1696,6 +1696,8 @@ mod tests {
             vec!["--password-stdin", "--password", "x"],
             vec!["--conda-token-stdin", "--conda-token", "x"],
             vec!["--token-stdin", "--password-stdin"],
+            vec!["--workload-identity", "--token-stdin"],
+            vec!["--oauth", "--password-stdin"],
         ] {
             let mut cmd = vec!["auth", "login", "prefix.dev"];
             cmd.extend(conflicting);
