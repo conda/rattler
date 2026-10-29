@@ -1,15 +1,17 @@
-use std::{fmt, str::FromStr};
+use std::{fmt, str::FromStr, sync::Arc, time::Duration};
 
 use indexmap::IndexMap;
-use jiff::{Timestamp, civil::Date};
+use jiff::{Span, Timestamp, civil::Date, tz::TimeZone};
 use rattler_conda_types::{
-    BuildNumberSpec, PackageName, ParseStrictness, VersionSpec, match_spec::matcher::StringMatcher,
+    BuildNumberSpec, Channel, ChannelConfig, MatchSpec, NamelessMatchSpec, PackageName,
+    PackageNameMatcher, ParseStrictness, VersionSpec, match_spec::matcher::StringMatcher,
 };
 use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
-    de::{self, MapAccess, SeqAccess, Visitor, value::MapAccessDeserializer},
+    de::{self, MapAccess, Visitor, value::MapAccessDeserializer},
 };
+use url::Url;
 
 /// The `exclude-newer` configuration that rattler-based tools start from when
 /// nothing more specific is configured, e.g. the cutoff of `pixi exec` or of a
@@ -29,13 +31,16 @@ use serde::{
 /// exemptions = { ruff = "*" }
 /// ```
 ///
-/// The cutoff and the exemptions are kept as written, so that a tool can write
-/// them into a manifest unchanged (e.g. `7d` instead of the point in time it
-/// resolves to). They are validated when they are deserialized, see
-/// [`Self::validate`]: the cutoff is an RFC 3339 timestamp, a date or a
-/// duration, and an exemption is a version spec or a table of match spec
-/// fields that select the exempt releases, with an optional absolute
-/// `cutoff`.
+/// The cutoffs are kept as written, so that a tool can write them into a
+/// manifest unchanged (e.g. `7d` instead of the point in time it resolves
+/// to). They are validated when they are deserialized, see [`Self::validate`]:
+/// the cutoff is an RFC 3339 timestamp, a date or a duration. An exemption is
+/// a version spec or a table of match spec fields that select the exempt
+/// releases, with an optional absolute `cutoff`. It is parsed into a
+/// [`NamelessMatchSpec`].
+///
+/// Use [`Self::to_exclude_newer_with_now`] or `TryFrom` to convert the
+/// configuration into a [`rattler_solve::ExcludeNewer`].
 ///
 /// Dates must be quoted. An unquoted TOML date, e.g.
 /// `exclude-newer = 2026-10-12`, is rejected with a misleading error such as
@@ -56,26 +61,19 @@ pub struct ExcludeNewerConfig {
 }
 
 /// The releases of a package that are exempt from the `exclude-newer` cutoff.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(untagged)]
-pub enum ExcludeNewerExemption {
-    /// A version spec, e.g. `"*"` or `"==1.43.1"`.
-    Version(String),
+///
+/// In the configuration this is either a version spec, e.g. `"==1.43.1"`, or
+/// a table of match spec fields, e.g.
+/// `{ version = "==1.43.1", cutoff = "2026-10-12" }`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExcludeNewerExemption {
+    /// The releases that are exempt. Only the fields that select records are
+    /// supported, see [`Self::validate`].
+    pub spec: NamelessMatchSpec,
 
-    /// Match spec fields that select the exempt releases, e.g.
-    /// `{ version = "==1.43.1", cutoff = "2026-10-12" }`.
-    Fields(IndexMap<String, ExcludeNewerExemptionField>),
-}
-
-/// The value of a match spec field of an [`ExcludeNewerExemption`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(untagged)]
-pub enum ExcludeNewerExemptionField {
-    /// A single value, e.g. `version = "==1.43.1"`.
-    Single(String),
-
-    /// A list of values, e.g. `flags = ["cuda"]`.
-    List(Vec<String>),
+    /// Only the releases published up to this cutoff are exempt, an RFC 3339
+    /// timestamp or a date, e.g. `2026-10-12`.
+    pub cutoff: Option<String>,
 }
 
 /// An invalid cutoff or exemption of an [`ExcludeNewerConfig`].
@@ -83,24 +81,11 @@ pub enum ExcludeNewerExemptionField {
 #[error("{0}")]
 pub struct InvalidExcludeNewerError(String);
 
-/// The match spec fields that select the exempt releases of a package and
-/// take a single value.
-const SINGLE_VALUE_FIELDS: &[&str] = &[
-    "version",
-    "build",
-    "build-number",
-    "file-name",
-    "channel",
-    "subdir",
-    "license",
-    "license-family",
-    "md5",
-    "sha256",
-];
-
-/// The match spec fields that select the exempt releases of a package and
-/// take a list of values.
-const LIST_FIELDS: &[&str] = &["flags", "track-features"];
+/// A parsed cutoff of an [`ExcludeNewerConfig`].
+enum Cutoff {
+    Timestamp(Timestamp),
+    Duration(Duration),
+}
 
 impl ExcludeNewerConfig {
     /// Creates a configuration that consists of a cutoff only, e.g. `7d`.
@@ -111,124 +96,376 @@ impl ExcludeNewerConfig {
         }
     }
 
-    /// Checks that the cutoff and the exemptions parse. This is done when the
-    /// configuration is deserialized, so it is only needed for a
-    /// configuration that is constructed directly.
+    /// Checks that the cutoff parses and that the exemptions are valid. This
+    /// is done when the configuration is deserialized, so it is only needed
+    /// for a configuration that is constructed directly.
     pub fn validate(&self) -> Result<(), InvalidExcludeNewerError> {
-        validate_cutoff(&self.cutoff).map_err(InvalidExcludeNewerError)?;
+        self.to_exclude_newer_with_now(Timestamp::now()).map(drop)
+    }
+
+    /// Converts the configuration into a [`rattler_solve::ExcludeNewer`],
+    /// resolving a duration cutoff relative to `now`.
+    pub fn to_exclude_newer_with_now(
+        &self,
+        now: Timestamp,
+    ) -> Result<rattler_solve::ExcludeNewer, InvalidExcludeNewerError> {
+        let cutoff = match parse_cutoff(&self.cutoff).map_err(InvalidExcludeNewerError)? {
+            Cutoff::Timestamp(timestamp) => timestamp,
+            Cutoff::Duration(duration) => Span::try_from(duration)
+                .ok()
+                .and_then(|span| now.checked_sub(span).ok())
+                .ok_or_else(|| {
+                    InvalidExcludeNewerError(format!("cutoff `{}` is too large", self.cutoff))
+                })?,
+        };
+        let mut exclude_newer = rattler_solve::ExcludeNewer::from_datetime(cutoff);
         for (name, exemption) in &self.exemptions {
-            exemption
-                .validate()
-                .map_err(|InvalidExcludeNewerError(err)| {
-                    InvalidExcludeNewerError(format!(
-                        "invalid exemption for `{}`: {err}",
-                        name.as_source()
-                    ))
-                })?;
+            exclude_newer = exemption.add_to(exclude_newer, name).map_err(|err| {
+                InvalidExcludeNewerError(format!(
+                    "invalid exemption for `{}`: {err}",
+                    name.as_source()
+                ))
+            })?;
         }
-        Ok(())
+        Ok(exclude_newer)
+    }
+}
+
+impl TryFrom<&ExcludeNewerConfig> for rattler_solve::ExcludeNewer {
+    type Error = InvalidExcludeNewerError;
+
+    /// Converts the configuration, resolving a duration cutoff relative to
+    /// the current time.
+    fn try_from(config: &ExcludeNewerConfig) -> Result<Self, Self::Error> {
+        config.to_exclude_newer_with_now(Timestamp::now())
+    }
+}
+
+impl TryFrom<ExcludeNewerConfig> for rattler_solve::ExcludeNewer {
+    type Error = InvalidExcludeNewerError;
+
+    /// Converts the configuration, resolving a duration cutoff relative to
+    /// the current time.
+    fn try_from(config: ExcludeNewerConfig) -> Result<Self, Self::Error> {
+        Self::try_from(&config)
     }
 }
 
 impl ExcludeNewerExemption {
-    /// Checks that the version spec or the match spec fields parse, and that
-    /// a table selects the exempt releases by at least one match spec field.
-    pub fn validate(&self) -> Result<(), InvalidExcludeNewerError> {
-        match self {
-            Self::Version(version) => validate_version(version),
-            Self::Fields(fields) => validate_exemption_fields(fields),
+    /// Creates an exemption for the releases matching a version spec.
+    pub fn from_version(version: VersionSpec) -> Self {
+        Self {
+            spec: NamelessMatchSpec {
+                version: Some(version),
+                ..NamelessMatchSpec::default()
+            },
+            cutoff: None,
         }
-        .map_err(InvalidExcludeNewerError)
+    }
+
+    /// Checks that the cutoff parses, that the spec only uses fields that
+    /// select records, and that it uses at least one of them. An empty spec
+    /// would exempt every release, so a typo would silently exempt the
+    /// package entirely.
+    pub fn validate(&self) -> Result<(), InvalidExcludeNewerError> {
+        self.check().map(drop).map_err(InvalidExcludeNewerError)
+    }
+
+    /// Validates the exemption and returns its parsed cutoff.
+    fn check(&self) -> Result<Option<Timestamp>, String> {
+        let NamelessMatchSpec {
+            version,
+            build,
+            build_number,
+            file_name,
+            extras,
+            flags,
+            channel,
+            subdir,
+            namespace,
+            md5,
+            sha256,
+            url,
+            license,
+            license_family,
+            condition,
+            track_features,
+        } = &self.spec;
+        for (field, is_set) in [
+            ("extras", extras.is_some()),
+            ("flags", flags.is_some()),
+            ("namespace", namespace.is_some()),
+            ("condition", condition.is_some()),
+            ("track-features", track_features.is_some()),
+        ] {
+            if is_set {
+                return Err(format!("the match spec field `{field}` is not supported"));
+            }
+        }
+        let selects_releases = version.is_some()
+            || build.is_some()
+            || build_number.is_some()
+            || file_name.is_some()
+            || channel.is_some()
+            || subdir.is_some()
+            || md5.is_some()
+            || sha256.is_some()
+            || url.is_some()
+            || license.is_some()
+            || license_family.is_some();
+        if !selects_releases {
+            return Err("an exemption table must specify at least one match spec field besides `cutoff`, use `version = \"*\"` to exempt every release".to_string());
+        }
+        self.cutoff
+            .as_deref()
+            .map(parse_absolute_cutoff)
+            .transpose()
+    }
+
+    /// Adds this exemption of the package `name` to `exclude_newer`.
+    fn add_to(
+        &self,
+        exclude_newer: rattler_solve::ExcludeNewer,
+        name: &PackageName,
+    ) -> Result<rattler_solve::ExcludeNewer, String> {
+        let cutoff = self.check()?;
+        let spec =
+            MatchSpec::from_nameless(self.spec.clone(), PackageNameMatcher::Exact(name.clone()));
+        match cutoff {
+            Some(cutoff) => exclude_newer.with_exemption_until(spec, cutoff),
+            None => exclude_newer.with_exemption(spec),
+        }
+        .map_err(|err| err.to_string())
+    }
+
+    /// Returns the version spec if the exemption consists of it only, which
+    /// is written on its own.
+    fn as_version(&self) -> Option<&VersionSpec> {
+        let version = self.spec.version.as_ref()?;
+        let only_version = NamelessMatchSpec {
+            version: Some(version.clone()),
+            ..NamelessMatchSpec::default()
+        };
+        (self.cutoff.is_none() && self.spec == only_version).then_some(version)
     }
 }
 
-/// Checks that `cutoff` is an RFC 3339 timestamp, a date or a duration.
-fn validate_cutoff(cutoff: &str) -> Result<(), String> {
-    if humantime::parse_duration(cutoff).is_ok() || validate_absolute_cutoff(cutoff).is_ok() {
-        return Ok(());
+/// Parses `cutoff` as an RFC 3339 timestamp, a date or a duration.
+fn parse_cutoff(cutoff: &str) -> Result<Cutoff, String> {
+    if let Ok(duration) = humantime::parse_duration(cutoff) {
+        return Ok(Cutoff::Duration(duration));
     }
-    Err(format!(
-        "invalid cutoff `{cutoff}`, expected an RFC 3339 timestamp, a date, or a duration (for example, 7d)"
-    ))
+    parse_absolute_cutoff(cutoff).map(Cutoff::Timestamp).map_err(|_err| {
+        format!(
+            "invalid cutoff `{cutoff}`, expected an RFC 3339 timestamp, a date, or a duration (for example, 7d)"
+        )
+    })
 }
 
-/// Checks that `cutoff` is an RFC 3339 timestamp or a date, the cutoffs that
-/// don't move over time.
-fn validate_absolute_cutoff(cutoff: &str) -> Result<(), String> {
-    if cutoff.parse::<Timestamp>().is_ok() || cutoff.parse::<Date>().is_ok() {
-        return Ok(());
+/// Parses `cutoff` as an RFC 3339 timestamp or a date, the cutoffs that don't
+/// move over time. A date includes the entire day in UTC.
+fn parse_absolute_cutoff(cutoff: &str) -> Result<Timestamp, String> {
+    if let Ok(timestamp) = cutoff.parse::<Timestamp>() {
+        return Ok(timestamp);
     }
-    Err(format!(
-        "invalid cutoff `{cutoff}`, expected an RFC 3339 timestamp or a date"
-    ))
+    cutoff
+        .parse::<Date>()
+        .ok()
+        .and_then(|date| date.tomorrow().ok())
+        .and_then(|next_day| next_day.to_zoned(TimeZone::UTC).ok())
+        .map(|next_day| next_day.timestamp())
+        .ok_or_else(|| {
+            format!("invalid cutoff `{cutoff}`, expected an RFC 3339 timestamp or a date")
+        })
 }
 
-/// Checks that `version` is a version spec. Lenient, so that the tools can
-/// apply their own strictness.
-fn validate_version(version: &str) -> Result<(), String> {
+/// Parses `version` as a version spec. Lenient, so that the tools can apply
+/// their own strictness.
+fn parse_version(version: &str) -> Result<VersionSpec, String> {
     VersionSpec::from_str(version, ParseStrictness::Lenient)
-        .map(drop)
         .map_err(|err| format!("invalid version `{version}`: {err}"))
 }
 
-/// Checks the match spec fields of an exemption table. An empty table would
-/// exempt every release, so a typo would silently exempt the package
-/// entirely.
-fn validate_exemption_fields(
-    fields: &IndexMap<String, ExcludeNewerExemptionField>,
-) -> Result<(), String> {
-    for (name, value) in fields {
-        validate_exemption_field(name, value)?;
-    }
-    if fields.keys().all(|name| name == "cutoff") {
-        return Err("an exemption table must specify at least one match spec field besides `cutoff`, use `version = \"*\"` to exempt every release".to_string());
-    }
-    Ok(())
+/// The table form of an [`ExcludeNewerExemption`]. Only the match spec fields
+/// that select records are supported.
+#[derive(Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+struct ExemptionTable {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    build: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    build_number: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    channel: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    subdir: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    license: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    license_family: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    md5: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sha256: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cutoff: Option<String>,
 }
 
-/// Checks a match spec field of an exemption table.
-fn validate_exemption_field(name: &str, value: &ExcludeNewerExemptionField) -> Result<(), String> {
-    use ExcludeNewerExemptionField::{List, Single};
+impl TryFrom<ExemptionTable> for ExcludeNewerExemption {
+    type Error = String;
 
-    let parse_string_matcher = |value: &str| {
-        StringMatcher::from_str(value)
-            .map(drop)
-            .map_err(|err| format!("invalid `{name}` `{value}`: {err}"))
-    };
-    match (name, value) {
-        ("cutoff", Single(cutoff)) => validate_absolute_cutoff(cutoff),
-        ("version", Single(version)) => validate_version(version),
-        ("build", Single(build)) => parse_string_matcher(build),
-        ("build-number", Single(build_number)) => BuildNumberSpec::from_str(build_number)
-            .map(drop)
-            .map_err(|err| format!("invalid `build-number` `{build_number}`: {err}")),
-        ("md5", Single(md5)) => parse_digest_from_hex::<Md5>(md5)
-            .map(drop)
-            .ok_or_else(|| format!("invalid `md5` `{md5}`, expected a hex encoded MD5 hash")),
-        ("sha256", Single(sha256)) => parse_digest_from_hex::<Sha256>(sha256)
-            .map(drop)
-            .ok_or_else(|| {
-                format!("invalid `sha256` `{sha256}`, expected a hex encoded SHA256 hash")
-            }),
-        ("flags", List(flags)) => flags.iter().try_for_each(|flag| parse_string_matcher(flag)),
-        (name, Single(_)) if SINGLE_VALUE_FIELDS.contains(&name) => Ok(()),
-        (name, List(_)) if LIST_FIELDS.contains(&name) => Ok(()),
-        ("cutoff", List(_)) => Err("`cutoff` must be a string".to_string()),
-        (name, List(_)) if SINGLE_VALUE_FIELDS.contains(&name) => {
-            Err(format!("`{name}` must be a string"))
+    fn try_from(table: ExemptionTable) -> Result<Self, Self::Error> {
+        let parse_string_matcher = |field: &str, value: String| {
+            StringMatcher::from_str(&value)
+                .map_err(|err| format!("invalid `{field}` `{value}`: {err}"))
+        };
+        let channel_config =
+            ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap_or_default());
+        let exemption = Self {
+            spec: NamelessMatchSpec {
+                version: table.version.as_deref().map(parse_version).transpose()?,
+                build: table
+                    .build
+                    .map(|build| parse_string_matcher("build", build))
+                    .transpose()?,
+                build_number: table
+                    .build_number
+                    .map(|build_number| {
+                        BuildNumberSpec::from_str(&build_number).map_err(|err| {
+                            format!("invalid `build-number` `{build_number}`: {err}")
+                        })
+                    })
+                    .transpose()?,
+                file_name: table.file_name,
+                channel: table
+                    .channel
+                    .map(|channel| {
+                        Channel::from_str(&channel, &channel_config)
+                            .map(Arc::new)
+                            .map_err(|err| format!("invalid `channel` `{channel}`: {err}"))
+                    })
+                    .transpose()?,
+                subdir: table.subdir,
+                license: table.license,
+                license_family: table.license_family,
+                md5: table
+                    .md5
+                    .map(|md5| {
+                        parse_digest_from_hex::<Md5>(&md5).ok_or_else(|| {
+                            format!("invalid `md5` `{md5}`, expected a hex encoded MD5 hash")
+                        })
+                    })
+                    .transpose()?,
+                sha256: table
+                    .sha256
+                    .map(|sha256| {
+                        parse_digest_from_hex::<Sha256>(&sha256).ok_or_else(|| {
+                            format!(
+                                "invalid `sha256` `{sha256}`, expected a hex encoded SHA256 hash"
+                            )
+                        })
+                    })
+                    .transpose()?,
+                url: table
+                    .url
+                    .map(|url| {
+                        Url::parse(&url).map_err(|err| format!("invalid `url` `{url}`: {err}"))
+                    })
+                    .transpose()?,
+                ..NamelessMatchSpec::default()
+            },
+            cutoff: table.cutoff,
+        };
+        exemption.check()?;
+        Ok(exemption)
+    }
+}
+
+impl From<&ExcludeNewerExemption> for ExemptionTable {
+    fn from(exemption: &ExcludeNewerExemption) -> Self {
+        let spec = &exemption.spec;
+        Self {
+            version: spec.version.as_ref().map(ToString::to_string),
+            build: spec.build.as_ref().map(ToString::to_string),
+            build_number: spec.build_number.as_ref().map(ToString::to_string),
+            file_name: spec.file_name.clone(),
+            channel: spec
+                .channel
+                .as_ref()
+                .map(|channel| channel.name().to_string()),
+            subdir: spec.subdir.clone(),
+            license: spec.license.clone(),
+            license_family: spec.license_family.clone(),
+            md5: spec.md5.as_ref().map(hex::encode),
+            sha256: spec.sha256.as_ref().map(hex::encode),
+            url: spec.url.as_ref().map(ToString::to_string),
+            cutoff: exemption.cutoff.clone(),
         }
-        (name, Single(_)) if LIST_FIELDS.contains(&name) => {
-            Err(format!("`{name}` must be an array of strings"))
+    }
+}
+
+impl Serialize for ExcludeNewerExemption {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self.as_version() {
+            Some(version) => version.to_string().serialize(serializer),
+            None => ExemptionTable::from(self).serialize(serializer),
         }
-        (name, _) => Err(format!(
-            "unknown field `{name}`, expected `cutoff` or one of the match spec fields {}",
-            SINGLE_VALUE_FIELDS
-                .iter()
-                .chain(LIST_FIELDS)
-                .map(|field| format!("`{field}`"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        )),
+    }
+}
+
+/// An [`ExcludeNewerExemption`] as written, before it is parsed.
+enum RawExemption {
+    Version(String),
+    Table(Box<ExemptionTable>),
+}
+
+impl TryFrom<RawExemption> for ExcludeNewerExemption {
+    type Error = String;
+
+    fn try_from(raw: RawExemption) -> Result<Self, Self::Error> {
+        match raw {
+            RawExemption::Version(version) => parse_version(&version).map(Self::from_version),
+            RawExemption::Table(table) => (*table).try_into(),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for RawExemption {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct ExemptionVisitor;
+
+        impl<'de> Visitor<'de> for ExemptionVisitor {
+            type Value = RawExemption;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("a version string or a table of match spec fields")
+            }
+
+            fn visit_str<E: de::Error>(self, version: &str) -> Result<Self::Value, E> {
+                Ok(RawExemption::Version(version.to_string()))
+            }
+
+            fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+                ExemptionTable::deserialize(MapAccessDeserializer::new(map))
+                    .map(|table| RawExemption::Table(Box::new(table)))
+            }
+        }
+
+        deserializer.deserialize_any(ExemptionVisitor)
+    }
+}
+
+impl<'de> Deserialize<'de> for ExcludeNewerExemption {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        RawExemption::deserialize(deserializer)?
+            .try_into()
+            .map_err(de::Error::custom)
     }
 }
 
@@ -259,62 +496,6 @@ impl Serialize for ExcludeNewerConfig {
     }
 }
 
-impl<'de> Deserialize<'de> for ExcludeNewerExemptionField {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct FieldVisitor;
-
-        impl<'de> Visitor<'de> for FieldVisitor {
-            type Value = ExcludeNewerExemptionField;
-
-            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str("a string or an array of strings")
-            }
-
-            fn visit_str<E: de::Error>(self, value: &str) -> Result<Self::Value, E> {
-                Ok(ExcludeNewerExemptionField::Single(value.to_string()))
-            }
-
-            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-                let mut values = Vec::new();
-                while let Some(value) = seq.next_element()? {
-                    values.push(value);
-                }
-                Ok(ExcludeNewerExemptionField::List(values))
-            }
-        }
-
-        deserializer.deserialize_any(FieldVisitor)
-    }
-}
-
-impl<'de> Deserialize<'de> for ExcludeNewerExemption {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct ExemptionVisitor;
-
-        impl<'de> Visitor<'de> for ExemptionVisitor {
-            type Value = ExcludeNewerExemption;
-
-            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str("a version string or a table of match spec fields")
-            }
-
-            fn visit_str<E: de::Error>(self, version: &str) -> Result<Self::Value, E> {
-                Ok(ExcludeNewerExemption::Version(version.to_string()))
-            }
-
-            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-                let mut fields = IndexMap::new();
-                while let Some(key) = map.next_key::<String>()? {
-                    fields.insert(key, map.next_value()?);
-                }
-                Ok(ExcludeNewerExemption::Fields(fields))
-            }
-        }
-
-        deserializer.deserialize_any(ExemptionVisitor)
-    }
-}
-
 /// Deserializes the exemptions of an [`ExcludeNewerConfig`]. Package names are
 /// compared normalized, so names that differ only in case are rejected as
 /// duplicates instead of silently overwriting each other.
@@ -340,13 +521,17 @@ fn deserialize_exemptions<'de, D: Deserializer<'de>>(
                         existing.as_source(),
                     )));
                 }
-                let exemption: ExcludeNewerExemption = map.next_value()?;
-                exemption.validate().map_err(|err| {
+                let invalid_exemption = |err: &dyn fmt::Display| {
                     de::Error::custom(format!(
                         "invalid exemption for `{}`: {err}",
                         name.as_source()
                     ))
-                })?;
+                };
+                let exemption = map
+                    .next_value::<RawExemption>()
+                    .map_err(|err| invalid_exemption(&err))?
+                    .try_into()
+                    .map_err(|err: String| invalid_exemption(&err))?;
                 exemptions.insert(name, exemption);
             }
             Ok(exemptions)
@@ -368,14 +553,14 @@ impl<'de> Deserialize<'de> for ExcludeNewerConfig {
             }
 
             fn visit_str<E: de::Error>(self, cutoff: &str) -> Result<Self::Value, E> {
-                validate_cutoff(cutoff).map_err(E::custom)?;
+                parse_cutoff(cutoff).map_err(E::custom)?;
                 Ok(ExcludeNewerConfig::from_cutoff(cutoff))
             }
 
             fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
                 let table = ExcludeNewerTable::deserialize(MapAccessDeserializer::new(map))?;
                 // The exemptions are validated while they are deserialized.
-                validate_cutoff(&table.cutoff).map_err(de::Error::custom)?;
+                parse_cutoff(&table.cutoff).map_err(de::Error::custom)?;
                 Ok(ExcludeNewerConfig {
                     cutoff: table.cutoff,
                     exemptions: table.exemptions,
@@ -421,36 +606,19 @@ mod tests {
         assert_eq!(config.exemptions.len(), 2);
         assert_eq!(
             config.exemptions[&PackageName::new_unchecked("ruff")],
-            ExcludeNewerExemption::Version("*".to_string())
+            ExcludeNewerExemption::from_version(version("*"))
         );
         assert_eq!(
             config.exemptions[&PackageName::new_unchecked("polars")],
-            ExcludeNewerExemption::Fields(IndexMap::from([
-                (
-                    "version".to_string(),
-                    ExcludeNewerExemptionField::Single("==1.43.1".to_string())
-                ),
-                (
-                    "cutoff".to_string(),
-                    ExcludeNewerExemptionField::Single("2026-10-12".to_string())
-                ),
-            ]))
+            ExcludeNewerExemption {
+                cutoff: Some("2026-10-12".to_string()),
+                ..ExcludeNewerExemption::from_version(version("==1.43.1"))
+            }
         );
     }
 
-    #[test]
-    fn test_parse_exemption_list_field() {
-        let document: Document = toml::from_str(
-            r#"exclude-newer = { cutoff = "7d", exemptions = { pytorch = { flags = ["cuda"] } } }"#,
-        )
-        .unwrap();
-        assert_eq!(
-            document.exclude_newer.exemptions[&PackageName::new_unchecked("pytorch")],
-            ExcludeNewerExemption::Fields(IndexMap::from([(
-                "flags".to_string(),
-                ExcludeNewerExemptionField::List(vec!["cuda".to_string()])
-            )]))
-        );
+    fn version(version: &str) -> VersionSpec {
+        VersionSpec::from_str(version, ParseStrictness::Lenient).unwrap()
     }
 
     #[test]
@@ -523,13 +691,14 @@ mod tests {
             ruff = ">=0.1,<1"
             polars = "1.43.1"
             numpy = { version = "*", build = "py3*", build-number = ">=2", cutoff = "2026-10-12" }
-            pytorch = { flags = ["cuda*"], track-features = ["mkl"], channel = "conda-forge", subdir = "linux-64" }
+            pytorch = { channel = "conda-forge", subdir = "linux-64" }
             openssl = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000", md5 = "00000000000000000000000000000000" }
             libfoo = { file-name = "libfoo-1-0.conda", license = "MIT", license-family = "MIT" }
+            libbar = { url = "https://example.com/libbar-1-0.conda" }
             "#,
         )
         .unwrap();
-        assert_eq!(document.exclude_newer.exemptions.len(), 6);
+        assert_eq!(document.exclude_newer.exemptions.len(), 7);
     }
 
     #[test]
@@ -540,17 +709,24 @@ mod tests {
             (r#"{ build-number = "x" }"#, "invalid `build-number` `x`"),
             (r#"{ md5 = "abc" }"#, "invalid `md5` `abc`"),
             (r#"{ sha256 = "abc" }"#, "invalid `sha256` `abc`"),
+            (r#"{ flags = ["cuda"] }"#, "unknown field `flags`"),
+            (r#"{ flags = [] }"#, "unknown field `flags`"),
             (
-                r#"{ flags = "cuda" }"#,
-                "`flags` must be an array of strings",
+                r#"{ track-features = [] }"#,
+                "unknown field `track-features`",
             ),
-            (r#"{ build = ["py3"] }"#, "`build` must be a string"),
+            (
+                r#"{ build = ["py3"] }"#,
+                "invalid type: sequence, expected a string",
+            ),
+            (r#"{ url = "not a url" }"#, "invalid `url` `not a url`"),
             (
                 r#"{ version = "*", cutoff = "7d" }"#,
                 "invalid cutoff `7d`, expected an RFC 3339 timestamp or a date",
             ),
             (r#"{ bogus = "*" }"#, "unknown field `bogus`"),
             (r#"{ extras = ["x"] }"#, "unknown field `extras`"),
+            (r#"{ namespace = "x" }"#, "unknown field `namespace`"),
             (
                 "{}",
                 "an exemption table must specify at least one match spec field besides `cutoff`",
@@ -582,18 +758,84 @@ mod tests {
                 .to_string(),
             "invalid cutoff `7 weeks ago`, expected an RFC 3339 timestamp, a date, or a duration (for example, 7d)"
         );
-        let mut config = ExcludeNewerConfig::from_cutoff("7d");
-        config.exemptions.insert(
-            PackageName::new_unchecked("ruff"),
-            ExcludeNewerExemption::Version(">>>".to_string()),
-        );
-        assert!(
+        for (exemption, message) in [
+            (
+                ExcludeNewerExemption {
+                    spec: NamelessMatchSpec::default(),
+                    cutoff: None,
+                },
+                "invalid exemption for `ruff`: an exemption table must specify at least one match spec field",
+            ),
+            (
+                ExcludeNewerExemption {
+                    spec: NamelessMatchSpec {
+                        flags: Some(vec![]),
+                        ..NamelessMatchSpec::default()
+                    },
+                    cutoff: None,
+                },
+                "invalid exemption for `ruff`: the match spec field `flags` is not supported",
+            ),
+            (
+                ExcludeNewerExemption {
+                    cutoff: Some("7d".to_string()),
+                    ..ExcludeNewerExemption::from_version(version("*"))
+                },
+                "invalid exemption for `ruff`: invalid cutoff `7d`, expected an RFC 3339 timestamp or a date",
+            ),
+        ] {
+            let mut config = ExcludeNewerConfig::from_cutoff("7d");
             config
-                .validate()
-                .unwrap_err()
-                .to_string()
-                .starts_with("invalid exemption for `ruff`: invalid version `>>>`")
-        );
+                .exemptions
+                .insert(PackageName::new_unchecked("ruff"), exemption);
+            let error = config.validate().unwrap_err().to_string();
+            assert!(error.starts_with(message), "{error}");
+        }
+    }
+
+    #[test]
+    fn test_to_exclude_newer() {
+        let document: Document = toml::from_str(
+            r#"
+            [exclude-newer]
+            cutoff = "1d"
+            exemptions = { ruff = ">=0.5,<0.6", polars = { version = "==1.43.1", cutoff = "2026-10-12" } }
+            "#,
+        )
+        .unwrap();
+        let now: Timestamp = "2026-10-20T00:00:00Z".parse().unwrap();
+        let exclude_newer = document
+            .exclude_newer
+            .to_exclude_newer_with_now(now)
+            .unwrap();
+
+        let expected =
+            rattler_solve::ExcludeNewer::from_datetime("2026-10-19T00:00:00Z".parse().unwrap())
+                .with_exemption(
+                    MatchSpec::from_str("ruff >=0.5,<0.6", ParseStrictness::Lenient).unwrap(),
+                )
+                .unwrap()
+                .with_exemption_until(
+                    MatchSpec::from_str("polars ==1.43.1", ParseStrictness::Lenient).unwrap(),
+                    // A date includes the entire day.
+                    "2026-10-13T00:00:00Z".parse().unwrap(),
+                )
+                .unwrap();
+        assert_eq!(exclude_newer, expected);
+    }
+
+    #[test]
+    fn test_to_exclude_newer_absolute_cutoff() {
+        for (cutoff, expected) in [
+            ("2026-10-12", "2026-10-13T00:00:00Z"),
+            ("2026-10-12T05:00:00Z", "2026-10-12T05:00:00Z"),
+        ] {
+            assert_eq!(
+                rattler_solve::ExcludeNewer::try_from(ExcludeNewerConfig::from_cutoff(cutoff))
+                    .unwrap(),
+                rattler_solve::ExcludeNewer::from_datetime(expected.parse().unwrap()),
+            );
+        }
     }
 
     #[test]
@@ -623,6 +865,7 @@ mod tests {
         for input in [
             "exclude-newer = \"7d\"\n",
             "[exclude-newer]\ncutoff = \"7d\"\n\n[exclude-newer.exemptions]\nruff = \"*\"\n",
+            "[exclude-newer]\ncutoff = \"7d\"\n\n[exclude-newer.exemptions.ruff]\nversion = \">=0.5,<0.6\"\nbuild = \"py*\"\nchannel = \"conda-forge\"\nmd5 = \"00000000000000000000000000000000\"\ncutoff = \"2026-10-12\"\n",
         ] {
             let document: Document = toml::from_str(input).unwrap();
             assert_eq!(toml::to_string(&document).unwrap(), input);

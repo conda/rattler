@@ -133,6 +133,10 @@ fn remove_path(table: &mut toml::Table, segments: &[String]) -> bool {
 ///   to the edited name, so that e.g. setting `exemptions.Ruff` replaces
 ///   `ruff` and setting `exemptions.Ruff.build` keeps the other fields of
 ///   `ruff`.
+/// - An exemption that consists of a version spec only is serialized on its
+///   own, e.g. `ruff = ">=0.5"`. When a field of it is edited, it is expanded
+///   into its table form, so that e.g. `exemptions.ruff.build` keeps the
+///   version.
 fn prepare_exclude_newer_edit(table: &mut toml::Table, segments: &[String]) {
     let [first, rest @ ..] = segments else {
         return;
@@ -151,15 +155,15 @@ fn prepare_exclude_newer_edit(table: &mut toml::Table, segments: &[String]) {
         )]));
     }
 
-    let [exemptions_key, edited, ..] = rest else {
-        return;
-    };
-    let Ok(name) = PackageName::from_str(edited) else {
+    let [exemptions_key, edited, field @ ..] = rest else {
         return;
     };
     if exemptions_key != "exemptions" {
         return;
     }
+    let Ok(name) = PackageName::from_str(edited) else {
+        return;
+    };
     let Some(exemptions) = exclude_newer
         .get_mut("exemptions")
         .and_then(toml::Value::as_table_mut)
@@ -177,6 +181,27 @@ fn prepare_exclude_newer_edit(table: &mut toml::Table, segments: &[String]) {
             .remove(&existing)
             .expect("the key was just found");
         exemptions.insert(edited.clone(), exemption);
+    }
+
+    if !field.is_empty()
+        && let Some(exemption) = exemptions.get_mut(edited)
+        && let toml::Value::String(version) = exemption
+    {
+        let version = std::mem::take(version);
+        *exemption = toml::Value::Table(toml::Table::from_iter([(
+            "version".to_string(),
+            toml::Value::String(version),
+        )]));
+    }
+}
+
+/// Is `error` a type mismatch of a value of type `ty`, e.g. `string`?
+fn is_type_error(error: &ConfigEditError, ty: &str) -> bool {
+    match error {
+        ConfigEditError::InvalidValue { source, .. } => {
+            source.to_string().contains(&format!("invalid type: {ty}"))
+        }
+        _ => false,
     }
 }
 
@@ -231,10 +256,19 @@ where
                 Ok(()) => Ok(()),
                 Err(first_error) if retry_as_string => {
                     // The JSON interpretation did not fit the target
-                    // field (e.g. `region = "true"`); retry verbatim.
+                    // field (e.g. `region = "true"`); retry verbatim. If the
+                    // type of the JSON value is wrong but the field takes a
+                    // string, the error of the verbatim value is the
+                    // relevant one (e.g. an invalid cutoff `2026`).
                     insert_path(&mut table, &segments, toml::Value::String(raw));
-                    self.rebuild_from(&table, key)
-                        .map_err(|_retry_error| first_error)
+                    self.rebuild_from(&table, key).map_err(|retry_error| {
+                        if is_type_error(&first_error, "") && !is_type_error(&retry_error, "string")
+                        {
+                            retry_error
+                        } else {
+                            first_error
+                        }
+                    })
                 }
                 Err(err) => Err(err),
             }
