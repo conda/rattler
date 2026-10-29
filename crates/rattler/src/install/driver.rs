@@ -2,7 +2,7 @@ use std::{
     borrow::Borrow,
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, MutexGuard, OnceLock},
+    sync::{Arc, Mutex, MutexGuard},
 };
 
 use indexmap::IndexSet;
@@ -10,7 +10,7 @@ use itertools::Itertools;
 use rattler_conda_types::{PackageRecord, PrefixRecord, prefix::Prefix, prefix_record::PathType};
 use simple_spawn_blocking::{Cancelled, tokio::run_blocking_task};
 use thiserror::Error;
-use tokio::sync::{AcquireError, Notify, OwnedSemaphorePermit, Semaphore};
+use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
 
 use super::{
     Transaction, TransactionOperation,
@@ -30,9 +30,7 @@ use crate::install::link_script::LinkScriptError;
 pub struct InstallDriver {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
     pub(crate) clobber_registry: Arc<Mutex<ClobberRegistry>>,
-    // Set from Python's file inventory, not from partially installed files.
-    pub(crate) windows_pythonw: OnceLock<bool>,
-    python_metadata_ready: Notify,
+    finalize_windows_wheel_scripts: bool,
     execute_link_scripts: bool,
     clobber_mode: ClobberMode,
 }
@@ -51,6 +49,7 @@ impl Default for InstallDriver {
 pub struct InstallDriverBuilder {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
     clobber_registry: Option<ClobberRegistry>,
+    finalize_windows_wheel_scripts: bool,
     execute_link_scripts: bool,
     clobber_mode: ClobberMode,
 }
@@ -72,6 +71,10 @@ pub enum PostProcessingError {
     #[error("failed to unclobber clobbered files")]
     ClobberError(#[from] ClobberError),
 
+    /// Failed to finalize raw Windows wheel scripts.
+    #[error("failed to finalize Windows wheel scripts")]
+    WheelScripts(#[source] std::io::Error),
+
     /// Failed to determine the currently installed packages.
     #[error("failed to determine the installed packages")]
     FailedToDetectInstalledPackages(#[source] std::io::Error),
@@ -82,6 +85,11 @@ pub enum PostProcessingError {
 }
 
 impl InstallDriverBuilder {
+    pub(crate) fn with_windows_wheel_script_finalization(mut self, enabled: bool) -> Self {
+        self.finalize_windows_wheel_scripts = enabled;
+        self
+    }
+
     /// Sets an optional IO concurrency limit. This is used to make sure
     /// that the system doesn't acquire more IO resources than the system has
     /// available.
@@ -143,31 +151,14 @@ impl InstallDriverBuilder {
                 .map(Mutex::new)
                 .map(Arc::new)
                 .unwrap_or_default(),
+            finalize_windows_wheel_scripts: self.finalize_windows_wheel_scripts,
             execute_link_scripts: self.execute_link_scripts,
             clobber_mode: self.clobber_mode,
-            windows_pythonw: OnceLock::new(),
-            python_metadata_ready: Notify::new(),
         }
     }
 }
 
 impl InstallDriver {
-    pub(crate) fn set_windows_pythonw(&self, available: bool) {
-        self.windows_pythonw
-            .set(available)
-            .expect("Python metadata already set");
-        self.python_metadata_ready.notify_waiters();
-    }
-
-    pub(crate) async fn wait_for_python_metadata(&self) {
-        // Register before checking the value so a concurrent notification cannot
-        // be missed. Only the installer waits here, when Python is being fetched.
-        let notified = self.python_metadata_ready.notified();
-        if self.windows_pythonw.get().is_none() {
-            notified.await;
-        }
-    }
-
     /// Constructs a builder to configure a new `InstallDriver`.
     pub fn builder() -> InstallDriverBuilder {
         InstallDriverBuilder::default()
@@ -279,6 +270,24 @@ impl InstallDriver {
             .unwrap_or_else(|e| {
                 tracing::warn!("Failed to remove empty directories: {} (ignored)", e);
             });
+
+        // All files, including clobber winners, are now in their final locations.
+        // Correct GUI interpreter choices before any post-link script can run.
+        if self.finalize_windows_wheel_scripts {
+            let installed_names: HashSet<_> = transaction
+                .operations
+                .iter()
+                .filter_map(|operation| operation.record_to_install())
+                .map(|record| record.as_ref().name.clone())
+                .collect();
+            super::wheel_scripts::finalize_windows_wheel_scripts(
+                target_prefix,
+                prefix_records.iter().filter(|record| {
+                    installed_names.contains(&record.repodata_record.package_record.name)
+                }),
+            )
+            .map_err(PostProcessingError::WheelScripts)?;
+        }
 
         let post_link_result = if self.execute_link_scripts {
             Some(self.run_post_link_scripts(

@@ -705,6 +705,7 @@ impl Installer {
 
         // Construct a driver.
         let driver = InstallDriver::builder()
+            .with_windows_wheel_script_finalization(target_platform.is_windows())
             .execute_link_scripts(self.execute_link_scripts)
             .with_io_concurrency_semaphore(io_semaphore)
             .with_prefix_records(
@@ -774,39 +775,6 @@ impl Installer {
         }
 
         let mut pending_link_futures = FuturesUnordered::new();
-        // Select the GUI interpreter from Python's file inventory, not from a
-        // partially linked prefix. Downloads and linking can remain concurrent.
-        let needs_python_metadata = target_platform.is_windows()
-            && transaction.operations.iter().any(|operation| {
-                operation.record_to_install().is_some_and(|record| {
-                    matches!(record.identifier.archive_type, DistArchiveType::Wheel(_))
-                })
-            });
-        let pending_python_metadata = needs_python_metadata
-            && transaction.operations.iter().any(|operation| {
-                operation
-                    .record_to_install()
-                    .is_some_and(|record| record.package_record.name.as_normalized() == "python")
-            });
-        if needs_python_metadata
-            && !pending_python_metadata
-            && let Some(python) = transaction.unchanged_packages().iter().find(|record| {
-                record.repodata_record.package_record.name.as_normalized() == "python"
-            })
-        {
-            let available = if python.paths_data.paths.is_empty() {
-                contains_pythonw(python.files.iter().map(PathBuf::as_path))
-            } else {
-                contains_pythonw(
-                    python
-                        .paths_data
-                        .paths
-                        .iter()
-                        .map(|entry| entry.relative_path.as_path()),
-                )
-            };
-            driver.set_windows_pythonw(available);
-        }
         // Execute the operations (install) in the transaction.
         for (operation_idx, operation) in transaction
             .operations
@@ -874,33 +842,6 @@ impl Installer {
 
                 // Install the package if it was fetched.
                 if let Some((cache_metadata, record)) = package_to_install.await? {
-                    if pending_python_metadata {
-                        if record.package_record.name.as_normalized() == "python" {
-                            let paths = super::read_paths_json(
-                                cache_metadata.path(),
-                                driver,
-                                cache_metadata.paths_json().cloned(),
-                            )
-                            .await
-                            .map_err(|error| {
-                                InstallerError::LinkError(record.identifier.to_string(), error)
-                            })?;
-                            driver.set_windows_pythonw(contains_pythonw(
-                                paths
-                                    .paths
-                                    .iter()
-                                    .map(|entry| entry.relative_path.as_path()),
-                            ));
-                        } else if matches!(
-                            record.identifier.archive_type,
-                            DistArchiveType::Wheel(_)
-                        ) {
-                            // Only wait for Python's cached metadata, not its
-                            // installation. Fetch failures abort the transaction
-                            // through the Python operation and cancel these waits.
-                            driver.wait_for_python_metadata().await;
-                        }
-                    }
                     let reporter = reporter
                         .as_deref()
                         .map(|r| (r, r.on_link_start(operation_idx, &record)));
@@ -993,7 +934,6 @@ async fn link_package(
     let target_prefix = target_prefix.clone();
     let cached_package_dir = cached_package_dir.to_path_buf();
     let clobber_registry = driver.clobber_registry.clone();
-    let pythonw_available = driver.windows_pythonw.get().copied();
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -1003,12 +943,11 @@ async fn link_package(
     rayon::spawn_fifo(move || {
         let inner = move || {
             // Link the contents of the package into the prefix.
-            let (paths, link_type) = super::link_package_sync_with_pythonw(
+            let (paths, link_type) = crate::install::link_package_sync(
                 &cached_package_dir,
                 &target_prefix,
                 clobber_registry,
                 install_options,
-                pythonw_available,
             )
             .map_err(|e| InstallerError::LinkError(record.identifier.to_string(), e))?;
 
@@ -1037,13 +976,6 @@ async fn link_package(
     });
 
     rx.await.unwrap_or(Err(InstallerError::Cancelled))
-}
-
-fn contains_pythonw<'a>(mut paths: impl Iterator<Item = &'a Path>) -> bool {
-    paths.any(|path| {
-        path.to_str()
-            .is_some_and(|path| path.eq_ignore_ascii_case("pythonw.exe"))
-    })
 }
 
 /// Given a repodata record, fetch the package into the cache if its not already

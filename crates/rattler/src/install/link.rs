@@ -35,7 +35,6 @@ fn copy_windows_wheel_script(
     placeholder: &str,
     target_dir: &Path,
     target_prefix: &str,
-    pythonw_available: Option<bool>,
 ) -> std::io::Result<bool> {
     use rattler_package_streaming::wheel::{
         PYTHON_GUI_SCRIPT_PREFIX_PLACEHOLDER, PYTHON_SCRIPT_PREFIX_PLACEHOLDER,
@@ -50,11 +49,7 @@ fn copy_windows_wheel_script(
     let Some(body) = source.strip_prefix(header.as_bytes()) else {
         return Ok(false);
     };
-    // Standalone linking can fall back to the filesystem. Transactions supply
-    // Python's final file inventory, even while Python itself is still linking.
-    let executable = if is_gui
-        && pythonw_available.unwrap_or_else(|| target_dir.join("pythonw.exe").is_file())
-    {
+    let executable = if is_gui && target_dir.join("pythonw.exe").is_file() {
         "pythonw.exe"
     } else {
         "python.exe"
@@ -209,39 +204,6 @@ pub fn link_file(
     modification_time: filetime::FileTime,
     external_symlink_policy: ExternalSymlinkPolicy,
 ) -> Result<Option<LinkedFile>, LinkFileError> {
-    link_file_with_pythonw(
-        path_json_entry,
-        destination_relative_path,
-        package_dir,
-        target_dir,
-        target_prefix,
-        allow_symbolic_links,
-        allow_hard_links,
-        allow_ref_links,
-        target_platform,
-        apple_codesign_behavior,
-        modification_time,
-        external_symlink_policy,
-        None,
-    )
-}
-
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-pub(super) fn link_file_with_pythonw(
-    path_json_entry: &PathsEntry,
-    destination_relative_path: PathBuf,
-    package_dir: &Path,
-    target_dir: &Prefix,
-    target_prefix: &str,
-    allow_symbolic_links: bool,
-    allow_hard_links: bool,
-    allow_ref_links: bool,
-    target_platform: Subdir,
-    apple_codesign_behavior: AppleCodeSignBehavior,
-    modification_time: filetime::FileTime,
-    external_symlink_policy: ExternalSymlinkPolicy,
-    pythonw_available: Option<bool>,
-) -> Result<Option<LinkedFile>, LinkFileError> {
     let source_path = package_dir.join(&path_json_entry.relative_path);
 
     let destination_path = target_dir.path().join(&destination_relative_path);
@@ -331,7 +293,6 @@ pub(super) fn link_file_with_pythonw(
                 placeholder,
                 target_dir.path(),
                 &target_prefix,
-                pythonw_available,
             )
             .map_err(|err| {
                 LinkFileError::IoError(String::from("rewriting wheel script shebang"), err)
