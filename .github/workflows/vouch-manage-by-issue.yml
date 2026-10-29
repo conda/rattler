@@ -33,7 +33,7 @@ jobs:
           repository: prefix-dev/vouched
           token: ${{ steps.octo-sts.outputs.token }}
 
-      - uses: mitchellh/vouch/action/manage-by-issue@c6d80ead49839655b61b422700b7a3bc9d0804a9 # v1.4.2
+      - uses: mitchellh/vouch/action/manage-by-issue@d66fa29a64600490892131ad87597c30c91fcac4 # v1.5.0
         id: manage-by-issue
         with:
           issue-id: ${{ github.event.issue.number }}
