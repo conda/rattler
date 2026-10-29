@@ -68,7 +68,7 @@ pub struct ExcludeNewerConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExcludeNewerExemption {
     /// The releases that are exempt. Only the fields that select records are
-    /// supported, see [`Self::validate`].
+    /// supported, see [`rattler_solve::ExcludeNewer::with_exemption`].
     pub spec: NamelessMatchSpec,
 
     /// Only the releases published up to this cutoff are exempt, an RFC 3339
