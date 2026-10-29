@@ -1945,13 +1945,17 @@ mod test {
             InstallDriver::builder()
                 .with_prefix_records(&records)
                 .with_windows_wheel_script_finalization(true)
-                .with_ignored_wheel_scripts(std::collections::HashSet::from([installed
-                    .repodata_record
-                    .package_record
-                    .name
-                    .clone()]))
                 .finish()
-                .post_process(&transaction, &prefix, None)
+                .post_process_with_ignored_packages(
+                    &transaction,
+                    &prefix,
+                    None,
+                    Some(&std::collections::HashSet::from([installed
+                        .repodata_record
+                        .package_record
+                        .name
+                        .clone()])),
+                )
                 .unwrap();
             assert_eq!(fs::read(&script).unwrap(), before);
             InstallDriver::builder()

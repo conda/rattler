@@ -32,7 +32,6 @@ use crate::install::link_script::LinkScriptError;
 pub struct InstallDriver {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
     pub(crate) clobber_registry: Arc<Mutex<ClobberRegistry>>,
-    ignored_wheel_scripts: HashSet<PackageName>,
     finalize_windows_wheel_scripts: bool,
     execute_link_scripts: bool,
     clobber_mode: ClobberMode,
@@ -52,7 +51,6 @@ impl Default for InstallDriver {
 pub struct InstallDriverBuilder {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
     clobber_registry: Option<ClobberRegistry>,
-    ignored_wheel_scripts: HashSet<PackageName>,
     finalize_windows_wheel_scripts: bool,
     execute_link_scripts: bool,
     clobber_mode: ClobberMode,
@@ -89,11 +87,6 @@ pub enum PostProcessingError {
 }
 
 impl InstallDriverBuilder {
-    pub(crate) fn with_ignored_wheel_scripts(mut self, ignored: HashSet<PackageName>) -> Self {
-        self.ignored_wheel_scripts = ignored;
-        self
-    }
-
     pub(crate) fn with_windows_wheel_script_finalization(mut self, enabled: bool) -> Self {
         self.finalize_windows_wheel_scripts = enabled;
         self
@@ -160,7 +153,6 @@ impl InstallDriverBuilder {
                 .map(Mutex::new)
                 .map(Arc::new)
                 .unwrap_or_default(),
-            ignored_wheel_scripts: self.ignored_wheel_scripts,
             finalize_windows_wheel_scripts: self.finalize_windows_wheel_scripts,
             execute_link_scripts: self.execute_link_scripts,
             clobber_mode: self.clobber_mode,
@@ -260,6 +252,19 @@ impl InstallDriver {
         target_prefix: &Prefix,
         reporter: Option<&dyn crate::install::installer::Reporter>,
     ) -> Result<PostProcessResult, PostProcessingError> {
+        self.post_process_with_ignored_packages(transaction, target_prefix, reporter, None)
+    }
+
+    pub(crate) fn post_process_with_ignored_packages<
+        Old: Borrow<PrefixRecord> + AsRef<New>,
+        New: AsRef<PackageRecord>,
+    >(
+        &self,
+        transaction: &Transaction<Old, New>,
+        target_prefix: &Prefix,
+        reporter: Option<&dyn crate::install::installer::Reporter>,
+        ignored_packages: Option<&HashSet<PackageName>>,
+    ) -> Result<PostProcessResult, PostProcessingError> {
         let prefix_records: Vec<PrefixRecord> = PrefixRecord::collect_from_prefix(target_prefix)
             .map_err(PostProcessingError::FailedToDetectInstalledPackages)?;
 
@@ -310,7 +315,7 @@ impl InstallDriver {
                 target_prefix,
                 prefix_records.iter().filter(|record| {
                     let name = &record.repodata_record.package_record.name;
-                    !self.ignored_wheel_scripts.contains(name)
+                    ignored_packages.is_none_or(|ignored| !ignored.contains(name))
                         && (python_changed || installed_names.contains(name))
                 }),
             )

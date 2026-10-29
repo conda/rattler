@@ -743,7 +743,6 @@ impl Installer {
         // Construct a driver.
         let driver = InstallDriver::builder()
             .with_windows_wheel_script_finalization(target_platform.is_windows())
-            .with_ignored_wheel_scripts(self.ignored_packages.clone().unwrap_or_default())
             .execute_link_scripts(self.execute_link_scripts)
             .with_io_concurrency_semaphore(io_semaphore)
             .with_prefix_records(
@@ -942,8 +941,12 @@ impl Installer {
         drop(pending_link_futures);
 
         // Post process the transaction
-        let post_process_result =
-            driver.post_process(&transaction, &prefix, self.reporter.as_deref())?;
+        let post_process_result = driver.post_process_with_ignored_packages(
+            &transaction,
+            &prefix,
+            self.reporter.as_deref(),
+            self.ignored_packages.as_ref(),
+        )?;
 
         if let Some(reporter) = &self.reporter {
             reporter.on_transaction_complete();
