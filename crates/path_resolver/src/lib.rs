@@ -580,6 +580,29 @@ New:
         Self::get_node(&self.root, path.as_ref()).map(|n| &n.terminals)
     }
 
+    /// Return the active owner of a file under the current package priorities.
+    /// A directory, missing path, or file shadowed by an ancestor returns `None`.
+    pub fn active_owner<P: AsRef<Path>>(&self, path: P) -> Option<&PackageName> {
+        let mut node = &self.root;
+        for component in path.as_ref().components().map(Component::as_os_str) {
+            if !node.terminals.is_empty()
+                && let Some(owner) = self
+                    .packages
+                    .iter()
+                    .find(|package| node.prefixes.contains(*package))
+                && node.terminals.contains(owner)
+            {
+                return None;
+            }
+            node = node.children.get(component)?;
+        }
+        let owner = self
+            .packages
+            .iter()
+            .find(|package| node.prefixes.contains(*package))?;
+        node.terminals.contains(owner).then_some(owner)
+    }
+
     /// List global file-vs-file conflicts (>1 owners).
     pub fn find_conflicts(&self) -> Vec<(PathBuf, Vec<PackageName>)> {
         fn dfs(n: &PathTrieNode, cur: &mut PathBuf, out: &mut Vec<(PathBuf, Vec<PackageName>)>) {
@@ -659,6 +682,25 @@ New:
 // TODO: Write property based tests.
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn active_owner_respects_file_directory_priority() {
+        let mut resolver = super::PathResolver::new();
+        let a = super::PackageName::new("a");
+        let b = super::PackageName::new("b");
+        resolver.insert_package(a.clone(), &["x", "z"]);
+        resolver.insert_package(b.clone(), &["x/y", "y", "z"]);
+        assert_eq!(resolver.active_owner("x"), Some(&a));
+        assert_eq!(resolver.active_owner("x/y"), None);
+        assert_eq!(resolver.active_owner("z"), Some(&a));
+        resolver.reprioritize_packages(vec![a.clone(), b.clone()]);
+        assert_eq!(resolver.active_owner("x"), None);
+        assert_eq!(resolver.active_owner("x/y"), Some(&b));
+        assert_eq!(resolver.active_owner("z"), Some(&b));
+        resolver.unregister_package(b);
+        assert_eq!(resolver.active_owner("x"), Some(&a));
+        assert_eq!(resolver.active_owner("missing"), None);
+    }
+
     use super::*;
     use std::{
         fs,

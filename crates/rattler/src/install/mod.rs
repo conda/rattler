@@ -25,6 +25,7 @@ mod prefix_replacement;
 mod python;
 mod transaction;
 pub mod unlink;
+mod wheel_record;
 
 mod installer;
 #[cfg(test)]
@@ -371,12 +372,19 @@ pub async fn link_package(
     // compute all path renames
     let final_paths = compute_paths(&index_json, &paths_json, options.python_info.as_ref());
 
-    // register all paths in the install driver path registry
-    let clobber_paths = Arc::new(
-        driver
-            .clobber_registry()
-            .register_paths(&index_json, &final_paths),
-    );
+    let generated_paths = generated_entry_point_paths(
+        link_json.as_ref(),
+        options.python_info.as_ref(),
+        platform,
+        target_dir,
+        &final_paths,
+    )?;
+    // Register payload and generated paths together, before any writes.
+    let clobber_paths = Arc::new(driver.clobber_registry().register_paths_with_entry_points(
+        &index_json,
+        &final_paths,
+        &generated_paths,
+    ));
 
     let final_paths: Vec<LinkPath> = final_paths
         .into_iter()
@@ -452,7 +460,10 @@ pub async fn link_package(
             // because filesystem access is blocking anyway so its more
             // efficient to group them together in a single blocking call.
             let cloned_entry = entry.clone();
-            let is_clobber = link_path.clobber_path.is_some();
+            let original_path = link_path
+                .clobber_path
+                .as_ref()
+                .map(|_| link_path.computed_path.clone());
             let result = match tokio::task::spawn_blocking(move || {
                 link_file(
                     &cloned_entry,
@@ -484,11 +495,7 @@ pub async fn link_package(
             // Construct a `PathsEntry` from the result of the linking operation
             let paths_entry = prefix_record::PathsEntry {
                 relative_path: result.relative_path,
-                original_path: if is_clobber {
-                    Some(entry.relative_path)
-                } else {
-                    None
-                },
+                original_path,
                 path_type: entry.path_type.into(),
                 no_link: entry.no_link,
                 sha256: entry.sha256,
@@ -543,6 +550,7 @@ pub async fn link_package(
             let target_dir = target_dir.to_owned();
             let target_prefix = target_prefix.clone();
 
+            let clobber_paths = clobber_paths.clone();
             let entry_point_fut = async move {
                 // Acquire an IO permit
                 let _permit = driver.acquire_io_permit().await;
@@ -554,6 +562,7 @@ pub async fn link_package(
                         &entry_point,
                         &python_info,
                         &platform,
+                        &clobber_paths,
                     ) {
                         Ok([a, b]) => vec![
                             (number_of_paths_entries, a),
@@ -567,6 +576,7 @@ pub async fn link_package(
                         &target_prefix,
                         &entry_point,
                         &python_info,
+                        &clobber_paths,
                     ) {
                         Ok(a) => vec![(number_of_paths_entries, a)],
                         Err(e) => return Err(InstallError::FailedToCreatePythonEntryPoint(e)),
@@ -725,11 +735,18 @@ pub fn link_package_sync(
     // compute all path renames
     let final_paths = compute_paths(&index_json, &paths_json, options.python_info.as_ref());
 
-    // register all paths in the install driver path registry
+    let generated_paths = generated_entry_point_paths(
+        link_json.as_ref(),
+        options.python_info.as_ref(),
+        platform,
+        target_dir,
+        &final_paths,
+    )?;
+    // Register payload and generated paths together, before any writes.
     let clobber_paths = clobber_registry
         .lock()
         .unwrap()
-        .register_paths(&index_json, &final_paths);
+        .register_paths_with_entry_points(&index_json, &final_paths, &generated_paths);
 
     let final_paths = final_paths.into_iter().map(|el| {
         let (entry, computed_path) = el;
@@ -990,6 +1007,7 @@ pub fn link_package_sync(
                         &entry_point,
                         &python_info,
                         &platform,
+                        &clobber_paths,
                     ) {
                         Ok([a, b]) => Either::Left([Ok(a), Ok(b)].into_iter()),
                         Err(e) => Either::Right(std::iter::once(Err(
@@ -1009,6 +1027,7 @@ pub fn link_package_sync(
                         &target_prefix,
                         &entry_point,
                         &python_info,
+                        &clobber_paths,
                     ) {
                         Ok(a) => Ok(a),
                         Err(e) => Err(InstallError::FailedToCreatePythonEntryPoint(e)),
@@ -1022,6 +1041,44 @@ pub fn link_package_sync(
 
     paths.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
     Ok((paths, link_type))
+}
+
+fn generated_entry_point_paths(
+    link_json: Option<&LinkJson>,
+    python: Option<&PythonInfo>,
+    platform: Subdir,
+    prefix: &Prefix,
+    payload: &[(PathsEntry, PathBuf)],
+) -> Result<Vec<PathBuf>, InstallError> {
+    let Some(LinkJson {
+        noarch: NoArchLinks::Python(entries),
+        ..
+    }) = link_json
+    else {
+        return Ok(Vec::new());
+    };
+    let python = python.ok_or(InstallError::MissingPythonInfo)?;
+    let mut seen: HashSet<_> = payload.iter().map(|entry| entry.1.clone()).collect();
+    let mut paths = Vec::new();
+    for entry in &entries.entry_points {
+        for path in entry_point::entry_point_paths(entry, python, platform, prefix.path())
+            .map_err(InstallError::FailedToCreatePythonEntryPoint)?
+        {
+            if !seen.insert(path.clone()) {
+                return Err(InstallError::FailedToCreatePythonEntryPoint(
+                    std::io::Error::new(
+                        ErrorKind::AlreadyExists,
+                        format!(
+                            "entry point conflicts with another package file: {}",
+                            path.display()
+                        ),
+                    ),
+                ));
+            }
+            paths.push(path);
+        }
+    }
+    Ok(paths)
 }
 
 fn compute_paths(
@@ -1404,7 +1461,7 @@ mod test {
         urls: impl Iterator<Item = Url>,
         cache_name: &str,
         platform: Subdir,
-    ) {
+    ) -> tempfile::TempDir {
         // Open a package cache in the systems temporary directory with a specific name.
         // This allows us to reuse a package cache across multiple invocations
         // of this test. Useful if you're debugging.
@@ -1420,7 +1477,10 @@ mod test {
 
         // Download and install each layer into an environment.
         let install_driver = InstallDriver::default();
-        let target_dir = tempdir().unwrap();
+        let target_dir = tempfile::Builder::new()
+            .prefix("rattler tests with spaces ")
+            .tempdir()
+            .unwrap();
         let prefix_path = Prefix::create(target_dir.path()).unwrap();
         stream::iter(urls)
             .for_each_concurrent(Some(50), |package_url| {
@@ -1475,6 +1535,7 @@ mod test {
             String::from_utf8_lossy(&python_version.stdout).trim(),
             "Python 3.11.0"
         );
+        target_dir
     }
 
     #[tracing_test::traced_test]

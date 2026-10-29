@@ -73,6 +73,11 @@ impl From<&rattler_config::config::CommonConfig> for LinkOptions {
 }
 
 /// An installer that can install packages into a prefix.
+///
+/// Converted wheels receive an installed `RECORD` after clobber resolution,
+/// script finalization, and enabled post-link hooks, without changing the cache.
+/// This transaction-level finalization is not performed by the low-level
+/// [`link_package`](super::link_package) primitive alone.
 #[derive(Default)]
 pub struct Installer {
     installed: Option<Vec<PrefixRecord>>,
@@ -670,6 +675,46 @@ impl Installer {
 
         // If the transaction is empty we can short-circuit the installation
         if transaction.operations.is_empty() {
+            // A previous installation may have linked everything but failed in
+            // finalization. A no-op retry must still reconcile RECORD.
+            // Conda-only no-ops keep the minimal-record fast path. For wheels,
+            // all owners are needed to reject ambiguous legacy command paths.
+            if desired_records.iter().any(|record| {
+                matches!(record.identifier.archive_type, DistArchiveType::Wheel(_))
+                    && self
+                        .ignored_packages
+                        .as_ref()
+                        .is_none_or(|ignored| !ignored.contains(&record.package_record.name))
+            }) {
+                let mut records = Vec::new();
+                for record in transaction.unchanged_packages() {
+                    ensure_safe_path_component(record.name().as_normalized())
+                        .and_then(|()| ensure_safe_path_component(record.build().as_str()))
+                        .map_err(InstallerError::UnsafePackageRecord)?;
+                    records.push(
+                        record
+                            .clone()
+                            .into_prefix_record(&prefix)
+                            .map_err(InstallerError::FailedToDetectInstalledPackages)?,
+                    );
+                }
+                super::wheel_record::validate_wheel_ownership(
+                    &records,
+                    self.ignored_packages.as_ref(),
+                )
+                .map_err(|error| {
+                    InstallerError::IoError("validating wheel file ownership".into(), error)
+                })?;
+                super::wheel_record::finalize_wheel_records(
+                    &prefix,
+                    &mut records,
+                    self.ignored_packages.as_ref(),
+                    self.execute_link_scripts,
+                )
+                .map_err(|error| {
+                    InstallerError::IoError("finalizing wheel RECORD".into(), error)
+                })?;
+            }
             return Ok(InstallationResult {
                 transaction,
                 pre_link_script_result: None,
@@ -903,8 +948,12 @@ impl Installer {
         drop(pending_link_futures);
 
         // Post process the transaction
-        let post_process_result =
-            driver.post_process(&transaction, &prefix, self.reporter.as_deref())?;
+        let post_process_result = driver.post_process_with_ignored_packages(
+            &transaction,
+            &prefix,
+            self.reporter.as_deref(),
+            self.ignored_packages.as_ref(),
+        )?;
 
         if let Some(reporter) = &self.reporter {
             reporter.on_transaction_complete();

@@ -7,7 +7,9 @@ use std::{
 
 use indexmap::IndexSet;
 use itertools::Itertools;
-use rattler_conda_types::{PackageRecord, PrefixRecord, prefix::Prefix, prefix_record::PathType};
+use rattler_conda_types::{
+    PackageName, PackageRecord, PrefixRecord, prefix::Prefix, prefix_record::PathType,
+};
 use simple_spawn_blocking::{Cancelled, tokio::run_blocking_task};
 use thiserror::Error;
 use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
@@ -68,6 +70,10 @@ pub struct PostProcessResult {
 pub enum PostProcessingError {
     #[error("failed to unclobber clobbered files")]
     ClobberError(#[from] ClobberError),
+
+    /// Failed to finalize an installed wheel's file inventory.
+    #[error("failed to finalize wheel RECORD")]
+    WheelRecord(#[source] std::io::Error),
 
     /// Failed to determine the currently installed packages.
     #[error("failed to determine the installed packages")]
@@ -238,8 +244,24 @@ impl InstallDriver {
         target_prefix: &Prefix,
         reporter: Option<&dyn crate::install::installer::Reporter>,
     ) -> Result<PostProcessResult, PostProcessingError> {
-        let prefix_records: Vec<PrefixRecord> = PrefixRecord::collect_from_prefix(target_prefix)
-            .map_err(PostProcessingError::FailedToDetectInstalledPackages)?;
+        self.post_process_with_ignored_packages(transaction, target_prefix, reporter, None)
+    }
+
+    pub(crate) fn post_process_with_ignored_packages<
+        Old: Borrow<PrefixRecord> + AsRef<New>,
+        New: AsRef<PackageRecord>,
+    >(
+        &self,
+        transaction: &Transaction<Old, New>,
+        target_prefix: &Prefix,
+        reporter: Option<&dyn crate::install::installer::Reporter>,
+        ignored_packages: Option<&HashSet<PackageName>>,
+    ) -> Result<PostProcessResult, PostProcessingError> {
+        let mut prefix_records: Vec<PrefixRecord> =
+            PrefixRecord::collect_from_prefix(target_prefix)
+                .map_err(PostProcessingError::FailedToDetectInstalledPackages)?;
+        super::wheel_record::validate_wheel_ownership(&prefix_records, ignored_packages)
+            .map_err(PostProcessingError::WheelRecord)?;
 
         let required_packages =
             PackageRecord::sort_topologically(prefix_records.iter().collect::<Vec<_>>());
@@ -269,6 +291,16 @@ impl InstallDriver {
         } else {
             None
         };
+
+        // Hooks may change payload bytes. Build RECORD only after all tracked
+        // transformations, using refreshed ownership and path metadata.
+        super::wheel_record::finalize_wheel_records(
+            target_prefix,
+            &mut prefix_records,
+            ignored_packages,
+            self.execute_link_scripts,
+        )
+        .map_err(PostProcessingError::WheelRecord)?;
 
         Ok(PostProcessResult {
             post_link_result,
