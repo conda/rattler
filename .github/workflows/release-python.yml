@@ -451,7 +451,7 @@ jobs:
           working-directory: py-rattler
       - name: "Test wheel - universal2"
         run: |
-          pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*universal2.whl --force-reinstall
+          pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*universal2*.whl --force-reinstall
           python -c "import rattler; print(rattler.__version__)"
       - name: "Upload wheels"
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
