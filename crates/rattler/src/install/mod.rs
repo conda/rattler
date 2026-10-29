@@ -1404,7 +1404,7 @@ mod test {
         urls: impl Iterator<Item = Url>,
         cache_name: &str,
         platform: Subdir,
-    ) {
+    ) -> tempfile::TempDir {
         // Open a package cache in the systems temporary directory with a specific name.
         // This allows us to reuse a package cache across multiple invocations
         // of this test. Useful if you're debugging.
@@ -1420,7 +1420,10 @@ mod test {
 
         // Download and install each layer into an environment.
         let install_driver = InstallDriver::default();
-        let target_dir = tempdir().unwrap();
+        let target_dir = tempfile::Builder::new()
+            .prefix("rattler python ")
+            .tempdir()
+            .unwrap();
         let prefix_path = Prefix::create(target_dir.path()).unwrap();
         stream::iter(urls)
             .for_each_concurrent(Some(50), |package_url| {
@@ -1475,6 +1478,7 @@ mod test {
             String::from_utf8_lossy(&python_version.stdout).trim(),
             "Python 3.11.0"
         );
+        target_dir
     }
 
     #[tracing_test::traced_test]
@@ -1750,6 +1754,97 @@ mod test {
                 );
                 assert!(!target.join("Scripts").join(format!("{name}.exe")).exists());
             }
+        }
+    }
+
+    /// Run the installed raw scripts with real Windows console and GUI interpreters.
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn test_wheel_raw_script_windows_execution() {
+        use rattler_conda_types::{NoArchType, PackageRecord};
+        use std::fs;
+
+        let platform = Subdir::current().unwrap();
+        let env = ExplicitEnvironmentSpec::from_path(
+            get_test_data_dir().join(format!("python/explicit-env-{platform}.txt")),
+        )
+        .unwrap();
+        let environment = test_install_python(
+            env.packages.into_iter().map(|package| package.url),
+            "wheel-script-python",
+            platform,
+        )
+        .await;
+        let record = PackageRecord {
+            noarch: NoArchType::python(),
+            subdir: "noarch".into(),
+            ..PackageRecord::new(
+                "script-probe".parse().unwrap(),
+                "1.0".parse::<Version>().unwrap(),
+                "py3_none_any_0".parse().unwrap(),
+            )
+        };
+        let cache_dir = tempdir().unwrap();
+        let cached = PackageCache::new(cache_dir.path())
+            .get_or_fetch_from_path(
+                &get_test_data_dir().join("wheels/script_probe-1.0-py3-none-any.whl"),
+                Some(&record),
+                None,
+            )
+            .await
+            .unwrap();
+        let originals = ["script-probe", "script-probe-gui"]
+            .map(|name| fs::read(cached.path().join("python-scripts").join(name)).unwrap());
+        let prefix = Prefix::create(environment.path()).unwrap();
+        link_package(
+            cached.path(),
+            &prefix,
+            &InstallDriver::default(),
+            InstallOptions {
+                python_info: Some(
+                    PythonInfo::from_version(&"3.11.0".parse::<Version>().unwrap(), None, platform)
+                        .unwrap(),
+                ),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        for ((name, interpreter), original) in [
+            ("script-probe", "python.exe"),
+            ("script-probe-gui", "pythonw.exe"),
+        ]
+        .into_iter()
+        .zip(originals)
+        {
+            let script = environment.path().join("Scripts").join(name);
+            let executable = environment.path().join(interpreter);
+            assert!(executable.is_file());
+            let contents = fs::read(&script).unwrap();
+            let header_end = contents.iter().position(|&byte| byte == b'\n').unwrap() + 1;
+            let expected = format!("#!{}\r\n", executable.to_str().unwrap().replace('\\', "/"));
+            assert_eq!(&contents[..header_end], expected.as_bytes());
+            let selected = std::str::from_utf8(&contents[2..header_end])
+                .unwrap()
+                .trim_end();
+            let marker = environment.path().join(format!("{name}.result"));
+            // Read the generated shebang explicitly: Windows does not execute
+            // extensionless Python scripts by shebang alone. Capture a file
+            // result since pythonw.exe need not have a console/stdout.
+            let output = Command::new(selected)
+                .arg("-c")
+                .arg("import contextlib, io, pathlib, runpy, sys\nwith contextlib.redirect_stdout(io.StringIO()):\n    runpy.run_path(sys.argv[1], run_name='__main__')\npathlib.Path(sys.argv[2]).write_text(sys.executable, encoding='utf-8')")
+                .arg(&script).arg(&marker).output().unwrap();
+            assert!(output.status.success(), "{output:?}");
+            assert_eq!(
+                fs::canonicalize(fs::read_to_string(marker).unwrap()).unwrap(),
+                fs::canonicalize(executable).unwrap(),
+            );
+            assert_eq!(
+                fs::read(cached.path().join("python-scripts").join(name)).unwrap(),
+                original
+            );
         }
     }
 
