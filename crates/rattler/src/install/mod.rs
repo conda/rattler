@@ -1578,23 +1578,178 @@ mod test {
             .await
             .unwrap();
 
-            let script = target.join("bin/script-probe");
-            assert!(script.is_file());
-            assert_ne!(script.metadata().unwrap().permissions().mode() & 0o111, 0);
-            let output = Command::new(&script)
-                .current_dir(root.path())
-                .output()
-                .expect("raw wheel script should execute using the environment's Python");
-            assert!(output.status.success(), "{output:?}");
-            assert_eq!(
-                String::from_utf8(output.stdout).unwrap(),
-                format!("{}\n", script.display())
-            );
+            for script_name in ["script-probe", "script-probe-gui"] {
+                let script = target.join("bin").join(script_name);
+                assert!(script.is_file());
+                assert_ne!(script.metadata().unwrap().permissions().mode() & 0o111, 0);
+                let output = Command::new(&script)
+                    .current_dir(root.path())
+                    .output()
+                    .expect("raw wheel script should execute using the environment's Python");
+                assert!(output.status.success(), "{output:?}");
+                assert_eq!(
+                    String::from_utf8(output.stdout).unwrap(),
+                    format!("{}\n", script.display())
+                );
+            }
             assert_eq!(fs::read(&cached_script).unwrap(), original);
             assert_eq!(
                 cached_script.metadata().unwrap().permissions().mode(),
                 original_mode
             );
+        }
+    }
+
+    /// Windows-target installation can be checked on any host without executing a PE binary.
+    #[tokio::test]
+    async fn test_wheel_raw_script_windows_interpreters() {
+        use rattler_conda_types::{
+            NoArchType, PackageRecord, RepoDataRecord, package::DistArchiveIdentifier,
+        };
+        use std::fs;
+
+        for has_pythonw in [false, true] {
+            let root = tempdir().unwrap();
+            let cache = PackageCache::new(root.path().join("cache"));
+            let wheel_path = get_test_data_dir().join("wheels/script_probe-1.0-py3-none-any.whl");
+            let wheel_record = PackageRecord {
+                noarch: NoArchType::python(),
+                subdir: "noarch".into(),
+                depends: vec!["python >=3.12".into()],
+                // Queue the wheel before Python to exercise installation ordering.
+                size: Some(100),
+                ..PackageRecord::new(
+                    "script-probe".parse().unwrap(),
+                    "1.0".parse::<Version>().unwrap(),
+                    "py3_none_any_0".parse().unwrap(),
+                )
+            };
+            let cached = cache
+                .get_or_fetch_from_path(&wheel_path, Some(&wheel_record), None)
+                .await
+                .unwrap();
+            let scripts = ["script-probe", "script-probe-gui", "plain-script"];
+            let originals = scripts
+                .map(|name| fs::read(cached.path().join("python-scripts").join(name)).unwrap());
+            let python_record = PackageRecord {
+                subdir: "win-64".into(),
+                size: Some(1),
+                ..PackageRecord::new(
+                    "python".parse().unwrap(),
+                    "3.12.0".parse::<Version>().unwrap(),
+                    "0".parse().unwrap(),
+                )
+            };
+            let index = serde_json::to_vec(&python_record).unwrap();
+            cache
+                .get_or_fetch(
+                    &python_record,
+                    move |path| {
+                        let index = index.clone();
+                        async move {
+                            fs::create_dir_all(path.join("info"))?;
+                            fs::write(path.join("info/index.json"), index)?;
+                            let files = if has_pythonw {
+                                vec!["python.exe", "pythonw.exe"]
+                            } else {
+                                vec!["python.exe"]
+                            };
+                            for file in &files {
+                                fs::write(path.join(file), b"interpreter fixture")?;
+                            }
+                            let paths: Vec<_> = files
+                            .iter()
+                            .map(|file| serde_json::json!({"_path": file, "path_type": "hardlink"}))
+                            .collect();
+                            fs::write(
+                                path.join("info/paths.json"),
+                                serde_json::to_vec(
+                                    &serde_json::json!({"paths_version": 1, "paths": paths}),
+                                )?,
+                            )?;
+                            Ok::<_, std::io::Error>(())
+                        }
+                    },
+                    None,
+                )
+                .await
+                .unwrap();
+
+            let target = root.path().join("environment");
+            super::Installer::new()
+                .with_package_cache(cache)
+                .with_target_platform(Subdir::Win64)
+                .with_alternative_target_prefix(r"C:\wheel env")
+                .with_installed_packages(Vec::new())
+                .with_download_client(
+                    reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+                        .with(rattler_networking::OfflineMiddleware)
+                        .build(),
+                )
+                .install(
+                    &target,
+                    [
+                        RepoDataRecord {
+                            package_record: wheel_record,
+                            identifier: DistArchiveIdentifier::try_from_path(&wheel_path).unwrap(),
+                            url: Url::from_file_path(&wheel_path).unwrap(),
+                            channel: None,
+                        },
+                        RepoDataRecord {
+                            package_record: python_record,
+                            identifier: DistArchiveIdentifier::try_from_filename(
+                                "python-3.12.0-0.conda",
+                            )
+                            .unwrap(),
+                            url: "https://example.invalid/python-3.12.0-0.conda"
+                                .parse()
+                                .unwrap(),
+                            channel: None,
+                        },
+                    ],
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                fs::read(target.join("Scripts/script-probe")).unwrap(),
+                b"#!C:/wheel env/python.exe\r\nprint(\"hello\")\n"
+            );
+            let executable = if has_pythonw {
+                "pythonw.exe"
+            } else {
+                "python.exe"
+            };
+            assert_eq!(
+                fs::read(target.join("Scripts/script-probe-gui")).unwrap(),
+                format!("#!C:/wheel env/{executable}\r\nprint(\"gui\")\n").as_bytes()
+            );
+            assert_eq!(
+                fs::read(target.join("Scripts/plain-script")).unwrap(),
+                originals[2]
+            );
+            let installed: rattler_conda_types::PrefixRecord = serde_json::from_slice(
+                &fs::read(target.join("conda-meta/script-probe-1.0-py3_none_any_0.json")).unwrap(),
+            )
+            .unwrap();
+            for entry in &installed.paths_data.paths {
+                if entry.relative_path.starts_with("Scripts") {
+                    let bytes = fs::read(target.join(&entry.relative_path)).unwrap();
+                    assert_eq!(
+                        entry.sha256_in_prefix.or(entry.sha256),
+                        Some(
+                            rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(&bytes),
+                        )
+                    );
+                }
+            }
+            for (name, original) in scripts.into_iter().zip(originals) {
+                assert_eq!(
+                    fs::read(cached.path().join("python-scripts").join(name)).unwrap(),
+                    original
+                );
+                assert!(!target.join("Scripts").join(format!("{name}.exe")).exists());
+            }
         }
     }
 

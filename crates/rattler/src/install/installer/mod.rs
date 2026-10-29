@@ -774,6 +774,15 @@ impl Installer {
         }
 
         let mut pending_link_futures = FuturesUnordered::new();
+        // Raw wheel GUI scripts select pythonw.exe only when it exists. Finish
+        // installing Python first so this does not depend on download/link order.
+        let python_first = target_platform.is_windows()
+            && transaction.operations.iter().any(|operation| {
+                operation.record_to_install().is_some_and(|record| {
+                    matches!(record.identifier.archive_type, DistArchiveType::Wheel(_))
+                })
+            });
+        let mut python_link_future = None;
         // Execute the operations (install) in the transaction.
         for (operation_idx, operation) in transaction
             .operations
@@ -879,7 +888,15 @@ impl Installer {
                 Ok::<_, InstallerError>(())
             };
 
-            pending_link_futures.push(operation_future);
+            if python_first
+                && operation
+                    .record_to_install()
+                    .is_some_and(|record| record.package_record.name.as_normalized() == "python")
+            {
+                python_link_future = Some(operation_future);
+            } else {
+                pending_link_futures.push(operation_future);
+            }
         }
 
         // Wait for all transaction operations to finish
@@ -897,6 +914,10 @@ impl Installer {
             .map_err(|e| InstallerError::UnlinkError("remove_empty_directories".to_string(), e))?;
 
         // Wait for all transaction operations to finish
+        if let Some(future) = python_link_future.take() {
+            future.await?;
+        }
+        drop(python_link_future);
         while let Some(result) = pending_link_futures.next().await {
             result?;
         }

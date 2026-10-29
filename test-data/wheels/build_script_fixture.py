@@ -11,6 +11,8 @@ files = {
     "script_probe-1.0.dist-info/METADATA": b"Metadata-Version: 2.1\nName: script-probe\nVersion: 1.0\n",
     "script_probe-1.0.dist-info/WHEEL": b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
     "script_probe-1.0.data/scripts/script-probe": b'#!python\nprint("hello")\n',
+    "script_probe-1.0.data/scripts/script-probe-gui": b'#!pythonw\r\nprint("gui")\n',
+    "script_probe-1.0.data/scripts/plain-script": b'#!/bin/sh\necho hello\n',
 }
 record = "script_probe-1.0.dist-info/RECORD"
 rows = io.StringIO()
