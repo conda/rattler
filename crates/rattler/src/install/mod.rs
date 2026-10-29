@@ -1751,6 +1751,178 @@ mod test {
                     );
                 }
             }
+            // Fail after rewriting the first GUI script but before saving its
+            // record. Retrying must repair the first script's stale hash/size.
+            let record_path = target.join("conda-meta").join(installed.file_name());
+            let gui_path = target.join("Scripts/script-probe-gui");
+            let original_gui = fs::read(&gui_path).unwrap();
+            let mut partial = installed.clone();
+            let mut missing = partial
+                .paths_data
+                .paths
+                .iter()
+                .find(|entry| {
+                    entry.relative_path == std::path::Path::new("Scripts/script-probe-gui")
+                })
+                .unwrap()
+                .clone();
+            missing.relative_path = "Scripts/second-gui".into();
+            partial.paths_data.paths.push(missing);
+            partial.write_to_path(&record_path, true).unwrap();
+            if has_pythonw {
+                fs::remove_file(target.join("pythonw.exe")).unwrap();
+            } else {
+                fs::write(target.join("pythonw.exe"), b"late interpreter").unwrap();
+            }
+            let prefix = Prefix::create(&target).unwrap();
+            assert!(
+                super::wheel_scripts::finalize_windows_wheel_scripts(
+                    &prefix,
+                    std::iter::once(&partial)
+                )
+                .is_err()
+            );
+            assert_ne!(fs::read(&gui_path).unwrap(), original_gui);
+            fs::write(target.join("Scripts/second-gui"), &original_gui).unwrap();
+            let python = rattler_conda_types::PrefixRecord::from_path(
+                target.join("conda-meta/python-3.12.0-0.json"),
+            )
+            .unwrap();
+            let before_retry = fs::read(&record_path).unwrap();
+            let ignored = super::Installer::new()
+                .with_target_platform(Subdir::Win64)
+                .with_ignored_packages(std::collections::HashSet::from([installed
+                    .repodata_record
+                    .package_record
+                    .name
+                    .clone()]))
+                .install(
+                    &target,
+                    [
+                        installed.repodata_record.clone(),
+                        python.repodata_record.clone(),
+                    ],
+                )
+                .await
+                .unwrap();
+            assert!(ignored.transaction.operations.is_empty());
+            assert_eq!(fs::read(&record_path).unwrap(), before_retry);
+            let retry = super::Installer::new()
+                .with_target_platform(Subdir::Win64)
+                .with_package_cache(cache.clone())
+                .install(
+                    &target,
+                    [installed.repodata_record.clone(), python.repodata_record],
+                )
+                .await
+                .unwrap();
+            assert!(retry.transaction.operations.is_empty());
+            let repaired = rattler_conda_types::PrefixRecord::from_path(&record_path).unwrap();
+            for entry in repaired.paths_data.paths.iter().filter(|entry| {
+                entry.prefix_placeholder.as_deref()
+                    == Some(rattler_package_streaming::wheel::PYTHON_GUI_SCRIPT_PREFIX_PLACEHOLDER)
+            }) {
+                let path = target.join(&entry.relative_path);
+                assert_eq!(
+                    entry.sha256_in_prefix,
+                    Some(
+                        rattler_digest::compute_file_digest::<rattler_digest::Sha256>(&path)
+                            .unwrap()
+                    )
+                );
+                assert_eq!(entry.size_in_bytes, Some(fs::metadata(path).unwrap().len()));
+            }
+            fs::remove_file(target.join("Scripts/second-gui")).unwrap();
+            fs::write(&gui_path, &original_gui).unwrap();
+            installed.write_to_path(&record_path, true).unwrap();
+            if has_pythonw {
+                fs::write(target.join("pythonw.exe"), b"interpreter fixture").unwrap();
+            } else {
+                fs::remove_file(target.join("pythonw.exe")).unwrap();
+            }
+
+            if has_pythonw {
+                let original_python = rattler_conda_types::PrefixRecord::from_path(
+                    target.join("conda-meta/python-3.12.0-0.json"),
+                )
+                .unwrap();
+                let python = PackageRecord {
+                    subdir: "win-64".into(),
+                    ..PackageRecord::new(
+                        "python".parse().unwrap(),
+                        "3.12.1".parse::<Version>().unwrap(),
+                        "0".parse().unwrap(),
+                    )
+                };
+                let index = serde_json::to_vec(&python).unwrap();
+                cache.get_or_fetch(&python, move |path| {
+                    let index = index.clone();
+                    async move {
+                        fs::create_dir_all(path.join("info"))?;
+                        fs::write(path.join("info/index.json"), index)?;
+                        fs::write(path.join("info/paths.json"), br#"{"paths_version":1,"paths":[{"_path":"python.exe","path_type":"hardlink"}]}"#)?;
+                        fs::write(path.join("python.exe"), b"interpreter fixture")?;
+                        Ok::<_, std::io::Error>(())
+                    }
+                }, None).await.unwrap();
+                let replacement = RepoDataRecord {
+                    package_record: python,
+                    identifier: DistArchiveIdentifier::try_from_filename("python-3.12.1-0.conda")
+                        .unwrap(),
+                    url: "https://example.invalid/python-3.12.1-0.conda"
+                        .parse()
+                        .unwrap(),
+                    channel: None,
+                };
+                // Same-minor Python changes do not relink the wheel. Exercise
+                // both removal and restoration of the GUI interpreter.
+                for (python, executable) in [
+                    (replacement, "python.exe"),
+                    (original_python.repodata_record, "pythonw.exe"),
+                ] {
+                    let result = super::Installer::new()
+                        .with_package_cache(cache.clone())
+                        .with_target_platform(Subdir::Win64)
+                        .with_alternative_target_prefix(r"C:\wheel env")
+                        .with_download_client(
+                            reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+                                .with(rattler_networking::OfflineMiddleware)
+                                .build(),
+                        )
+                        .install(&target, [installed.repodata_record.clone(), python])
+                        .await
+                        .unwrap();
+                    assert_eq!(result.transaction.operations.len(), 1);
+                    assert_eq!(
+                        fs::read_to_string(&gui_path).unwrap(),
+                        format!("#!C:/wheel env/{executable}\r\nprint(\"gui\")\n")
+                    );
+                    let updated =
+                        rattler_conda_types::PrefixRecord::from_path(&record_path).unwrap();
+                    let entry = updated
+                        .paths_data
+                        .paths
+                        .iter()
+                        .find(|entry| {
+                            entry.relative_path == std::path::Path::new("Scripts/script-probe-gui")
+                        })
+                        .unwrap();
+                    assert_eq!(
+                        entry.sha256_in_prefix,
+                        Some(
+                            rattler_digest::compute_file_digest::<rattler_digest::Sha256>(
+                                &gui_path
+                            )
+                            .unwrap()
+                        )
+                    );
+                    assert_eq!(
+                        entry.size_in_bytes,
+                        Some(fs::metadata(&gui_path).unwrap().len())
+                    );
+                }
+            }
+
             // Simulate an interpreter arriving/disappearing after the wheel was
             // linked, and a script moved by clobber resolution. The final sweep
             // must use the final filesystem and reload the recorded destination.
@@ -1770,6 +1942,18 @@ mod test {
                 .into_prefix_record(&prefix)
                 .unwrap();
             let records = rattler_conda_types::PrefixRecord::collect_from_prefix(&prefix).unwrap();
+            InstallDriver::builder()
+                .with_prefix_records(&records)
+                .with_windows_wheel_script_finalization(true)
+                .with_ignored_wheel_scripts(std::collections::HashSet::from([installed
+                    .repodata_record
+                    .package_record
+                    .name
+                    .clone()]))
+                .finish()
+                .post_process(&transaction, &prefix, None)
+                .unwrap();
+            assert_eq!(fs::read(&script).unwrap(), before);
             InstallDriver::builder()
                 .with_prefix_records(&records)
                 .with_windows_wheel_script_finalization(true)

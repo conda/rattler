@@ -10,7 +10,7 @@ use rattler_conda_types::{PrefixRecord, package::DistArchiveType, prefix::Prefix
 use rattler_digest::{Sha256, compute_file_digest};
 use rattler_package_streaming::wheel::PYTHON_GUI_SCRIPT_PREFIX_PLACEHOLDER;
 
-/// Revisit only newly installed wheel records, never arbitrary files in Scripts/.
+/// Revisit tracked wheel records, never arbitrary files in Scripts/.
 /// Clobber resolution may have moved scripts, so reload their final recorded paths.
 pub(super) fn finalize_windows_wheel_scripts<'a>(
     prefix: &Prefix,
@@ -38,9 +38,14 @@ pub(super) fn finalize_windows_wheel_scripts<'a>(
                 continue;
             }
             let path = prefix.join(&entry.relative_path);
-            if rewrite_interpreter(&path, executable)? {
-                entry.sha256_in_prefix = Some(compute_file_digest::<Sha256>(&path)?);
-                entry.size_in_bytes = Some(fs_err::metadata(&path)?.len());
+            rewrite_interpreter(&path, executable)?;
+            // A previous sweep may have replaced the file before failing to
+            // persist its metadata. Reconcile even when the shebang is correct.
+            let sha256 = Some(compute_file_digest::<Sha256>(&path)?);
+            let size = Some(fs_err::metadata(&path)?.len());
+            if entry.sha256_in_prefix != sha256 || entry.size_in_bytes != size {
+                entry.sha256_in_prefix = sha256;
+                entry.size_in_bytes = size;
                 changed = true;
             }
         }
@@ -51,7 +56,7 @@ pub(super) fn finalize_windows_wheel_scripts<'a>(
     Ok(())
 }
 
-fn rewrite_interpreter(path: &Path, executable: &str) -> io::Result<bool> {
+fn rewrite_interpreter(path: &Path, executable: &str) -> io::Result<()> {
     let metadata = fs_err::symlink_metadata(path)?;
     if !metadata.is_file() {
         return Err(io::Error::other(format!(
@@ -77,7 +82,7 @@ fn rewrite_interpreter(path: &Path, executable: &str) -> io::Result<bool> {
     let mut desired = prefix.to_vec();
     write!(desired, "/{executable}\r\n")?;
     if header == desired {
-        return Ok(false);
+        return Ok(());
     }
 
     // Replace rather than truncate: even a hardlinked installed script must
@@ -95,5 +100,5 @@ fn rewrite_interpreter(path: &Path, executable: &str) -> io::Result<bool> {
         .set_permissions(metadata.permissions())?;
     drop(source);
     replacement.persist(path).map_err(|error| error.error)?;
-    Ok(true)
+    Ok(())
 }
