@@ -64,7 +64,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/linux-64/nodejs-25.9.0-he4ff34a_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/openssl-3.6.1-h35e630c_1.conda
       - conda: https://prefix.dev/conda-forge/linux-64/rust-1.98.1-hc89c8c8_2.conda
-      - conda: https://prefix.dev/conda-forge/linux-64/wasm-pack-0.14.0-hb17b654_1.conda
+      - conda: https://prefix.dev/conda-forge/linux-64/wasm-pack-0.15.0-hb17b654_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - conda: https://prefix.dev/conda-forge/noarch/ca-certificates-2026.2.25-hbd8a1cb_0.conda
       - conda: https://prefix.dev/conda-forge/noarch/compiler-rt22_linux-64-22.1.0-hffcefe0_0.conda
@@ -114,7 +114,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/linux-aarch64/nodejs-25.9.0-h07adefd_0.conda
       - conda: https://prefix.dev/conda-forge/linux-aarch64/openssl-3.6.1-h546c87b_1.conda
       - conda: https://prefix.dev/conda-forge/linux-aarch64/rust-1.98.1-h651fc87_2.conda
-      - conda: https://prefix.dev/conda-forge/linux-aarch64/wasm-pack-0.14.0-h069e38c_1.conda
+      - conda: https://prefix.dev/conda-forge/linux-aarch64/wasm-pack-0.15.0-h069e38c_0.conda
       - conda: https://prefix.dev/conda-forge/linux-aarch64/zstd-1.5.7-h85ac4a6_6.conda
       - conda: https://prefix.dev/conda-forge/noarch/ca-certificates-2026.2.25-hbd8a1cb_0.conda
       - conda: https://prefix.dev/conda-forge/noarch/compiler-rt22_linux-aarch64-22.1.0-hfefdfc9_0.conda
@@ -170,7 +170,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/osx-arm64/rust-1.98.1-h4ff7c5d_2.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/sigtool-codesign-0.1.3-h98dc951_0.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/tapi-1600.0.11.8-h997e182_0.conda
-      - conda: https://prefix.dev/conda-forge/osx-arm64/wasm-pack-0.14.0-h6fdd925_1.conda
+      - conda: https://prefix.dev/conda-forge/osx-arm64/wasm-pack-0.15.0-h6fdd925_0.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
       win-64:
       - conda: https://prefix.dev/conda-forge/noarch/compiler-rt22_win-64-22.1.0-h49e36cd_0.conda
@@ -187,7 +187,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/win-64/vc-14.3-h41ae7f8_34.conda
       - conda: https://prefix.dev/conda-forge/win-64/vc14_runtime-14.44.35208-h818238b_34.conda
       - conda: https://prefix.dev/conda-forge/win-64/vcomp14-14.44.35208-h818238b_34.conda
-      - conda: https://prefix.dev/conda-forge/win-64/wasm-pack-0.14.0-h18a1a76_1.conda
+      - conda: https://prefix.dev/conda-forge/win-64/wasm-pack-0.15.0-h18a1a76_0.conda
       - conda: https://prefix.dev/conda-forge/win-64/zstd-1.5.7-h534d264_6.conda
 packages:
 - conda: https://prefix.dev/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
@@ -665,17 +665,18 @@ packages:
     - __glibc >=2.17
   size: 173347196
   timestamp: 1788888331501
-- conda: https://prefix.dev/conda-forge/linux-64/wasm-pack-0.14.0-hb17b654_1.conda
-  sha256: 54085923ed0b5890dc663fbea3c522b4764cc2fb95ffec36ce26a4532acd5362
-  md5: 3e6505aa104d2206d82ed617b9a0ae51
+- conda: https://prefix.dev/conda-forge/linux-64/wasm-pack-0.15.0-hb17b654_0.conda
+  sha256: f8aed69714662b4da06ee0364d695792ae8d9397191ab441a8a6432dd61f5251
+  md5: e528a0758c2dce2dfc8ea4fd0bcbb643
   depends:
-  - libgcc >=14
   - __glibc >=2.17,<3.0.a0
+  - libgcc >=14
   constrains:
   - __glibc >=2.17
   license: MIT OR Apache-2.0
-  size: 2206769
-  timestamp: 1772443346128
+  run_exports: {}
+  size: 2198657
+  timestamp: 1780752575057
 - conda: https://prefix.dev/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
   sha256: 68f0206ca6e98fea941e5717cec780ed2873ffabc0e1ed34428c061e2c6268c7
   md5: 4a13eeac0b5c8e5b8ab496e6c4ddd829
@@ -1133,16 +1134,17 @@ packages:
     - __glibc >=2.17
   size: 138145608
   timestamp: 1788887060853
-- conda: https://prefix.dev/conda-forge/linux-aarch64/wasm-pack-0.14.0-h069e38c_1.conda
-  sha256: ab33b53fd08504b594ff8412340bc3b29c978c253e70712e90b37fd6ca95069a
-  md5: 09b34f7fb6f78642d8ff51045664e80b
+- conda: https://prefix.dev/conda-forge/linux-aarch64/wasm-pack-0.15.0-h069e38c_0.conda
+  sha256: 9e964e24d9f677fcdf062c9d5b3789e070dc6cbebaa35c546b9aae7f1844dbeb
+  md5: 18fa656fab4fa678356f5ade7982ddfc
   depends:
   - libgcc >=14
   constrains:
   - __glibc >=2.17
   license: MIT OR Apache-2.0
-  size: 2140511
-  timestamp: 1772443340334
+  run_exports: {}
+  size: 2131446
+  timestamp: 1780752599860
 - conda: https://prefix.dev/conda-forge/linux-aarch64/zstd-1.5.7-h85ac4a6_6.conda
   sha256: 569990cf12e46f9df540275146da567d9c618c1e9c7a0bc9d9cfefadaed20b75
   md5: c3655f82dcea2aa179b291e7099c1fcc
@@ -1852,16 +1854,17 @@ packages:
   license: NCSA
   size: 199699
   timestamp: 1762535277608
-- conda: https://prefix.dev/conda-forge/osx-arm64/wasm-pack-0.14.0-h6fdd925_1.conda
-  sha256: 0d62a0702255e5059a6007c829e0c7f708656c764e3d5cfb254f1490e72c962a
-  md5: 305bfcfcd3072c37f318033be0bc29c9
+- conda: https://prefix.dev/conda-forge/osx-arm64/wasm-pack-0.15.0-h6fdd925_0.conda
+  sha256: da3268c99f9ba928e6c8e7b5ccc80d615686fe926179cab5a76703d6ee03816f
+  md5: acbf02604fb4e6881967c355164f6b74
   depends:
   - __osx >=11.0
   constrains:
   - __osx >=11.0
   license: MIT OR Apache-2.0
-  size: 2009468
-  timestamp: 1772443370989
+  run_exports: {}
+  size: 2011074
+  timestamp: 1780752614144
 - conda: https://prefix.dev/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
   sha256: 9485ba49e8f47d2b597dd399e88f4802e100851b27c21d7525625b0b4025a5d9
   md5: ab136e4c34e97f34fb621d2592a393d8
@@ -2003,16 +2006,17 @@ packages:
   license_family: Proprietary
   size: 115235
   timestamp: 1767320173250
-- conda: https://prefix.dev/conda-forge/win-64/wasm-pack-0.14.0-h18a1a76_1.conda
-  sha256: bc065d154d240aa29937c91233ed5596fd5172545a0a4c2ac24f2c2cd90c9c42
-  md5: b4326717a00f86f8f8f92c3dbb3433c1
+- conda: https://prefix.dev/conda-forge/win-64/wasm-pack-0.15.0-h18a1a76_0.conda
+  sha256: 706828365c117cfcc8c4c0e28e2d41d14061152c89a47b4e60dff4319b390651
+  md5: c1d45f169e2717a1c22d5d275474df8a
   depends:
   - vc >=14.3,<15
   - vc14_runtime >=14.44.35208
   - ucrt >=10.0.20348.0
   license: MIT OR Apache-2.0
-  size: 2094162
-  timestamp: 1772443364940
+  run_exports: {}
+  size: 2095862
+  timestamp: 1780752567368
 - conda: https://prefix.dev/conda-forge/win-64/zstd-1.5.7-h534d264_6.conda
   sha256: 368d8628424966fd8f9c8018326a9c779e06913dd39e646cf331226acc90e5b2
   md5: 053b84beec00b71ea8ff7a4f84b55207
