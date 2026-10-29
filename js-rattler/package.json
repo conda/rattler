@@ -36,14 +36,14 @@
         "fmt:check": "prettier --check ."
     },
     "devDependencies": {
-        "@jest/globals": "30.4.1",
+        "@jest/globals": "30.5.2",
         "@rollup/plugin-commonjs": "28.0.9",
         "@rollup/plugin-esm-shim": "0.1.8",
         "@rollup/plugin-node-resolve": "16.0.3",
         "@rollup/plugin-typescript": "12.3.1",
         "@rollup/plugin-wasm": "6.2.2",
         "cross-env": "7.0.3",
-        "jest": "30.4.2",
+        "jest": "30.5.2",
         "prettier": "3.9.10",
         "prettier-plugin-jsdoc": "1.5.0",
         "rollup": "4.65.0",
