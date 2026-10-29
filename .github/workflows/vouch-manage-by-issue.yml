@@ -1,6 +1,8 @@
 name: Manage by Issue
 
-on:
+# `issue_comment` is needed to vouch/denounce via comments. The workflow never
+# checks out or executes PR code.
+on: # zizmor: ignore[dangerous-triggers]
   issue_comment:
     types: [created]
 
