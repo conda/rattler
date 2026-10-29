@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.1] - 2026-10-29
+
+This patch release is built from 0.28.0 and changes only the bundled `zip` crate. Nothing changes in the Python API.
+
+### Security
+
+- Update `zip` to 9.1.3, which is used to read `.conda` archives during `install()` and extraction. It fixes archives that list different contents than other ZIP readers would see ([GHSA-m665-v7pm-7grj](https://github.com/zip-rs/zip2/security/advisories/GHSA-m665-v7pm-7grj) / CVE-2026-115905, [GHSA-wjr6-mhvj-cjvm](https://github.com/zip-rs/zip2/security/advisories/GHSA-wjr6-mhvj-cjvm)) and stream validation that accepted a missing footer and shifted offsets ([GHSA-gmfj-vffv-32pw](https://github.com/zip-rs/zip2/security/advisories/GHSA-gmfj-vffv-32pw)), backported from [#3035](https://github.com/conda/rattler/pull/3035)
+
 ## [0.28.0] - 2026-10-23
 
 ### Highlights
