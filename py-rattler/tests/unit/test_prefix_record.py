@@ -70,6 +70,7 @@ def test_create_prefix_record() -> None:
     sha256 = "c505c9636f910d737b3a304ca2daff88fef1a92450d4dcd2f1a9d735eb1fa4d6"
 
     r.sha256 = bytes.fromhex(sha256)
+    assert r.sha256 is not None
     assert r.sha256.hex() == sha256
 
     package_record = PackageRecord(

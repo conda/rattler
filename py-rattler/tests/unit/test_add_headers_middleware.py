@@ -1,7 +1,7 @@
-# type: ignore
 from __future__ import annotations
 
 import os.path
+from collections.abc import Iterator
 
 import pytest
 from xprocess import ProcessStarter
@@ -12,7 +12,7 @@ from rattler.platform import Subdir
 
 
 @pytest.fixture(scope="module")
-def serve_bearer_repo(xprocess) -> None:
+def serve_bearer_repo(xprocess) -> Iterator[tuple[int, str, str]]:
     """Start a test server that requires bearer authentication."""
     port = 8913
     repo_name = "bearer-repo"
