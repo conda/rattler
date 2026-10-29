@@ -11,6 +11,7 @@ use jiff::{Span, Timestamp, civil::Date, tz::TimeZone};
 use rattler_conda_types::{
     BuildNumberSpec, Channel, ChannelConfig, MatchSpec, NamelessMatchSpec, PackageName,
     PackageNameMatcher, ParseStrictness, VersionSpec, match_spec::matcher::StringMatcher,
+    package::CondaArchiveType,
 };
 use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 use serde::{
@@ -80,6 +81,64 @@ pub struct ExcludeNewerExemption {
     /// Only the releases published up to this cutoff are exempt, an RFC 3339
     /// timestamp or a date, e.g. `2026-10-12`.
     pub cutoff: Option<ExcludeNewerExemptionCutoff>,
+}
+
+/// A match spec that can't select the exempt releases of a package, see
+/// [`validate_exemption_spec`].
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum InvalidExemptionSpecError {
+    /// The spec has no field that selects releases, so a typo would silently
+    /// exempt every release. An empty list doesn't select releases either.
+    #[error(
+        "an exemption table must specify at least one match spec field besides `cutoff` that is not an empty list, use `version = \"*\"` to exempt every release"
+    )]
+    Empty,
+
+    /// The `url` doesn't point to a package archive, so it never matches a
+    /// release.
+    #[error(
+        "the `url` of an exemption must point to a package archive, e.g. a `.conda` file, not `{0}`"
+    )]
+    NotPackageArchive(Url),
+
+    /// The solver can't use the spec as an exemption.
+    #[error(transparent)]
+    Solver(#[from] rattler_solve::InvalidExemptionError),
+}
+
+/// Checks that `spec` can select the exempt releases of the package `name`,
+/// the rules that apply to every [`ExcludeNewerExemption`]. Tools that keep
+/// exemptions in their own format can use it to apply the same rules.
+pub fn validate_exemption_spec(
+    name: &PackageName,
+    spec: &NamelessMatchSpec,
+) -> Result<(), InvalidExemptionSpecError> {
+    let selecting_spec = NamelessMatchSpec {
+        flags: spec.flags.clone().filter(|flags| !flags.is_empty()),
+        track_features: spec
+            .track_features
+            .clone()
+            .filter(|track_features| !track_features.is_empty()),
+        ..spec.clone()
+    };
+    if selecting_spec == NamelessMatchSpec::default() {
+        return Err(InvalidExemptionSpecError::Empty);
+    }
+    if let Some(url) = &spec.url {
+        let is_archive = url
+            .path_segments()
+            .and_then(Iterator::last)
+            .and_then(CondaArchiveType::split_str)
+            .is_some();
+        if !is_archive {
+            return Err(InvalidExemptionSpecError::NotPackageArchive(url.clone()));
+        }
+    }
+    rattler_solve::ExcludeNewer::validate_exemption(&MatchSpec::from_nameless(
+        spec.clone(),
+        PackageNameMatcher::Exact(name.clone()),
+    ))?;
+    Ok(())
 }
 
 /// An invalid cutoff or exemption of an [`ExcludeNewerConfig`].
@@ -479,20 +538,8 @@ impl TryFrom<ExemptionTable> for ExcludeNewerExemption {
             track_features: table.track_features,
             ..NamelessMatchSpec::default()
         };
-        // An empty table would exempt every release, so a typo would silently
-        // exempt the package entirely. An empty list matches every release
-        // too, so it doesn't count.
-        let selecting_spec = NamelessMatchSpec {
-            flags: spec.flags.clone().filter(|flags| !flags.is_empty()),
-            track_features: spec
-                .track_features
-                .clone()
-                .filter(|track_features| !track_features.is_empty()),
-            ..spec.clone()
-        };
-        if selecting_spec == NamelessMatchSpec::default() {
-            return Err("an exemption table must specify at least one match spec field besides `cutoff` that is not an empty list, use `version = \"*\"` to exempt every release".to_string());
-        }
+        // The spec is checked with the name of the package, see
+        // `deserialize_exemptions`.
         let cutoff = table
             .cutoff
             .map(|cutoff| {
@@ -655,11 +702,13 @@ fn deserialize_exemptions<'de, D: Deserializer<'de>>(
                         name.as_source()
                     ))
                 };
-                let exemption = map
+                let exemption: ExcludeNewerExemption = map
                     .next_value::<RawExemption>()
                     .map_err(|err| invalid_exemption(&err))?
                     .try_into()
                     .map_err(|err: String| invalid_exemption(&err))?;
+                validate_exemption_spec(&name, &exemption.spec)
+                    .map_err(|err| invalid_exemption(&err))?;
                 exemptions.insert(name, exemption);
             }
             Ok(exemptions)
@@ -861,6 +910,10 @@ mod tests {
             ),
             (r#"{ url = "not a url" }"#, "invalid `url` `not a url`"),
             (
+                r#"{ url = "https://example.com/ruff" }"#,
+                "the `url` of an exemption must point to a package archive",
+            ),
+            (
                 r#"{ version = "*", cutoff = "7d" }"#,
                 "invalid cutoff `7d`, expected an RFC 3339 timestamp or a date",
             ),
@@ -928,6 +981,38 @@ mod tests {
             ),
             "{error}"
         );
+    }
+
+    #[test]
+    fn test_validate_exemption_spec() {
+        let name = PackageName::new_unchecked("ruff");
+        assert!(
+            validate_exemption_spec(
+                &name,
+                &ExcludeNewerExemption::from_version(version("*")).spec
+            )
+            .is_ok()
+        );
+        assert_eq!(
+            validate_exemption_spec(&name, &NamelessMatchSpec::default()),
+            Err(InvalidExemptionSpecError::Empty)
+        );
+        let extras = NamelessMatchSpec {
+            version: Some(version("*")),
+            extras: Some(vec!["x".to_string()]),
+            ..NamelessMatchSpec::default()
+        };
+        assert!(matches!(
+            validate_exemption_spec(&name, &extras),
+            Err(InvalidExemptionSpecError::Solver(
+                rattler_solve::InvalidExemptionError::UnsupportedField(_)
+            ))
+        ));
+        let archive = NamelessMatchSpec {
+            url: Some("https://example.com/ruff-0.1-0.conda".parse().unwrap()),
+            ..NamelessMatchSpec::default()
+        };
+        assert!(validate_exemption_spec(&name, &archive).is_ok());
     }
 
     #[test]
