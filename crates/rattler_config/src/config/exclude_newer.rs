@@ -109,15 +109,7 @@ impl ExcludeNewerConfig {
         &self,
         now: Timestamp,
     ) -> Result<rattler_solve::ExcludeNewer, InvalidExcludeNewerError> {
-        let cutoff = match parse_cutoff(&self.cutoff).map_err(InvalidExcludeNewerError)? {
-            Cutoff::Timestamp(timestamp) => timestamp,
-            Cutoff::Duration(duration) => Span::try_from(duration)
-                .ok()
-                .and_then(|span| now.checked_sub(span).ok())
-                .ok_or_else(|| {
-                    InvalidExcludeNewerError(format!("cutoff `{}` is too large", self.cutoff))
-                })?,
-        };
+        let cutoff = resolve_cutoff(&self.cutoff, now).map_err(InvalidExcludeNewerError)?;
         let mut exclude_newer = rattler_solve::ExcludeNewer::from_datetime(cutoff);
         for (name, exemption) in &self.exemptions {
             exclude_newer = exemption.add_to(exclude_newer, name).map_err(|err| {
@@ -192,6 +184,17 @@ impl ExcludeNewerExemption {
             ..NamelessMatchSpec::default()
         };
         (self.cutoff.is_none() && self.spec == only_version).then_some(version)
+    }
+}
+
+/// Parses `cutoff` and resolves a duration relative to `now`.
+fn resolve_cutoff(cutoff: &str, now: Timestamp) -> Result<Timestamp, String> {
+    match parse_cutoff(cutoff)? {
+        Cutoff::Timestamp(timestamp) => Ok(timestamp),
+        Cutoff::Duration(duration) => Span::try_from(duration)
+            .ok()
+            .and_then(|span| now.checked_sub(span).ok())
+            .ok_or_else(|| format!("cutoff `{cutoff}` is too large")),
     }
 }
 
@@ -510,14 +513,14 @@ impl<'de> Deserialize<'de> for ExcludeNewerConfig {
             }
 
             fn visit_str<E: de::Error>(self, cutoff: &str) -> Result<Self::Value, E> {
-                parse_cutoff(cutoff).map_err(E::custom)?;
+                resolve_cutoff(cutoff, Timestamp::now()).map_err(E::custom)?;
                 Ok(ExcludeNewerConfig::from_cutoff(cutoff))
             }
 
             fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
                 let table = ExcludeNewerTable::deserialize(MapAccessDeserializer::new(map))?;
                 // The exemptions are validated while they are deserialized.
-                parse_cutoff(&table.cutoff).map_err(de::Error::custom)?;
+                resolve_cutoff(&table.cutoff, Timestamp::now()).map_err(de::Error::custom)?;
                 Ok(ExcludeNewerConfig {
                     cutoff: table.cutoff,
                     exemptions: table.exemptions,
@@ -639,6 +642,15 @@ mod tests {
                 "{input}: {error}"
             );
         }
+    }
+
+    #[test]
+    fn test_parse_too_large_cutoff() {
+        let error = toml::from_str::<Document>(r#"exclude-newer = "100000y""#).unwrap_err();
+        assert!(
+            error.to_string().contains("cutoff `100000y` is too large"),
+            "{error}"
+        );
     }
 
     #[test]
