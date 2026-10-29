@@ -841,6 +841,7 @@ mod tests {
                 "exclude-newer",
                 r#"{"cutoff": "7d", "exemptions": {"ruff": {}}}"#,
             ),
+            ("exclude-newer", r#"{"cutoff": "7d", "bogus": 1}"#),
         ] {
             let error = config.set(key, Some(value.to_string())).unwrap_err();
             assert!(
@@ -849,18 +850,6 @@ mod tests {
             );
         }
 
-        // An unknown key of the table is rejected like any other unknown key.
-        let error = config
-            .set(
-                "exclude-newer",
-                Some(r#"{"cutoff": "7d", "bogus": 1}"#.to_string()),
-            )
-            .unwrap_err();
-        assert!(
-            matches!(error, crate::edit::ConfigEditError::UnknownKey { .. }),
-            "{error}"
-        );
-
         assert_eq!(
             config.exclude_newer,
             Some(crate::config::exclude_newer::ExcludeNewerConfig::from_cutoff("7d"))
@@ -868,22 +857,18 @@ mod tests {
     }
 
     #[test]
-    fn test_unknown_exclude_newer_key_is_reported() {
-        let (config, unused) = TestConfig::from_toml_str(
+    fn test_unknown_exclude_newer_key_is_rejected() {
+        let error = TestConfig::from_toml_str(
             r#"
             [exclude-newer]
             cutoff = "7d"
             exemption = { ruff = "*" }
             "#,
         )
-        .unwrap();
-        assert_eq!(
-            config.exclude_newer,
-            Some(crate::config::exclude_newer::ExcludeNewerConfig::from_cutoff("7d"))
-        );
-        assert_eq!(
-            unused.into_iter().collect::<Vec<_>>(),
-            vec!["exclude-newer.exemption".to_string()]
+        .unwrap_err();
+        assert!(
+            error.to_string().contains("unknown field `exemption`"),
+            "{error}"
         );
     }
 

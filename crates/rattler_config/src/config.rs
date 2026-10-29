@@ -286,8 +286,8 @@ fn prefixed_keys(prefix: &str, keys: Vec<String>) -> Vec<String> {
     keys.into_iter().map(|k| format!("{prefix}.{k}")).collect()
 }
 
-/// Formats the path of an ignored key as a dotted key, e.g.
-/// `exclude-newer.exemption`. Unlike the `Display` of the path, this leaves out
+/// Formats the path of an ignored key as a dotted key, e.g. `table.key`.
+/// Unlike the `Display` of the path, this leaves out
 /// the `?` that marks a value inside an `Option`.
 fn key_path(path: &serde_ignored::Path<'_>) -> String {
     use serde_ignored::Path;

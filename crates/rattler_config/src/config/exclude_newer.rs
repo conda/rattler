@@ -431,7 +431,7 @@ impl<'de> Deserialize<'de> for ExcludeNewerExemption {
 
 /// The table form of [`ExcludeNewerConfig`].
 #[derive(Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 struct ExcludeNewerTable {
     cutoff: String,
     #[serde(
@@ -817,6 +817,23 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.to_string().contains("missing field `cutoff`"));
+    }
+
+    #[test]
+    fn test_parse_table_unknown_key() {
+        // A typo such as `exemption` would otherwise drop every exemption.
+        let error = toml::from_str::<Document>(
+            r#"
+            [exclude-newer]
+            cutoff = "7d"
+            exemption = { ruff = "*" }
+            "#,
+        )
+        .unwrap_err();
+        assert!(
+            error.to_string().contains("unknown field `exemption`"),
+            "{error}"
+        );
     }
 
     #[test]
