@@ -112,7 +112,7 @@ class PackageRecord:
         return [PackageRecord._from_py_record(p) for p in PyRecord.sort_topologically(records)]
 
     @staticmethod
-    def to_graph(records: list[PackageRecord]) -> nx.DiGraph:  # type: ignore[type-arg]
+    def to_graph(records: list[PackageRecord]) -> nx.DiGraph:
         """
         Converts a list of PackageRecords to a DAG (`networkx.DiGraph`).
         The nodes in the graph are the PackageRecords and the edges are the dependencies.
@@ -126,7 +126,7 @@ class PackageRecord:
 
         names_to_records = {record.name: record for record in records}
 
-        graph = nx.DiGraph()  # type: ignore[var-annotated]
+        graph = nx.DiGraph()
         for record in records:
             graph.add_node(record)
             for dep in record.depends:
