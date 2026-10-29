@@ -670,43 +670,6 @@ impl Installer {
 
         // If the transaction is empty we can short-circuit the installation
         if transaction.operations.is_empty() {
-            // A previous installation may have linked everything but failed in
-            // the final sweep. A no-op retry must still reconcile wheel scripts.
-            // Only load full records for wheels, preserving the conda fast path.
-            if target_platform.is_windows() {
-                let wheel_names: HashSet<_> = desired_records
-                    .iter()
-                    .filter(|record| {
-                        matches!(record.identifier.archive_type, DistArchiveType::Wheel(_))
-                    })
-                    .filter(|record| {
-                        self.ignored_packages
-                            .as_ref()
-                            .is_none_or(|ignored| !ignored.contains(&record.package_record.name))
-                    })
-                    .map(|record| &record.package_record.name)
-                    .collect();
-                let mut wheels = Vec::new();
-                for record in transaction
-                    .unchanged_packages()
-                    .iter()
-                    .filter(|record| wheel_names.contains(record.name()))
-                {
-                    ensure_safe_path_component(record.name().as_normalized())
-                        .and_then(|()| ensure_safe_path_component(record.build().as_str()))
-                        .map_err(InstallerError::UnsafePackageRecord)?;
-                    wheels.push(
-                        record
-                            .clone()
-                            .into_prefix_record(&prefix)
-                            .map_err(InstallerError::FailedToDetectInstalledPackages)?,
-                    );
-                }
-                super::wheel_scripts::finalize_windows_wheel_scripts(&prefix, wheels.iter())
-                    .map_err(|error| {
-                        InstallerError::IoError("finalizing Windows wheel scripts".into(), error)
-                    })?;
-            }
             return Ok(InstallationResult {
                 transaction,
                 pre_link_script_result: None,
@@ -742,7 +705,6 @@ impl Installer {
 
         // Construct a driver.
         let driver = InstallDriver::builder()
-            .with_windows_wheel_script_finalization(target_platform.is_windows())
             .execute_link_scripts(self.execute_link_scripts)
             .with_io_concurrency_semaphore(io_semaphore)
             .with_prefix_records(
@@ -941,12 +903,8 @@ impl Installer {
         drop(pending_link_futures);
 
         // Post process the transaction
-        let post_process_result = driver.post_process_with_ignored_packages(
-            &transaction,
-            &prefix,
-            self.reporter.as_deref(),
-            self.ignored_packages.as_ref(),
-        )?;
+        let post_process_result =
+            driver.post_process(&transaction, &prefix, self.reporter.as_deref())?;
 
         if let Some(reporter) = &self.reporter {
             reporter.on_transaction_complete();

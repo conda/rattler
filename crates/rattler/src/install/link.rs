@@ -11,7 +11,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Formatter;
 use std::fs::Permissions;
-use std::io::{BufWriter, ErrorKind, Read, Seek, Write};
+use std::io::{BufWriter, ErrorKind, Read, Seek};
 use std::path::{Path, PathBuf};
 
 use super::apple_codesign::{AppleCodeSignBehavior, codesign};
@@ -26,38 +26,6 @@ pub use prefix_replacement::{
     copy_and_replace_textual_placeholder, copy_and_replace_textual_placeholder_offsets,
     find_cstring_occurrences, find_text_occurrences, replace_shebang_region,
 };
-
-/// Writes a Windows shebang for a converted raw wheel script, leaving its body unchanged.
-/// Returns false without writing anything for ordinary conda prefix replacements.
-fn copy_windows_wheel_script(
-    source: &[u8],
-    mut destination: impl Write,
-    placeholder: &str,
-    target_dir: &Path,
-    target_prefix: &str,
-) -> std::io::Result<bool> {
-    use rattler_package_streaming::wheel::{
-        PYTHON_GUI_SCRIPT_PREFIX_PLACEHOLDER, PYTHON_SCRIPT_PREFIX_PLACEHOLDER,
-    };
-
-    let is_gui = match placeholder {
-        PYTHON_SCRIPT_PREFIX_PLACEHOLDER => false,
-        PYTHON_GUI_SCRIPT_PREFIX_PLACEHOLDER => true,
-        _ => return Ok(false),
-    };
-    let header = format!("#!{placeholder}/bin/python\n");
-    let Some(body) = source.strip_prefix(header.as_bytes()) else {
-        return Ok(false);
-    };
-    let executable = if is_gui && target_dir.join("pythonw.exe").is_file() {
-        "pythonw.exe"
-    } else {
-        "python.exe"
-    };
-    write!(destination, "#!{target_prefix}/{executable}\r\n")?;
-    destination.write_all(body)?;
-    Ok(true)
-}
 
 /// Describes the method to "link" a file from the source directory (or the cache directory) to the
 /// destination directory.
@@ -285,49 +253,34 @@ pub fn link_file(
             }
             None => None,
         };
-        let spliced = if target_platform.is_windows()
-            && *file_mode == FileMode::Text
-            && copy_windows_wheel_script(
+        let spliced = match offsets {
+            Some(offsets) => match copy_and_replace_placeholders_with_offsets(
                 source.as_ref(),
                 &mut destination_writer,
                 placeholder,
-                target_dir.path(),
                 &target_prefix,
-            )
-            .map_err(|err| {
-                LinkFileError::IoError(String::from("rewriting wheel script shebang"), err)
-            })? {
-            true
-        } else {
-            match offsets {
-                Some(offsets) => match copy_and_replace_placeholders_with_offsets(
-                    source.as_ref(),
-                    &mut destination_writer,
-                    placeholder,
-                    &target_prefix,
-                    &target_platform,
-                    *file_mode,
-                    offsets,
-                ) {
-                    Ok(()) => true,
-                    Err(OffsetReplaceError::InconsistentMetadata(error)) => {
-                        tracing::warn!(
-                            path = %path_json_entry.relative_path.display(),
-                            %error,
-                            "prefix replacement offsets are inconsistent with the file; falling back \
-                             to search-based replacement"
-                        );
-                        false
-                    }
-                    Err(OffsetReplaceError::Io(err)) => {
-                        return Err(LinkFileError::IoError(
-                            String::from("replacing placeholders"),
-                            err,
-                        ));
-                    }
-                },
-                None => false,
-            }
+                &target_platform,
+                *file_mode,
+                offsets,
+            ) {
+                Ok(()) => true,
+                Err(OffsetReplaceError::InconsistentMetadata(error)) => {
+                    tracing::warn!(
+                        path = %path_json_entry.relative_path.display(),
+                        %error,
+                        "prefix replacement offsets are inconsistent with the file; falling back \
+                         to search-based replacement"
+                    );
+                    false
+                }
+                Err(OffsetReplaceError::Io(err)) => {
+                    return Err(LinkFileError::IoError(
+                        String::from("replacing placeholders"),
+                        err,
+                    ));
+                }
+            },
+            None => false,
         };
         if !spliced {
             // Replace the prefix placeholder in the file with the new placeholder

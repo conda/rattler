@@ -7,9 +7,7 @@
 //! header paths depend on the target environment, which is unknown during caching.
 //! Declared license files are also copied into `info/licenses/` (CEP 34).
 //! Raw `#!python` and `#!pythonw` scripts use relocatable shebangs targeting
-//! `bin/python` on Unix. Their distinct placeholders let rattler select
-//! `python.exe` or `pythonw.exe` when installing on Windows. Raw-script Windows
-//! executable launchers are not generated.
+//! `bin/python` on Unix. Windows launchers for raw scripts are not generated.
 //!
 //! `RECORD` describes the cache layout, not final installed paths; its original
 //! signatures are discarded. Original RECORD hashes are not verified; callers
@@ -38,21 +36,19 @@ use crate::{ExtractError, ExtractResult};
 
 mod licenses;
 mod record;
+#[cfg(test)]
+mod tests;
 
 const SITE_PACKAGES: &str = "site-packages";
 const PYTHON_SCRIPTS: &str = "python-scripts";
 const INSTALLER: &str = "conda\n";
-/// Reserved prefix placeholder identifying a raw wheel console script.
-pub const PYTHON_SCRIPT_PREFIX_PLACEHOLDER: &str = "/__rattler_wheel_prefix_placeholder__";
-/// Reserved prefix placeholder identifying a raw wheel GUI script.
-/// Both script kinds use `bin/python` on Unix; Windows selects the interpreter at install time.
-pub const PYTHON_GUI_SCRIPT_PREFIX_PLACEHOLDER: &str = "/__rattler_wheel_gui_prefix_placeholder__";
+const SCRIPT_PREFIX_PLACEHOLDER: &str = "/__rattler_wheel_prefix_placeholder__";
 
 /// Wheels can be spooled to memory up to this size before spilling to disk.
 const SPOOL_LIMIT: usize = 5 * 1024 * 1024;
 
 /// Bump when the converted layout changes to invalidate older cache entries.
-pub const CONVERSION_VERSION: u64 = 3;
+pub const CONVERSION_VERSION: u64 = 2;
 
 /// A wheel cannot be represented safely in the conda cache layout.
 #[derive(Debug, thiserror::Error)]
@@ -491,16 +487,11 @@ fn write_script_entry(
         );
     }
 
+    // Like PyPA installer, replace the entire first line, including CRLF and
+    // any suffix. On Unix pythonw uses the same interpreter as python.
     let mut body = BufReader::new(content);
-    let placeholder = if body.fill_buf()?.first() == Some(&b'w') {
-        PYTHON_GUI_SCRIPT_PREFIX_PLACEHOLDER
-    } else {
-        PYTHON_SCRIPT_PREFIX_PLACEHOLDER
-    };
-    // Replace the whole first line. Keep GUI identity in the metadata, not a
-    // host-specific interpreter path: the same noarch cache serves both OSes.
     body.skip_until(b'\n')?;
-    let shebang = format!("#!{placeholder}/bin/python\n");
+    let shebang = format!("#!{SCRIPT_PREFIX_PLACEHOLDER}/bin/python\n");
     let mut entry = write_entry(
         destination,
         relative_path,
@@ -509,7 +500,7 @@ fn write_script_entry(
     )?;
     entry.prefix_placeholder = Some(PrefixPlaceholder {
         file_mode: FileMode::Text,
-        placeholder: placeholder.to_owned(),
+        placeholder: SCRIPT_PREFIX_PLACEHOLDER.to_owned(),
         experimental_offsets: None,
     });
     Ok(entry)

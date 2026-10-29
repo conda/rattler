@@ -7,9 +7,7 @@ use std::{
 
 use indexmap::IndexSet;
 use itertools::Itertools;
-use rattler_conda_types::{
-    PackageName, PackageRecord, PrefixRecord, prefix::Prefix, prefix_record::PathType,
-};
+use rattler_conda_types::{PackageRecord, PrefixRecord, prefix::Prefix, prefix_record::PathType};
 use simple_spawn_blocking::{Cancelled, tokio::run_blocking_task};
 use thiserror::Error;
 use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
@@ -32,7 +30,6 @@ use crate::install::link_script::LinkScriptError;
 pub struct InstallDriver {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
     pub(crate) clobber_registry: Arc<Mutex<ClobberRegistry>>,
-    finalize_windows_wheel_scripts: bool,
     execute_link_scripts: bool,
     clobber_mode: ClobberMode,
 }
@@ -51,7 +48,6 @@ impl Default for InstallDriver {
 pub struct InstallDriverBuilder {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
     clobber_registry: Option<ClobberRegistry>,
-    finalize_windows_wheel_scripts: bool,
     execute_link_scripts: bool,
     clobber_mode: ClobberMode,
 }
@@ -73,10 +69,6 @@ pub enum PostProcessingError {
     #[error("failed to unclobber clobbered files")]
     ClobberError(#[from] ClobberError),
 
-    /// Failed to finalize raw Windows wheel scripts.
-    #[error("failed to finalize Windows wheel scripts")]
-    WheelScripts(#[source] std::io::Error),
-
     /// Failed to determine the currently installed packages.
     #[error("failed to determine the installed packages")]
     FailedToDetectInstalledPackages(#[source] std::io::Error),
@@ -87,11 +79,6 @@ pub enum PostProcessingError {
 }
 
 impl InstallDriverBuilder {
-    pub(crate) fn with_windows_wheel_script_finalization(mut self, enabled: bool) -> Self {
-        self.finalize_windows_wheel_scripts = enabled;
-        self
-    }
-
     /// Sets an optional IO concurrency limit. This is used to make sure
     /// that the system doesn't acquire more IO resources than the system has
     /// available.
@@ -153,7 +140,6 @@ impl InstallDriverBuilder {
                 .map(Mutex::new)
                 .map(Arc::new)
                 .unwrap_or_default(),
-            finalize_windows_wheel_scripts: self.finalize_windows_wheel_scripts,
             execute_link_scripts: self.execute_link_scripts,
             clobber_mode: self.clobber_mode,
         }
@@ -252,19 +238,6 @@ impl InstallDriver {
         target_prefix: &Prefix,
         reporter: Option<&dyn crate::install::installer::Reporter>,
     ) -> Result<PostProcessResult, PostProcessingError> {
-        self.post_process_with_ignored_packages(transaction, target_prefix, reporter, None)
-    }
-
-    pub(crate) fn post_process_with_ignored_packages<
-        Old: Borrow<PrefixRecord> + AsRef<New>,
-        New: AsRef<PackageRecord>,
-    >(
-        &self,
-        transaction: &Transaction<Old, New>,
-        target_prefix: &Prefix,
-        reporter: Option<&dyn crate::install::installer::Reporter>,
-        ignored_packages: Option<&HashSet<PackageName>>,
-    ) -> Result<PostProcessResult, PostProcessingError> {
         let prefix_records: Vec<PrefixRecord> = PrefixRecord::collect_from_prefix(target_prefix)
             .map_err(PostProcessingError::FailedToDetectInstalledPackages)?;
 
@@ -285,42 +258,6 @@ impl InstallDriver {
             .unwrap_or_else(|e| {
                 tracing::warn!("Failed to remove empty directories: {} (ignored)", e);
             });
-
-        // All files, including clobber winners, are now in their final locations.
-        // Correct GUI interpreter choices before any post-link script can run.
-        if self.finalize_windows_wheel_scripts {
-            let installed_names: HashSet<_> = transaction
-                .operations
-                .iter()
-                .filter_map(|operation| operation.record_to_install())
-                .map(|record| record.as_ref().name.clone())
-                .collect();
-            // Even a patch-level Python replacement can add/remove pythonw.exe
-            // without causing noarch wheels to be relinked.
-            let python_changed = transaction.operations.iter().any(|operation| {
-                operation
-                    .record_to_install()
-                    .is_some_and(|record| record.as_ref().name.as_normalized() == "python")
-                    || operation.record_to_remove().is_some_and(|record| {
-                        record
-                            .borrow()
-                            .repodata_record
-                            .package_record
-                            .name
-                            .as_normalized()
-                            == "python"
-                    })
-            });
-            super::wheel_scripts::finalize_windows_wheel_scripts(
-                target_prefix,
-                prefix_records.iter().filter(|record| {
-                    let name = &record.repodata_record.package_record.name;
-                    ignored_packages.is_none_or(|ignored| !ignored.contains(name))
-                        && (python_changed || installed_names.contains(name))
-                }),
-            )
-            .map_err(PostProcessingError::WheelScripts)?;
-        }
 
         let post_link_result = if self.execute_link_scripts {
             Some(self.run_post_link_scripts(
