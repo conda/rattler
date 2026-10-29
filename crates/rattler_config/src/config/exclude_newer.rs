@@ -268,6 +268,10 @@ struct ExemptionTable {
     #[serde(skip_serializing_if = "Option::is_none")]
     url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    flags: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    track_features: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     cutoff: Option<String>,
 }
 
@@ -325,12 +329,31 @@ impl TryFrom<ExemptionTable> for ExcludeNewerExemption {
                 .url
                 .map(|url| Url::parse(&url).map_err(|err| format!("invalid `url` `{url}`: {err}")))
                 .transpose()?,
+            flags: table
+                .flags
+                .map(|flags| {
+                    flags
+                        .into_iter()
+                        .map(|flag| parse_string_matcher("flags", flag))
+                        .collect()
+                })
+                .transpose()?,
+            track_features: table.track_features,
             ..NamelessMatchSpec::default()
         };
         // An empty table would exempt every release, so a typo would silently
-        // exempt the package entirely.
-        if spec == NamelessMatchSpec::default() {
-            return Err("an exemption table must specify at least one match spec field besides `cutoff`, use `version = \"*\"` to exempt every release".to_string());
+        // exempt the package entirely. An empty list matches every release
+        // too, so it doesn't count.
+        let selecting_spec = NamelessMatchSpec {
+            flags: spec.flags.clone().filter(|flags| !flags.is_empty()),
+            track_features: spec
+                .track_features
+                .clone()
+                .filter(|track_features| !track_features.is_empty()),
+            ..spec.clone()
+        };
+        if selecting_spec == NamelessMatchSpec::default() {
+            return Err("an exemption table must specify at least one match spec field besides `cutoff` that is not an empty list, use `version = \"*\"` to exempt every release".to_string());
         }
         if let Some(cutoff) = &table.cutoff {
             parse_absolute_cutoff(cutoff)?;
@@ -365,6 +388,11 @@ impl From<&ExcludeNewerExemption> for ExemptionTable {
             md5: spec.md5.as_ref().map(hex::encode),
             sha256: spec.sha256.as_ref().map(hex::encode),
             url: spec.url.as_ref().map(ToString::to_string),
+            flags: spec
+                .flags
+                .as_ref()
+                .map(|flags| flags.iter().map(ToString::to_string).collect()),
+            track_features: spec.track_features.clone(),
             cutoff: exemption.cutoff.clone(),
         }
     }
@@ -667,10 +695,13 @@ mod tests {
             openssl = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000", md5 = "00000000000000000000000000000000" }
             libfoo = { file-name = "libfoo-1-0.conda", license = "MIT", license-family = "MIT" }
             libbar = { url = "https://example.com/libbar-1-0.conda" }
+            torch = { flags = ["cuda*"], track-features = ["mkl"] }
+            jax = { version = "*", flags = [], track-features = [] }
             "#,
         )
         .unwrap();
-        assert_eq!(document.exclude_newer.exemptions.len(), 7);
+        assert_eq!(document.exclude_newer.exemptions.len(), 9);
+        document.exclude_newer.validate().unwrap();
     }
 
     #[test]
@@ -681,11 +712,9 @@ mod tests {
             (r#"{ build-number = "x" }"#, "invalid `build-number` `x`"),
             (r#"{ md5 = "abc" }"#, "invalid `md5` `abc`"),
             (r#"{ sha256 = "abc" }"#, "invalid `sha256` `abc`"),
-            (r#"{ flags = ["cuda"] }"#, "unknown field `flags`"),
-            (r#"{ flags = [] }"#, "unknown field `flags`"),
             (
-                r#"{ track-features = [] }"#,
-                "unknown field `track-features`",
+                r#"{ flags = "cuda" }"#,
+                "invalid type: string \"cuda\", expected a sequence",
             ),
             (
                 r#"{ build = ["py3"] }"#,
@@ -710,6 +739,10 @@ mod tests {
             (
                 r#"{ cutoff = "2026-10-12" }"#,
                 "an exemption table must specify at least one match spec field besides `cutoff`",
+            ),
+            (
+                r#"{ flags = [], track-features = [] }"#,
+                "an exemption table must specify at least one match spec field besides `cutoff` that is not an empty list",
             ),
         ] {
             let input = format!(
@@ -854,6 +887,7 @@ mod tests {
             "[exclude-newer]\ncutoff = \"7d\"\n\n[exclude-newer.exemptions.ruff]\nversion = \">=0.5,<0.6\"\nbuild = \"py*\"\nchannel = \"conda-forge\"\nmd5 = \"00000000000000000000000000000000\"\ncutoff = \"2026-10-12\"\n",
             // A channel that its name doesn't resolve to is written as a URL.
             "[exclude-newer]\ncutoff = \"7d\"\n\n[exclude-newer.exemptions.ruff]\nchannel = \"https://prefix.dev/conda-forge/\"\n",
+            "[exclude-newer]\ncutoff = \"7d\"\n\n[exclude-newer.exemptions.ruff]\nflags = [\"cuda*\"]\ntrack-features = [\"mkl\"]\n",
         ] {
             let document: Document = toml::from_str(input).unwrap();
             assert_eq!(toml::to_string(&document).unwrap(), input);
