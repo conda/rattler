@@ -7,6 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-11-09
+
+### Highlights
+
+**Breaking: every source picks package formats the same way.** Until now only plain `repodata.json` channels dropped a `.tar.bz2` file when the same build was also available as `.conda`. Sharded channels (like conda-forge) and custom `RepoDataSource` implementations returned every file. Now `Gateway.query()`, `Gateway.names()` and `solve()` apply `PackageFormatSelection.PREFER_CONDA` to every source by default. Expect fewer duplicate `.tar.bz2` records from sharded channels. Wheel records from a custom source or a sharded channel are no longer returned unless you ask for them. When a build exists in several formats, the order of preference is now `.conda` > `.whl` > `.tar.bz2`, and the solver uses the same order to break ties. Pass the new `package_format_selection` argument to get the old behavior back or to choose explicitly:
+
+```python
+records = await solve(["conda-forge"], ["python"], package_format_selection=PackageFormatSelection.ALL)
+await gateway.query([my_source], ["noarch"], ["foo"], package_format_selection=PackageFormatSelection.PREFER_CONDA_WITH_WHL)
+```
+
+**Installing wheels from conda channels.** `install()` can now install `.whl` records, such as those returned with `PREFER_CONDA_WITH_WHL`. Each wheel is downloaded and converted into an extracted conda package in the package cache, under `wheels-v<N>/`, and then linked like any other package.
+
+**Solving against what is already installed.** `solve()` and `solve_with_sparse_repodata()` take `additional_packages`: records that are candidates in the solve without being preferred like `locked_packages` or forced like `pinned_packages`. Use it for the records already in a prefix, which may come from channels you no longer pass in.
+
+```python
+installed = [PrefixRecord.from_path(p) for p in Path(prefix, "conda-meta").glob("*.json")]
+records = await solve(["conda-forge"], ["numpy"], additional_packages=installed)
+```
+
+**conda's `disabled` channel priority.** `ChannelPriority.Disabled` ignores channel order entirely. The new `ChannelPriority.VersionFirst` also picks the highest version from any channel, but when two channels have the same version, the earlier channel wins before the build number is compared. That is what conda does with `channel_priority: disabled`.
+
+```python
+records = await solve(["conda-forge", "bioconda"], ["samtools"], channel_priority=ChannelPriority.VersionFirst)
+```
+
+**Faster solves.** The bundled solver, resolvo 0.12.2, works out the candidates of each requirement once instead of again for every package that requires it. On 2,000 sampled conda-forge solves the total time dropped by 47%, the median solve from 145 ms to 71 ms and the p95 from 507 ms to 262 ms, with identical results.
+
+**Faster indexing of large packages.** `index_fs()` and `index_s3()` read each archive in bulk instead of byte by byte. Indexing `libcudf` (411 MB) went from 8.4 s to 3.8 s and `libcudf-tests` (1.04 GB) from 21.0 s to 9.5 s.
+
+**Cached packages are downloaded once more.** The package cache now stores the sha256 of the archive it actually downloaded, and only reuses an entry for a record with a sha256 when the stored hash matches. Entries written by earlier versions have no such hash, so `install()` fetches them again the first time. Offline, or in a read-only `PackageCacheLayer`, those entries count as missing until a newer version has re-populated the cache.
+
+### Added
+
+- Add `package_format_selection` to `Gateway.query()`, `Gateway.names()` and `solve()`, add `PackageFormatSelection.ALL`, and accept `SparseRepoData` in `Gateway.names()` in [#2887](https://github.com/conda/rattler/pull/2887)
+- Install `.whl` records with `install()` by converting them into extracted conda packages in the package cache in [#2964](https://github.com/conda/rattler/pull/2964); scripts from a wheel's `.data/scripts/` run with the environment's Python in [#3039](https://github.com/conda/rattler/pull/3039)
+- Add `additional_packages` to `solve()` and `solve_with_sparse_repodata()` in [#2968](https://github.com/conda/rattler/pull/2968)
+- Add `ChannelPriority.VersionFirst` in [#2974](https://github.com/conda/rattler/pull/2974)
+- Add `SparseRepoData.from_bytes()` to load repodata JSON from memory instead of a file in [#3134](https://github.com/conda/rattler/pull/3134)
+- Add `LinkJson`, `NoArchLinks`, `PythonEntryPoints` and `EntryPoint` to read and write `info/link.json` in [#3077](https://github.com/conda/rattler/pull/3077)
+- Add `to_json()` to `AboutJson`, `IndexJson`, `PathsJson` and `RunExportsJson`, and `RunExportsJson.is_empty()`, in [#3058](https://github.com/conda/rattler/pull/3058)
+- Add `PathsJson.sort()` in [#3019](https://github.com/conda/rattler/pull/3019)
+- Add `ArchiveIdentifier`, `CondaArchiveIdentifier` and `CondaArchiveType` to parse and build package archive file names like `python-3.11.0-0.conda` from strings, paths and URLs, in [#3102](https://github.com/conda/rattler/pull/3102)
+- Accept `track_features` and `timestamp` in `PackageRecord(...)` in [#3127](https://github.com/conda/rattler/pull/3127)
+
+### Changed
+
+- **BREAKING:** `Gateway.query()`, `Gateway.names()` and `solve()` apply `PackageFormatSelection.PREFER_CONDA` to sharded channels and custom `RepoDataSource` implementations. These sources used to return every file, so now duplicate `.tar.bz2` builds and all `.whl` records are dropped unless another selection is passed. The preference order is `.conda` > `.whl` > `.tar.bz2`, in [#2887](https://github.com/conda/rattler/pull/2887)
+
+### Fixed
+
+- `solve()` warns about identical duplicate records and keeps the first one instead of failing; duplicates whose metadata differs still raise, in [#3043](https://github.com/conda/rattler/pull/3043)
+- `Gateway.query()` on a sharded channel returns only the requested package from a shard. Alias shards on `conda-pypi` made `solve()` fail with `encountered duplicate records`, in [#3059](https://github.com/conda/rattler/pull/3059)
+- Version specs pad missing components with zeros on both sides, so `1.1c.1.*` matches `1.1c0.1` and `~=1.1c.1.1` matches `1.1c0.1.2`, in [#2965](https://github.com/conda/rattler/pull/2965)
+- `VirtualPackage.detect()` finds `__glibc` on Linux systems without `ldd`, through `getconf GNU_LIBC_VERSION` or the glibc loader, in [#3105](https://github.com/conda/rattler/pull/3105)
+- `install()` never records `sha256_in_prefix` for softlinks, so `conda-meta/*.json` no longer depends on which link method won a race on macOS, in [#2983](https://github.com/conda/rattler/pull/2983)
+- `PathsJson.from_deprecated_package_directory()` returns its entries sorted by path in [#2996](https://github.com/conda/rattler/pull/2996)
+- Type `PackageRecord(features=...)` as `str`, like the `features` property; a list was never accepted, in [#3127](https://github.com/conda/rattler/pull/3127)
+
+### Performance
+
+- Speed up `solve()` and `solve_with_sparse_repodata()` by updating resolvo to 0.12.2 ([prefix-dev/resolvo#307](https://github.com/prefix-dev/resolvo/pull/307)) in [#2993](https://github.com/conda/rattler/pull/2993)
+- Read package archives in bulk in `index_fs()` and `index_s3()` in [#3089](https://github.com/conda/rattler/pull/3089)
+
+### Security
+
+- Update `zip` to 9.1.3 (also shipped in 0.28.1) in [#3035](https://github.com/conda/rattler/pull/3035)
+- Verify every shard of a sharded channel against the hash in its shard index before parsing or caching it. The shard cache is shared between channels, so one channel could serve a shard under another channel's hash and poison it, in [#3060](https://github.com/conda/rattler/pull/3060)
+- Record the sha256 of the downloaded archive in the package cache instead of the expected one, reject local archives whose sha256 doesn't match the record, and don't reuse a cached entry without a recorded sha256 for a record that has one, in [#2959](https://github.com/conda/rattler/pull/2959)
+
+## [0.28.1] - 2026-10-29
+
+This patch release is built from 0.28.0 and changes only the bundled `zip` crate. Nothing changes in the Python API.
+
+### Security
+
+- Update `zip` to 9.1.3, which is used to read `.conda` archives during `install()` and extraction. It fixes archives that list different contents than other ZIP readers would see ([GHSA-m665-v7pm-7grj](https://github.com/zip-rs/zip2/security/advisories/GHSA-m665-v7pm-7grj) / CVE-2026-115905, [GHSA-wjr6-mhvj-cjvm](https://github.com/zip-rs/zip2/security/advisories/GHSA-wjr6-mhvj-cjvm)) and stream validation that accepted a missing footer and shifted offsets ([GHSA-gmfj-vffv-32pw](https://github.com/zip-rs/zip2/security/advisories/GHSA-gmfj-vffv-32pw)), backported from [#3035](https://github.com/conda/rattler/pull/3035)
+
 ## [0.28.0] - 2026-10-23
 
 ### Highlights
