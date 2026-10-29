@@ -6,6 +6,8 @@
 //! Headers retain conda-pypi's `include/` mapping; pip's Python-version-specific
 //! header paths depend on the target environment, which is unknown during caching.
 //! Declared license files are also copied into `info/licenses/` (CEP 34).
+//! Raw `#!python` and `#!pythonw` scripts use relocatable shebangs targeting
+//! `bin/python` on Unix. Windows launchers for raw scripts are not generated.
 //!
 //! `RECORD` describes the cache layout, not final installed paths; its original
 //! signatures are discarded. Original RECORD hashes are not verified; callers
@@ -13,7 +15,7 @@
 
 use std::{
     collections::HashSet,
-    io::{self, Read, Seek, SeekFrom},
+    io::{self, BufRead, BufReader, Read, Seek, SeekFrom},
     path::{Component, Path, PathBuf},
     str::FromStr,
 };
@@ -21,8 +23,8 @@ use std::{
 use rattler_conda_types::{
     NoArchType, PackageRecord,
     package::{
-        EntryPoint, IndexJson, LinkJson, NoArchLinks, PackageFile, ParseEntryPointError, PathType,
-        PathsEntry, PathsJson, PythonEntryPoints,
+        EntryPoint, FileMode, IndexJson, LinkJson, NoArchLinks, PackageFile, ParseEntryPointError,
+        PathType, PathsEntry, PathsJson, PrefixPlaceholder, PythonEntryPoints,
     },
 };
 use rattler_digest::{HashingReader, Sha256};
@@ -34,16 +36,19 @@ use crate::{ExtractError, ExtractResult};
 
 mod licenses;
 mod record;
+#[cfg(test)]
+mod tests;
 
 const SITE_PACKAGES: &str = "site-packages";
 const PYTHON_SCRIPTS: &str = "python-scripts";
 const INSTALLER: &str = "conda\n";
+const SCRIPT_PREFIX_PLACEHOLDER: &str = "/__rattler_wheel_prefix_placeholder__";
 
 /// Wheels can be spooled to memory up to this size before spilling to disk.
 const SPOOL_LIMIT: usize = 5 * 1024 * 1024;
 
 /// Bump when the converted layout changes to invalidate older cache entries.
-pub const CONVERSION_VERSION: u64 = 1;
+pub const CONVERSION_VERSION: u64 = 2;
 
 /// A wheel cannot be represented safely in the conda cache layout.
 #[derive(Debug, thiserror::Error)]
@@ -149,7 +154,12 @@ pub(crate) fn extract_wheel_from_seek(
         let mut source = archive.by_index(index)?;
         let mode = source.unix_mode();
 
-        paths.push(write_entry(destination, target, &mut source, mode)?);
+        let entry = if Path::new(source.name()?.as_ref()).starts_with(layout.data.join("scripts")) {
+            write_script_entry(destination, target, &mut source, mode)?
+        } else {
+            write_entry(destination, target, &mut source, mode)?
+        };
+        paths.push(entry);
     }
 
     for PlannedEntry { index, target } in licenses {
@@ -457,6 +467,43 @@ fn normalize_name(name: &str) -> String {
         }
     }
     normalized
+}
+
+/// Rewrites wheel Python shebangs to conda's relocatable Unix script layout.
+fn write_script_entry(
+    destination: &Path,
+    relative_path: PathBuf,
+    mut content: impl Read,
+    unix_mode: Option<u32>,
+) -> Result<PathsEntry, ExtractError> {
+    let mut prefix = Vec::with_capacity(8);
+    content.by_ref().take(8).read_to_end(&mut prefix)?;
+    if prefix != b"#!python" {
+        return write_entry(
+            destination,
+            relative_path,
+            prefix.as_slice().chain(content),
+            unix_mode,
+        );
+    }
+
+    // Like PyPA installer, replace the entire first line, including CRLF and
+    // any suffix. On Unix pythonw uses the same interpreter as python.
+    let mut body = BufReader::new(content);
+    body.skip_until(b'\n')?;
+    let shebang = format!("#!{SCRIPT_PREFIX_PLACEHOLDER}/bin/python\n");
+    let mut entry = write_entry(
+        destination,
+        relative_path,
+        shebang.as_bytes().chain(body),
+        Some(unix_mode.unwrap_or_default() | 0o111),
+    )?;
+    entry.prefix_placeholder = Some(PrefixPlaceholder {
+        file_mode: FileMode::Text,
+        placeholder: SCRIPT_PREFIX_PLACEHOLDER.to_owned(),
+        experimental_offsets: None,
+    });
+    Ok(entry)
 }
 
 /// Writes a file and computes its `paths.json` entry.

@@ -1537,6 +1537,12 @@ mod test {
             .unwrap();
         let cached_script = cached.path().join("python-scripts/script-probe");
         let original = fs::read(&cached_script).unwrap();
+        let original_mode = cached_script.metadata().unwrap().permissions().mode();
+        crate::validation::validate_package_directory(
+            cached.path(),
+            crate::validation::ValidationMode::Full,
+        )
+        .unwrap();
         let python_info = PythonInfo::from_version(
             &"3.12.0".parse::<Version>().unwrap(),
             None,
@@ -1544,14 +1550,21 @@ mod test {
         )
         .unwrap();
 
-        for name in ["env-one", "env with spaces"] {
+        for name in [
+            "env-one".to_owned(),
+            "env with spaces".to_owned(),
+            format!("{0}/{0}/{0}", "long-prefix".repeat(16)),
+        ] {
             let target = root.path().join(name);
             let prefix = Prefix::create(&target).unwrap();
-            let python = target.join(python_info.path());
+            // Conversion cannot know the target Python minor version; conda's
+            // Python packages provide an unversioned interpreter in bin/python.
+            let python = target.join("bin/python");
             fs::create_dir_all(python.parent().unwrap()).unwrap();
-            // A shell stub tests interpreter selection without requiring a host Python.
-            fs::write(&python, b"#!/bin/sh\nprintf '%s\\n' \"$0\" \"$1\"\n").unwrap();
-            fs::set_permissions(&python, fs::Permissions::from_mode(0o755)).unwrap();
+            // Use a native executable as an interpreter stand-in: macOS does
+            // not support another shebang script as a shebang interpreter.
+            // echo prints the script path handed to it by the kernel/wrapper.
+            std::os::unix::fs::symlink("/bin/echo", &python).unwrap();
 
             link_package(
                 cached.path(),
@@ -1575,9 +1588,13 @@ mod test {
             assert!(output.status.success(), "{output:?}");
             assert_eq!(
                 String::from_utf8(output.stdout).unwrap(),
-                format!("{}\n{}\n", python.display(), script.display())
+                format!("{}\n", script.display())
             );
             assert_eq!(fs::read(&cached_script).unwrap(), original);
+            assert_eq!(
+                cached_script.metadata().unwrap().permissions().mode(),
+                original_mode
+            );
         }
     }
 
