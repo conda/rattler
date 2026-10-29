@@ -163,72 +163,17 @@ impl ExcludeNewerExemption {
         }
     }
 
-    /// Checks that the cutoff parses, that the spec only uses fields that
-    /// select records, and that it uses at least one of them. An empty spec
-    /// would exempt every release, so a typo would silently exempt the
-    /// package entirely.
-    pub fn validate(&self) -> Result<(), InvalidExcludeNewerError> {
-        self.check().map(drop).map_err(InvalidExcludeNewerError)
-    }
-
-    /// Validates the exemption and returns its parsed cutoff.
-    fn check(&self) -> Result<Option<Timestamp>, String> {
-        let NamelessMatchSpec {
-            version,
-            build,
-            build_number,
-            file_name,
-            extras,
-            flags,
-            channel,
-            subdir,
-            namespace,
-            md5,
-            sha256,
-            url,
-            license,
-            license_family,
-            condition,
-            track_features,
-        } = &self.spec;
-        for (field, is_set) in [
-            ("extras", extras.is_some()),
-            ("flags", flags.is_some()),
-            ("namespace", namespace.is_some()),
-            ("condition", condition.is_some()),
-            ("track-features", track_features.is_some()),
-        ] {
-            if is_set {
-                return Err(format!("the match spec field `{field}` is not supported"));
-            }
-        }
-        let selects_releases = version.is_some()
-            || build.is_some()
-            || build_number.is_some()
-            || file_name.is_some()
-            || channel.is_some()
-            || subdir.is_some()
-            || md5.is_some()
-            || sha256.is_some()
-            || url.is_some()
-            || license.is_some()
-            || license_family.is_some();
-        if !selects_releases {
-            return Err("an exemption table must specify at least one match spec field besides `cutoff`, use `version = \"*\"` to exempt every release".to_string());
-        }
-        self.cutoff
-            .as_deref()
-            .map(parse_absolute_cutoff)
-            .transpose()
-    }
-
     /// Adds this exemption of the package `name` to `exclude_newer`.
     fn add_to(
         &self,
         exclude_newer: rattler_solve::ExcludeNewer,
         name: &PackageName,
     ) -> Result<rattler_solve::ExcludeNewer, String> {
-        let cutoff = self.check()?;
+        let cutoff = self
+            .cutoff
+            .as_deref()
+            .map(parse_absolute_cutoff)
+            .transpose()?;
         let spec =
             MatchSpec::from_nameless(self.spec.clone(), PackageNameMatcher::Exact(name.clone()));
         match cutoff {
@@ -327,63 +272,65 @@ impl TryFrom<ExemptionTable> for ExcludeNewerExemption {
         };
         let channel_config =
             ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap_or_default());
-        let exemption = Self {
-            spec: NamelessMatchSpec {
-                version: table.version.as_deref().map(parse_version).transpose()?,
-                build: table
-                    .build
-                    .map(|build| parse_string_matcher("build", build))
-                    .transpose()?,
-                build_number: table
-                    .build_number
-                    .map(|build_number| {
-                        BuildNumberSpec::from_str(&build_number).map_err(|err| {
-                            format!("invalid `build-number` `{build_number}`: {err}")
-                        })
+        let spec = NamelessMatchSpec {
+            version: table.version.as_deref().map(parse_version).transpose()?,
+            build: table
+                .build
+                .map(|build| parse_string_matcher("build", build))
+                .transpose()?,
+            build_number: table
+                .build_number
+                .map(|build_number| {
+                    BuildNumberSpec::from_str(&build_number)
+                        .map_err(|err| format!("invalid `build-number` `{build_number}`: {err}"))
+                })
+                .transpose()?,
+            file_name: table.file_name,
+            channel: table
+                .channel
+                .map(|channel| {
+                    Channel::from_str(&channel, &channel_config)
+                        .map(Arc::new)
+                        .map_err(|err| format!("invalid `channel` `{channel}`: {err}"))
+                })
+                .transpose()?,
+            subdir: table.subdir,
+            license: table.license,
+            license_family: table.license_family,
+            md5: table
+                .md5
+                .map(|md5| {
+                    parse_digest_from_hex::<Md5>(&md5).ok_or_else(|| {
+                        format!("invalid `md5` `{md5}`, expected a hex encoded MD5 hash")
                     })
-                    .transpose()?,
-                file_name: table.file_name,
-                channel: table
-                    .channel
-                    .map(|channel| {
-                        Channel::from_str(&channel, &channel_config)
-                            .map(Arc::new)
-                            .map_err(|err| format!("invalid `channel` `{channel}`: {err}"))
+                })
+                .transpose()?,
+            sha256: table
+                .sha256
+                .map(|sha256| {
+                    parse_digest_from_hex::<Sha256>(&sha256).ok_or_else(|| {
+                        format!("invalid `sha256` `{sha256}`, expected a hex encoded SHA256 hash")
                     })
-                    .transpose()?,
-                subdir: table.subdir,
-                license: table.license,
-                license_family: table.license_family,
-                md5: table
-                    .md5
-                    .map(|md5| {
-                        parse_digest_from_hex::<Md5>(&md5).ok_or_else(|| {
-                            format!("invalid `md5` `{md5}`, expected a hex encoded MD5 hash")
-                        })
-                    })
-                    .transpose()?,
-                sha256: table
-                    .sha256
-                    .map(|sha256| {
-                        parse_digest_from_hex::<Sha256>(&sha256).ok_or_else(|| {
-                            format!(
-                                "invalid `sha256` `{sha256}`, expected a hex encoded SHA256 hash"
-                            )
-                        })
-                    })
-                    .transpose()?,
-                url: table
-                    .url
-                    .map(|url| {
-                        Url::parse(&url).map_err(|err| format!("invalid `url` `{url}`: {err}"))
-                    })
-                    .transpose()?,
-                ..NamelessMatchSpec::default()
-            },
-            cutoff: table.cutoff,
+                })
+                .transpose()?,
+            url: table
+                .url
+                .map(|url| Url::parse(&url).map_err(|err| format!("invalid `url` `{url}`: {err}")))
+                .transpose()?,
+            ..NamelessMatchSpec::default()
         };
-        exemption.check()?;
-        Ok(exemption)
+        // An empty table would exempt every release, so a typo would silently
+        // exempt the package entirely.
+        if spec == NamelessMatchSpec::default() {
+            return Err("an exemption table must specify at least one match spec field besides `cutoff`, use `version = \"*\"` to exempt every release".to_string());
+        }
+        if let Some(cutoff) = &table.cutoff {
+            parse_absolute_cutoff(cutoff)?;
+        }
+        Ok(Self {
+            spec,
+            cutoff: table.cutoff,
+        })
     }
 }
 
@@ -761,20 +708,13 @@ mod tests {
         for (exemption, message) in [
             (
                 ExcludeNewerExemption {
-                    spec: NamelessMatchSpec::default(),
-                    cutoff: None,
-                },
-                "invalid exemption for `ruff`: an exemption table must specify at least one match spec field",
-            ),
-            (
-                ExcludeNewerExemption {
                     spec: NamelessMatchSpec {
-                        flags: Some(vec![]),
+                        extras: Some(vec!["x".to_string()]),
                         ..NamelessMatchSpec::default()
                     },
                     cutoff: None,
                 },
-                "invalid exemption for `ruff`: the match spec field `flags` is not supported",
+                "invalid exemption for `ruff`: exclude-newer exemption 'ruff[extras=[x]]' must not have extras",
             ),
             (
                 ExcludeNewerExemption {
