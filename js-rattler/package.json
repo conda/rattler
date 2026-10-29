@@ -47,7 +47,7 @@
         "prettier": "3.9.10",
         "prettier-plugin-jsdoc": "1.5.0",
         "rollup": "4.65.0",
-        "rollup-plugin-dts": "6.2.3",
+        "rollup-plugin-dts": "6.5.1",
         "shx": "0.4.0",
         "ts-jest": "29.4.15",
         "ts-node": "10.9.2",
