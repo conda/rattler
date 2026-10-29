@@ -1510,6 +1510,77 @@ mod test {
         insta::assert_yaml_snapshot!(paths);
     }
 
+    /// A raw wheel script must use the target interpreter, not retain `#!python`.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn test_wheel_raw_script_uses_environment_python() {
+        use rattler_conda_types::{NoArchType, PackageRecord};
+        use std::{fs, os::unix::fs::PermissionsExt};
+
+        let root = tempdir().unwrap();
+        let record = PackageRecord {
+            noarch: NoArchType::python(),
+            subdir: "noarch".into(),
+            ..PackageRecord::new(
+                "script-probe".parse().unwrap(),
+                "1.0".parse::<Version>().unwrap(),
+                "py3_none_any_0".parse().unwrap(),
+            )
+        };
+        let cached = PackageCache::new(root.path().join("cache"))
+            .get_or_fetch_from_path(
+                &get_test_data_dir().join("wheels/script_probe-1.0-py3-none-any.whl"),
+                Some(&record),
+                None,
+            )
+            .await
+            .unwrap();
+        let cached_script = cached.path().join("python-scripts/script-probe");
+        let original = fs::read(&cached_script).unwrap();
+        let python_info = PythonInfo::from_version(
+            &"3.12.0".parse::<Version>().unwrap(),
+            None,
+            Subdir::current().unwrap(),
+        )
+        .unwrap();
+
+        for name in ["env-one", "env with spaces"] {
+            let target = root.path().join(name);
+            let prefix = Prefix::create(&target).unwrap();
+            let python = target.join(python_info.path());
+            fs::create_dir_all(python.parent().unwrap()).unwrap();
+            // A shell stub tests interpreter selection without requiring a host Python.
+            fs::write(&python, b"#!/bin/sh\nprintf '%s\\n' \"$0\" \"$1\"\n").unwrap();
+            fs::set_permissions(&python, fs::Permissions::from_mode(0o755)).unwrap();
+
+            link_package(
+                cached.path(),
+                &prefix,
+                &InstallDriver::default(),
+                InstallOptions {
+                    python_info: Some(python_info.clone()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+
+            let script = target.join("bin/script-probe");
+            assert!(script.is_file());
+            assert_ne!(script.metadata().unwrap().permissions().mode() & 0o111, 0);
+            let output = Command::new(&script)
+                .current_dir(root.path())
+                .output()
+                .expect("raw wheel script should execute using the environment's Python");
+            assert!(output.status.success(), "{output:?}");
+            assert_eq!(
+                String::from_utf8(output.stdout).unwrap(),
+                format!("{}\n{}\n", python.display(), script.display())
+            );
+            assert_eq!(fs::read(&cached_script).unwrap(), original);
+        }
+    }
+
     /// `link_package_sync` runs the per-file linking in parallel via rayon,
     /// so its result must be sorted by `relative_path` before returning to
     /// produce reproducible `conda-meta/<package>.json` files.
