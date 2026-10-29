@@ -642,7 +642,7 @@ mod tests {
         config.set("exclude-newer", Some("7d".to_string())).unwrap();
         assert_eq!(
             config.exclude_newer,
-            Some(ExcludeNewerConfig::from_cutoff("7d"))
+            Some(ExcludeNewerConfig::from_cutoff("7d".parse().unwrap()))
         );
 
         // A table is given as JSON.
@@ -700,7 +700,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             config.exclude_newer,
-            Some(ExcludeNewerConfig::from_cutoff("14d"))
+            Some(ExcludeNewerConfig::from_cutoff("14d".parse().unwrap()))
         );
 
         config.set("exclude-newer", None).unwrap();
@@ -751,7 +751,11 @@ mod tests {
         config.set("exclude-newer.exemptions.ruff", None).unwrap();
         assert_eq!(
             config.exclude_newer,
-            Some(crate::config::exclude_newer::ExcludeNewerConfig::from_cutoff("7d"))
+            Some(
+                crate::config::exclude_newer::ExcludeNewerConfig::from_cutoff(
+                    "7d".parse().unwrap()
+                )
+            )
         );
     }
 
@@ -797,7 +801,13 @@ mod tests {
             exemption.spec,
             NamelessMatchSpec::from_str(">=1", ParseStrictness::Lenient).unwrap()
         );
-        assert_eq!(exemption.cutoff.as_deref(), Some("2026-10-12"));
+        assert_eq!(
+            exemption
+                .cutoff
+                .as_ref()
+                .map(crate::config::exclude_newer::ExcludeNewerExemptionCutoff::as_str),
+            Some("2026-10-12")
+        );
     }
 
     #[test]
@@ -852,7 +862,11 @@ mod tests {
 
         assert_eq!(
             config.exclude_newer,
-            Some(crate::config::exclude_newer::ExcludeNewerConfig::from_cutoff("7d"))
+            Some(
+                crate::config::exclude_newer::ExcludeNewerConfig::from_cutoff(
+                    "7d".parse().unwrap()
+                )
+            )
         );
     }
 

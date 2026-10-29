@@ -1,4 +1,10 @@
-use std::{fmt, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    fmt,
+    hash::{Hash, Hasher},
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
 
 use indexmap::IndexMap;
 use jiff::{Span, Timestamp, civil::Date, tz::TimeZone};
@@ -31,9 +37,9 @@ use url::Url;
 /// exemptions = { ruff = "*" }
 /// ```
 ///
-/// The cutoffs are kept as written, so that a tool can write them into a
-/// manifest unchanged (e.g. `7d` instead of the point in time it resolves
-/// to). They are validated when they are deserialized, see [`Self::validate`]:
+/// The cutoffs are parsed when they are deserialized and keep how they are
+/// written, so that a tool can write them into a manifest unchanged (e.g. `7d`
+/// instead of the point in time it resolves to), see [`ExcludeNewerCutoff`]:
 /// the cutoff is an RFC 3339 timestamp, a date or a duration. An exemption is
 /// a version spec or a table of match spec fields that select the exempt
 /// releases, with an optional absolute `cutoff`. It is parsed into a
@@ -53,7 +59,7 @@ use url::Url;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExcludeNewerConfig {
     /// Packages uploaded after this cutoff are excluded, e.g. `7d`.
-    pub cutoff: String,
+    pub cutoff: ExcludeNewerCutoff,
 
     /// The releases of a package that are not excluded, regardless of their
     /// timestamp, e.g. `ruff = "*"`.
@@ -73,7 +79,7 @@ pub struct ExcludeNewerExemption {
 
     /// Only the releases published up to this cutoff are exempt, an RFC 3339
     /// timestamp or a date, e.g. `2026-10-12`.
-    pub cutoff: Option<String>,
+    pub cutoff: Option<ExcludeNewerExemptionCutoff>,
 }
 
 /// An invalid cutoff or exemption of an [`ExcludeNewerConfig`].
@@ -81,17 +87,173 @@ pub struct ExcludeNewerExemption {
 #[error("{0}")]
 pub struct InvalidExcludeNewerError(String);
 
-/// A parsed cutoff of an [`ExcludeNewerConfig`].
-enum Cutoff {
+/// The cutoff of an [`ExcludeNewerConfig`]: an RFC 3339 timestamp, a date or
+/// a duration, e.g. `7d`.
+///
+/// It keeps how it is written, which is what it is displayed and serialized
+/// as, so that a tool can write it into a manifest unchanged. Two cutoffs are
+/// equal if they are written the same.
+#[derive(Debug, Clone)]
+pub struct ExcludeNewerCutoff {
+    value: CutoffValue,
+    source: String,
+}
+
+/// The value of an [`ExcludeNewerCutoff`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CutoffValue {
+    /// Packages uploaded after this point in time are excluded. A date
+    /// includes the entire day in UTC.
     Timestamp(Timestamp),
+
+    /// Packages uploaded within this duration before the solve are excluded.
     Duration(Duration),
 }
 
+impl ExcludeNewerCutoff {
+    /// The parsed cutoff.
+    pub fn value(&self) -> CutoffValue {
+        self.value
+    }
+
+    /// The cutoff as it is written, e.g. `7d`.
+    pub fn as_str(&self) -> &str {
+        &self.source
+    }
+
+    /// Returns the point in time after which packages are excluded,
+    /// resolving a duration relative to `now`.
+    pub fn resolve(&self, now: Timestamp) -> Result<Timestamp, InvalidExcludeNewerError> {
+        match self.value {
+            CutoffValue::Timestamp(timestamp) => Ok(timestamp),
+            CutoffValue::Duration(duration) => Span::try_from(duration)
+                .ok()
+                .and_then(|span| now.checked_sub(span).ok())
+                .ok_or_else(|| {
+                    InvalidExcludeNewerError(format!("cutoff `{}` is too large", self.source))
+                }),
+        }
+    }
+}
+
+impl FromStr for ExcludeNewerCutoff {
+    type Err = InvalidExcludeNewerError;
+
+    fn from_str(cutoff: &str) -> Result<Self, Self::Err> {
+        let value = match humantime::parse_duration(cutoff) {
+            Ok(duration) => CutoffValue::Duration(duration),
+            Err(_) => parse_absolute_cutoff(cutoff)
+                .map(CutoffValue::Timestamp)
+                .map_err(|_err| {
+                    InvalidExcludeNewerError(format!(
+                        "invalid cutoff `{cutoff}`, expected an RFC 3339 timestamp, a date, or a duration (for example, 7d)"
+                    ))
+                })?,
+        };
+        let cutoff = Self {
+            value,
+            source: cutoff.to_string(),
+        };
+        // A duration too large to resolve would fail every solve.
+        cutoff.resolve(Timestamp::now())?;
+        Ok(cutoff)
+    }
+}
+
+/// The cutoff of an [`ExcludeNewerExemption`]: an RFC 3339 timestamp or a
+/// date, e.g. `2026-10-12`, the cutoffs that don't move over time.
+///
+/// Like [`ExcludeNewerCutoff`], it keeps how it is written.
+#[derive(Debug, Clone)]
+pub struct ExcludeNewerExemptionCutoff {
+    timestamp: Timestamp,
+    source: String,
+}
+
+impl ExcludeNewerExemptionCutoff {
+    /// The point in time up to which releases are exempt. A date includes the
+    /// entire day in UTC.
+    pub fn timestamp(&self) -> Timestamp {
+        self.timestamp
+    }
+
+    /// The cutoff as it is written, e.g. `2026-10-12`.
+    pub fn as_str(&self) -> &str {
+        &self.source
+    }
+}
+
+impl FromStr for ExcludeNewerExemptionCutoff {
+    type Err = InvalidExcludeNewerError;
+
+    fn from_str(cutoff: &str) -> Result<Self, Self::Err> {
+        Ok(Self {
+            timestamp: parse_absolute_cutoff(cutoff).map_err(InvalidExcludeNewerError)?,
+            source: cutoff.to_string(),
+        })
+    }
+}
+
+/// Implements the traits that both cutoffs share: they are displayed,
+/// serialized and compared as written.
+macro_rules! impl_cutoff {
+    ($cutoff:ty) => {
+        impl fmt::Display for $cutoff {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(&self.source)
+            }
+        }
+
+        impl PartialEq for $cutoff {
+            fn eq(&self, other: &Self) -> bool {
+                self.source == other.source
+            }
+        }
+
+        impl Eq for $cutoff {}
+
+        impl Hash for $cutoff {
+            fn hash<H: Hasher>(&self, state: &mut H) {
+                self.source.hash(state);
+            }
+        }
+
+        impl PartialEq<str> for $cutoff {
+            fn eq(&self, other: &str) -> bool {
+                self.source == other
+            }
+        }
+
+        impl PartialEq<&str> for $cutoff {
+            fn eq(&self, other: &&str) -> bool {
+                self.source == *other
+            }
+        }
+
+        impl Serialize for $cutoff {
+            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                self.source.serialize(serializer)
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $cutoff {
+            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                String::deserialize(deserializer)?
+                    .parse()
+                    .map_err(de::Error::custom)
+            }
+        }
+    };
+}
+
+impl_cutoff!(ExcludeNewerCutoff);
+impl_cutoff!(ExcludeNewerExemptionCutoff);
+
 impl ExcludeNewerConfig {
     /// Creates a configuration that consists of a cutoff only, e.g. `7d`.
-    pub fn from_cutoff(cutoff: impl Into<String>) -> Self {
+    pub fn from_cutoff(cutoff: ExcludeNewerCutoff) -> Self {
         Self {
-            cutoff: cutoff.into(),
+            cutoff,
             exemptions: IndexMap::new(),
         }
     }
@@ -109,7 +271,7 @@ impl ExcludeNewerConfig {
         &self,
         now: Timestamp,
     ) -> Result<rattler_solve::ExcludeNewer, InvalidExcludeNewerError> {
-        let cutoff = resolve_cutoff(&self.cutoff, now).map_err(InvalidExcludeNewerError)?;
+        let cutoff = self.cutoff.resolve(now)?;
         let mut exclude_newer = rattler_solve::ExcludeNewer::from_datetime(cutoff);
         for (name, exemption) in &self.exemptions {
             exclude_newer = exemption.add_to(exclude_newer, name).map_err(|err| {
@@ -163,9 +325,8 @@ impl ExcludeNewerExemption {
     ) -> Result<rattler_solve::ExcludeNewer, String> {
         let cutoff = self
             .cutoff
-            .as_deref()
-            .map(parse_absolute_cutoff)
-            .transpose()?;
+            .as_ref()
+            .map(ExcludeNewerExemptionCutoff::timestamp);
         let spec =
             MatchSpec::from_nameless(self.spec.clone(), PackageNameMatcher::Exact(name.clone()));
         match cutoff {
@@ -185,29 +346,6 @@ impl ExcludeNewerExemption {
         };
         (self.cutoff.is_none() && self.spec == only_version).then_some(version)
     }
-}
-
-/// Parses `cutoff` and resolves a duration relative to `now`.
-fn resolve_cutoff(cutoff: &str, now: Timestamp) -> Result<Timestamp, String> {
-    match parse_cutoff(cutoff)? {
-        Cutoff::Timestamp(timestamp) => Ok(timestamp),
-        Cutoff::Duration(duration) => Span::try_from(duration)
-            .ok()
-            .and_then(|span| now.checked_sub(span).ok())
-            .ok_or_else(|| format!("cutoff `{cutoff}` is too large")),
-    }
-}
-
-/// Parses `cutoff` as an RFC 3339 timestamp, a date or a duration.
-fn parse_cutoff(cutoff: &str) -> Result<Cutoff, String> {
-    if let Ok(duration) = humantime::parse_duration(cutoff) {
-        return Ok(Cutoff::Duration(duration));
-    }
-    parse_absolute_cutoff(cutoff).map(Cutoff::Timestamp).map_err(|_err| {
-        format!(
-            "invalid cutoff `{cutoff}`, expected an RFC 3339 timestamp, a date, or a duration (for example, 7d)"
-        )
-    })
 }
 
 /// Parses `cutoff` as an RFC 3339 timestamp or a date, the cutoffs that don't
@@ -355,13 +493,15 @@ impl TryFrom<ExemptionTable> for ExcludeNewerExemption {
         if selecting_spec == NamelessMatchSpec::default() {
             return Err("an exemption table must specify at least one match spec field besides `cutoff` that is not an empty list, use `version = \"*\"` to exempt every release".to_string());
         }
-        if let Some(cutoff) = &table.cutoff {
-            parse_absolute_cutoff(cutoff)?;
-        }
-        Ok(Self {
-            spec,
-            cutoff: table.cutoff,
-        })
+        let cutoff = table
+            .cutoff
+            .map(|cutoff| {
+                cutoff
+                    .parse()
+                    .map_err(|err: InvalidExcludeNewerError| err.0)
+            })
+            .transpose()?;
+        Ok(Self { spec, cutoff })
     }
 }
 
@@ -393,7 +533,7 @@ impl From<&ExcludeNewerExemption> for ExemptionTable {
                 .as_ref()
                 .map(|flags| flags.iter().map(ToString::to_string).collect()),
             track_features: spec.track_features.clone(),
-            cutoff: exemption.cutoff.clone(),
+            cutoff: exemption.cutoff.as_ref().map(ToString::to_string),
         }
     }
 }
@@ -461,7 +601,7 @@ impl<'de> Deserialize<'de> for ExcludeNewerExemption {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 struct ExcludeNewerTable {
-    cutoff: String,
+    cutoff: ExcludeNewerCutoff,
     #[serde(
         default,
         skip_serializing_if = "IndexMap::is_empty",
@@ -541,14 +681,13 @@ impl<'de> Deserialize<'de> for ExcludeNewerConfig {
             }
 
             fn visit_str<E: de::Error>(self, cutoff: &str) -> Result<Self::Value, E> {
-                resolve_cutoff(cutoff, Timestamp::now()).map_err(E::custom)?;
-                Ok(ExcludeNewerConfig::from_cutoff(cutoff))
+                Ok(ExcludeNewerConfig::from_cutoff(
+                    cutoff.parse().map_err(E::custom)?,
+                ))
             }
 
             fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
                 let table = ExcludeNewerTable::deserialize(MapAccessDeserializer::new(map))?;
-                // The exemptions are validated while they are deserialized.
-                resolve_cutoff(&table.cutoff, Timestamp::now()).map_err(de::Error::custom)?;
                 Ok(ExcludeNewerConfig {
                     cutoff: table.cutoff,
                     exemptions: table.exemptions,
@@ -575,7 +714,7 @@ mod tests {
         let document: Document = toml::from_str(r#"exclude-newer = "7d""#).unwrap();
         assert_eq!(
             document.exclude_newer,
-            ExcludeNewerConfig::from_cutoff("7d")
+            ExcludeNewerConfig::from_cutoff("7d".parse().unwrap())
         );
     }
 
@@ -599,7 +738,7 @@ mod tests {
         assert_eq!(
             config.exemptions[&PackageName::new_unchecked("polars")],
             ExcludeNewerExemption {
-                cutoff: Some("2026-10-12".to_string()),
+                cutoff: Some("2026-10-12".parse().unwrap()),
                 ..ExcludeNewerExemption::from_version(version("==1.43.1"))
             }
         );
@@ -759,40 +898,70 @@ mod tests {
 
     #[test]
     fn test_validate() {
-        assert!(ExcludeNewerConfig::from_cutoff("7d").validate().is_ok());
-        assert_eq!(
-            ExcludeNewerConfig::from_cutoff("7 weeks ago")
+        assert!(
+            ExcludeNewerConfig::from_cutoff("7d".parse().unwrap())
                 .validate()
+                .is_ok()
+        );
+        assert_eq!(
+            "7 weeks ago"
+                .parse::<ExcludeNewerCutoff>()
                 .unwrap_err()
                 .to_string(),
             "invalid cutoff `7 weeks ago`, expected an RFC 3339 timestamp, a date, or a duration (for example, 7d)"
         );
-        for (exemption, message) in [
-            (
-                ExcludeNewerExemption {
-                    spec: NamelessMatchSpec {
-                        extras: Some(vec!["x".to_string()]),
-                        ..NamelessMatchSpec::default()
-                    },
-                    cutoff: None,
+        let mut config = ExcludeNewerConfig::from_cutoff("7d".parse().unwrap());
+        config.exemptions.insert(
+            PackageName::new_unchecked("ruff"),
+            ExcludeNewerExemption {
+                spec: NamelessMatchSpec {
+                    extras: Some(vec!["x".to_string()]),
+                    ..NamelessMatchSpec::default()
                 },
-                "invalid exemption for `ruff`: exclude-newer exemption 'ruff[extras=[x]]' must not have extras",
+                cutoff: None,
+            },
+        );
+        let error = config.validate().unwrap_err().to_string();
+        assert!(
+            error.starts_with(
+                "invalid exemption for `ruff`: exclude-newer exemption 'ruff[extras=[x]]' must not have extras"
             ),
-            (
-                ExcludeNewerExemption {
-                    cutoff: Some("7d".to_string()),
-                    ..ExcludeNewerExemption::from_version(version("*"))
-                },
-                "invalid exemption for `ruff`: invalid cutoff `7d`, expected an RFC 3339 timestamp or a date",
-            ),
-        ] {
-            let mut config = ExcludeNewerConfig::from_cutoff("7d");
-            config
-                .exemptions
-                .insert(PackageName::new_unchecked("ruff"), exemption);
-            let error = config.validate().unwrap_err().to_string();
-            assert!(error.starts_with(message), "{error}");
-        }
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn test_parse_exemption_cutoff() {
+        let cutoff: ExcludeNewerExemptionCutoff = "2026-10-12".parse().unwrap();
+        assert_eq!(cutoff, "2026-10-12");
+        assert_eq!(
+            cutoff.timestamp(),
+            "2026-10-13T00:00:00Z".parse::<Timestamp>().unwrap()
+        );
+        assert_eq!(
+            "7d".parse::<ExcludeNewerExemptionCutoff>()
+                .unwrap_err()
+                .to_string(),
+            "invalid cutoff `7d`, expected an RFC 3339 timestamp or a date"
+        );
+    }
+
+    #[test]
+    fn test_cutoff_keeps_how_it_is_written() {
+        let cutoff: ExcludeNewerCutoff = "1week".parse().unwrap();
+        assert_eq!(cutoff.as_str(), "1week");
+        assert_eq!(cutoff.to_string(), "1week");
+        assert_eq!(
+            cutoff.value(),
+            CutoffValue::Duration(Duration::from_secs(7 * 24 * 60 * 60))
+        );
+        assert_ne!(cutoff, "7d".parse::<ExcludeNewerCutoff>().unwrap());
+
+        let cutoff: ExcludeNewerCutoff = "2026-10-12".parse().unwrap();
+        assert_eq!(
+            cutoff.value(),
+            CutoffValue::Timestamp("2026-10-13T00:00:00Z".parse().unwrap())
+        );
     }
 
     #[test]
@@ -833,8 +1002,10 @@ mod tests {
             ("2026-10-12T05:00:00Z", "2026-10-12T05:00:00Z"),
         ] {
             assert_eq!(
-                rattler_solve::ExcludeNewer::try_from(ExcludeNewerConfig::from_cutoff(cutoff))
-                    .unwrap(),
+                rattler_solve::ExcludeNewer::try_from(ExcludeNewerConfig::from_cutoff(
+                    cutoff.parse().unwrap()
+                ))
+                .unwrap(),
                 rattler_solve::ExcludeNewer::from_datetime(expected.parse().unwrap()),
             );
         }
