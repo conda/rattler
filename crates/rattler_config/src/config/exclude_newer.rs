@@ -213,8 +213,9 @@ fn parse_absolute_cutoff(cutoff: &str) -> Result<Timestamp, String> {
     if let Ok(timestamp) = cutoff.parse::<Timestamp>() {
         return Ok(timestamp);
     }
-    cutoff
-        .parse::<Date>()
+    // Only a plain date, `Date::from_str` also accepts a date-time and drops
+    // its time.
+    Date::strptime("%Y-%m-%d", cutoff)
         .ok()
         .and_then(|date| date.tomorrow().ok())
         .and_then(|next_day| next_day.to_zoned(TimeZone::UTC).ok())
@@ -626,6 +627,9 @@ mod tests {
             r#"exclude-newer = "7 weeks ago""#,
             r#"exclude-newer = { cutoff = "yesterday" }"#,
             r#"exclude-newer = "2026-13-01""#,
+            // A date-time needs an offset.
+            r#"exclude-newer = "2026-10-12T05:00:00""#,
+            r#"exclude-newer = "2026-10-12 05:00""#,
         ] {
             let error = toml::from_str::<Document>(input).unwrap_err();
             assert!(
@@ -679,6 +683,10 @@ mod tests {
             (
                 r#"{ version = "*", cutoff = "7d" }"#,
                 "invalid cutoff `7d`, expected an RFC 3339 timestamp or a date",
+            ),
+            (
+                r#"{ version = "*", cutoff = "2026-10-12T05:00:00" }"#,
+                "invalid cutoff `2026-10-12T05:00:00`, expected an RFC 3339 timestamp or a date",
             ),
             (r#"{ bogus = "*" }"#, "unknown field `bogus`"),
             (r#"{ extras = ["x"] }"#, "unknown field `extras`"),
