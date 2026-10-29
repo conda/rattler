@@ -1250,6 +1250,21 @@ mod test {
     }
 
     #[test]
+    fn test_display() {
+        let strict = StrictVersion::new(Version::from_str("1!1.2.3a+local").unwrap());
+        let errors = ["", "1..2", "1.2.", "x!1", "1-2_3"]
+            .into_iter()
+            .map(|s| Version::from_str(s).unwrap_err().to_string());
+
+        insta::assert_snapshot!(
+            std::iter::once(strict.to_string())
+                .chain(errors)
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+    }
+
+    #[test]
     fn openssl_convention() {
         let version_strs = [
             "1.0.1dev",

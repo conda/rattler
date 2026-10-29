@@ -1,0 +1,29 @@
+# Configuration for cargo-mutants (https://mutants.rs).
+#
+# Mutation testing is scoped to the crates that contain pure, deterministic
+# logic. Crates dominated by I/O, networking or platform specific code produce
+# mostly noise and are not examined.
+
+examine_globs = [
+    "crates/rattler_conda_version/src/**",
+    "crates/rattler_conda_types/src/**",
+    "crates/rattler_lock/src/**",
+    "crates/rattler_digest/src/**",
+]
+
+# `Debug` output is not part of any contract.
+exclude_re = ["<impl Debug"]
+
+# Tests for `rattler_conda_version` mostly live in `rattler_conda_types`, which
+# re-exports it, so always run the tests of all examined crates.
+test_package = [
+    "rattler_conda_version",
+    "rattler_conda_types",
+    "rattler_lock",
+    "rattler_digest",
+]
+
+# Some code is behind feature flags (e.g. `semver`) and is otherwise not compiled.
+all_features = true
+
+test_tool = "nextest"

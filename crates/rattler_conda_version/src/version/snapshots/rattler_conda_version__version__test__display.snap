@@ -1,0 +1,10 @@
+---
+source: crates/rattler_conda_version/src/version/mod.rs
+expression: "std::iter::once(strict.to_string()).chain(errors).collect::<Vec<_>>().join(\"\\n\")"
+---
+1!1.2.3a+local
+malformed version string '': empty string
+malformed version string '1..2': encountered more characters but expected none
+malformed version string '1.2.': encountered more characters but expected none
+malformed version string 'x!1': encountered more characters but expected none
+malformed version string '1-2_3': cannot use both underscores and dashes as version segment separators
