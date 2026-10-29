@@ -2,7 +2,7 @@ use std::{
     borrow::Borrow,
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{Arc, Mutex, MutexGuard, OnceLock},
 };
 
 use indexmap::IndexSet;
@@ -10,7 +10,7 @@ use itertools::Itertools;
 use rattler_conda_types::{PackageRecord, PrefixRecord, prefix::Prefix, prefix_record::PathType};
 use simple_spawn_blocking::{Cancelled, tokio::run_blocking_task};
 use thiserror::Error;
-use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
+use tokio::sync::{AcquireError, Notify, OwnedSemaphorePermit, Semaphore};
 
 use super::{
     Transaction, TransactionOperation,
@@ -30,6 +30,9 @@ use crate::install::link_script::LinkScriptError;
 pub struct InstallDriver {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
     pub(crate) clobber_registry: Arc<Mutex<ClobberRegistry>>,
+    // Set from Python's file inventory, not from partially installed files.
+    pub(crate) windows_pythonw: OnceLock<bool>,
+    python_metadata_ready: Notify,
     execute_link_scripts: bool,
     clobber_mode: ClobberMode,
 }
@@ -142,11 +145,29 @@ impl InstallDriverBuilder {
                 .unwrap_or_default(),
             execute_link_scripts: self.execute_link_scripts,
             clobber_mode: self.clobber_mode,
+            windows_pythonw: OnceLock::new(),
+            python_metadata_ready: Notify::new(),
         }
     }
 }
 
 impl InstallDriver {
+    pub(crate) fn set_windows_pythonw(&self, available: bool) {
+        self.windows_pythonw
+            .set(available)
+            .expect("Python metadata already set");
+        self.python_metadata_ready.notify_waiters();
+    }
+
+    pub(crate) async fn wait_for_python_metadata(&self) {
+        // Register before checking the value so a concurrent notification cannot
+        // be missed. Only the installer waits here, when Python is being fetched.
+        let notified = self.python_metadata_ready.notified();
+        if self.windows_pythonw.get().is_none() {
+            notified.await;
+        }
+    }
+
     /// Constructs a builder to configure a new `InstallDriver`.
     pub fn builder() -> InstallDriverBuilder {
         InstallDriverBuilder::default()

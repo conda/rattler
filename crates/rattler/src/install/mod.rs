@@ -436,6 +436,8 @@ pub async fn link_package(
     // tasks.
     let python_info = options.python_info.map(Arc::new);
 
+    let pythonw_available = driver.windows_pythonw.get().copied();
+
     // Start linking all package files in parallel
     let mut pending_futures = FuturesUnordered::new();
     let mut number_of_paths_entries = 0;
@@ -454,7 +456,7 @@ pub async fn link_package(
             let cloned_entry = entry.clone();
             let is_clobber = link_path.clobber_path.is_some();
             let result = match tokio::task::spawn_blocking(move || {
-                link_file(
+                link::link_file_with_pythonw(
                     &cloned_entry,
                     link_path.clobber_path.unwrap_or(link_path.computed_path),
                     &package_dir,
@@ -467,6 +469,7 @@ pub async fn link_package(
                     options.apple_codesign_behavior,
                     modification_time,
                     options.external_symlink_policy,
+                    pythonw_available,
                 )
             })
             .await
@@ -634,12 +637,22 @@ pub async fn link_package(
 /// Returns a [`PathsEntry`] for every file that was linked into the target
 /// directory. The entries are ordered in the same order as they appear in the
 /// `paths.json` file of the package.
-#[instrument(skip_all, fields(package_dir = % package_dir.display()))]
 pub fn link_package_sync(
     package_dir: &Path,
     target_dir: &Prefix,
     clobber_registry: Arc<Mutex<ClobberRegistry>>,
     options: InstallOptions,
+) -> Result<(Vec<prefix_record::PathsEntry>, LinkType), InstallError> {
+    link_package_sync_with_pythonw(package_dir, target_dir, clobber_registry, options, None)
+}
+
+#[instrument(name = "link_package_sync", skip_all, fields(package_dir = % package_dir.display()))]
+fn link_package_sync_with_pythonw(
+    package_dir: &Path,
+    target_dir: &Prefix,
+    clobber_registry: Arc<Mutex<ClobberRegistry>>,
+    options: InstallOptions,
+    pythonw_available: Option<bool>,
 ) -> Result<(Vec<prefix_record::PathsEntry>, LinkType), InstallError> {
     // Determine the target prefix for linking
     let target_prefix = options
@@ -891,7 +904,7 @@ pub fn link_package_sync(
                 let entry = link_path.entry;
 
                 let is_clobber = link_path.clobber_path.is_some();
-                let link_result = link_file(
+                let link_result = link::link_file_with_pythonw(
                     &entry,
                     link_path
                         .clobber_path
@@ -906,6 +919,7 @@ pub fn link_package_sync(
                     options.apple_codesign_behavior,
                     modification_time,
                     options.external_symlink_policy,
+                    pythonw_available,
                 );
 
                 let result = match link_result {
@@ -1620,7 +1634,7 @@ mod test {
                 noarch: NoArchType::python(),
                 subdir: "noarch".into(),
                 depends: vec!["python >=3.12".into()],
-                // Queue the wheel before Python to exercise installation ordering.
+                // Start the wheel first so it may need to wait for Python's metadata.
                 size: Some(100),
                 ..PackageRecord::new(
                     "script-probe".parse().unwrap(),
@@ -1681,7 +1695,10 @@ mod test {
 
             let target = root.path().join("environment");
             super::Installer::new()
-                .with_package_cache(cache)
+                .with_package_cache(cache.clone())
+                .with_concurrent_requests_semaphore(std::sync::Arc::new(
+                    tokio::sync::Semaphore::new(1),
+                ))
                 .with_target_platform(Subdir::Win64)
                 .with_alternative_target_prefix(r"C:\wheel env")
                 .with_installed_packages(Vec::new())
@@ -1747,6 +1764,99 @@ mod test {
                     );
                 }
             }
+            let python: rattler_conda_types::PrefixRecord = serde_json::from_slice(
+                &fs::read(target.join("conda-meta/python-3.12.0-0.json")).unwrap(),
+            )
+            .unwrap();
+            for scenario in ["unchanged", "legacy", "upgrade"] {
+                let target = root.path().join(scenario);
+                Prefix::create(&target).unwrap();
+                let mut existing = python.clone();
+                if scenario == "upgrade" {
+                    existing.repodata_record.package_record.version = "3.11.0".parse().unwrap();
+                    existing.repodata_record.identifier =
+                        DistArchiveIdentifier::try_from_filename("python-3.11.0-0.conda").unwrap();
+                    existing.repodata_record.url = "https://example.invalid/python-3.11.0-0.conda"
+                        .parse()
+                        .unwrap();
+                    existing
+                        .paths_data
+                        .paths
+                        .retain(|entry| entry.relative_path == std::path::Path::new("python.exe"));
+                    if !has_pythonw {
+                        let mut gui = existing.paths_data.paths[0].clone();
+                        gui.relative_path = "pythonw.exe".into();
+                        existing.paths_data.paths.push(gui);
+                    }
+                    existing.files = existing
+                        .paths_data
+                        .paths
+                        .iter()
+                        .map(|entry| entry.relative_path.clone())
+                        .collect();
+                } else if scenario == "legacy" {
+                    existing.files = existing
+                        .paths_data
+                        .paths
+                        .iter()
+                        .map(|entry| entry.relative_path.clone())
+                        .collect();
+                    existing.paths_data.paths.clear();
+                }
+                // Deliberately make the on-disk GUI interpreter disagree with
+                // the desired inventory. Unchanged/legacy records must remain
+                // authoritative; upgrades must use the new cached inventory.
+                fs::write(target.join("python.exe"), b"interpreter fixture").unwrap();
+                if !has_pythonw {
+                    fs::write(target.join("pythonw.exe"), b"old interpreter").unwrap();
+                }
+                existing
+                    .write_to_path(target.join("conda-meta").join(existing.file_name()), true)
+                    .unwrap();
+                super::Installer::new()
+                    .with_package_cache(cache.clone())
+                    .with_target_platform(Subdir::Win64)
+                    .with_alternative_target_prefix(r"C:\wheel env")
+                    .with_installed_packages(vec![existing])
+                    .with_download_client(
+                        reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+                            .with(rattler_networking::OfflineMiddleware)
+                            .build(),
+                    )
+                    .install(
+                        &target,
+                        [
+                            installed.repodata_record.clone(),
+                            python.repodata_record.clone(),
+                        ],
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    fs::read(target.join("Scripts/script-probe-gui")).unwrap(),
+                    format!("#!C:/wheel env/{executable}\r\nprint(\"gui\")\n").as_bytes(),
+                    "{scenario}",
+                );
+            }
+            // A failed Python fetch must abort, not strand wheels waiting for
+            // metadata that will never arrive.
+            let mut missing_python = python.repodata_record.clone();
+            missing_python.url =
+                Url::from_file_path(root.path().join("missing/python-3.12.0-0.conda")).unwrap();
+            let failure_target = root.path().join("failed-environment");
+            let failure = super::Installer::new()
+                .with_package_cache(PackageCache::new(root.path().join("failed-cache")))
+                .with_target_platform(Subdir::Win64)
+                .with_installed_packages(Vec::new())
+                .install(
+                    &failure_target,
+                    [installed.repodata_record.clone(), missing_python],
+                );
+            let result = tokio::time::timeout(std::time::Duration::from_secs(10), failure)
+                .await
+                .expect("Python fetch failure must not hang metadata waiters");
+            assert!(result.is_err());
+
             for (name, original) in scripts.into_iter().zip(originals) {
                 assert_eq!(
                     fs::read(cached.path().join("python-scripts").join(name)).unwrap(),
@@ -1758,15 +1868,16 @@ mod test {
     }
 
     /// Run the installed raw scripts with real Windows console and GUI interpreters.
-    #[cfg(windows)]
-    #[tokio::test]
+    /// Compile the body on every platform, but only register the test on Windows.
+    #[cfg_attr(windows, tokio::test)]
+    #[cfg_attr(not(windows), allow(dead_code))]
     async fn test_wheel_raw_script_windows_execution() {
         use rattler_conda_types::{NoArchType, PackageRecord};
         use std::fs;
 
         let platform = Subdir::current().unwrap();
         let env = ExplicitEnvironmentSpec::from_path(
-            get_test_data_dir().join(format!("python/explicit-env-{platform}.txt")),
+            &get_test_data_dir().join(format!("python/explicit-env-{platform}.txt")),
         )
         .unwrap();
         let environment = test_install_python(
