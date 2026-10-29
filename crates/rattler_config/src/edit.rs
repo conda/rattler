@@ -195,6 +195,26 @@ fn prepare_exclude_newer_edit(table: &mut toml::Table, segments: &[String]) {
     }
 }
 
+/// Checks that `exclude-newer` is set before an exemption is added to it,
+/// which would otherwise fail with a missing field `cutoff`.
+fn check_exclude_newer_is_set(
+    table: &toml::Table,
+    segments: &[String],
+    key: &str,
+) -> Result<(), ConfigEditError> {
+    if let [first, second, ..] = segments
+        && first == "exclude-newer"
+        && second == "exemptions"
+        && !table.contains_key(first)
+    {
+        return Err(ConfigEditError::InvalidValue {
+            key: key.to_string(),
+            source: "`exclude-newer` is not set, set its cutoff before adding exemptions, e.g. `exclude-newer = \"7d\"`".into(),
+        });
+    }
+    Ok(())
+}
+
 /// Is `error` a type mismatch of a value of type `ty`, e.g. `string`?
 fn is_type_error(error: &ConfigEditError, ty: &str) -> bool {
     match error {
@@ -248,6 +268,7 @@ where
         prepare_exclude_newer_edit(&mut table, &segments);
 
         if let Some(raw) = value {
+            check_exclude_newer_is_set(&table, &segments, key)?;
             let parsed = parse_value(&raw);
             let retry_as_string = !matches!(parsed, toml::Value::String(_));
             insert_path(&mut table, &segments, parsed);

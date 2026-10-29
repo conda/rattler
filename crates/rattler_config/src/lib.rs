@@ -857,6 +857,37 @@ mod tests {
     }
 
     #[test]
+    fn test_edit_exclude_newer_exemption_requires_cutoff() {
+        let mut config = TestConfig::default();
+        for key in [
+            "exclude-newer.exemptions.ruff",
+            "exclude-newer.exemptions.ruff.version",
+        ] {
+            let error = config.set(key, Some("*".to_string())).unwrap_err();
+            assert!(
+                error.to_string().contains(
+                    "`exclude-newer` is not set, set its cutoff before adding exemptions"
+                ),
+                "{key}: {error}"
+            );
+        }
+        let error = config
+            .set(
+                "exclude-newer.exemptions",
+                Some(r#"{"ruff": "*"}"#.to_string()),
+            )
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("`exclude-newer` is not set"),
+            "{error}"
+        );
+        assert_eq!(config.exclude_newer, None);
+
+        // Unsetting an exemption that is not set is fine.
+        config.set("exclude-newer.exemptions.ruff", None).unwrap();
+    }
+
+    #[test]
     fn test_unknown_exclude_newer_key_is_rejected() {
         let error = TestConfig::from_toml_str(
             r#"
