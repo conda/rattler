@@ -3586,6 +3586,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "pathdiff"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df94ce210e5bc13cb6651479fa48d14f601d9858cfe0467f43ae157023b938d3"
+
+[[package]]
 name = "pem"
 version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4178,6 +4184,7 @@ dependencies = [
  "astral-reqwest-middleware",
  "base64 0.22.1",
  "console",
+ "csv",
  "digest 0.11.3",
  "dirs",
  "filetime",
@@ -4194,6 +4201,8 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "path_resolver",
+ "pathdiff",
+ "pep440_rs",
  "rattler_cache",
  "rattler_conda_types",
  "rattler_config",
