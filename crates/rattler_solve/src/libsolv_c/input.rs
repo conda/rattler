@@ -117,9 +117,12 @@ pub fn add_repodata_records<'a>(
     // Custom id
     let solvable_index_id = pool.intern_str(SOLVABLE_REPODATA_RECORD_INDEX);
 
-    // Keeps a mapping from packages added to the repo to the type and solvable
-    let mut package_to_type: HashMap<&ArchiveIdentifier, (DistArchiveType, SolvableId)> =
-        HashMap::new();
+    // Retain the original record as well, to distinguish exact duplicates from
+    // conflicting records with the same package identity.
+    let mut package_to_type: HashMap<
+        &ArchiveIdentifier,
+        (DistArchiveType, SolvableId, &RepoDataRecord),
+    > = HashMap::new();
 
     // Through `data` we can manipulate solvables (see the `Repodata` docs for
     // details)
@@ -340,14 +343,19 @@ fn add_or_reuse_solvable<'a>(
     pool: &Pool,
     repo: &Repo<'_>,
     data: &Repodata<'_>,
-    package_to_type: &mut HashMap<&'a ArchiveIdentifier, (DistArchiveType, SolvableId)>,
+    package_to_type: &mut HashMap<
+        &'a ArchiveIdentifier,
+        (DistArchiveType, SolvableId, &'a RepoDataRecord),
+    >,
     repo_data: &'a RepoDataRecord,
 ) -> Result<Option<SolvableId>, SolveError> {
     // Sometimes we can reuse an existing solvable
     let identifier = &repo_data.identifier.identifier;
     let archive_type = repo_data.identifier.archive_type;
 
-    if let Some(&(other_package_type, old_solvable_id)) = package_to_type.get(identifier) {
+    if let Some(&(other_package_type, old_solvable_id, other_record)) =
+        package_to_type.get(identifier)
+    {
         match archive_type.cmp_preference(other_package_type) {
             Ordering::Less => {
                 // A previous package that we already stored is actually a package of a better
@@ -359,17 +367,25 @@ fn add_or_reuse_solvable<'a>(
                 // overwrite its attributes
 
                 // Update the package to the new type mapping
-                package_to_type.insert(identifier, (archive_type, old_solvable_id));
+                package_to_type.insert(identifier, (archive_type, old_solvable_id, repo_data));
 
                 // Reset and reuse the old solvable
                 reset_solvable(pool, repo, data, old_solvable_id);
                 Ok(Some(old_solvable_id))
             }
+            Ordering::Equal if other_record == repo_data => {
+                tracing::warn!(
+                    identifier = %repo_data.identifier,
+                    url = %repo_data.url,
+                    "ignoring identical duplicate package record; keeping the first record"
+                );
+                Ok(None)
+            }
             Ordering::Equal => Err(SolveError::DuplicateRecords(identifier.to_string())),
         }
     } else {
         let solvable_id = repo.add_solvable();
-        package_to_type.insert(identifier, (archive_type, solvable_id));
+        package_to_type.insert(identifier, (archive_type, solvable_id, repo_data));
         Ok(Some(solvable_id))
     }
 }
