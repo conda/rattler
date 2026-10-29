@@ -231,6 +231,11 @@ fn parse_version(version: &str) -> Result<VersionSpec, String> {
         .map_err(|err| format!("invalid version `{version}`: {err}"))
 }
 
+/// The configuration that the `channel` of an exemption is resolved with.
+fn channel_config() -> ChannelConfig {
+    ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap_or_default())
+}
+
 /// The table form of an [`ExcludeNewerExemption`]. Only the match spec fields
 /// that select records are supported.
 #[derive(Default, Serialize, Deserialize)]
@@ -270,8 +275,7 @@ impl TryFrom<ExemptionTable> for ExcludeNewerExemption {
             StringMatcher::from_str(&value)
                 .map_err(|err| format!("invalid `{field}` `{value}`: {err}"))
         };
-        let channel_config =
-            ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap_or_default());
+        let channel_config = channel_config();
         let spec = NamelessMatchSpec {
             version: table.version.as_deref().map(parse_version).transpose()?,
             build: table
@@ -342,10 +346,15 @@ impl From<&ExcludeNewerExemption> for ExemptionTable {
             build: spec.build.as_ref().map(ToString::to_string),
             build_number: spec.build_number.as_ref().map(ToString::to_string),
             file_name: spec.file_name.clone(),
-            channel: spec
-                .channel
-                .as_ref()
-                .map(|channel| channel.name().to_string()),
+            channel: spec.channel.as_ref().map(|channel| {
+                // The name of a channel is written only if it resolves to the
+                // same channel, e.g. not for `https://prefix.dev/conda-forge`.
+                let name = channel.name();
+                match Channel::from_str(name, &channel_config()) {
+                    Ok(resolved) if resolved.base_url == channel.base_url => name.to_string(),
+                    _ => channel.base_url.to_string(),
+                }
+            }),
             subdir: spec.subdir.clone(),
             license: spec.license.clone(),
             license_family: spec.license_family.clone(),
@@ -806,6 +815,8 @@ mod tests {
             "exclude-newer = \"7d\"\n",
             "[exclude-newer]\ncutoff = \"7d\"\n\n[exclude-newer.exemptions]\nruff = \"*\"\n",
             "[exclude-newer]\ncutoff = \"7d\"\n\n[exclude-newer.exemptions.ruff]\nversion = \">=0.5,<0.6\"\nbuild = \"py*\"\nchannel = \"conda-forge\"\nmd5 = \"00000000000000000000000000000000\"\ncutoff = \"2026-10-12\"\n",
+            // A channel that its name doesn't resolve to is written as a URL.
+            "[exclude-newer]\ncutoff = \"7d\"\n\n[exclude-newer.exemptions.ruff]\nchannel = \"https://prefix.dev/conda-forge/\"\n",
         ] {
             let document: Document = toml::from_str(input).unwrap();
             assert_eq!(toml::to_string(&document).unwrap(), input);
