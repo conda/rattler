@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../assets/rattler-logo.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -29,7 +29,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -4268,7 +4268,7 @@
   </span>
 
 <a href="#rattler.index.RepodataRevisionSelection" class="headerlink" title="Permanent link">#</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">RepodataRevisionSelection</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">&#39;v3&#39;</span><span class="p">]</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">RepodataRevisionSelection</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">'v3'</span><span class="p">]</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4682,8 +4682,8 @@ conda channels at a minimum must include this subdirectory.</p>
       </tbody>
     </table>
         <h4 id="rattler.index.index_fs--examples">Examples<a class="headerlink" href="#rattler.index.index_fs--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">index_fs</span><span class="p">(</span><span class="n">channel_directory</span><span class="p">,</span> <span class="n">repodata_revisions</span><span class="o">=</span><span class="p">[{</span><span class="s2">&quot;revision&quot;</span><span class="p">:</span> <span class="s2">&quot;v3&quot;</span><span class="p">,</span> <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="s2">&quot;v3 packages&quot;</span><span class="p">}]))</span>  <span class="c1"># doctest: +SKIP</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.index.index_fs--__span-0-1"><a id="rattler.index.index_fs--__codelineno-0-1" name="rattler.index.index_fs--__codelineno-0-1" href="#rattler.index.index_fs--__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+</span><span id="rattler.index.index_fs--__span-0-2"><a id="rattler.index.index_fs--__codelineno-0-2" name="rattler.index.index_fs--__codelineno-0-2" href="#rattler.index.index_fs--__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">index_fs</span><span class="p">(</span><span class="n">channel_directory</span><span class="p">,</span> <span class="n">repodata_revisions</span><span class="o">=</span><span class="p">[{</span><span class="s2">"revision"</span><span class="p">:</span> <span class="s2">"v3"</span><span class="p">,</span> <span class="s2">"message"</span><span class="p">:</span> <span class="s2">"v3 packages"</span><span class="p">}]))</span>  <span class="c1"># doctest: +SKIP</span>
 </span></code></pre></div>
 
 
@@ -4956,8 +4956,8 @@ conda channels at a minimum must include this subdirectory.</p>
       </tbody>
     </table>
         <h4 id="rattler.index.index_s3--examples">Examples<a class="headerlink" href="#rattler.index.index_s3--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">index_s3</span><span class="p">(</span><span class="n">channel_url</span><span class="p">,</span> <span class="n">repodata_revisions</span><span class="o">=</span><span class="p">[{</span><span class="s2">&quot;revision&quot;</span><span class="p">:</span> <span class="s2">&quot;v3&quot;</span><span class="p">,</span> <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="s2">&quot;v3 packages&quot;</span><span class="p">}]))</span>  <span class="c1"># doctest: +SKIP</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.index.index_s3--__span-0-1"><a id="rattler.index.index_s3--__codelineno-0-1" name="rattler.index.index_s3--__codelineno-0-1" href="#rattler.index.index_s3--__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+</span><span id="rattler.index.index_s3--__span-0-2"><a id="rattler.index.index_s3--__codelineno-0-2" name="rattler.index.index_s3--__codelineno-0-2" href="#rattler.index.index_s3--__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">index_s3</span><span class="p">(</span><span class="n">channel_url</span><span class="p">,</span> <span class="n">repodata_revisions</span><span class="o">=</span><span class="p">[{</span><span class="s2">"revision"</span><span class="p">:</span> <span class="s2">"v3"</span><span class="p">,</span> <span class="s2">"message"</span><span class="p">:</span> <span class="s2">"v3 packages"</span><span class="p">}]))</span>  <span class="c1"># doctest: +SKIP</span>
 </span></code></pre></div>
 
 
@@ -5183,10 +5183,10 @@ conda channels at a minimum must include this subdirectory.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.tabs.link", "content.code.copy", "content.action.edit", "content.code.annotate", "navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.sections", "navigation.top", "navigation.footer"], "search": "../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.tabs.link", "content.code.copy", "content.action.edit", "content.code.annotate", "navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.sections", "navigation.top", "navigation.footer"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

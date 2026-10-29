@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../assets/rattler-logo.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -29,7 +29,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -4324,10 +4324,10 @@ call can simply be repeated. Symbolic links inside the archive are
 surfaced but never followed; reading one raises an <code>OSError</code>. Paths are
 exchanged as UTF-8 strings.</p>
 <h3 id="rattler.package_streaming.PackageArchive--examples">Examples<a class="headerlink" href="#rattler.package_streaming.PackageArchive--examples" title="Permanent link">#</a></h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">pkg</span> <span class="o">=</span> <span class="k">await</span> <span class="n">PackageArchive</span><span class="o">.</span><span class="n">from_url</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">url</span><span class="p">)</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">paths</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pkg</span><span class="o">.</span><span class="n">paths_json</span><span class="p">()</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">libs</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">relative_path</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">paths</span><span class="o">.</span><span class="n">paths</span> <span class="k">if</span> <span class="nb">str</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">relative_path</span><span class="p">)</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.so&quot;</span><span class="p">)]</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">files</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pkg</span><span class="o">.</span><span class="n">read_files</span><span class="p">(</span><span class="n">libs</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.package_streaming.PackageArchive--__span-0-1"><a id="rattler.package_streaming.PackageArchive--__codelineno-0-1" name="rattler.package_streaming.PackageArchive--__codelineno-0-1" href="#rattler.package_streaming.PackageArchive--__codelineno-0-1"></a><span class="n">pkg</span> <span class="o">=</span> <span class="k">await</span> <span class="n">PackageArchive</span><span class="o">.</span><span class="n">from_url</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">url</span><span class="p">)</span>
+</span><span id="rattler.package_streaming.PackageArchive--__span-0-2"><a id="rattler.package_streaming.PackageArchive--__codelineno-0-2" name="rattler.package_streaming.PackageArchive--__codelineno-0-2" href="#rattler.package_streaming.PackageArchive--__codelineno-0-2"></a><span class="n">paths</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pkg</span><span class="o">.</span><span class="n">paths_json</span><span class="p">()</span>
+</span><span id="rattler.package_streaming.PackageArchive--__span-0-3"><a id="rattler.package_streaming.PackageArchive--__codelineno-0-3" name="rattler.package_streaming.PackageArchive--__codelineno-0-3" href="#rattler.package_streaming.PackageArchive--__codelineno-0-3"></a><span class="n">libs</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">relative_path</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">paths</span><span class="o">.</span><span class="n">paths</span> <span class="k">if</span> <span class="nb">str</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">relative_path</span><span class="p">)</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">".so"</span><span class="p">)]</span>
+</span><span id="rattler.package_streaming.PackageArchive--__span-0-4"><a id="rattler.package_streaming.PackageArchive--__codelineno-0-4" name="rattler.package_streaming.PackageArchive--__codelineno-0-4" href="#rattler.package_streaming.PackageArchive--__codelineno-0-4"></a><span class="n">files</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pkg</span><span class="o">.</span><span class="n">read_files</span><span class="p">(</span><span class="n">libs</span><span class="p">)</span>
 </span></code></pre></div>
 
 
@@ -4419,8 +4419,8 @@ exchanged as UTF-8 strings.</p>
 
         <p>Opens a package archive from a local file.</p>
 <h4 id="rattler.package_streaming.PackageArchive.from_path--examples">Examples<a class="headerlink" href="#rattler.package_streaming.PackageArchive.from_path--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">pkg</span> <span class="o">=</span> <span class="k">await</span> <span class="n">PackageArchive</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span><span class="s2">&quot;numpy-2.1.3-py312h58c1407_0.conda&quot;</span><span class="p">)</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">index</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pkg</span><span class="o">.</span><span class="n">index_json</span><span class="p">()</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.package_streaming.PackageArchive.from_path--__span-0-1"><a id="rattler.package_streaming.PackageArchive.from_path--__codelineno-0-1" name="rattler.package_streaming.PackageArchive.from_path--__codelineno-0-1" href="#rattler.package_streaming.PackageArchive.from_path--__codelineno-0-1"></a><span class="n">pkg</span> <span class="o">=</span> <span class="k">await</span> <span class="n">PackageArchive</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span><span class="s2">"numpy-2.1.3-py312h58c1407_0.conda"</span><span class="p">)</span>
+</span><span id="rattler.package_streaming.PackageArchive.from_path--__span-0-2"><a id="rattler.package_streaming.PackageArchive.from_path--__codelineno-0-2" name="rattler.package_streaming.PackageArchive.from_path--__codelineno-0-2" href="#rattler.package_streaming.PackageArchive.from_path--__codelineno-0-2"></a><span class="n">index</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pkg</span><span class="o">.</span><span class="n">index_json</span><span class="p">()</span>
 </span></code></pre></div>
 
 
@@ -4442,7 +4442,7 @@ exchanged as UTF-8 strings.</p>
 
 <a href="#rattler.package_streaming.PackageArchive.from_url" class="headerlink" title="Permanent link">#</a></h2>
 <div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">from_url</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">client</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">sparse</span><span class="o">=</span><span class="s2">&quot;prefer&quot;</span><span class="p">,</span> <span class="n">max_spool_size</span><span class="o">=</span><span class="kc">None</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">client</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">sparse</span><span class="o">=</span><span class="s2">"prefer"</span><span class="p">,</span> <span class="n">max_spool_size</span><span class="o">=</span><span class="kc">None</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span>
 </span></code></pre></div>
 
@@ -4495,7 +4495,7 @@ range support, or <code>"disable"</code> to skip the range probe. Setting
   </span>
 
 <a href="#rattler.package_streaming.PackageArchive.list_files" class="headerlink" title="Permanent link">#</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">list_files</span><span class="p">(</span><span class="n">section</span><span class="o">=</span><span class="s1">&#39;pkg&#39;</span><span class="p">)</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">list_files</span><span class="p">(</span><span class="n">section</span><span class="o">=</span><span class="s1">'pkg'</span><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4506,9 +4506,9 @@ section.</p>
 <code>"pkg"</code> it streams the entire section; prefer <code>paths_json()</code> when only
 paths are needed.</p>
 <h4 id="rattler.package_streaming.PackageArchive.list_files--examples">Examples<a class="headerlink" href="#rattler.package_streaming.PackageArchive.list_files--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Usually free: the info section tends to sit in the cached tail.</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="k">await</span> <span class="n">pkg</span><span class="o">.</span><span class="n">list_files</span><span class="p">(</span><span class="s2">&quot;info&quot;</span><span class="p">):</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.package_streaming.PackageArchive.list_files--__span-0-1"><a id="rattler.package_streaming.PackageArchive.list_files--__codelineno-0-1" name="rattler.package_streaming.PackageArchive.list_files--__codelineno-0-1" href="#rattler.package_streaming.PackageArchive.list_files--__codelineno-0-1"></a><span class="c1"># Usually free: the info section tends to sit in the cached tail.</span>
+</span><span id="rattler.package_streaming.PackageArchive.list_files--__span-0-2"><a id="rattler.package_streaming.PackageArchive.list_files--__codelineno-0-2" name="rattler.package_streaming.PackageArchive.list_files--__codelineno-0-2" href="#rattler.package_streaming.PackageArchive.list_files--__codelineno-0-2"></a><span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="k">await</span> <span class="n">pkg</span><span class="o">.</span><span class="n">list_files</span><span class="p">(</span><span class="s2">"info"</span><span class="p">):</span>
+</span><span id="rattler.package_streaming.PackageArchive.list_files--__span-0-3"><a id="rattler.package_streaming.PackageArchive.list_files--__codelineno-0-3" name="rattler.package_streaming.PackageArchive.list_files--__codelineno-0-3" href="#rattler.package_streaming.PackageArchive.list_files--__codelineno-0-3"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
 </span></code></pre></div>
 
 
@@ -4564,9 +4564,9 @@ again up to the requested file. When reading more than one file,
 prefer a single <code>read_files</code> call. Requesting a path that is a link
 raises an <code>OSError</code>; links are not followed.</p>
 <h4 id="rattler.package_streaming.PackageArchive.read_file--examples">Examples<a class="headerlink" href="#rattler.package_streaming.PackageArchive.read_file--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">recipe</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pkg</span><span class="o">.</span><span class="n">read_file</span><span class="p">(</span><span class="s2">&quot;info/recipe/meta.yaml&quot;</span><span class="p">)</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">if</span> <span class="n">recipe</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;package has no recipe&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.package_streaming.PackageArchive.read_file--__span-0-1"><a id="rattler.package_streaming.PackageArchive.read_file--__codelineno-0-1" name="rattler.package_streaming.PackageArchive.read_file--__codelineno-0-1" href="#rattler.package_streaming.PackageArchive.read_file--__codelineno-0-1"></a><span class="n">recipe</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pkg</span><span class="o">.</span><span class="n">read_file</span><span class="p">(</span><span class="s2">"info/recipe/meta.yaml"</span><span class="p">)</span>
+</span><span id="rattler.package_streaming.PackageArchive.read_file--__span-0-2"><a id="rattler.package_streaming.PackageArchive.read_file--__codelineno-0-2" name="rattler.package_streaming.PackageArchive.read_file--__codelineno-0-2" href="#rattler.package_streaming.PackageArchive.read_file--__codelineno-0-2"></a><span class="k">if</span> <span class="n">recipe</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="rattler.package_streaming.PackageArchive.read_file--__span-0-3"><a id="rattler.package_streaming.PackageArchive.read_file--__codelineno-0-3" name="rattler.package_streaming.PackageArchive.read_file--__codelineno-0-3" href="#rattler.package_streaming.PackageArchive.read_file--__codelineno-0-3"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">"package has no recipe"</span><span class="p">)</span>
 </span></code></pre></div>
 
 
@@ -4601,11 +4601,11 @@ cached: a repeated call streams its sections again, so batch all
 needed paths into a single call where possible. Requesting a path
 that is a link raises an <code>OSError</code>; links are not followed.</p>
 <h4 id="rattler.package_streaming.PackageArchive.read_files--examples">Examples<a class="headerlink" href="#rattler.package_streaming.PackageArchive.read_files--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># One pass over the payload, one over info, fetched concurrently.</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">files</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pkg</span><span class="o">.</span><span class="n">read_files</span><span class="p">([</span><span class="s2">&quot;info/index.json&quot;</span><span class="p">,</span> <span class="s2">&quot;lib/libfoo.so&quot;</span><span class="p">,</span> <span class="s2">&quot;bin/foo&quot;</span><span class="p">])</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="k">for</span> <span class="n">path</span><span class="p">,</span> <span class="n">contents</span> <span class="ow">in</span> <span class="n">files</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="k">if</span> <span class="n">contents</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: not in archive&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.package_streaming.PackageArchive.read_files--__span-0-1"><a id="rattler.package_streaming.PackageArchive.read_files--__codelineno-0-1" name="rattler.package_streaming.PackageArchive.read_files--__codelineno-0-1" href="#rattler.package_streaming.PackageArchive.read_files--__codelineno-0-1"></a><span class="c1"># One pass over the payload, one over info, fetched concurrently.</span>
+</span><span id="rattler.package_streaming.PackageArchive.read_files--__span-0-2"><a id="rattler.package_streaming.PackageArchive.read_files--__codelineno-0-2" name="rattler.package_streaming.PackageArchive.read_files--__codelineno-0-2" href="#rattler.package_streaming.PackageArchive.read_files--__codelineno-0-2"></a><span class="n">files</span> <span class="o">=</span> <span class="k">await</span> <span class="n">pkg</span><span class="o">.</span><span class="n">read_files</span><span class="p">([</span><span class="s2">"info/index.json"</span><span class="p">,</span> <span class="s2">"lib/libfoo.so"</span><span class="p">,</span> <span class="s2">"bin/foo"</span><span class="p">])</span>
+</span><span id="rattler.package_streaming.PackageArchive.read_files--__span-0-3"><a id="rattler.package_streaming.PackageArchive.read_files--__codelineno-0-3" name="rattler.package_streaming.PackageArchive.read_files--__codelineno-0-3" href="#rattler.package_streaming.PackageArchive.read_files--__codelineno-0-3"></a><span class="k">for</span> <span class="n">path</span><span class="p">,</span> <span class="n">contents</span> <span class="ow">in</span> <span class="n">files</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+</span><span id="rattler.package_streaming.PackageArchive.read_files--__span-0-4"><a id="rattler.package_streaming.PackageArchive.read_files--__codelineno-0-4" name="rattler.package_streaming.PackageArchive.read_files--__codelineno-0-4" href="#rattler.package_streaming.PackageArchive.read_files--__codelineno-0-4"></a>    <span class="k">if</span> <span class="n">contents</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="rattler.package_streaming.PackageArchive.read_files--__span-0-5"><a id="rattler.package_streaming.PackageArchive.read_files--__codelineno-0-5" name="rattler.package_streaming.PackageArchive.read_files--__codelineno-0-5" href="#rattler.package_streaming.PackageArchive.read_files--__codelineno-0-5"></a>        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: not in archive"</span><span class="p">)</span>
 </span></code></pre></div>
 
 
@@ -4650,7 +4650,7 @@ package has none.</p>
   </span>
 
 <a href="#rattler.package_streaming.PackageArchive.stream" class="headerlink" title="Permanent link">#</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">stream</span><span class="p">(</span><span class="n">section</span><span class="o">=</span><span class="s1">&#39;pkg&#39;</span><span class="p">)</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">stream</span><span class="p">(</span><span class="n">section</span><span class="o">=</span><span class="s1">'pkg'</span><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4662,10 +4662,10 @@ cheaply, and abandoning the iterator aborts any underlying transfer.
 If an iteration step is cancelled (e.g. by a timeout), discard the
 iterator: the underlying stream position is no longer well-defined.</p>
 <h4 id="rattler.package_streaming.PackageArchive.stream--examples">Examples<a class="headerlink" href="#rattler.package_streaming.PackageArchive.stream--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">async</span> <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">pkg</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="s2">&quot;pkg&quot;</span><span class="p">):</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.so&quot;</span><span class="p">):</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>        <span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">entry</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>  <span class="c1"># read before advancing</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="c1"># entries that are not read are skipped cheaply</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.package_streaming.PackageArchive.stream--__span-0-1"><a id="rattler.package_streaming.PackageArchive.stream--__codelineno-0-1" name="rattler.package_streaming.PackageArchive.stream--__codelineno-0-1" href="#rattler.package_streaming.PackageArchive.stream--__codelineno-0-1"></a><span class="k">async</span> <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">pkg</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="s2">"pkg"</span><span class="p">):</span>
+</span><span id="rattler.package_streaming.PackageArchive.stream--__span-0-2"><a id="rattler.package_streaming.PackageArchive.stream--__codelineno-0-2" name="rattler.package_streaming.PackageArchive.stream--__codelineno-0-2" href="#rattler.package_streaming.PackageArchive.stream--__codelineno-0-2"></a>    <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">".so"</span><span class="p">):</span>
+</span><span id="rattler.package_streaming.PackageArchive.stream--__span-0-3"><a id="rattler.package_streaming.PackageArchive.stream--__codelineno-0-3" name="rattler.package_streaming.PackageArchive.stream--__codelineno-0-3" href="#rattler.package_streaming.PackageArchive.stream--__codelineno-0-3"></a>        <span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">entry</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>  <span class="c1"># read before advancing</span>
+</span><span id="rattler.package_streaming.PackageArchive.stream--__span-0-4"><a id="rattler.package_streaming.PackageArchive.stream--__codelineno-0-4" name="rattler.package_streaming.PackageArchive.stream--__codelineno-0-4" href="#rattler.package_streaming.PackageArchive.stream--__codelineno-0-4"></a>    <span class="c1"># entries that are not read are skipped cheaply</span>
 </span></code></pre></div>
 
 
@@ -4891,10 +4891,10 @@ iterator: the underlying stream position is no longer well-defined.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.tabs.link", "content.code.copy", "content.action.edit", "content.code.annotate", "navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.sections", "navigation.top", "navigation.footer"], "search": "../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.tabs.link", "content.code.copy", "content.action.edit", "content.code.annotate", "navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.sections", "navigation.top", "navigation.footer"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../assets/rattler-logo.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -29,7 +29,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -4897,10 +4897,10 @@
 
 <a href="#rattler.networking.CacheAction" class="headerlink" title="Permanent link">#</a></h2>
 <div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">CacheAction</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="s2">&quot;cache-or-fetch&quot;</span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="s2">&quot;use-cache-only&quot;</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="s2">&quot;force-cache-only&quot;</span><span class="p">,</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="s2">&quot;no-cache&quot;</span><span class="p">,</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="s2">"cache-or-fetch"</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="s2">"use-cache-only"</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="s2">"force-cache-only"</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="s2">"no-cache"</span><span class="p">,</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">]</span>
 </span></code></pre></div>
 
@@ -4936,17 +4936,17 @@ and <code>no-cache</code> always re-fetches.</p>
 <p>The callback receives the host and path of the request URL and should return
 a dictionary of headers to add, or None to add no headers.</p>
 <h4 id="rattler.networking.AddHeadersMiddleware--examples">Examples<a class="headerlink" href="#rattler.networking.AddHeadersMiddleware--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler.networking</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span><span class="p">,</span> <span class="n">AddHeadersMiddleware</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="k">def</span><span class="w"> </span><span class="nf">my_callback</span><span class="p">(</span><span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">...</span>     <span class="k">if</span> <span class="n">host</span> <span class="o">==</span> <span class="s2">&quot;private.example.com&quot;</span><span class="p">:</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">...</span>         <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="s2">&quot;Bearer my-token&quot;</span><span class="p">}</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">...</span>     <span class="k">return</span> <span class="kc">None</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span> <span class="o">=</span> <span class="n">AddHeadersMiddleware</span><span class="p">(</span><span class="n">my_callback</span><span class="p">)</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">AddHeadersMiddleware</span><span class="p">()</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="p">([</span><span class="n">middleware</span><span class="p">])</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">Client</span><span class="p">()</span>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="o">&gt;&gt;&gt;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.networking.AddHeadersMiddleware--__span-0-1"><a id="rattler.networking.AddHeadersMiddleware--__codelineno-0-1" name="rattler.networking.AddHeadersMiddleware--__codelineno-0-1" href="#rattler.networking.AddHeadersMiddleware--__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler.networking</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span><span class="p">,</span> <span class="n">AddHeadersMiddleware</span>
+</span><span id="rattler.networking.AddHeadersMiddleware--__span-0-2"><a id="rattler.networking.AddHeadersMiddleware--__codelineno-0-2" name="rattler.networking.AddHeadersMiddleware--__codelineno-0-2" href="#rattler.networking.AddHeadersMiddleware--__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="k">def</span><span class="w"> </span><span class="nf">my_callback</span><span class="p">(</span><span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="rattler.networking.AddHeadersMiddleware--__span-0-3"><a id="rattler.networking.AddHeadersMiddleware--__codelineno-0-3" name="rattler.networking.AddHeadersMiddleware--__codelineno-0-3" href="#rattler.networking.AddHeadersMiddleware--__codelineno-0-3"></a><span class="o">...</span>     <span class="k">if</span> <span class="n">host</span> <span class="o">==</span> <span class="s2">"private.example.com"</span><span class="p">:</span>
+</span><span id="rattler.networking.AddHeadersMiddleware--__span-0-4"><a id="rattler.networking.AddHeadersMiddleware--__codelineno-0-4" name="rattler.networking.AddHeadersMiddleware--__codelineno-0-4" href="#rattler.networking.AddHeadersMiddleware--__codelineno-0-4"></a><span class="o">...</span>         <span class="k">return</span> <span class="p">{</span><span class="s2">"Authorization"</span><span class="p">:</span> <span class="s2">"Bearer my-token"</span><span class="p">}</span>
+</span><span id="rattler.networking.AddHeadersMiddleware--__span-0-5"><a id="rattler.networking.AddHeadersMiddleware--__codelineno-0-5" name="rattler.networking.AddHeadersMiddleware--__codelineno-0-5" href="#rattler.networking.AddHeadersMiddleware--__codelineno-0-5"></a><span class="o">...</span>     <span class="k">return</span> <span class="kc">None</span>
+</span><span id="rattler.networking.AddHeadersMiddleware--__span-0-6"><a id="rattler.networking.AddHeadersMiddleware--__codelineno-0-6" name="rattler.networking.AddHeadersMiddleware--__codelineno-0-6" href="#rattler.networking.AddHeadersMiddleware--__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span> <span class="o">=</span> <span class="n">AddHeadersMiddleware</span><span class="p">(</span><span class="n">my_callback</span><span class="p">)</span>
+</span><span id="rattler.networking.AddHeadersMiddleware--__span-0-7"><a id="rattler.networking.AddHeadersMiddleware--__codelineno-0-7" name="rattler.networking.AddHeadersMiddleware--__codelineno-0-7" href="#rattler.networking.AddHeadersMiddleware--__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span>
+</span><span id="rattler.networking.AddHeadersMiddleware--__span-0-8"><a id="rattler.networking.AddHeadersMiddleware--__codelineno-0-8" name="rattler.networking.AddHeadersMiddleware--__codelineno-0-8" href="#rattler.networking.AddHeadersMiddleware--__codelineno-0-8"></a><span class="n">AddHeadersMiddleware</span><span class="p">()</span>
+</span><span id="rattler.networking.AddHeadersMiddleware--__span-0-9"><a id="rattler.networking.AddHeadersMiddleware--__codelineno-0-9" name="rattler.networking.AddHeadersMiddleware--__codelineno-0-9" href="#rattler.networking.AddHeadersMiddleware--__codelineno-0-9"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="p">([</span><span class="n">middleware</span><span class="p">])</span>
+</span><span id="rattler.networking.AddHeadersMiddleware--__span-0-10"><a id="rattler.networking.AddHeadersMiddleware--__codelineno-0-10" name="rattler.networking.AddHeadersMiddleware--__codelineno-0-10" href="#rattler.networking.AddHeadersMiddleware--__codelineno-0-10"></a><span class="n">Client</span><span class="p">()</span>
+</span><span id="rattler.networking.AddHeadersMiddleware--__span-0-11"><a id="rattler.networking.AddHeadersMiddleware--__codelineno-0-11" name="rattler.networking.AddHeadersMiddleware--__codelineno-0-11" href="#rattler.networking.AddHeadersMiddleware--__codelineno-0-11"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
 
@@ -5085,13 +5085,13 @@ The path is the path component of the URL (e.g., "/conda-forge/linux-64/repodata
 
         <p>Returns a representation of the Middleware</p>
 <h5 id="rattler.networking.AuthenticationMiddleware.__repr__--examples">Examples<a class="headerlink" href="#rattler.networking.AuthenticationMiddleware.__repr__--examples" title="Permanent link">#</a></h5>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler.networking</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span> <span class="o">=</span> <span class="n">AuthenticationMiddleware</span><span class="p">()</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">AuthenticationMiddleware</span><span class="p">()</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="p">([</span><span class="n">middleware</span><span class="p">])</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">Client</span><span class="p">()</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.networking.AuthenticationMiddleware.__repr__--__span-0-1"><a id="rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-1" name="rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-1" href="#rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler.networking</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
+</span><span id="rattler.networking.AuthenticationMiddleware.__repr__--__span-0-2"><a id="rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-2" name="rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-2" href="#rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span> <span class="o">=</span> <span class="n">AuthenticationMiddleware</span><span class="p">()</span>
+</span><span id="rattler.networking.AuthenticationMiddleware.__repr__--__span-0-3"><a id="rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-3" name="rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-3" href="#rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span>
+</span><span id="rattler.networking.AuthenticationMiddleware.__repr__--__span-0-4"><a id="rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-4" name="rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-4" href="#rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-4"></a><span class="n">AuthenticationMiddleware</span><span class="p">()</span>
+</span><span id="rattler.networking.AuthenticationMiddleware.__repr__--__span-0-5"><a id="rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-5" name="rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-5" href="#rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="p">([</span><span class="n">middleware</span><span class="p">])</span>
+</span><span id="rattler.networking.AuthenticationMiddleware.__repr__--__span-0-6"><a id="rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-6" name="rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-6" href="#rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-6"></a><span class="n">Client</span><span class="p">()</span>
+</span><span id="rattler.networking.AuthenticationMiddleware.__repr__--__span-0-7"><a id="rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-7" name="rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-7" href="#rattler.networking.AuthenticationMiddleware.__repr__--__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
 
@@ -5160,9 +5160,9 @@ The path is the path component of the URL (e.g., "/conda-forge/linux-64/repodata
 
         <p>Returns a representation of the Client</p>
 <h5 id="rattler.networking.Client.__repr__--examples">Examples<a class="headerlink" href="#rattler.networking.Client.__repr__--examples" title="Permanent link">#</a></h5>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="p">()</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">Client</span><span class="p">()</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.networking.Client.__repr__--__span-0-1"><a id="rattler.networking.Client.__repr__--__codelineno-0-1" name="rattler.networking.Client.__repr__--__codelineno-0-1" href="#rattler.networking.Client.__repr__--__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="p">()</span>
+</span><span id="rattler.networking.Client.__repr__--__span-0-2"><a id="rattler.networking.Client.__repr__--__codelineno-0-2" name="rattler.networking.Client.__repr__--__codelineno-0-2" href="#rattler.networking.Client.__repr__--__codelineno-0-2"></a><span class="n">Client</span><span class="p">()</span>
+</span><span id="rattler.networking.Client.__repr__--__span-0-3"><a id="rattler.networking.Client.__repr__--__codelineno-0-3" name="rattler.networking.Client.__repr__--__codelineno-0-3" href="#rattler.networking.Client.__repr__--__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
 
@@ -5191,9 +5191,9 @@ The path is the path component of the URL (e.g., "/conda-forge/linux-64/repodata
 <p>This is equivalent to :py:meth:<code>default_client</code> and kept for
 backwards compatibility.</p>
 <h5 id="rattler.networking.Client.authenticated_client--examples">Examples<a class="headerlink" href="#rattler.networking.Client.authenticated_client--examples" title="Permanent link">#</a></h5>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="o">.</span><span class="n">authenticated_client</span><span class="p">()</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">Client</span><span class="p">()</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.networking.Client.authenticated_client--__span-0-1"><a id="rattler.networking.Client.authenticated_client--__codelineno-0-1" name="rattler.networking.Client.authenticated_client--__codelineno-0-1" href="#rattler.networking.Client.authenticated_client--__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="o">.</span><span class="n">authenticated_client</span><span class="p">()</span>
+</span><span id="rattler.networking.Client.authenticated_client--__span-0-2"><a id="rattler.networking.Client.authenticated_client--__codelineno-0-2" name="rattler.networking.Client.authenticated_client--__codelineno-0-2" href="#rattler.networking.Client.authenticated_client--__codelineno-0-2"></a><span class="n">Client</span><span class="p">()</span>
+</span><span id="rattler.networking.Client.authenticated_client--__span-0-3"><a id="rattler.networking.Client.authenticated_client--__codelineno-0-3" name="rattler.networking.Client.authenticated_client--__codelineno-0-3" href="#rattler.networking.Client.authenticated_client--__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
 
@@ -5305,9 +5305,9 @@ authentication, OCI, GCS and S3.</p>
       </tbody>
     </table>
         <h5 id="rattler.networking.Client.default_client--examples">Examples<a class="headerlink" href="#rattler.networking.Client.default_client--examples" title="Permanent link">#</a></h5>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="o">.</span><span class="n">default_client</span><span class="p">()</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">Client</span><span class="p">()</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.networking.Client.default_client--__span-0-1"><a id="rattler.networking.Client.default_client--__codelineno-0-1" name="rattler.networking.Client.default_client--__codelineno-0-1" href="#rattler.networking.Client.default_client--__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="o">.</span><span class="n">default_client</span><span class="p">()</span>
+</span><span id="rattler.networking.Client.default_client--__span-0-2"><a id="rattler.networking.Client.default_client--__codelineno-0-2" name="rattler.networking.Client.default_client--__codelineno-0-2" href="#rattler.networking.Client.default_client--__codelineno-0-2"></a><span class="n">Client</span><span class="p">()</span>
+</span><span id="rattler.networking.Client.default_client--__span-0-3"><a id="rattler.networking.Client.default_client--__codelineno-0-3" name="rattler.networking.Client.default_client--__codelineno-0-3" href="#rattler.networking.Client.default_client--__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
 
@@ -5344,11 +5344,11 @@ authentication, OCI, GCS and S3.</p>
 Explicit client options such as <code>headers</code> and <code>timeout</code> remain
 available to the caller.</p>
 <h5 id="rattler.networking.Client.from_config--examples">Examples<a class="headerlink" href="#rattler.networking.Client.from_config--examples" title="Permanent link">#</a></h5>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">Config</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">client</span> <span class="o">=</span> <span class="n">Client</span><span class="o">.</span><span class="n">from_config</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">from_toml</span><span class="p">(</span><span class="s2">&quot;tls-no-verify = true&quot;</span><span class="p">))</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">client</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">Client</span><span class="p">()</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.networking.Client.from_config--__span-0-1"><a id="rattler.networking.Client.from_config--__codelineno-0-1" name="rattler.networking.Client.from_config--__codelineno-0-1" href="#rattler.networking.Client.from_config--__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">Config</span>
+</span><span id="rattler.networking.Client.from_config--__span-0-2"><a id="rattler.networking.Client.from_config--__codelineno-0-2" name="rattler.networking.Client.from_config--__codelineno-0-2" href="#rattler.networking.Client.from_config--__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">client</span> <span class="o">=</span> <span class="n">Client</span><span class="o">.</span><span class="n">from_config</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">from_toml</span><span class="p">(</span><span class="s2">"tls-no-verify = true"</span><span class="p">))</span>
+</span><span id="rattler.networking.Client.from_config--__span-0-3"><a id="rattler.networking.Client.from_config--__codelineno-0-3" name="rattler.networking.Client.from_config--__codelineno-0-3" href="#rattler.networking.Client.from_config--__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">client</span>
+</span><span id="rattler.networking.Client.from_config--__span-0-4"><a id="rattler.networking.Client.from_config--__codelineno-0-4" name="rattler.networking.Client.from_config--__codelineno-0-4" href="#rattler.networking.Client.from_config--__codelineno-0-4"></a><span class="n">Client</span><span class="p">()</span>
+</span><span id="rattler.networking.Client.from_config--__span-0-5"><a id="rattler.networking.Client.from_config--__codelineno-0-5" name="rattler.networking.Client.from_config--__codelineno-0-5" href="#rattler.networking.Client.from_config--__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
 
@@ -5440,7 +5440,7 @@ available to the caller.</p>
   </span>
 
 <a href="#rattler.networking.FetchRepoDataOptions.cache_action" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">cache_action</span> <span class="o">=</span> <span class="s1">&#39;cache-or-fetch&#39;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">cache_action</span> <span class="o">=</span> <span class="s1">'cache-or-fetch'</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -5496,7 +5496,7 @@ available to the caller.</p>
   </span>
 
 <a href="#rattler.networking.FetchRepoDataOptions.variant" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">variant</span> <span class="o">=</span> <span class="s1">&#39;after-patches&#39;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">variant</span> <span class="o">=</span> <span class="s1">'after-patches'</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -5565,13 +5565,13 @@ available to the caller.</p>
 
         <p>Middleware to work with gcs:// URLs</p>
 <h4 id="rattler.networking.GCSMiddleware--examples">Examples<a class="headerlink" href="#rattler.networking.GCSMiddleware--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler.networking</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span> <span class="o">=</span> <span class="n">GCSMiddleware</span><span class="p">()</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">GCSMiddleware</span><span class="p">()</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="p">([</span><span class="n">middleware</span><span class="p">])</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">Client</span><span class="p">()</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.networking.GCSMiddleware--__span-0-1"><a id="rattler.networking.GCSMiddleware--__codelineno-0-1" name="rattler.networking.GCSMiddleware--__codelineno-0-1" href="#rattler.networking.GCSMiddleware--__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler.networking</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
+</span><span id="rattler.networking.GCSMiddleware--__span-0-2"><a id="rattler.networking.GCSMiddleware--__codelineno-0-2" name="rattler.networking.GCSMiddleware--__codelineno-0-2" href="#rattler.networking.GCSMiddleware--__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span> <span class="o">=</span> <span class="n">GCSMiddleware</span><span class="p">()</span>
+</span><span id="rattler.networking.GCSMiddleware--__span-0-3"><a id="rattler.networking.GCSMiddleware--__codelineno-0-3" name="rattler.networking.GCSMiddleware--__codelineno-0-3" href="#rattler.networking.GCSMiddleware--__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span>
+</span><span id="rattler.networking.GCSMiddleware--__span-0-4"><a id="rattler.networking.GCSMiddleware--__codelineno-0-4" name="rattler.networking.GCSMiddleware--__codelineno-0-4" href="#rattler.networking.GCSMiddleware--__codelineno-0-4"></a><span class="n">GCSMiddleware</span><span class="p">()</span>
+</span><span id="rattler.networking.GCSMiddleware--__span-0-5"><a id="rattler.networking.GCSMiddleware--__codelineno-0-5" name="rattler.networking.GCSMiddleware--__codelineno-0-5" href="#rattler.networking.GCSMiddleware--__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="p">([</span><span class="n">middleware</span><span class="p">])</span>
+</span><span id="rattler.networking.GCSMiddleware--__span-0-6"><a id="rattler.networking.GCSMiddleware--__codelineno-0-6" name="rattler.networking.GCSMiddleware--__codelineno-0-6" href="#rattler.networking.GCSMiddleware--__codelineno-0-6"></a><span class="n">Client</span><span class="p">()</span>
+</span><span id="rattler.networking.GCSMiddleware--__span-0-7"><a id="rattler.networking.GCSMiddleware--__codelineno-0-7" name="rattler.networking.GCSMiddleware--__codelineno-0-7" href="#rattler.networking.GCSMiddleware--__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
 
@@ -5657,13 +5657,13 @@ The mirrors argument should be a dictionary where the keys are the
 original mirror URLs and the values are lists of mirror URLs to
 replace the original mirror with.</p>
 <h5 id="rattler.networking.MirrorMiddleware.__init__--examples">Examples<a class="headerlink" href="#rattler.networking.MirrorMiddleware.__init__--examples" title="Permanent link">#</a></h5>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler.networking</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span> <span class="o">=</span> <span class="n">MirrorMiddleware</span><span class="p">({</span><span class="s2">&quot;https://conda.anaconda.org/conda-forge&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://repo.prefix.dev/conda-forge&quot;</span><span class="p">]})</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">MirrorMiddleware</span><span class="p">()</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="p">([</span><span class="n">middleware</span><span class="p">])</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">Client</span><span class="p">()</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.networking.MirrorMiddleware.__init__--__span-0-1"><a id="rattler.networking.MirrorMiddleware.__init__--__codelineno-0-1" name="rattler.networking.MirrorMiddleware.__init__--__codelineno-0-1" href="#rattler.networking.MirrorMiddleware.__init__--__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler.networking</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
+</span><span id="rattler.networking.MirrorMiddleware.__init__--__span-0-2"><a id="rattler.networking.MirrorMiddleware.__init__--__codelineno-0-2" name="rattler.networking.MirrorMiddleware.__init__--__codelineno-0-2" href="#rattler.networking.MirrorMiddleware.__init__--__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span> <span class="o">=</span> <span class="n">MirrorMiddleware</span><span class="p">({</span><span class="s2">"https://conda.anaconda.org/conda-forge"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"https://repo.prefix.dev/conda-forge"</span><span class="p">]})</span>
+</span><span id="rattler.networking.MirrorMiddleware.__init__--__span-0-3"><a id="rattler.networking.MirrorMiddleware.__init__--__codelineno-0-3" name="rattler.networking.MirrorMiddleware.__init__--__codelineno-0-3" href="#rattler.networking.MirrorMiddleware.__init__--__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span>
+</span><span id="rattler.networking.MirrorMiddleware.__init__--__span-0-4"><a id="rattler.networking.MirrorMiddleware.__init__--__codelineno-0-4" name="rattler.networking.MirrorMiddleware.__init__--__codelineno-0-4" href="#rattler.networking.MirrorMiddleware.__init__--__codelineno-0-4"></a><span class="n">MirrorMiddleware</span><span class="p">()</span>
+</span><span id="rattler.networking.MirrorMiddleware.__init__--__span-0-5"><a id="rattler.networking.MirrorMiddleware.__init__--__codelineno-0-5" name="rattler.networking.MirrorMiddleware.__init__--__codelineno-0-5" href="#rattler.networking.MirrorMiddleware.__init__--__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="p">([</span><span class="n">middleware</span><span class="p">])</span>
+</span><span id="rattler.networking.MirrorMiddleware.__init__--__span-0-6"><a id="rattler.networking.MirrorMiddleware.__init__--__codelineno-0-6" name="rattler.networking.MirrorMiddleware.__init__--__codelineno-0-6" href="#rattler.networking.MirrorMiddleware.__init__--__codelineno-0-6"></a><span class="n">Client</span><span class="p">()</span>
+</span><span id="rattler.networking.MirrorMiddleware.__init__--__span-0-7"><a id="rattler.networking.MirrorMiddleware.__init__--__codelineno-0-7" name="rattler.networking.MirrorMiddleware.__init__--__codelineno-0-7" href="#rattler.networking.MirrorMiddleware.__init__--__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
 
@@ -5686,10 +5686,10 @@ replace the original mirror with.</p>
 
         <p>Returns a representation of the Middleware</p>
 <h5 id="rattler.networking.MirrorMiddleware.__repr__--examples">Examples<a class="headerlink" href="#rattler.networking.MirrorMiddleware.__repr__--examples" title="Permanent link">#</a></h5>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span> <span class="o">=</span> <span class="n">MirrorMiddleware</span><span class="p">({</span><span class="s2">&quot;https://conda.anaconda.org/conda-forge&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://repo.prefix.dev/conda-forge&quot;</span><span class="p">]})</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">MirrorMiddleware</span><span class="p">()</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.networking.MirrorMiddleware.__repr__--__span-0-1"><a id="rattler.networking.MirrorMiddleware.__repr__--__codelineno-0-1" name="rattler.networking.MirrorMiddleware.__repr__--__codelineno-0-1" href="#rattler.networking.MirrorMiddleware.__repr__--__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span> <span class="o">=</span> <span class="n">MirrorMiddleware</span><span class="p">({</span><span class="s2">"https://conda.anaconda.org/conda-forge"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"https://repo.prefix.dev/conda-forge"</span><span class="p">]})</span>
+</span><span id="rattler.networking.MirrorMiddleware.__repr__--__span-0-2"><a id="rattler.networking.MirrorMiddleware.__repr__--__codelineno-0-2" name="rattler.networking.MirrorMiddleware.__repr__--__codelineno-0-2" href="#rattler.networking.MirrorMiddleware.__repr__--__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span>
+</span><span id="rattler.networking.MirrorMiddleware.__repr__--__span-0-3"><a id="rattler.networking.MirrorMiddleware.__repr__--__codelineno-0-3" name="rattler.networking.MirrorMiddleware.__repr__--__codelineno-0-3" href="#rattler.networking.MirrorMiddleware.__repr__--__codelineno-0-3"></a><span class="n">MirrorMiddleware</span><span class="p">()</span>
+</span><span id="rattler.networking.MirrorMiddleware.__repr__--__span-0-4"><a id="rattler.networking.MirrorMiddleware.__repr__--__codelineno-0-4" name="rattler.networking.MirrorMiddleware.__repr__--__codelineno-0-4" href="#rattler.networking.MirrorMiddleware.__repr__--__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
 
@@ -5760,13 +5760,13 @@ credentials stored for the registry's host in the authentication storage.</p>
 
         <p>Returns a representation of the Middleware</p>
 <h5 id="rattler.networking.OciMiddleware.__repr__--examples">Examples<a class="headerlink" href="#rattler.networking.OciMiddleware.__repr__--examples" title="Permanent link">#</a></h5>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler.networking</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span> <span class="o">=</span> <span class="n">OciMiddleware</span><span class="p">()</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">OciMiddleware</span><span class="p">()</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="p">([</span><span class="n">middleware</span><span class="p">])</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">Client</span><span class="p">()</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.networking.OciMiddleware.__repr__--__span-0-1"><a id="rattler.networking.OciMiddleware.__repr__--__codelineno-0-1" name="rattler.networking.OciMiddleware.__repr__--__codelineno-0-1" href="#rattler.networking.OciMiddleware.__repr__--__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler.networking</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
+</span><span id="rattler.networking.OciMiddleware.__repr__--__span-0-2"><a id="rattler.networking.OciMiddleware.__repr__--__codelineno-0-2" name="rattler.networking.OciMiddleware.__repr__--__codelineno-0-2" href="#rattler.networking.OciMiddleware.__repr__--__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span> <span class="o">=</span> <span class="n">OciMiddleware</span><span class="p">()</span>
+</span><span id="rattler.networking.OciMiddleware.__repr__--__span-0-3"><a id="rattler.networking.OciMiddleware.__repr__--__codelineno-0-3" name="rattler.networking.OciMiddleware.__repr__--__codelineno-0-3" href="#rattler.networking.OciMiddleware.__repr__--__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span>
+</span><span id="rattler.networking.OciMiddleware.__repr__--__span-0-4"><a id="rattler.networking.OciMiddleware.__repr__--__codelineno-0-4" name="rattler.networking.OciMiddleware.__repr__--__codelineno-0-4" href="#rattler.networking.OciMiddleware.__repr__--__codelineno-0-4"></a><span class="n">OciMiddleware</span><span class="p">()</span>
+</span><span id="rattler.networking.OciMiddleware.__repr__--__span-0-5"><a id="rattler.networking.OciMiddleware.__repr__--__codelineno-0-5" name="rattler.networking.OciMiddleware.__repr__--__codelineno-0-5" href="#rattler.networking.OciMiddleware.__repr__--__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="p">([</span><span class="n">middleware</span><span class="p">])</span>
+</span><span id="rattler.networking.OciMiddleware.__repr__--__span-0-6"><a id="rattler.networking.OciMiddleware.__repr__--__codelineno-0-6" name="rattler.networking.OciMiddleware.__repr__--__codelineno-0-6" href="#rattler.networking.OciMiddleware.__repr__--__codelineno-0-6"></a><span class="n">Client</span><span class="p">()</span>
+</span><span id="rattler.networking.OciMiddleware.__repr__--__span-0-7"><a id="rattler.networking.OciMiddleware.__repr__--__codelineno-0-7" name="rattler.networking.OciMiddleware.__repr__--__codelineno-0-7" href="#rattler.networking.OciMiddleware.__repr__--__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
 
@@ -5799,14 +5799,14 @@ credentials stored for the registry's host in the authentication storage.</p>
 
         <p>Middleware that retries transient HTTP errors with exponential back-off.</p>
 <h4 id="rattler.networking.RetryMiddleware--examples">Examples<a class="headerlink" href="#rattler.networking.RetryMiddleware--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler.networking</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span><span class="p">,</span> <span class="n">RetryMiddleware</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">RetryMiddleware</span><span class="p">()</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">RetryMiddleware</span><span class="p">(</span><span class="n">max_retries</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">RetryMiddleware</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">RetryMiddleware</span><span class="p">(</span><span class="n">max_retries</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="p">([</span><span class="n">RetryMiddleware</span><span class="p">()])</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">Client</span><span class="p">()</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="o">&gt;&gt;&gt;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.networking.RetryMiddleware--__span-0-1"><a id="rattler.networking.RetryMiddleware--__codelineno-0-1" name="rattler.networking.RetryMiddleware--__codelineno-0-1" href="#rattler.networking.RetryMiddleware--__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler.networking</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span><span class="p">,</span> <span class="n">RetryMiddleware</span>
+</span><span id="rattler.networking.RetryMiddleware--__span-0-2"><a id="rattler.networking.RetryMiddleware--__codelineno-0-2" name="rattler.networking.RetryMiddleware--__codelineno-0-2" href="#rattler.networking.RetryMiddleware--__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">RetryMiddleware</span><span class="p">()</span>
+</span><span id="rattler.networking.RetryMiddleware--__span-0-3"><a id="rattler.networking.RetryMiddleware--__codelineno-0-3" name="rattler.networking.RetryMiddleware--__codelineno-0-3" href="#rattler.networking.RetryMiddleware--__codelineno-0-3"></a><span class="n">RetryMiddleware</span><span class="p">(</span><span class="n">max_retries</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+</span><span id="rattler.networking.RetryMiddleware--__span-0-4"><a id="rattler.networking.RetryMiddleware--__codelineno-0-4" name="rattler.networking.RetryMiddleware--__codelineno-0-4" href="#rattler.networking.RetryMiddleware--__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">RetryMiddleware</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+</span><span id="rattler.networking.RetryMiddleware--__span-0-5"><a id="rattler.networking.RetryMiddleware--__codelineno-0-5" name="rattler.networking.RetryMiddleware--__codelineno-0-5" href="#rattler.networking.RetryMiddleware--__codelineno-0-5"></a><span class="n">RetryMiddleware</span><span class="p">(</span><span class="n">max_retries</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+</span><span id="rattler.networking.RetryMiddleware--__span-0-6"><a id="rattler.networking.RetryMiddleware--__codelineno-0-6" name="rattler.networking.RetryMiddleware--__codelineno-0-6" href="#rattler.networking.RetryMiddleware--__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="p">([</span><span class="n">RetryMiddleware</span><span class="p">()])</span>
+</span><span id="rattler.networking.RetryMiddleware--__span-0-7"><a id="rattler.networking.RetryMiddleware--__codelineno-0-7" name="rattler.networking.RetryMiddleware--__codelineno-0-7" href="#rattler.networking.RetryMiddleware--__codelineno-0-7"></a><span class="n">Client</span><span class="p">()</span>
+</span><span id="rattler.networking.RetryMiddleware--__span-0-8"><a id="rattler.networking.RetryMiddleware--__codelineno-0-8" name="rattler.networking.RetryMiddleware--__codelineno-0-8" href="#rattler.networking.RetryMiddleware--__codelineno-0-8"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
 
@@ -5855,13 +5855,13 @@ credentials stored for the registry's host in the authentication storage.</p>
 
         <p>Middleware to work with s3:// URLs</p>
 <h4 id="rattler.networking.S3Middleware--examples">Examples<a class="headerlink" href="#rattler.networking.S3Middleware--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler.networking</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span> <span class="o">=</span> <span class="n">S3Middleware</span><span class="p">()</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">S3Middleware</span><span class="p">()</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="p">([</span><span class="n">middleware</span><span class="p">])</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">Client</span><span class="p">()</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.networking.S3Middleware--__span-0-1"><a id="rattler.networking.S3Middleware--__codelineno-0-1" name="rattler.networking.S3Middleware--__codelineno-0-1" href="#rattler.networking.S3Middleware--__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler.networking</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
+</span><span id="rattler.networking.S3Middleware--__span-0-2"><a id="rattler.networking.S3Middleware--__codelineno-0-2" name="rattler.networking.S3Middleware--__codelineno-0-2" href="#rattler.networking.S3Middleware--__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span> <span class="o">=</span> <span class="n">S3Middleware</span><span class="p">()</span>
+</span><span id="rattler.networking.S3Middleware--__span-0-3"><a id="rattler.networking.S3Middleware--__codelineno-0-3" name="rattler.networking.S3Middleware--__codelineno-0-3" href="#rattler.networking.S3Middleware--__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">middleware</span>
+</span><span id="rattler.networking.S3Middleware--__span-0-4"><a id="rattler.networking.S3Middleware--__codelineno-0-4" name="rattler.networking.S3Middleware--__codelineno-0-4" href="#rattler.networking.S3Middleware--__codelineno-0-4"></a><span class="n">S3Middleware</span><span class="p">()</span>
+</span><span id="rattler.networking.S3Middleware--__span-0-5"><a id="rattler.networking.S3Middleware--__codelineno-0-5" name="rattler.networking.S3Middleware--__codelineno-0-5" href="#rattler.networking.S3Middleware--__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">Client</span><span class="p">([</span><span class="n">middleware</span><span class="p">])</span>
+</span><span id="rattler.networking.S3Middleware--__span-0-6"><a id="rattler.networking.S3Middleware--__codelineno-0-6" name="rattler.networking.S3Middleware--__codelineno-0-6" href="#rattler.networking.S3Middleware--__codelineno-0-6"></a><span class="n">Client</span><span class="p">()</span>
+</span><span id="rattler.networking.S3Middleware--__span-0-7"><a id="rattler.networking.S3Middleware--__codelineno-0-7" name="rattler.networking.S3Middleware--__codelineno-0-7" href="#rattler.networking.S3Middleware--__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
 
@@ -5940,10 +5940,10 @@ credentials stored for the registry's host in the authentication storage.</p>
 
 <a href="#rattler.networking.fetch_repo_data.CacheAction" class="headerlink" title="Permanent link">#</a></h2>
 <div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">CacheAction</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="s2">&quot;cache-or-fetch&quot;</span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="s2">&quot;use-cache-only&quot;</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="s2">&quot;force-cache-only&quot;</span><span class="p">,</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="s2">&quot;no-cache&quot;</span><span class="p">,</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="s2">"cache-or-fetch"</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="s2">"use-cache-only"</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="s2">"force-cache-only"</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="s2">"no-cache"</span><span class="p">,</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">]</span>
 </span></code></pre></div>
 
@@ -5972,7 +5972,7 @@ and <code>no-cache</code> always re-fetches.</p>
 
 <a href="#rattler.networking.fetch_repo_data.Variant" class="headerlink" title="Permanent link">#</a></h2>
 <div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">Variant</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="s2">&quot;after-patches&quot;</span><span class="p">,</span> <span class="s2">&quot;from-packages&quot;</span><span class="p">,</span> <span class="s2">&quot;current&quot;</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="s2">"after-patches"</span><span class="p">,</span> <span class="s2">"from-packages"</span><span class="p">,</span> <span class="s2">"current"</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">]</span>
 </span></code></pre></div>
 
@@ -6062,7 +6062,7 @@ and <code>no-cache</code> always re-fetches.</p>
   </span>
 
 <a href="#rattler.networking.fetch_repo_data.FetchRepoDataOptions.cache_action" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">cache_action</span> <span class="o">=</span> <span class="s1">&#39;cache-or-fetch&#39;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">cache_action</span> <span class="o">=</span> <span class="s1">'cache-or-fetch'</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -6118,7 +6118,7 @@ and <code>no-cache</code> always re-fetches.</p>
   </span>
 
 <a href="#rattler.networking.fetch_repo_data.FetchRepoDataOptions.variant" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">variant</span> <span class="o">=</span> <span class="s1">&#39;after-patches&#39;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">variant</span> <span class="o">=</span> <span class="s1">'after-patches'</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -6542,10 +6542,10 @@ and <code>no-cache</code> always re-fetches.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.tabs.link", "content.code.copy", "content.action.edit", "content.code.annotate", "navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.sections", "navigation.top", "navigation.footer"], "search": "../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.tabs.link", "content.code.copy", "content.action.edit", "content.code.annotate", "navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.sections", "navigation.top", "navigation.footer"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

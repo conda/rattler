@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../assets/rattler-logo.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -29,7 +29,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -4628,7 +4628,7 @@
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">Issuer</span><span class="p">,</span> <span class="n">Publisher</span><span class="p">,</span> <span class="n">VerificationPolicy</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">publisher</span> <span class="o">=</span> <span class="n">Publisher</span><span class="p">(</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">identity</span><span class="o">=</span><span class="s2">&quot;https://github.com/conda/rattler/*&quot;</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">identity</span><span class="o">=</span><span class="s2">"https://github.com/conda/rattler/*"</span><span class="p">,</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">issuer</span><span class="o">=</span><span class="n">Issuer</span><span class="o">.</span><span class="n">github_actions</span><span class="p">(),</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">policy</span> <span class="o">=</span> <span class="n">VerificationPolicy</span><span class="o">.</span><span class="n">require</span><span class="p">(</span><span class="n">publisher</span><span class="p">)</span>
@@ -4641,7 +4641,7 @@
 <p>By default the production Sigstore trusted root is fetched over TUF the first time a bundle is verified, which needs access to <code>tuf-repo-cdn.sigstore.dev</code>. Passing a <code>TrustedRoot</code> verifies against that trust material instead, so the only remaining request is the sidecar download.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrustedRoot</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">trusted_root</span> <span class="o">=</span> <span class="n">TrustedRoot</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span><span class="s2">&quot;trusted_root.json&quot;</span><span class="p">)</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">trusted_root</span> <span class="o">=</span> <span class="n">TrustedRoot</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span><span class="s2">"trusted_root.json"</span><span class="p">)</span>
 </span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">outcome</span> <span class="o">=</span> <span class="k">await</span> <span class="n">verify_attestation</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">trusted_root</span><span class="o">=</span><span class="n">trusted_root</span><span class="p">)</span>
 </span></code></pre></div>
 <p>A pinned root stays usable as the Sigstore infrastructure rotates its keys, because a bundle's certificate chain is validated against the point in time it was signed at. It does not pick up new certificate authorities, so a bundle issued under one the file does not carry fails to verify until the file is refreshed.</p>
@@ -4984,10 +4984,10 @@ the given trust material, so it can run against a pinned
 
         <p>Return a string representation of this trusted root.</p>
 <h5 id="rattler.sigstore.TrustedRoot.__repr__--examples">Examples<a class="headerlink" href="#rattler.sigstore.TrustedRoot.__repr__--examples" title="Permanent link">#</a></h5>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">root</span> <span class="o">=</span> <span class="n">TrustedRoot</span><span class="o">.</span><span class="n">from_json</span><span class="p">(</span><span class="s1">&#39;{&quot;mediaType&quot;: &quot;application/vnd.dev.sigstore.trustedroot+json;version=0.1&quot;}&#39;</span><span class="p">)</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="nb">repr</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="s1">&#39;TrustedRoot()&#39;</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.sigstore.TrustedRoot.__repr__--__span-0-1"><a id="rattler.sigstore.TrustedRoot.__repr__--__codelineno-0-1" name="rattler.sigstore.TrustedRoot.__repr__--__codelineno-0-1" href="#rattler.sigstore.TrustedRoot.__repr__--__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">root</span> <span class="o">=</span> <span class="n">TrustedRoot</span><span class="o">.</span><span class="n">from_json</span><span class="p">(</span><span class="s1">'{"mediaType": "application/vnd.dev.sigstore.trustedroot+json;version=0.1"}'</span><span class="p">)</span>
+</span><span id="rattler.sigstore.TrustedRoot.__repr__--__span-0-2"><a id="rattler.sigstore.TrustedRoot.__repr__--__codelineno-0-2" name="rattler.sigstore.TrustedRoot.__repr__--__codelineno-0-2" href="#rattler.sigstore.TrustedRoot.__repr__--__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="nb">repr</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
+</span><span id="rattler.sigstore.TrustedRoot.__repr__--__span-0-3"><a id="rattler.sigstore.TrustedRoot.__repr__--__codelineno-0-3" name="rattler.sigstore.TrustedRoot.__repr__--__codelineno-0-3" href="#rattler.sigstore.TrustedRoot.__repr__--__codelineno-0-3"></a><span class="s1">'TrustedRoot()'</span>
+</span><span id="rattler.sigstore.TrustedRoot.__repr__--__span-0-4"><a id="rattler.sigstore.TrustedRoot.__repr__--__codelineno-0-4" name="rattler.sigstore.TrustedRoot.__repr__--__codelineno-0-4" href="#rattler.sigstore.TrustedRoot.__repr__--__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
 
@@ -5027,10 +5027,10 @@ and ages with the installed version of py-rattler. Prefer
 <code>trusted_root.json</code> you refresh yourself if you need a pinned root that
 can be updated independently.</p>
 <h5 id="rattler.sigstore.TrustedRoot.embedded--examples">Examples<a class="headerlink" href="#rattler.sigstore.TrustedRoot.embedded--examples" title="Permanent link">#</a></h5>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">root</span> <span class="o">=</span> <span class="n">TrustedRoot</span><span class="o">.</span><span class="n">embedded</span><span class="p">()</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">root</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">TrustedRoot</span><span class="p">()</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.sigstore.TrustedRoot.embedded--__span-0-1"><a id="rattler.sigstore.TrustedRoot.embedded--__codelineno-0-1" name="rattler.sigstore.TrustedRoot.embedded--__codelineno-0-1" href="#rattler.sigstore.TrustedRoot.embedded--__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">root</span> <span class="o">=</span> <span class="n">TrustedRoot</span><span class="o">.</span><span class="n">embedded</span><span class="p">()</span>
+</span><span id="rattler.sigstore.TrustedRoot.embedded--__span-0-2"><a id="rattler.sigstore.TrustedRoot.embedded--__codelineno-0-2" name="rattler.sigstore.TrustedRoot.embedded--__codelineno-0-2" href="#rattler.sigstore.TrustedRoot.embedded--__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">root</span>
+</span><span id="rattler.sigstore.TrustedRoot.embedded--__span-0-3"><a id="rattler.sigstore.TrustedRoot.embedded--__codelineno-0-3" name="rattler.sigstore.TrustedRoot.embedded--__codelineno-0-3" href="#rattler.sigstore.TrustedRoot.embedded--__codelineno-0-3"></a><span class="n">TrustedRoot</span><span class="p">()</span>
+</span><span id="rattler.sigstore.TrustedRoot.embedded--__span-0-4"><a id="rattler.sigstore.TrustedRoot.embedded--__codelineno-0-4" name="rattler.sigstore.TrustedRoot.embedded--__codelineno-0-4" href="#rattler.sigstore.TrustedRoot.embedded--__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
 
@@ -5080,10 +5080,10 @@ can be updated independently.</p>
       </tbody>
     </table>
         <h5 id="rattler.sigstore.TrustedRoot.from_json--examples">Examples<a class="headerlink" href="#rattler.sigstore.TrustedRoot.from_json--examples" title="Permanent link">#</a></h5>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">root</span> <span class="o">=</span> <span class="n">TrustedRoot</span><span class="o">.</span><span class="n">from_json</span><span class="p">(</span><span class="s1">&#39;{&quot;mediaType&quot;: &quot;application/vnd.dev.sigstore.trustedroot+json;version=0.1&quot;}&#39;</span><span class="p">)</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">root</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">TrustedRoot</span><span class="p">()</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.sigstore.TrustedRoot.from_json--__span-0-1"><a id="rattler.sigstore.TrustedRoot.from_json--__codelineno-0-1" name="rattler.sigstore.TrustedRoot.from_json--__codelineno-0-1" href="#rattler.sigstore.TrustedRoot.from_json--__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">root</span> <span class="o">=</span> <span class="n">TrustedRoot</span><span class="o">.</span><span class="n">from_json</span><span class="p">(</span><span class="s1">'{"mediaType": "application/vnd.dev.sigstore.trustedroot+json;version=0.1"}'</span><span class="p">)</span>
+</span><span id="rattler.sigstore.TrustedRoot.from_json--__span-0-2"><a id="rattler.sigstore.TrustedRoot.from_json--__codelineno-0-2" name="rattler.sigstore.TrustedRoot.from_json--__codelineno-0-2" href="#rattler.sigstore.TrustedRoot.from_json--__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">root</span>
+</span><span id="rattler.sigstore.TrustedRoot.from_json--__span-0-3"><a id="rattler.sigstore.TrustedRoot.from_json--__codelineno-0-3" name="rattler.sigstore.TrustedRoot.from_json--__codelineno-0-3" href="#rattler.sigstore.TrustedRoot.from_json--__codelineno-0-3"></a><span class="n">TrustedRoot</span><span class="p">()</span>
+</span><span id="rattler.sigstore.TrustedRoot.from_json--__span-0-4"><a id="rattler.sigstore.TrustedRoot.from_json--__codelineno-0-4" name="rattler.sigstore.TrustedRoot.from_json--__codelineno-0-4" href="#rattler.sigstore.TrustedRoot.from_json--__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
 
@@ -5817,10 +5817,10 @@ trust material instead, leaving the sidecar download as the only request.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.tabs.link", "content.code.copy", "content.action.edit", "content.code.annotate", "navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.sections", "navigation.top", "navigation.footer"], "search": "../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.tabs.link", "content.code.copy", "content.action.edit", "content.code.annotate", "navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.sections", "navigation.top", "navigation.footer"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>
