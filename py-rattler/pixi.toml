@@ -32,7 +32,7 @@ env = { MATURIN_PEP517_ARGS = "--locked" }
 
 [feature.test.dependencies]
 py-rattler = { path = "." }
-python = "3.10.*"
+python = "3.15.*"
 boto3 = "*"
 requests = ">=2.32.3,<3"
 types-requests = ">=2.32,<3"
