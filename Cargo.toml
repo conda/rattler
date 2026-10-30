@@ -36,7 +36,7 @@ async-compression = { version = "0.4", features = [
   "zstd",
 ] }
 async-fd-lock = "0.2"
-async_http_range_reader = { package = "astral_async_http_range_reader", version = "0.11" }
+async_http_range_reader = { package = "astral_async_http_range_reader", version = "0.12" }
 fs4 = "1"
 async-once-cell = "0.5"
 async-trait = "0.1"
