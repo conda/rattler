@@ -75,7 +75,7 @@ dirs = "6"
 dbus-secret-service-keyring-store = { version = "1", default-features = false }
 dunce = "1"
 enum_dispatch = "0.3"
-fancy-regex = "0.18"
+fancy-regex = "0.19"
 filetime = "0.2"
 fs-err = { version = "3" }
 fslock = "0.2"
