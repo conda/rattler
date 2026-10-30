@@ -5,7 +5,7 @@ use std::sync::Arc;
 use cfg_if::cfg_if;
 use http::StatusCode;
 use rattler_conda_types::{
-    ChannelUrl, PackageRecord, RepoDataRecord, Shard, UrlOrPath, WhlPackageRecord,
+    ChannelUrl, PackageName, PackageRecord, RepoDataRecord, Shard, UrlOrPath, WhlPackageRecord,
     package::{CondaArchiveType, DistArchiveIdentifier, DistArchiveType, WheelArchiveType},
 };
 use rattler_redaction::Redact;
@@ -88,11 +88,20 @@ async fn decode_zst_bytes_async<R: AsRef<[u8]> + Send + 'static>(
     simple_spawn_blocking::tokio::run_blocking_task(decode).await
 }
 
-/// Parses the records of a shard. Removed packages are dropped, and a file
-/// that is listed both in a legacy map and in `v3` is described by its `v3`
-/// entry. The records of every bucket are returned.
+/// Parses the records of `package_name` from a shard. Removed packages are
+/// dropped, and a file that is listed both in a legacy map and in `v3` is
+/// described by its `v3` entry. The records of every bucket are returned.
+///
+/// A shard is looked up by package name, but nothing stops a channel from
+/// listing other packages in it. `conda-pypi`, for example, serves alias shards
+/// under the upstream Python project names whose records carry the conda
+/// package name, and those may lag behind the canonical shard. Like a
+/// `repodata.json` lookup, only the records and removed entries of the
+/// requested package are returned, so an alias cannot introduce duplicate or
+/// stale records of another package.
 async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
     bytes: R,
+    package_name: PackageName,
     channel_base_url: ChannelUrl,
     base_url: Url,
 ) -> Result<FetchedPackage, GatewayError> {
@@ -198,9 +207,24 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
             }));
         }
 
+        let requested = package_name.as_normalized();
+        let foreign_records = records
+            .iter()
+            .filter(|record| record.package_record.name.as_normalized() != requested)
+            .count();
+        if foreign_records > 0 {
+            tracing::debug!(
+                package_name = requested,
+                foreign_records,
+                "ignoring records of other packages in the shard"
+            );
+        }
+        records.retain(|record| record.package_record.name.as_normalized() == requested);
+
         // Sort the removed set so the result does not depend on hash order.
         let mut removed = removed
             .into_iter()
+            .filter(|identifier| identifier.identifier.name.eq_ignore_ascii_case(requested))
             .map(|identifier| {
                 Ok(RemovedPackage {
                     url: package_url(&identifier.to_file_name())?,
@@ -239,7 +263,7 @@ mod tests {
     use itertools::Itertools;
     use rattler_conda_types::{
         Channel, PackageName, PackageRecord, RepodataRevisions, Shard, ShardedRepodata,
-        ShardedSubdirInfo, Version,
+        ShardedSubdirInfo, UrlOrPath, Version, WhlPackageRecord,
         package::{BuildString, DistArchiveIdentifier},
     };
     use rattler_digest::{Sha256, parse_digest_from_hex};
@@ -816,6 +840,7 @@ mod tests {
         let base_url = Url::parse("https://example.com/channel/linux-64/").unwrap();
         let records = super::parse_records(
             rmp_serde::to_vec_named(&shard).unwrap(),
+            PackageName::new_unchecked("foo"),
             channel.base_url.clone(),
             base_url,
         )
@@ -841,6 +866,61 @@ mod tests {
         https://example.com/channel/linux-64/foo-0.1-0.tar.bz2 foo-0.1-0.tar.bz2 https://example.com/channel/
         https://example.com/channel/linux-64/foo-2.0-0.conda foo-2.0-0.conda https://example.com/channel/
         ");
+    }
+
+    /// A shard may list packages other than the one it is looked up by, as
+    /// the alias shards of conda-pypi do. Only the records and removed entries
+    /// of the requested package are returned.
+    #[tokio::test]
+    async fn parse_records_keeps_only_the_requested_package() {
+        let record = |name: &str, version: &str| {
+            PackageRecord::new(
+                PackageName::new_unchecked(name),
+                Version::from_str(version).unwrap(),
+                "0".parse::<BuildString>().unwrap(),
+            )
+        };
+        let identifier =
+            |file_name: &str| DistArchiveIdentifier::try_from_filename(file_name).unwrap();
+
+        let mut shard = Shard::default();
+        shard
+            .conda_packages
+            .insert(identifier("foo-1.0-0.conda"), record("foo", "1.0"));
+        shard.conda_packages.insert(
+            identifier("python-foo-1.0-0.conda"),
+            record("python-foo", "1.0"),
+        );
+        shard.v3.whl.insert(
+            identifier("python-foo-2.0-py3_none_any_0.whl").identifier,
+            WhlPackageRecord {
+                url: UrlOrPath::Path("foo-2.0-py3-none-any.whl".into()),
+                package_record: record("python-foo", "2.0"),
+            },
+        );
+        shard.removed.insert(identifier("foo-0.1-0.tar.bz2"));
+        shard.removed.insert(identifier("python-foo-0.1-0.tar.bz2"));
+
+        let channel = Channel::from_url(Url::parse("https://example.com/channel/").unwrap());
+        let base_url = Url::parse("https://example.com/channel/noarch/").unwrap();
+        let records = super::parse_records(
+            rmp_serde::to_vec_named(&shard).unwrap(),
+            PackageName::new_unchecked("foo"),
+            channel.base_url.clone(),
+            base_url,
+        )
+        .await
+        .unwrap();
+
+        let urls = records.records().map(|(_, record)| &record.url).join("\n");
+        insta::assert_snapshot!(urls, @"https://example.com/channel/noarch/foo-1.0-0.conda");
+
+        let removed = records
+            .removed()
+            .iter()
+            .map(|removed| removed.identifier.to_string())
+            .join("\n");
+        insta::assert_snapshot!(removed, @"foo-0.1-0.tar.bz2");
     }
 
     /// Records which downloads were started and which of those were reported
