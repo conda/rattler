@@ -214,15 +214,14 @@ dependencies = [
 
 [[package]]
 name = "astral_async_http_range_reader"
-version = "0.11.1"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d5ba70a583d0819c44078238014752e85ebca0cb398ab712bbd2e40fb754b80"
+checksum = "f43a0c8763a14527a14bc40b6294565aab998a8376e4e71880287d1867823d4c"
 dependencies = [
  "astral-reqwest-middleware",
  "futures",
  "http-content-range",
  "itertools 0.14.0",
- "memmap2",
  "reqwest",
  "thiserror 2.0.21",
  "tokio",
