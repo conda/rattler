@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.55.3](https://github.com/conda/rattler/compare/rattler-v0.55.2...rattler-v0.55.3) - 2026-10-30
+
+### Fixed
+
+- support raw wheel script shebangs ([#3039](https://github.com/conda/rattler/pull/3039))
+
 ## [0.55.2](https://github.com/conda/rattler/compare/rattler-v0.55.1...rattler-v0.55.2) - 2026-10-28
 
 ### Added
