@@ -182,6 +182,7 @@ impl SubdirClient for ShardedSubdir {
         // Parse the records from the shard
         parse_records(
             shard_bytes,
+            name.clone(),
             self.channel.base_url.clone(),
             self.package_base_url.clone(),
         )

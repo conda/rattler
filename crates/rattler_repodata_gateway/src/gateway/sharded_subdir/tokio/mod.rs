@@ -233,6 +233,7 @@ impl SubdirClient for ShardedSubdir {
                     // Decode the cached shard
                     return parse_records(
                         cached_bytes,
+                        name.clone(),
                         self.channel.base_url.clone(),
                         self.package_base_url.clone(),
                     )
@@ -310,6 +311,7 @@ impl SubdirClient for ShardedSubdir {
         // Create a future to parse the records from the shard
         let parse_records_fut = parse_records(
             shard_bytes,
+            name.clone(),
             self.channel.base_url.clone(),
             self.package_base_url.clone(),
         );
