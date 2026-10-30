@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.55.4](https://github.com/conda/rattler/compare/rattler-v0.55.3...rattler-v0.55.4) - 2026-10-30
+
+### Fixed
+
+- *(install)* do not record sha256_in_prefix for softlinks ([#2983](https://github.com/conda/rattler/pull/2983))
+
 ## [0.55.3](https://github.com/conda/rattler/compare/rattler-v0.55.2...rattler-v0.55.3) - 2026-10-30
 
 ### Fixed

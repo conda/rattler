@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.2](https://github.com/conda/rattler/compare/rattler_upload-v0.15.1...rattler_upload-v0.15.2) - 2026-10-30
+
+### Other
+
+- bump rust to 1.99.0 ([#3030](https://github.com/conda/rattler/pull/3030))
+
 ## [0.15.1](https://github.com/conda/rattler/compare/rattler_upload-v0.15.0...rattler_upload-v0.15.1) - 2026-10-30
 
 ### Other

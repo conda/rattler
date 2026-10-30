@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0](https://github.com/conda/rattler/compare/rattler_cache-v0.11.1...rattler_cache-v0.12.0) - 2026-10-30
+
+### Fixed
+
+- *(cache)* [**breaking**] record the sha256 of fetched packages and don't reuse unhashed entries ([#2959](https://github.com/conda/rattler/pull/2959))
+
 ## [0.11.1](https://github.com/conda/rattler/compare/rattler_cache-v0.11.0...rattler_cache-v0.11.1) - 2026-10-30
 
 ### Other
