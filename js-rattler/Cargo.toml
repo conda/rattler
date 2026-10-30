@@ -46,7 +46,7 @@ reqwest-middleware = { package = "astral-reqwest-middleware", version = "0.5", d
 # We have transient dependencies on getrandom 0.2 and 0.3 which need WASM features enabled.
 [dependencies.getrandom_v02]
 package = "getrandom"
-version = "0.2"
+version = "0.4"
 features = ["js"]
 
 [dependencies.getrandom_v03]
