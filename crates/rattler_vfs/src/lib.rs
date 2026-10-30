@@ -1032,7 +1032,7 @@ fn mount_fuse(vfs: VirtualFS, config: &MountConfig) -> anyhow::Result<fuser::Bac
                 config.overlay_mismatch,
             )?;
             let adapter = FuseAdapter::new(overlay);
-            Ok(fuser::spawn_mount2(
+            Ok(fuser::spawn_mount(
                 adapter,
                 &config.mount_point,
                 &fuser_config,
@@ -1047,7 +1047,7 @@ fn mount_fuse(vfs: VirtualFS, config: &MountConfig) -> anyhow::Result<fuser::Bac
         }
         Mode::ReadOnly | Mode::ReadOnlyIfSupported => {
             let adapter = FuseAdapter::new(vfs);
-            Ok(fuser::spawn_mount2(
+            Ok(fuser::spawn_mount(
                 adapter,
                 &config.mount_point,
                 &fuser_config,
