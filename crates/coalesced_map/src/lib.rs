@@ -270,6 +270,17 @@ where
         })
     }
 
+    /// Returns true if any fetched value satisfies the predicate.
+    pub fn any<F>(&self, mut f: F) -> bool
+    where
+        F: FnMut(&K, &V) -> bool,
+    {
+        self.map.iter().any(|entry| match entry.value() {
+            PendingOrFetched::Fetched(v) => f(entry.key(), v),
+            PendingOrFetched::Pending(_) => false,
+        })
+    }
+
     /// Clears all entries matching the predicate, similar to `DashMap::retain`.
     pub fn retain<F>(&self, mut f: F)
     where
