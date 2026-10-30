@@ -9,7 +9,7 @@
 <p>On targets that rewrite shebangs (<a href="../../rattler_conda_types/subdir/enum.Subdir.html#method.is_unix" title="method rattler_conda_types::subdir::Subdir::is_unix"><code>Subdir::is_unix</code></a>) a file starting with
 <code>#!</code> has a shebang region (up to and including the first newline, or the
 whole file when there is none), transformed via the shared
-[<code>replace_shebang_region</code>] helper — the same code the installer uses, so an
+<a href="../../rattler/install/prefix_replacement/text/fn.replace_shebang_region.html" title="fn rattler::install::prefix_replacement::text::replace_shebang_region"><code>replace_shebang_region</code></a> helper — the same code the installer uses, so an
 over-long line collapses to <code>#!/usr/bin/env &lt;program&gt;</code> exactly as it would
 on install. The occurrences come from the installer’s own search, which
 excludes the region, covers every encoding and resolves overlapping matches

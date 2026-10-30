@@ -290,9 +290,9 @@
 <a href=#288 id=288 data-nosnippet>288</a>        }
 <a href=#289 id=289 data-nosnippet>289</a>    }
 <a href=#290 id=290 data-nosnippet>290</a>
-<a href=#291 id=291 data-nosnippet>291</a>    <span class="doccomment">/// Returns the declared entry size.
+<a href=#291 id=291 data-nosnippet>291</a>    <span class="doccomment">/// Returns the entry size, including any pax `size` override.
 <a href=#292 id=292 data-nosnippet>292</a>    </span><span class="kw">pub fn </span>size(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;u64, ExtractError&gt; {
-<a href=#293 id=293 data-nosnippet>293</a>        <span class="prelude-val">Ok</span>(<span class="self">self</span>.inner.header().size()<span class="question-mark">?</span>)
+<a href=#293 id=293 data-nosnippet>293</a>        <span class="prelude-val">Ok</span>(<span class="self">self</span>.inner.effective_size())
 <a href=#294 id=294 data-nosnippet>294</a>    }
 <a href=#295 id=295 data-nosnippet>295</a>
 <a href=#296 id=296 data-nosnippet>296</a>    <span class="doccomment">/// Returns the raw link target for a symbolic or hard link.
@@ -967,7 +967,7 @@
 <a href=#965 id=965 data-nosnippet>965</a>        )]));
 <a href=#966 id=966 data-nosnippet>966</a>    }
 <a href=#967 id=967 data-nosnippet>967</a>
-<a href=#968 id=968 data-nosnippet>968</a>    <span class="kw">let </span>size = entry.header().size()<span class="question-mark">?</span>;
+<a href=#968 id=968 data-nosnippet>968</a>    <span class="kw">let </span>size = entry.effective_size();
 <a href=#969 id=969 data-nosnippet>969</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = Vec::with_capacity(size.min(MAX_PREALLOC) <span class="kw">as </span>usize);
 <a href=#970 id=970 data-nosnippet>970</a>    entry.read_to_end(<span class="kw-2">&amp;mut </span>buf).<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#971 id=971 data-nosnippet>971</a>    <span class="prelude-val">Ok</span>(buf)
