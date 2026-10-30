@@ -2085,7 +2085,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.11.1"
+version = "0.12.0"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2118,7 +2118,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.58.0"
+version = "0.58.1"
 dependencies = [
  "ahash",
  "core-foundation",
@@ -2171,7 +2171,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "dirs",
  "fs-err",
@@ -2218,7 +2218,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.34.4"
+version = "0.34.5"
 dependencies = [
  "ambient-id",
  "astral-reqwest-middleware",
@@ -2244,7 +2244,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.28.1"
+version = "0.28.2"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-tokio-tar",
@@ -2294,7 +2294,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.37.2"
+version = "0.38.0"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2361,7 +2361,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "12.0.2"
+version = "12.0.3"
 dependencies = [
  "futures",
  "hex",
