@@ -177,6 +177,23 @@ pub struct CacheMetadataFile {
 }
 
 impl CacheMetadataFile {
+    /// Opens existing metadata without creating files or requesting write access.
+    /// Legacy cache entries may have no metadata sidecar.
+    pub async fn open_existing(path: &Path) -> Result<Option<Self>, PackageCacheLayerError> {
+        let path = path.to_path_buf();
+        simple_spawn_blocking::tokio::run_blocking_task(move || match std::fs::File::open(&path) {
+            Ok(file) => Ok(Some(Self {
+                file: Arc::new(file),
+            })),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(PackageCacheLayerError::LockError(
+                format!("failed to read cache metadata file: '{}'", path.display()),
+                error,
+            )),
+        })
+        .await
+    }
+
     /// Acquires a handle to the cache metadata file.
     ///
     /// Opens the file with both read and write permissions. Since concurrent access

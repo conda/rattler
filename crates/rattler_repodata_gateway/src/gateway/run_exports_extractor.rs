@@ -7,7 +7,12 @@ use std::{
 use bytes::Buf;
 use coalesced_map::CoalescedMap;
 use http::StatusCode;
-use rattler_conda_types::{RepoDataRecord, SubdirRunExportsJson, package::RunExportsJson};
+#[cfg(not(target_arch = "wasm32"))]
+use rattler_conda_types::package::PackageFile;
+use rattler_conda_types::{
+    RepoDataRecord, SubdirRunExportsJson,
+    package::{DistArchiveType, RunExportsJson},
+};
 use rattler_networking::LazyClient;
 use reqwest_middleware::ClientWithMiddleware;
 use thiserror::Error;
@@ -15,7 +20,7 @@ use tokio::sync::Semaphore;
 use tracing::instrument;
 use url::Url;
 
-use crate::reporter::{DownloadReporter, ResponseReporterExt};
+use crate::reporter::{DownloadProgressGuard, DownloadReporter, ResponseReporterExt};
 
 /// Type used for in-memory caching of `SubdirRunExportsJson`.
 pub(crate) type SubdirRunExportsCache = CoalescedMap<Url, Option<Arc<SubdirRunExportsJson>>>;
@@ -125,6 +130,11 @@ impl RunExportExtractor {
         record: &RepoDataRecord,
         progress_reporter: Option<Arc<dyn RunExportsReporter>>,
     ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
+        match record.identifier.archive_type {
+            DistArchiveType::Wheel(_) => return Ok(None),
+            DistArchiveType::Conda(_) => {}
+        }
+
         // If this is local package, try to read it directly from the package file
         // itself.
         if let Some(package_file) = Self::path_to_package(record) {
@@ -185,9 +195,8 @@ impl RunExportExtractor {
 
         let reporter = reporter
             .as_deref()
-            .and_then(RunExportsReporter::download_reporter)
-            .map(|reporter| (reporter, reporter.on_download_start(&url)));
-        let _progress_guard = DownloadProgressGuard::new(reporter, url.clone());
+            .and_then(RunExportsReporter::download_reporter);
+        let download = DownloadProgressGuard::start(reporter, &url);
 
         let request = client.get(url.clone());
         let response = request.send().await.and_then(|resp| {
@@ -196,7 +205,7 @@ impl RunExportExtractor {
         });
         match response {
             Ok(response) => {
-                let bytes_stream = match response.bytes_with_progress(reporter).await {
+                let bytes_stream = match response.bytes_with_progress(download.reporter()).await {
                     Ok(bytes) => bytes,
                     Err(err) => return Err(RunExportExtractorError::TransportError(url, err)),
                 };
@@ -245,9 +254,8 @@ impl RunExportExtractor {
         let request = client.get(url.clone());
         let reporter = reporter
             .as_deref()
-            .and_then(RunExportsReporter::download_reporter)
-            .map(|reporter| (reporter, reporter.on_download_start(&url)));
-        let _progress_guard = DownloadProgressGuard::new(reporter, url.clone());
+            .and_then(RunExportsReporter::download_reporter);
+        let download = DownloadProgressGuard::start(reporter, &url);
 
         let response = request.send().await.and_then(|resp| {
             resp.error_for_status()
@@ -255,7 +263,7 @@ impl RunExportExtractor {
         });
         match response {
             Ok(response) => {
-                let bytes_stream = match response.bytes_with_progress(reporter).await {
+                let bytes_stream = match response.bytes_with_progress(download.reporter()).await {
                     Ok(bytes) => bytes,
                     Err(err) => return Err(RunExportExtractorError::TransportError(url, err)),
                 };
@@ -325,15 +333,11 @@ impl RunExportExtractor {
         record: &RepoDataRecord,
         progress_reporter: Option<Arc<dyn RunExportsReporter>>,
     ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
-        use rattler_cache::package_cache::CacheKey;
-
         let (Some(package_cache), Some(client)) =
             (self.package_cache.as_ref(), self.client.as_ref())
         else {
             return Ok(None);
         };
-
-        let cache_key = CacheKey::from(&record.package_record);
 
         // Construct a reporter specifically for the run export download
         let reporter = progress_reporter
@@ -341,18 +345,18 @@ impl RunExportExtractor {
             .and_then(|reporter| reporter.create_package_download_reporter(record))
             .map(Arc::from);
 
-        match package_cache
+        let result = package_cache
             .get_or_fetch_from_url_with_retry(
-                cache_key,
+                &record.package_record,
                 record.url.clone(),
                 client.clone(),
                 rattler_networking::retry_policies::default_retry_policy(),
                 reporter,
                 self.max_concurrent_requests.clone(),
             )
-            .await
-        {
-            Ok(package_dir) => Ok(<RunExportsJson as rattler_conda_types::package::PackageFile>::from_package_directory(package_dir.path()).ok()),
+            .await;
+        match result {
+            Ok(package_dir) => Ok(RunExportsJson::from_package_directory(package_dir.path()).ok()),
             Err(e) => Err(e.into()),
         }
     }
@@ -403,26 +407,5 @@ impl RunExportExtractor {
         _path: &Path,
     ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
         Ok(None)
-    }
-}
-
-/// RAII guard to automatically complete download progress reporting when
-/// dropped.
-struct DownloadProgressGuard<'a> {
-    reporter: Option<(&'a dyn DownloadReporter, usize)>,
-    url: Url,
-}
-
-impl<'a> DownloadProgressGuard<'a> {
-    fn new(reporter: Option<(&'a dyn DownloadReporter, usize)>, url: Url) -> Self {
-        Self { reporter, url }
-    }
-}
-
-impl<'a> Drop for DownloadProgressGuard<'a> {
-    fn drop(&mut self) {
-        if let Some((reporter, index)) = self.reporter {
-            reporter.on_download_complete(&self.url, index);
-        }
     }
 }

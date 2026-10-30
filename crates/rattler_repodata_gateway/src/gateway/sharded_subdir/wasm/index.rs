@@ -7,8 +7,10 @@ use url::Url;
 
 use super::ShardedRepodata;
 use crate::{
-    GatewayError, Reporter, gateway::sharded_subdir::decode_zst_bytes_async,
-    reporter::ResponseReporterExt, utils::js_fetch::JsFetcher,
+    GatewayError, Reporter,
+    gateway::sharded_subdir::decode_zst_bytes_async,
+    reporter::{DownloadProgressGuard, ResponseReporterExt},
+    utils::js_fetch::JsFetcher,
 };
 
 const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
@@ -70,9 +72,8 @@ async fn fetch_index_bytes(
         .expect("failed to build request for shard index");
 
     // Do a fresh requests
-    let reporter = reporter
-        .and_then(Reporter::download_reporter)
-        .map(|r| (r, r.on_download_start(shards_url)));
+    let download =
+        DownloadProgressGuard::start(reporter.and_then(Reporter::download_reporter), shards_url);
     let response = client
         .client()
         .execute(
@@ -86,11 +87,9 @@ async fn fetch_index_bytes(
 
     // Read the bytes of the response
     let response_url = response.url().clone();
-    let bytes = response.bytes_with_progress(reporter).await?;
+    let bytes = response.bytes_with_progress(download.reporter()).await?;
 
-    if let Some((reporter, index)) = reporter {
-        reporter.on_download_complete(&response_url, index);
-    }
+    download.finish(&response_url);
 
     Ok((Bytes::from(bytes), response_url))
 }

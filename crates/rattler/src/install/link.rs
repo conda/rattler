@@ -20,10 +20,11 @@ use super::{ExternalSymlinkPolicy, Prefix};
 
 // Re-exported so that the prefix replacement functions are reachable from this public module.
 pub use prefix_replacement::{
-    InconsistentOffsetsError, OffsetReplaceError, copy_and_replace_cstring_placeholder,
-    copy_and_replace_cstring_placeholder_offsets, copy_and_replace_placeholders,
-    copy_and_replace_placeholders_with_offsets, copy_and_replace_textual_placeholder,
-    copy_and_replace_textual_placeholder_offsets,
+    CStringOccurrences, InconsistentOffsetsError, OffsetReplaceError, TextOccurrence,
+    copy_and_replace_cstring_placeholder, copy_and_replace_cstring_placeholder_offsets,
+    copy_and_replace_placeholders, copy_and_replace_placeholders_with_offsets,
+    copy_and_replace_textual_placeholder, copy_and_replace_textual_placeholder_offsets,
+    find_cstring_occurrences, find_text_occurrences, replace_shebang_region,
 };
 
 /// Describes the method to "link" a file from the source directory (or the cache directory) to the

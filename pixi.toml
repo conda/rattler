@@ -50,7 +50,7 @@ openssl = "~=3.1"
 make = "~=4.3"
 pkg-config = "~=0.29.2"
 rust = "~=1.98.1"
-cmake = "~=3.26.4"
+cmake = "~=3.31.8"
 cargo-nextest = ">=0.9.91,<0.10"
 # for rust-analyzer
 rust-src = "~=1.98.1"
@@ -126,7 +126,7 @@ rustfs = ">=1.0.0beta.12,<2"
 rustfs-cli = ">=0.1.33,<0.2"
 rattler_index = { path = "crates/rattler_index" }
 rattler = { path = "crates/rattler-bin" }
-nushell = ">=0.106.1,<0.107"
+nushell = ">=0.116.1,<0.117"
 
 [feature.rustfs.tasks]
 e2e-s3-rustfs = "nu scripts/e2e/s3-rustfs.nu"
@@ -142,11 +142,31 @@ no-default-feature = true
 awscli = ">=2.28.18,<3"
 rattler_index = { path = "crates/rattler_index" }
 rattler = { path = "crates/rattler-bin" }
-nushell = ">=0.106.1,<0.107"
+nushell = ">=0.116.1,<0.117"
 
 [feature.s3.tasks]
 e2e-s3-aws = "nu scripts/e2e/s3-aws.nu"
 
 [environments.s3]
 features = ["s3"]
+no-default-feature = true
+
+#------------------------------
+# rattler-vfs E2E mount test
+#------------------------------
+[feature.rattler-vfs.dependencies]
+rattler = { path = "crates/rattler-bin" }
+nushell = ">=0.116.1,<0.117"
+
+# GNU `timeout` (from coreutils) is used by the e2e script to bound stuck
+# NFS syscalls. macOS GHA runners don't ship it. Windows uses ProjFS in the
+# tests, which doesn't need it; coreutils isn't available on win-64 either.
+[feature.rattler-vfs.target.unix.dependencies]
+coreutils = ">=9.5,<10"
+
+[feature.rattler-vfs.tasks]
+e2e-rattler-vfs = "nu scripts/e2e/rattler-vfs-mount.nu"
+
+[environments.rattler-vfs]
+features = ["rattler-vfs"]
 no-default-feature = true

@@ -16,9 +16,7 @@ use super::etag_memory_backend::ETagMemoryBuilder;
 /// 5. Verifies the function retries and succeeds with v2 content and metadata
 #[tokio::test]
 async fn test_read_package_with_retry_success_after_etag_change() {
-    let op = Operator::new(ETagMemoryBuilder::default())
-        .unwrap()
-        .finish();
+    let op = Operator::new(ETagMemoryBuilder::default()).unwrap();
 
     let path = "test/package.tar.bz2";
     let content_v1 = "version 1 content";
@@ -69,9 +67,7 @@ async fn test_read_package_with_retry_success_after_etag_change() {
 /// instead propagated immediately to the caller.
 #[tokio::test]
 async fn test_read_package_with_retry_propagates_other_errors() {
-    let op = Operator::new(ETagMemoryBuilder::default())
-        .unwrap()
-        .finish();
+    let op = Operator::new(ETagMemoryBuilder::default()).unwrap();
 
     let path = "nonexistent/file.tar.bz2";
 

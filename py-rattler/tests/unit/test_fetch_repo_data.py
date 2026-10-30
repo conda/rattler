@@ -1,5 +1,5 @@
-# type: ignore
 import os.path
+from collections.abc import Iterator
 
 import pytest
 from xprocess import ProcessStarter
@@ -10,7 +10,7 @@ from rattler.repo_data.record import RepoDataRecord
 
 
 @pytest.fixture(scope="session")
-def serve_repo_data(xprocess) -> None:
+def serve_repo_data(xprocess) -> Iterator[tuple[int, str]]:
     port, repo_name = 8912, "test-repo"
 
     test_data_dir = os.path.join(os.path.dirname(__file__), "../../../test-data/test-server")

@@ -344,7 +344,12 @@ pub async fn upload_package_to_cloudsmith(
                 .await?;
         }
 
-        let pkg_response = client.create_package(&upload_response.identifier).await?;
+        let pkg_response = client
+            .create_package(
+                &upload_response.identifier,
+                cloudsmith_data.force.is_enabled(),
+            )
+            .await?;
         info!(
             "Package created: slug_perm={}, slug={}",
             pkg_response.slug_perm, pkg_response.slug
@@ -708,7 +713,10 @@ mod test {
             .route("/s3-upload", post(|| async { StatusCode::OK }))
             .route(
                 "/packages/{owner}/{repo}/upload/conda/",
-                post(|| async {
+                post(|body: String| async move {
+                    let payload: serde_json::Value = serde_json::from_str(&body).unwrap();
+                    assert_eq!(payload.get("package_file").unwrap(), "test-file-id");
+                    assert_eq!(payload.get("republish").unwrap(), &false);
                     (
                         StatusCode::OK,
                         [("content-type", "application/json")],
@@ -742,6 +750,94 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_cloudsmith_upload_republish() {
+        use axum::routing::post;
+        use std::net::SocketAddr;
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
+        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let base_url: url::Url = format!("http://{}:{}", addr.ip(), addr.port())
+            .parse()
+            .unwrap();
+
+        let upload_handler = {
+            let base_url = base_url.clone();
+            move |headers: axum::http::HeaderMap| {
+                let base_url = base_url.clone();
+                async move {
+                    assert!(headers.get("X-Api-Key").is_some());
+                    let upload_url = base_url.join("s3-upload").unwrap();
+                    (
+                        axum::http::StatusCode::OK,
+                        [("content-type", "application/json")],
+                        serde_json::json!({
+                            "identifier": "test-file-id",
+                            "upload_url": upload_url.to_string(),
+                            "upload_fields": {"key": "value"}
+                        })
+                        .to_string(),
+                    )
+                }
+            }
+        };
+
+        let republish_seen = Arc::new(AtomicBool::new(false));
+        let republish_seen_clone = republish_seen.clone();
+
+        let router = Router::new()
+            .route("/files/{owner}/{repo}/", post(upload_handler))
+            .route("/s3-upload", post(|| async { StatusCode::OK }))
+            .route(
+                "/packages/{owner}/{repo}/upload/conda/",
+                post(move |body: String| {
+                    let republish_seen = republish_seen_clone.clone();
+                    async move {
+                        let payload: serde_json::Value = serde_json::from_str(&body).unwrap();
+                        assert_eq!(payload.get("package_file").unwrap(), "test-file-id");
+                        republish_seen.store(
+                            payload.get("republish").unwrap().as_bool().unwrap(),
+                            Ordering::SeqCst,
+                        );
+                        (
+                            StatusCode::OK,
+                            [("content-type", "application/json")],
+                            serde_json::json!({
+                                "slug_perm": "test-slug-perm",
+                                "slug": "test-slug"
+                            })
+                            .to_string(),
+                        )
+                    }
+                }),
+            );
+
+        tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
+
+        let storage = AuthenticationStorage::empty();
+        let cloudsmith_data = crate::upload::opt::CloudsmithData::new(
+            "test-owner".to_string(),
+            "test-repo".to_string(),
+            Some("test-api-key".to_string()),
+            Some(base_url),
+        )
+        .with_force(true.into());
+
+        let result = super::upload_package_to_cloudsmith(
+            &storage,
+            &vec![test_package_path()],
+            cloudsmith_data,
+        )
+        .await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+        assert!(republish_seen.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
     async fn test_cloudsmith_upload_missing_api_key() {
         let storage = AuthenticationStorage::empty();
         let cloudsmith_data = crate::upload::opt::CloudsmithData::new(
@@ -761,5 +857,31 @@ mod test {
             result.unwrap_err(),
             super::cloudsmith::CloudsmithError::MissingApiKey
         ),);
+    }
+    #[test]
+    fn test_cloudsmith_opts_force() {
+        use crate::upload::opt::CloudsmithOpts;
+        use clap::Parser;
+
+        let opts_force = CloudsmithOpts::try_parse_from([
+            "cloudsmith",
+            "--owner",
+            "test-owner",
+            "--repo",
+            "test-repo",
+            "--force",
+        ])
+        .unwrap();
+        assert!(opts_force.force);
+
+        let opts_default = CloudsmithOpts::try_parse_from([
+            "cloudsmith",
+            "--owner",
+            "test-owner",
+            "--repo",
+            "test-repo",
+        ])
+        .unwrap();
+        assert!(!opts_default.force);
     }
 }

@@ -1,6 +1,8 @@
 name: Manage by Issue
 
-on:
+# `issue_comment` is needed to vouch/denounce via comments. The workflow never
+# checks out or executes PR code.
+on: # zizmor: ignore[dangerous-triggers]
   issue_comment:
     types: [created]
 
@@ -12,6 +14,7 @@ permissions:
   contents: write
   issues: write
   pull-requests: write
+  id-token: write # needed for octo-sts
 
 jobs:
   manage:
@@ -20,23 +23,19 @@ jobs:
       contains(github.event.comment.body, 'vouch') ||
         contains(github.event.comment.body, 'denounce')
     steps:
-      - name: Obtain GitHub app token
-        id: generate-token
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+      - name: Obtain token for prefix-dev/vouched via octo-sts
+        id: octo-sts
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # v1.1.1
         with:
-          app-id: ${{ vars.VOUCHED_APP_ID }}
-          private-key: ${{ secrets.VOUCHED_APP_PRIVATE_KEY }}
-          owner: prefix-dev
-          repositories: vouched
-          # The token is only used to check out and push to the vouched repo
-          permission-contents: write
+          scope: prefix-dev/vouched
+          identity: rattler-vouch
 
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: prefix-dev/vouched
-          token: ${{ steps.generate-token.outputs.token }}
+          token: ${{ steps.octo-sts.outputs.token }}
 
-      - uses: mitchellh/vouch/action/manage-by-issue@c6d80ead49839655b61b422700b7a3bc9d0804a9 # v1.4.2
+      - uses: mitchellh/vouch/action/manage-by-issue@d66fa29a64600490892131ad87597c30c91fcac4 # v1.5.0
         id: manage-by-issue
         with:
           issue-id: ${{ github.event.issue.number }}
