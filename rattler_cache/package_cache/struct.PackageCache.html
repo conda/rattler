@@ -17,7 +17,7 @@ hits of packages with packages with similar properties.</p>
 <p>Existing layers, filters, cached-origin behavior, and in-memory entry
 coordination are preserved. This is useful for adding a temporary
 overlay to an already configured cache.</p>
-</div></details><details class="toggle method-toggle" open><summary><section id="method.excluding_from_all_layers" class="method"><a class="src rightside" href="../../src/rattler_cache/package_cache/mod.rs.html#554-559">Source</a><h4 class="code-header">pub fn <a href="#method.excluding_from_all_layers" class="fn">excluding_from_all_layers</a>(self, spec: MatchSpec) -&gt; Self</h4></section></summary><div class="docblock"><p>Excludes packages matching <code>spec</code> from every existing layer.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.excluding_from_all_layers" class="method"><a class="src rightside" href="../../src/rattler_cache/package_cache/mod.rs.html#554-559">Source</a><h4 class="code-header">pub fn <a href="#method.excluding_from_all_layers" class="fn">excluding_from_all_layers</a>(self, spec: <a class="struct" href="../../rattler_conda_types/match_spec/struct.MatchSpec.html" title="struct rattler_conda_types::match_spec::MatchSpec">MatchSpec</a>) -&gt; Self</h4></section></summary><div class="docblock"><p>Excludes packages matching <code>spec</code> from every existing layer.</p>
 <p>Combined with <a href="struct.PackageCache.html#method.with_prepended_layer" title="method rattler_cache::package_cache::PackageCache::with_prepended_layer"><code>Self::with_prepended_layer</code></a>, this allows a package to
 be routed exclusively to a new layer without reconstructing the
 existing cache or losing custom cache directories.</p>
@@ -85,7 +85,7 @@ request is coalesced. No duplicate fetch is performed.</p>
     &amp;self,
     pkg: impl <a class="trait" href="https://doc.rust-lang.org/1.98.1/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;<a class="struct" href="struct.CacheKey.html" title="struct rattler_cache::package_cache::CacheKey">CacheKey</a>&gt;,
     url: <a class="struct" href="https://docs.rs/url/2.5.7/url/struct.Url.html" title="struct url::Url">Url</a>,
-    client: LazyClient,
+    client: <a class="struct" href="../../rattler_networking/lazy_client/struct.LazyClient.html" title="struct rattler_networking::lazy_client::LazyClient">LazyClient</a>,
     reporter: <a class="enum" href="https://doc.rust-lang.org/1.98.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.98.1/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;dyn <a class="trait" href="trait.CacheReporter.html" title="trait rattler_cache::package_cache::CacheReporter">CacheReporter</a>&gt;&gt;,
     concurrent_requests_semaphore: <a class="enum" href="https://doc.rust-lang.org/1.98.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.98.1/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;Semaphore&gt;&gt;,
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.98.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.CacheMetadata.html" title="struct rattler_cache::package_cache::CacheMetadata">CacheMetadata</a>, <a class="enum" href="enum.PackageCacheError.html" title="enum rattler_cache::package_cache::PackageCacheError">PackageCacheError</a>&gt;</h4></section></summary><div class="docblock"><p>Returns the directory that contains the specified package.</p>
@@ -95,13 +95,13 @@ cache.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.get_or_fetch_from_path" class="method"><a class="src rightside" href="../../src/rattler_cache/package_cache/mod.rs.html#846-898">Source</a><h4 class="code-header">pub async fn <a href="#method.get_or_fetch_from_path" class="fn">get_or_fetch_from_path</a>(
     &amp;self,
     path: &amp;<a class="struct" href="https://doc.rust-lang.org/1.98.1/std/path/struct.Path.html" title="struct std::path::Path">Path</a>,
-    record: <a class="enum" href="https://doc.rust-lang.org/1.98.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;&amp;PackageRecord&gt;,
+    record: <a class="enum" href="https://doc.rust-lang.org/1.98.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;&amp;<a class="struct" href="../../rattler_conda_types/repo_data/struct.PackageRecord.html" title="struct rattler_conda_types::repo_data::PackageRecord">PackageRecord</a>&gt;,
     reporter: <a class="enum" href="https://doc.rust-lang.org/1.98.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.98.1/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;dyn <a class="trait" href="trait.CacheReporter.html" title="trait rattler_cache::package_cache::CacheReporter">CacheReporter</a>&gt;&gt;,
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.98.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.CacheMetadata.html" title="struct rattler_cache::package_cache::CacheMetadata">CacheMetadata</a>, <a class="enum" href="enum.PackageCacheError.html" title="enum rattler_cache::package_cache::PackageCacheError">PackageCacheError</a>&gt;</h4></section></summary><div class="docblock"><p>Returns the directory that contains the specified package.</p>
 <p>This is a convenience wrapper around <code>get_or_fetch</code> which fetches the
 package from the given path if the package could not be found in the
 cache.</p>
-<p>If a [<code>PackageRecord</code>] is provided, the cache key is derived from the
+<p>If a <a href="../../rattler_conda_types/repo_data/struct.PackageRecord.html" title="struct rattler_conda_types::repo_data::PackageRecord"><code>PackageRecord</code></a> is provided, the cache key is derived from the
 record, which includes its hashes. This ensures that packages that
 share the same name, version and build string but have different
 content do not collide in the cache. Otherwise, the cache key is
@@ -110,7 +110,7 @@ derived from the package filename only.</p>
     &amp;self,
     pkg: impl <a class="trait" href="https://doc.rust-lang.org/1.98.1/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;<a class="struct" href="struct.CacheKey.html" title="struct rattler_cache::package_cache::CacheKey">CacheKey</a>&gt;,
     url: <a class="struct" href="https://docs.rs/url/2.5.7/url/struct.Url.html" title="struct url::Url">Url</a>,
-    client: LazyClient,
+    client: <a class="struct" href="../../rattler_networking/lazy_client/struct.LazyClient.html" title="struct rattler_networking::lazy_client::LazyClient">LazyClient</a>,
     retry_policy: impl RetryPolicy + <a class="trait" href="https://doc.rust-lang.org/1.98.1/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + 'static + <a class="trait" href="https://doc.rust-lang.org/1.98.1/core/clone/trait.Clone.html" title="trait core::clone::Clone">Clone</a>,
     reporter: <a class="enum" href="https://doc.rust-lang.org/1.98.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.98.1/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;dyn <a class="trait" href="trait.CacheReporter.html" title="trait rattler_cache::package_cache::CacheReporter">CacheReporter</a>&gt;&gt;,
     concurrent_requests_semaphore: <a class="enum" href="https://doc.rust-lang.org/1.98.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.98.1/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;Semaphore&gt;&gt;,
@@ -131,9 +131,9 @@ for the duration of the download and extraction.</p>
 <a href="struct.PackageCache.html#method.get_or_fetch_wheel_from_url_with_retry" title="method rattler_cache::package_cache::PackageCache::get_or_fetch_wheel_from_url_with_retry"><code>Self::get_or_fetch_wheel_from_url_with_retry</code></a>.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.get_or_fetch_wheel_from_url_with_retry" class="method"><a class="src rightside" href="../../src/rattler_cache/package_cache/mod.rs.html#944-963">Source</a><h4 class="code-header">pub async fn <a href="#method.get_or_fetch_wheel_from_url_with_retry" class="fn">get_or_fetch_wheel_from_url_with_retry</a>(
     &amp;self,
-    record: &amp;PackageRecord,
+    record: &amp;<a class="struct" href="../../rattler_conda_types/repo_data/struct.PackageRecord.html" title="struct rattler_conda_types::repo_data::PackageRecord">PackageRecord</a>,
     url: <a class="struct" href="https://docs.rs/url/2.5.7/url/struct.Url.html" title="struct url::Url">Url</a>,
-    client: LazyClient,
+    client: <a class="struct" href="../../rattler_networking/lazy_client/struct.LazyClient.html" title="struct rattler_networking::lazy_client::LazyClient">LazyClient</a>,
     retry_policy: impl RetryPolicy + <a class="trait" href="https://doc.rust-lang.org/1.98.1/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + 'static + <a class="trait" href="https://doc.rust-lang.org/1.98.1/core/clone/trait.Clone.html" title="trait core::clone::Clone">Clone</a>,
     reporter: <a class="enum" href="https://doc.rust-lang.org/1.98.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.98.1/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;dyn <a class="trait" href="trait.CacheReporter.html" title="trait rattler_cache::package_cache::CacheReporter">CacheReporter</a>&gt;&gt;,
     concurrent_requests_semaphore: <a class="enum" href="https://doc.rust-lang.org/1.98.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.98.1/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;Semaphore&gt;&gt;,

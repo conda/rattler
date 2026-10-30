@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["prj_file_name_compare"]};

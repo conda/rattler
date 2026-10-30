@@ -4,8 +4,8 @@
     pub environment_provider: &amp;'a dyn <a class="trait" href="../environment/trait.DetectorEnvironmentProvider.html" title="trait rattler_virtual_package_detectors::environment::DetectorEnvironmentProvider">DetectorEnvironmentProvider</a>,
     pub environment: &amp;'a <a class="struct" href="../struct.EnvironmentSnapshot.html" title="struct rattler_virtual_package_detectors::EnvironmentSnapshot">EnvironmentSnapshot</a>,
     pub root: &amp;'a <a class="struct" href="https://doc.rust-lang.org/1.98.1/std/path/struct.Path.html" title="struct std::path::Path">Path</a>,
-    pub host_platform: Subdir,
-    pub target_platform: Subdir,
+    pub host_platform: <a class="enum" href="../../rattler_conda_types/subdir/enum.Subdir.html" title="enum rattler_conda_types::subdir::Subdir">Subdir</a>,
+    pub target_platform: <a class="enum" href="../../rattler_conda_types/subdir/enum.Subdir.html" title="enum rattler_conda_types::subdir::Subdir">Subdir</a>,
     pub timeout: <a class="struct" href="https://doc.rust-lang.org/1.98.1/core/time/struct.Duration.html" title="struct core::time::Duration">Duration</a>,
     pub consent: &amp;'a dyn <a class="trait" href="../consent/trait.DetectorConsent.html" title="trait rattler_virtual_package_detectors::consent::DetectorConsent">DetectorConsent</a>,
     pub wanted: <a class="enum" href="enum.WantedNames.html" title="enum rattler_virtual_package_detectors::detect::WantedNames">WantedNames</a>,
@@ -16,8 +16,8 @@
 </div><span id="structfield.environment" class="structfield section-header"><a href="#structfield.environment" class="anchor field">§</a><code>environment: &amp;'a <a class="struct" href="../struct.EnvironmentSnapshot.html" title="struct rattler_virtual_package_detectors::EnvironmentSnapshot">EnvironmentSnapshot</a></code></span><div class="docblock"><p>The complete inherited environment used for overrides, activation and
 result-cache watched variables.</p>
 </div><span id="structfield.root" class="structfield section-header"><a href="#structfield.root" class="anchor field">§</a><code>root: &amp;'a <a class="struct" href="https://doc.rust-lang.org/1.98.1/std/path/struct.Path.html" title="struct std::path::Path">Path</a></code></span><div class="docblock"><p>The directory that holds the result cache.</p>
-</div><span id="structfield.host_platform" class="structfield section-header"><a href="#structfield.host_platform" class="anchor field">§</a><code>host_platform: Subdir</code></span><div class="docblock"><p>The platform of the machine running the client.</p>
-</div><span id="structfield.target_platform" class="structfield section-header"><a href="#structfield.target_platform" class="anchor field">§</a><code>target_platform: Subdir</code></span><div class="docblock"><p>The platform being solved for. Detectors only run when it equals
+</div><span id="structfield.host_platform" class="structfield section-header"><a href="#structfield.host_platform" class="anchor field">§</a><code>host_platform: <a class="enum" href="../../rattler_conda_types/subdir/enum.Subdir.html" title="enum rattler_conda_types::subdir::Subdir">Subdir</a></code></span><div class="docblock"><p>The platform of the machine running the client.</p>
+</div><span id="structfield.target_platform" class="structfield section-header"><a href="#structfield.target_platform" class="anchor field">§</a><code>target_platform: <a class="enum" href="../../rattler_conda_types/subdir/enum.Subdir.html" title="enum rattler_conda_types::subdir::Subdir">Subdir</a></code></span><div class="docblock"><p>The platform being solved for. Detectors only run when it equals
 <code>host_platform</code>.</p>
 </div><span id="structfield.timeout" class="structfield section-header"><a href="#structfield.timeout" class="anchor field">§</a><code>timeout: <a class="struct" href="https://doc.rust-lang.org/1.98.1/core/time/struct.Duration.html" title="struct core::time::Duration">Duration</a></code></span><div class="docblock"><p>How long a detector may run, and separately how long its activation
 may take. Clamped to the protocol’s maximum.</p>

@@ -1,0 +1,52 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="`PrjFileNameCompare`-compatible file-name ordering for `ProjFS` enumeration."><title>rattler_vfs::projfs_name_compare - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-1ed95124.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="rattler_vfs" data-themes="" data-resource-suffix="" data-rustdoc-version="1.98.1 (48a229cea 2026-09-01)" data-channel="1.98.1" data-search-js="search-9944d736.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"><meta name="robots" content="noindex">
+
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module projfs_name_compare</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../rattler_vfs/index.html">rattler_<wbr>vfs</a><span class="version">0.1.3</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module projfs_<wbr>name_<wbr>compare</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#known-divergences-from-the-real-prjfilenamecompare" title="Known divergences from the real `PrjFileNameCompare`">Known divergences from the real <code>PrjFileNameCompare</code></a></li></ul><h3><a href="#functions">Module Items</a></h3><ul class="block"><li><a href="#functions" title="Functions">Functions</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="../index.html">In crate rattler_<wbr>vfs</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">rattler_vfs</a></div><h1>Module <span>projfs_<wbr>name_<wbr>compare</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/rattler_vfs/projfs_name_compare.rs.html#1-303">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p><code>PrjFileNameCompare</code>-compatible file-name ordering for <code>ProjFS</code> enumeration.</p>
+<p>Windows Projected File System (<code>ProjFS</code>) requires the entries returned from a
+directory-enumeration callback to be sorted in the exact order the
+filesystem itself uses — the order defined by the Win32 <code>PrjFileNameCompare</code>
+API. If a provider returns entries in any other order (for example plain
+Rust <code>str</code>/UTF-8 byte order), <code>ProjFS</code>’s streaming enumeration can skip or
+miss-report entries: it walks the provider’s list assuming it is already in
+<code>PrjFileNameCompare</code> order and stops matching as soon as that assumption is
+violated. See issue #2581.</p>
+<p><code>PrjFileNameCompare</code> performs a <strong>case-insensitive, locale-independent
+(ordinal) comparison of UTF-16 code units</strong>, mirroring
+<code>RtlCompareUnicodeString(.., CaseInSensitive = TRUE)</code> — the same ordering
+NTFS uses for its directory index. This differs from Rust’s <code>str::cmp</code>
+(UTF-8 byte order) in two important ways:</p>
+<ol>
+<li><strong>Case-insensitivity.</strong> <code>str::cmp</code> orders every uppercase ASCII letter
+before every lowercase one (<code>'Z'</code> = 0x5A &lt; <code>'a'</code> = 0x61), so it sorts
+<code>"Zebra" &lt; "apple"</code>. <code>PrjFileNameCompare</code> upper-cases both operands
+first, so it sorts <code>"apple" &lt; "Zebra"</code>.</li>
+<li><strong>Comparison unit.</strong> The comparison is over upper-cased UTF-16 code
+units, not raw UTF-8 bytes. For the Basic Multilingual Plane, UTF-16
+code-unit order equals Unicode scalar order equals UTF-8 byte order, so
+this only diverges for supplementary-plane characters (encoded as
+surrogate pairs, code units 0xD800–0xDFFF, which sort <em>before</em> the
+0xE000–0xFFFF range in UTF-16 but <em>after</em> it in scalar/UTF-8 order).</li>
+</ol>
+<p>Because <code>ProjFS</code> is Windows-only, this comparator only ever <em>feeds</em> <code>ProjFS</code>
+on Windows. It is nevertheless implemented as a platform-independent
+pure-Rust function (no <code>windows</code> dependency, not <code>cfg(windows)</code>-gated) for
+two reasons: it keeps the enumeration sort as a single, testable source of
+truth that runs identically everywhere, and it lets the unit tests below run
+on any host (including the macOS/Linux CI that cannot compile the <code>ProjFS</code>
+adapter). A <code>#[cfg(windows)]</code> test asserts the pure-Rust ordering agrees
+with the real <code>PrjFileNameCompare</code> on a Windows host.</p>
+<h3 id="known-divergences-from-the-real-prjfilenamecompare"><a class="doc-anchor" href="#known-divergences-from-the-real-prjfilenamecompare">§</a>Known divergences from the real <code>PrjFileNameCompare</code></h3>
+<p>The upper-casing here uses Rust’s Unicode simple (1:1) uppercase mapping,
+restricted to mappings that stay within a single BMP code unit. The real
+API uses Windows’ internal NLS/<code>$UpCase</code> table, which:</p>
+<ul>
+<li>can differ from the Unicode mapping for a small number of code points and
+may vary slightly between Windows versions;</li>
+<li>never <em>expands</em> a character during upper-casing (e.g. <code>'ß'</code> U+00DF stays
+<code>'ß'</code> rather than becoming <code>"SS"</code>). We match this by only applying
+mappings that produce exactly one BMP code unit and leaving everything
+else unchanged.</li>
+</ul>
+<p>For the ASCII-dominated filename space of conda packages (letters, digits,
+<code>.</code>, <code>-</code>, <code>_</code>, <code>+</code>, <code>~</code>) the two orderings are identical.</p>
+</div></details><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.prj_file_name_compare.html" title="fn rattler_vfs::projfs_name_compare::prj_file_name_compare">prj_<wbr>file_<wbr>name_<wbr>compare</a></dt><dd>Compare two file names using <code>PrjFileNameCompare</code> semantics: a
+case-insensitive, ordinal comparison over upper-cased UTF-16 code units.</dd></dl></section></div></main></body></html>
