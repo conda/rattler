@@ -4722,9 +4722,7 @@ is available as <code>.conda</code>. Wheels are not used.</p>
   </span>
 
 <a href="#rattler.repo_data.sparse.PackageFormatSelection.PREFER_CONDA_WITH_WHL" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">PREFER_CONDA_WITH_WHL</span> <span class="o">=</span> <span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">PyPackageFormatSelection</span><span class="o">.</span><span class="n">PreferCondaWithWhl</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">PREFER_CONDA_WITH_WHL</span> <span class="o">=</span> <span class="n">PyPackageFormatSelection</span><span class="o">.</span><span class="n">PreferCondaWithWhl</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4987,9 +4985,7 @@ only the first call, however, will have an effect.</p>
 
 
 <a href="#rattler.repo_data.sparse.SparseRepoData.load_all_records" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">load_all_records</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">package_format_selection</span><span class="o">=</span><span class="n">PackageFormatSelection</span><span class="o">.</span><span class="n">PREFER_CONDA</span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">load_all_records</span><span class="p">(</span><span class="n">package_format_selection</span><span class="o">=</span><span class="n">PackageFormatSelection</span><span class="o">.</span><span class="n">PREFER_CONDA</span><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -5021,10 +5017,7 @@ only the first call, however, will have an effect.</p>
 
 
 <a href="#rattler.repo_data.sparse.SparseRepoData.load_matching_records" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">load_matching_records</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">specs</span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">package_format_selection</span><span class="o">=</span><span class="n">PackageFormatSelection</span><span class="o">.</span><span class="n">PREFER_CONDA</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="p">)</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">load_matching_records</span><span class="p">(</span><span class="n">specs</span><span class="p">,</span> <span class="n">package_format_selection</span><span class="o">=</span><span class="n">PackageFormatSelection</span><span class="o">.</span><span class="n">PREFER_CONDA</span><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -5053,10 +5046,7 @@ only the first call, however, will have an effect.</p>
 
 
 <a href="#rattler.repo_data.sparse.SparseRepoData.load_records" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">load_records</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">package_name</span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">package_format_selection</span><span class="o">=</span><span class="n">PackageFormatSelection</span><span class="o">.</span><span class="n">PREFER_CONDA</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="p">)</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">load_records</span><span class="p">(</span><span class="n">package_name</span><span class="p">,</span> <span class="n">package_format_selection</span><span class="o">=</span><span class="n">PackageFormatSelection</span><span class="o">.</span><span class="n">PREFER_CONDA</span><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -5093,11 +5083,7 @@ only the first call, however, will have an effect.</p>
   </span>
 
 <a href="#rattler.repo_data.sparse.SparseRepoData.load_records_recursive" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">load_records_recursive</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">repo_data</span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">package_names</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">package_format_selection</span><span class="o">=</span><span class="n">PackageFormatSelection</span><span class="o">.</span><span class="n">PREFER_CONDA</span><span class="p">,</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="p">)</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">load_records_recursive</span><span class="p">(</span><span class="n">repo_data</span><span class="p">,</span> <span class="n">package_names</span><span class="p">,</span> <span class="n">package_format_selection</span><span class="o">=</span><span class="n">PackageFormatSelection</span><span class="o">.</span><span class="n">PREFER_CONDA</span><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -5166,9 +5152,7 @@ methods.</p>
 
 
 <a href="#rattler.repo_data.sparse.SparseRepoData.package_names" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">package_names</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">package_format_selection</span><span class="o">=</span><span class="n">PackageFormatSelection</span><span class="o">.</span><span class="n">PREFER_CONDA</span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">package_names</span><span class="p">(</span><span class="n">package_format_selection</span><span class="o">=</span><span class="n">PackageFormatSelection</span><span class="o">.</span><span class="n">PREFER_CONDA</span><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -5203,9 +5187,7 @@ package names.</p>
 
 
 <a href="#rattler.repo_data.sparse.SparseRepoData.record_count" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">record_count</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">package_format_selection</span><span class="o">=</span><span class="n">PackageFormatSelection</span><span class="o">.</span><span class="n">PREFER_CONDA</span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">record_count</span><span class="p">(</span><span class="n">package_format_selection</span><span class="o">=</span><span class="n">PackageFormatSelection</span><span class="o">.</span><span class="n">PREFER_CONDA</span><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
