@@ -4178,7 +4178,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.55.2"
+version = "0.55.3"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -4239,7 +4239,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4367,7 +4367,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.34.2"
+version = "0.34.3"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4405,7 +4405,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.34.10"
+version = "0.34.11"
 dependencies = [
  "ahash",
  "file_url",
@@ -4441,7 +4441,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.4.6"
+version = "0.4.7"
 dependencies = [
  "configparser",
  "dirs",
@@ -4509,7 +4509,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.28.0"
+version = "0.28.1"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-tokio-tar",
@@ -4582,7 +4582,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.37.1"
+version = "0.37.2"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4712,7 +4712,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "12.0.1"
+version = "12.0.2"
 dependencies = [
  "futures",
  "hex",
@@ -4730,7 +4730,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_package_detectors"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "async-trait",
  "fs-err",
