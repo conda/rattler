@@ -304,6 +304,8 @@ fn print_run_exports(run_exports: &RunExportsJson) {
     print_indented_list("noarch", &run_exports.noarch);
     print_indented_list("weak constrains", &run_exports.weak_constrains);
     print_indented_list("strong constrains", &run_exports.strong_constrains);
+    let flags: Vec<String> = run_exports.flags.iter().map(ToString::to_string).collect();
+    print_indented_list("flags", &flags);
 }
 
 fn print_paths(paths: &PathsJson, limit: i64) {
