@@ -33,6 +33,11 @@
       matchManagers: ["pixi"],
       enabled: false,
     },
+    {
+      description: "Wait 14 days after a release before proposing an update. Overrides the shorter npm default from config:best-practices.",
+      matchPackageNames: ["*"],
+      minimumReleaseAge: "14 days",
+    },
   ],
   vulnerabilityAlerts: {
     commitMessageSuffix: "",

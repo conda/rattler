@@ -293,6 +293,26 @@ fn read_conda_forge_sparse_repo_data() -> &'static SparseRepoData {
     });
     &REPO_DATA
 }
+fn duplicate_test_record(filename: &str) -> RepoDataRecord {
+    let identifier = DistArchiveIdentifier::try_from_filename(filename).unwrap();
+    RepoDataRecord {
+        package_record: PackageRecord {
+            subdir: "noarch".into(),
+            sha256: Some(
+                rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(b"original"),
+            ),
+            ..PackageRecord::new(
+                identifier.identifier.name.parse().unwrap(),
+                identifier.identifier.version.parse::<Version>().unwrap(),
+                identifier.identifier.build_string.parse().unwrap(),
+            )
+        },
+        identifier,
+        url: Url::parse(&format!("https://example.com/noarch/{filename}")).unwrap(),
+        channel: Some("https://example.com".into()),
+    }
+}
+
 macro_rules! solver_backend_tests {
     ($T:path) => {
         use itertools::Itertools;
@@ -593,18 +613,88 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
-        fn test_duplicate_record() {
-            use rattler_solve::SolverImpl;
+        fn test_identical_duplicate_records() {
+            use rattler_conda_types::MatchSpec;
+            use rattler_solve::{SolverImpl, SolverTask};
+            for filename in [
+                "duplicate-probe-1.0-0.conda",
+                "duplicate_probe-1.0-py3-none-any.whl",
+            ] {
+                let record = super::duplicate_test_record(filename);
+                let records = vec![record.clone(), record.clone(), record.clone()];
+                let task = SolverTask {
+                    specs: vec![
+                        MatchSpec::from_str(
+                            record.package_record.name.as_normalized(),
+                            ParseStrictness::Strict,
+                        )
+                        .unwrap(),
+                    ],
+                    ..SolverTask::from_iter([&records])
+                };
+                let result = <$T>::default().solve(task).unwrap();
+                assert_eq!(result.records, vec![record]);
+            }
+        }
 
-            let mut records = super::read_repodata(&dummy_channel_json_path());
-            records.push(records[0].clone());
+        #[test]
+        fn test_conflicting_duplicate_records() {
+            use rattler_solve::{SolverImpl, SolverTask};
+            for filename in [
+                "duplicate-probe-1.0-0.conda",
+                "duplicate_probe-1.0-py3-none-any.whl",
+            ] {
+                let original = super::duplicate_test_record(filename);
+                for field in ["dependencies", "checksum", "url", "channel"] {
+                    let mut conflicting = original.clone();
+                    match field {
+                        "dependencies" => conflicting
+                            .package_record
+                            .depends
+                            .push("different-dependency".into()),
+                        "checksum" => {
+                            conflicting.package_record.sha256 = Some(
+                                rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(
+                                    b"different",
+                                ),
+                            )
+                        }
+                        "url" => conflicting.url = "https://other.example/package".parse().unwrap(),
+                        "channel" => conflicting.channel = Some("https://other.example".into()),
+                        _ => unreachable!(),
+                    }
+                    for records in [
+                        vec![original.clone(), conflicting.clone()],
+                        vec![conflicting.clone(), original.clone()],
+                    ] {
+                        let result = <$T>::default().solve(SolverTask::from_iter([&records]));
+                        assert!(
+                            matches!(&result, Err(SolveError::DuplicateRecords(_))),
+                            "expected duplicate conflict for {field}: {result:?}"
+                        );
+                    }
+                }
+            }
+        }
 
-            let task = rattler_solve::SolverTask::from_iter([&records]);
-
-            let result = <$T>::default().solve(task);
-            match result {
-                Err(rattler_solve::SolveError::DuplicateRecords(_)) => {}
-                _ => panic!("expected a DuplicateRecord error"),
+        #[test]
+        fn test_identical_duplicates_preserve_archive_preference() {
+            use rattler_conda_types::MatchSpec;
+            use rattler_solve::{SolverImpl, SolverTask};
+            let conda = super::duplicate_test_record("duplicate-probe-1.0-0.conda");
+            let tar = super::duplicate_test_record("duplicate-probe-1.0-0.tar.bz2");
+            for records in [
+                vec![tar.clone(), conda.clone(), conda.clone()],
+                vec![conda.clone(), tar, conda.clone()],
+            ] {
+                let task = SolverTask {
+                    specs: vec![
+                        MatchSpec::from_str("duplicate-probe", ParseStrictness::Strict).unwrap(),
+                    ],
+                    ..SolverTask::from_iter([&records])
+                };
+                let result = <$T>::default().solve(task).unwrap();
+                assert_eq!(result.records, vec![conda.clone()]);
             }
         }
 

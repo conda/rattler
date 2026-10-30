@@ -56,7 +56,7 @@ pub enum SolveError {
     #[error(transparent)]
     ParseMatchSpecError(#[from] rattler_conda_types::ParseMatchSpecError),
 
-    /// Encountered duplicate records in the available packages.
+    /// Encountered records with the same package identity but conflicting contents.
     DuplicateRecords(String),
 
     /// To support Resolvo cancellation
