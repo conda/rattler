@@ -4,7 +4,7 @@
 //! directory for copy-on-write semantics. Implements the same `VfsOps` trait
 //! so it can be used interchangeably with the read-only VFS.
 
-use libc::{EIO, ENOENT};
+use libc::{EINVAL, EIO, ENOENT};
 use std::{
     collections::HashMap,
     ffi::{OsStr, OsString},
@@ -22,6 +22,62 @@ mod inode;
 use crate::overlay::{OverlayState, STATE_FILENAME, STATE_LOCK_FILENAME, STATE_TMP_FILENAME};
 use crate::vfs_ops::{ContentSource, DirEntry, FileAttr, FileKind, VfsOps, set_file_permissions};
 use inode::{ResolvedIno, UPPER_INODE_BASE, UpperInodeMap};
+
+/// Reject a wire filename that is not a single, safe path component.
+///
+/// Transport adapters (NFS in particular) hand us filenames straight off the
+/// wire. NFS `AUTH_UNIX` is unauthenticated and the protocol does not stop a
+/// client from sending a multi-component or `..` name, so without this check a
+/// request such as `CREATE(dir, "../../../home/user/.bashrc")` would escape the
+/// overlay directory once joined onto the on-disk upper path. Every name that
+/// reaches a `parent_path.join(name)` must pass through here first.
+///
+/// A valid component is non-empty, is neither `.` nor `..`, and contains no NUL
+/// byte or path separator (`/` always; `\` additionally on Windows). Violations
+/// return `EINVAL`.
+fn validate_component(name: &OsStr) -> Result<(), i32> {
+    if name.is_empty() || name == "." || name == ".." {
+        return Err(EINVAL);
+    }
+    let bytes = name.as_encoded_bytes();
+    let has_separator = bytes
+        .iter()
+        .any(|&b| b == b'/' || (cfg!(windows) && b == b'\\'));
+    if has_separator || bytes.contains(&0) {
+        return Err(EINVAL);
+    }
+    Ok(())
+}
+
+/// Join a validated single-component `name` onto `parent_path`.
+///
+/// Central guard against path-traversal via untrusted wire filenames — see
+/// [`validate_component`].
+fn child_path(parent_path: &Path, name: &OsStr) -> Result<PathBuf, i32> {
+    validate_component(name)?;
+    Ok(parent_path.join(name))
+}
+
+/// Create a symlink at `link` pointing to `target`, cross-platform.
+#[cfg(unix)]
+fn symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(target, link)
+}
+
+/// Create a symlink at `link` pointing to `target`, cross-platform.
+///
+/// Windows requires choosing the symlink kind up front. Resolve the target
+/// relative to the link's parent and pick a directory symlink when it points
+/// at a directory, falling back to a file symlink (also for dangling targets).
+#[cfg(not(unix))]
+fn symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+    let resolved = link.parent().map(|p| p.join(target));
+    if resolved.is_some_and(|t| t.is_dir()) {
+        std::os::windows::fs::symlink_dir(target, link)
+    } else {
+        std::os::windows::fs::symlink_file(target, link)
+    }
+}
 
 /// A writable overlay filesystem that wraps a read-only lower layer.
 pub struct OverlayFS<T: VfsOps> {
@@ -133,7 +189,7 @@ impl<T: VfsOps> OverlayFS<T> {
         let parent_path = match self.resolve_ino(parent)? {
             ResolvedIno::Upper(p) | ResolvedIno::Lower(_, p) => p,
         };
-        Ok(parent_path.join(name))
+        child_path(&parent_path, name)
     }
 
     fn resolve_ino(&self, ino: u64) -> Result<ResolvedIno, i32> {
@@ -236,15 +292,36 @@ impl<T: VfsOps> OverlayFS<T> {
         self.ensure_upper_parent(virtual_path)?;
         let upper_path = self.upper_path(virtual_path);
 
-        if upper_path.exists() {
+        let lower_attr = self.lower.getattr(lower_ino).ok();
+        let lower_kind = lower_attr.as_ref().map(|a| a.kind);
+
+        // Directories need recursive COW so every lower-only child is
+        // materialized. This must run *before* the "already in upper" short
+        // circuit below: a partially-materialized upper directory still has to
+        // be recursed into, otherwise a later rename drops the lower-only
+        // children and a whiteout permanently hides the originals.
+        if lower_kind == Some(FileKind::Directory) {
+            return self.copy_dir_to_upper(virtual_path, lower_ino);
+        }
+
+        // A non-directory already present in upper has been copied up already.
+        // Use symlink_metadata so an existing (possibly dangling) symlink is
+        // recognised rather than followed.
+        if upper_path.symlink_metadata().is_ok() {
             return Ok(upper_path);
         }
 
-        // Check if this is a directory — directories need recursive COW
-        if let Ok(attr) = self.lower.getattr(lower_ino)
-            && attr.kind == FileKind::Directory
-        {
-            return self.copy_dir_to_upper(virtual_path, lower_ino);
+        // Symlinks must be recreated as symlinks. Reading a symlink through the
+        // VFS returns no bytes, so the old fall-through wrote a 0-byte regular
+        // file that permanently shadowed the real link — corrupting the many
+        // `libfoo.so -> libfoo.so.1` links a conda env is full of.
+        if lower_kind == Some(FileKind::Symlink) {
+            let target = self.lower.readlink(lower_ino)?;
+            symlink(&target, &upper_path).map_err(|e| {
+                tracing::warn!("COW symlink failed {:?} -> {:?}: {}", upper_path, target, e);
+                EIO
+            })?;
+            return Ok(upper_path);
         }
 
         if let Ok(ContentSource::Direct(source)) = self.lower.content_source(lower_ino) {
@@ -260,6 +337,15 @@ impl<T: VfsOps> OverlayFS<T> {
                 EIO
             })?;
         }
+
+        // Preserve the source's permission bits. `fs::write` creates 0644 and
+        // reflink/copy does not reliably carry the mode across platforms, so an
+        // executable such as `bin/python` would otherwise come up non-executable
+        // after a `chmod`/`mv`/truncate and fail to run.
+        if let Some(attr) = lower_attr {
+            set_file_permissions(&upper_path, u32::from(attr.perm)).ok();
+        }
+
         Ok(upper_path)
     }
 
@@ -297,7 +383,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
         let parent_path = match self.resolve_ino(parent)? {
             ResolvedIno::Upper(p) | ResolvedIno::Lower(_, p) => p,
         };
-        let virtual_path = parent_path.join(name);
+        let virtual_path = child_path(&parent_path, name)?;
 
         // Single state lock: check whiteout and opaque in one acquisition
         {
@@ -935,6 +1021,50 @@ mod tests {
                 Err(ENOENT)
             }
         }
+    }
+
+    #[test]
+    fn test_validate_component_rejects_traversal() {
+        // Single safe components are accepted.
+        assert!(validate_component(OsStr::new("file.txt")).is_ok());
+        assert!(validate_component(OsStr::new("a.b.c")).is_ok());
+
+        // Empty, self, and parent references are rejected.
+        assert_eq!(validate_component(OsStr::new("")), Err(EINVAL));
+        assert_eq!(validate_component(OsStr::new(".")), Err(EINVAL));
+        assert_eq!(validate_component(OsStr::new("..")), Err(EINVAL));
+
+        // Any embedded separator or NUL is rejected.
+        assert_eq!(validate_component(OsStr::new("../etc/passwd")), Err(EINVAL));
+        assert_eq!(
+            validate_component(OsStr::new("../../../home/user/.bashrc")),
+            Err(EINVAL)
+        );
+        assert_eq!(validate_component(OsStr::new("sub/dir")), Err(EINVAL));
+        assert_eq!(validate_component(OsStr::new("a\0b")), Err(EINVAL));
+    }
+
+    #[test]
+    fn test_overlay_create_rejects_traversal_name() {
+        let tmp = TempDir::new().unwrap();
+        let overlay_dir = tmp.path().join("upper");
+        let ofs = OverlayFS::new(
+            MockLowerFS,
+            overlay_dir.clone(),
+            "hash".into(),
+            "test".into(),
+        )
+        .unwrap();
+
+        // A crafted NFS filename must not escape the overlay directory.
+        let escape = OsStr::new("../../../home/user/.bashrc");
+        assert_eq!(ofs.create(1, escape, 0o644).err(), Some(EINVAL));
+        assert_eq!(ofs.mkdir(1, escape, 0o755).err(), Some(EINVAL));
+        assert_eq!(ofs.lookup(1, escape).err(), Some(EINVAL));
+        assert_eq!(ofs.unlink(1, escape).err(), Some(EINVAL));
+
+        // Nothing was written outside the overlay directory.
+        assert!(!tmp.path().join("home/user/.bashrc").exists());
     }
 
     #[test]
@@ -2357,5 +2487,220 @@ mod tests {
         // The overlay directory must still exist — no silent wipe.
         assert!(overlay_dir.exists());
         assert!(overlay_dir.join(".rattler_vfs_state.json").exists());
+    }
+
+    // --- Copy-up correctness tests (issue #2582) ---
+
+    /// A lower FS exposing a symlink `link -> target.txt` and an executable
+    /// regular file `run` (perm 0o755, served as a virtual/transformed file).
+    /// Tree: root(1) → {link(2, symlink), target.txt(3), run(4, exec)}
+    struct MockLowerWithSpecialFiles;
+
+    impl VfsOps for MockLowerWithSpecialFiles {
+        fn lookup(&self, parent: u64, name: &OsStr) -> Result<FileAttr, i32> {
+            match (parent, name.to_str().unwrap()) {
+                (1, "link") => self.getattr(2),
+                (1, "target.txt") => self.getattr(3),
+                (1, "run") => self.getattr(4),
+                _ => Err(ENOENT),
+            }
+        }
+        fn getattr(&self, ino: u64) -> Result<FileAttr, i32> {
+            let (kind, size, perm) = match ino {
+                1 => (FileKind::Directory, 0, 0o755),
+                2 => (FileKind::Symlink, 10, 0o777),
+                3 => (FileKind::RegularFile, 5, 0o644),
+                4 => (FileKind::RegularFile, 12, 0o755),
+                _ => return Err(ENOENT),
+            };
+            Ok(FileAttr {
+                ino,
+                size,
+                blocks: 1,
+                atime: UNIX_EPOCH,
+                mtime: UNIX_EPOCH,
+                ctime: UNIX_EPOCH,
+                kind,
+                perm,
+                nlink: 1,
+                uid: 0,
+                gid: 0,
+            })
+        }
+        fn readlink(&self, ino: u64) -> Result<PathBuf, i32> {
+            match ino {
+                2 => Ok(PathBuf::from("target.txt")),
+                _ => Err(ENOENT),
+            }
+        }
+        fn read(&self, ino: u64, offset: u64, size: u32) -> Result<Vec<u8>, i32> {
+            let content = match ino {
+                3 => b"hello".to_vec(),
+                4 => b"#!/bin/sh\ne\n".to_vec(),
+                // Symlinks yield no bytes through the VFS — this is exactly why
+                // copy-up must special-case them.
+                2 => vec![],
+                _ => return Err(EIO),
+            };
+            let start = offset as usize;
+            let end = (start + size as usize).min(content.len());
+            if start >= content.len() {
+                return Ok(vec![]);
+            }
+            Ok(content[start..end].to_vec())
+        }
+        fn content_source(&self, ino: u64) -> Result<ContentSource, i32> {
+            match ino {
+                // Executable served through read() (prefix-replaced / virtual),
+                // matching how patched conda binaries are delivered.
+                3 | 4 => Ok(ContentSource::Virtual),
+                _ => Err(ENOENT),
+            }
+        }
+        fn readdir(&self, ino: u64, _offset: u64) -> Result<Vec<DirEntry>, i32> {
+            match ino {
+                1 => Ok(vec![
+                    DirEntry {
+                        ino: 2,
+                        kind: FileKind::Symlink,
+                        name: "link".into(),
+                    },
+                    DirEntry {
+                        ino: 3,
+                        kind: FileKind::RegularFile,
+                        name: "target.txt".into(),
+                    },
+                    DirEntry {
+                        ino: 4,
+                        kind: FileKind::RegularFile,
+                        name: "run".into(),
+                    },
+                ]),
+                _ => Err(ENOENT),
+            }
+        }
+        fn ino_to_path(&self, ino: u64) -> Result<PathBuf, i32> {
+            match ino {
+                1 => Ok(PathBuf::new()),
+                2 => Ok(PathBuf::from("link")),
+                3 => Ok(PathBuf::from("target.txt")),
+                4 => Ok(PathBuf::from("run")),
+                _ => Err(ENOENT),
+            }
+        }
+    }
+
+    /// Bug 1: copying a symlink up must recreate a symlink, not a 0-byte file.
+    #[test]
+    fn test_copy_up_preserves_symlink() {
+        let tmp = TempDir::new().unwrap();
+        let overlay_dir = tmp.path().join("upper");
+        let ofs = OverlayFS::new(
+            MockLowerWithSpecialFiles,
+            overlay_dir.clone(),
+            "hash".into(),
+            "test".into(),
+        )
+        .unwrap();
+
+        let link = ofs.lookup(1, OsStr::new("link")).unwrap();
+        assert_eq!(link.kind, FileKind::Symlink);
+
+        ofs.copy_to_upper(Path::new("link"), link.ino).unwrap();
+
+        let upper = overlay_dir.join("link");
+        let meta = fs::symlink_metadata(&upper).unwrap();
+        assert!(
+            meta.file_type().is_symlink(),
+            "copied-up symlink must remain a symlink, not a regular file"
+        );
+        assert_eq!(fs::read_link(&upper).unwrap(), Path::new("target.txt"));
+    }
+
+    /// Bug 3: copying an executable up must preserve its permission bits.
+    #[test]
+    #[cfg(unix)]
+    fn test_copy_up_preserves_exec_bit() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = TempDir::new().unwrap();
+        let overlay_dir = tmp.path().join("upper");
+        let ofs = OverlayFS::new(
+            MockLowerWithSpecialFiles,
+            overlay_dir.clone(),
+            "hash".into(),
+            "test".into(),
+        )
+        .unwrap();
+
+        let run = ofs.lookup(1, OsStr::new("run")).unwrap();
+        assert_eq!(run.perm, 0o755);
+
+        ofs.copy_to_upper(Path::new("run"), run.ino).unwrap();
+
+        let upper = overlay_dir.join("run");
+        let mode = fs::metadata(&upper).unwrap().permissions().mode();
+        assert_ne!(
+            mode & 0o111,
+            0,
+            "copied-up executable lost its exec bit (mode {mode:o})"
+        );
+    }
+
+    /// Bug 2: renaming a directory that is partially materialized in the upper
+    /// layer must not drop the lower-only children. This exercises the
+    /// `copy_to_upper` early-return: `lib/python` already exists in upper (a new
+    /// file was written there), yet its lower-only `foo.py`/`bar.py` must still
+    /// be carried across the rename.
+    #[test]
+    fn test_rename_partially_materialized_dir_preserves_lower_children() {
+        let tmp = TempDir::new().unwrap();
+        let overlay_dir = tmp.path().join("upper");
+        let ofs = OverlayFS::new(
+            MockLowerWithFiles,
+            overlay_dir.clone(),
+            "hash".into(),
+            "test".into(),
+        )
+        .unwrap();
+
+        // MockLowerWithFiles: lib(2) → python(3) → {foo.py(4), bar.py(5)}
+        let lib = ofs.lookup(1, OsStr::new("lib")).unwrap();
+        let python = ofs.lookup(lib.ino, OsStr::new("python")).unwrap();
+
+        // Partially materialize lib/python in the upper layer by adding a file.
+        // This makes overlay_dir/lib/python exist on disk while foo.py/bar.py
+        // still live only in the lower layer.
+        let (_, fh) = ofs
+            .create(python.ino, OsStr::new("added.py"), 0o644)
+            .unwrap();
+        ofs.write(fh, 0, b"added").unwrap();
+        ofs.release_write(fh);
+        assert!(overlay_dir.join("lib/python").is_dir());
+
+        // Rename the whole lib tree — the child dir lib/python is now a
+        // partially-materialized upper directory.
+        ofs.rename(1, OsStr::new("lib"), 1, OsStr::new("lib2"), 0)
+            .unwrap();
+
+        // All three files must be reachable under the new path.
+        let lib2 = ofs.lookup(1, OsStr::new("lib2")).unwrap();
+        let python2 = ofs.lookup(lib2.ino, OsStr::new("python")).unwrap();
+
+        let foo = ofs.lookup(python2.ino, OsStr::new("foo.py")).unwrap();
+        assert_eq!(ofs.read(foo.ino, 0, 1024).unwrap(), b"foo content");
+
+        let bar = ofs.lookup(python2.ino, OsStr::new("bar.py")).unwrap();
+        assert_eq!(ofs.read(bar.ino, 0, 1024).unwrap(), b"bar content");
+
+        assert!(ofs.lookup(python2.ino, OsStr::new("added.py")).is_ok());
+
+        // The lower-only children must exist as real files on disk in upper,
+        // not be silently dropped.
+        assert!(overlay_dir.join("lib2/python/foo.py").exists());
+        assert!(overlay_dir.join("lib2/python/bar.py").exists());
+
+        // Old path is gone.
+        assert_eq!(ofs.lookup(1, OsStr::new("lib")).unwrap_err(), ENOENT);
     }
 }
