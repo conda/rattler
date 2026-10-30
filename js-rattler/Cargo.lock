@@ -1558,7 +1558,6 @@ version = "0.1.1"
 dependencies = [
  "astral-reqwest-middleware",
  "console_error_panic_hook",
- "getrandom 0.2.17",
  "getrandom 0.3.4",
  "getrandom 0.4.3",
  "hex",
@@ -2261,7 +2260,6 @@ dependencies = [
  "fs-err",
  "futures",
  "futures-util",
- "getrandom 0.2.17",
  "getrandom 0.4.3",
  "hex",
  "http",
