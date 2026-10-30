@@ -405,17 +405,24 @@ impl ExcludeNewer {
         self.insert_exemption(spec, Some(cutoff))
     }
 
-    fn insert_exemption(
-        mut self,
-        spec: MatchSpec,
-        cutoff: Option<Timestamp>,
-    ) -> Result<Self, InvalidExemptionError> {
+    /// Checks that `spec` can be used as an exemption, see
+    /// [`Self::with_exemption`], without adding it.
+    pub fn validate_exemption(spec: &MatchSpec) -> Result<(), InvalidExemptionError> {
         if spec.name.as_exact().is_none() {
             return Err(InvalidExemptionError::NotExactName(spec.to_string()));
         }
         if spec.extras.is_some() || spec.condition.is_some() || spec.namespace.is_some() {
             return Err(InvalidExemptionError::UnsupportedField(spec.to_string()));
         }
+        Ok(())
+    }
+
+    fn insert_exemption(
+        mut self,
+        spec: MatchSpec,
+        cutoff: Option<Timestamp>,
+    ) -> Result<Self, InvalidExemptionError> {
+        Self::validate_exemption(&spec)?;
         self.exemptions.insert(spec, cutoff);
         Ok(self)
     }

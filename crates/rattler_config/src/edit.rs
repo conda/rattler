@@ -8,9 +8,10 @@
 //! without any per-field code. Unknown keys are rejected using the same
 //! detection that [`ConfigBase::from_toml_str`] uses when loading files.
 
-use std::path::Path;
+use std::{path::Path, str::FromStr};
 
 use crate::config::{Config, ConfigBase};
+use rattler_conda_types::PackageName;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -122,6 +123,108 @@ fn remove_path(table: &mut toml::Table, segments: &[String]) -> bool {
     current.remove(last).is_some()
 }
 
+/// Prepares an edit of a key inside `exclude-newer`, which `set` cannot do on
+/// the serialized configuration alone:
+/// - A cutoff without exemptions is serialized on its own, e.g.
+///   `exclude-newer = "7d"`. It is expanded into its table form, so that
+///   e.g. `exclude-newer.exemptions.ruff` keeps the cutoff.
+/// - Exemptions are keyed by package name, which is compared normalized. An
+///   exemption whose name only differs from the edited one in case is renamed
+///   to the edited name, so that e.g. setting `exemptions.Ruff` replaces
+///   `ruff` and setting `exemptions.Ruff.build` keeps the other fields of
+///   `ruff`.
+/// - An exemption that consists of a version spec only is serialized on its
+///   own, e.g. `ruff = ">=0.5"`. When a field of it is edited, it is expanded
+///   into its table form, so that e.g. `exemptions.ruff.build` keeps the
+///   version.
+fn prepare_exclude_newer_edit(table: &mut toml::Table, segments: &[String]) {
+    let [first, rest @ ..] = segments else {
+        return;
+    };
+    if first != "exclude-newer" || rest.is_empty() {
+        return;
+    }
+    let Some(exclude_newer) = table.get_mut(first) else {
+        return;
+    };
+    if let toml::Value::String(cutoff) = exclude_newer {
+        let cutoff = std::mem::take(cutoff);
+        *exclude_newer = toml::Value::Table(toml::Table::from_iter([(
+            "cutoff".to_string(),
+            toml::Value::String(cutoff),
+        )]));
+    }
+
+    let [exemptions_key, edited, field @ ..] = rest else {
+        return;
+    };
+    if exemptions_key != "exemptions" {
+        return;
+    }
+    let Ok(name) = PackageName::from_str(edited) else {
+        return;
+    };
+    let Some(exemptions) = exclude_newer
+        .get_mut("exemptions")
+        .and_then(toml::Value::as_table_mut)
+    else {
+        return;
+    };
+    let existing = exemptions
+        .keys()
+        .find(|existing| PackageName::from_str(existing).ok().as_ref() == Some(&name))
+        .cloned();
+    if let Some(existing) = existing
+        && existing != *edited
+    {
+        let exemption = exemptions
+            .remove(&existing)
+            .expect("the key was just found");
+        exemptions.insert(edited.clone(), exemption);
+    }
+
+    if !field.is_empty()
+        && let Some(exemption) = exemptions.get_mut(edited)
+        && let toml::Value::String(version) = exemption
+    {
+        let version = std::mem::take(version);
+        *exemption = toml::Value::Table(toml::Table::from_iter([(
+            "version".to_string(),
+            toml::Value::String(version),
+        )]));
+    }
+}
+
+/// Checks that `exclude-newer` is set before an exemption is added to it,
+/// which would otherwise fail with a missing field `cutoff`.
+fn check_exclude_newer_is_set(
+    table: &toml::Table,
+    segments: &[String],
+    key: &str,
+) -> Result<(), ConfigEditError> {
+    if let [first, second, ..] = segments
+        && first == "exclude-newer"
+        && second == "exemptions"
+        && !table.contains_key(first)
+    {
+        return Err(ConfigEditError::InvalidValue {
+            key: key.to_string(),
+            source: "`exclude-newer` is not set, set its cutoff before adding exemptions, e.g. `exclude-newer = \"7d\"`".into(),
+        });
+    }
+    Ok(())
+}
+
+/// Is `error` a type mismatch of a value of type `ty`, e.g. `string`?
+fn is_type_error(error: &ConfigEditError, ty: &str) -> bool {
+    match error {
+        ConfigEditError::InvalidValue { source, .. } => {
+            source.to_string().contains(&format!("invalid type: {ty}"))
+        }
+        _ => false,
+    }
+}
+
 /// Does `key` address (part of) one of the `known` dotted key paths?
 fn is_known_key(key: &str, known: &[String]) -> bool {
     known.iter().any(|k| {
@@ -162,8 +265,10 @@ where
         }
 
         let mut table = toml::Table::try_from(&*self)?;
+        prepare_exclude_newer_edit(&mut table, &segments);
 
         if let Some(raw) = value {
+            check_exclude_newer_is_set(&table, &segments, key)?;
             let parsed = parse_value(&raw);
             let retry_as_string = !matches!(parsed, toml::Value::String(_));
             insert_path(&mut table, &segments, parsed);
@@ -172,10 +277,19 @@ where
                 Ok(()) => Ok(()),
                 Err(first_error) if retry_as_string => {
                     // The JSON interpretation did not fit the target
-                    // field (e.g. `region = "true"`); retry verbatim.
+                    // field (e.g. `region = "true"`); retry verbatim. If the
+                    // type of the JSON value is wrong but the field takes a
+                    // string, the error of the verbatim value is the
+                    // relevant one (e.g. an invalid cutoff `2026`).
                     insert_path(&mut table, &segments, toml::Value::String(raw));
-                    self.rebuild_from(&table, key)
-                        .map_err(|_retry_error| first_error)
+                    self.rebuild_from(&table, key).map_err(|retry_error| {
+                        if is_type_error(&first_error, "") && !is_type_error(&retry_error, "string")
+                        {
+                            retry_error
+                        } else {
+                            first_error
+                        }
+                    })
                 }
                 Err(err) => Err(err),
             }

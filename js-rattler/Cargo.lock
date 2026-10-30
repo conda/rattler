@@ -2175,8 +2175,13 @@ version = "0.10.0"
 dependencies = [
  "dirs",
  "fs-err",
+ "hex",
+ "humantime",
  "indexmap 2.14.2",
+ "jiff",
  "rattler_conda_types",
+ "rattler_digest",
+ "rattler_solve",
  "serde",
  "serde_ignored",
  "serde_json",

@@ -642,7 +642,7 @@ mod tests {
         config.set("exclude-newer", Some("7d".to_string())).unwrap();
         assert_eq!(
             config.exclude_newer,
-            Some(ExcludeNewerConfig::from_cutoff("7d"))
+            Some(ExcludeNewerConfig::from_cutoff("7d".parse().unwrap()))
         );
 
         // A table is given as JSON.
@@ -671,21 +671,250 @@ mod tests {
         assert_eq!(
             config.exclude_newer.as_ref().unwrap().exemptions
                 [&rattler_conda_types::PackageName::new_unchecked("ruff")],
-            ExcludeNewerExemption::Version("1.10".to_string())
+            ExcludeNewerExemption::from_version(
+                rattler_conda_types::VersionSpec::from_str(
+                    "1.10",
+                    rattler_conda_types::ParseStrictness::Lenient
+                )
+                .unwrap()
+            )
         );
 
-        // Exemptions cannot be added to a bare cutoff key by key.
+        // Exemptions can be added to a bare cutoff key by key, which keeps the
+        // cutoff.
         config.set("exclude-newer", Some("7d".to_string())).unwrap();
         config
             .set("exclude-newer.exemptions.ruff", Some("*".to_string()))
-            .unwrap_err();
+            .unwrap();
+        let exclude_newer = config.exclude_newer.as_ref().unwrap();
+        assert_eq!(exclude_newer.cutoff, "7d");
+        assert_eq!(
+            exclude_newer.exemptions[&rattler_conda_types::PackageName::new_unchecked("ruff")],
+            ExcludeNewerExemption::from_version(rattler_conda_types::VersionSpec::Any)
+        );
+
+        // So can the cutoff.
+        config.set("exclude-newer", Some("7d".to_string())).unwrap();
+        config
+            .set("exclude-newer.cutoff", Some("14d".to_string()))
+            .unwrap();
         assert_eq!(
             config.exclude_newer,
-            Some(ExcludeNewerConfig::from_cutoff("7d"))
+            Some(ExcludeNewerConfig::from_cutoff("14d".parse().unwrap()))
         );
 
         config.set("exclude-newer", None).unwrap();
         assert_eq!(config.exclude_newer, None);
+    }
+
+    #[test]
+    fn test_edit_exclude_newer_exemption_names_are_normalized() {
+        use rattler_conda_types::{NamelessMatchSpec, ParseStrictness};
+
+        let mut config = TestConfig::default();
+        config
+            .set(
+                "exclude-newer",
+                Some(
+                    r#"{"cutoff": "7d", "exemptions": {"ruff": {"version": "*", "build": "py*"}}}"#
+                        .to_string(),
+                ),
+            )
+            .unwrap();
+
+        // A field of an exemption that is written in a different case keeps
+        // the other fields, under the name as it is edited.
+        config
+            .set(
+                "exclude-newer.exemptions.Ruff.version",
+                Some("==1".to_string()),
+            )
+            .unwrap();
+        let exemptions = &config.exclude_newer.as_ref().unwrap().exemptions;
+        assert_eq!(exemptions.len(), 1);
+        let (name, exemption) = exemptions.first().unwrap();
+        assert_eq!(name.as_source(), "Ruff");
+        assert_eq!(
+            exemption.spec,
+            NamelessMatchSpec::from_str("==1 py*", ParseStrictness::Lenient).unwrap()
+        );
+
+        // Setting an exemption replaces it.
+        config
+            .set("exclude-newer.exemptions.RUFF", Some("*".to_string()))
+            .unwrap();
+        let exemptions = &config.exclude_newer.as_ref().unwrap().exemptions;
+        assert_eq!(exemptions.len(), 1);
+        assert_eq!(exemptions.first().unwrap().0.as_source(), "RUFF");
+
+        // Unsetting it removes it, and the cutoff is left on its own.
+        config.set("exclude-newer.exemptions.ruff", None).unwrap();
+        assert_eq!(
+            config.exclude_newer,
+            Some(
+                crate::config::exclude_newer::ExcludeNewerConfig::from_cutoff(
+                    "7d".parse().unwrap()
+                )
+            )
+        );
+    }
+
+    #[test]
+    fn test_edit_exclude_newer_exemption_field_keeps_version() {
+        use rattler_conda_types::{NamelessMatchSpec, PackageName, ParseStrictness};
+
+        let mut config = TestConfig::default();
+        config
+            .set(
+                "exclude-newer",
+                Some(r#"{"cutoff": "7d", "exemptions": {"ruff": ">=0.5,<0.6"}}"#.to_string()),
+            )
+            .unwrap();
+
+        // Editing a field of an exemption that is written as a version keeps
+        // the version.
+        config
+            .set(
+                "exclude-newer.exemptions.ruff.build",
+                Some("py*".to_string()),
+            )
+            .unwrap();
+        let exemption =
+            &config.exclude_newer.as_ref().unwrap().exemptions[&PackageName::new_unchecked("ruff")];
+        assert_eq!(
+            exemption.spec,
+            NamelessMatchSpec::from_str(">=0.5,<0.6 py*", ParseStrictness::Lenient).unwrap()
+        );
+
+        config
+            .set("exclude-newer.exemptions.ruff", Some(">=1".to_string()))
+            .unwrap();
+        config
+            .set(
+                "exclude-newer.exemptions.ruff.cutoff",
+                Some("2026-10-12".to_string()),
+            )
+            .unwrap();
+        let exemption =
+            &config.exclude_newer.as_ref().unwrap().exemptions[&PackageName::new_unchecked("ruff")];
+        assert_eq!(
+            exemption.spec,
+            NamelessMatchSpec::from_str(">=1", ParseStrictness::Lenient).unwrap()
+        );
+        assert_eq!(
+            exemption
+                .cutoff
+                .as_ref()
+                .map(crate::config::exclude_newer::ExcludeNewerCutoff::as_str),
+            Some("2026-10-12")
+        );
+    }
+
+    #[test]
+    fn test_edit_exclude_newer_reports_error_of_string_value() {
+        let mut config = TestConfig::default();
+        config.set("exclude-newer", Some("7d".to_string())).unwrap();
+
+        // `2026` parses as a number, but the error is about the cutoff it
+        // is as a string.
+        let error = config
+            .set("exclude-newer", Some("2026".to_string()))
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("invalid cutoff `2026`"),
+            "{error}"
+        );
+
+        // A field that doesn't take a string reports the error of the
+        // number.
+        let error = config
+            .set("concurrency.solves", Some("1.5".to_string()))
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("invalid type: floating point"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn test_edit_exclude_newer_rejects_invalid_values() {
+        let mut config = TestConfig::default();
+        config.set("exclude-newer", Some("7d".to_string())).unwrap();
+
+        for (key, value) in [
+            ("exclude-newer", "7 weeks ago"),
+            ("exclude-newer.cutoff", "yesterday"),
+            ("exclude-newer.exemptions.ruff", ">>>"),
+            ("exclude-newer.exemptions.ruff.bogus", "*"),
+            ("exclude-newer.exemptions.ruff.cutoff", "7d"),
+            (
+                "exclude-newer",
+                r#"{"cutoff": "7d", "exemptions": {"ruff": {}}}"#,
+            ),
+            ("exclude-newer", r#"{"cutoff": "7d", "bogus": 1}"#),
+        ] {
+            let error = config.set(key, Some(value.to_string())).unwrap_err();
+            assert!(
+                matches!(error, crate::edit::ConfigEditError::InvalidValue { .. }),
+                "{key} = {value}: {error}"
+            );
+        }
+
+        assert_eq!(
+            config.exclude_newer,
+            Some(
+                crate::config::exclude_newer::ExcludeNewerConfig::from_cutoff(
+                    "7d".parse().unwrap()
+                )
+            )
+        );
+    }
+
+    #[test]
+    fn test_edit_exclude_newer_exemption_requires_cutoff() {
+        let mut config = TestConfig::default();
+        for key in [
+            "exclude-newer.exemptions.ruff",
+            "exclude-newer.exemptions.ruff.version",
+        ] {
+            let error = config.set(key, Some("*".to_string())).unwrap_err();
+            assert!(
+                error.to_string().contains(
+                    "`exclude-newer` is not set, set its cutoff before adding exemptions"
+                ),
+                "{key}: {error}"
+            );
+        }
+        let error = config
+            .set(
+                "exclude-newer.exemptions",
+                Some(r#"{"ruff": "*"}"#.to_string()),
+            )
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("`exclude-newer` is not set"),
+            "{error}"
+        );
+        assert_eq!(config.exclude_newer, None);
+
+        // Unsetting an exemption that is not set is fine.
+        config.set("exclude-newer.exemptions.ruff", None).unwrap();
+    }
+
+    #[test]
+    fn test_unknown_exclude_newer_key_is_rejected() {
+        let error = TestConfig::from_toml_str(
+            r#"
+            [exclude-newer]
+            cutoff = "7d"
+            exemption = { ruff = "*" }
+            "#,
+        )
+        .unwrap_err();
+        assert!(
+            error.to_string().contains("unknown field `exemption`"),
+            "{error}"
+        );
     }
 
     #[test]
