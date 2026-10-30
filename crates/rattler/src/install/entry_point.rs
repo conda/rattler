@@ -5,10 +5,9 @@ use rattler_conda_types::{
     package::EntryPoint,
     prefix_record::{PathType, PathsEntry},
 };
-use rattler_digest::HashingWriter;
-use rattler_digest::Sha256;
+use rattler_digest::{Sha256, compute_bytes_digest};
 use std::path::{Component, PathBuf};
-use std::{fs::File, io, io::Write, path::Path};
+use std::{collections::HashMap, io, io::Write, path::Path};
 
 use super::Prefix;
 
@@ -110,24 +109,27 @@ pub fn get_windows_launcher(platform: &Subdir) -> &'static [u8] {
 /// `CPython` 3.7 launcher patched for the conda ecosystem).
 ///
 /// See [`create_unix_python_entry_point`] for the unix variant of this function.
-pub fn create_windows_python_entry_point(
+pub(super) fn create_windows_python_entry_point(
     target_dir: &Prefix,
     target_prefix: &str,
     entry_point: &EntryPoint,
     python_info: &PythonInfo,
     target_platform: &Subdir,
-) -> Result<[PathsEntry; 2], std::io::Error> {
-    let relative_path_script_py = ensure_entry_point_relative_path(
+    clobbers: &HashMap<PathBuf, PathBuf>,
+) -> Result<[PathsEntry; 2], io::Error> {
+    let (relative_path_script_py, original_script) = entry_point_destination(
         &python_info
             .bin_dir
             .join(format!("{}-script.py", entry_point.command)),
         target_dir.path(),
+        clobbers,
     )?;
-    let relative_path_script_exe = ensure_entry_point_relative_path(
+    let (relative_path_script_exe, original_exe) = entry_point_destination(
         &python_info
             .bin_dir
             .join(format!("{}.exe", entry_point.command)),
         target_dir.path(),
+        clobbers,
     )?;
 
     let script_contents =
@@ -138,25 +140,16 @@ pub fn create_windows_python_entry_point(
         script_contents,
     )?;
 
-    let launcher_bytes = get_windows_launcher(target_platform);
-    write_validated_entry_point_bytes(
+    let (launcher_digest, launcher_size) = write_validated_entry_point_file(
         target_dir.path(),
         &relative_path_script_exe,
-        launcher_bytes,
+        get_windows_launcher(target_platform),
     )?;
-
-    // The launcher is written verbatim, so its recorded digest is simply the
-    // hash of the embedded bytes. Computing it here (rather than hardcoding)
-    // keeps the record correct across platforms and whenever the launchers are
-    // updated to a new signed release.
-    let launcher_digest =
-        rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(launcher_bytes);
 
     Ok([
         PathsEntry {
             relative_path: relative_path_script_py.into_path_buf(),
-            // todo: clobbering of entry points not handled yet
-            original_path: None,
+            original_path: original_script,
             path_type: PathType::WindowsPythonEntryPointScript,
             no_link: false,
             sha256: Some(hash),
@@ -167,12 +160,12 @@ pub fn create_windows_python_entry_point(
         },
         PathsEntry {
             relative_path: relative_path_script_exe.into_path_buf(),
-            original_path: None,
+            original_path: original_exe,
             path_type: PathType::WindowsPythonEntryPointExe,
             no_link: false,
             sha256: Some(launcher_digest),
             sha256_in_prefix: None,
-            size_in_bytes: Some(launcher_bytes.len() as u64),
+            size_in_bytes: Some(launcher_size as u64),
             prefix_placeholder: None,
             file_mode: None,
         },
@@ -186,15 +179,17 @@ pub fn create_windows_python_entry_point(
 /// python compiler which in turn invokes the correct Python function.
 ///
 /// On windows things are a bit more complicated. See [`create_windows_python_entry_point`].
-pub fn create_unix_python_entry_point(
+pub(super) fn create_unix_python_entry_point(
     target_dir: &Prefix,
     target_prefix: &str,
     entry_point: &EntryPoint,
     python_info: &PythonInfo,
-) -> Result<PathsEntry, std::io::Error> {
-    let relative_path = ensure_entry_point_relative_path(
+    clobbers: &HashMap<PathBuf, PathBuf>,
+) -> Result<PathsEntry, io::Error> {
+    let (relative_path, original_path) = entry_point_destination(
         &python_info.bin_dir.join(&entry_point.command),
         target_dir.path(),
+        clobbers,
     )?;
 
     let script_contents =
@@ -207,8 +202,7 @@ pub fn create_unix_python_entry_point(
 
     Ok(PathsEntry {
         relative_path: relative_path.into_path_buf(),
-        // todo: clobbering of entry points not handled yet
-        original_path: None,
+        original_path,
         path_type: PathType::UnixPythonEntryPoint,
         no_link: false,
         sha256: Some(hash),
@@ -217,6 +211,46 @@ pub fn create_unix_python_entry_point(
         prefix_placeholder: None,
         file_mode: None,
     })
+}
+
+/// Paths reserved in the clobber registry before any generated file is written.
+pub(super) fn entry_point_paths(
+    entry_point: &EntryPoint,
+    python_info: &PythonInfo,
+    platform: Subdir,
+    prefix: &Path,
+) -> io::Result<Vec<PathBuf>> {
+    let names = if platform.is_windows() {
+        vec![
+            format!("{}-script.py", entry_point.command),
+            format!("{}.exe", entry_point.command),
+        ]
+    } else {
+        vec![entry_point.command.clone()]
+    };
+    names
+        .into_iter()
+        .map(|name| {
+            ensure_entry_point_relative_path(&python_info.bin_dir.join(name), prefix)
+                .map(ValidatedRelativePath::into_path_buf)
+        })
+        .collect()
+}
+
+fn entry_point_destination(
+    path: &Path,
+    prefix: &Path,
+    clobbers: &HashMap<PathBuf, PathBuf>,
+) -> io::Result<(ValidatedRelativePath, Option<PathBuf>)> {
+    let original = ensure_entry_point_relative_path(path, prefix)?;
+    if let Some(destination) = clobbers.get(&original.0) {
+        Ok((
+            ensure_entry_point_relative_path(destination, prefix)?,
+            Some(original.into_path_buf()),
+        ))
+    } else {
+        Ok((original, None))
+    }
 }
 
 /// Returns Python code that, when placed in an executable file, invokes the specified
@@ -257,35 +291,29 @@ pub fn python_entry_point_template(
     )
 }
 
-/// Writes `contents` to `<prefix>/<relative_path>` and returns its hash
-/// and size.
+/// Atomically writes `contents` to `<prefix>/<relative_path>` and returns its
+/// hash and size.
 fn write_validated_entry_point_file(
     prefix: &Path,
     relative_path: &ValidatedRelativePath,
     contents: impl AsRef<[u8]>,
 ) -> io::Result<(Output<Sha256>, usize)> {
     let absolute = relative_path.absolute_under(prefix);
-    if let Some(parent) = absolute.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
+    let parent = absolute.parent().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "entry point has no parent directory: {}",
+                absolute.display()
+            ),
+        )
+    })?;
+    std::fs::create_dir_all(parent)?;
     let bytes = contents.as_ref();
-    let mut writer = HashingWriter::<_, Sha256>::new(File::create(&absolute)?);
-    writer.write_all(bytes)?;
-    let (_, hash) = writer.finalize();
-    Ok((hash, bytes.len()))
-}
-
-/// Writes raw bytes to `<prefix>/<relative_path>` (Windows launcher).
-fn write_validated_entry_point_bytes(
-    prefix: &Path,
-    relative_path: &ValidatedRelativePath,
-    bytes: &[u8],
-) -> io::Result<()> {
-    let absolute = relative_path.absolute_under(prefix);
-    if let Some(parent) = absolute.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(absolute, bytes)
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    temporary.write_all(bytes)?;
+    temporary.persist(&absolute).map_err(|error| error.error)?;
+    Ok((compute_bytes_digest::<Sha256>(bytes), bytes.len()))
 }
 
 /// Sets the executable bit on `<prefix>/<relative_path>`.

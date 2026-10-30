@@ -1,0 +1,11 @@
+---
+source: crates/rattler/src/install/mod.rs
+expression: recorded_paths
+---
+- "../../../bin/plain-script"
+- "../../../bin/script-probe"
+- "../../../bin/script-probe-gui"
+- script_probe-1.0.dist-info/INSTALLER
+- script_probe-1.0.dist-info/METADATA
+- script_probe-1.0.dist-info/RECORD
+- script_probe-1.0.dist-info/WHEEL

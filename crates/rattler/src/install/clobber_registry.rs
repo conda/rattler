@@ -118,6 +118,21 @@ impl ClobberRegistry {
         self.register_paths_by_name(name, computed_paths.iter().map(|p| &p.1))
     }
 
+    pub(crate) fn register_paths_with_entry_points(
+        &mut self,
+        index_json: &IndexJson,
+        computed_paths: &[(PathsEntry, PathBuf)],
+        entry_points: &[PathBuf],
+    ) -> HashMap<PathBuf, PathBuf> {
+        self.register_paths_by_name(
+            &index_json.name,
+            computed_paths
+                .iter()
+                .map(|path| &path.1)
+                .chain(entry_points),
+        )
+    }
+
     fn register_paths_by_name<'a>(
         &'a mut self,
         name: &PackageName,
@@ -172,10 +187,11 @@ impl ClobberRegistry {
 
         let (mut removals, additions) = self.path_trie.reprioritize_packages(new_priorities);
 
+        // Restore only final winners, not intermediate winners queued during removals.
         let more_additions = self
             .to_add
             .iter()
-            .filter(|&p| self.path_trie.packages().contains(&p.1) && !additions.contains(p));
+            .filter(|&p| self.path_trie.active_owner(&p.0) == Some(&p.1) && !additions.contains(p));
 
         let mut all_additions = more_additions
             .chain(additions.iter())

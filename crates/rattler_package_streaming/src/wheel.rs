@@ -9,8 +9,10 @@
 //! Raw `#!python` and `#!pythonw` scripts use relocatable shebangs targeting
 //! `bin/python` on Unix. Windows launchers for raw scripts are not generated.
 //!
-//! `RECORD` describes the cache layout, not final installed paths; its original
-//! signatures are discarded. Original RECORD hashes are not verified; callers
+//! `RECORD` describes the cache layout, not final installed paths. The full
+//! `rattler::install::Installer` finalizes an environment-specific copy after
+//! linking; low-level linking alone does not. Original RECORD signatures are
+//! discarded. Original RECORD hashes are not verified; callers
 //! should verify the returned archive hashes against trusted repodata when available.
 
 use std::{

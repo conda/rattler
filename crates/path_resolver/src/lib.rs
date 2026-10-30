@@ -580,6 +580,29 @@ New:
         Self::get_node(&self.root, path.as_ref()).map(|n| &n.terminals)
     }
 
+    /// Return the active owner of a file under the current package priorities.
+    /// A directory, missing path, or file shadowed by an ancestor returns `None`.
+    pub fn active_owner<P: AsRef<Path>>(&self, path: P) -> Option<&PackageName> {
+        let mut node = &self.root;
+        for component in path.as_ref().components().map(Component::as_os_str) {
+            if !node.terminals.is_empty()
+                && let Some(owner) = self
+                    .packages
+                    .iter()
+                    .find(|package| node.prefixes.contains(*package))
+                && node.terminals.contains(owner)
+            {
+                return None;
+            }
+            node = node.children.get(component)?;
+        }
+        let owner = self
+            .packages
+            .iter()
+            .find(|package| node.prefixes.contains(*package))?;
+        node.terminals.contains(owner).then_some(owner)
+    }
+
     /// List global file-vs-file conflicts (>1 owners).
     pub fn find_conflicts(&self) -> Vec<(PathBuf, Vec<PackageName>)> {
         fn dfs(n: &PathTrieNode, cur: &mut PathBuf, out: &mut Vec<(PathBuf, Vec<PackageName>)>) {

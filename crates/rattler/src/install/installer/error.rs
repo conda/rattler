@@ -96,6 +96,9 @@ impl From<PostProcessingError> for InstallerError {
     fn from(value: PostProcessingError) -> Self {
         match value {
             PostProcessingError::ClobberError(err) => InstallerError::ClobberError(err),
+            PostProcessingError::WheelRecord(err) => {
+                InstallerError::IoError("finalizing wheel RECORD".into(), err)
+            }
             PostProcessingError::FailedToDetectInstalledPackages(err) => {
                 InstallerError::FailedToDetectInstalledPackages(err)
             }
