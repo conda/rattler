@@ -21,7 +21,7 @@
     MissingFileName,
     MissingBuildString,
     InvalidCondaName(<a class="enum" href="../../rattler_conda_types/package_name/enum.InvalidPackageNameError.html" title="enum rattler_conda_types::package_name::InvalidPackageNameError">InvalidPackageNameError</a>),
-    InvalidCondaVersion(<a class="struct" href="../../rattler_conda_version/version/parse/struct.ParseVersionError.html" title="struct rattler_conda_version::version::parse::ParseVersionError">ParseVersionError</a>),
+    InvalidCondaVersion(ParseVersionError),
     InvalidPythonName(InvalidNameError),
     InvalidPythonVersion(VersionParseError),
     InvalidRequirement(<a class="struct" href="https://doc.rust-lang.org/1.98.1/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;Pep508Error&gt;),
@@ -78,7 +78,7 @@ identity a pixi lock file records.</p>
 </div><section id="variant.MissingFileName" class="variant"><a href="#variant.MissingFileName" class="anchor">§</a><h3 class="code-header">MissingFileName</h3></section><div class="docblock"><p>The URL has no conda archive file name.</p>
 </div><section id="variant.MissingBuildString" class="variant"><a href="#variant.MissingBuildString" class="anchor">§</a><h3 class="code-header">MissingBuildString</h3></section><div class="docblock"><p>Neither the <code>build</code> field nor the URL yields a build string.</p>
 </div><section id="variant.InvalidCondaName" class="variant"><a href="#variant.InvalidCondaName" class="anchor">§</a><h3 class="code-header">InvalidCondaName(<a class="enum" href="../../rattler_conda_types/package_name/enum.InvalidPackageNameError.html" title="enum rattler_conda_types::package_name::InvalidPackageNameError">InvalidPackageNameError</a>)</h3></section><div class="docblock"><p>A conda package name is invalid.</p>
-</div><section id="variant.InvalidCondaVersion" class="variant"><a href="#variant.InvalidCondaVersion" class="anchor">§</a><h3 class="code-header">InvalidCondaVersion(<a class="struct" href="../../rattler_conda_version/version/parse/struct.ParseVersionError.html" title="struct rattler_conda_version::version::parse::ParseVersionError">ParseVersionError</a>)</h3></section><div class="docblock"><p>A conda version is invalid.</p>
+</div><section id="variant.InvalidCondaVersion" class="variant"><a href="#variant.InvalidCondaVersion" class="anchor">§</a><h3 class="code-header">InvalidCondaVersion(ParseVersionError)</h3></section><div class="docblock"><p>A conda version is invalid.</p>
 </div><section id="variant.InvalidPythonName" class="variant"><a href="#variant.InvalidPythonName" class="anchor">§</a><h3 class="code-header">InvalidPythonName(InvalidNameError)</h3></section><div class="docblock"><p>A Python package name is invalid.</p>
 </div><section id="variant.InvalidPythonVersion" class="variant"><a href="#variant.InvalidPythonVersion" class="anchor">§</a><h3 class="code-header">InvalidPythonVersion(VersionParseError)</h3></section><div class="docblock"><p>A Python version is invalid.</p>
 </div><section id="variant.InvalidRequirement" class="variant"><a href="#variant.InvalidRequirement" class="anchor">§</a><h3 class="code-header">InvalidRequirement(<a class="struct" href="https://doc.rust-lang.org/1.98.1/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;Pep508Error&gt;)</h3></section><div class="docblock"><p>A dependency is not a valid PEP 508 requirement.</p>
