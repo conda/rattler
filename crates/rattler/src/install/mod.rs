@@ -1404,6 +1404,7 @@ mod test {
     };
     use rattler_lock::LockFile;
     use rattler_networking::LazyClient;
+    #[cfg(unix)]
     use tempfile::tempdir;
     use url::Url;
 

@@ -33,7 +33,7 @@ use tokio::{sync::Semaphore, task::JoinError};
 
 use super::{
     AppleCodeSignBehavior, ExternalSymlinkPolicy, InstallDriver, InstallOptions, Prefix,
-    Transaction, unlink_package,
+    Transaction, unlink_package, wheel_record,
 };
 use crate::{
     default_cache_dir,
@@ -680,11 +680,7 @@ impl Installer {
             // Conda-only no-ops keep the minimal-record fast path. For wheels,
             // all owners are needed to reject ambiguous legacy command paths.
             if desired_records.iter().any(|record| {
-                matches!(record.identifier.archive_type, DistArchiveType::Wheel(_))
-                    && self
-                        .ignored_packages
-                        .as_ref()
-                        .is_none_or(|ignored| !ignored.contains(&record.package_record.name))
+                wheel_record::is_managed_wheel(record, self.ignored_packages.as_ref())
             }) {
                 let mut records = Vec::new();
                 for record in transaction.unchanged_packages() {
@@ -698,14 +694,7 @@ impl Installer {
                             .map_err(InstallerError::FailedToDetectInstalledPackages)?,
                     );
                 }
-                super::wheel_record::validate_wheel_ownership(
-                    &records,
-                    self.ignored_packages.as_ref(),
-                )
-                .map_err(|error| {
-                    InstallerError::IoError("validating wheel file ownership".into(), error)
-                })?;
-                super::wheel_record::finalize_wheel_records(
+                wheel_record::finalize_wheel_records(
                     &prefix,
                     &mut records,
                     self.ignored_packages.as_ref(),
