@@ -8,12 +8,13 @@ use rattler_conda_types::{
     ChannelUrl, PackageRecord, RepoDataRecord, Shard, UrlOrPath, WhlPackageRecord,
     package::{CondaArchiveType, DistArchiveIdentifier, DistArchiveType, WheelArchiveType},
 };
+use rattler_digest::{HashingReader, Sha256, Sha256Hash};
 use rattler_redaction::Redact;
 use url::Url;
 
 use crate::{
-    GatewayError, fetch::FetchRepoDataError, gateway::subdir::FetchedPackage,
-    sparse::RemovedPackage,
+    GatewayError, ShardHashMismatchError, fetch::FetchRepoDataError,
+    gateway::subdir::FetchedPackage, sparse::RemovedPackage,
 };
 
 /// Returns `true` if the HTTP status indicates that the server does not expose
@@ -48,37 +49,88 @@ fn add_trailing_slash(url: &Url) -> Cow<'_, Url> {
     }
 }
 
+/// Decompresses the `len` zstd bytes `reader` yields, downloaded from `url`.
+fn decode_zst_reader(
+    reader: impl io::Read,
+    len: usize,
+    url: &Url,
+) -> Result<Vec<u8>, GatewayError> {
+    // Check for empty response which indicates a misconfigured server
+    if len == 0 {
+        return Err(GatewayError::IoError(
+            format!(
+                "failed to decode zstd shard from '{}': received empty response (0 bytes). \
+                This usually indicates a misconfigured server.",
+                url.clone().redact()
+            ),
+            io::Error::new(io::ErrorKind::UnexpectedEof, "empty response"),
+        ));
+    }
+
+    zstd::decode_all(reader).map_err(|err| {
+        GatewayError::IoError(
+            format!(
+                "failed to decode zstd shard from '{}' ({len} bytes received). \
+                The server may have returned invalid or truncated data.",
+                url.clone().redact(),
+            ),
+            err,
+        )
+    })
+}
+
 async fn decode_zst_bytes_async<R: AsRef<[u8]> + Send + 'static>(
     bytes: R,
     url: Url,
 ) -> Result<Vec<u8>, GatewayError> {
     let decode = move || {
-        let bytes_ref = bytes.as_ref();
+        let bytes = bytes.as_ref();
+        decode_zst_reader(bytes, bytes.len(), &url)
+    };
 
-        // Check for empty response which indicates a misconfigured server
-        if bytes_ref.is_empty() {
-            return Err(GatewayError::IoError(
-                format!(
-                    "failed to decode zstd shard from '{}': received empty response (0 bytes). \
-                    This usually indicates a misconfigured server.",
-                    url.redact()
-                ),
-                std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "empty response"),
-            ));
-        }
+    #[cfg(target_arch = "wasm32")]
+    return decode();
 
-        match zstd::decode_all(bytes_ref) {
-            Ok(decoded) => Ok(decoded),
-            Err(err) => Err(GatewayError::IoError(
-                format!(
-                    "failed to decode zstd shard from '{}' ({} bytes received). \
-                    The server may have returned invalid or truncated data.",
-                    url.redact(),
-                    bytes_ref.len()
-                ),
+    #[cfg(not(target_arch = "wasm32"))]
+    simple_spawn_blocking::tokio::run_blocking_task(decode).await
+}
+
+/// Decompresses a shard downloaded from `url` and checks that its compressed
+/// bytes hash to `expected_sha256`, the hash the shard index lists for it. The
+/// hash is computed while decoding.
+///
+/// Shards are cached by that hash in a cache shared by all channels, so a
+/// shard whose bytes do not match is rejected, whether or not it decodes,
+/// before it can be parsed or cached.
+async fn decode_verified_shard_async<R: AsRef<[u8]> + Send + 'static>(
+    bytes: R,
+    expected_sha256: Sha256Hash,
+    url: Url,
+) -> Result<Vec<u8>, GatewayError> {
+    let decode = move || {
+        let bytes = bytes.as_ref();
+        let mut reader = HashingReader::<_, Sha256>::new(bytes);
+        let decoded = decode_zst_reader(&mut reader, bytes.len(), &url);
+
+        // The decoder may stop before the end of the input, after a failure or
+        // a final frame; the hash covers every byte.
+        io::copy(&mut reader, &mut io::sink()).map_err(|err| {
+            GatewayError::IoError(
+                format!("failed to hash shard from '{}'", url.clone().redact()),
                 err,
-            )),
+            )
+        })?;
+        let (_, actual_sha256) = reader.finalize();
+        if actual_sha256 != expected_sha256 {
+            return Err(Box::new(ShardHashMismatchError {
+                url: url.redact(),
+                expected: expected_sha256,
+                actual: actual_sha256,
+            })
+            .into());
         }
+
+        decoded
     };
 
     #[cfg(target_arch = "wasm32")]
@@ -242,7 +294,7 @@ mod tests {
         ShardedSubdirInfo, Version,
         package::{BuildString, DistArchiveIdentifier},
     };
-    use rattler_digest::{Sha256, parse_digest_from_hex};
+    use rattler_digest::{Sha256, Sha256Hash, compute_bytes_digest};
     use std::future::IntoFuture;
     use std::net::SocketAddr;
     use std::path::{Path, PathBuf};
@@ -286,12 +338,7 @@ mod tests {
         ) -> Self {
             // Create a minimal sharded index with one package
             let mut shards = ahash::HashMap::default();
-            // Use a known hash for the "test-package" shard (SHA256 of empty string)
-            let shard_hash = parse_digest_from_hex::<Sha256>(
-                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-            )
-            .unwrap();
-            shards.insert("test-package".to_string(), shard_hash);
+            shards.insert("test-package".to_string(), shard_response.advertised_hash());
 
             let sharded_index = ShardedRepodata {
                 info: ShardedSubdirInfo {
@@ -346,17 +393,12 @@ mod tests {
                         move || async move {
                             shard_requests.fetch_add(1, Ordering::SeqCst);
                             match shard_response {
-                                MockShardResponse::Empty => Response::builder()
+                                MockShardResponse::Empty
+                                | MockShardResponse::Truncated
+                                | MockShardResponse::Forged => Response::builder()
                                     .status(StatusCode::OK)
-                                    .body(Body::empty())
+                                    .body(Body::from(shard_response.body()))
                                     .unwrap(),
-                                MockShardResponse::Truncated => {
-                                    // Return some bytes that look like zstd but are truncated
-                                    Response::builder()
-                                        .status(StatusCode::OK)
-                                        .body(Body::from(vec![0x28, 0xb5, 0x2f, 0xfd]))
-                                        .unwrap()
-                                }
                                 MockShardResponse::Status(status) => Response::builder()
                                     .status(status)
                                     .body(Body::empty())
@@ -428,11 +470,42 @@ mod tests {
     #[derive(Clone, Copy)]
     enum MockShardResponse {
         Empty,
+        /// Bytes that look like zstd but are truncated.
         Truncated,
+        /// A valid shard that does not match the hash the index lists for it.
+        Forged,
         /// Answer with this status and an empty body.
         Status(StatusCode),
         /// Never answer.
         Hang,
+    }
+
+    impl MockShardResponse {
+        /// The body of a successful shard response.
+        fn body(self) -> Vec<u8> {
+            match self {
+                MockShardResponse::Truncated => vec![0x28, 0xb5, 0x2f, 0xfd],
+                MockShardResponse::Forged => {
+                    let shard = rmp_serde::to_vec_named(&Shard::default()).unwrap();
+                    zstd::encode_all(shard.as_slice(), 3).unwrap()
+                }
+                MockShardResponse::Empty
+                | MockShardResponse::Status(_)
+                | MockShardResponse::Hang => Vec::new(),
+            }
+        }
+
+        /// The hash the index lists for the shard: the hash of the served
+        /// body, except for a forged shard.
+        fn advertised_hash(self) -> Sha256Hash {
+            match self {
+                MockShardResponse::Forged => compute_bytes_digest::<Sha256>(b"the genuine shard"),
+                MockShardResponse::Empty
+                | MockShardResponse::Truncated
+                | MockShardResponse::Status(_)
+                | MockShardResponse::Hang => compute_bytes_digest::<Sha256>(self.body()),
+            }
+        }
     }
 
     #[tokio::test]
@@ -587,6 +660,39 @@ mod tests {
             .to_string();
 
         insta::assert_snapshot!("truncated_shard_response_error", err_string);
+    }
+
+    /// The shard cache is keyed by the hash the index lists and is shared by
+    /// all channels, so a shard whose bytes do not match that hash must be
+    /// rejected instead of being cached for another channel to read.
+    #[tokio::test]
+    async fn shard_with_wrong_hash_is_rejected_and_not_cached() {
+        let server = MockShardedServer::new(MockShardResponse::Forged).await;
+        let cache_dir = tempfile::tempdir().unwrap();
+        let subdir = load_index(&server, cache_dir.path()).await.unwrap();
+
+        let package_name = "test-package".parse().unwrap();
+        let err = subdir
+            .fetch_package_records(&package_name, FormatBucketSet::ALL, None)
+            .await
+            .expect_err("the shard does not match its hash");
+        let err_string = regex::Regex::new(r"localhost:\d+")
+            .unwrap()
+            .replace_all(&err.to_string(), "localhost:[PORT]")
+            .to_string();
+        insta::assert_snapshot!(err_string, @"the shard downloaded from 'http://localhost:[PORT]/linux-64/shards/bf9312d9d5c4103571172767a45b860bd979716392c234c5b2557d774b153df6.msgpack.zst' has SHA-256 705e4af249688ae83ad71cc747c34fee1fe00334505894accb903fbfb8ff6017, but the shard index lists bf9312d9d5c4103571172767a45b860bd979716392c234c5b2557d774b153df6");
+
+        let err = subdir
+            .fetch_package_records(&package_name, FormatBucketSet::ALL, None)
+            .await
+            .expect_err("the rejected shard was not cached");
+        assert!(
+            matches!(err, GatewayError::ShardHashMismatch(_)),
+            "expected ShardHashMismatch, got: {err}"
+        );
+
+        // The rejected shard was not cached, so it was downloaded twice.
+        assert_eq!(server.shard_request_count(), 2);
     }
 
     /// Warms the shard *index* cache without ever fetching a shard, then hands
