@@ -1526,6 +1526,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#rattler.package.paths_json.PathsJson.sort" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sort
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -4241,6 +4252,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#rattler.package.paths_json.PathsJson.sort" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sort
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -4614,6 +4636,35 @@ format, this function returns an error.</p>
         <p>Returns the path to the file within the Conda archive.</p>
 <p>The path is relative to the root of the archive and includes any necessary
 directories.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="rattler.package.paths_json.PathsJson.sort" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">sort</span>
+
+
+<a href="#rattler.package.paths_json.PathsJson.sort" class="headerlink" title="Permanent link">#</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">sort</span><span class="p">()</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Sorts the entries in <code>paths</code> in-place by their <code>relative_path</code> (<code>_path</code>).</p>
+<h4 id="rattler.package.paths_json.PathsJson.sort--examples">Examples<a class="headerlink" href="#rattler.package.paths_json.PathsJson.sort--examples" title="Permanent link">#</a></h4>
+<div class="language-python highlight"><pre><span></span><code><span id="rattler.package.paths_json.PathsJson.sort--__span-0-1"><a id="rattler.package.paths_json.PathsJson.sort--__codelineno-0-1" name="rattler.package.paths_json.PathsJson.sort--__codelineno-0-1" href="#rattler.package.paths_json.PathsJson.sort--__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">paths_json</span> <span class="o">=</span> <span class="n">PathsJson</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span>
+</span><span id="rattler.package.paths_json.PathsJson.sort--__span-0-2"><a id="rattler.package.paths_json.PathsJson.sort--__codelineno-0-2" name="rattler.package.paths_json.PathsJson.sort--__codelineno-0-2" href="#rattler.package.paths_json.PathsJson.sort--__codelineno-0-2"></a><span class="o">...</span>     <span class="s2">"../test-data/conda-22.9.0-py38haa244fe_2-paths.json"</span>
+</span><span id="rattler.package.paths_json.PathsJson.sort--__span-0-3"><a id="rattler.package.paths_json.PathsJson.sort--__codelineno-0-3" name="rattler.package.paths_json.PathsJson.sort--__codelineno-0-3" href="#rattler.package.paths_json.PathsJson.sort--__codelineno-0-3"></a><span class="o">...</span> <span class="p">)</span>
+</span><span id="rattler.package.paths_json.PathsJson.sort--__span-0-4"><a id="rattler.package.paths_json.PathsJson.sort--__codelineno-0-4" name="rattler.package.paths_json.PathsJson.sort--__codelineno-0-4" href="#rattler.package.paths_json.PathsJson.sort--__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">paths_json</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+</span><span id="rattler.package.paths_json.PathsJson.sort--__span-0-5"><a id="rattler.package.paths_json.PathsJson.sort--__codelineno-0-5" name="rattler.package.paths_json.PathsJson.sort--__codelineno-0-5" href="#rattler.package.paths_json.PathsJson.sort--__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">paths_json</span>
+</span><span id="rattler.package.paths_json.PathsJson.sort--__span-0-6"><a id="rattler.package.paths_json.PathsJson.sort--__codelineno-0-6" name="rattler.package.paths_json.PathsJson.sort--__codelineno-0-6" href="#rattler.package.paths_json.PathsJson.sort--__codelineno-0-6"></a><span class="n">PathsJson</span><span class="p">()</span>
+</span><span id="rattler.package.paths_json.PathsJson.sort--__span-0-7"><a id="rattler.package.paths_json.PathsJson.sort--__codelineno-0-7" name="rattler.package.paths_json.PathsJson.sort--__codelineno-0-7" href="#rattler.package.paths_json.PathsJson.sort--__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span>
+</span></code></pre></div>
 
 
     </div>
