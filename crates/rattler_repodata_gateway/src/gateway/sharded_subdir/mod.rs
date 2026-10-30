@@ -92,7 +92,8 @@ async fn decode_zst_bytes_async<R: AsRef<[u8]> + Send + 'static>(
 /// dropped, and a file that is listed both in a legacy map and in `v3` is
 /// described by its `v3` entry. The records of every bucket are returned.
 ///
-/// A shard may list other packages than the one it is looked up by. Only the
+/// A shard may list other packages than the one it is looked up by: the
+/// `conda-pypi` shard for `tzdata` holds `python-tzdata` records. Only the
 /// records of the requested package are returned, like a `repodata.json`
 /// lookup does, so such records cannot duplicate those of their own shard.
 async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
