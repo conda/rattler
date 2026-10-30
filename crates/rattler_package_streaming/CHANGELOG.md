@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.1](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.28.0...rattler_package_streaming-v0.28.1) - 2026-10-30
+
+### Fixed
+
+- support raw wheel script shebangs ([#3039](https://github.com/conda/rattler/pull/3039))
+
 ## [0.28.0](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.16...rattler_package_streaming-v0.28.0) - 2026-10-28
 
 ### Added
