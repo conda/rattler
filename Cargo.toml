@@ -197,7 +197,7 @@ supports-hyperlinks = "3.2"
 syn = "2"
 sysinfo = "0.39"
 tar = "0.4"
-astral-tokio-tar = "0.6"
+astral-tokio-tar = "0.7"
 tempfile = "3"
 temp-env = { version = "0.3", features = ["async_closure"] }
 test-log = "0.2"
