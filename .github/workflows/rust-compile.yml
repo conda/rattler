@@ -36,6 +36,25 @@ jobs:
         uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
       - run: pixi r doc
 
+  check-wasm:
+    name: Check wasm32 (rattler_package_streaming)
+    runs-on: ubuntu-latest
+    env:
+      # Overrides the workspace-level RUSTFLAGS, so the getrandom cfg from
+      # .cargo/config.toml has to be repeated here.
+      RUSTFLAGS: "-D warnings --cfg getrandom_backend=\"wasm_js\""
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          submodules: recursive
+      - name: Install Rust toolchain
+        run: rustup target add wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Check rattler_package_streaming for wasm32
+        run: |
+          cargo check -p rattler_package_streaming --target wasm32-unknown-unknown --features wasm
+          cargo check -p rattler_package_streaming --target wasm32-unknown-unknown --features wasm,reqwest
+
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}

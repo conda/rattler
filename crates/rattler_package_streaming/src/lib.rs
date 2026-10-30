@@ -80,7 +80,7 @@ pub enum ExtractError {
     #[error(transparent)]
     ReqwestError(::reqwest_middleware::Error),
 
-    #[cfg(feature = "reqwest")]
+    #[cfg(all(feature = "reqwest", not(target_arch = "wasm32")))]
     #[error("an error occurred during a range request: {0}")]
     AsyncHttpRangeReaderError(#[from] async_http_range_reader::AsyncHttpRangeReaderError),
 
@@ -131,7 +131,13 @@ impl ExtractError {
                 // Check if this is a connection error (includes broken pipe during connection)
                 match err {
                     ::reqwest_middleware::Error::Reqwest(reqwest_err) => {
-                        reqwest_err.is_connect() || reqwest_err.is_timeout()
+                        // `is_connect` does not exist on wasm32, where the browser owns
+                        // the connection.
+                        #[cfg(not(target_arch = "wasm32"))]
+                        let is_connect = reqwest_err.is_connect();
+                        #[cfg(target_arch = "wasm32")]
+                        let is_connect = false;
+                        is_connect || reqwest_err.is_timeout()
                     }
                     ::reqwest_middleware::Error::Middleware(_) => false,
                 }

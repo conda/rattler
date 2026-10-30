@@ -14,7 +14,7 @@ use std::{
     },
 };
 
-#[cfg(feature = "reqwest")]
+#[cfg(all(feature = "reqwest", not(target_arch = "wasm32")))]
 use futures_util::StreamExt;
 use futures_util::future::{self, Either};
 use rattler_conda_types::PackageRecord;
@@ -23,7 +23,7 @@ use tokio::io::{AsyncRead, AsyncReadExt};
 
 use crate::{ExtractError, ExtractResult};
 
-use super::shared::DEFAULT_BUF_SIZE;
+use super::DEFAULT_BUF_SIZE;
 
 /// Bytes per chunk handed to the extraction worker. Chunks are filled
 /// completely before they are sent, so the worker wakes up once per chunk
@@ -251,7 +251,7 @@ where
 /// Iterates entries of a tar archive, returning the contents of the first
 /// entry whose path matches `file_name`. Because the reader is streaming,
 /// only the bytes up to (and including) the target entry are consumed.
-#[cfg(feature = "reqwest")]
+#[cfg(all(feature = "reqwest", not(target_arch = "wasm32")))]
 pub(crate) async fn get_file_from_tar_archive<R: tokio::io::AsyncRead + Unpin>(
     archive: &mut tokio_tar::Archive<R>,
     file_name: &Path,

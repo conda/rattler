@@ -9,7 +9,8 @@ use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 
 use crate::ExtractError;
 
-use super::shared::{DEFAULT_BUF_SIZE, extract_tar_zst_entry};
+use super::DEFAULT_BUF_SIZE;
+use super::shared::extract_tar_zst_entry;
 
 /// Extracts the contents of a `.conda` package archive using the seek-based API.
 /// This is more efficient than streaming when the entire file is available (e.g., from disk or memory).
