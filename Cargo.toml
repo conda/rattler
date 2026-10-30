@@ -36,7 +36,7 @@ async-compression = { version = "0.4", features = [
   "zstd",
 ] }
 async-fd-lock = "0.2"
-async_http_range_reader = { package = "astral_async_http_range_reader", version = "0.11" }
+async_http_range_reader = { package = "astral_async_http_range_reader", version = "0.12" }
 fs4 = "1"
 async-once-cell = "0.5"
 async-trait = "0.1"
@@ -45,7 +45,7 @@ axum = { version = "0.8", default-features = false, features = [
   "tokio",
   "http1",
 ] }
-base64 = "0.22"
+base64 = "0.23"
 bindgen = "0.72"
 blake2 = "0.11.0-rc.6"
 bytes = "1"
@@ -75,13 +75,13 @@ dirs = "6"
 dbus-secret-service-keyring-store = { version = "1", default-features = false }
 dunce = "1"
 enum_dispatch = "0.3"
-fancy-regex = "0.18"
+fancy-regex = "0.19"
 filetime = "0.2"
 fs-err = { version = "3" }
 fslock = "0.2"
 futures = "0.3"
 futures-util = "0.3"
-fuser = { version = "0.17", default-features = false }
+fuser = { version = "0.18", default-features = false }
 getrandom = { version = "0.4", default-features = false }
 glob = "0.3"
 google-cloud-auth = { version = "1", default-features = false, features = [
