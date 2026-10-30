@@ -4,6 +4,7 @@ use std::{
 };
 
 use rattler_conda_types::{Channel, InvalidPackageNameError, MatchSpec};
+use rattler_digest::Sha256Hash;
 use rattler_redaction::Redact;
 use thiserror::Error;
 use url::Url;
@@ -15,6 +16,7 @@ use crate::{
 
 #[derive(Debug, Error)]
 #[allow(missing_docs)]
+#[non_exhaustive]
 pub enum GatewayError {
     #[error("{0}")]
     IoError(String, #[source] std::io::Error),
@@ -84,6 +86,9 @@ pub enum GatewayError {
 
     #[error("direct url queries are not supported ({0})")]
     DirectUrlQueryNotSupported(String),
+
+    #[error(transparent)]
+    ShardHashMismatch(#[from] Box<ShardHashMismatchError>),
 
     /// Raised in [`ChannelRelationsMode::Strict`](crate::gateway::ChannelRelationsMode::Strict)
     /// when the declared CEP-42 relations are malformed.
@@ -160,4 +165,23 @@ impl Display for SubdirNotFoundError {
             self.channel.canonical_name()
         )
     }
+}
+
+/// A downloaded shard does not hash to the SHA-256 the shard index lists for
+/// it. Such a shard is neither parsed nor cached.
+#[derive(Debug, Error)]
+#[error(
+    "the shard downloaded from '{url}' has SHA-256 {}, but the shard index lists {}",
+    hex::encode(.actual),
+    hex::encode(.expected)
+)]
+pub struct ShardHashMismatchError {
+    /// The redacted URL the shard was downloaded from.
+    pub url: Url,
+
+    /// The SHA-256 the shard index lists for the shard.
+    pub expected: Sha256Hash,
+
+    /// The SHA-256 of the downloaded, still compressed, bytes.
+    pub actual: Sha256Hash,
 }
