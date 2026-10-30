@@ -288,353 +288,378 @@
 <a href=#286 id=286 data-nosnippet>286</a>    keys.into_iter().map(|k| <span class="macro">format!</span>(<span class="string">"{prefix}.{k}"</span>)).collect()
 <a href=#287 id=287 data-nosnippet>287</a>}
 <a href=#288 id=288 data-nosnippet>288</a>
-<a href=#289 id=289 data-nosnippet>289</a><span class="doccomment">/// Is `key` equal to, or nested inside, one of the `ignored` paths?
-<a href=#290 id=290 data-nosnippet>290</a></span><span class="kw">fn </span>covered_by(key: <span class="kw-2">&amp;</span>str, ignored: <span class="kw-2">&amp;</span>BTreeSet&lt;String&gt;) -&gt; bool {
-<a href=#291 id=291 data-nosnippet>291</a>    ignored.iter().any(|path| {
-<a href=#292 id=292 data-nosnippet>292</a>        key == path
-<a href=#293 id=293 data-nosnippet>293</a>            || key
-<a href=#294 id=294 data-nosnippet>294</a>                .strip_prefix(path.as_str())
-<a href=#295 id=295 data-nosnippet>295</a>                .is_some_and(|rest| rest.starts_with(<span class="string">'.'</span>))
-<a href=#296 id=296 data-nosnippet>296</a>    })
-<a href=#297 id=297 data-nosnippet>297</a>}
-<a href=#298 id=298 data-nosnippet>298</a>
-<a href=#299 id=299 data-nosnippet>299</a><span class="kw">impl </span>Config <span class="kw">for </span>CommonConfig {
-<a href=#300 id=300 data-nosnippet>300</a>    <span class="doccomment">/// Merge another configuration (file) into this one.
-<a href=#301 id=301 data-nosnippet>301</a>    /// Note: the "other" configuration takes priority over the current one.
-<a href=#302 id=302 data-nosnippet>302</a>    </span><span class="kw">fn </span>merge_config(<span class="self">self</span>, other: <span class="kw-2">&amp;</span><span class="self">Self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, MergeError&gt; {
-<a href=#303 id=303 data-nosnippet>303</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
-<a href=#304 id=304 data-nosnippet>304</a>            default_channels: other
-<a href=#305 id=305 data-nosnippet>305</a>                .default_channels
-<a href=#306 id=306 data-nosnippet>306</a>                .as_ref()
-<a href=#307 id=307 data-nosnippet>307</a>                .or(<span class="self">self</span>.default_channels.as_ref())
-<a href=#308 id=308 data-nosnippet>308</a>                .cloned(),
-<a href=#309 id=309 data-nosnippet>309</a>            exclude_newer: other
-<a href=#310 id=310 data-nosnippet>310</a>                .exclude_newer
-<a href=#311 id=311 data-nosnippet>311</a>                .as_ref()
-<a href=#312 id=312 data-nosnippet>312</a>                .or(<span class="self">self</span>.exclude_newer.as_ref())
-<a href=#313 id=313 data-nosnippet>313</a>                .cloned(),
-<a href=#314 id=314 data-nosnippet>314</a>            authentication_override_file: other
-<a href=#315 id=315 data-nosnippet>315</a>                .authentication_override_file
-<a href=#316 id=316 data-nosnippet>316</a>                .as_ref()
-<a href=#317 id=317 data-nosnippet>317</a>                .or(<span class="self">self</span>.authentication_override_file.as_ref())
-<a href=#318 id=318 data-nosnippet>318</a>                .cloned(),
-<a href=#319 id=319 data-nosnippet>319</a>            tls_no_verify: other.tls_no_verify.or(<span class="self">self</span>.tls_no_verify),
-<a href=#320 id=320 data-nosnippet>320</a>            tls_root_certs: other.tls_root_certs.or(<span class="self">self</span>.tls_root_certs),
-<a href=#321 id=321 data-nosnippet>321</a>            mirrors: <span class="self">self
-<a href=#322 id=322 data-nosnippet>322</a>                </span>.mirrors
-<a href=#323 id=323 data-nosnippet>323</a>                .iter()
-<a href=#324 id=324 data-nosnippet>324</a>                .chain(other.mirrors.iter())
-<a href=#325 id=325 data-nosnippet>325</a>                .map(|(k, v)| (k.clone(), v.clone()))
-<a href=#326 id=326 data-nosnippet>326</a>                .collect(),
-<a href=#327 id=327 data-nosnippet>327</a>            build: <span class="self">self</span>.build.merge_config(<span class="kw-2">&amp;</span>other.build)<span class="question-mark">?</span>,
-<a href=#328 id=328 data-nosnippet>328</a>            <span class="comment">// Currently this is always the default so it doesn't matter which one we take.
-<a href=#329 id=329 data-nosnippet>329</a>            </span>channel_config: <span class="self">self</span>.channel_config,
-<a href=#330 id=330 data-nosnippet>330</a>            repodata_config: <span class="self">self</span>.repodata_config.merge_config(<span class="kw-2">&amp;</span>other.repodata_config)<span class="question-mark">?</span>,
-<a href=#331 id=331 data-nosnippet>331</a>            concurrency: <span class="self">self</span>.concurrency.merge_config(<span class="kw-2">&amp;</span>other.concurrency)<span class="question-mark">?</span>,
-<a href=#332 id=332 data-nosnippet>332</a>            proxy_config: <span class="self">self</span>.proxy_config.merge_config(<span class="kw-2">&amp;</span>other.proxy_config)<span class="question-mark">?</span>,
-<a href=#333 id=333 data-nosnippet>333</a>            s3_options: <span class="self">self</span>.s3_options.merge_config(<span class="kw-2">&amp;</span>other.s3_options)<span class="question-mark">?</span>,
-<a href=#334 id=334 data-nosnippet>334</a>            index_config: <span class="self">self</span>.index_config.merge_config(<span class="kw-2">&amp;</span>other.index_config)<span class="question-mark">?</span>,
-<a href=#335 id=335 data-nosnippet>335</a>            run_post_link_scripts: other
-<a href=#336 id=336 data-nosnippet>336</a>                .run_post_link_scripts
-<a href=#337 id=337 data-nosnippet>337</a>                .clone()
-<a href=#338 id=338 data-nosnippet>338</a>                .or(<span class="self">self</span>.run_post_link_scripts),
-<a href=#339 id=339 data-nosnippet>339</a>            allow_symbolic_links: other.allow_symbolic_links.or(<span class="self">self</span>.allow_symbolic_links),
-<a href=#340 id=340 data-nosnippet>340</a>            allow_hard_links: other.allow_hard_links.or(<span class="self">self</span>.allow_hard_links),
-<a href=#341 id=341 data-nosnippet>341</a>            allow_ref_links: other.allow_ref_links.or(<span class="self">self</span>.allow_ref_links),
-<a href=#342 id=342 data-nosnippet>342</a>            virtual_package_detectors: <span class="self">self
-<a href=#343 id=343 data-nosnippet>343</a>                </span>.virtual_package_detectors
-<a href=#344 id=344 data-nosnippet>344</a>                .merge_config(<span class="kw-2">&amp;</span>other.virtual_package_detectors)<span class="question-mark">?</span>,
-<a href=#345 id=345 data-nosnippet>345</a>        })
-<a href=#346 id=346 data-nosnippet>346</a>    }
-<a href=#347 id=347 data-nosnippet>347</a>
-<a href=#348 id=348 data-nosnippet>348</a>    <span class="kw">fn </span>validate(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), ValidationError&gt; {
-<a href=#349 id=349 data-nosnippet>349</a>        <span class="self">self</span>.build.validate()<span class="question-mark">?</span>;
-<a href=#350 id=350 data-nosnippet>350</a>        <span class="self">self</span>.repodata_config.validate()<span class="question-mark">?</span>;
-<a href=#351 id=351 data-nosnippet>351</a>        <span class="self">self</span>.concurrency.validate()<span class="question-mark">?</span>;
-<a href=#352 id=352 data-nosnippet>352</a>        <span class="self">self</span>.proxy_config.validate()<span class="question-mark">?</span>;
-<a href=#353 id=353 data-nosnippet>353</a>        <span class="self">self</span>.s3_options.validate()<span class="question-mark">?</span>;
-<a href=#354 id=354 data-nosnippet>354</a>        <span class="self">self</span>.index_config.validate()<span class="question-mark">?</span>;
-<a href=#355 id=355 data-nosnippet>355</a>        <span class="self">self</span>.virtual_package_detectors.validate()<span class="question-mark">?</span>;
-<a href=#356 id=356 data-nosnippet>356</a>        <span class="prelude-val">Ok</span>(())
-<a href=#357 id=357 data-nosnippet>357</a>    }
-<a href=#358 id=358 data-nosnippet>358</a>
-<a href=#359 id=359 data-nosnippet>359</a>    <span class="kw">fn </span>keys(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;String&gt; {
-<a href=#360 id=360 data-nosnippet>360</a>        <span class="kw">let </span><span class="kw-2">mut </span>keys = <span class="macro">vec!</span>[
-<a href=#361 id=361 data-nosnippet>361</a>            <span class="string">"default-channels"</span>.to_string(),
-<a href=#362 id=362 data-nosnippet>362</a>            <span class="string">"exclude-newer"</span>.to_string(),
-<a href=#363 id=363 data-nosnippet>363</a>            <span class="string">"authentication-override-file"</span>.to_string(),
-<a href=#364 id=364 data-nosnippet>364</a>            <span class="string">"tls-no-verify"</span>.to_string(),
-<a href=#365 id=365 data-nosnippet>365</a>            <span class="string">"tls-root-certs"</span>.to_string(),
-<a href=#366 id=366 data-nosnippet>366</a>            <span class="string">"mirrors"</span>.to_string(),
-<a href=#367 id=367 data-nosnippet>367</a>            <span class="string">"run-post-link-scripts"</span>.to_string(),
-<a href=#368 id=368 data-nosnippet>368</a>            <span class="string">"allow-symbolic-links"</span>.to_string(),
-<a href=#369 id=369 data-nosnippet>369</a>            <span class="string">"allow-hard-links"</span>.to_string(),
-<a href=#370 id=370 data-nosnippet>370</a>            <span class="string">"allow-ref-links"</span>.to_string(),
-<a href=#371 id=371 data-nosnippet>371</a>            <span class="string">"s3-options"</span>.to_string(),
-<a href=#372 id=372 data-nosnippet>372</a>            <span class="string">"index-config"</span>.to_string(),
-<a href=#373 id=373 data-nosnippet>373</a>        ];
-<a href=#374 id=374 data-nosnippet>374</a>        keys.extend(prefixed_keys(<span class="string">"build"</span>, <span class="self">self</span>.build.keys()));
-<a href=#375 id=375 data-nosnippet>375</a>        keys.extend(prefixed_keys(
-<a href=#376 id=376 data-nosnippet>376</a>            <span class="string">"repodata-config"</span>,
-<a href=#377 id=377 data-nosnippet>377</a>            <span class="self">self</span>.repodata_config.keys(),
-<a href=#378 id=378 data-nosnippet>378</a>        ));
-<a href=#379 id=379 data-nosnippet>379</a>        keys.extend(prefixed_keys(<span class="string">"concurrency"</span>, <span class="self">self</span>.concurrency.keys()));
-<a href=#380 id=380 data-nosnippet>380</a>        keys.extend(prefixed_keys(<span class="string">"proxy-config"</span>, <span class="self">self</span>.proxy_config.keys()));
-<a href=#381 id=381 data-nosnippet>381</a>        keys.extend(prefixed_keys(<span class="string">"s3-options"</span>, <span class="self">self</span>.s3_options.keys()));
-<a href=#382 id=382 data-nosnippet>382</a>        keys.extend(prefixed_keys(
-<a href=#383 id=383 data-nosnippet>383</a>            <span class="string">"virtual-package-detectors"</span>,
-<a href=#384 id=384 data-nosnippet>384</a>            <span class="self">self</span>.virtual_package_detectors.keys(),
-<a href=#385 id=385 data-nosnippet>385</a>        ));
-<a href=#386 id=386 data-nosnippet>386</a>        keys
-<a href=#387 id=387 data-nosnippet>387</a>    }
-<a href=#388 id=388 data-nosnippet>388</a>}
-<a href=#389 id=389 data-nosnippet>389</a>
-<a href=#390 id=390 data-nosnippet>390</a><span class="doccomment">/// The complete configuration of a rattler-based tool: the
-<a href=#391 id=391 data-nosnippet>391</a>/// [common keys](CommonConfig) plus a tool-specific extension `T` whose keys
-<a href=#392 id=392 data-nosnippet>392</a>/// live at the top level of the same TOML document.
-<a href=#393 id=393 data-nosnippet>393</a>///
-<a href=#394 id=394 data-nosnippet>394</a>/// `ConfigBase` dereferences to [`CommonConfig`], so the shared keys can be
-<a href=#395 id=395 data-nosnippet>395</a>/// accessed directly: `config.default_channels`, `config.concurrency`, ….
-<a href=#396 id=396 data-nosnippet>396</a></span><span class="attr">#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
-<a href=#397 id=397 data-nosnippet>397</a></span><span class="kw">pub struct </span>ConfigBase&lt;T = NoExtension&gt; {
-<a href=#398 id=398 data-nosnippet>398</a>    <span class="doccomment">/// The configuration keys shared by all rattler-based tools.
-<a href=#399 id=399 data-nosnippet>399</a>    </span><span class="attr">#[serde(flatten)]
-<a href=#400 id=400 data-nosnippet>400</a>    </span><span class="kw">pub </span>common: CommonConfig,
-<a href=#401 id=401 data-nosnippet>401</a>
-<a href=#402 id=402 data-nosnippet>402</a>    <span class="doccomment">/// Tool-specific configuration keys.
-<a href=#403 id=403 data-nosnippet>403</a>    </span><span class="attr">#[serde(flatten)]
-<a href=#404 id=404 data-nosnippet>404</a>    </span><span class="kw">pub </span>extensions: T,
-<a href=#405 id=405 data-nosnippet>405</a>
-<a href=#406 id=406 data-nosnippet>406</a>    <span class="doccomment">/// The configuration files this configuration was loaded from, in load
-<a href=#407 id=407 data-nosnippet>407</a>    /// order (lowest precedence first).
-<a href=#408 id=408 data-nosnippet>408</a>    </span><span class="attr">#[serde(skip)]
-<a href=#409 id=409 data-nosnippet>409</a>    </span><span class="kw">pub </span>loaded_from: Vec&lt;PathBuf&gt;,
-<a href=#410 id=410 data-nosnippet>410</a>}
-<a href=#411 id=411 data-nosnippet>411</a>
-<a href=#412 id=412 data-nosnippet>412</a><span class="kw">impl</span>&lt;T&gt; Deref <span class="kw">for </span>ConfigBase&lt;T&gt; {
-<a href=#413 id=413 data-nosnippet>413</a>    <span class="kw">type </span>Target = CommonConfig;
+<a href=#289 id=289 data-nosnippet>289</a><span class="doccomment">/// Formats the path of an ignored key as a dotted key, e.g. `table.key`.
+<a href=#290 id=290 data-nosnippet>290</a>/// Unlike the `Display` of the path, this leaves out
+<a href=#291 id=291 data-nosnippet>291</a>/// the `?` that marks a value inside an `Option`.
+<a href=#292 id=292 data-nosnippet>292</a></span><span class="kw">fn </span>key_path(path: <span class="kw-2">&amp;</span>serde_ignored::Path&lt;<span class="lifetime">'_</span>&gt;) -&gt; String {
+<a href=#293 id=293 data-nosnippet>293</a>    <span class="kw">use </span>serde_ignored::Path;
+<a href=#294 id=294 data-nosnippet>294</a>
+<a href=#295 id=295 data-nosnippet>295</a>    <span class="kw">let </span>(parent, segment) = <span class="kw">match </span>path {
+<a href=#296 id=296 data-nosnippet>296</a>        Path::Root =&gt; <span class="kw">return </span>String::new(),
+<a href=#297 id=297 data-nosnippet>297</a>        Path::Seq { parent, index } =&gt; (parent, index.to_string()),
+<a href=#298 id=298 data-nosnippet>298</a>        Path::Map { parent, key } =&gt; (parent, key.clone()),
+<a href=#299 id=299 data-nosnippet>299</a>        Path::Some { parent }
+<a href=#300 id=300 data-nosnippet>300</a>        | Path::NewtypeStruct { parent }
+<a href=#301 id=301 data-nosnippet>301</a>        | Path::NewtypeVariant { parent } =&gt; <span class="kw">return </span>key_path(parent),
+<a href=#302 id=302 data-nosnippet>302</a>    };
+<a href=#303 id=303 data-nosnippet>303</a>    <span class="kw">match </span>key_path(parent) {
+<a href=#304 id=304 data-nosnippet>304</a>        parent <span class="kw">if </span>parent.is_empty() =&gt; segment,
+<a href=#305 id=305 data-nosnippet>305</a>        parent =&gt; <span class="macro">format!</span>(<span class="string">"{parent}.{segment}"</span>),
+<a href=#306 id=306 data-nosnippet>306</a>    }
+<a href=#307 id=307 data-nosnippet>307</a>}
+<a href=#308 id=308 data-nosnippet>308</a>
+<a href=#309 id=309 data-nosnippet>309</a><span class="doccomment">/// Is `key` equal to, or nested inside, one of the `ignored` paths?
+<a href=#310 id=310 data-nosnippet>310</a></span><span class="kw">fn </span>covered_by(key: <span class="kw-2">&amp;</span>str, ignored: <span class="kw-2">&amp;</span>BTreeSet&lt;String&gt;) -&gt; bool {
+<a href=#311 id=311 data-nosnippet>311</a>    ignored.iter().any(|path| {
+<a href=#312 id=312 data-nosnippet>312</a>        key == path
+<a href=#313 id=313 data-nosnippet>313</a>            || key
+<a href=#314 id=314 data-nosnippet>314</a>                .strip_prefix(path.as_str())
+<a href=#315 id=315 data-nosnippet>315</a>                .is_some_and(|rest| rest.starts_with(<span class="string">'.'</span>))
+<a href=#316 id=316 data-nosnippet>316</a>    })
+<a href=#317 id=317 data-nosnippet>317</a>}
+<a href=#318 id=318 data-nosnippet>318</a>
+<a href=#319 id=319 data-nosnippet>319</a><span class="kw">impl </span>Config <span class="kw">for </span>CommonConfig {
+<a href=#320 id=320 data-nosnippet>320</a>    <span class="doccomment">/// Merge another configuration (file) into this one.
+<a href=#321 id=321 data-nosnippet>321</a>    /// Note: the "other" configuration takes priority over the current one.
+<a href=#322 id=322 data-nosnippet>322</a>    </span><span class="kw">fn </span>merge_config(<span class="self">self</span>, other: <span class="kw-2">&amp;</span><span class="self">Self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, MergeError&gt; {
+<a href=#323 id=323 data-nosnippet>323</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
+<a href=#324 id=324 data-nosnippet>324</a>            default_channels: other
+<a href=#325 id=325 data-nosnippet>325</a>                .default_channels
+<a href=#326 id=326 data-nosnippet>326</a>                .as_ref()
+<a href=#327 id=327 data-nosnippet>327</a>                .or(<span class="self">self</span>.default_channels.as_ref())
+<a href=#328 id=328 data-nosnippet>328</a>                .cloned(),
+<a href=#329 id=329 data-nosnippet>329</a>            exclude_newer: other
+<a href=#330 id=330 data-nosnippet>330</a>                .exclude_newer
+<a href=#331 id=331 data-nosnippet>331</a>                .as_ref()
+<a href=#332 id=332 data-nosnippet>332</a>                .or(<span class="self">self</span>.exclude_newer.as_ref())
+<a href=#333 id=333 data-nosnippet>333</a>                .cloned(),
+<a href=#334 id=334 data-nosnippet>334</a>            authentication_override_file: other
+<a href=#335 id=335 data-nosnippet>335</a>                .authentication_override_file
+<a href=#336 id=336 data-nosnippet>336</a>                .as_ref()
+<a href=#337 id=337 data-nosnippet>337</a>                .or(<span class="self">self</span>.authentication_override_file.as_ref())
+<a href=#338 id=338 data-nosnippet>338</a>                .cloned(),
+<a href=#339 id=339 data-nosnippet>339</a>            tls_no_verify: other.tls_no_verify.or(<span class="self">self</span>.tls_no_verify),
+<a href=#340 id=340 data-nosnippet>340</a>            tls_root_certs: other.tls_root_certs.or(<span class="self">self</span>.tls_root_certs),
+<a href=#341 id=341 data-nosnippet>341</a>            mirrors: <span class="self">self
+<a href=#342 id=342 data-nosnippet>342</a>                </span>.mirrors
+<a href=#343 id=343 data-nosnippet>343</a>                .iter()
+<a href=#344 id=344 data-nosnippet>344</a>                .chain(other.mirrors.iter())
+<a href=#345 id=345 data-nosnippet>345</a>                .map(|(k, v)| (k.clone(), v.clone()))
+<a href=#346 id=346 data-nosnippet>346</a>                .collect(),
+<a href=#347 id=347 data-nosnippet>347</a>            build: <span class="self">self</span>.build.merge_config(<span class="kw-2">&amp;</span>other.build)<span class="question-mark">?</span>,
+<a href=#348 id=348 data-nosnippet>348</a>            <span class="comment">// Currently this is always the default so it doesn't matter which one we take.
+<a href=#349 id=349 data-nosnippet>349</a>            </span>channel_config: <span class="self">self</span>.channel_config,
+<a href=#350 id=350 data-nosnippet>350</a>            repodata_config: <span class="self">self</span>.repodata_config.merge_config(<span class="kw-2">&amp;</span>other.repodata_config)<span class="question-mark">?</span>,
+<a href=#351 id=351 data-nosnippet>351</a>            concurrency: <span class="self">self</span>.concurrency.merge_config(<span class="kw-2">&amp;</span>other.concurrency)<span class="question-mark">?</span>,
+<a href=#352 id=352 data-nosnippet>352</a>            proxy_config: <span class="self">self</span>.proxy_config.merge_config(<span class="kw-2">&amp;</span>other.proxy_config)<span class="question-mark">?</span>,
+<a href=#353 id=353 data-nosnippet>353</a>            s3_options: <span class="self">self</span>.s3_options.merge_config(<span class="kw-2">&amp;</span>other.s3_options)<span class="question-mark">?</span>,
+<a href=#354 id=354 data-nosnippet>354</a>            index_config: <span class="self">self</span>.index_config.merge_config(<span class="kw-2">&amp;</span>other.index_config)<span class="question-mark">?</span>,
+<a href=#355 id=355 data-nosnippet>355</a>            run_post_link_scripts: other
+<a href=#356 id=356 data-nosnippet>356</a>                .run_post_link_scripts
+<a href=#357 id=357 data-nosnippet>357</a>                .clone()
+<a href=#358 id=358 data-nosnippet>358</a>                .or(<span class="self">self</span>.run_post_link_scripts),
+<a href=#359 id=359 data-nosnippet>359</a>            allow_symbolic_links: other.allow_symbolic_links.or(<span class="self">self</span>.allow_symbolic_links),
+<a href=#360 id=360 data-nosnippet>360</a>            allow_hard_links: other.allow_hard_links.or(<span class="self">self</span>.allow_hard_links),
+<a href=#361 id=361 data-nosnippet>361</a>            allow_ref_links: other.allow_ref_links.or(<span class="self">self</span>.allow_ref_links),
+<a href=#362 id=362 data-nosnippet>362</a>            virtual_package_detectors: <span class="self">self
+<a href=#363 id=363 data-nosnippet>363</a>                </span>.virtual_package_detectors
+<a href=#364 id=364 data-nosnippet>364</a>                .merge_config(<span class="kw-2">&amp;</span>other.virtual_package_detectors)<span class="question-mark">?</span>,
+<a href=#365 id=365 data-nosnippet>365</a>        })
+<a href=#366 id=366 data-nosnippet>366</a>    }
+<a href=#367 id=367 data-nosnippet>367</a>
+<a href=#368 id=368 data-nosnippet>368</a>    <span class="kw">fn </span>validate(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), ValidationError&gt; {
+<a href=#369 id=369 data-nosnippet>369</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(exclude_newer) = <span class="kw-2">&amp;</span><span class="self">self</span>.exclude_newer {
+<a href=#370 id=370 data-nosnippet>370</a>            exclude_newer.validate().map_err(|err| {
+<a href=#371 id=371 data-nosnippet>371</a>                ValidationError::InvalidValue(<span class="string">"exclude-newer"</span>.to_string(), err.to_string())
+<a href=#372 id=372 data-nosnippet>372</a>            })<span class="question-mark">?</span>;
+<a href=#373 id=373 data-nosnippet>373</a>        }
+<a href=#374 id=374 data-nosnippet>374</a>        <span class="self">self</span>.build.validate()<span class="question-mark">?</span>;
+<a href=#375 id=375 data-nosnippet>375</a>        <span class="self">self</span>.repodata_config.validate()<span class="question-mark">?</span>;
+<a href=#376 id=376 data-nosnippet>376</a>        <span class="self">self</span>.concurrency.validate()<span class="question-mark">?</span>;
+<a href=#377 id=377 data-nosnippet>377</a>        <span class="self">self</span>.proxy_config.validate()<span class="question-mark">?</span>;
+<a href=#378 id=378 data-nosnippet>378</a>        <span class="self">self</span>.s3_options.validate()<span class="question-mark">?</span>;
+<a href=#379 id=379 data-nosnippet>379</a>        <span class="self">self</span>.index_config.validate()<span class="question-mark">?</span>;
+<a href=#380 id=380 data-nosnippet>380</a>        <span class="self">self</span>.virtual_package_detectors.validate()<span class="question-mark">?</span>;
+<a href=#381 id=381 data-nosnippet>381</a>        <span class="prelude-val">Ok</span>(())
+<a href=#382 id=382 data-nosnippet>382</a>    }
+<a href=#383 id=383 data-nosnippet>383</a>
+<a href=#384 id=384 data-nosnippet>384</a>    <span class="kw">fn </span>keys(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;String&gt; {
+<a href=#385 id=385 data-nosnippet>385</a>        <span class="kw">let </span><span class="kw-2">mut </span>keys = <span class="macro">vec!</span>[
+<a href=#386 id=386 data-nosnippet>386</a>            <span class="string">"default-channels"</span>.to_string(),
+<a href=#387 id=387 data-nosnippet>387</a>            <span class="string">"exclude-newer"</span>.to_string(),
+<a href=#388 id=388 data-nosnippet>388</a>            <span class="string">"authentication-override-file"</span>.to_string(),
+<a href=#389 id=389 data-nosnippet>389</a>            <span class="string">"tls-no-verify"</span>.to_string(),
+<a href=#390 id=390 data-nosnippet>390</a>            <span class="string">"tls-root-certs"</span>.to_string(),
+<a href=#391 id=391 data-nosnippet>391</a>            <span class="string">"mirrors"</span>.to_string(),
+<a href=#392 id=392 data-nosnippet>392</a>            <span class="string">"run-post-link-scripts"</span>.to_string(),
+<a href=#393 id=393 data-nosnippet>393</a>            <span class="string">"allow-symbolic-links"</span>.to_string(),
+<a href=#394 id=394 data-nosnippet>394</a>            <span class="string">"allow-hard-links"</span>.to_string(),
+<a href=#395 id=395 data-nosnippet>395</a>            <span class="string">"allow-ref-links"</span>.to_string(),
+<a href=#396 id=396 data-nosnippet>396</a>            <span class="string">"s3-options"</span>.to_string(),
+<a href=#397 id=397 data-nosnippet>397</a>            <span class="string">"index-config"</span>.to_string(),
+<a href=#398 id=398 data-nosnippet>398</a>        ];
+<a href=#399 id=399 data-nosnippet>399</a>        keys.extend(prefixed_keys(<span class="string">"build"</span>, <span class="self">self</span>.build.keys()));
+<a href=#400 id=400 data-nosnippet>400</a>        keys.extend(prefixed_keys(
+<a href=#401 id=401 data-nosnippet>401</a>            <span class="string">"repodata-config"</span>,
+<a href=#402 id=402 data-nosnippet>402</a>            <span class="self">self</span>.repodata_config.keys(),
+<a href=#403 id=403 data-nosnippet>403</a>        ));
+<a href=#404 id=404 data-nosnippet>404</a>        keys.extend(prefixed_keys(<span class="string">"concurrency"</span>, <span class="self">self</span>.concurrency.keys()));
+<a href=#405 id=405 data-nosnippet>405</a>        keys.extend(prefixed_keys(<span class="string">"proxy-config"</span>, <span class="self">self</span>.proxy_config.keys()));
+<a href=#406 id=406 data-nosnippet>406</a>        keys.extend(prefixed_keys(<span class="string">"s3-options"</span>, <span class="self">self</span>.s3_options.keys()));
+<a href=#407 id=407 data-nosnippet>407</a>        keys.extend(prefixed_keys(
+<a href=#408 id=408 data-nosnippet>408</a>            <span class="string">"virtual-package-detectors"</span>,
+<a href=#409 id=409 data-nosnippet>409</a>            <span class="self">self</span>.virtual_package_detectors.keys(),
+<a href=#410 id=410 data-nosnippet>410</a>        ));
+<a href=#411 id=411 data-nosnippet>411</a>        keys
+<a href=#412 id=412 data-nosnippet>412</a>    }
+<a href=#413 id=413 data-nosnippet>413</a>}
 <a href=#414 id=414 data-nosnippet>414</a>
-<a href=#415 id=415 data-nosnippet>415</a>    <span class="kw">fn </span>deref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="self">Self</span>::Target {
-<a href=#416 id=416 data-nosnippet>416</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.common
-<a href=#417 id=417 data-nosnippet>417</a>    }
-<a href=#418 id=418 data-nosnippet>418</a>}
-<a href=#419 id=419 data-nosnippet>419</a>
-<a href=#420 id=420 data-nosnippet>420</a><span class="kw">impl</span>&lt;T&gt; DerefMut <span class="kw">for </span>ConfigBase&lt;T&gt; {
-<a href=#421 id=421 data-nosnippet>421</a>    <span class="kw">fn </span>deref_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self</span>::Target {
-<a href=#422 id=422 data-nosnippet>422</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>.common
-<a href=#423 id=423 data-nosnippet>423</a>    }
-<a href=#424 id=424 data-nosnippet>424</a>}
-<a href=#425 id=425 data-nosnippet>425</a>
-<a href=#426 id=426 data-nosnippet>426</a><span class="kw">impl</span>&lt;T&gt; Config <span class="kw">for </span>ConfigBase&lt;T&gt;
-<a href=#427 id=427 data-nosnippet>427</a><span class="kw">where
-<a href=#428 id=428 data-nosnippet>428</a>    </span>T: Config,
-<a href=#429 id=429 data-nosnippet>429</a>{
-<a href=#430 id=430 data-nosnippet>430</a>    <span class="doccomment">/// Merge another configuration (file) into this one.
-<a href=#431 id=431 data-nosnippet>431</a>    /// Note: the "other" configuration takes priority over the current one.
-<a href=#432 id=432 data-nosnippet>432</a>    </span><span class="kw">fn </span>merge_config(<span class="self">self</span>, other: <span class="kw-2">&amp;</span><span class="self">Self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, MergeError&gt; {
-<a href=#433 id=433 data-nosnippet>433</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
-<a href=#434 id=434 data-nosnippet>434</a>            common: <span class="self">self</span>.common.merge_config(<span class="kw-2">&amp;</span>other.common)<span class="question-mark">?</span>,
-<a href=#435 id=435 data-nosnippet>435</a>            extensions: <span class="self">self</span>.extensions.merge_config(<span class="kw-2">&amp;</span>other.extensions)<span class="question-mark">?</span>,
-<a href=#436 id=436 data-nosnippet>436</a>            loaded_from: <span class="self">self
-<a href=#437 id=437 data-nosnippet>437</a>                </span>.loaded_from
-<a href=#438 id=438 data-nosnippet>438</a>                .iter()
-<a href=#439 id=439 data-nosnippet>439</a>                .chain(<span class="kw-2">&amp;</span>other.loaded_from)
-<a href=#440 id=440 data-nosnippet>440</a>                .cloned()
-<a href=#441 id=441 data-nosnippet>441</a>                .collect(),
-<a href=#442 id=442 data-nosnippet>442</a>        })
-<a href=#443 id=443 data-nosnippet>443</a>    }
+<a href=#415 id=415 data-nosnippet>415</a><span class="doccomment">/// The complete configuration of a rattler-based tool: the
+<a href=#416 id=416 data-nosnippet>416</a>/// [common keys](CommonConfig) plus a tool-specific extension `T` whose keys
+<a href=#417 id=417 data-nosnippet>417</a>/// live at the top level of the same TOML document.
+<a href=#418 id=418 data-nosnippet>418</a>///
+<a href=#419 id=419 data-nosnippet>419</a>/// `ConfigBase` dereferences to [`CommonConfig`], so the shared keys can be
+<a href=#420 id=420 data-nosnippet>420</a>/// accessed directly: `config.default_channels`, `config.concurrency`, ….
+<a href=#421 id=421 data-nosnippet>421</a></span><span class="attr">#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+<a href=#422 id=422 data-nosnippet>422</a></span><span class="kw">pub struct </span>ConfigBase&lt;T = NoExtension&gt; {
+<a href=#423 id=423 data-nosnippet>423</a>    <span class="doccomment">/// The configuration keys shared by all rattler-based tools.
+<a href=#424 id=424 data-nosnippet>424</a>    </span><span class="attr">#[serde(flatten)]
+<a href=#425 id=425 data-nosnippet>425</a>    </span><span class="kw">pub </span>common: CommonConfig,
+<a href=#426 id=426 data-nosnippet>426</a>
+<a href=#427 id=427 data-nosnippet>427</a>    <span class="doccomment">/// Tool-specific configuration keys.
+<a href=#428 id=428 data-nosnippet>428</a>    </span><span class="attr">#[serde(flatten)]
+<a href=#429 id=429 data-nosnippet>429</a>    </span><span class="kw">pub </span>extensions: T,
+<a href=#430 id=430 data-nosnippet>430</a>
+<a href=#431 id=431 data-nosnippet>431</a>    <span class="doccomment">/// The configuration files this configuration was loaded from, in load
+<a href=#432 id=432 data-nosnippet>432</a>    /// order (lowest precedence first).
+<a href=#433 id=433 data-nosnippet>433</a>    </span><span class="attr">#[serde(skip)]
+<a href=#434 id=434 data-nosnippet>434</a>    </span><span class="kw">pub </span>loaded_from: Vec&lt;PathBuf&gt;,
+<a href=#435 id=435 data-nosnippet>435</a>}
+<a href=#436 id=436 data-nosnippet>436</a>
+<a href=#437 id=437 data-nosnippet>437</a><span class="kw">impl</span>&lt;T&gt; Deref <span class="kw">for </span>ConfigBase&lt;T&gt; {
+<a href=#438 id=438 data-nosnippet>438</a>    <span class="kw">type </span>Target = CommonConfig;
+<a href=#439 id=439 data-nosnippet>439</a>
+<a href=#440 id=440 data-nosnippet>440</a>    <span class="kw">fn </span>deref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="self">Self</span>::Target {
+<a href=#441 id=441 data-nosnippet>441</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.common
+<a href=#442 id=442 data-nosnippet>442</a>    }
+<a href=#443 id=443 data-nosnippet>443</a>}
 <a href=#444 id=444 data-nosnippet>444</a>
-<a href=#445 id=445 data-nosnippet>445</a>    <span class="kw">fn </span>validate(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), ValidationError&gt; {
-<a href=#446 id=446 data-nosnippet>446</a>        <span class="self">self</span>.common.validate()<span class="question-mark">?</span>;
-<a href=#447 id=447 data-nosnippet>447</a>        <span class="self">self</span>.extensions.validate()
+<a href=#445 id=445 data-nosnippet>445</a><span class="kw">impl</span>&lt;T&gt; DerefMut <span class="kw">for </span>ConfigBase&lt;T&gt; {
+<a href=#446 id=446 data-nosnippet>446</a>    <span class="kw">fn </span>deref_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self</span>::Target {
+<a href=#447 id=447 data-nosnippet>447</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>.common
 <a href=#448 id=448 data-nosnippet>448</a>    }
-<a href=#449 id=449 data-nosnippet>449</a>
-<a href=#450 id=450 data-nosnippet>450</a>    <span class="doccomment">/// Gather all the keys of the configuration, including the extension
-<a href=#451 id=451 data-nosnippet>451</a>    /// keys.
-<a href=#452 id=452 data-nosnippet>452</a>    </span><span class="kw">fn </span>keys(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;String&gt; {
-<a href=#453 id=453 data-nosnippet>453</a>        <span class="kw">let </span><span class="kw-2">mut </span>keys = <span class="self">self</span>.common.keys();
-<a href=#454 id=454 data-nosnippet>454</a>        keys.extend(<span class="self">self</span>.extensions.keys());
-<a href=#455 id=455 data-nosnippet>455</a>        keys
-<a href=#456 id=456 data-nosnippet>456</a>    }
-<a href=#457 id=457 data-nosnippet>457</a>}
-<a href=#458 id=458 data-nosnippet>458</a>
-<a href=#459 id=459 data-nosnippet>459</a><span class="kw">impl</span>&lt;T&gt; ConfigBase&lt;T&gt;
-<a href=#460 id=460 data-nosnippet>460</a><span class="kw">where
-<a href=#461 id=461 data-nosnippet>461</a>    </span>T: Config,
-<a href=#462 id=462 data-nosnippet>462</a>{
-<a href=#463 id=463 data-nosnippet>463</a>    <span class="doccomment">/// Parse a configuration from a TOML string.
-<a href=#464 id=464 data-nosnippet>464</a>    ///
-<a href=#465 id=465 data-nosnippet>465</a>    /// Returns the parsed configuration together with the set of keys that
-<a href=#466 id=466 data-nosnippet>466</a>    /// neither [`CommonConfig`] nor the extension `T` recognized. Callers
-<a href=#467 id=467 data-nosnippet>467</a>    /// should surface these to the user as warnings (they are typos or
-<a href=#468 id=468 data-nosnippet>468</a>    /// keys of other tools).
-<a href=#469 id=469 data-nosnippet>469</a>    </span><span class="kw">pub fn </span>from_toml_str(input: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="self">Self</span>, BTreeSet&lt;String&gt;), toml::de::Error&gt; {
-<a href=#470 id=470 data-nosnippet>470</a>        <span class="comment">// The document is deserialized twice: once into the common
-<a href=#471 id=471 data-nosnippet>471</a>        // configuration and once into the extension. Each pass records the
-<a href=#472 id=472 data-nosnippet>472</a>        // keys it did not recognize; only keys unknown to *both* passes are
-<a href=#473 id=473 data-nosnippet>473</a>        // truly unused. This is also why `CommonConfig` must not contain
-<a href=#474 id=474 data-nosnippet>474</a>        // `#[serde(flatten)]` fields: flattening swallows unknown keys
-<a href=#475 id=475 data-nosnippet>475</a>        // before `serde_ignored` can see them.
-<a href=#476 id=476 data-nosnippet>476</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>unknown_to_common = BTreeSet::new();
-<a href=#477 id=477 data-nosnippet>477</a>        <span class="kw">let </span>common: CommonConfig = serde_ignored::deserialize(
-<a href=#478 id=478 data-nosnippet>478</a>            toml::de::Deserializer::parse(input)<span class="question-mark">?</span>,
-<a href=#479 id=479 data-nosnippet>479</a>            |path: serde_ignored::Path&lt;<span class="lifetime">'_</span>&gt;| {
-<a href=#480 id=480 data-nosnippet>480</a>                unknown_to_common.insert(path.to_string());
-<a href=#481 id=481 data-nosnippet>481</a>            },
-<a href=#482 id=482 data-nosnippet>482</a>        )<span class="question-mark">?</span>;
+<a href=#449 id=449 data-nosnippet>449</a>}
+<a href=#450 id=450 data-nosnippet>450</a>
+<a href=#451 id=451 data-nosnippet>451</a><span class="kw">impl</span>&lt;T&gt; Config <span class="kw">for </span>ConfigBase&lt;T&gt;
+<a href=#452 id=452 data-nosnippet>452</a><span class="kw">where
+<a href=#453 id=453 data-nosnippet>453</a>    </span>T: Config,
+<a href=#454 id=454 data-nosnippet>454</a>{
+<a href=#455 id=455 data-nosnippet>455</a>    <span class="doccomment">/// Merge another configuration (file) into this one.
+<a href=#456 id=456 data-nosnippet>456</a>    /// Note: the "other" configuration takes priority over the current one.
+<a href=#457 id=457 data-nosnippet>457</a>    </span><span class="kw">fn </span>merge_config(<span class="self">self</span>, other: <span class="kw-2">&amp;</span><span class="self">Self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, MergeError&gt; {
+<a href=#458 id=458 data-nosnippet>458</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
+<a href=#459 id=459 data-nosnippet>459</a>            common: <span class="self">self</span>.common.merge_config(<span class="kw-2">&amp;</span>other.common)<span class="question-mark">?</span>,
+<a href=#460 id=460 data-nosnippet>460</a>            extensions: <span class="self">self</span>.extensions.merge_config(<span class="kw-2">&amp;</span>other.extensions)<span class="question-mark">?</span>,
+<a href=#461 id=461 data-nosnippet>461</a>            loaded_from: <span class="self">self
+<a href=#462 id=462 data-nosnippet>462</a>                </span>.loaded_from
+<a href=#463 id=463 data-nosnippet>463</a>                .iter()
+<a href=#464 id=464 data-nosnippet>464</a>                .chain(<span class="kw-2">&amp;</span>other.loaded_from)
+<a href=#465 id=465 data-nosnippet>465</a>                .cloned()
+<a href=#466 id=466 data-nosnippet>466</a>                .collect(),
+<a href=#467 id=467 data-nosnippet>467</a>        })
+<a href=#468 id=468 data-nosnippet>468</a>    }
+<a href=#469 id=469 data-nosnippet>469</a>
+<a href=#470 id=470 data-nosnippet>470</a>    <span class="kw">fn </span>validate(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), ValidationError&gt; {
+<a href=#471 id=471 data-nosnippet>471</a>        <span class="self">self</span>.common.validate()<span class="question-mark">?</span>;
+<a href=#472 id=472 data-nosnippet>472</a>        <span class="self">self</span>.extensions.validate()
+<a href=#473 id=473 data-nosnippet>473</a>    }
+<a href=#474 id=474 data-nosnippet>474</a>
+<a href=#475 id=475 data-nosnippet>475</a>    <span class="doccomment">/// Gather all the keys of the configuration, including the extension
+<a href=#476 id=476 data-nosnippet>476</a>    /// keys.
+<a href=#477 id=477 data-nosnippet>477</a>    </span><span class="kw">fn </span>keys(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;String&gt; {
+<a href=#478 id=478 data-nosnippet>478</a>        <span class="kw">let </span><span class="kw-2">mut </span>keys = <span class="self">self</span>.common.keys();
+<a href=#479 id=479 data-nosnippet>479</a>        keys.extend(<span class="self">self</span>.extensions.keys());
+<a href=#480 id=480 data-nosnippet>480</a>        keys
+<a href=#481 id=481 data-nosnippet>481</a>    }
+<a href=#482 id=482 data-nosnippet>482</a>}
 <a href=#483 id=483 data-nosnippet>483</a>
-<a href=#484 id=484 data-nosnippet>484</a>        <span class="kw">let </span><span class="kw-2">mut </span>unknown_to_extension = BTreeSet::new();
-<a href=#485 id=485 data-nosnippet>485</a>        <span class="kw">let </span>extensions: T = serde_ignored::deserialize(
-<a href=#486 id=486 data-nosnippet>486</a>            toml::de::Deserializer::parse(input)<span class="question-mark">?</span>,
-<a href=#487 id=487 data-nosnippet>487</a>            |path: serde_ignored::Path&lt;<span class="lifetime">'_</span>&gt;| {
-<a href=#488 id=488 data-nosnippet>488</a>                unknown_to_extension.insert(path.to_string());
-<a href=#489 id=489 data-nosnippet>489</a>            },
-<a href=#490 id=490 data-nosnippet>490</a>        )<span class="question-mark">?</span>;
-<a href=#491 id=491 data-nosnippet>491</a>
-<a href=#492 id=492 data-nosnippet>492</a>        <span class="comment">// A key is truly unused when neither pass consumed it. The two
-<a href=#493 id=493 data-nosnippet>493</a>        // passes may record it at different depths (the extension ignores
-<a href=#494 id=494 data-nosnippet>494</a>        // an entire table that the common configuration partially
-<a href=#495 id=495 data-nosnippet>495</a>        // consumed, or vice versa), so match against ancestors too and
-<a href=#496 id=496 data-nosnippet>496</a>        // keep the most specific path.
-<a href=#497 id=497 data-nosnippet>497</a>        </span><span class="kw">let </span>unused = unknown_to_common
-<a href=#498 id=498 data-nosnippet>498</a>            .iter()
-<a href=#499 id=499 data-nosnippet>499</a>            .filter(|key| covered_by(key, <span class="kw-2">&amp;</span>unknown_to_extension))
-<a href=#500 id=500 data-nosnippet>500</a>            .chain(
-<a href=#501 id=501 data-nosnippet>501</a>                unknown_to_extension
-<a href=#502 id=502 data-nosnippet>502</a>                    .iter()
-<a href=#503 id=503 data-nosnippet>503</a>                    .filter(|key| covered_by(key, <span class="kw-2">&amp;</span>unknown_to_common)),
-<a href=#504 id=504 data-nosnippet>504</a>            )
-<a href=#505 id=505 data-nosnippet>505</a>            .cloned()
-<a href=#506 id=506 data-nosnippet>506</a>            .collect::&lt;BTreeSet&lt;String&gt;&gt;();
-<a href=#507 id=507 data-nosnippet>507</a>        <span class="comment">// Drop entries whose descendants are also reported: the deeper
-<a href=#508 id=508 data-nosnippet>508</a>        // path is the actionable one.
-<a href=#509 id=509 data-nosnippet>509</a>        </span><span class="kw">let </span>unused = unused
-<a href=#510 id=510 data-nosnippet>510</a>            .iter()
-<a href=#511 id=511 data-nosnippet>511</a>            .filter(|key| {
-<a href=#512 id=512 data-nosnippet>512</a>                !unused.iter().any(|other| {
-<a href=#513 id=513 data-nosnippet>513</a>                    other
-<a href=#514 id=514 data-nosnippet>514</a>                        .strip_prefix(key.as_str())
-<a href=#515 id=515 data-nosnippet>515</a>                        .is_some_and(|rest| rest.starts_with(<span class="string">'.'</span>))
-<a href=#516 id=516 data-nosnippet>516</a>                })
-<a href=#517 id=517 data-nosnippet>517</a>            })
-<a href=#518 id=518 data-nosnippet>518</a>            .cloned()
-<a href=#519 id=519 data-nosnippet>519</a>            .collect();
-<a href=#520 id=520 data-nosnippet>520</a>
-<a href=#521 id=521 data-nosnippet>521</a>        <span class="prelude-val">Ok</span>((
-<a href=#522 id=522 data-nosnippet>522</a>            <span class="self">Self </span>{
-<a href=#523 id=523 data-nosnippet>523</a>                common,
-<a href=#524 id=524 data-nosnippet>524</a>                extensions,
-<a href=#525 id=525 data-nosnippet>525</a>                loaded_from: Vec::new(),
-<a href=#526 id=526 data-nosnippet>526</a>            },
-<a href=#527 id=527 data-nosnippet>527</a>            unused,
-<a href=#528 id=528 data-nosnippet>528</a>        ))
-<a href=#529 id=529 data-nosnippet>529</a>    }
-<a href=#530 id=530 data-nosnippet>530</a>
-<a href=#531 id=531 data-nosnippet>531</a>    <span class="doccomment">/// Parse a *shared* configuration file from a TOML string.
-<a href=#532 id=532 data-nosnippet>532</a>    ///
-<a href=#533 id=533 data-nosnippet>533</a>    /// Shared files (see [`crate::locations::ConfigLayer::Shared`]) may only
-<a href=#534 id=534 data-nosnippet>534</a>    /// contain the keys shared by all rattler-based tools: the document is
-<a href=#535 id=535 data-nosnippet>535</a>    /// deserialized into [`CommonConfig`] alone and the extension is left at
-<a href=#536 id=536 data-nosnippet>536</a>    /// its default. Returns the parsed configuration together with the set
-<a href=#537 id=537 data-nosnippet>537</a>    /// of keys [`CommonConfig`] did not recognize, including extension keys
-<a href=#538 id=538 data-nosnippet>538</a>    /// the tool itself would understand, so that a shared file means the
-<a href=#539 id=539 data-nosnippet>539</a>    /// same thing to every tool reading it.
-<a href=#540 id=540 data-nosnippet>540</a>    </span><span class="kw">pub fn </span>from_toml_str_shared(input: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="self">Self</span>, BTreeSet&lt;String&gt;), toml::de::Error&gt; {
-<a href=#541 id=541 data-nosnippet>541</a>        <span class="kw">let </span><span class="kw-2">mut </span>unknown = BTreeSet::new();
-<a href=#542 id=542 data-nosnippet>542</a>        <span class="kw">let </span>common: CommonConfig = serde_ignored::deserialize(
-<a href=#543 id=543 data-nosnippet>543</a>            toml::de::Deserializer::parse(input)<span class="question-mark">?</span>,
-<a href=#544 id=544 data-nosnippet>544</a>            |path: serde_ignored::Path&lt;<span class="lifetime">'_</span>&gt;| {
-<a href=#545 id=545 data-nosnippet>545</a>                unknown.insert(path.to_string());
-<a href=#546 id=546 data-nosnippet>546</a>            },
-<a href=#547 id=547 data-nosnippet>547</a>        )<span class="question-mark">?</span>;
-<a href=#548 id=548 data-nosnippet>548</a>
-<a href=#549 id=549 data-nosnippet>549</a>        <span class="prelude-val">Ok</span>((
-<a href=#550 id=550 data-nosnippet>550</a>            <span class="self">Self </span>{
-<a href=#551 id=551 data-nosnippet>551</a>                common,
-<a href=#552 id=552 data-nosnippet>552</a>                extensions: T::default(),
-<a href=#553 id=553 data-nosnippet>553</a>                loaded_from: Vec::new(),
-<a href=#554 id=554 data-nosnippet>554</a>            },
-<a href=#555 id=555 data-nosnippet>555</a>            unknown,
-<a href=#556 id=556 data-nosnippet>556</a>        ))
-<a href=#557 id=557 data-nosnippet>557</a>    }
-<a href=#558 id=558 data-nosnippet>558</a>
-<a href=#559 id=559 data-nosnippet>559</a>    <span class="doccomment">/// Parse the file at `path` according to its `layer` and merge it into
-<a href=#560 id=560 data-nosnippet>560</a>    /// `self`, warning about ignored keys.
-<a href=#561 id=561 data-nosnippet>561</a>    </span><span class="kw">fn </span>merge_from_path(<span class="self">self</span>, path: <span class="kw-2">&amp;</span>Path, layer: ConfigLayer) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, LoadError&gt; {
-<a href=#562 id=562 data-nosnippet>562</a>        <span class="kw">let </span>content = fs_err::read_to_string(path)<span class="question-mark">?</span>;
-<a href=#563 id=563 data-nosnippet>563</a>        <span class="kw">let </span>(<span class="kw-2">mut </span>other, unused) = <span class="kw">match </span>layer {
-<a href=#564 id=564 data-nosnippet>564</a>            ConfigLayer::Shared =&gt; <span class="self">Self</span>::from_toml_str_shared(<span class="kw-2">&amp;</span>content)<span class="question-mark">?</span>,
-<a href=#565 id=565 data-nosnippet>565</a>            ConfigLayer::Tool =&gt; <span class="self">Self</span>::from_toml_str(<span class="kw-2">&amp;</span>content)<span class="question-mark">?</span>,
-<a href=#566 id=566 data-nosnippet>566</a>        };
-<a href=#567 id=567 data-nosnippet>567</a>        <span class="kw">for </span>key <span class="kw">in </span><span class="kw-2">&amp;</span>unused {
-<a href=#568 id=568 data-nosnippet>568</a>            <span class="kw">match </span>layer {
-<a href=#569 id=569 data-nosnippet>569</a>                ConfigLayer::Shared =&gt; <span class="macro">tracing::warn!</span>(
-<a href=#570 id=570 data-nosnippet>570</a>                    <span class="string">"Ignoring configuration key `{key}` in {}: not a key shared by all rattler-based tools"</span>,
-<a href=#571 id=571 data-nosnippet>571</a>                    path.display()
-<a href=#572 id=572 data-nosnippet>572</a>                ),
-<a href=#573 id=573 data-nosnippet>573</a>                ConfigLayer::Tool =&gt; <span class="macro">tracing::warn!</span>(
-<a href=#574 id=574 data-nosnippet>574</a>                    <span class="string">"Ignoring unknown configuration key `{key}` in {}"</span>,
-<a href=#575 id=575 data-nosnippet>575</a>                    path.display()
-<a href=#576 id=576 data-nosnippet>576</a>                ),
-<a href=#577 id=577 data-nosnippet>577</a>            }
-<a href=#578 id=578 data-nosnippet>578</a>        }
-<a href=#579 id=579 data-nosnippet>579</a>        other.loaded_from.push(path.to_path_buf());
-<a href=#580 id=580 data-nosnippet>580</a>        <span class="self">self</span>.merge_config(<span class="kw-2">&amp;</span>other)
-<a href=#581 id=581 data-nosnippet>581</a>            .map_err(|e| LoadError::MergeError(e, path.to_path_buf()))
+<a href=#484 id=484 data-nosnippet>484</a><span class="kw">impl</span>&lt;T&gt; ConfigBase&lt;T&gt;
+<a href=#485 id=485 data-nosnippet>485</a><span class="kw">where
+<a href=#486 id=486 data-nosnippet>486</a>    </span>T: Config,
+<a href=#487 id=487 data-nosnippet>487</a>{
+<a href=#488 id=488 data-nosnippet>488</a>    <span class="doccomment">/// Parse a configuration from a TOML string.
+<a href=#489 id=489 data-nosnippet>489</a>    ///
+<a href=#490 id=490 data-nosnippet>490</a>    /// Returns the parsed configuration together with the set of keys that
+<a href=#491 id=491 data-nosnippet>491</a>    /// neither [`CommonConfig`] nor the extension `T` recognized. Callers
+<a href=#492 id=492 data-nosnippet>492</a>    /// should surface these to the user as warnings (they are typos or
+<a href=#493 id=493 data-nosnippet>493</a>    /// keys of other tools).
+<a href=#494 id=494 data-nosnippet>494</a>    </span><span class="kw">pub fn </span>from_toml_str(input: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="self">Self</span>, BTreeSet&lt;String&gt;), toml::de::Error&gt; {
+<a href=#495 id=495 data-nosnippet>495</a>        <span class="comment">// The document is deserialized twice: once into the common
+<a href=#496 id=496 data-nosnippet>496</a>        // configuration and once into the extension. Each pass records the
+<a href=#497 id=497 data-nosnippet>497</a>        // keys it did not recognize; only keys unknown to *both* passes are
+<a href=#498 id=498 data-nosnippet>498</a>        // truly unused. This is also why `CommonConfig` must not contain
+<a href=#499 id=499 data-nosnippet>499</a>        // `#[serde(flatten)]` fields: flattening swallows unknown keys
+<a href=#500 id=500 data-nosnippet>500</a>        // before `serde_ignored` can see them.
+<a href=#501 id=501 data-nosnippet>501</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>unknown_to_common = BTreeSet::new();
+<a href=#502 id=502 data-nosnippet>502</a>        <span class="kw">let </span>common: CommonConfig = serde_ignored::deserialize(
+<a href=#503 id=503 data-nosnippet>503</a>            toml::de::Deserializer::parse(input)<span class="question-mark">?</span>,
+<a href=#504 id=504 data-nosnippet>504</a>            |path: serde_ignored::Path&lt;<span class="lifetime">'_</span>&gt;| {
+<a href=#505 id=505 data-nosnippet>505</a>                unknown_to_common.insert(key_path(<span class="kw-2">&amp;</span>path));
+<a href=#506 id=506 data-nosnippet>506</a>            },
+<a href=#507 id=507 data-nosnippet>507</a>        )<span class="question-mark">?</span>;
+<a href=#508 id=508 data-nosnippet>508</a>
+<a href=#509 id=509 data-nosnippet>509</a>        <span class="kw">let </span><span class="kw-2">mut </span>unknown_to_extension = BTreeSet::new();
+<a href=#510 id=510 data-nosnippet>510</a>        <span class="kw">let </span>extensions: T = serde_ignored::deserialize(
+<a href=#511 id=511 data-nosnippet>511</a>            toml::de::Deserializer::parse(input)<span class="question-mark">?</span>,
+<a href=#512 id=512 data-nosnippet>512</a>            |path: serde_ignored::Path&lt;<span class="lifetime">'_</span>&gt;| {
+<a href=#513 id=513 data-nosnippet>513</a>                unknown_to_extension.insert(key_path(<span class="kw-2">&amp;</span>path));
+<a href=#514 id=514 data-nosnippet>514</a>            },
+<a href=#515 id=515 data-nosnippet>515</a>        )<span class="question-mark">?</span>;
+<a href=#516 id=516 data-nosnippet>516</a>
+<a href=#517 id=517 data-nosnippet>517</a>        <span class="comment">// A key is truly unused when neither pass consumed it. The two
+<a href=#518 id=518 data-nosnippet>518</a>        // passes may record it at different depths (the extension ignores
+<a href=#519 id=519 data-nosnippet>519</a>        // an entire table that the common configuration partially
+<a href=#520 id=520 data-nosnippet>520</a>        // consumed, or vice versa), so match against ancestors too and
+<a href=#521 id=521 data-nosnippet>521</a>        // keep the most specific path.
+<a href=#522 id=522 data-nosnippet>522</a>        </span><span class="kw">let </span>unused = unknown_to_common
+<a href=#523 id=523 data-nosnippet>523</a>            .iter()
+<a href=#524 id=524 data-nosnippet>524</a>            .filter(|key| covered_by(key, <span class="kw-2">&amp;</span>unknown_to_extension))
+<a href=#525 id=525 data-nosnippet>525</a>            .chain(
+<a href=#526 id=526 data-nosnippet>526</a>                unknown_to_extension
+<a href=#527 id=527 data-nosnippet>527</a>                    .iter()
+<a href=#528 id=528 data-nosnippet>528</a>                    .filter(|key| covered_by(key, <span class="kw-2">&amp;</span>unknown_to_common)),
+<a href=#529 id=529 data-nosnippet>529</a>            )
+<a href=#530 id=530 data-nosnippet>530</a>            .cloned()
+<a href=#531 id=531 data-nosnippet>531</a>            .collect::&lt;BTreeSet&lt;String&gt;&gt;();
+<a href=#532 id=532 data-nosnippet>532</a>        <span class="comment">// Drop entries whose descendants are also reported: the deeper
+<a href=#533 id=533 data-nosnippet>533</a>        // path is the actionable one.
+<a href=#534 id=534 data-nosnippet>534</a>        </span><span class="kw">let </span>unused = unused
+<a href=#535 id=535 data-nosnippet>535</a>            .iter()
+<a href=#536 id=536 data-nosnippet>536</a>            .filter(|key| {
+<a href=#537 id=537 data-nosnippet>537</a>                !unused.iter().any(|other| {
+<a href=#538 id=538 data-nosnippet>538</a>                    other
+<a href=#539 id=539 data-nosnippet>539</a>                        .strip_prefix(key.as_str())
+<a href=#540 id=540 data-nosnippet>540</a>                        .is_some_and(|rest| rest.starts_with(<span class="string">'.'</span>))
+<a href=#541 id=541 data-nosnippet>541</a>                })
+<a href=#542 id=542 data-nosnippet>542</a>            })
+<a href=#543 id=543 data-nosnippet>543</a>            .cloned()
+<a href=#544 id=544 data-nosnippet>544</a>            .collect();
+<a href=#545 id=545 data-nosnippet>545</a>
+<a href=#546 id=546 data-nosnippet>546</a>        <span class="prelude-val">Ok</span>((
+<a href=#547 id=547 data-nosnippet>547</a>            <span class="self">Self </span>{
+<a href=#548 id=548 data-nosnippet>548</a>                common,
+<a href=#549 id=549 data-nosnippet>549</a>                extensions,
+<a href=#550 id=550 data-nosnippet>550</a>                loaded_from: Vec::new(),
+<a href=#551 id=551 data-nosnippet>551</a>            },
+<a href=#552 id=552 data-nosnippet>552</a>            unused,
+<a href=#553 id=553 data-nosnippet>553</a>        ))
+<a href=#554 id=554 data-nosnippet>554</a>    }
+<a href=#555 id=555 data-nosnippet>555</a>
+<a href=#556 id=556 data-nosnippet>556</a>    <span class="doccomment">/// Parse a *shared* configuration file from a TOML string.
+<a href=#557 id=557 data-nosnippet>557</a>    ///
+<a href=#558 id=558 data-nosnippet>558</a>    /// Shared files (see [`crate::locations::ConfigLayer::Shared`]) may only
+<a href=#559 id=559 data-nosnippet>559</a>    /// contain the keys shared by all rattler-based tools: the document is
+<a href=#560 id=560 data-nosnippet>560</a>    /// deserialized into [`CommonConfig`] alone and the extension is left at
+<a href=#561 id=561 data-nosnippet>561</a>    /// its default. Returns the parsed configuration together with the set
+<a href=#562 id=562 data-nosnippet>562</a>    /// of keys [`CommonConfig`] did not recognize, including extension keys
+<a href=#563 id=563 data-nosnippet>563</a>    /// the tool itself would understand, so that a shared file means the
+<a href=#564 id=564 data-nosnippet>564</a>    /// same thing to every tool reading it.
+<a href=#565 id=565 data-nosnippet>565</a>    </span><span class="kw">pub fn </span>from_toml_str_shared(input: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="self">Self</span>, BTreeSet&lt;String&gt;), toml::de::Error&gt; {
+<a href=#566 id=566 data-nosnippet>566</a>        <span class="kw">let </span><span class="kw-2">mut </span>unknown = BTreeSet::new();
+<a href=#567 id=567 data-nosnippet>567</a>        <span class="kw">let </span>common: CommonConfig = serde_ignored::deserialize(
+<a href=#568 id=568 data-nosnippet>568</a>            toml::de::Deserializer::parse(input)<span class="question-mark">?</span>,
+<a href=#569 id=569 data-nosnippet>569</a>            |path: serde_ignored::Path&lt;<span class="lifetime">'_</span>&gt;| {
+<a href=#570 id=570 data-nosnippet>570</a>                unknown.insert(key_path(<span class="kw-2">&amp;</span>path));
+<a href=#571 id=571 data-nosnippet>571</a>            },
+<a href=#572 id=572 data-nosnippet>572</a>        )<span class="question-mark">?</span>;
+<a href=#573 id=573 data-nosnippet>573</a>
+<a href=#574 id=574 data-nosnippet>574</a>        <span class="prelude-val">Ok</span>((
+<a href=#575 id=575 data-nosnippet>575</a>            <span class="self">Self </span>{
+<a href=#576 id=576 data-nosnippet>576</a>                common,
+<a href=#577 id=577 data-nosnippet>577</a>                extensions: T::default(),
+<a href=#578 id=578 data-nosnippet>578</a>                loaded_from: Vec::new(),
+<a href=#579 id=579 data-nosnippet>579</a>            },
+<a href=#580 id=580 data-nosnippet>580</a>            unknown,
+<a href=#581 id=581 data-nosnippet>581</a>        ))
 <a href=#582 id=582 data-nosnippet>582</a>    }
 <a href=#583 id=583 data-nosnippet>583</a>
-<a href=#584 id=584 data-nosnippet>584</a>    <span class="doccomment">/// Load the configuration by merging all the given files, in order:
-<a href=#585 id=585 data-nosnippet>585</a>    /// later files take precedence over earlier ones. Every file is parsed
-<a href=#586 id=586 data-nosnippet>586</a>    /// as a tool file (common keys plus extension keys); unrecognized keys
-<a href=#587 id=587 data-nosnippet>587</a>    /// are reported as `tracing` warnings. The merged configuration is
-<a href=#588 id=588 data-nosnippet>588</a>    /// validated before it is returned.
-<a href=#589 id=589 data-nosnippet>589</a>    ///
-<a href=#590 id=590 data-nosnippet>590</a>    /// Missing files result in an error; callers that search default
-<a href=#591 id=591 data-nosnippet>591</a>    /// locations should filter for existing files first (see
-<a href=#592 id=592 data-nosnippet>592</a>    /// [`ConfigBase::load_from_default_locations`]).
-<a href=#593 id=593 data-nosnippet>593</a>    </span><span class="kw">pub fn </span>load_from_files&lt;I, P&gt;(paths: I) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, LoadError&gt;
-<a href=#594 id=594 data-nosnippet>594</a>    <span class="kw">where
-<a href=#595 id=595 data-nosnippet>595</a>        </span>I: IntoIterator&lt;Item = P&gt;,
-<a href=#596 id=596 data-nosnippet>596</a>        P: AsRef&lt;Path&gt;,
-<a href=#597 id=597 data-nosnippet>597</a>    {
-<a href=#598 id=598 data-nosnippet>598</a>        <span class="self">Self</span>::load_from_locations(paths.into_iter().map(|path| ConfigLocation {
-<a href=#599 id=599 data-nosnippet>599</a>            path: path.as_ref().to_path_buf(),
-<a href=#600 id=600 data-nosnippet>600</a>            layer: ConfigLayer::Tool,
-<a href=#601 id=601 data-nosnippet>601</a>        }))
-<a href=#602 id=602 data-nosnippet>602</a>    }
-<a href=#603 id=603 data-nosnippet>603</a>
-<a href=#604 id=604 data-nosnippet>604</a>    <span class="doccomment">/// Load the configuration by merging all the given locations, in order:
-<a href=#605 id=605 data-nosnippet>605</a>    /// later locations take precedence over earlier ones. Each file is
-<a href=#606 id=606 data-nosnippet>606</a>    /// parsed according to its layer: shared files accept only the common
-<a href=#607 id=607 data-nosnippet>607</a>    /// keys (see [`ConfigBase::from_toml_str_shared`]), tool files also
-<a href=#608 id=608 data-nosnippet>608</a>    /// accept the extension keys. Unrecognized keys are reported as
-<a href=#609 id=609 data-nosnippet>609</a>    /// `tracing` warnings; the merged configuration is validated before it
-<a href=#610 id=610 data-nosnippet>610</a>    /// is returned.
-<a href=#611 id=611 data-nosnippet>611</a>    </span><span class="kw">pub fn </span>load_from_locations&lt;I&gt;(locations: I) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, LoadError&gt;
-<a href=#612 id=612 data-nosnippet>612</a>    <span class="kw">where
-<a href=#613 id=613 data-nosnippet>613</a>        </span>I: IntoIterator&lt;Item = ConfigLocation&gt;,
-<a href=#614 id=614 data-nosnippet>614</a>    {
-<a href=#615 id=615 data-nosnippet>615</a>        <span class="kw">let </span><span class="kw-2">mut </span>config = <span class="self">Self</span>::default();
-<a href=#616 id=616 data-nosnippet>616</a>
-<a href=#617 id=617 data-nosnippet>617</a>        <span class="kw">for </span>location <span class="kw">in </span>locations {
-<a href=#618 id=618 data-nosnippet>618</a>            config = config.merge_from_path(<span class="kw-2">&amp;</span>location.path, location.layer)<span class="question-mark">?</span>;
-<a href=#619 id=619 data-nosnippet>619</a>        }
-<a href=#620 id=620 data-nosnippet>620</a>
-<a href=#621 id=621 data-nosnippet>621</a>        config.validate()<span class="question-mark">?</span>;
-<a href=#622 id=622 data-nosnippet>622</a>        <span class="prelude-val">Ok</span>(config)
-<a href=#623 id=623 data-nosnippet>623</a>    }
-<a href=#624 id=624 data-nosnippet>624</a>
-<a href=#625 id=625 data-nosnippet>625</a>    <span class="doccomment">/// Load the configuration from the default locations of the given tool
-<a href=#626 id=626 data-nosnippet>626</a>    /// (e.g. `"rattler-build"`), skipping files that do not exist: the
-<a href=#627 id=627 data-nosnippet>627</a>    /// shared `rattler` configuration layered with the tool's own files.
-<a href=#628 id=628 data-nosnippet>628</a>    /// See [`crate::locations::config_search_paths`] for the exact search
-<a href=#629 id=629 data-nosnippet>629</a>    /// order.
-<a href=#630 id=630 data-nosnippet>630</a>    </span><span class="kw">pub fn </span>load_from_default_locations(tool: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, LoadError&gt; {
-<a href=#631 id=631 data-nosnippet>631</a>        <span class="self">Self</span>::load_from_locations(
-<a href=#632 id=632 data-nosnippet>632</a>            <span class="kw">crate</span>::locations::config_search_paths(tool)
-<a href=#633 id=633 data-nosnippet>633</a>                .into_iter()
-<a href=#634 id=634 data-nosnippet>634</a>                .filter(|location| location.path.is_file()),
-<a href=#635 id=635 data-nosnippet>635</a>        )
-<a href=#636 id=636 data-nosnippet>636</a>    }
-<a href=#637 id=637 data-nosnippet>637</a>}
+<a href=#584 id=584 data-nosnippet>584</a>    <span class="doccomment">/// Parse the file at `path` according to its `layer` and merge it into
+<a href=#585 id=585 data-nosnippet>585</a>    /// `self`, warning about ignored keys.
+<a href=#586 id=586 data-nosnippet>586</a>    </span><span class="kw">fn </span>merge_from_path(<span class="self">self</span>, path: <span class="kw-2">&amp;</span>Path, layer: ConfigLayer) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, LoadError&gt; {
+<a href=#587 id=587 data-nosnippet>587</a>        <span class="kw">let </span>content = fs_err::read_to_string(path)<span class="question-mark">?</span>;
+<a href=#588 id=588 data-nosnippet>588</a>        <span class="kw">let </span>(<span class="kw-2">mut </span>other, unused) = <span class="kw">match </span>layer {
+<a href=#589 id=589 data-nosnippet>589</a>            ConfigLayer::Shared =&gt; <span class="self">Self</span>::from_toml_str_shared(<span class="kw-2">&amp;</span>content)<span class="question-mark">?</span>,
+<a href=#590 id=590 data-nosnippet>590</a>            ConfigLayer::Tool =&gt; <span class="self">Self</span>::from_toml_str(<span class="kw-2">&amp;</span>content)<span class="question-mark">?</span>,
+<a href=#591 id=591 data-nosnippet>591</a>        };
+<a href=#592 id=592 data-nosnippet>592</a>        <span class="kw">for </span>key <span class="kw">in </span><span class="kw-2">&amp;</span>unused {
+<a href=#593 id=593 data-nosnippet>593</a>            <span class="kw">match </span>layer {
+<a href=#594 id=594 data-nosnippet>594</a>                ConfigLayer::Shared =&gt; <span class="macro">tracing::warn!</span>(
+<a href=#595 id=595 data-nosnippet>595</a>                    <span class="string">"Ignoring configuration key `{key}` in {}: not a key shared by all rattler-based tools"</span>,
+<a href=#596 id=596 data-nosnippet>596</a>                    path.display()
+<a href=#597 id=597 data-nosnippet>597</a>                ),
+<a href=#598 id=598 data-nosnippet>598</a>                ConfigLayer::Tool =&gt; <span class="macro">tracing::warn!</span>(
+<a href=#599 id=599 data-nosnippet>599</a>                    <span class="string">"Ignoring unknown configuration key `{key}` in {}"</span>,
+<a href=#600 id=600 data-nosnippet>600</a>                    path.display()
+<a href=#601 id=601 data-nosnippet>601</a>                ),
+<a href=#602 id=602 data-nosnippet>602</a>            }
+<a href=#603 id=603 data-nosnippet>603</a>        }
+<a href=#604 id=604 data-nosnippet>604</a>        other.loaded_from.push(path.to_path_buf());
+<a href=#605 id=605 data-nosnippet>605</a>        <span class="self">self</span>.merge_config(<span class="kw-2">&amp;</span>other)
+<a href=#606 id=606 data-nosnippet>606</a>            .map_err(|e| LoadError::MergeError(e, path.to_path_buf()))
+<a href=#607 id=607 data-nosnippet>607</a>    }
+<a href=#608 id=608 data-nosnippet>608</a>
+<a href=#609 id=609 data-nosnippet>609</a>    <span class="doccomment">/// Load the configuration by merging all the given files, in order:
+<a href=#610 id=610 data-nosnippet>610</a>    /// later files take precedence over earlier ones. Every file is parsed
+<a href=#611 id=611 data-nosnippet>611</a>    /// as a tool file (common keys plus extension keys); unrecognized keys
+<a href=#612 id=612 data-nosnippet>612</a>    /// are reported as `tracing` warnings. The merged configuration is
+<a href=#613 id=613 data-nosnippet>613</a>    /// validated before it is returned.
+<a href=#614 id=614 data-nosnippet>614</a>    ///
+<a href=#615 id=615 data-nosnippet>615</a>    /// Missing files result in an error; callers that search default
+<a href=#616 id=616 data-nosnippet>616</a>    /// locations should filter for existing files first (see
+<a href=#617 id=617 data-nosnippet>617</a>    /// [`ConfigBase::load_from_default_locations`]).
+<a href=#618 id=618 data-nosnippet>618</a>    </span><span class="kw">pub fn </span>load_from_files&lt;I, P&gt;(paths: I) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, LoadError&gt;
+<a href=#619 id=619 data-nosnippet>619</a>    <span class="kw">where
+<a href=#620 id=620 data-nosnippet>620</a>        </span>I: IntoIterator&lt;Item = P&gt;,
+<a href=#621 id=621 data-nosnippet>621</a>        P: AsRef&lt;Path&gt;,
+<a href=#622 id=622 data-nosnippet>622</a>    {
+<a href=#623 id=623 data-nosnippet>623</a>        <span class="self">Self</span>::load_from_locations(paths.into_iter().map(|path| ConfigLocation {
+<a href=#624 id=624 data-nosnippet>624</a>            path: path.as_ref().to_path_buf(),
+<a href=#625 id=625 data-nosnippet>625</a>            layer: ConfigLayer::Tool,
+<a href=#626 id=626 data-nosnippet>626</a>        }))
+<a href=#627 id=627 data-nosnippet>627</a>    }
+<a href=#628 id=628 data-nosnippet>628</a>
+<a href=#629 id=629 data-nosnippet>629</a>    <span class="doccomment">/// Load the configuration by merging all the given locations, in order:
+<a href=#630 id=630 data-nosnippet>630</a>    /// later locations take precedence over earlier ones. Each file is
+<a href=#631 id=631 data-nosnippet>631</a>    /// parsed according to its layer: shared files accept only the common
+<a href=#632 id=632 data-nosnippet>632</a>    /// keys (see [`ConfigBase::from_toml_str_shared`]), tool files also
+<a href=#633 id=633 data-nosnippet>633</a>    /// accept the extension keys. Unrecognized keys are reported as
+<a href=#634 id=634 data-nosnippet>634</a>    /// `tracing` warnings; the merged configuration is validated before it
+<a href=#635 id=635 data-nosnippet>635</a>    /// is returned.
+<a href=#636 id=636 data-nosnippet>636</a>    </span><span class="kw">pub fn </span>load_from_locations&lt;I&gt;(locations: I) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, LoadError&gt;
+<a href=#637 id=637 data-nosnippet>637</a>    <span class="kw">where
+<a href=#638 id=638 data-nosnippet>638</a>        </span>I: IntoIterator&lt;Item = ConfigLocation&gt;,
+<a href=#639 id=639 data-nosnippet>639</a>    {
+<a href=#640 id=640 data-nosnippet>640</a>        <span class="kw">let </span><span class="kw-2">mut </span>config = <span class="self">Self</span>::default();
+<a href=#641 id=641 data-nosnippet>641</a>
+<a href=#642 id=642 data-nosnippet>642</a>        <span class="kw">for </span>location <span class="kw">in </span>locations {
+<a href=#643 id=643 data-nosnippet>643</a>            config = config.merge_from_path(<span class="kw-2">&amp;</span>location.path, location.layer)<span class="question-mark">?</span>;
+<a href=#644 id=644 data-nosnippet>644</a>        }
+<a href=#645 id=645 data-nosnippet>645</a>
+<a href=#646 id=646 data-nosnippet>646</a>        config.validate()<span class="question-mark">?</span>;
+<a href=#647 id=647 data-nosnippet>647</a>        <span class="prelude-val">Ok</span>(config)
+<a href=#648 id=648 data-nosnippet>648</a>    }
+<a href=#649 id=649 data-nosnippet>649</a>
+<a href=#650 id=650 data-nosnippet>650</a>    <span class="doccomment">/// Load the configuration from the default locations of the given tool
+<a href=#651 id=651 data-nosnippet>651</a>    /// (e.g. `"rattler-build"`), skipping files that do not exist: the
+<a href=#652 id=652 data-nosnippet>652</a>    /// shared `rattler` configuration layered with the tool's own files.
+<a href=#653 id=653 data-nosnippet>653</a>    /// See [`crate::locations::config_search_paths`] for the exact search
+<a href=#654 id=654 data-nosnippet>654</a>    /// order.
+<a href=#655 id=655 data-nosnippet>655</a>    </span><span class="kw">pub fn </span>load_from_default_locations(tool: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, LoadError&gt; {
+<a href=#656 id=656 data-nosnippet>656</a>        <span class="self">Self</span>::load_from_locations(
+<a href=#657 id=657 data-nosnippet>657</a>            <span class="kw">crate</span>::locations::config_search_paths(tool)
+<a href=#658 id=658 data-nosnippet>658</a>                .into_iter()
+<a href=#659 id=659 data-nosnippet>659</a>                .filter(|location| location.path.is_file()),
+<a href=#660 id=660 data-nosnippet>660</a>        )
+<a href=#661 id=661 data-nosnippet>661</a>    }
+<a href=#662 id=662 data-nosnippet>662</a>}
 </code></pre></div></section></main></body></html>

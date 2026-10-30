@@ -4,7 +4,7 @@
     lockfile: &amp;<a class="struct" href="../rattler_lock/struct.LockFile.html" title="struct rattler_lock::LockFile">LockFile</a>,
     environment_name: &amp;<a class="primitive" href="https://doc.rust-lang.org/1.98.1/std/primitive.str.html">str</a>,
     platform: <a class="enum" href="../rattler_conda_types/subdir/enum.Subdir.html" title="enum rattler_conda_types::subdir::Subdir">Subdir</a>,
-    package_cache: &amp;<a class="struct" href="../rattler_cache/package_cache/struct.PackageCache.html" title="struct rattler_cache::package_cache::PackageCache">PackageCache</a>,
+    package_cache: &amp;PackageCache,
     config: &amp;<a class="struct" href="struct.MountConfig.html" title="struct rattler_vfs::MountConfig">MountConfig</a>,
 ) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.104/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;<a class="enum" href="enum.MountHandle.html" title="enum rattler_vfs::MountHandle">MountHandle</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Build the metadata tree from a lock file and mount it.</p>
 <p>This is the main entry point for library consumers. It looks up the

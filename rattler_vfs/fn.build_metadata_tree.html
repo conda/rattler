@@ -4,7 +4,7 @@
     lockfile: &amp;<a class="struct" href="../rattler_lock/struct.LockFile.html" title="struct rattler_lock::LockFile">LockFile</a>,
     environment_name: &amp;<a class="primitive" href="https://doc.rust-lang.org/1.98.1/std/primitive.str.html">str</a>,
     platform: <a class="enum" href="../rattler_conda_types/subdir/enum.Subdir.html" title="enum rattler_conda_types::subdir::Subdir">Subdir</a>,
-    package_cache: &amp;<a class="struct" href="../rattler_cache/package_cache/struct.PackageCache.html" title="struct rattler_cache::package_cache::PackageCache">PackageCache</a>,
+    package_cache: &amp;PackageCache,
     mount_point: &amp;<a class="struct" href="https://doc.rust-lang.org/1.98.1/std/path/struct.Path.html" title="struct std::path::Path">Path</a>,
 ) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.104/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;<a class="struct" href="struct.MetadataTree.html" title="struct rattler_vfs::MetadataTree">MetadataTree</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Build the in-memory metadata tree from a parsed lock file.</p>
 <p>Fetches packages from <code>package_cache</code> as needed, reads <code>PathsJson</code> for each,
@@ -14,8 +14,8 @@ and entry point generation.</p>
 <ul>
 <li>Parse the lock file once via <a href="../rattler_lock/struct.LockFile.html#method.from_path" title="associated function rattler_lock::LockFile::from_path"><code>LockFile::from_path</code></a>.</li>
 <li>Pick a <a href="../rattler_conda_types/subdir/enum.Subdir.html" title="enum rattler_conda_types::subdir::Subdir"><code>Subdir</code></a> (usually <a href="../rattler_conda_types/subdir/enum.Subdir.html#method.current" title="associated function rattler_conda_types::subdir::Subdir::current"><code>Subdir::current()</code></a>).</li>
-<li>Construct a <a href="../rattler_cache/package_cache/struct.PackageCache.html" title="struct rattler_cache::package_cache::PackageCache"><code>PackageCache</code></a> (commonly via
-<a href="../rattler_cache/fn.default_cache_dir.html" title="fn rattler_cache::default_cache_dir"><code>rattler_cache::default_cache_dir()</code></a>). Decoupling the cache from this
+<li>Construct a [<code>PackageCache</code>] (commonly via
+[<code>rattler_cache::default_cache_dir()</code>]). Decoupling the cache from this
 function lets pixi share its own cache and lets tests use a temp dir.</li>
 </ul>
 </div></details></section></div></main></body></html>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ExcludeNewerExemption","ExcludeNewerExemptionField"],"struct":["ExcludeNewerConfig"]};
+window.SIDEBAR_ITEMS = {"enum":["CutoffValue","InvalidExemptionSpecError"],"fn":["validate_exemption_spec"],"struct":["ExcludeNewerConfig","ExcludeNewerCutoff","ExcludeNewerExemption","InvalidExcludeNewerError"]};
