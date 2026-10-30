@@ -177,6 +177,13 @@ impl PyPathsJson {
     pub fn set_paths_version(&mut self, version: u64) {
         self.inner.paths_version = version;
     }
+
+    /// Returns a JSON string representation of the object.
+    pub fn to_json(&self) -> PyResult<String> {
+        serde_json::to_string_pretty(&self.inner).map_err(|e| {
+            PyValueError::new_err(format!("Failed to serialize PathsJson to JSON: {e}"))
+        })
+    }
 }
 
 /// A single entry in the `paths.json` file.
