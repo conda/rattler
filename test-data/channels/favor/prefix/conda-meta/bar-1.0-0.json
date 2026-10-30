@@ -1,0 +1,22 @@
+{
+  "build": "0",
+  "build_number": 0,
+  "depends": [],
+  "license": "MIT",
+  "name": "bar",
+  "noarch": "generic",
+  "md5": "be18e258734591414a7b72a4463260ad",
+  "sha256": "9e98dae797aa686b84f469930f653ae85f469bc59bf10c5bb2ef72eeae06523e",
+  "size": 100,
+  "subdir": "noarch",
+  "timestamp": 1700000000000,
+  "version": "1.0",
+  "fn": "bar-1.0-0.tar.bz2",
+  "url": "https://example.com/installed/noarch/bar-1.0-0.tar.bz2",
+  "channel": "https://example.com/installed/",
+  "files": [],
+  "paths_data": {
+    "paths_version": 1,
+    "paths": []
+  }
+}
