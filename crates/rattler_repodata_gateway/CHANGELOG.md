@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.38.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.37.2...rattler_repodata_gateway-v0.38.0) - 2026-10-30
+
+### Fixed
+
+- *(gateway)* return only the requested package from a shard ([#3059](https://github.com/conda/rattler/pull/3059))
+- verify shards against the hash in the shard index ([#3060](https://github.com/conda/rattler/pull/3060))
+
 ## [0.37.2](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.37.1...rattler_repodata_gateway-v0.37.2) - 2026-10-30
 
 ### Other
