@@ -13,7 +13,7 @@ use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::MatchSpecCondition;
 use rattler_conda_types::{
-    Channel, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec, PackageName,
+    Channel, Flag, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec, PackageName,
     PackageNameMatcher, ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord,
     RepodataRevision, SolverResult,
     package::{ArchiveIdentifier, DistArchiveType},
@@ -28,8 +28,8 @@ use resolvo::{
 use url::Url;
 
 use crate::{
-    CancellationToken, ChannelPriority, ExcludeNewer, IntoRepoData, SolveError, SolveStrategy,
-    SolverRepoData, SolverTask, priority_tier::PriorityTier,
+    CancellationToken, ChannelPriority, ExcludeNewer, FlagPreference, IntoRepoData, SolveError,
+    SolveStrategy, SolverRepoData, SolverTask, priority_tier::PriorityTier,
     resolvo::conda_sorting::CompareStrategy,
 };
 
@@ -187,6 +187,13 @@ impl SolverPackageRecord<'_> {
         match self {
             SolverPackageRecord::Record(rec) => &rec.package_record.track_features,
             SolverPackageRecord::Extra { .. } | SolverPackageRecord::VirtualPackage(..) => &EMPTY,
+        }
+    }
+
+    fn flags(&self) -> &[Flag] {
+        match self {
+            SolverPackageRecord::Record(rec) => &rec.package_record.flags,
+            SolverPackageRecord::Extra { .. } | SolverPackageRecord::VirtualPackage(..) => &[],
         }
     }
 
@@ -350,6 +357,10 @@ pub struct CondaDependencyProvider<'a> {
     /// This is only populated (and consulted) for
     /// [`ChannelPriority::Flexible`].
     channel_order: HashMap<Option<String>, u32>,
+
+    /// Preferences for or against flagged variants among candidates of equal
+    /// version. Earlier preferences take precedence over later ones.
+    flag_preferences: Vec<FlagPreference>,
 }
 
 impl<'a> CondaDependencyProvider<'a> {
@@ -698,7 +709,35 @@ impl<'a> CondaDependencyProvider<'a> {
             dependency_overrides: override_map,
             channel_priority,
             channel_order,
+            flag_preferences: Vec::new(),
         })
+    }
+
+    /// Sets the preferences for or against flagged variants among candidates
+    /// of equal version. See [`SolverTask::flag_preferences`].
+    pub fn with_flag_preferences(mut self, flag_preferences: Vec<FlagPreference>) -> Self {
+        self.flag_preferences = flag_preferences;
+        self
+    }
+
+    /// Compares two records by the flag preferences, where `Less` means `a`
+    /// is preferred. The first preference that only one of them satisfies
+    /// decides.
+    fn compare_flag_preferences(
+        &self,
+        a: &SolverPackageRecord<'_>,
+        b: &SolverPackageRecord<'_>,
+    ) -> std::cmp::Ordering {
+        let (a_flags, b_flags) = (a.flags(), b.flags());
+        self.flag_preferences
+            .iter()
+            .map(|preference| {
+                preference
+                    .is_satisfied_by(b_flags)
+                    .cmp(&preference.is_satisfied_by(a_flags))
+            })
+            .find(|ordering| ordering.is_ne())
+            .unwrap_or(std::cmp::Ordering::Equal)
     }
 
     /// Returns the priority rank for a channel, where a lower rank indicates a
@@ -1169,7 +1208,8 @@ impl super::SolverImpl for Solver {
             task.strategy,
             dependency_overrides,
             &task.excluded_candidates,
-        )?;
+        )?
+        .with_flag_preferences(task.flag_preferences);
 
         // Construct the requirements that the solver needs to satisfy.
         let virtual_package_requirements = task.virtual_packages.iter().map(|spec| {
