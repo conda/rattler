@@ -560,6 +560,15 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     /// See [`Self::locked_packages`] for the borrowing rationale.
     pub pinned_packages: Vec<&'a RepoDataRecord>,
 
+    /// Records that the solver may select but has no preference for.
+    ///
+    /// Unlike [`Self::locked_packages`] these records are not favored, and
+    /// unlike [`Self::pinned_packages`] they are not forced into the solution.
+    /// They are simply added as extra candidates next to other packages at the
+    /// highest priority tier. For example, these may represent packages that
+    /// already exist in the prefix.
+    pub additional_packages: Vec<&'a RepoDataRecord>,
+
     /// Virtual packages considered active
     pub virtual_packages: Vec<GenericVirtualPackage>,
 
@@ -587,11 +596,12 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     /// - a relative duration, equivalent to the historical `min_age`
     ///   behavior.
     ///
-    /// The cutoff applies to `locked_packages` and `pinned_packages` as well.
-    /// A locked record newer than the cutoff is not favored, so the solver
-    /// picks a record the cutoff allows instead. With the `resolvo` backend,
-    /// a pinned record newer than the cutoff makes the solve unsatisfiable
-    /// when the package is needed, the same as with `excluded_candidates`.
+    /// The cutoff applies to `locked_packages`, `pinned_packages` and
+    /// `additional_packages` as well. A locked record newer than the cutoff
+    /// is not favored, so the solver picks a record the cutoff allows instead.
+    /// With the `resolvo` backend, a pinned record newer than the cutoff
+    /// makes the solve unsatisfiable when the package is needed, the same as
+    /// with `excluded_candidates`.
     pub exclude_newer: Option<ExcludeNewer>,
 
     /// The solve strategy.
@@ -644,6 +654,7 @@ impl<'r, T> SolverTask<'r, T> {
             available_packages,
             locked_packages: Vec::new(),
             pinned_packages: Vec::new(),
+            additional_packages: Vec::new(),
             virtual_packages: Vec::new(),
             specs: Vec::new(),
             constraints: Vec::new(),
