@@ -33,7 +33,7 @@ jobs:
         with:
           submodules: recursive
       - name: Set up pixi
-        uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
+        uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
       - run: pixi r doc
 
   build:
