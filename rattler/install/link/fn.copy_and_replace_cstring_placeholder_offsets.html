@@ -5,7 +5,7 @@
     destination: impl <a class="trait" href="https://doc.rust-lang.org/1.98.1/std/io/trait.Write.html" title="trait std::io::Write">Write</a>,
     prefix_placeholder: &amp;<a class="primitive" href="https://doc.rust-lang.org/1.98.1/std/primitive.str.html">str</a>,
     target_prefix: &amp;<a class="primitive" href="https://doc.rust-lang.org/1.98.1/std/primitive.str.html">str</a>,
-    groups: &amp;[<a class="struct" href="../../../rattler_conda_types/package/paths/struct.OffsetGroup.html" title="struct rattler_conda_types::package::paths::OffsetGroup">OffsetGroup</a>],
+    groups: &amp;[OffsetGroup],
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.98.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.98.1/std/primitive.unit.html">()</a>, <a class="enum" href="enum.OffsetReplaceError.html" title="enum rattler::install::link::OffsetReplaceError">OffsetReplaceError</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Given the contents &amp; offsets of a file, copies it to the <code>destination</code> and in the process
 replace any binary c-style string that contains the text <code>prefix_placeholder</code> with a binary
 compatible c-string where the <code>prefix_placeholder</code> text is replaced with the <code>target_prefix</code>

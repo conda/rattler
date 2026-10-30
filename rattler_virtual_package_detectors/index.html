@@ -20,11 +20,11 @@ solver and installer implementation keyed by the environment digest.</li>
 <li><a href="consent/index.html" title="mod rattler_virtual_package_detectors::consent"><code>consent</code></a> lets the client decide whether a detector may run at all.</li>
 <li><a href="detect/index.html" title="mod rattler_virtual_package_detectors::detect"><code>detect</code></a> composes all of that into <a href="detect/fn.detect.html" title="fn rattler_virtual_package_detectors::detect::detect"><code>detect()</code></a>, the entry point.</li>
 </ul>
-<p>Enable <a href="../rattler_repodata_gateway/gateway/query/struct.RepoDataQuery.html#method.virtual_package_detectors" title="method rattler_repodata_gateway::gateway::query::RepoDataQuery::virtual_package_detectors"><code>RepoDataQuery::virtual_package_detectors</code></a>
+<p>Enable <a href="rattler_repodata_gateway::RepoDataQuery::virtual_package_detectors"><code>RepoDataQuery::virtual_package_detectors</code></a>
 to collect registrations and candidate-wide demand with the package records.
 Pass all accepted registrations to <a href="detect/fn.detect.html" title="fn rattler_virtual_package_detectors::detect::detect"><code>detect()</code></a> and use the query’s wanted names
 as <a href="detect/enum.WantedNames.html#variant.Only" title="variant rattler_virtual_package_detectors::detect::WantedNames::Only"><code>WantedNames::Only</code></a>. Standalone discovery is also available through
-<a href="../rattler_repodata_gateway/gateway/struct.Gateway.html#method.virtual_package_detectors" title="method rattler_repodata_gateway::gateway::Gateway::virtual_package_detectors"><code>Gateway::virtual_package_detectors</code></a>.</p>
+<a href="rattler_repodata_gateway::Gateway::virtual_package_detectors"><code>Gateway::virtual_package_detectors</code></a>.</p>
 <p>Pass a <a href="environment/trait.DetectorEnvironmentProvider.html" title="trait rattler_virtual_package_detectors::environment::DetectorEnvironmentProvider"><code>DetectorEnvironmentProvider</code></a> in <a href="detect/struct.DetectOptions.html" title="struct rattler_virtual_package_detectors::detect::DetectOptions"><code>DetectOptions</code></a> to create
 detector environments through the client’s own environment flow. The
 standalone <a href="environment/struct.RattlerEnvironmentProvider.html" title="struct rattler_virtual_package_detectors::environment::RattlerEnvironmentProvider"><code>RattlerEnvironmentProvider</code></a> takes <a href="environment/struct.EnvironmentOptions.html" title="struct rattler_virtual_package_detectors::environment::EnvironmentOptions"><code>EnvironmentOptions</code></a>,
