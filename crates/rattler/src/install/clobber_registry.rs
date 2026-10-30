@@ -187,9 +187,7 @@ impl ClobberRegistry {
 
         let (mut removals, additions) = self.path_trie.reprioritize_packages(new_priorities);
 
-        // Removing several contenders can enqueue intermediate winners which
-        // survive the transaction but lose under the final priorities. Restoring
-        // them would make multiple prefix records claim the same active file.
+        // Restore only final winners, not intermediate winners queued during removals.
         let more_additions = self
             .to_add
             .iter()

@@ -292,8 +292,7 @@ impl InstallDriver {
             None
         };
 
-        // Hooks may change payload bytes. Build RECORD only after all tracked
-        // transformations, using refreshed ownership and path metadata.
+        // Finalize RECORD after hooks, which may change installed files.
         super::wheel_record::finalize_wheel_records(
             target_prefix,
             &mut prefix_records,

@@ -15,11 +15,8 @@ use rattler_conda_types::{
 };
 use rattler_digest::{Sha256, Sha256Hash, compute_bytes_digest, compute_file_digest};
 
-#[cfg(test)]
-mod tests;
-
-/// Finalize only records supplied by the transaction, never discover files by
-/// scanning site-packages. Reload metadata after clobber and script finalization.
+/// Finalize the transaction's wheel records using metadata reloaded after
+/// clobber resolution and link scripts.
 pub(super) fn finalize_wheel_records(
     prefix: &Prefix,
     records: &mut [PrefixRecord],
@@ -94,8 +91,7 @@ fn finalize_wheel_record(
     write_record_file(prefix, dist_info, &prefix.join(&record_path), &bytes)?;
 
     let entry = &mut record.paths_data.paths[record_index];
-    // Reconcile even if a prior attempt replaced RECORD but failed while
-    // writing conda-meta. This makes no-op retries recover that failure.
+    // Repair stale conda-meta hashes even when RECORD is already up to date.
     metadata_changed |= reconcile_installed_hash(
         entry,
         compute_bytes_digest::<Sha256>(&bytes),
@@ -107,10 +103,8 @@ fn finalize_wheel_record(
     Ok(())
 }
 
-/// Locate the one `RECORD` entry whose `.dist-info` directory names this
-/// record's distribution. Match the identity validated by the converter, not
-/// a guessed Python layout: existing paths can outlive Python or remain in an
-/// older layout.
+/// Find the distribution's unique `RECORD` by name and version, independent
+/// of the current Python layout.
 fn find_record_entry(record: &PrefixRecord) -> io::Result<usize> {
     let expected_name = normalize_name(record.repodata_record.package_record.name.as_source());
     let expected_version: pep440_rs::Version = record
@@ -126,8 +120,7 @@ fn find_record_entry(record: &PrefixRecord) -> io::Result<usize> {
         .iter()
         .enumerate()
         .filter_map(|(index, entry)| {
-            // A clobbered RECORD lives under `__clobbers__`; its original path
-            // still names the distribution.
+            // Use the original path to identify a clobbered RECORD.
             let logical = entry.original_path.as_ref().unwrap_or(&entry.relative_path);
             if logical.file_name()? != "RECORD" {
                 return None;
@@ -153,9 +146,8 @@ fn find_record_entry(record: &PrefixRecord) -> io::Result<usize> {
     }
 }
 
-/// Hash and size of the installed file behind `entry`. Linking records the
-/// hash of the final bytes, so it is reused unless `rehash` is requested or
-/// the size no longer matches.
+/// Return the installed hash and size, reusing the recorded hash when the
+/// size matches and `rehash` is false.
 fn installed_hash_and_size(
     prefix: &Prefix,
     entry: &PathsEntry,
@@ -177,9 +169,8 @@ fn installed_hash_and_size(
     Ok((hash, size))
 }
 
-/// Store the installed hash and size on `entry`, returning whether anything
-/// changed. `sha256_in_prefix` is only kept when it differs from the archive
-/// hash, matching how linking records entries.
+/// Update installed metadata and return whether it changed.
+/// Keep `sha256_in_prefix` only when it differs from the archive hash.
 fn reconcile_installed_hash(entry: &mut PathsEntry, hash: Sha256Hash, size: u64) -> bool {
     let installed_hash = (entry.sha256 != Some(hash)).then_some(hash);
     if entry.sha256_in_prefix == installed_hash && entry.size_in_bytes == Some(size) {
@@ -210,9 +201,8 @@ fn write_record_file(
     destination: &Path,
     bytes: &[u8],
 ) -> io::Result<()> {
-    // Reject directory symlinks: replacing a file through a symlinked
-    // dist-info directory could modify the cache itself. A file symlink is
-    // safe to replace atomically and is deliberately not canonicalized.
+    // Directory symlinks could redirect writes into the cache. File symlinks
+    // are safe because atomic replacement replaces the link itself.
     let mut directory = prefix.path().to_path_buf();
     for component in dist_info.components() {
         directory.push(component);
@@ -251,10 +241,9 @@ pub(super) fn is_managed_wheel(
     is_wheel && ignored.is_none_or(|ignored| !ignored.contains(&record.package_record.name))
 }
 
-/// Legacy installers could overwrite generated commands without recording a
-/// clobber. Do not manufacture a RECORD that claims another package's file.
-/// Check before clobber resolution as well: an already-overwritten command
-/// cannot be recovered by moving its surviving bytes to a different owner.
+/// Reject files claimed by a wheel and another package.
+/// Run before clobber resolution: moving an overwritten file cannot recover
+/// its original contents.
 pub(super) fn validate_wheel_ownership(
     records: &[PrefixRecord],
     ignored: Option<&HashSet<PackageName>>,

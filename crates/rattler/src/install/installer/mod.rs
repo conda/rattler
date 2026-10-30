@@ -74,10 +74,9 @@ impl From<&rattler_config::config::CommonConfig> for LinkOptions {
 
 /// An installer that can install packages into a prefix.
 ///
-/// Converted wheels receive an installed `RECORD` after clobber resolution,
-/// script finalization, and enabled post-link hooks, without changing the cache.
-/// This transaction-level finalization is not performed by the low-level
-/// [`link_package`](super::link_package) primitive alone.
+/// Finalizes wheel `RECORD` files after clobber resolution and post-link hooks
+/// without changing the cache. Low-level [`link_package`](super::link_package)
+/// calls do not perform this step.
 #[derive(Default)]
 pub struct Installer {
     installed: Option<Vec<PrefixRecord>>,
@@ -675,10 +674,8 @@ impl Installer {
 
         // If the transaction is empty we can short-circuit the installation
         if transaction.operations.is_empty() {
-            // A previous installation may have linked everything but failed in
-            // finalization. A no-op retry must still reconcile RECORD.
-            // Conda-only no-ops keep the minimal-record fast path. For wheels,
-            // all owners are needed to reject ambiguous legacy command paths.
+            // Repair incomplete wheel finalization on no-op retries. Load all
+            // owners to detect conflicts; conda-only transactions skip this step.
             if desired_records.iter().any(|record| {
                 wheel_record::is_managed_wheel(record, self.ignored_packages.as_ref())
             }) {
