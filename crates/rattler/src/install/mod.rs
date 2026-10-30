@@ -1393,15 +1393,23 @@ fn paths_have_same_filesystem_sync(a: &Path, b: &Path) -> bool {
 mod test {
     use std::{collections::HashSet, env::temp_dir, path::Path, process::Command, str::FromStr};
 
+    #[cfg(unix)]
+    use crate::install::Transaction;
     use crate::{
         get_test_data_dir,
         install::{InstallDriver, InstallOptions, Prefix, PythonInfo, link_package},
         package_cache::PackageCache,
     };
+    #[cfg(unix)]
+    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
     use futures::{StreamExt, stream};
     use rattler_conda_types::{
         ExplicitEnvironmentSpec, Subdir, Version, package::CondaArchiveIdentifier,
     };
+    #[cfg(unix)]
+    use rattler_conda_types::{PrefixRecord, RepoDataRecord, package::DistArchiveIdentifier};
+    #[cfg(unix)]
+    use rattler_digest::{Sha256, compute_bytes_digest};
     use rattler_lock::LockFile;
     use rattler_networking::LazyClient;
     #[cfg(unix)]
@@ -1572,7 +1580,7 @@ mod test {
         insta::assert_yaml_snapshot!(paths);
     }
 
-    /// A raw wheel script must use the target interpreter, not retain `#!python`.
+    /// Raw wheel scripts use the target interpreter and appear in the installed RECORD.
     #[cfg(unix)]
     #[tokio::test]
     async fn test_wheel_raw_script_uses_environment_python() {
@@ -1589,14 +1597,20 @@ mod test {
                 "py3_none_any_0".parse().unwrap(),
             )
         };
+        let wheel_path = get_test_data_dir().join("wheels/script_probe-1.0-py3-none-any.whl");
+        let repodata_record = RepoDataRecord {
+            package_record: record.clone(),
+            identifier: DistArchiveIdentifier::try_from_path(&wheel_path).unwrap(),
+            url: Url::from_file_path(&wheel_path).unwrap(),
+            channel: None,
+        };
         let cached = PackageCache::new(root.path().join("cache"))
-            .get_or_fetch_from_path(
-                &get_test_data_dir().join("wheels/script_probe-1.0-py3-none-any.whl"),
-                Some(&record),
-                None,
-            )
+            .get_or_fetch_from_path(&wheel_path, Some(&record), None)
             .await
             .unwrap();
+        let record_name = "script_probe-1.0.dist-info/RECORD";
+        let cached_record = cached.path().join("site-packages").join(record_name);
+        let original_record = fs::read(&cached_record).unwrap();
         let cached_script = cached.path().join("python-scripts/script-probe");
         let original = fs::read(&cached_script).unwrap();
         let original_mode = cached_script.metadata().unwrap().permissions().mode();
@@ -1628,10 +1642,11 @@ mod test {
             // echo prints the script path handed to it by the kernel/wrapper.
             std::os::unix::fs::symlink("/bin/echo", &python).unwrap();
 
-            link_package(
+            let driver = InstallDriver::default();
+            let paths = link_package(
                 cached.path(),
                 &prefix,
-                &InstallDriver::default(),
+                &driver,
                 InstallOptions {
                     python_info: Some(python_info.clone()),
                     ..Default::default()
@@ -1639,6 +1654,54 @@ mod test {
             )
             .await
             .unwrap();
+
+            let installed = PrefixRecord::from_repodata_record(repodata_record.clone(), paths);
+            installed
+                .write_to_path(target.join("conda-meta").join(installed.file_name()), true)
+                .unwrap();
+            let transaction = Transaction::from_current_and_desired(
+                vec![installed],
+                vec![repodata_record.clone()],
+                None,
+                None,
+                Subdir::current().unwrap(),
+            )
+            .unwrap();
+            driver.post_process(&transaction, &prefix, None).unwrap();
+            let site_packages = target.join(&python_info.site_packages_path);
+            let destination = site_packages.join(record_name);
+            let mut reader = csv::ReaderBuilder::new()
+                .has_headers(false)
+                .from_path(&destination)
+                .unwrap();
+            let mut recorded_paths = Vec::new();
+            for row in reader.records() {
+                let row = row.unwrap();
+                recorded_paths.push(row[0].to_owned());
+                if row[0] == *record_name {
+                    assert_eq!((&row[1], &row[2]), ("", ""));
+                } else {
+                    let bytes = fs::read(site_packages.join(&row[0])).unwrap();
+                    assert_eq!(
+                        row[1],
+                        format!(
+                            "sha256={}",
+                            URL_SAFE_NO_PAD.encode(compute_bytes_digest::<Sha256>(&bytes))
+                        )
+                    );
+                    assert_eq!(row[2], bytes.len().to_string());
+                }
+            }
+            insta::assert_yaml_snapshot!("wheel_record_paths", recorded_paths);
+            assert_eq!(fs::read(&cached_record).unwrap(), original_record);
+
+            // A missing payload must fail finalization; restoring it allows a retry.
+            let script = target.join("bin/plain-script");
+            let saved_script = target.join("plain-script.saved");
+            fs::rename(&script, &saved_script).unwrap();
+            assert!(driver.post_process(&transaction, &prefix, None).is_err());
+            fs::rename(saved_script, script).unwrap();
+            driver.post_process(&transaction, &prefix, None).unwrap();
 
             for script_name in ["script-probe", "script-probe-gui"] {
                 let script = target.join("bin").join(script_name);
