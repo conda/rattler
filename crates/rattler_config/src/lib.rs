@@ -805,7 +805,7 @@ mod tests {
             exemption
                 .cutoff
                 .as_ref()
-                .map(crate::config::exclude_newer::ExcludeNewerExemptionCutoff::as_str),
+                .map(crate::config::exclude_newer::ExcludeNewerCutoff::as_str),
             Some("2026-10-12")
         );
     }
