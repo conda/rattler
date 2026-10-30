@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-10-29
+
+### Highlights
+
+**Breaking: every source picks package formats the same way.** Until now only plain `repodata.json` channels dropped a `.tar.bz2` file when the same build was also available as `.conda`. Sharded channels (like conda-forge) and custom `RepoDataSource` implementations returned every file. Now `Gateway.query()`, `Gateway.names()` and `solve()` apply `PackageFormatSelection.PREFER_CONDA` to every source by default. Expect fewer duplicate `.tar.bz2` records from sharded channels. Wheel records from a custom source or a sharded channel are no longer returned unless you ask for them. When a build exists in several formats, the order of preference is now `.conda` > `.whl` > `.tar.bz2`, and the solver uses the same order to break ties. Pass the new `package_format_selection` argument to get the old behavior back or to choose explicitly:
+
+```python
+records = await solve(["conda-forge"], ["python"], package_format_selection=PackageFormatSelection.ALL)
+await gateway.query([my_source], ["noarch"], ["foo"], package_format_selection=PackageFormatSelection.PREFER_CONDA_WITH_WHL)
+```
+
+**Installing wheels from conda channels.** `install()` can now install `.whl` records, such as those returned with `PREFER_CONDA_WITH_WHL`. Each wheel is downloaded and converted into an extracted conda package in the package cache, under `wheels-v<N>/`, and then linked like any other package.
+
+### Added
+
+- Add `package_format_selection` to `Gateway.query()`, `Gateway.names()` and `solve()`, add `PackageFormatSelection.ALL`, and accept `SparseRepoData` in `Gateway.names()` in [#2887](https://github.com/conda/rattler/pull/2887)
+- Install `.whl` records with `install()` by converting them into extracted conda packages in the package cache in [#2964](https://github.com/conda/rattler/pull/2964)
+
+### Changed
+
+- **BREAKING:** `Gateway.query()`, `Gateway.names()` and `solve()` apply `PackageFormatSelection.PREFER_CONDA` to sharded channels and custom `RepoDataSource` implementations. These sources used to return every file, so now duplicate `.tar.bz2` builds and all `.whl` records are dropped unless another selection is passed. The preference order is `.conda` > `.whl` > `.tar.bz2`, in [#2887](https://github.com/conda/rattler/pull/2887)
+
+### Security
+
+- Update `zip` to 9.1.3 (also shipped in 0.28.1) in [#3035](https://github.com/conda/rattler/pull/3035)
+
+## [0.28.1] - 2026-10-29
+
+This patch release is built from 0.28.0 and changes only the bundled `zip` crate. Nothing changes in the Python API.
+
+### Security
+
+- Update `zip` to 9.1.3, which is used to read `.conda` archives during `install()` and extraction. It fixes archives that list different contents than other ZIP readers would see ([GHSA-m665-v7pm-7grj](https://github.com/zip-rs/zip2/security/advisories/GHSA-m665-v7pm-7grj) / CVE-2026-115905, [GHSA-wjr6-mhvj-cjvm](https://github.com/zip-rs/zip2/security/advisories/GHSA-wjr6-mhvj-cjvm)) and stream validation that accepted a missing footer and shifted offsets ([GHSA-gmfj-vffv-32pw](https://github.com/zip-rs/zip2/security/advisories/GHSA-gmfj-vffv-32pw)), backported from [#3035](https://github.com/conda/rattler/pull/3035)
+
 ## [0.28.0] - 2026-10-23
 
 ### Highlights
