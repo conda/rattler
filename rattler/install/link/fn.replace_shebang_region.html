@@ -4,10 +4,10 @@
     region: &amp;[<a class="primitive" href="https://doc.rust-lang.org/1.98.1/std/primitive.u8.html">u8</a>],
     prefix_placeholder: &amp;<a class="primitive" href="https://doc.rust-lang.org/1.98.1/std/primitive.str.html">str</a>,
     target_prefix: &amp;<a class="primitive" href="https://doc.rust-lang.org/1.98.1/std/primitive.str.html">str</a>,
-    target_platform: &amp;Subdir,
+    target_platform: &amp;<a class="enum" href="../../../rattler_conda_types/subdir/enum.Subdir.html" title="enum rattler_conda_types::subdir::Subdir">Subdir</a>,
 ) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.98.1/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.98.1/std/primitive.u8.html">u8</a>&gt; <a href="#" class="tooltip" data-notable-ty="Vec&lt;u8&gt;">ⓘ</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Transforms the shebang region (the first <code>shebang_length</code> bytes of a text file) exactly as the
 installer does when writing the patched file, returning the region’s contribution to the output.</p>
-<p>On targets with shebang handling ([<code>Subdir::is_unix</code>]) the region minus its trailing newline is
+<p>On targets with shebang handling (<a href="../../../rattler_conda_types/subdir/enum.Subdir.html#method.is_unix" title="method rattler_conda_types::subdir::Subdir::is_unix"><code>Subdir::is_unix</code></a>) the region minus its trailing newline is
 rewritten by <code>replace_shebang</code> (which may collapse an over-long line to the
 <code>#!/usr/bin/env &lt;program&gt;</code> form) and the trailing newline, if present, is appended unchanged. On
 other targets the region receives plain placeholder replacement under every encoding.</p>

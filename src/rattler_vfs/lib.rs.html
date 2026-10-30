@@ -1205,7 +1205,7 @@
 <a href=#1203 id=1203 data-nosnippet>1203</a>                config.overlay_mismatch,
 <a href=#1204 id=1204 data-nosnippet>1204</a>            )<span class="question-mark">?</span>;
 <a href=#1205 id=1205 data-nosnippet>1205</a>            <span class="kw">let </span>adapter = FuseAdapter::new(overlay);
-<a href=#1206 id=1206 data-nosnippet>1206</a>            <span class="prelude-val">Ok</span>(fuser::spawn_mount2(
+<a href=#1206 id=1206 data-nosnippet>1206</a>            <span class="prelude-val">Ok</span>(fuser::spawn_mount(
 <a href=#1207 id=1207 data-nosnippet>1207</a>                adapter,
 <a href=#1208 id=1208 data-nosnippet>1208</a>                <span class="kw-2">&amp;</span>config.mount_point,
 <a href=#1209 id=1209 data-nosnippet>1209</a>                <span class="kw-2">&amp;</span>fuser_config,
@@ -1220,7 +1220,7 @@
 <a href=#1218 id=1218 data-nosnippet>1218</a>        }
 <a href=#1219 id=1219 data-nosnippet>1219</a>        Mode::ReadOnly | Mode::ReadOnlyIfSupported =&gt; {
 <a href=#1220 id=1220 data-nosnippet>1220</a>            <span class="kw">let </span>adapter = FuseAdapter::new(vfs);
-<a href=#1221 id=1221 data-nosnippet>1221</a>            <span class="prelude-val">Ok</span>(fuser::spawn_mount2(
+<a href=#1221 id=1221 data-nosnippet>1221</a>            <span class="prelude-val">Ok</span>(fuser::spawn_mount(
 <a href=#1222 id=1222 data-nosnippet>1222</a>                adapter,
 <a href=#1223 id=1223 data-nosnippet>1223</a>                <span class="kw-2">&amp;</span>config.mount_point,
 <a href=#1224 id=1224 data-nosnippet>1224</a>                <span class="kw-2">&amp;</span>fuser_config,
