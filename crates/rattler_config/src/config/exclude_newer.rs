@@ -342,6 +342,7 @@ impl ExcludeNewerExemption {
         name: &PackageName,
         now: Timestamp,
     ) -> Result<rattler_solve::ExcludeNewer, String> {
+        validate_exemption_spec(name, &self.spec).map_err(|err| err.to_string())?;
         let cutoff = self
             .cutoff
             .as_ref()
@@ -918,24 +919,34 @@ mod tests {
                 .to_string(),
             "invalid cutoff `7 weeks ago`, expected an RFC 3339 timestamp, a date, or a duration (for example, 7d)"
         );
-        let mut config = ExcludeNewerConfig::from_cutoff("7d".parse().unwrap());
-        config.exemptions.insert(
-            PackageName::new_unchecked("ruff"),
-            ExcludeNewerExemption {
-                spec: NamelessMatchSpec {
+        for (spec, message) in [
+            (
+                NamelessMatchSpec {
                     extras: Some(vec!["x".to_string()]),
                     ..NamelessMatchSpec::default()
                 },
-                cutoff: None,
-            },
-        );
-        let error = config.validate().unwrap_err().to_string();
-        assert!(
-            error.starts_with(
-                "invalid exemption for `ruff`: exclude-newer exemption 'ruff[extras=[x]]' must not have extras"
+                "invalid exemption for `ruff`: exclude-newer exemption 'ruff[extras=[x]]' must not have extras",
             ),
-            "{error}"
-        );
+            (
+                NamelessMatchSpec::default(),
+                "invalid exemption for `ruff`: an exemption table must specify at least one match spec field",
+            ),
+            (
+                NamelessMatchSpec {
+                    url: Some("https://example.com/ruff".parse().unwrap()),
+                    ..NamelessMatchSpec::default()
+                },
+                "invalid exemption for `ruff`: the `url` of an exemption must point to a package archive",
+            ),
+        ] {
+            let mut config = ExcludeNewerConfig::from_cutoff("7d".parse().unwrap());
+            config.exemptions.insert(
+                PackageName::new_unchecked("ruff"),
+                ExcludeNewerExemption { spec, cutoff: None },
+            );
+            let error = config.validate().unwrap_err().to_string();
+            assert!(error.starts_with(message), "{error}");
+        }
     }
 
     #[test]
