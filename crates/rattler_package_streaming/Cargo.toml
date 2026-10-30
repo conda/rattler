@@ -1,7 +1,7 @@
 [package]
 exclude = ["tests/**", "benches/**", "**/snapshots/**"]
 name = "rattler_package_streaming"
-version = "0.27.15"
+version = "0.28.1"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Extract and stream of Conda package archives"
@@ -12,13 +12,16 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
+base64 = { workspace = true }
 bzip2 = { workspace = true }
+csv = { workspace = true }
 jiff = { workspace = true }
 http = { workspace = true, optional = true }
 filetime = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"], optional = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
+pep440_rs = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false, features = [
   "tokio",
@@ -33,6 +36,7 @@ async_http_range_reader = { workspace = true, optional = true }
 reqwest = { workspace = true, features = ["stream", "http2"], optional = true }
 reqwest-middleware = { workspace = true, optional = true }
 simple_spawn_blocking = { workspace = true, features = ["tokio"] }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }

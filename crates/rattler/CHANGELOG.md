@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.55.3](https://github.com/conda/rattler/compare/rattler-v0.55.2...rattler-v0.55.3) - 2026-10-30
+
+### Fixed
+
+- support raw wheel script shebangs ([#3039](https://github.com/conda/rattler/pull/3039))
+
+## [0.55.2](https://github.com/conda/rattler/compare/rattler-v0.55.1...rattler-v0.55.2) - 2026-10-28
+
+### Added
+
+- *(cache)* download and cache wheels as extracted conda packages ([#2964](https://github.com/conda/rattler/pull/2964))
+
+## [0.55.1](https://github.com/conda/rattler/compare/rattler-v0.55.0...rattler-v0.55.1) - 2026-10-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming, rattler_config, rattler_cache, rattler_shell, rattler_menuinst, rattler_sigstore
+
+## [0.55.0](https://github.com/conda/rattler/compare/rattler-v0.54.2...rattler-v0.55.0) - 2026-10-23
+
+### Changed
+
+- **BREAKING:** `Installer::with_attestation_policy` takes a `rattler_sigstore` 0.3 `VerificationPolicy` ([#2977](https://github.com/conda/rattler/pull/2977))
+
+### Added
+
+- add rattler_vfs crate ([#2566](https://github.com/conda/rattler/pull/2566))
+
 ## [0.54.2](https://github.com/conda/rattler/compare/rattler-v0.54.1...rattler-v0.54.2) - 2026-10-16
 
 ### Other

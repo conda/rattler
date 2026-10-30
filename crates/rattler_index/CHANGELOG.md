@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.3](https://github.com/conda/rattler/compare/rattler_index-v0.34.2...rattler_index-v0.34.3) - 2026-10-30
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.34.2](https://github.com/conda/rattler/compare/rattler_index-v0.34.1...rattler_index-v0.34.2) - 2026-10-28
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.34.1](https://github.com/conda/rattler/compare/rattler_index-v0.34.0...rattler_index-v0.34.1) - 2026-10-27
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.34.0](https://github.com/conda/rattler/compare/rattler_index-v0.33.5...rattler_index-v0.34.0) - 2026-10-23
+
+### Changed
+
+- **BREAKING:** `write_channel_notices` and `ensure_channel_initialized` take an `opendal` 0.59 `Operator`, and `RepodataFileMetadata::last_modified` is an `opendal` 0.59 `Timestamp` ([#2979](https://github.com/conda/rattler/pull/2979))
+
+### Other
+
+- bump opendal to 0.59 ([#2979](https://github.com/conda/rattler/pull/2979))
+
 ## [0.33.5](https://github.com/conda/rattler/compare/rattler_index-v0.33.4...rattler_index-v0.33.5) - 2026-10-16
 
 ### Fixed

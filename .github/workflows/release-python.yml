@@ -10,6 +10,10 @@ on:
         description: "The full sha of the commit to be released. If omitted, the latest commit on the default branch will be used."
         default: ""
         type: string
+      branch:
+        description: "The branch that must contain `sha`: `main`, or a `py-rattler-X.Y.x` branch for a backport release. Backport releases don't update the latest docs or the latest GitHub release."
+        default: "main"
+        type: string
   pull_request:
     paths:
       # When we change pyproject.toml, we want to ensure that the maturin builds still work
@@ -34,10 +38,10 @@ jobs:
     name: Build sdist
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build sdist"
@@ -76,10 +80,10 @@ jobs:
             runner: windows-11-arm
             arch: arm64
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.platform.arch }}
@@ -110,10 +114,10 @@ jobs:
           - x86_64-unknown-linux-gnu
           - i686-unknown-linux-gnu
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
@@ -165,10 +169,10 @@ jobs:
             distro: ubuntu22.04
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build wheels"
@@ -194,7 +198,7 @@ jobs:
             'Acquire::http::Timeout "10";' \
             'Acquire::https::Timeout "10";' \
             | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
-      - uses: uraimo/run-on-arch-action@460cb8e6d9f726a588fc9b5e681c8a6cab09ae41 # v3.2.0
+      - uses: uraimo/run-on-arch-action@fa1f3e7de95534497266c7265950b5188355fbfb # v3.2.1
         if: ${{ matrix.platform.distro }}
         name: Test wheel (emulated)
         with:
@@ -234,10 +238,10 @@ jobs:
             manylinux: auto
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build wheels"
@@ -259,7 +263,7 @@ jobs:
             'Acquire::https::Timeout "10";' \
             | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
       # Only ppc64le: run-on-arch ships no rootfs for big endian ppc64.
-      - uses: uraimo/run-on-arch-action@460cb8e6d9f726a588fc9b5e681c8a6cab09ae41 # v3.2.0
+      - uses: uraimo/run-on-arch-action@fa1f3e7de95534497266c7265950b5188355fbfb # v3.2.1
         if: matrix.platform.arch != 'ppc64'
         name: Test wheel
         with:
@@ -289,10 +293,10 @@ jobs:
           - x86_64-unknown-linux-musl
           - i686-unknown-linux-musl
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
@@ -350,10 +354,10 @@ jobs:
             distro: alpine_latest
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build wheels"
@@ -384,7 +388,7 @@ jobs:
             'Acquire::http::Timeout "10";' \
             'Acquire::https::Timeout "10";' \
             | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
-      - uses: uraimo/run-on-arch-action@460cb8e6d9f726a588fc9b5e681c8a6cab09ae41 # v3.2.0
+      - uses: uraimo/run-on-arch-action@fa1f3e7de95534497266c7265950b5188355fbfb # v3.2.1
         if: ${{ matrix.platform.distro }}
         name: Test wheel (emulated)
         with:
@@ -406,10 +410,10 @@ jobs:
     runs-on: macos-15-intel # x86_64 runner
     name: Build x86_64-macos
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
@@ -433,10 +437,10 @@ jobs:
     runs-on: macos-latest
     name: Build universal2-apple-macos
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
@@ -447,7 +451,7 @@ jobs:
           working-directory: py-rattler
       - name: "Test wheel - universal2"
         run: |
-          pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*universal2.whl --force-reinstall
+          pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*universal2*.whl --force-reinstall
           python -c "import rattler; print(rattler.__version__)"
       - name: "Upload wheels"
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -461,19 +465,29 @@ jobs:
     # If you don't set an input tag, it's a dry run (no uploads).
     if: ${{ inputs.tag }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: main # We checkout the main branch to check for the commit
-      - name: Check main branch
-        if: ${{ inputs.sha }}
+          ref: ${{ inputs.branch }} # We checkout the release branch to check for the commit
+      - name: Check release branch
         env:
           INPUT_SHA: ${{ inputs.sha }}
+          INPUT_BRANCH: ${{ inputs.branch }}
         run: |
-          # Fetch the main branch since a shallow checkout is used by default
-          git fetch origin main --unshallow
-          if ! git branch --contains "$INPUT_SHA" | grep -E '(^|\s)main$'; then
-            echo "The specified sha is not on the main branch" >&2
+          if ! [[ "$INPUT_BRANCH" =~ ^(main|py-rattler-[0-9]+\.[0-9]+\.x)$ ]]; then
+            echo "The branch must be main or py-rattler-X.Y.x, got: $INPUT_BRANCH" >&2
             exit 1
+          fi
+          if [ "$INPUT_BRANCH" != main ] && [ -z "$INPUT_SHA" ]; then
+            echo "A sha is required when releasing from $INPUT_BRANCH" >&2
+            exit 1
+          fi
+          if [ -n "$INPUT_SHA" ]; then
+            # Fetch the release branch since a shallow checkout is used by default
+            git fetch origin "$INPUT_BRANCH" --unshallow
+            if ! git branch --contains "$INPUT_SHA" | grep -E "(^|\s)$INPUT_BRANCH\$"; then
+              echo "The specified sha is not on the $INPUT_BRANCH branch" >&2
+              exit 1
+            fi
           fi
       - name: Check tag consistency
         env:
@@ -499,7 +513,7 @@ jobs:
     outputs:
       release_notes: ${{ steps.release_notes.outputs.release_notes }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.sha }}
       - name: Extract release notes
@@ -543,7 +557,7 @@ jobs:
           merge-multiple: true
           path: wheels
       - name: Publish to PyPi
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           skip-existing: true
           packages-dir: wheels
@@ -567,10 +581,17 @@ jobs:
           RELEASE_NOTES: ${{ needs.extract-changelog.outputs.release_notes }}
           INPUT_TAG: ${{ inputs.tag }}
           TARGET_SHA: ${{ inputs.sha || github.sha }}
+          INPUT_BRANCH: ${{ inputs.branch }}
         run: |
+          # A backport release must not become the latest GitHub release
+          latest_args=()
+          if [ "$INPUT_BRANCH" != main ]; then
+            latest_args=(--latest=false)
+          fi
           gh release create "py-rattler-v$INPUT_TAG" \
             --repo "${{ github.repository }}" \
             --target "$TARGET_SHA" \
+            "${latest_args[@]}" \
             --title "py-rattler v$INPUT_TAG" \
             --notes "$RELEASE_NOTES"
 
@@ -578,7 +599,8 @@ jobs:
     name: Deploy release docs
     runs-on: ubuntu-latest
     needs: tag-release
-    if: ${{ inputs.tag }}
+    # Backport releases from a py-rattler-X.Y.x branch must not replace the latest docs.
+    if: ${{ inputs.tag && inputs.branch == 'main' }}
     permissions:
       contents: write
     concurrency:
@@ -586,13 +608,13 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.sha }}
           fetch-depth: 0
           submodules: recursive
 
-      - uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
+      - uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
         with:
           manifest-path: py-rattler/pixi.toml
           environments: docs

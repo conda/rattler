@@ -7,15 +7,28 @@ use thiserror::Error;
 
 use super::{
     GatewayError,
-    subdir::{PackageRecords, SubdirClient, extract_unique_deps_split},
+    subdir::{FetchedPackage, SubdirClient},
 };
-use crate::{Reporter, sparse::SparseRepoData};
+use crate::{
+    Reporter,
+    sparse::{FormatBucketSet, PackageFormatSelection, SparseRepoData},
+};
 
 /// A source of repodata records for a specific subdirectory.
 ///
 /// Implement this trait to provide custom repodata records without
 /// going through traditional channel URLs. The gateway will call
 /// these methods for each platform in the query.
+///
+/// The records a source returns are filtered by the
+/// [`PackageFormatSelection`](crate::sparse::PackageFormatSelection) of the
+/// query, like the records of a channel: records with the same identifier
+/// in several archive formats are treated as one build in different formats.
+/// With the default selection
+/// ([`PreferConda`](crate::sparse::PackageFormatSelection::PreferConda)),
+/// wheels are never returned and a `.tar.bz2` record is dropped when the same
+/// build is also available as `.conda`, so a source that only serves wheels
+/// returns no records unless the query selects wheels.
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 pub trait RepoDataSource: Send + Sync {
@@ -310,23 +323,17 @@ impl SubdirClient for CustomSourceClient {
     async fn fetch_package_records(
         &self,
         name: &PackageName,
+        _buckets: FormatBucketSet,
         _reporter: Option<&dyn Reporter>,
-    ) -> Result<PackageRecords, GatewayError> {
+    ) -> Result<FetchedPackage, GatewayError> {
         let records = self
             .source
             .fetch_package_records(self.platform, name)
             .await?;
-        let (unique_base_deps, unique_extra_deps) =
-            extract_unique_deps_split(records.iter().map(|r| &**r));
-        Ok(PackageRecords {
-            records,
-            removed: Vec::new(),
-            unique_base_deps,
-            unique_extra_deps,
-        })
+        Ok(FetchedPackage::from_records(records, Vec::new()))
     }
 
-    fn package_names(&self) -> Vec<String> {
+    fn package_names(&self, _selection: PackageFormatSelection) -> Vec<String> {
         self.source.package_names(self.platform)
     }
 }

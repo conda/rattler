@@ -495,9 +495,19 @@ impl<'a> CondaDependencyProvider<'a> {
                                     // A previous package that we already stored
                                     // is actually a package of a better
                                     // "type" so we'll just use that instead
-                                    // (.conda > .tar.bz)
+                                    // (.conda > .whl > .tar.bz2)
                                 }
                                 Ordering::Equal => {
+                                    // Compare the complete record, including its source and
+                                    // checksums, rather than just its package identity.
+                                    if ordered_repodata[*idx] == record {
+                                        tracing::warn!(
+                                            identifier = %record.identifier,
+                                            url = %record.url,
+                                            "ignoring identical duplicate package record; keeping the first record"
+                                        );
+                                        continue;
+                                    }
                                     return Err(SolveError::DuplicateRecords(
                                         record.identifier.to_string(),
                                     ));

@@ -633,6 +633,86 @@ mod tests {
     }
 
     #[test]
+    fn test_edit_exclude_newer() {
+        use crate::config::exclude_newer::{ExcludeNewerConfig, ExcludeNewerExemption};
+
+        let mut config = TestConfig::default();
+
+        // A plain value is a cutoff.
+        config.set("exclude-newer", Some("7d".to_string())).unwrap();
+        assert_eq!(
+            config.exclude_newer,
+            Some(ExcludeNewerConfig::from_cutoff("7d"))
+        );
+
+        // A table is given as JSON.
+        config
+            .set(
+                "exclude-newer",
+                Some(r#"{"cutoff": "14d", "exemptions": {"ruff": "*"}}"#.to_string()),
+            )
+            .unwrap();
+        let exclude_newer = config.exclude_newer.as_ref().unwrap();
+        assert_eq!(exclude_newer.cutoff, "14d");
+        assert_eq!(exclude_newer.exemptions.len(), 1);
+
+        // The cutoff of the table can be set on its own.
+        config
+            .set("exclude-newer.cutoff", Some("1d".to_string()))
+            .unwrap();
+        let exclude_newer = config.exclude_newer.as_ref().unwrap();
+        assert_eq!(exclude_newer.cutoff, "1d");
+        assert_eq!(exclude_newer.exemptions.len(), 1);
+
+        // An exemption that looks like a number is kept as a version.
+        config
+            .set("exclude-newer.exemptions.ruff", Some("1.10".to_string()))
+            .unwrap();
+        assert_eq!(
+            config.exclude_newer.as_ref().unwrap().exemptions
+                [&rattler_conda_types::PackageName::new_unchecked("ruff")],
+            ExcludeNewerExemption::Version("1.10".to_string())
+        );
+
+        // Exemptions cannot be added to a bare cutoff key by key.
+        config.set("exclude-newer", Some("7d".to_string())).unwrap();
+        config
+            .set("exclude-newer.exemptions.ruff", Some("*".to_string()))
+            .unwrap_err();
+        assert_eq!(
+            config.exclude_newer,
+            Some(ExcludeNewerConfig::from_cutoff("7d"))
+        );
+
+        config.set("exclude-newer", None).unwrap();
+        assert_eq!(config.exclude_newer, None);
+    }
+
+    #[test]
+    fn test_merge_exclude_newer() {
+        let (config1, _) = TestConfig::from_toml_str(r#"exclude-newer = "7d""#).unwrap();
+        let (config2, _) = TestConfig::from_toml_str(
+            r#"
+            [exclude-newer]
+            cutoff = "1d"
+            exemptions = { ruff = "*" }
+            "#,
+        )
+        .unwrap();
+
+        // The value is replaced as a whole, not merged.
+        let merged = config1.clone().merge_config(&config2).unwrap();
+        assert_eq!(merged.exclude_newer, config2.exclude_newer);
+        let merged = config2.merge_config(&config1).unwrap();
+        assert_eq!(merged.exclude_newer, config1.exclude_newer);
+        let merged = config1
+            .clone()
+            .merge_config(&TestConfig::default())
+            .unwrap();
+        assert_eq!(merged.exclude_newer, config1.exclude_newer);
+    }
+
+    #[test]
     fn test_save_and_load_config() {
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("config.toml");

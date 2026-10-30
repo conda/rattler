@@ -460,7 +460,7 @@ class Version:
         """
         return self._version.__hash__()
 
-    def __eq__(self, other: Version) -> bool:  # type: ignore[override]
+    def __eq__(self, other: Version) -> bool:  # ty: ignore[invalid-method-override]
         """
         Returns True if this instance represents the same version as `other`.
 
@@ -478,7 +478,7 @@ class Version:
         """
         return self._version == other._version
 
-    def __ne__(self, other: Version) -> bool:  # type: ignore[override]
+    def __ne__(self, other: Version) -> bool:  # ty: ignore[invalid-method-override]
         """
         Returns False if this instance represents the same version as `other`.
 

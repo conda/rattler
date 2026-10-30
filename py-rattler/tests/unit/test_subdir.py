@@ -36,4 +36,4 @@ def test_unknown_attribute_still_raises() -> None:
     import rattler
 
     with pytest.raises(AttributeError):
-        _ = rattler.NotAThing  # type: ignore[attr-defined]
+        _ = rattler.NotAThing  # ty: ignore[unresolved-attribute]

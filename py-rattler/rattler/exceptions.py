@@ -49,122 +49,122 @@ except ImportError:
     # They are only redefined for documentation purposes
     # when there is no binary yet
 
-    class ActivationError(Exception):  # type: ignore[no-redef]
+    class ActivationError(Exception):
         """Error that can occur when activating a conda environment"""
 
-    class ActivationScriptFormatError(Exception):  # type: ignore[no-redef]
+    class ActivationScriptFormatError(Exception):
         """Error that can occur when the activation script has an invalid format"""
 
-    class AuthenticationStorageError(Exception):  # type: ignore[no-redef]
+    class AuthenticationStorageError(Exception):
         """Error that can occur when querying the authentication storage"""
 
-    class CacheDirError(Exception):  # type: ignore[no-redef]
+    class CacheDirError(Exception):
         """Error that can occur when querying the cache directory"""
 
-    class CanonicalMatchSpecError(Exception):  # type: ignore[no-redef]
+    class CanonicalMatchSpecError(Exception):
         """Error that can occur when a MatchSpec cannot be represented canonically"""
 
-    class ConfigError(Exception):  # type: ignore[no-redef]
+    class ConfigError(Exception):
         """An error that can occur when loading a configuration file"""
 
-    class ConversionError(Exception):  # type: ignore[no-redef]
+    class ConversionError(Exception):
         """An error that can occur during conversion"""
 
-    class ConvertSubdirError(Exception):  # type: ignore[no-redef]
+    class ConvertSubdirError(Exception):
         """An error that can occur when parsing a subdir from a string."""
 
-    class DetectVirtualPackageError(Exception):  # type: ignore[no-redef]
+    class DetectVirtualPackageError(Exception):
         """An error that can occur when trying to detect virtual packages"""
 
-    class EnvironmentCreationError(Exception):  # type: ignore[no-redef]
+    class EnvironmentCreationError(Exception):
         """An error that can occur when creating an environment."""
 
-    class ExtractError(Exception):  # type: ignore[no-redef]
+    class ExtractError(Exception):
         """An error that can occur when extracting an archive."""
 
-    class FetchRepoDataError(Exception):  # type: ignore[no-redef]
+    class FetchRepoDataError(Exception):
         """An error that can occur when fetching repo data"""
 
-    class GatewayError(Exception):  # type: ignore[no-redef]
+    class GatewayError(Exception):
         """An error that can occur when querying the repodata gateway."""
 
-    class GatewayWarning(UserWarning):  # type: ignore[no-redef]
+    class GatewayWarning(UserWarning):
         """A non-fatal problem reported by the repodata gateway, e.g. while
         resolving CEP-42 channel relations."""
 
-    class InstallerError(Exception):  # type: ignore[no-redef]
+    class InstallerError(Exception):
         """An error that can occur when installing a package"""
 
-    class AttestationError(Exception):  # type: ignore[no-redef]
+    class AttestationError(Exception):
         """An error that can occur when verifying a Sigstore attestation"""
 
-    class InvalidChannelError(Exception):  # type: ignore[no-redef]
+    class InvalidChannelError(Exception):
         """Error that can occur when parsing a channel."""
 
-    class InvalidMatchSpecError(Exception):  # type: ignore[no-redef]
+    class InvalidMatchSpecError(Exception):
         """Error that can occur when parsing a MatchSpec"""
 
-    class InvalidHeaderNameError(Exception):  # type: ignore[no-redef]
+    class InvalidHeaderNameError(Exception):
         """Error that can occur when an invalid header name is used"""
 
-    class InvalidHeaderValueError(Exception):  # type: ignore[no-redef]
+    class InvalidHeaderValueError(Exception):
         """Error that can occur when an invalid header value is used"""
 
-    class InvalidPackageNameError(Exception):  # type: ignore[no-redef]
+    class InvalidPackageNameError(Exception):
         """Error that can occur when parsing a package name"""
 
-    class InvalidUrlError(Exception):  # type: ignore[no-redef]
+    class InvalidUrlError(Exception):
         """Error that can occur when parsing a URL"""
 
-    class InvalidVersionError(Exception):  # type: ignore[no-redef]
+    class InvalidVersionError(Exception):
         """Error that can occur when parsing a Version"""
 
-    class InvalidVersionSpecError(Exception):  # type: ignore[no-redef]
+    class InvalidVersionSpecError(Exception):
         """Error that can occur when parsing a VersionSpec"""
 
-    class VirtualPackageOverrideError(Exception):  # type: ignore[no-redef]
+    class VirtualPackageOverrideError(Exception):
         """Error that can occur when a `CONDA_OVERRIDE_*` variable of a detector-provided virtual package is invalid"""
 
-    class IoError(Exception):  # type: ignore[no-redef]
+    class IoError(Exception):
         """An error that can occur during io operations"""
 
-    class LinkError(Exception):  # type: ignore[no-redef]
+    class LinkError(Exception):
         """An error that can occur when linking a package"""
 
-    class PackageNameMatcherParseError(Exception):  # type: ignore[no-redef]
+    class PackageNameMatcherParseError(Exception):
         """Error that can occur when parsing a package name matcher"""
 
-    class ParseArchError(Exception):  # type: ignore[no-redef]
+    class ParseArchError(Exception):
         """An error that can occur when parsing an arch from a string."""
 
-    class ParseCondaLockError(Exception):  # type: ignore[no-redef]
+    class ParseCondaLockError(Exception):
         """An error that can occur when parsing a conda lock file"""
 
-    class ParseExplicitEnvironmentSpecError(Exception):  # type: ignore[no-redef]
+    class ParseExplicitEnvironmentSpecError(Exception):
         """An error that can occur when parsing an explicit environment spec"""
 
-    class ParseSubdirError(Exception):  # type: ignore[no-redef]
+    class ParseSubdirError(Exception):
         """An error that can occur when parsing a platform from a string."""
 
-    class RequirementError(Exception):  # type: ignore[no-redef]
+    class RequirementError(Exception):
         """An error that can occur when parsing a requirement"""
 
-    class ShellError(Exception):  # type: ignore[no-redef]
+    class ShellError(Exception):
         """An error that can occur when interacting with the shell"""
 
-    class SolverError(Exception):  # type: ignore[no-redef]
+    class SolverError(Exception):
         """An error that can occur when solving for an environment"""
 
-    class TransactionError(Exception):  # type: ignore[no-redef]
+    class TransactionError(Exception):
         """An error that can occur when executing a transaction"""
 
-    class ValidatePackageRecordsError(Exception):  # type: ignore[no-redef]
+    class ValidatePackageRecordsError(Exception):
         """An error when validating package records."""
 
-    class VersionBumpError(Exception):  # type: ignore[no-redef]
+    class VersionBumpError(Exception):
         """An error that can occur when bumping a version."""
 
-    class VersionExtendError(Exception):  # type: ignore[no-redef]
+    class VersionExtendError(Exception):
         """An error that can occur when extending a version."""
 
 
