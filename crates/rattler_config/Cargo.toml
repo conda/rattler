@@ -1,7 +1,7 @@
 [package]
 exclude = ["**/snapshots/**", "test-data/**"]
 name = "rattler_config"
-version = "0.9.5"
+version = "0.11.0"
 edition.workspace = true
 authors = []
 description = "A crate to configure rattler and derived tools."
@@ -22,8 +22,13 @@ all-features = true
 thiserror = { workspace = true }
 dirs = { workspace = true }
 fs-err = { workspace = true }
+hex = { workspace = true }
+humantime = { workspace = true }
 indexmap = { workspace = true }
+jiff = { workspace = true }
 rattler_conda_types = { workspace = true }
+rattler_digest = { workspace = true }
+rattler_solve = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_ignored = { workspace = true }
 serde_json = { workspace = true }

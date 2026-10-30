@@ -10,7 +10,6 @@ import shutil
 import sys
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from typing import Dict, List
 
 try:
     import conda_content_trust.authentication as cct_authentication
@@ -27,7 +26,7 @@ except ImportError:
 def fatal_error(message: str) -> None:
     """Print error and exit."""
     print(message, file=sys.stderr)
-    exit(1)
+    sys.exit(1)
 
 
 def get_fingerprint(gpg_output: str) -> str:
@@ -37,7 +36,7 @@ def get_fingerprint(gpg_output: str) -> str:
     return fpline
 
 
-KeySet = Dict[str, List[Dict[str, str]]]
+KeySet = dict[str, list[dict[str, str]]]
 
 
 def normalize_keys(keys: KeySet) -> KeySet:
@@ -60,30 +59,28 @@ def normalize_keys(keys: KeySet) -> KeySet:
 
 
 class RepoSigner:
-    keys = {
-        "root": [],
-        "key_mgr": [
-            {
-                "private": "c9c2060d7e0d93616c2654840b4983d00221d8b6b69c850107da74b42168f937",
-                "public": "013ddd714962866d12ba5bae273f14d48c89cf0773dee2dbf6d4561e521c83f7",
-            },
-        ],
-        "pkg_mgr": [
-            {
-                "private": "f3cdab14740066fb277651ec4f96b9f6c3e3eb3f812269797b9656074cd52133",
-                "public": "f46b5a7caa43640744186564c098955147daa8bac4443887bc64d8bfee3d3569",
-            }
-        ],
-    }
-
     def __init__(self, in_folder: str) -> None:
         self.in_folder = Path(in_folder).resolve()
         self.folder = self.in_folder.parent / (str(self.in_folder.name) + "_signed")
-        self.keys["root"] = [
-            get_fingerprint(os.environ["KEY1"]),
-            get_fingerprint(os.environ["KEY2"]),
-        ]
-        self.keys = normalize_keys(self.keys)
+        keys = {
+            "root": [
+                get_fingerprint(os.environ["KEY1"]),
+                get_fingerprint(os.environ["KEY2"]),
+            ],
+            "key_mgr": [
+                {
+                    "private": "c9c2060d7e0d93616c2654840b4983d00221d8b6b69c850107da74b42168f937",
+                    "public": "013ddd714962866d12ba5bae273f14d48c89cf0773dee2dbf6d4561e521c83f7",
+                },
+            ],
+            "pkg_mgr": [
+                {
+                    "private": "f3cdab14740066fb277651ec4f96b9f6c3e3eb3f812269797b9656074cd52133",
+                    "public": "f46b5a7caa43640744186564c098955147daa8bac4443887bc64d8bfee3d3569",
+                }
+            ],
+        }
+        self.keys = normalize_keys(keys)
 
     def make_signed_repo(self) -> Path:
         print("[reposigner] Using keys:", self.keys)
@@ -388,8 +385,8 @@ server = HTTPServer(("", PORT), ChannelHandler)
 print("Server started at localhost:" + str(PORT))
 try:
     server.serve_forever()
-except Exception:
-    # Catch all sorts of interrupts
+except KeyboardInterrupt:
+    # Catch Ctrl-C
     print("Shutting server down")
     server.shutdown()
     print("Server shut down")

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4](https://github.com/conda/rattler/compare/rattler_virtual_package_detectors-v0.3.3...rattler_virtual_package_detectors-v0.3.4) - 2026-10-30
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve, rattler_config, rattler_networking, rattler_package_streaming, rattler_cache, rattler, rattler_repodata_gateway, rattler_index, rattler_shell, rattler_environment_digest
+
+## [0.3.3](https://github.com/conda/rattler/compare/rattler_virtual_package_detectors-v0.3.2...rattler_virtual_package_detectors-v0.3.3) - 2026-10-30
+
+### Other
+
+- updated the following local packages: rattler_package_streaming, rattler, rattler_solve, rattler_index, rattler_cache, rattler_repodata_gateway
+
+## [0.3.2](https://github.com/conda/rattler/compare/rattler_virtual_package_detectors-v0.3.1...rattler_virtual_package_detectors-v0.3.2) - 2026-10-28
+
+### Other
+
+- updated the following local packages: rattler_config, rattler_package_streaming, rattler_cache, rattler, rattler_repodata_gateway, rattler_index, rattler_networking, rattler_solve
+
 ## [0.3.1](https://github.com/conda/rattler/compare/rattler_virtual_package_detectors-v0.3.0...rattler_virtual_package_detectors-v0.3.1) - 2026-10-27
 
 ### Other

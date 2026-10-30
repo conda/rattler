@@ -41,13 +41,15 @@ pub(crate) fn peek_sha256(cache_path: &Path) -> Option<Sha256Hash> {
     Sha256Hash::try_from(hash).ok()
 }
 
-/// Whether a wanted sha256 contradicts the one recorded for a cache entry.
+/// Whether a cache entry recorded with `cached` can serve a request for
+/// `wanted`.
 ///
-/// A mismatch requires both hashes to be known: an entry that predates hash
-/// recording, or a request that carries no hash of its own, cannot contradict
-/// anything and is treated as a match.
-pub(crate) fn sha256_mismatch(wanted: Option<&Sha256Hash>, cached: Option<&Sha256Hash>) -> bool {
-    matches!((wanted, cached), (Some(wanted), Some(cached)) if wanted != cached)
+/// A request that carries no hash of its own accepts any entry. A request
+/// with a hash only accepts an entry recorded with the same hash: an entry
+/// without one (e.g. one that predates hash recording) may hold a different
+/// package with the same name, version and build string.
+pub(crate) fn sha256_satisfies(wanted: Option<&Sha256Hash>, cached: Option<&Sha256Hash>) -> bool {
+    wanted.is_none_or(|wanted| cached == Some(wanted))
 }
 
 /// A validated cache entry with its associated metadata.
@@ -81,8 +83,8 @@ impl CacheMetadata {
         &self.path
     }
 
-    /// Returns the revision of the cache entry. This revision indicates the
-    /// number of times the cache entry has been updated.
+    /// Returns the revision of the cache entry. The revision increases
+    /// whenever the cache entry changes.
     pub fn revision(&self) -> u64 {
         self.revision
     }
@@ -175,6 +177,23 @@ pub struct CacheMetadataFile {
 }
 
 impl CacheMetadataFile {
+    /// Opens existing metadata without creating files or requesting write access.
+    /// Legacy cache entries may have no metadata sidecar.
+    pub async fn open_existing(path: &Path) -> Result<Option<Self>, PackageCacheLayerError> {
+        let path = path.to_path_buf();
+        simple_spawn_blocking::tokio::run_blocking_task(move || match std::fs::File::open(&path) {
+            Ok(file) => Ok(Some(Self {
+                file: Arc::new(file),
+            })),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(PackageCacheLayerError::LockError(
+                format!("failed to read cache metadata file: '{}'", path.display()),
+                error,
+            )),
+        })
+        .await
+    }
+
     /// Acquires a handle to the cache metadata file.
     ///
     /// Opens the file with both read and write permissions. Since concurrent access

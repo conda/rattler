@@ -86,9 +86,9 @@ pub use gateway::{
     GatewayBuilder, GatewayError, GatewayWarning, MaxConcurrency, MultiSource, MultiSourceError,
     NamesQuery, NamesQueryOutput, QueryVirtualPackageDetectors, RegistrationConflict,
     RegistrationConflictKind, RejectedDetectorRegistration, RemovedPackages, RepoData,
-    RepoDataQuery, RepoDataQueryOutput, RepoDataSource, Source, SourceConfig, SubdirSelection,
-    VirtualPackageDetectorWarning, VirtualPackageDetectorsOutput, VirtualPackageDetectorsQuery,
-    WhoNeedsQuery,
+    RepoDataQuery, RepoDataQueryOutput, RepoDataSource, ShardHashMismatchError, Source,
+    SourceConfig, SubdirSelection, VirtualPackageDetectorWarning, VirtualPackageDetectorsOutput,
+    VirtualPackageDetectorsQuery, WhoNeedsQuery,
 };
 #[cfg(feature = "indicatif")]
 pub use gateway::{IndicatifReporter, IndicatifReporterBuilder};

@@ -1,7 +1,7 @@
 [package]
 exclude = ["tests/**", "benches/**"]
 name = "rattler_solve"
-version = "12.0.0"
+version = "12.0.3"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to solve conda environments"
@@ -32,7 +32,10 @@ criterion = { workspace = true }
 insta = { workspace = true, features = ["yaml"] }
 jiff = { workspace = true }
 once_cell = { workspace = true }
-rattler_cache = { workspace = true }
+# Path-only so `cargo publish` strips it: rattler_cache transitively depends on
+# rattler_solve (via rattler_config), so a versioned dev-dependency would require
+# publishing rattler_cache first, which in turn requires rattler_solve.
+rattler_cache = { path = "../rattler_cache", default-features = false }
 rattler_digest = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 rattler_repodata_gateway = { path = "../rattler_repodata_gateway", default-features = false, features = [

@@ -186,6 +186,24 @@ class PathsJson:
 
         return paths_json
 
+    def sort(self) -> None:
+        """
+        Sorts the entries in `paths` in-place by their `relative_path` (`_path`).
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
+        ... )
+        >>> paths_json.sort()
+        >>> paths_json
+        PathsJson()
+        >>>
+        ```
+        """
+        self._inner.sort()
+
     def __repr__(self) -> str:
         """
         Returns a representation of the PathsJson.

@@ -17,6 +17,7 @@ use std::{
 #[cfg(feature = "reqwest")]
 use futures_util::StreamExt;
 use futures_util::future::{self, Either};
+use rattler_conda_types::PackageRecord;
 use rattler_digest::{Md5, Sha256, digest::Digest};
 use tokio::io::{AsyncRead, AsyncReadExt};
 
@@ -64,6 +65,19 @@ pub async fn extract_conda_via_buffering(
 ) -> Result<ExtractResult, ExtractError> {
     extract_blocking(reader, destination, |reader, destination| {
         crate::read::extract_conda_via_buffering_without_hashing(reader, destination)
+    })
+    .await
+}
+
+/// Extracts a wheel stream into the [`crate::wheel`] conda layout using `record` metadata.
+pub async fn extract_wheel(
+    reader: impl AsyncRead + Unpin,
+    destination: &Path,
+    record: &PackageRecord,
+) -> Result<ExtractResult, ExtractError> {
+    let record = record.clone();
+    extract_blocking(reader, destination, move |reader, destination| {
+        crate::wheel::extract_wheel_without_hashing(reader, destination, &record)
     })
     .await
 }
@@ -154,11 +168,15 @@ fn flatten_worker_result(
 /// worker thread finishes first.
 ///
 /// Must be called from within a tokio runtime.
-async fn extract_blocking<R: AsyncRead + Unpin>(
+async fn extract_blocking<R, F>(
     reader: R,
     destination: &Path,
-    extract: fn(Box<dyn Read + Send>, &Path) -> Result<(), ExtractError>,
-) -> Result<ExtractResult, ExtractError> {
+    extract: F,
+) -> Result<ExtractResult, ExtractError>
+where
+    R: AsyncRead + Unpin,
+    F: FnOnce(Box<dyn Read + Send>, &Path) -> Result<(), ExtractError> + Send + 'static,
+{
     let (sender, receiver) = tokio::sync::mpsc::channel(CHUNKS_IN_FLIGHT);
     let cancelled = Arc::new(AtomicBool::new(false));
     let cancel_guard = CancelOnDrop(cancelled.clone());

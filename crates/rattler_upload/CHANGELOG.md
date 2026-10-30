@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.2](https://github.com/conda/rattler/compare/rattler_upload-v0.15.1...rattler_upload-v0.15.2) - 2026-10-30
+
+### Other
+
+- bump rust to 1.99.0 ([#3030](https://github.com/conda/rattler/pull/3030))
+
+## [0.15.1](https://github.com/conda/rattler/compare/rattler_upload-v0.15.0...rattler_upload-v0.15.1) - 2026-10-30
+
+### Other
+
+- updated the following local packages: rattler_package_streaming, rattler_solve
+
+## [0.15.0](https://github.com/conda/rattler/compare/rattler_upload-v0.14.1...rattler_upload-v0.15.0) - 2026-10-28
+
+### Added
+
+- *(upload)* support `--force` (republish) in cloudsmith upload ([#2461](https://github.com/conda/rattler/pull/2461)) ([#2984](https://github.com/conda/rattler/pull/2984))
+
 ## [0.14.1](https://github.com/conda/rattler/compare/rattler_upload-v0.14.0...rattler_upload-v0.14.1) - 2026-10-27
 
 ### Other

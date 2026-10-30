@@ -33,6 +33,17 @@
       matchManagers: ["pixi"],
       enabled: false,
     },
+    {
+      description: "Wait 14 days after a release before proposing an update. Overrides the shorter npm default from config:best-practices.",
+      matchPackageNames: ["*"],
+      minimumReleaseAge: "14 days",
+    },
+    {
+      description: "The getrandom_v03 alias in js-rattler only enables the `wasm_js` feature for transitive getrandom 0.3 dependencies (e.g. ahash), so it must stay on 0.3.",
+      matchManagers: ["cargo"],
+      matchDepNames: ["getrandom_v03"],
+      allowedVersions: "<0.4",
+    },
   ],
   vulnerabilityAlerts: {
     commitMessageSuffix: "",

@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4](https://github.com/conda/rattler/compare/rattler_vfs-v0.1.3...rattler_vfs-v0.1.4) - 2026-10-30
+
+### Fixed
+
+- *(rattler_vfs)* correctness & security fixes ([#2807](https://github.com/conda/rattler/pull/2807))
+
+### Other
+
+- *(ci)* Update Rust crate fuser to 0.18 ([#3054](https://github.com/conda/rattler/pull/3054))
+
+## [0.1.3](https://github.com/conda/rattler/compare/rattler_vfs-v0.1.2...rattler_vfs-v0.1.3) - 2026-10-30
+
+### Other
+
+- updated the following local packages: rattler, rattler_cache, rattler_lock
+
+## [0.1.2](https://github.com/conda/rattler/compare/rattler_vfs-v0.1.1...rattler_vfs-v0.1.2) - 2026-10-28
+
+### Other
+
+- updated the following local packages: rattler_cache, rattler, rattler_networking, rattler_lock
+
 ## [0.1.1](https://github.com/conda/rattler/compare/rattler_vfs-v0.1.0...rattler_vfs-v0.1.1) - 2026-10-27
 
 ### Other

@@ -1,6 +1,6 @@
 [package]
 name = "rattler_vfs"
-version = "0.1.1"
+version = "0.1.4"
 description = "Serve conda environments as a virtual filesystem (FUSE, NFS, or ProjFS) directly from the package cache"
 categories.workspace = true
 homepage.workspace = true

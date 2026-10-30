@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.55.4](https://github.com/conda/rattler/compare/rattler-v0.55.3...rattler-v0.55.4) - 2026-10-30
+
+### Fixed
+
+- *(install)* do not record sha256_in_prefix for softlinks ([#2983](https://github.com/conda/rattler/pull/2983))
+
+## [0.55.3](https://github.com/conda/rattler/compare/rattler-v0.55.2...rattler-v0.55.3) - 2026-10-30
+
+### Fixed
+
+- support raw wheel script shebangs ([#3039](https://github.com/conda/rattler/pull/3039))
+
+## [0.55.2](https://github.com/conda/rattler/compare/rattler-v0.55.1...rattler-v0.55.2) - 2026-10-28
+
+### Added
+
+- *(cache)* download and cache wheels as extracted conda packages ([#2964](https://github.com/conda/rattler/pull/2964))
+
 ## [0.55.1](https://github.com/conda/rattler/compare/rattler-v0.55.0...rattler-v0.55.1) - 2026-10-27
 
 ### Other

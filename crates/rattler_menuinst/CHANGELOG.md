@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.8](https://github.com/conda/rattler/compare/rattler_menuinst-v0.4.7...rattler_menuinst-v0.4.8) - 2026-10-30
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.4.7](https://github.com/conda/rattler/compare/rattler_menuinst-v0.4.6...rattler_menuinst-v0.4.7) - 2026-10-30
+
+### Other
+
+- *(ci)* Update Rust crate configparser to v3.3.0 ([#3052](https://github.com/conda/rattler/pull/3052))
+
 ## [0.4.6](https://github.com/conda/rattler/compare/rattler_menuinst-v0.4.5...rattler_menuinst-v0.4.6) - 2026-10-27
 
 ### Other

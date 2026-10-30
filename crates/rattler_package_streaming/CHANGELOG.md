@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.2](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.28.1...rattler_package_streaming-v0.28.2) - 2026-10-30
+
+### Other
+
+- *(ci)* Update Rust crate astral-tokio-tar to 0.7 ([#3048](https://github.com/conda/rattler/pull/3048))
+- remove obsolete getrandom_v02 alias and pin getrandom_v03 in renovate ([#3061](https://github.com/conda/rattler/pull/3061))
+
+## [0.28.1](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.28.0...rattler_package_streaming-v0.28.1) - 2026-10-30
+
+### Fixed
+
+- support raw wheel script shebangs ([#3039](https://github.com/conda/rattler/pull/3039))
+
+## [0.28.0](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.16...rattler_package_streaming-v0.28.0) - 2026-10-28
+
+### Added
+
+- *(cache)* download and cache wheels as extracted conda packages ([#2964](https://github.com/conda/rattler/pull/2964))
+
 ## [0.27.16](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.27.15...rattler_package_streaming-v0.27.16) - 2026-10-27
 
 ### Other

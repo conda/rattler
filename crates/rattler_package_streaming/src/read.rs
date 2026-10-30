@@ -465,7 +465,7 @@ impl<R: tokio::io::AsyncRead + Unpin> tokio::io::AsyncRead for SizeCountingReade
 }
 
 /// Helper function to compute hashes and size while processing a tar archive
-fn process_with_hashing<E, R, F>(reader: R, processor: F) -> Result<ExtractResult, E>
+pub(crate) fn process_with_hashing<E, R, F>(reader: R, processor: F) -> Result<ExtractResult, E>
 where
     R: Read,
     E: From<std::io::Error>,
