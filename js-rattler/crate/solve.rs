@@ -20,26 +20,35 @@ use std::collections::HashMap;
 use url::Url;
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen(getter_with_clone)]
+#[wasm_bindgen]
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SolvedPackage {
+    #[wasm_bindgen(getter_with_clone)]
     pub url: String,
-    #[wasm_bindgen(js_name = "packageName")]
+    #[wasm_bindgen(getter_with_clone, js_name = "packageName")]
     pub package_name: String,
+    #[wasm_bindgen(getter_with_clone)]
     pub build: String,
     #[wasm_bindgen(js_name = "buildNumber")]
     pub build_number: Option<u64>,
-    #[wasm_bindgen(js_name = "repoName")]
+    #[wasm_bindgen(getter_with_clone, js_name = "repoName")]
     pub repo_name: Option<String>,
     pub size: Option<u64>,
+    #[wasm_bindgen(getter_with_clone)]
     pub filename: String,
+    #[wasm_bindgen(getter_with_clone)]
     pub md5: Option<String>,
+    #[wasm_bindgen(getter_with_clone)]
     pub sha256: Option<String>,
+    #[wasm_bindgen(getter_with_clone)]
     pub version: String,
+    #[wasm_bindgen(getter_with_clone)]
     pub depends: Option<Vec<String>>,
     extra_depends: Option<BTreeMap<String, Vec<String>>>,
+    #[wasm_bindgen(getter_with_clone)]
     pub subdir: Option<String>,
+    #[wasm_bindgen(getter_with_clone)]
     pub flags: Option<Vec<String>>,
 }
 
