@@ -36,7 +36,7 @@ jobs:
       - name: Install cargo-semver-checks
         uses: taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3 # v2.87.16
         with:
-          tool: cargo-semver-checks@0.50
+          tool: cargo-semver-checks@0.51
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
