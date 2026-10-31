@@ -280,3 +280,35 @@ class RunExportsJson:
         Returns a representation of the RunExportsJson.
         """
         return f"RunExportsJson(weak={self.weak}, strong={self.strong}, noarch={self.noarch}, weak_constrains={self.weak_constrains}, strong_constrains={self.strong_constrains})"
+
+    def is_empty(self) -> bool:
+        """
+        Returns True if all fields of the RunExportsJson are empty.
+
+        Examples
+        --------
+        ```python
+        >>> RunExportsJson().is_empty()
+        True
+        >>> RunExportsJson(weak=["python_abi 3.10.* *_cp310"]).is_empty()
+        False
+        >>>
+        ```
+        """
+        return self._inner.is_empty()
+
+    def to_json(self) -> str:
+        """
+        Returns a JSON string representation of the RunExportsJson.
+
+        Examples
+        --------
+        ```python
+        >>> run_exports = RunExportsJson(weak=["python_abi 3.10.* *_cp310"])
+        >>> json_data = run_exports.to_json()
+        >>> "weak" in json_data
+        True
+        >>>
+        ```
+        """
+        return self._inner.to_json()

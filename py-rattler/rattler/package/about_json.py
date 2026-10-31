@@ -363,3 +363,19 @@ class AboutJson:
         Returns a representation of the AboutJson.
         """
         return "AboutJson()"
+
+    def to_json(self) -> str:
+        """
+        Returns a JSON string representation of the AboutJson.
+
+        Examples
+        --------
+        ```python
+        >>> about = AboutJson.from_path("../test-data/dummy-about.json")
+        >>> json_data = about.to_json()
+        >>> "channels" in json_data
+        True
+        >>>
+        ```
+        """
+        return self._inner.to_json()
