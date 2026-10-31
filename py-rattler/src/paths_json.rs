@@ -184,7 +184,7 @@ impl PyPathsJson {
             PyValueError::new_err(format!("Failed to serialize PathsJson to JSON: {e}"))
         })
     }
-  
+
     /// Sorts the entries in `paths` by their `relative_path` (`_path`).
     pub fn sort(&mut self) {
         self.inner
