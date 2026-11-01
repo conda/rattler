@@ -150,7 +150,11 @@ impl PyPythonEntryPoints {
     }
 
     pub fn __repr__(&self) -> String {
-        let eps: Vec<String> = self.entry_points().iter().map(PyEntryPoint::__repr__).collect();
+        let eps: Vec<String> = self
+            .entry_points()
+            .iter()
+            .map(PyEntryPoint::__repr__)
+            .collect();
         format!("PythonEntryPoints(entry_points=[{}])", eps.join(", "))
     }
 
