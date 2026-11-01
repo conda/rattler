@@ -96,7 +96,7 @@ pyo3-file = "0.17"
 nix = { version = "0.31", features = ["process"], optional = true }
 
 [build-dependencies]
-pyo3-build-config = "0.29"
+pyo3-build-config = "0.30"
 
 
 [patch.crates-io]
