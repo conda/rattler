@@ -4,14 +4,14 @@
 //! on disk.
 
 use crate::{ExtractError, ExtractResult};
-use rattler_conda_types::package::CondaArchiveType;
+use rattler_conda_types::{PackageRecord, package::CondaArchiveType};
 use std::path::Path;
 
 /// Runs a blocking extractor on a worker thread.
 async fn spawn_extract(
     archive: &Path,
     destination: &Path,
-    extract: fn(&Path, &Path) -> Result<ExtractResult, ExtractError>,
+    extract: impl FnOnce(&Path, &Path) -> Result<ExtractResult, ExtractError> + Send + 'static,
 ) -> Result<ExtractResult, ExtractError> {
     let archive = archive.to_owned();
     let destination = destination.to_owned();
@@ -66,6 +66,19 @@ pub async fn extract_conda(
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
     spawn_extract(archive, destination, crate::fs::extract_conda).await
+}
+
+/// Extracts a wheel into the [`crate::wheel`] conda layout on a blocking worker.
+pub async fn extract_wheel(
+    archive: &Path,
+    destination: &Path,
+    record: &PackageRecord,
+) -> Result<ExtractResult, ExtractError> {
+    let record = record.clone();
+    spawn_extract(archive, destination, move |archive, destination| {
+        crate::fs::extract_wheel(archive, destination, &record)
+    })
+    .await
 }
 
 /// Extracts the contents a package archive at the specified path to a directory. The type of

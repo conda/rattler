@@ -1,0 +1,10 @@
+---
+source: crates/rattler_repodata_gateway/src/gateway/mod.rs
+expression: expected
+---
+foo-1-0.tar.bz2
+foo-2-0.tar.bz2
+foo-3-0.tar.bz2
+foo-4-0.tar.bz2
+foo-7-0.tar.bz2
+foo-8-0.tar.bz2

@@ -294,6 +294,7 @@ impl Cloudsmith {
     pub async fn create_package(
         &self,
         file_identifier: &str,
+        republish: bool,
     ) -> Result<PackageResponse, CloudsmithError> {
         let url = self
             .url
@@ -310,6 +311,7 @@ impl Cloudsmith {
             .post(url)
             .json(&serde_json::json!({
                 "package_file": file_identifier,
+                "republish": republish,
             }))
             .send()
             .await
@@ -485,9 +487,60 @@ mod test {
         assert!(chunk_count.load(Ordering::SeqCst) >= 1);
 
         let pkg = client
-            .create_package(&upload_resp.identifier)
+            .create_package(&upload_resp.identifier, false)
             .await
             .expect("create_package failed");
         assert_eq!(pkg.slug_perm, "mp-slug-perm");
+    }
+
+    #[tokio::test]
+    async fn test_cloudsmith_create_package_republish() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let republish_seen = Arc::new(AtomicBool::new(false));
+        let republish_seen_clone = republish_seen.clone();
+
+        let router = Router::new().route(
+            "/packages/{owner}/{repo}/upload/conda/",
+            post(move |body: String| {
+                let republish_seen = republish_seen_clone.clone();
+                async move {
+                    let payload: serde_json::Value = serde_json::from_str(&body).unwrap();
+                    assert_eq!(payload["package_file"], "test-file-id");
+                    republish_seen.store(payload["republish"].as_bool().unwrap(), Ordering::SeqCst);
+                    (
+                        StatusCode::OK,
+                        [("content-type", "application/json")],
+                        serde_json::json!({
+                            "slug_perm": "pkg-slug-perm",
+                            "slug": "pkg-slug"
+                        })
+                        .to_string(),
+                    )
+                }
+            }),
+        );
+
+        let url = crate::upload::test_utils::start_test_server(router).await;
+        let client = Cloudsmith::new(
+            "test-api-key".to_string(),
+            url.into(),
+            "test-owner".to_string(),
+            "test-repo".to_string(),
+        );
+
+        let pkg = client
+            .create_package("test-file-id", true)
+            .await
+            .expect("create_package failed");
+        assert_eq!(pkg.slug_perm, "pkg-slug-perm");
+        assert!(republish_seen.load(Ordering::SeqCst));
+
+        let _ = client
+            .create_package("test-file-id", false)
+            .await
+            .expect("create_package failed");
+        assert!(!republish_seen.load(Ordering::SeqCst));
     }
 }

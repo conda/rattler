@@ -493,6 +493,10 @@ pub struct CloudsmithOpts {
     /// The URL to the Cloudsmith API server
     #[arg(short, long, env = "CLOUDSMITH_API_URL")]
     pub url: Option<Url>,
+
+    /// Force overwrite existing packages
+    #[arg(long, env = "CLOUDSMITH_FORCE")]
+    pub force: bool,
 }
 
 #[derive(Debug)]
@@ -502,11 +506,12 @@ pub struct CloudsmithData {
     pub repo: String,
     pub api_key: Option<String>,
     pub url: UrlWithTrailingSlash,
+    pub force: ForceOverwrite,
 }
 
 impl From<CloudsmithOpts> for CloudsmithData {
     fn from(value: CloudsmithOpts) -> Self {
-        Self::new(value.owner, value.repo, value.api_key, value.url)
+        Self::new(value.owner, value.repo, value.api_key, value.url).with_force(value.force.into())
     }
 }
 
@@ -520,7 +525,14 @@ impl CloudsmithData {
             url: url
                 .unwrap_or_else(|| Url::parse("https://api.cloudsmith.io/v1").unwrap())
                 .into(),
+            force: ForceOverwrite(false),
         }
+    }
+
+    /// Set whether to overwrite existing packages.
+    pub fn with_force(mut self, force: ForceOverwrite) -> Self {
+        self.force = force;
+        self
     }
 }
 

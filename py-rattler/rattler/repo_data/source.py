@@ -28,6 +28,15 @@ class RepoDataSource(Protocol):
     marshalled between Python and Rust for each request. For performance-critical
     applications with large amounts of repodata, consider using channels when possible.
 
+    **Package formats:** The records a source returns are filtered by the
+    `package_format_selection` of the query, like the records of a channel. Records
+    with the same name, version and build in several archive formats are treated as
+    one build in different formats. With the default
+    (`PackageFormatSelection.PREFER_CONDA`), wheels are never returned and a
+    `.tar.bz2` record is dropped when the same build is also available as `.conda`;
+    a source that only serves wheels returns no records unless the query uses
+    `PREFER_CONDA_WITH_WHL` or `ALL`.
+
     Example
     -------
     ```python

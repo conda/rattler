@@ -66,8 +66,9 @@ pub async fn upload_package_to_s3_with_attestation(
         .host_str()
         .ok_or(miette::miette!("No bucket in S3 URL"))?;
 
-    let builder = credentials.opendal_builder(bucket, channel.path());
-    let op = Operator::new(builder).into_diagnostic()?.finish();
+    let op = credentials
+        .opendal_operator(bucket, channel.path())
+        .into_diagnostic()?;
 
     // Upload multiple packages concurrently. Each individual package upload also
     // streams its chunks concurrently (see `upload_single_package`).
@@ -103,9 +104,9 @@ pub async fn upload_package_to_s3_with_attestation(
 fn validate_attestation_sidecar(bytes: &[u8]) -> miette::Result<()> {
     match serde_json::from_slice::<serde_json::Value>(bytes) {
         Ok(serde_json::Value::Array(bundles)) if !bundles.is_empty() => Ok(()),
-        Ok(_) => {
-            miette::bail!("attestation sidecar must be a non-empty JSON array of Sigstore bundles")
-        }
+        Ok(_) => Err(miette::miette!(
+            "attestation sidecar must be a non-empty JSON array of Sigstore bundles"
+        )),
         Err(err) => Err(miette::miette!(
             "attestation sidecar is not valid JSON: {err}"
         )),
@@ -273,9 +274,8 @@ mod tests {
     #[tokio::test]
     async fn publishes_immutable_and_mutable_sidecars_with_identical_bytes() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let op = opendal::Operator::new(Fs::default().root(temp_dir.path().to_str().unwrap()))
-            .unwrap()
-            .finish();
+        let op =
+            opendal::Operator::new(Fs::default().root(temp_dir.path().to_str().unwrap())).unwrap();
         let mutable_key = "noarch/test-1.0-0.conda.sigs";
         let bytes = br#"[{"bundle":1}]"#.to_vec();
         let hash =

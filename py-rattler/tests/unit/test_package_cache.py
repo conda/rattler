@@ -30,7 +30,7 @@ def test_validation_mode() -> None:
 
     assert ValidationMode.full() != "full"
     with pytest.raises(TypeError):
-        ValidationMode.full() < ValidationMode.skip()  # type: ignore[operator]  # noqa: B015
+        ValidationMode.full() < ValidationMode.skip()  # noqa: B015  # ty: ignore[unsupported-operator]
 
     with pytest.raises(NotImplementedError):
         ValidationMode()

@@ -39,7 +39,7 @@ let python_path = if $nu.os-info.name == "windows" {
 # Timing results
 mut results: list<record<desc: string, ok: bool, elapsed: duration>> = []
 
-def run [desc: string, cmd: closure] {
+def run-step [desc: string, cmd: closure] {
     let start = (date now)
     print $"== ($desc)"
     try { do $cmd } catch { }
@@ -56,7 +56,7 @@ def run [desc: string, cmd: closure] {
 
 # Helper: run a critical test — bail immediately on failure
 def run_critical [desc: string, cmd: closure] {
-    let result = (run $desc $cmd)
+    let result = (run-step $desc $cmd)
     if not $result.ok {
         print $"\nFATAL: critical test '($desc)' failed — aborting"
         exit 1
@@ -244,7 +244,7 @@ if not $use_overlay and $transport != "projfs" {
 
 # Symlink resolution (skip on Windows — symlinks handled differently)
 if $nu.os-info.name != "windows" {
-    $results = ($results | append (run "symlink resolution" {
+    $results = ($results | append (run-step "symlink resolution" {
         # Find a symlink in the mount and verify its target exists
         let symlinks = (^find $mount_point -type l -maxdepth 3 | lines | first 5)
         if ($symlinks | length) == 0 {
@@ -273,7 +273,7 @@ if $nu.os-info.name != "windows" {
 # Overlay tests (only when writable)
 # ---------------------------------------------------------------------------
 if $use_overlay {
-    $results = ($results | append (run "write and read file" {
+    $results = ($results | append (run-step "write and read file" {
         "hello from rattler-vfs" | save $"($mount_point)/test_write.txt"
         let content = (open $"($mount_point)/test_write.txt")
         if $content != "hello from rattler-vfs" {
@@ -284,7 +284,7 @@ if $use_overlay {
 
     # Verify overlay stores data in the right place (FUSE/NFS only — ProjFS writes in-place)
     if $transport != "projfs" {
-        $results = ($results | append (run "overlay data placement" {
+        $results = ($results | append (run-step "overlay data placement" {
             "placement test" | save $"($mount_point)/overlay_check.txt"
             if not ($"($overlay_dir)/overlay_check.txt" | path exists) {
                 error make {msg: "Write did not appear in overlay directory"}
@@ -293,7 +293,7 @@ if $use_overlay {
         }))
     }
 
-    $results = ($results | append (run "mkdir and rename" {
+    $results = ($results | append (run-step "mkdir and rename" {
         mkdir $"($mount_point)/test_dir"
         "test" | save $"($mount_point)/test_dir/a.txt"
         mv $"($mount_point)/test_dir/a.txt" $"($mount_point)/test_dir/b.txt"
@@ -304,11 +304,11 @@ if $use_overlay {
     }))
 
     # pip install scipy
-    $results = ($results | append (run "pip install scipy" {
+    $results = ($results | append (run-step "pip install scipy" {
         ^$python_path -m pip install --prefix $mount_point --no-build-isolation scipy
     }))
 
-    $results = ($results | append (run "import scipy" {
+    $results = ($results | append (run-step "import scipy" {
         ^$python_path -c "import scipy; print(f'scipy {scipy.__version__}')"
     }))
 
@@ -316,7 +316,7 @@ if $use_overlay {
     "persist_marker" | save $"($mount_point)/persist_test.txt"
 
     # pip uninstall scipy (pip-installed package)
-    $results = ($results | append (run "pip uninstall scipy" {
+    $results = ($results | append (run-step "pip uninstall scipy" {
         ^$python_path -m pip uninstall -y scipy
     }))
 
@@ -333,7 +333,7 @@ if $use_overlay {
     # tags), which breaks pip's uninstall stash step.  Pip can still
     # install/uninstall in the overlay (as tested by the scipy tests above).
     if $transport != "projfs" {
-        $results = ($results | append (run "pip uninstall pytest" {
+        $results = ($results | append (run-step "pip uninstall pytest" {
             ^$python_path -m pip uninstall -y pytest
         }))
 
@@ -343,7 +343,7 @@ if $use_overlay {
     }
 
     # Large file COW materialization
-    $results = ($results | append (run "large file COW materialization" {
+    $results = ($results | append (run-step "large file COW materialization" {
         let large_file = $"($mount_point)/large_test.bin"
         # Write a 10 MB file through the overlay.
         # Use a Python raw string for the path so Windows backslashes
@@ -385,14 +385,14 @@ assert data == b'A' * len\(data), 'Content mismatch'
     let log_file2 = $"($tmp)/rattler-vfs-($transport)($overlay_suffix)-remount.log"
     let fs_job2 = (start_and_wait $fixture_lock $mount_point $transport $overlay_args $log_file2 $python_path)
 
-    $results = ($results | append (run "persisted file survives remount" {
+    $results = ($results | append (run-step "persisted file survives remount" {
         let content = (open $"($mount_point)/persist_test.txt")
         if $content != "persist_marker" {
             error make {msg: $"Persisted file content mismatch: ($content)"}
         }
     }))
 
-    $results = ($results | append (run "renamed file survives remount" {
+    $results = ($results | append (run-step "renamed file survives remount" {
         let content = (open $"($mount_point)/test_dir/b.txt")
         if $content != "test" {
             error make {msg: $"Renamed file content mismatch: ($content)"}
@@ -414,7 +414,7 @@ assert data == b'A' * len\(data), 'Content mismatch'
     let log_file3 = $"($tmp)/rattler-vfs-($transport)($overlay_suffix)-edited.log"
     let fs_job3 = (start_and_wait $edited_lock $mount_point $transport $overlay_args $log_file3 $python_path)
 
-    $results = ($results | append (run "overlay survives benign lock-file edit" {
+    $results = ($results | append (run-step "overlay survives benign lock-file edit" {
         let content = (open $"($mount_point)/persist_test.txt")
         if $content != "persist_marker" {
             error make {msg: $"Persisted file lost after lock-file edit: ($content)"}

@@ -80,9 +80,7 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
     };
 
     // Create operator with ETag support and test hooks
-    let op = Operator::new(ETagMemoryBuilder::default().with_test_hooks(test_hooks))
-        .unwrap()
-        .finish();
+    let op = Operator::new(ETagMemoryBuilder::default().with_test_hooks(test_hooks)).unwrap();
 
     // Create subdirectories and copy files from filesystem to our ETag backend
     let contents = tokio::fs::read(

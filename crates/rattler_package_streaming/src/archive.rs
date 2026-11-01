@@ -288,9 +288,9 @@ impl SectionEntry {
         }
     }
 
-    /// Returns the declared entry size.
+    /// Returns the entry size, including any pax `size` override.
     pub fn size(&self) -> Result<u64, ExtractError> {
-        Ok(self.inner.header().size()?)
+        Ok(self.inner.effective_size())
     }
 
     /// Returns the raw link target for a symbolic or hard link.
@@ -965,7 +965,7 @@ pub(crate) async fn read_raw_entry_contents<R: AsyncRead + Unpin>(
         )]));
     }
 
-    let size = entry.header().size()?;
+    let size = entry.effective_size();
     let mut buf = Vec::with_capacity(size.min(MAX_PREALLOC) as usize);
     entry.read_to_end(&mut buf).await?;
     Ok(buf)

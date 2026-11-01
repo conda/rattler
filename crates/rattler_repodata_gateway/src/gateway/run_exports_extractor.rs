@@ -7,7 +7,12 @@ use std::{
 use bytes::Buf;
 use coalesced_map::CoalescedMap;
 use http::StatusCode;
-use rattler_conda_types::{RepoDataRecord, SubdirRunExportsJson, package::RunExportsJson};
+#[cfg(not(target_arch = "wasm32"))]
+use rattler_conda_types::package::PackageFile;
+use rattler_conda_types::{
+    RepoDataRecord, SubdirRunExportsJson,
+    package::{DistArchiveType, RunExportsJson},
+};
 use rattler_networking::LazyClient;
 use reqwest_middleware::ClientWithMiddleware;
 use thiserror::Error;
@@ -125,6 +130,11 @@ impl RunExportExtractor {
         record: &RepoDataRecord,
         progress_reporter: Option<Arc<dyn RunExportsReporter>>,
     ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
+        match record.identifier.archive_type {
+            DistArchiveType::Wheel(_) => return Ok(None),
+            DistArchiveType::Conda(_) => {}
+        }
+
         // If this is local package, try to read it directly from the package file
         // itself.
         if let Some(package_file) = Self::path_to_package(record) {
@@ -323,15 +333,11 @@ impl RunExportExtractor {
         record: &RepoDataRecord,
         progress_reporter: Option<Arc<dyn RunExportsReporter>>,
     ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
-        use rattler_cache::package_cache::CacheKey;
-
         let (Some(package_cache), Some(client)) =
             (self.package_cache.as_ref(), self.client.as_ref())
         else {
             return Ok(None);
         };
-
-        let cache_key = CacheKey::from(&record.package_record);
 
         // Construct a reporter specifically for the run export download
         let reporter = progress_reporter
@@ -339,18 +345,18 @@ impl RunExportExtractor {
             .and_then(|reporter| reporter.create_package_download_reporter(record))
             .map(Arc::from);
 
-        match package_cache
+        let result = package_cache
             .get_or_fetch_from_url_with_retry(
-                cache_key,
+                &record.package_record,
                 record.url.clone(),
                 client.clone(),
                 rattler_networking::retry_policies::default_retry_policy(),
                 reporter,
                 self.max_concurrent_requests.clone(),
             )
-            .await
-        {
-            Ok(package_dir) => Ok(<RunExportsJson as rattler_conda_types::package::PackageFile>::from_package_directory(package_dir.path()).ok()),
+            .await;
+        match result {
+            Ok(package_dir) => Ok(RunExportsJson::from_package_directory(package_dir.path()).ok()),
             Err(e) => Err(e.into()),
         }
     }

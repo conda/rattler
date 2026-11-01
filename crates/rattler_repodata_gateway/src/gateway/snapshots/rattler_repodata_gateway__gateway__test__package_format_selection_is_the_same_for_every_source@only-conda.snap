@@ -1,0 +1,9 @@
+---
+source: crates/rattler_repodata_gateway/src/gateway/mod.rs
+expression: expected
+---
+foo-1-0.conda
+foo-10-0.whl.conda
+foo-2-0.conda
+foo-6-0.conda
+foo-9-0.conda (v3)

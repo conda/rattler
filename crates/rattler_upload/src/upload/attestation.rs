@@ -83,7 +83,7 @@ pub async fn create_attestation(
     let tuf_config = TufSigningConfig::production()
         .await
         .map_err(|e| miette::miette!("Failed to fetch Sigstore TUF signing config: {}", e))?;
-    let signing_services = SigningServices::from_tuf_config(&tuf_config)
+    let signing_services = SigningServices::from_signing_config(&tuf_config)
         .map_err(|e| miette::miette!("Failed to build Sigstore signing config: {}", e))?;
 
     tracing::info!("Signing attestation with Sigstore...");

@@ -13,6 +13,7 @@ expression: "(unused, normalized(config))"
                     ),
                 ],
             ),
+            exclude_newer: None,
             authentication_override_file: None,
             tls_no_verify: Some(
                 true,
