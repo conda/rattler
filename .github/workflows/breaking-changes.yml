@@ -34,7 +34,7 @@ jobs:
 
       # Keep this version aligned with the release-plz action.
       - name: Install cargo-semver-checks
-        uses: taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3 # v2.87.16
+        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-semver-checks@0.50
 
