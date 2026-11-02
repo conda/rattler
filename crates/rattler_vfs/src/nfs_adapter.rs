@@ -18,7 +18,7 @@ use nfs3_server::vfs::{
 };
 use nfs3_types::nfs3::{
     Nfs3Option, createverf3, fattr3, filename3, ftype3, nfspath3, nfsstat3, nfstime3, sattr3,
-    specdata3,
+    specdata3, stable_how,
 };
 use nfs3_types::xdr_codec::Opaque;
 
@@ -526,12 +526,16 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
         })
     }
 
+    /// Every write is passed straight to the VFS backing file, so it is
+    /// reported as `FILE_SYNC` regardless of the stability the client asked
+    /// for, and `commit` has nothing left to flush.
     async fn write(
         &self,
         id: &FileHandleU64,
         offset: u64,
         data: &[u8],
-    ) -> Result<fattr3, nfsstat3> {
+        _stable: stable_how,
+    ) -> Result<(fattr3, stable_how), nfsstat3> {
         let ino = id.as_u64();
         let data = data.to_vec();
 
@@ -559,7 +563,7 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
                             tracing::error!("NFS handler panicked: {e}");
                             Err(VfsError::Io)
                         })
-                        .map(|attr| file_attr_to_fattr3(&attr))
+                        .map(|attr| (file_attr_to_fattr3(&attr), stable_how::FILE_SYNC))
                         .map_err(vfs_err_to_nfsstat);
                 }
                 // Evicted handle on the first try: fall through to reopen+retry.
@@ -706,6 +710,12 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
         _attr: &sattr3,
     ) -> Result<(FileHandleU64, fattr3), nfsstat3> {
         Err(nfsstat3::NFS3ERR_NOTSUPP)
+    }
+
+    async fn commit(&self, _id: &FileHandleU64, _offset: u64, _count: u32) -> Result<(), nfsstat3> {
+        // Writes are always reported as `FILE_SYNC`, so there is no
+        // uncommitted data to flush.
+        Ok(())
     }
 }
 
