@@ -324,11 +324,10 @@ fn write_exclude_newer_edit(
     let segments = split_key(key);
     let rest = &segments[1..];
     let edited_in_place = !rest.is_empty()
-        && document
-            .get_mut(EXCLUDE_NEWER)
-            .and_then(|item| write_edited_value(item, rest, edited).transpose())
-            .transpose()?
-            .is_some();
+        && match document.get_mut(EXCLUDE_NEWER) {
+            Some(item) => write_edited_value(item, rest, edited)?,
+            None => false,
+        };
     if !edited_in_place {
         // The whole value is replaced, e.g. when it isn't set yet.
         let value = to_edit_value(&toml::Value::try_from(edited)?);
@@ -338,17 +337,17 @@ fn write_exclude_newer_edit(
 }
 
 /// Writes the value of the key `rest` inside `exclude_newer` from `edited`.
-/// Returns `None` if `exclude_newer` doesn't have the shape the key needs.
+/// Returns `false` if `exclude_newer` doesn't have the shape the key needs.
 fn write_edited_value(
     exclude_newer: &mut Item,
     rest: &[String],
     edited: &ExcludeNewerConfig,
-) -> Result<Option<()>, ConfigEditError> {
+) -> Result<bool, ConfigEditError> {
     let new_value = edited_value(edited, rest)?;
     expand_string(exclude_newer, "cutoff");
     let mut inline = exclude_newer.is_inline_table();
     let Some(table) = exclude_newer.as_table_like_mut() else {
-        return Ok(None);
+        return Ok(false);
     };
 
     let (leaf, parents) = rest
@@ -367,7 +366,7 @@ fn write_edited_value(
                     expand_string(child, "version");
                 }
                 if !child.is_table_like() {
-                    return Ok(None);
+                    return Ok(false);
                 }
                 Some(child)
             }
@@ -410,7 +409,7 @@ fn write_edited_value(
         *value = edited.cutoff.as_str().into();
         *value.decor_mut() = decor;
     }
-    Ok(Some(()))
+    Ok(true)
 }
 
 /// The value of the key `rest` inside `exclude-newer` after the edit, or
