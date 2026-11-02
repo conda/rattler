@@ -20,7 +20,7 @@
 <a href=#18 id=18 data-nosnippet>18</a>};
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>nfs3_types::nfs3::{
 <a href=#20 id=20 data-nosnippet>20</a>    Nfs3Option, createverf3, fattr3, filename3, ftype3, nfspath3, nfsstat3, nfstime3, sattr3,
-<a href=#21 id=21 data-nosnippet>21</a>    specdata3,
+<a href=#21 id=21 data-nosnippet>21</a>    specdata3, stable_how,
 <a href=#22 id=22 data-nosnippet>22</a>};
 <a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>nfs3_types::xdr_codec::Opaque;
 <a href=#24 id=24 data-nosnippet>24</a>
@@ -528,403 +528,413 @@
 <a href=#526 id=526 data-nosnippet>526</a>        })
 <a href=#527 id=527 data-nosnippet>527</a>    }
 <a href=#528 id=528 data-nosnippet>528</a>
-<a href=#529 id=529 data-nosnippet>529</a>    <span class="kw">async fn </span>write(
-<a href=#530 id=530 data-nosnippet>530</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#531 id=531 data-nosnippet>531</a>        id: <span class="kw-2">&amp;</span>FileHandleU64,
-<a href=#532 id=532 data-nosnippet>532</a>        offset: u64,
-<a href=#533 id=533 data-nosnippet>533</a>        data: <span class="kw-2">&amp;</span>[u8],
-<a href=#534 id=534 data-nosnippet>534</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;fattr3, nfsstat3&gt; {
-<a href=#535 id=535 data-nosnippet>535</a>        <span class="kw">let </span>ino = id.as_u64();
-<a href=#536 id=536 data-nosnippet>536</a>        <span class="kw">let </span>data = data.to_vec();
-<a href=#537 id=537 data-nosnippet>537</a>
-<a href=#538 id=538 data-nosnippet>538</a>        <span class="comment">// Retry once on EIO: a concurrent write to a different file can evict
-<a href=#539 id=539 data-nosnippet>539</a>        // (and close) our cached write handle between acquiring it and using it,
-<a href=#540 id=540 data-nosnippet>540</a>        // since the LRU cache is bounded. Eviction also drops the cache entry,
-<a href=#541 id=541 data-nosnippet>541</a>        // so re-acquiring the handle reopens a fresh one.
-<a href=#542 id=542 data-nosnippet>542</a>        </span><span class="kw">for </span>attempt <span class="kw">in </span><span class="number">0</span>..<span class="number">2 </span>{
-<a href=#543 id=543 data-nosnippet>543</a>            <span class="kw">let </span>fh = <span class="self">self</span>.get_write_handle(ino)<span class="question-mark">?</span>;
-<a href=#544 id=544 data-nosnippet>544</a>            <span class="kw">let </span>vfs = <span class="self">self</span>.vfs.clone();
-<a href=#545 id=545 data-nosnippet>545</a>            <span class="kw">let </span>data = data.clone();
-<a href=#546 id=546 data-nosnippet>546</a>            <span class="kw">let </span>write_result = tokio::task::spawn_blocking(<span class="kw">move </span>|| vfs.write(fh, offset, <span class="kw-2">&amp;</span>data))
-<a href=#547 id=547 data-nosnippet>547</a>                .<span class="kw">await
-<a href=#548 id=548 data-nosnippet>548</a>                </span>.unwrap_or_else(|e| {
-<a href=#549 id=549 data-nosnippet>549</a>                    <span class="macro">tracing::error!</span>(<span class="string">"NFS write handler panicked: {e}"</span>);
-<a href=#550 id=550 data-nosnippet>550</a>                    <span class="prelude-val">Err</span>(VfsError::Io)
-<a href=#551 id=551 data-nosnippet>551</a>                });
-<a href=#552 id=552 data-nosnippet>552</a>
-<a href=#553 id=553 data-nosnippet>553</a>            <span class="kw">match </span>write_result {
-<a href=#554 id=554 data-nosnippet>554</a>                <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; {
-<a href=#555 id=555 data-nosnippet>555</a>                    <span class="kw">let </span>vfs = <span class="self">self</span>.vfs.clone();
-<a href=#556 id=556 data-nosnippet>556</a>                    <span class="kw">return </span>tokio::task::spawn_blocking(<span class="kw">move </span>|| vfs.getattr(ino))
-<a href=#557 id=557 data-nosnippet>557</a>                        .<span class="kw">await
-<a href=#558 id=558 data-nosnippet>558</a>                        </span>.unwrap_or_else(|e| {
-<a href=#559 id=559 data-nosnippet>559</a>                            <span class="macro">tracing::error!</span>(<span class="string">"NFS handler panicked: {e}"</span>);
-<a href=#560 id=560 data-nosnippet>560</a>                            <span class="prelude-val">Err</span>(VfsError::Io)
-<a href=#561 id=561 data-nosnippet>561</a>                        })
-<a href=#562 id=562 data-nosnippet>562</a>                        .map(|attr| file_attr_to_fattr3(<span class="kw-2">&amp;</span>attr))
-<a href=#563 id=563 data-nosnippet>563</a>                        .map_err(vfs_err_to_nfsstat);
-<a href=#564 id=564 data-nosnippet>564</a>                }
-<a href=#565 id=565 data-nosnippet>565</a>                <span class="comment">// Evicted handle on the first try: fall through to reopen+retry.
-<a href=#566 id=566 data-nosnippet>566</a>                </span><span class="prelude-val">Err</span>(VfsError::Io) <span class="kw">if </span>attempt == <span class="number">0 </span>=&gt; {}
-<a href=#567 id=567 data-nosnippet>567</a>                <span class="prelude-val">Err</span>(e) =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(vfs_err_to_nfsstat(e)),
-<a href=#568 id=568 data-nosnippet>568</a>            }
-<a href=#569 id=569 data-nosnippet>569</a>        }
-<a href=#570 id=570 data-nosnippet>570</a>        <span class="prelude-val">Err</span>(nfsstat3::NFS3ERR_IO)
-<a href=#571 id=571 data-nosnippet>571</a>    }
-<a href=#572 id=572 data-nosnippet>572</a>
-<a href=#573 id=573 data-nosnippet>573</a>    <span class="kw">async fn </span>create(
-<a href=#574 id=574 data-nosnippet>574</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#575 id=575 data-nosnippet>575</a>        dirid: <span class="kw-2">&amp;</span>FileHandleU64,
-<a href=#576 id=576 data-nosnippet>576</a>        filename: <span class="kw-2">&amp;</span>filename3&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#577 id=577 data-nosnippet>577</a>        attr: sattr3,
-<a href=#578 id=578 data-nosnippet>578</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(FileHandleU64, fattr3), nfsstat3&gt; {
-<a href=#579 id=579 data-nosnippet>579</a>        <span class="kw">let </span>vfs = <span class="self">self</span>.vfs.clone();
-<a href=#580 id=580 data-nosnippet>580</a>        <span class="kw">let </span>parent_ino = dirid.as_u64();
-<a href=#581 id=581 data-nosnippet>581</a>        <span class="kw">let </span>name_bytes = filename.<span class="number">0</span>.as_ref().to_vec();
-<a href=#582 id=582 data-nosnippet>582</a>        <span class="kw">let </span>mode = <span class="kw">match </span>attr.mode {
-<a href=#583 id=583 data-nosnippet>583</a>            Nfs3Option::Some(m) =&gt; m,
-<a href=#584 id=584 data-nosnippet>584</a>            Nfs3Option::None =&gt; <span class="number">0o644</span>,
-<a href=#585 id=585 data-nosnippet>585</a>        };
-<a href=#586 id=586 data-nosnippet>586</a>        tokio::task::spawn_blocking(<span class="kw">move </span>|| {
-<a href=#587 id=587 data-nosnippet>587</a>            <span class="kw">let </span>name = <span class="kw-2">&amp;</span>os_str_from_nfs_bytes(<span class="kw-2">&amp;</span>name_bytes)<span class="question-mark">?</span>;
-<a href=#588 id=588 data-nosnippet>588</a>            <span class="kw">let </span>(file_attr, fh) = vfs
-<a href=#589 id=589 data-nosnippet>589</a>                .create(parent_ino, name, mode)
-<a href=#590 id=590 data-nosnippet>590</a>                .map_err(vfs_err_to_nfsstat)<span class="question-mark">?</span>;
-<a href=#591 id=591 data-nosnippet>591</a>            vfs.release_write(fh);
-<a href=#592 id=592 data-nosnippet>592</a>            <span class="prelude-val">Ok</span>((
-<a href=#593 id=593 data-nosnippet>593</a>                FileHandleU64::new(file_attr.ino),
-<a href=#594 id=594 data-nosnippet>594</a>                file_attr_to_fattr3(<span class="kw-2">&amp;</span>file_attr),
-<a href=#595 id=595 data-nosnippet>595</a>            ))
-<a href=#596 id=596 data-nosnippet>596</a>        })
-<a href=#597 id=597 data-nosnippet>597</a>        .<span class="kw">await
-<a href=#598 id=598 data-nosnippet>598</a>        </span>.unwrap_or_else(|e| {
-<a href=#599 id=599 data-nosnippet>599</a>            <span class="macro">tracing::error!</span>(<span class="string">"NFS handler panicked: {e}"</span>);
-<a href=#600 id=600 data-nosnippet>600</a>            <span class="prelude-val">Err</span>(nfsstat3::NFS3ERR_IO)
-<a href=#601 id=601 data-nosnippet>601</a>        })
-<a href=#602 id=602 data-nosnippet>602</a>    }
-<a href=#603 id=603 data-nosnippet>603</a>
-<a href=#604 id=604 data-nosnippet>604</a>    <span class="kw">async fn </span>create_exclusive(
-<a href=#605 id=605 data-nosnippet>605</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#606 id=606 data-nosnippet>606</a>        dirid: <span class="kw-2">&amp;</span>FileHandleU64,
-<a href=#607 id=607 data-nosnippet>607</a>        filename: <span class="kw-2">&amp;</span>filename3&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#608 id=608 data-nosnippet>608</a>        _createverf: createverf3,
-<a href=#609 id=609 data-nosnippet>609</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;FileHandleU64, nfsstat3&gt; {
-<a href=#610 id=610 data-nosnippet>610</a>        <span class="comment">// Use regular create — exclusive semantics aren't critical for our use case
-<a href=#611 id=611 data-nosnippet>611</a>        </span><span class="kw">let </span>vfs = <span class="self">self</span>.vfs.clone();
-<a href=#612 id=612 data-nosnippet>612</a>        <span class="kw">let </span>parent_ino = dirid.as_u64();
-<a href=#613 id=613 data-nosnippet>613</a>        <span class="kw">let </span>name_bytes = filename.<span class="number">0</span>.as_ref().to_vec();
-<a href=#614 id=614 data-nosnippet>614</a>        tokio::task::spawn_blocking(<span class="kw">move </span>|| {
-<a href=#615 id=615 data-nosnippet>615</a>            <span class="kw">let </span>name = <span class="kw-2">&amp;</span>os_str_from_nfs_bytes(<span class="kw-2">&amp;</span>name_bytes)<span class="question-mark">?</span>;
-<a href=#616 id=616 data-nosnippet>616</a>            <span class="kw">let </span>(file_attr, fh) = vfs.create(parent_ino, name, <span class="number">0o644</span>).map_err(|errno| {
-<a href=#617 id=617 data-nosnippet>617</a>                <span class="macro">tracing::warn!</span>(
-<a href=#618 id=618 data-nosnippet>618</a>                    <span class="string">"create_exclusive failed: parent={parent_ino} name={name:?} errno={errno}"
-<a href=#619 id=619 data-nosnippet>619</a>                </span>);
-<a href=#620 id=620 data-nosnippet>620</a>                vfs_err_to_nfsstat(errno)
-<a href=#621 id=621 data-nosnippet>621</a>            })<span class="question-mark">?</span>;
-<a href=#622 id=622 data-nosnippet>622</a>            vfs.release_write(fh);
-<a href=#623 id=623 data-nosnippet>623</a>            <span class="prelude-val">Ok</span>(FileHandleU64::new(file_attr.ino))
-<a href=#624 id=624 data-nosnippet>624</a>        })
-<a href=#625 id=625 data-nosnippet>625</a>        .<span class="kw">await
-<a href=#626 id=626 data-nosnippet>626</a>        </span>.unwrap_or_else(|e| {
-<a href=#627 id=627 data-nosnippet>627</a>            <span class="macro">tracing::error!</span>(<span class="string">"create_exclusive spawn_blocking panicked: {e}"</span>);
-<a href=#628 id=628 data-nosnippet>628</a>            <span class="prelude-val">Err</span>(nfsstat3::NFS3ERR_IO)
-<a href=#629 id=629 data-nosnippet>629</a>        })
-<a href=#630 id=630 data-nosnippet>630</a>    }
-<a href=#631 id=631 data-nosnippet>631</a>
-<a href=#632 id=632 data-nosnippet>632</a>    <span class="kw">async fn </span>mkdir(
-<a href=#633 id=633 data-nosnippet>633</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#634 id=634 data-nosnippet>634</a>        dirid: <span class="kw-2">&amp;</span>FileHandleU64,
-<a href=#635 id=635 data-nosnippet>635</a>        dirname: <span class="kw-2">&amp;</span>filename3&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#636 id=636 data-nosnippet>636</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(FileHandleU64, fattr3), nfsstat3&gt; {
-<a href=#637 id=637 data-nosnippet>637</a>        <span class="kw">let </span>vfs = <span class="self">self</span>.vfs.clone();
-<a href=#638 id=638 data-nosnippet>638</a>        <span class="kw">let </span>parent_ino = dirid.as_u64();
-<a href=#639 id=639 data-nosnippet>639</a>        <span class="kw">let </span>name_bytes = dirname.<span class="number">0</span>.as_ref().to_vec();
-<a href=#640 id=640 data-nosnippet>640</a>        tokio::task::spawn_blocking(<span class="kw">move </span>|| {
-<a href=#641 id=641 data-nosnippet>641</a>            <span class="kw">let </span>name = <span class="kw-2">&amp;</span>os_str_from_nfs_bytes(<span class="kw-2">&amp;</span>name_bytes)<span class="question-mark">?</span>;
-<a href=#642 id=642 data-nosnippet>642</a>            <span class="kw">let </span>dir_attr = vfs
-<a href=#643 id=643 data-nosnippet>643</a>                .mkdir(parent_ino, name, <span class="number">0o755</span>)
-<a href=#644 id=644 data-nosnippet>644</a>                .map_err(vfs_err_to_nfsstat)<span class="question-mark">?</span>;
-<a href=#645 id=645 data-nosnippet>645</a>            <span class="prelude-val">Ok</span>((
-<a href=#646 id=646 data-nosnippet>646</a>                FileHandleU64::new(dir_attr.ino),
-<a href=#647 id=647 data-nosnippet>647</a>                file_attr_to_fattr3(<span class="kw-2">&amp;</span>dir_attr),
-<a href=#648 id=648 data-nosnippet>648</a>            ))
-<a href=#649 id=649 data-nosnippet>649</a>        })
-<a href=#650 id=650 data-nosnippet>650</a>        .<span class="kw">await
-<a href=#651 id=651 data-nosnippet>651</a>        </span>.unwrap_or_else(|e| {
-<a href=#652 id=652 data-nosnippet>652</a>            <span class="macro">tracing::error!</span>(<span class="string">"NFS handler panicked: {e}"</span>);
-<a href=#653 id=653 data-nosnippet>653</a>            <span class="prelude-val">Err</span>(nfsstat3::NFS3ERR_IO)
-<a href=#654 id=654 data-nosnippet>654</a>        })
-<a href=#655 id=655 data-nosnippet>655</a>    }
-<a href=#656 id=656 data-nosnippet>656</a>
-<a href=#657 id=657 data-nosnippet>657</a>    <span class="kw">async fn </span>remove(
-<a href=#658 id=658 data-nosnippet>658</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#659 id=659 data-nosnippet>659</a>        dirid: <span class="kw-2">&amp;</span>FileHandleU64,
-<a href=#660 id=660 data-nosnippet>660</a>        filename: <span class="kw-2">&amp;</span>filename3&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#661 id=661 data-nosnippet>661</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), nfsstat3&gt; {
-<a href=#662 id=662 data-nosnippet>662</a>        <span class="kw">let </span>vfs = <span class="self">self</span>.vfs.clone();
-<a href=#663 id=663 data-nosnippet>663</a>        <span class="kw">let </span>parent_ino = dirid.as_u64();
-<a href=#664 id=664 data-nosnippet>664</a>        <span class="kw">let </span>name_bytes = filename.<span class="number">0</span>.as_ref().to_vec();
-<a href=#665 id=665 data-nosnippet>665</a>        tokio::task::spawn_blocking(<span class="kw">move </span>|| {
-<a href=#666 id=666 data-nosnippet>666</a>            <span class="kw">let </span>name = <span class="kw-2">&amp;</span>os_str_from_nfs_bytes(<span class="kw-2">&amp;</span>name_bytes)<span class="question-mark">?</span>;
-<a href=#667 id=667 data-nosnippet>667</a>            vfs.unlink(parent_ino, name).map_err(vfs_err_to_nfsstat)
-<a href=#668 id=668 data-nosnippet>668</a>        })
-<a href=#669 id=669 data-nosnippet>669</a>        .<span class="kw">await
-<a href=#670 id=670 data-nosnippet>670</a>        </span>.unwrap_or_else(|e| {
-<a href=#671 id=671 data-nosnippet>671</a>            <span class="macro">tracing::error!</span>(<span class="string">"NFS handler panicked: {e}"</span>);
-<a href=#672 id=672 data-nosnippet>672</a>            <span class="prelude-val">Err</span>(nfsstat3::NFS3ERR_IO)
-<a href=#673 id=673 data-nosnippet>673</a>        })
-<a href=#674 id=674 data-nosnippet>674</a>    }
-<a href=#675 id=675 data-nosnippet>675</a>
-<a href=#676 id=676 data-nosnippet>676</a>    <span class="kw">async fn </span>rename&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#677 id=677 data-nosnippet>677</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#678 id=678 data-nosnippet>678</a>        from_dirid: <span class="kw-2">&amp;</span>FileHandleU64,
-<a href=#679 id=679 data-nosnippet>679</a>        from_filename: <span class="kw-2">&amp;</span>filename3&lt;<span class="lifetime">'a</span>&gt;,
-<a href=#680 id=680 data-nosnippet>680</a>        to_dirid: <span class="kw-2">&amp;</span>FileHandleU64,
-<a href=#681 id=681 data-nosnippet>681</a>        to_filename: <span class="kw-2">&amp;</span>filename3&lt;<span class="lifetime">'a</span>&gt;,
-<a href=#682 id=682 data-nosnippet>682</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), nfsstat3&gt; {
-<a href=#683 id=683 data-nosnippet>683</a>        <span class="kw">let </span>vfs = <span class="self">self</span>.vfs.clone();
-<a href=#684 id=684 data-nosnippet>684</a>        <span class="kw">let </span>from_parent = from_dirid.as_u64();
-<a href=#685 id=685 data-nosnippet>685</a>        <span class="kw">let </span>to_parent = to_dirid.as_u64();
-<a href=#686 id=686 data-nosnippet>686</a>        <span class="kw">let </span>from_name = from_filename.<span class="number">0</span>.as_ref().to_vec();
-<a href=#687 id=687 data-nosnippet>687</a>        <span class="kw">let </span>to_name = to_filename.<span class="number">0</span>.as_ref().to_vec();
-<a href=#688 id=688 data-nosnippet>688</a>        tokio::task::spawn_blocking(<span class="kw">move </span>|| {
-<a href=#689 id=689 data-nosnippet>689</a>            <span class="kw">let </span>from = os_str_from_nfs_bytes(<span class="kw-2">&amp;</span>from_name)<span class="question-mark">?</span>;
-<a href=#690 id=690 data-nosnippet>690</a>            <span class="kw">let </span>to = os_str_from_nfs_bytes(<span class="kw-2">&amp;</span>to_name)<span class="question-mark">?</span>;
-<a href=#691 id=691 data-nosnippet>691</a>            vfs.rename(from_parent, <span class="kw-2">&amp;</span>from, to_parent, <span class="kw-2">&amp;</span>to, <span class="number">0</span>)
-<a href=#692 id=692 data-nosnippet>692</a>                .map_err(vfs_err_to_nfsstat)
-<a href=#693 id=693 data-nosnippet>693</a>        })
-<a href=#694 id=694 data-nosnippet>694</a>        .<span class="kw">await
-<a href=#695 id=695 data-nosnippet>695</a>        </span>.unwrap_or_else(|e| {
-<a href=#696 id=696 data-nosnippet>696</a>            <span class="macro">tracing::error!</span>(<span class="string">"NFS handler panicked: {e}"</span>);
-<a href=#697 id=697 data-nosnippet>697</a>            <span class="prelude-val">Err</span>(nfsstat3::NFS3ERR_IO)
-<a href=#698 id=698 data-nosnippet>698</a>        })
-<a href=#699 id=699 data-nosnippet>699</a>    }
-<a href=#700 id=700 data-nosnippet>700</a>
-<a href=#701 id=701 data-nosnippet>701</a>    <span class="kw">async fn </span>symlink&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#702 id=702 data-nosnippet>702</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#703 id=703 data-nosnippet>703</a>        _dirid: <span class="kw-2">&amp;</span>FileHandleU64,
-<a href=#704 id=704 data-nosnippet>704</a>        _linkname: <span class="kw-2">&amp;</span>filename3&lt;<span class="lifetime">'a</span>&gt;,
-<a href=#705 id=705 data-nosnippet>705</a>        _symlink: <span class="kw-2">&amp;</span>nfspath3&lt;<span class="lifetime">'a</span>&gt;,
-<a href=#706 id=706 data-nosnippet>706</a>        _attr: <span class="kw-2">&amp;</span>sattr3,
-<a href=#707 id=707 data-nosnippet>707</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(FileHandleU64, fattr3), nfsstat3&gt; {
-<a href=#708 id=708 data-nosnippet>708</a>        <span class="prelude-val">Err</span>(nfsstat3::NFS3ERR_NOTSUPP)
-<a href=#709 id=709 data-nosnippet>709</a>    }
-<a href=#710 id=710 data-nosnippet>710</a>}
-<a href=#711 id=711 data-nosnippet>711</a>
-<a href=#712 id=712 data-nosnippet>712</a><span class="comment">// ---------------------------------------------------------------------------
-<a href=#713 id=713 data-nosnippet>713</a>// Mount helper (moved from lib.rs — issue #2576)
-<a href=#714 id=714 data-nosnippet>714</a>// ---------------------------------------------------------------------------
-<a href=#715 id=715 data-nosnippet>715</a>
-<a href=#716 id=716 data-nosnippet>716</a></span><span class="kw">use crate</span>::{Mode, MountConfig, VirtualFS, create_overlay};
-<a href=#717 id=717 data-nosnippet>717</a><span class="comment">// `MountError::SudoRequired` is only referenced on the Linux mount path.
-<a href=#718 id=718 data-nosnippet>718</a></span><span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
-<a href=#719 id=719 data-nosnippet>719</a></span><span class="kw">use </span><span class="kw">crate</span>::MountError;
-<a href=#720 id=720 data-nosnippet>720</a>
-<a href=#721 id=721 data-nosnippet>721</a><span class="doccomment">/// Mount via NFS, with optional writable overlay.
-<a href=#722 id=722 data-nosnippet>722</a>///
-<a href=#723 id=723 data-nosnippet>723</a>/// The overlay is retried once if the env hash mismatches (environment updated).
-<a href=#724 id=724 data-nosnippet>724</a></span><span class="attr">#[cfg(feature = <span class="string">"nfs"</span>)]
-<a href=#725 id=725 data-nosnippet>725</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>mount_nfs(
-<a href=#726 id=726 data-nosnippet>726</a>    vfs: VirtualFS,
-<a href=#727 id=727 data-nosnippet>727</a>    config: <span class="kw-2">&amp;</span>MountConfig,
-<a href=#728 id=728 data-nosnippet>728</a>) -&gt; anyhow::Result&lt;NfsMountHandle&gt; {
-<a href=#729 id=729 data-nosnippet>729</a>    <span class="kw">let </span>read_only = <span class="macro">matches!</span>(config.mode, Mode::ReadOnly | Mode::ReadOnlyIfSupported);
+<a href=#529 id=529 data-nosnippet>529</a>    <span class="doccomment">/// Every write is passed straight to the VFS backing file, so it is
+<a href=#530 id=530 data-nosnippet>530</a>    /// reported as `FILE_SYNC` regardless of the stability the client asked
+<a href=#531 id=531 data-nosnippet>531</a>    /// for, and `commit` has nothing left to flush.
+<a href=#532 id=532 data-nosnippet>532</a>    </span><span class="kw">async fn </span>write(
+<a href=#533 id=533 data-nosnippet>533</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#534 id=534 data-nosnippet>534</a>        id: <span class="kw-2">&amp;</span>FileHandleU64,
+<a href=#535 id=535 data-nosnippet>535</a>        offset: u64,
+<a href=#536 id=536 data-nosnippet>536</a>        data: <span class="kw-2">&amp;</span>[u8],
+<a href=#537 id=537 data-nosnippet>537</a>        _stable: stable_how,
+<a href=#538 id=538 data-nosnippet>538</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(fattr3, stable_how), nfsstat3&gt; {
+<a href=#539 id=539 data-nosnippet>539</a>        <span class="kw">let </span>ino = id.as_u64();
+<a href=#540 id=540 data-nosnippet>540</a>        <span class="kw">let </span>data = data.to_vec();
+<a href=#541 id=541 data-nosnippet>541</a>
+<a href=#542 id=542 data-nosnippet>542</a>        <span class="comment">// Retry once on EIO: a concurrent write to a different file can evict
+<a href=#543 id=543 data-nosnippet>543</a>        // (and close) our cached write handle between acquiring it and using it,
+<a href=#544 id=544 data-nosnippet>544</a>        // since the LRU cache is bounded. Eviction also drops the cache entry,
+<a href=#545 id=545 data-nosnippet>545</a>        // so re-acquiring the handle reopens a fresh one.
+<a href=#546 id=546 data-nosnippet>546</a>        </span><span class="kw">for </span>attempt <span class="kw">in </span><span class="number">0</span>..<span class="number">2 </span>{
+<a href=#547 id=547 data-nosnippet>547</a>            <span class="kw">let </span>fh = <span class="self">self</span>.get_write_handle(ino)<span class="question-mark">?</span>;
+<a href=#548 id=548 data-nosnippet>548</a>            <span class="kw">let </span>vfs = <span class="self">self</span>.vfs.clone();
+<a href=#549 id=549 data-nosnippet>549</a>            <span class="kw">let </span>data = data.clone();
+<a href=#550 id=550 data-nosnippet>550</a>            <span class="kw">let </span>write_result = tokio::task::spawn_blocking(<span class="kw">move </span>|| vfs.write(fh, offset, <span class="kw-2">&amp;</span>data))
+<a href=#551 id=551 data-nosnippet>551</a>                .<span class="kw">await
+<a href=#552 id=552 data-nosnippet>552</a>                </span>.unwrap_or_else(|e| {
+<a href=#553 id=553 data-nosnippet>553</a>                    <span class="macro">tracing::error!</span>(<span class="string">"NFS write handler panicked: {e}"</span>);
+<a href=#554 id=554 data-nosnippet>554</a>                    <span class="prelude-val">Err</span>(VfsError::Io)
+<a href=#555 id=555 data-nosnippet>555</a>                });
+<a href=#556 id=556 data-nosnippet>556</a>
+<a href=#557 id=557 data-nosnippet>557</a>            <span class="kw">match </span>write_result {
+<a href=#558 id=558 data-nosnippet>558</a>                <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; {
+<a href=#559 id=559 data-nosnippet>559</a>                    <span class="kw">let </span>vfs = <span class="self">self</span>.vfs.clone();
+<a href=#560 id=560 data-nosnippet>560</a>                    <span class="kw">return </span>tokio::task::spawn_blocking(<span class="kw">move </span>|| vfs.getattr(ino))
+<a href=#561 id=561 data-nosnippet>561</a>                        .<span class="kw">await
+<a href=#562 id=562 data-nosnippet>562</a>                        </span>.unwrap_or_else(|e| {
+<a href=#563 id=563 data-nosnippet>563</a>                            <span class="macro">tracing::error!</span>(<span class="string">"NFS handler panicked: {e}"</span>);
+<a href=#564 id=564 data-nosnippet>564</a>                            <span class="prelude-val">Err</span>(VfsError::Io)
+<a href=#565 id=565 data-nosnippet>565</a>                        })
+<a href=#566 id=566 data-nosnippet>566</a>                        .map(|attr| (file_attr_to_fattr3(<span class="kw-2">&amp;</span>attr), stable_how::FILE_SYNC))
+<a href=#567 id=567 data-nosnippet>567</a>                        .map_err(vfs_err_to_nfsstat);
+<a href=#568 id=568 data-nosnippet>568</a>                }
+<a href=#569 id=569 data-nosnippet>569</a>                <span class="comment">// Evicted handle on the first try: fall through to reopen+retry.
+<a href=#570 id=570 data-nosnippet>570</a>                </span><span class="prelude-val">Err</span>(VfsError::Io) <span class="kw">if </span>attempt == <span class="number">0 </span>=&gt; {}
+<a href=#571 id=571 data-nosnippet>571</a>                <span class="prelude-val">Err</span>(e) =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(vfs_err_to_nfsstat(e)),
+<a href=#572 id=572 data-nosnippet>572</a>            }
+<a href=#573 id=573 data-nosnippet>573</a>        }
+<a href=#574 id=574 data-nosnippet>574</a>        <span class="prelude-val">Err</span>(nfsstat3::NFS3ERR_IO)
+<a href=#575 id=575 data-nosnippet>575</a>    }
+<a href=#576 id=576 data-nosnippet>576</a>
+<a href=#577 id=577 data-nosnippet>577</a>    <span class="kw">async fn </span>create(
+<a href=#578 id=578 data-nosnippet>578</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#579 id=579 data-nosnippet>579</a>        dirid: <span class="kw-2">&amp;</span>FileHandleU64,
+<a href=#580 id=580 data-nosnippet>580</a>        filename: <span class="kw-2">&amp;</span>filename3&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#581 id=581 data-nosnippet>581</a>        attr: sattr3,
+<a href=#582 id=582 data-nosnippet>582</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(FileHandleU64, fattr3), nfsstat3&gt; {
+<a href=#583 id=583 data-nosnippet>583</a>        <span class="kw">let </span>vfs = <span class="self">self</span>.vfs.clone();
+<a href=#584 id=584 data-nosnippet>584</a>        <span class="kw">let </span>parent_ino = dirid.as_u64();
+<a href=#585 id=585 data-nosnippet>585</a>        <span class="kw">let </span>name_bytes = filename.<span class="number">0</span>.as_ref().to_vec();
+<a href=#586 id=586 data-nosnippet>586</a>        <span class="kw">let </span>mode = <span class="kw">match </span>attr.mode {
+<a href=#587 id=587 data-nosnippet>587</a>            Nfs3Option::Some(m) =&gt; m,
+<a href=#588 id=588 data-nosnippet>588</a>            Nfs3Option::None =&gt; <span class="number">0o644</span>,
+<a href=#589 id=589 data-nosnippet>589</a>        };
+<a href=#590 id=590 data-nosnippet>590</a>        tokio::task::spawn_blocking(<span class="kw">move </span>|| {
+<a href=#591 id=591 data-nosnippet>591</a>            <span class="kw">let </span>name = <span class="kw-2">&amp;</span>os_str_from_nfs_bytes(<span class="kw-2">&amp;</span>name_bytes)<span class="question-mark">?</span>;
+<a href=#592 id=592 data-nosnippet>592</a>            <span class="kw">let </span>(file_attr, fh) = vfs
+<a href=#593 id=593 data-nosnippet>593</a>                .create(parent_ino, name, mode)
+<a href=#594 id=594 data-nosnippet>594</a>                .map_err(vfs_err_to_nfsstat)<span class="question-mark">?</span>;
+<a href=#595 id=595 data-nosnippet>595</a>            vfs.release_write(fh);
+<a href=#596 id=596 data-nosnippet>596</a>            <span class="prelude-val">Ok</span>((
+<a href=#597 id=597 data-nosnippet>597</a>                FileHandleU64::new(file_attr.ino),
+<a href=#598 id=598 data-nosnippet>598</a>                file_attr_to_fattr3(<span class="kw-2">&amp;</span>file_attr),
+<a href=#599 id=599 data-nosnippet>599</a>            ))
+<a href=#600 id=600 data-nosnippet>600</a>        })
+<a href=#601 id=601 data-nosnippet>601</a>        .<span class="kw">await
+<a href=#602 id=602 data-nosnippet>602</a>        </span>.unwrap_or_else(|e| {
+<a href=#603 id=603 data-nosnippet>603</a>            <span class="macro">tracing::error!</span>(<span class="string">"NFS handler panicked: {e}"</span>);
+<a href=#604 id=604 data-nosnippet>604</a>            <span class="prelude-val">Err</span>(nfsstat3::NFS3ERR_IO)
+<a href=#605 id=605 data-nosnippet>605</a>        })
+<a href=#606 id=606 data-nosnippet>606</a>    }
+<a href=#607 id=607 data-nosnippet>607</a>
+<a href=#608 id=608 data-nosnippet>608</a>    <span class="kw">async fn </span>create_exclusive(
+<a href=#609 id=609 data-nosnippet>609</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#610 id=610 data-nosnippet>610</a>        dirid: <span class="kw-2">&amp;</span>FileHandleU64,
+<a href=#611 id=611 data-nosnippet>611</a>        filename: <span class="kw-2">&amp;</span>filename3&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#612 id=612 data-nosnippet>612</a>        _createverf: createverf3,
+<a href=#613 id=613 data-nosnippet>613</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;FileHandleU64, nfsstat3&gt; {
+<a href=#614 id=614 data-nosnippet>614</a>        <span class="comment">// Use regular create — exclusive semantics aren't critical for our use case
+<a href=#615 id=615 data-nosnippet>615</a>        </span><span class="kw">let </span>vfs = <span class="self">self</span>.vfs.clone();
+<a href=#616 id=616 data-nosnippet>616</a>        <span class="kw">let </span>parent_ino = dirid.as_u64();
+<a href=#617 id=617 data-nosnippet>617</a>        <span class="kw">let </span>name_bytes = filename.<span class="number">0</span>.as_ref().to_vec();
+<a href=#618 id=618 data-nosnippet>618</a>        tokio::task::spawn_blocking(<span class="kw">move </span>|| {
+<a href=#619 id=619 data-nosnippet>619</a>            <span class="kw">let </span>name = <span class="kw-2">&amp;</span>os_str_from_nfs_bytes(<span class="kw-2">&amp;</span>name_bytes)<span class="question-mark">?</span>;
+<a href=#620 id=620 data-nosnippet>620</a>            <span class="kw">let </span>(file_attr, fh) = vfs.create(parent_ino, name, <span class="number">0o644</span>).map_err(|errno| {
+<a href=#621 id=621 data-nosnippet>621</a>                <span class="macro">tracing::warn!</span>(
+<a href=#622 id=622 data-nosnippet>622</a>                    <span class="string">"create_exclusive failed: parent={parent_ino} name={name:?} errno={errno}"
+<a href=#623 id=623 data-nosnippet>623</a>                </span>);
+<a href=#624 id=624 data-nosnippet>624</a>                vfs_err_to_nfsstat(errno)
+<a href=#625 id=625 data-nosnippet>625</a>            })<span class="question-mark">?</span>;
+<a href=#626 id=626 data-nosnippet>626</a>            vfs.release_write(fh);
+<a href=#627 id=627 data-nosnippet>627</a>            <span class="prelude-val">Ok</span>(FileHandleU64::new(file_attr.ino))
+<a href=#628 id=628 data-nosnippet>628</a>        })
+<a href=#629 id=629 data-nosnippet>629</a>        .<span class="kw">await
+<a href=#630 id=630 data-nosnippet>630</a>        </span>.unwrap_or_else(|e| {
+<a href=#631 id=631 data-nosnippet>631</a>            <span class="macro">tracing::error!</span>(<span class="string">"create_exclusive spawn_blocking panicked: {e}"</span>);
+<a href=#632 id=632 data-nosnippet>632</a>            <span class="prelude-val">Err</span>(nfsstat3::NFS3ERR_IO)
+<a href=#633 id=633 data-nosnippet>633</a>        })
+<a href=#634 id=634 data-nosnippet>634</a>    }
+<a href=#635 id=635 data-nosnippet>635</a>
+<a href=#636 id=636 data-nosnippet>636</a>    <span class="kw">async fn </span>mkdir(
+<a href=#637 id=637 data-nosnippet>637</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#638 id=638 data-nosnippet>638</a>        dirid: <span class="kw-2">&amp;</span>FileHandleU64,
+<a href=#639 id=639 data-nosnippet>639</a>        dirname: <span class="kw-2">&amp;</span>filename3&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#640 id=640 data-nosnippet>640</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(FileHandleU64, fattr3), nfsstat3&gt; {
+<a href=#641 id=641 data-nosnippet>641</a>        <span class="kw">let </span>vfs = <span class="self">self</span>.vfs.clone();
+<a href=#642 id=642 data-nosnippet>642</a>        <span class="kw">let </span>parent_ino = dirid.as_u64();
+<a href=#643 id=643 data-nosnippet>643</a>        <span class="kw">let </span>name_bytes = dirname.<span class="number">0</span>.as_ref().to_vec();
+<a href=#644 id=644 data-nosnippet>644</a>        tokio::task::spawn_blocking(<span class="kw">move </span>|| {
+<a href=#645 id=645 data-nosnippet>645</a>            <span class="kw">let </span>name = <span class="kw-2">&amp;</span>os_str_from_nfs_bytes(<span class="kw-2">&amp;</span>name_bytes)<span class="question-mark">?</span>;
+<a href=#646 id=646 data-nosnippet>646</a>            <span class="kw">let </span>dir_attr = vfs
+<a href=#647 id=647 data-nosnippet>647</a>                .mkdir(parent_ino, name, <span class="number">0o755</span>)
+<a href=#648 id=648 data-nosnippet>648</a>                .map_err(vfs_err_to_nfsstat)<span class="question-mark">?</span>;
+<a href=#649 id=649 data-nosnippet>649</a>            <span class="prelude-val">Ok</span>((
+<a href=#650 id=650 data-nosnippet>650</a>                FileHandleU64::new(dir_attr.ino),
+<a href=#651 id=651 data-nosnippet>651</a>                file_attr_to_fattr3(<span class="kw-2">&amp;</span>dir_attr),
+<a href=#652 id=652 data-nosnippet>652</a>            ))
+<a href=#653 id=653 data-nosnippet>653</a>        })
+<a href=#654 id=654 data-nosnippet>654</a>        .<span class="kw">await
+<a href=#655 id=655 data-nosnippet>655</a>        </span>.unwrap_or_else(|e| {
+<a href=#656 id=656 data-nosnippet>656</a>            <span class="macro">tracing::error!</span>(<span class="string">"NFS handler panicked: {e}"</span>);
+<a href=#657 id=657 data-nosnippet>657</a>            <span class="prelude-val">Err</span>(nfsstat3::NFS3ERR_IO)
+<a href=#658 id=658 data-nosnippet>658</a>        })
+<a href=#659 id=659 data-nosnippet>659</a>    }
+<a href=#660 id=660 data-nosnippet>660</a>
+<a href=#661 id=661 data-nosnippet>661</a>    <span class="kw">async fn </span>remove(
+<a href=#662 id=662 data-nosnippet>662</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#663 id=663 data-nosnippet>663</a>        dirid: <span class="kw-2">&amp;</span>FileHandleU64,
+<a href=#664 id=664 data-nosnippet>664</a>        filename: <span class="kw-2">&amp;</span>filename3&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#665 id=665 data-nosnippet>665</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), nfsstat3&gt; {
+<a href=#666 id=666 data-nosnippet>666</a>        <span class="kw">let </span>vfs = <span class="self">self</span>.vfs.clone();
+<a href=#667 id=667 data-nosnippet>667</a>        <span class="kw">let </span>parent_ino = dirid.as_u64();
+<a href=#668 id=668 data-nosnippet>668</a>        <span class="kw">let </span>name_bytes = filename.<span class="number">0</span>.as_ref().to_vec();
+<a href=#669 id=669 data-nosnippet>669</a>        tokio::task::spawn_blocking(<span class="kw">move </span>|| {
+<a href=#670 id=670 data-nosnippet>670</a>            <span class="kw">let </span>name = <span class="kw-2">&amp;</span>os_str_from_nfs_bytes(<span class="kw-2">&amp;</span>name_bytes)<span class="question-mark">?</span>;
+<a href=#671 id=671 data-nosnippet>671</a>            vfs.unlink(parent_ino, name).map_err(vfs_err_to_nfsstat)
+<a href=#672 id=672 data-nosnippet>672</a>        })
+<a href=#673 id=673 data-nosnippet>673</a>        .<span class="kw">await
+<a href=#674 id=674 data-nosnippet>674</a>        </span>.unwrap_or_else(|e| {
+<a href=#675 id=675 data-nosnippet>675</a>            <span class="macro">tracing::error!</span>(<span class="string">"NFS handler panicked: {e}"</span>);
+<a href=#676 id=676 data-nosnippet>676</a>            <span class="prelude-val">Err</span>(nfsstat3::NFS3ERR_IO)
+<a href=#677 id=677 data-nosnippet>677</a>        })
+<a href=#678 id=678 data-nosnippet>678</a>    }
+<a href=#679 id=679 data-nosnippet>679</a>
+<a href=#680 id=680 data-nosnippet>680</a>    <span class="kw">async fn </span>rename&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#681 id=681 data-nosnippet>681</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#682 id=682 data-nosnippet>682</a>        from_dirid: <span class="kw-2">&amp;</span>FileHandleU64,
+<a href=#683 id=683 data-nosnippet>683</a>        from_filename: <span class="kw-2">&amp;</span>filename3&lt;<span class="lifetime">'a</span>&gt;,
+<a href=#684 id=684 data-nosnippet>684</a>        to_dirid: <span class="kw-2">&amp;</span>FileHandleU64,
+<a href=#685 id=685 data-nosnippet>685</a>        to_filename: <span class="kw-2">&amp;</span>filename3&lt;<span class="lifetime">'a</span>&gt;,
+<a href=#686 id=686 data-nosnippet>686</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), nfsstat3&gt; {
+<a href=#687 id=687 data-nosnippet>687</a>        <span class="kw">let </span>vfs = <span class="self">self</span>.vfs.clone();
+<a href=#688 id=688 data-nosnippet>688</a>        <span class="kw">let </span>from_parent = from_dirid.as_u64();
+<a href=#689 id=689 data-nosnippet>689</a>        <span class="kw">let </span>to_parent = to_dirid.as_u64();
+<a href=#690 id=690 data-nosnippet>690</a>        <span class="kw">let </span>from_name = from_filename.<span class="number">0</span>.as_ref().to_vec();
+<a href=#691 id=691 data-nosnippet>691</a>        <span class="kw">let </span>to_name = to_filename.<span class="number">0</span>.as_ref().to_vec();
+<a href=#692 id=692 data-nosnippet>692</a>        tokio::task::spawn_blocking(<span class="kw">move </span>|| {
+<a href=#693 id=693 data-nosnippet>693</a>            <span class="kw">let </span>from = os_str_from_nfs_bytes(<span class="kw-2">&amp;</span>from_name)<span class="question-mark">?</span>;
+<a href=#694 id=694 data-nosnippet>694</a>            <span class="kw">let </span>to = os_str_from_nfs_bytes(<span class="kw-2">&amp;</span>to_name)<span class="question-mark">?</span>;
+<a href=#695 id=695 data-nosnippet>695</a>            vfs.rename(from_parent, <span class="kw-2">&amp;</span>from, to_parent, <span class="kw-2">&amp;</span>to, <span class="number">0</span>)
+<a href=#696 id=696 data-nosnippet>696</a>                .map_err(vfs_err_to_nfsstat)
+<a href=#697 id=697 data-nosnippet>697</a>        })
+<a href=#698 id=698 data-nosnippet>698</a>        .<span class="kw">await
+<a href=#699 id=699 data-nosnippet>699</a>        </span>.unwrap_or_else(|e| {
+<a href=#700 id=700 data-nosnippet>700</a>            <span class="macro">tracing::error!</span>(<span class="string">"NFS handler panicked: {e}"</span>);
+<a href=#701 id=701 data-nosnippet>701</a>            <span class="prelude-val">Err</span>(nfsstat3::NFS3ERR_IO)
+<a href=#702 id=702 data-nosnippet>702</a>        })
+<a href=#703 id=703 data-nosnippet>703</a>    }
+<a href=#704 id=704 data-nosnippet>704</a>
+<a href=#705 id=705 data-nosnippet>705</a>    <span class="kw">async fn </span>symlink&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#706 id=706 data-nosnippet>706</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#707 id=707 data-nosnippet>707</a>        _dirid: <span class="kw-2">&amp;</span>FileHandleU64,
+<a href=#708 id=708 data-nosnippet>708</a>        _linkname: <span class="kw-2">&amp;</span>filename3&lt;<span class="lifetime">'a</span>&gt;,
+<a href=#709 id=709 data-nosnippet>709</a>        _symlink: <span class="kw-2">&amp;</span>nfspath3&lt;<span class="lifetime">'a</span>&gt;,
+<a href=#710 id=710 data-nosnippet>710</a>        _attr: <span class="kw-2">&amp;</span>sattr3,
+<a href=#711 id=711 data-nosnippet>711</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(FileHandleU64, fattr3), nfsstat3&gt; {
+<a href=#712 id=712 data-nosnippet>712</a>        <span class="prelude-val">Err</span>(nfsstat3::NFS3ERR_NOTSUPP)
+<a href=#713 id=713 data-nosnippet>713</a>    }
+<a href=#714 id=714 data-nosnippet>714</a>
+<a href=#715 id=715 data-nosnippet>715</a>    <span class="kw">async fn </span>commit(<span class="kw-2">&amp;</span><span class="self">self</span>, _id: <span class="kw-2">&amp;</span>FileHandleU64, _offset: u64, _count: u32) -&gt; <span class="prelude-ty">Result</span>&lt;(), nfsstat3&gt; {
+<a href=#716 id=716 data-nosnippet>716</a>        <span class="comment">// Writes are always reported as `FILE_SYNC`, so there is no
+<a href=#717 id=717 data-nosnippet>717</a>        // uncommitted data to flush.
+<a href=#718 id=718 data-nosnippet>718</a>        </span><span class="prelude-val">Ok</span>(())
+<a href=#719 id=719 data-nosnippet>719</a>    }
+<a href=#720 id=720 data-nosnippet>720</a>}
+<a href=#721 id=721 data-nosnippet>721</a>
+<a href=#722 id=722 data-nosnippet>722</a><span class="comment">// ---------------------------------------------------------------------------
+<a href=#723 id=723 data-nosnippet>723</a>// Mount helper (moved from lib.rs — issue #2576)
+<a href=#724 id=724 data-nosnippet>724</a>// ---------------------------------------------------------------------------
+<a href=#725 id=725 data-nosnippet>725</a>
+<a href=#726 id=726 data-nosnippet>726</a></span><span class="kw">use crate</span>::{Mode, MountConfig, VirtualFS, create_overlay};
+<a href=#727 id=727 data-nosnippet>727</a><span class="comment">// `MountError::SudoRequired` is only referenced on the Linux mount path.
+<a href=#728 id=728 data-nosnippet>728</a></span><span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
+<a href=#729 id=729 data-nosnippet>729</a></span><span class="kw">use </span><span class="kw">crate</span>::MountError;
 <a href=#730 id=730 data-nosnippet>730</a>
-<a href=#731 id=731 data-nosnippet>731</a>    <span class="kw">let </span>bind_port = <span class="number">0u16</span>;
-<a href=#732 id=732 data-nosnippet>732</a>
-<a href=#733 id=733 data-nosnippet>733</a>    <span class="kw">let </span>server_handle = <span class="kw">match </span><span class="kw-2">&amp;</span>config.mode {
-<a href=#734 id=734 data-nosnippet>734</a>        Mode::Writable {
-<a href=#735 id=735 data-nosnippet>735</a>            overlay_dir: <span class="prelude-val">Some</span>(overlay_dir),
-<a href=#736 id=736 data-nosnippet>736</a>        } =&gt; {
-<a href=#737 id=737 data-nosnippet>737</a>            <span class="kw">let </span>overlay = create_overlay(
-<a href=#738 id=738 data-nosnippet>738</a>                vfs,
-<a href=#739 id=739 data-nosnippet>739</a>                overlay_dir,
-<a href=#740 id=740 data-nosnippet>740</a>                <span class="kw-2">&amp;</span>config.env_hash,
-<a href=#741 id=741 data-nosnippet>741</a>                <span class="string">"nfs"</span>,
-<a href=#742 id=742 data-nosnippet>742</a>                config.overlay_mismatch,
-<a href=#743 id=743 data-nosnippet>743</a>            )<span class="question-mark">?</span>;
-<a href=#744 id=744 data-nosnippet>744</a>            NfsAdapter::new(overlay).serve(bind_port).<span class="kw">await</span><span class="question-mark">?
-<a href=#745 id=745 data-nosnippet>745</a>        </span>}
-<a href=#746 id=746 data-nosnippet>746</a>        Mode::Writable { overlay_dir: <span class="prelude-val">None </span>} =&gt; {
-<a href=#747 id=747 data-nosnippet>747</a>            <span class="macro">anyhow::bail!</span>(
-<a href=#748 id=748 data-nosnippet>748</a>                <span class="string">"NFS writable mode requires an overlay directory. Use \
-<a href=#749 id=749 data-nosnippet>749</a>                 MountConfig::new(..).with_writable(overlay_dir) or \
-<a href=#750 id=750 data-nosnippet>750</a>                 MountConfig::new(..) for a read-only mount."
-<a href=#751 id=751 data-nosnippet>751</a>            </span>);
-<a href=#752 id=752 data-nosnippet>752</a>        }
-<a href=#753 id=753 data-nosnippet>753</a>        Mode::ReadOnly | Mode::ReadOnlyIfSupported =&gt; NfsAdapter::new(vfs).serve(bind_port).<span class="kw">await</span><span class="question-mark">?</span>,
-<a href=#754 id=754 data-nosnippet>754</a>    };
-<a href=#755 id=755 data-nosnippet>755</a>
-<a href=#756 id=756 data-nosnippet>756</a>    <span class="kw">let </span>port = server_handle.port();
-<a href=#757 id=757 data-nosnippet>757</a>
-<a href=#758 id=758 data-nosnippet>758</a>    <span class="comment">// `soft` with a bounded timeout so a dead userspace NFS server (e.g. the
-<a href=#759 id=759 data-nosnippet>759</a>    // sidecar crashed) surfaces EIO to clients instead of wedging them in
-<a href=#760 id=760 data-nosnippet>760</a>    // uninterruptible D-state on every access, which a hard mount would. The
-<a href=#761 id=761 data-nosnippet>761</a>    // server is always local, so the usual soft-mount data-loss caveat is moot:
-<a href=#762 id=762 data-nosnippet>762</a>    // if it dies, the mount is gone regardless. timeo is in deciseconds.
-<a href=#763 id=763 data-nosnippet>763</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>opts = <span class="macro">format!</span>(
-<a href=#764 id=764 data-nosnippet>764</a>        <span class="string">"noacl,nolock,soft,timeo=100,retrans=3,vers=3,tcp,port={port},mountport={port},rsize=1048576"
-<a href=#765 id=765 data-nosnippet>765</a>    </span>);
-<a href=#766 id=766 data-nosnippet>766</a>    <span class="kw">if </span>read_only {
-<a href=#767 id=767 data-nosnippet>767</a>        opts.push_str(<span class="string">",actimeo=3600,ro"</span>);
-<a href=#768 id=768 data-nosnippet>768</a>    } <span class="kw">else </span>{
-<a href=#769 id=769 data-nosnippet>769</a>        opts.push_str(<span class="string">",wsize=1048576"</span>);
-<a href=#770 id=770 data-nosnippet>770</a>    }
-<a href=#771 id=771 data-nosnippet>771</a>
-<a href=#772 id=772 data-nosnippet>772</a>    <span class="attr">#[cfg(target_os = <span class="string">"macos"</span>)]
-<a href=#773 id=773 data-nosnippet>773</a>    </span>{
-<a href=#774 id=774 data-nosnippet>774</a>        <span class="kw">let </span>mnt = config.mount_point.display().to_string();
-<a href=#775 id=775 data-nosnippet>775</a>        <span class="kw">let </span>status = tokio::process::Command::new(<span class="string">"mount_nfs"</span>)
-<a href=#776 id=776 data-nosnippet>776</a>            .args([<span class="string">"-o"</span>, <span class="kw-2">&amp;</span>opts, <span class="string">"localhost:/"</span>, <span class="kw-2">&amp;</span>mnt])
-<a href=#777 id=777 data-nosnippet>777</a>            .status()
-<a href=#778 id=778 data-nosnippet>778</a>            .<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#779 id=779 data-nosnippet>779</a>        <span class="kw">if </span>!status.success() {
-<a href=#780 id=780 data-nosnippet>780</a>            server_handle.abort();
-<a href=#781 id=781 data-nosnippet>781</a>            <span class="macro">anyhow::bail!</span>(<span class="string">"NFS mount failed with exit status {status}"</span>);
-<a href=#782 id=782 data-nosnippet>782</a>        }
-<a href=#783 id=783 data-nosnippet>783</a>    }
-<a href=#784 id=784 data-nosnippet>784</a>
-<a href=#785 id=785 data-nosnippet>785</a>    <span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
-<a href=#786 id=786 data-nosnippet>786</a>    </span>{
-<a href=#787 id=787 data-nosnippet>787</a>        <span class="kw">let </span>mnt = config.mount_point.display().to_string();
-<a href=#788 id=788 data-nosnippet>788</a>        <span class="comment">// Probe passwordless sudo first — `mount -t nfs` needs CAP_SYS_ADMIN
-<a href=#789 id=789 data-nosnippet>789</a>        // which isn't available in unprivileged user namespaces, so there's no
-<a href=#790 id=790 data-nosnippet>790</a>        // userspace fallback we can reach for. Fail loudly instead of letting
-<a href=#791 id=791 data-nosnippet>791</a>        // sudo prompt interactively (terrible UX in `pixi run`).
-<a href=#792 id=792 data-nosnippet>792</a>        //
-<a href=#793 id=793 data-nosnippet>793</a>        // TODO(bind-mount): investigate `unshare -Urm` + `mount --bind` as a
-<a href=#794 id=794 data-nosnippet>794</a>        // rootless alternative transport on Linux. That would work in rootless
-<a href=#795 id=795 data-nosnippet>795</a>        // containers where neither FUSE nor sudo is available.
-<a href=#796 id=796 data-nosnippet>796</a>        </span><span class="kw">let </span>probe = tokio::process::Command::new(<span class="string">"sudo"</span>)
-<a href=#797 id=797 data-nosnippet>797</a>            .args([<span class="string">"-n"</span>, <span class="string">"true"</span>])
-<a href=#798 id=798 data-nosnippet>798</a>            .status()
-<a href=#799 id=799 data-nosnippet>799</a>            .<span class="kw">await</span>;
-<a href=#800 id=800 data-nosnippet>800</a>        <span class="kw">match </span>probe {
-<a href=#801 id=801 data-nosnippet>801</a>            <span class="prelude-val">Ok</span>(s) <span class="kw">if </span>s.success() =&gt; {}
-<a href=#802 id=802 data-nosnippet>802</a>            <span class="kw">_ </span>=&gt; {
-<a href=#803 id=803 data-nosnippet>803</a>                server_handle.abort();
-<a href=#804 id=804 data-nosnippet>804</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(MountError::SudoRequired.into());
-<a href=#805 id=805 data-nosnippet>805</a>            }
-<a href=#806 id=806 data-nosnippet>806</a>        }
-<a href=#807 id=807 data-nosnippet>807</a>
-<a href=#808 id=808 data-nosnippet>808</a>        <span class="kw">let </span>status = tokio::process::Command::new(<span class="string">"sudo"</span>)
-<a href=#809 id=809 data-nosnippet>809</a>            .args([<span class="string">"mount"</span>, <span class="string">"-t"</span>, <span class="string">"nfs"</span>, <span class="string">"-o"</span>, <span class="kw-2">&amp;</span>opts, <span class="string">"localhost:/"</span>, <span class="kw-2">&amp;</span>mnt])
-<a href=#810 id=810 data-nosnippet>810</a>            .status()
-<a href=#811 id=811 data-nosnippet>811</a>            .<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#812 id=812 data-nosnippet>812</a>        <span class="kw">if </span>!status.success() {
-<a href=#813 id=813 data-nosnippet>813</a>            server_handle.abort();
-<a href=#814 id=814 data-nosnippet>814</a>            <span class="macro">anyhow::bail!</span>(<span class="string">"NFS mount failed with exit status {status}"</span>);
-<a href=#815 id=815 data-nosnippet>815</a>        }
-<a href=#816 id=816 data-nosnippet>816</a>    }
+<a href=#731 id=731 data-nosnippet>731</a><span class="doccomment">/// Mount via NFS, with optional writable overlay.
+<a href=#732 id=732 data-nosnippet>732</a>///
+<a href=#733 id=733 data-nosnippet>733</a>/// The overlay is retried once if the env hash mismatches (environment updated).
+<a href=#734 id=734 data-nosnippet>734</a></span><span class="attr">#[cfg(feature = <span class="string">"nfs"</span>)]
+<a href=#735 id=735 data-nosnippet>735</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>mount_nfs(
+<a href=#736 id=736 data-nosnippet>736</a>    vfs: VirtualFS,
+<a href=#737 id=737 data-nosnippet>737</a>    config: <span class="kw-2">&amp;</span>MountConfig,
+<a href=#738 id=738 data-nosnippet>738</a>) -&gt; anyhow::Result&lt;NfsMountHandle&gt; {
+<a href=#739 id=739 data-nosnippet>739</a>    <span class="kw">let </span>read_only = <span class="macro">matches!</span>(config.mode, Mode::ReadOnly | Mode::ReadOnlyIfSupported);
+<a href=#740 id=740 data-nosnippet>740</a>
+<a href=#741 id=741 data-nosnippet>741</a>    <span class="kw">let </span>bind_port = <span class="number">0u16</span>;
+<a href=#742 id=742 data-nosnippet>742</a>
+<a href=#743 id=743 data-nosnippet>743</a>    <span class="kw">let </span>server_handle = <span class="kw">match </span><span class="kw-2">&amp;</span>config.mode {
+<a href=#744 id=744 data-nosnippet>744</a>        Mode::Writable {
+<a href=#745 id=745 data-nosnippet>745</a>            overlay_dir: <span class="prelude-val">Some</span>(overlay_dir),
+<a href=#746 id=746 data-nosnippet>746</a>        } =&gt; {
+<a href=#747 id=747 data-nosnippet>747</a>            <span class="kw">let </span>overlay = create_overlay(
+<a href=#748 id=748 data-nosnippet>748</a>                vfs,
+<a href=#749 id=749 data-nosnippet>749</a>                overlay_dir,
+<a href=#750 id=750 data-nosnippet>750</a>                <span class="kw-2">&amp;</span>config.env_hash,
+<a href=#751 id=751 data-nosnippet>751</a>                <span class="string">"nfs"</span>,
+<a href=#752 id=752 data-nosnippet>752</a>                config.overlay_mismatch,
+<a href=#753 id=753 data-nosnippet>753</a>            )<span class="question-mark">?</span>;
+<a href=#754 id=754 data-nosnippet>754</a>            NfsAdapter::new(overlay).serve(bind_port).<span class="kw">await</span><span class="question-mark">?
+<a href=#755 id=755 data-nosnippet>755</a>        </span>}
+<a href=#756 id=756 data-nosnippet>756</a>        Mode::Writable { overlay_dir: <span class="prelude-val">None </span>} =&gt; {
+<a href=#757 id=757 data-nosnippet>757</a>            <span class="macro">anyhow::bail!</span>(
+<a href=#758 id=758 data-nosnippet>758</a>                <span class="string">"NFS writable mode requires an overlay directory. Use \
+<a href=#759 id=759 data-nosnippet>759</a>                 MountConfig::new(..).with_writable(overlay_dir) or \
+<a href=#760 id=760 data-nosnippet>760</a>                 MountConfig::new(..) for a read-only mount."
+<a href=#761 id=761 data-nosnippet>761</a>            </span>);
+<a href=#762 id=762 data-nosnippet>762</a>        }
+<a href=#763 id=763 data-nosnippet>763</a>        Mode::ReadOnly | Mode::ReadOnlyIfSupported =&gt; NfsAdapter::new(vfs).serve(bind_port).<span class="kw">await</span><span class="question-mark">?</span>,
+<a href=#764 id=764 data-nosnippet>764</a>    };
+<a href=#765 id=765 data-nosnippet>765</a>
+<a href=#766 id=766 data-nosnippet>766</a>    <span class="kw">let </span>port = server_handle.port();
+<a href=#767 id=767 data-nosnippet>767</a>
+<a href=#768 id=768 data-nosnippet>768</a>    <span class="comment">// `soft` with a bounded timeout so a dead userspace NFS server (e.g. the
+<a href=#769 id=769 data-nosnippet>769</a>    // sidecar crashed) surfaces EIO to clients instead of wedging them in
+<a href=#770 id=770 data-nosnippet>770</a>    // uninterruptible D-state on every access, which a hard mount would. The
+<a href=#771 id=771 data-nosnippet>771</a>    // server is always local, so the usual soft-mount data-loss caveat is moot:
+<a href=#772 id=772 data-nosnippet>772</a>    // if it dies, the mount is gone regardless. timeo is in deciseconds.
+<a href=#773 id=773 data-nosnippet>773</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>opts = <span class="macro">format!</span>(
+<a href=#774 id=774 data-nosnippet>774</a>        <span class="string">"noacl,nolock,soft,timeo=100,retrans=3,vers=3,tcp,port={port},mountport={port},rsize=1048576"
+<a href=#775 id=775 data-nosnippet>775</a>    </span>);
+<a href=#776 id=776 data-nosnippet>776</a>    <span class="kw">if </span>read_only {
+<a href=#777 id=777 data-nosnippet>777</a>        opts.push_str(<span class="string">",actimeo=3600,ro"</span>);
+<a href=#778 id=778 data-nosnippet>778</a>    } <span class="kw">else </span>{
+<a href=#779 id=779 data-nosnippet>779</a>        opts.push_str(<span class="string">",wsize=1048576"</span>);
+<a href=#780 id=780 data-nosnippet>780</a>    }
+<a href=#781 id=781 data-nosnippet>781</a>
+<a href=#782 id=782 data-nosnippet>782</a>    <span class="attr">#[cfg(target_os = <span class="string">"macos"</span>)]
+<a href=#783 id=783 data-nosnippet>783</a>    </span>{
+<a href=#784 id=784 data-nosnippet>784</a>        <span class="kw">let </span>mnt = config.mount_point.display().to_string();
+<a href=#785 id=785 data-nosnippet>785</a>        <span class="kw">let </span>status = tokio::process::Command::new(<span class="string">"mount_nfs"</span>)
+<a href=#786 id=786 data-nosnippet>786</a>            .args([<span class="string">"-o"</span>, <span class="kw-2">&amp;</span>opts, <span class="string">"localhost:/"</span>, <span class="kw-2">&amp;</span>mnt])
+<a href=#787 id=787 data-nosnippet>787</a>            .status()
+<a href=#788 id=788 data-nosnippet>788</a>            .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#789 id=789 data-nosnippet>789</a>        <span class="kw">if </span>!status.success() {
+<a href=#790 id=790 data-nosnippet>790</a>            server_handle.abort();
+<a href=#791 id=791 data-nosnippet>791</a>            <span class="macro">anyhow::bail!</span>(<span class="string">"NFS mount failed with exit status {status}"</span>);
+<a href=#792 id=792 data-nosnippet>792</a>        }
+<a href=#793 id=793 data-nosnippet>793</a>    }
+<a href=#794 id=794 data-nosnippet>794</a>
+<a href=#795 id=795 data-nosnippet>795</a>    <span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
+<a href=#796 id=796 data-nosnippet>796</a>    </span>{
+<a href=#797 id=797 data-nosnippet>797</a>        <span class="kw">let </span>mnt = config.mount_point.display().to_string();
+<a href=#798 id=798 data-nosnippet>798</a>        <span class="comment">// Probe passwordless sudo first — `mount -t nfs` needs CAP_SYS_ADMIN
+<a href=#799 id=799 data-nosnippet>799</a>        // which isn't available in unprivileged user namespaces, so there's no
+<a href=#800 id=800 data-nosnippet>800</a>        // userspace fallback we can reach for. Fail loudly instead of letting
+<a href=#801 id=801 data-nosnippet>801</a>        // sudo prompt interactively (terrible UX in `pixi run`).
+<a href=#802 id=802 data-nosnippet>802</a>        //
+<a href=#803 id=803 data-nosnippet>803</a>        // TODO(bind-mount): investigate `unshare -Urm` + `mount --bind` as a
+<a href=#804 id=804 data-nosnippet>804</a>        // rootless alternative transport on Linux. That would work in rootless
+<a href=#805 id=805 data-nosnippet>805</a>        // containers where neither FUSE nor sudo is available.
+<a href=#806 id=806 data-nosnippet>806</a>        </span><span class="kw">let </span>probe = tokio::process::Command::new(<span class="string">"sudo"</span>)
+<a href=#807 id=807 data-nosnippet>807</a>            .args([<span class="string">"-n"</span>, <span class="string">"true"</span>])
+<a href=#808 id=808 data-nosnippet>808</a>            .status()
+<a href=#809 id=809 data-nosnippet>809</a>            .<span class="kw">await</span>;
+<a href=#810 id=810 data-nosnippet>810</a>        <span class="kw">match </span>probe {
+<a href=#811 id=811 data-nosnippet>811</a>            <span class="prelude-val">Ok</span>(s) <span class="kw">if </span>s.success() =&gt; {}
+<a href=#812 id=812 data-nosnippet>812</a>            <span class="kw">_ </span>=&gt; {
+<a href=#813 id=813 data-nosnippet>813</a>                server_handle.abort();
+<a href=#814 id=814 data-nosnippet>814</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(MountError::SudoRequired.into());
+<a href=#815 id=815 data-nosnippet>815</a>            }
+<a href=#816 id=816 data-nosnippet>816</a>        }
 <a href=#817 id=817 data-nosnippet>817</a>
-<a href=#818 id=818 data-nosnippet>818</a>    <span class="attr">#[cfg(not(any(target_os = <span class="string">"macos"</span>, target_os = <span class="string">"linux"</span>)))]
-<a href=#819 id=819 data-nosnippet>819</a>    </span>{
-<a href=#820 id=820 data-nosnippet>820</a>        server_handle.abort();
-<a href=#821 id=821 data-nosnippet>821</a>        <span class="macro">anyhow::bail!</span>(<span class="string">"NFS mount is not supported on this platform. Use ProjFS on Windows."</span>);
-<a href=#822 id=822 data-nosnippet>822</a>    }
-<a href=#823 id=823 data-nosnippet>823</a>
-<a href=#824 id=824 data-nosnippet>824</a>    <span class="comment">// Only reachable on the NFS-capable targets; on other platforms the block
-<a href=#825 id=825 data-nosnippet>825</a>    // above diverges, so gate the success tail to avoid unreachable-code errors.
-<a href=#826 id=826 data-nosnippet>826</a>    </span><span class="attr">#[cfg(any(target_os = <span class="string">"macos"</span>, target_os = <span class="string">"linux"</span>))]
-<a href=#827 id=827 data-nosnippet>827</a>    </span>{
-<a href=#828 id=828 data-nosnippet>828</a>        <span class="macro">tracing::info!</span>(<span class="string">"mounted via NFS on {}"</span>, config.mount_point.display());
-<a href=#829 id=829 data-nosnippet>829</a>
-<a href=#830 id=830 data-nosnippet>830</a>        <span class="prelude-val">Ok</span>(NfsMountHandle {
-<a href=#831 id=831 data-nosnippet>831</a>            mount_point: config.mount_point.clone(),
-<a href=#832 id=832 data-nosnippet>832</a>            server_handle,
-<a href=#833 id=833 data-nosnippet>833</a>            unmounted: <span class="bool-val">false</span>,
-<a href=#834 id=834 data-nosnippet>834</a>        })
-<a href=#835 id=835 data-nosnippet>835</a>    }
-<a href=#836 id=836 data-nosnippet>836</a>}
-<a href=#837 id=837 data-nosnippet>837</a>
-<a href=#838 id=838 data-nosnippet>838</a><span class="attr">#[cfg(test)]
-<a href=#839 id=839 data-nosnippet>839</a></span><span class="kw">mod </span>tests {
-<a href=#840 id=840 data-nosnippet>840</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#841 id=841 data-nosnippet>841</a>    <span class="kw">use </span><span class="kw">crate</span>::vfs_ops::FileAttr;
-<a href=#842 id=842 data-nosnippet>842</a>    <span class="kw">use </span>std::time::{Duration, UNIX_EPOCH};
-<a href=#843 id=843 data-nosnippet>843</a>
-<a href=#844 id=844 data-nosnippet>844</a>    <span class="attr">#[test]
-<a href=#845 id=845 data-nosnippet>845</a>    </span><span class="kw">fn </span>errno_maps_to_expected_nfsstat() {
-<a href=#846 id=846 data-nosnippet>846</a>        <span class="kw">use </span><span class="kw">crate</span>::vfs_ops::VfsError <span class="kw">as </span>E;
-<a href=#847 id=847 data-nosnippet>847</a>        <span class="macro">assert_eq!</span>(vfs_err_to_nfsstat(E::NotFound), nfsstat3::NFS3ERR_NOENT);
-<a href=#848 id=848 data-nosnippet>848</a>        <span class="macro">assert_eq!</span>(
-<a href=#849 id=849 data-nosnippet>849</a>            vfs_err_to_nfsstat(E::PermissionDenied),
-<a href=#850 id=850 data-nosnippet>850</a>            nfsstat3::NFS3ERR_ACCES
-<a href=#851 id=851 data-nosnippet>851</a>        );
-<a href=#852 id=852 data-nosnippet>852</a>        <span class="macro">assert_eq!</span>(
-<a href=#853 id=853 data-nosnippet>853</a>            vfs_err_to_nfsstat(E::NotADirectory),
-<a href=#854 id=854 data-nosnippet>854</a>            nfsstat3::NFS3ERR_NOTDIR
-<a href=#855 id=855 data-nosnippet>855</a>        );
-<a href=#856 id=856 data-nosnippet>856</a>        <span class="macro">assert_eq!</span>(vfs_err_to_nfsstat(E::IsADirectory), nfsstat3::NFS3ERR_ISDIR);
-<a href=#857 id=857 data-nosnippet>857</a>        <span class="macro">assert_eq!</span>(vfs_err_to_nfsstat(E::ReadOnly), nfsstat3::NFS3ERR_ROFS);
+<a href=#818 id=818 data-nosnippet>818</a>        <span class="kw">let </span>status = tokio::process::Command::new(<span class="string">"sudo"</span>)
+<a href=#819 id=819 data-nosnippet>819</a>            .args([<span class="string">"mount"</span>, <span class="string">"-t"</span>, <span class="string">"nfs"</span>, <span class="string">"-o"</span>, <span class="kw-2">&amp;</span>opts, <span class="string">"localhost:/"</span>, <span class="kw-2">&amp;</span>mnt])
+<a href=#820 id=820 data-nosnippet>820</a>            .status()
+<a href=#821 id=821 data-nosnippet>821</a>            .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#822 id=822 data-nosnippet>822</a>        <span class="kw">if </span>!status.success() {
+<a href=#823 id=823 data-nosnippet>823</a>            server_handle.abort();
+<a href=#824 id=824 data-nosnippet>824</a>            <span class="macro">anyhow::bail!</span>(<span class="string">"NFS mount failed with exit status {status}"</span>);
+<a href=#825 id=825 data-nosnippet>825</a>        }
+<a href=#826 id=826 data-nosnippet>826</a>    }
+<a href=#827 id=827 data-nosnippet>827</a>
+<a href=#828 id=828 data-nosnippet>828</a>    <span class="attr">#[cfg(not(any(target_os = <span class="string">"macos"</span>, target_os = <span class="string">"linux"</span>)))]
+<a href=#829 id=829 data-nosnippet>829</a>    </span>{
+<a href=#830 id=830 data-nosnippet>830</a>        server_handle.abort();
+<a href=#831 id=831 data-nosnippet>831</a>        <span class="macro">anyhow::bail!</span>(<span class="string">"NFS mount is not supported on this platform. Use ProjFS on Windows."</span>);
+<a href=#832 id=832 data-nosnippet>832</a>    }
+<a href=#833 id=833 data-nosnippet>833</a>
+<a href=#834 id=834 data-nosnippet>834</a>    <span class="comment">// Only reachable on the NFS-capable targets; on other platforms the block
+<a href=#835 id=835 data-nosnippet>835</a>    // above diverges, so gate the success tail to avoid unreachable-code errors.
+<a href=#836 id=836 data-nosnippet>836</a>    </span><span class="attr">#[cfg(any(target_os = <span class="string">"macos"</span>, target_os = <span class="string">"linux"</span>))]
+<a href=#837 id=837 data-nosnippet>837</a>    </span>{
+<a href=#838 id=838 data-nosnippet>838</a>        <span class="macro">tracing::info!</span>(<span class="string">"mounted via NFS on {}"</span>, config.mount_point.display());
+<a href=#839 id=839 data-nosnippet>839</a>
+<a href=#840 id=840 data-nosnippet>840</a>        <span class="prelude-val">Ok</span>(NfsMountHandle {
+<a href=#841 id=841 data-nosnippet>841</a>            mount_point: config.mount_point.clone(),
+<a href=#842 id=842 data-nosnippet>842</a>            server_handle,
+<a href=#843 id=843 data-nosnippet>843</a>            unmounted: <span class="bool-val">false</span>,
+<a href=#844 id=844 data-nosnippet>844</a>        })
+<a href=#845 id=845 data-nosnippet>845</a>    }
+<a href=#846 id=846 data-nosnippet>846</a>}
+<a href=#847 id=847 data-nosnippet>847</a>
+<a href=#848 id=848 data-nosnippet>848</a><span class="attr">#[cfg(test)]
+<a href=#849 id=849 data-nosnippet>849</a></span><span class="kw">mod </span>tests {
+<a href=#850 id=850 data-nosnippet>850</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#851 id=851 data-nosnippet>851</a>    <span class="kw">use </span><span class="kw">crate</span>::vfs_ops::FileAttr;
+<a href=#852 id=852 data-nosnippet>852</a>    <span class="kw">use </span>std::time::{Duration, UNIX_EPOCH};
+<a href=#853 id=853 data-nosnippet>853</a>
+<a href=#854 id=854 data-nosnippet>854</a>    <span class="attr">#[test]
+<a href=#855 id=855 data-nosnippet>855</a>    </span><span class="kw">fn </span>errno_maps_to_expected_nfsstat() {
+<a href=#856 id=856 data-nosnippet>856</a>        <span class="kw">use </span><span class="kw">crate</span>::vfs_ops::VfsError <span class="kw">as </span>E;
+<a href=#857 id=857 data-nosnippet>857</a>        <span class="macro">assert_eq!</span>(vfs_err_to_nfsstat(E::NotFound), nfsstat3::NFS3ERR_NOENT);
 <a href=#858 id=858 data-nosnippet>858</a>        <span class="macro">assert_eq!</span>(
-<a href=#859 id=859 data-nosnippet>859</a>            vfs_err_to_nfsstat(E::AlreadyExists),
-<a href=#860 id=860 data-nosnippet>860</a>            nfsstat3::NFS3ERR_EXIST
+<a href=#859 id=859 data-nosnippet>859</a>            vfs_err_to_nfsstat(E::PermissionDenied),
+<a href=#860 id=860 data-nosnippet>860</a>            nfsstat3::NFS3ERR_ACCES
 <a href=#861 id=861 data-nosnippet>861</a>        );
-<a href=#862 id=862 data-nosnippet>862</a>        <span class="macro">assert_eq!</span>(vfs_err_to_nfsstat(E::NotEmpty), nfsstat3::NFS3ERR_NOTEMPTY);
-<a href=#863 id=863 data-nosnippet>863</a>        <span class="macro">assert_eq!</span>(vfs_err_to_nfsstat(E::NoSpace), nfsstat3::NFS3ERR_NOSPC);
-<a href=#864 id=864 data-nosnippet>864</a>        <span class="comment">// The traversal guard's InvalidArgument now maps to a distinct status.
-<a href=#865 id=865 data-nosnippet>865</a>        </span><span class="macro">assert_eq!</span>(
-<a href=#866 id=866 data-nosnippet>866</a>            vfs_err_to_nfsstat(E::InvalidArgument),
-<a href=#867 id=867 data-nosnippet>867</a>            nfsstat3::NFS3ERR_INVAL
-<a href=#868 id=868 data-nosnippet>868</a>        );
-<a href=#869 id=869 data-nosnippet>869</a>        <span class="macro">assert_eq!</span>(vfs_err_to_nfsstat(E::Io), nfsstat3::NFS3ERR_IO);
-<a href=#870 id=870 data-nosnippet>870</a>        <span class="comment">// errno round-trips through VfsError.
-<a href=#871 id=871 data-nosnippet>871</a>        </span><span class="macro">assert_eq!</span>(E::from_errno(libc::ENOENT), E::NotFound);
-<a href=#872 id=872 data-nosnippet>872</a>        <span class="macro">assert_eq!</span>(E::from_errno(-<span class="number">12345</span>), E::Io);
-<a href=#873 id=873 data-nosnippet>873</a>    }
-<a href=#874 id=874 data-nosnippet>874</a>
-<a href=#875 id=875 data-nosnippet>875</a>    <span class="attr">#[test]
-<a href=#876 id=876 data-nosnippet>876</a>    </span><span class="kw">fn </span>system_time_converts_and_clamps_pre_epoch() {
-<a href=#877 id=877 data-nosnippet>877</a>        <span class="kw">let </span>t = system_time_to_nfstime(UNIX_EPOCH + Duration::new(<span class="number">1_700_000_000</span>, <span class="number">500</span>));
-<a href=#878 id=878 data-nosnippet>878</a>        <span class="macro">assert_eq!</span>(t.seconds, <span class="number">1_700_000_000</span>);
-<a href=#879 id=879 data-nosnippet>879</a>        <span class="macro">assert_eq!</span>(t.nseconds, <span class="number">500</span>);
-<a href=#880 id=880 data-nosnippet>880</a>        <span class="comment">// Pre-epoch times can't be represented; clamp to zero rather than panic.
-<a href=#881 id=881 data-nosnippet>881</a>        </span><span class="kw">let </span>pre = system_time_to_nfstime(UNIX_EPOCH - Duration::from_secs(<span class="number">10</span>));
-<a href=#882 id=882 data-nosnippet>882</a>        <span class="macro">assert_eq!</span>(pre.seconds, <span class="number">0</span>);
-<a href=#883 id=883 data-nosnippet>883</a>        <span class="macro">assert_eq!</span>(pre.nseconds, <span class="number">0</span>);
-<a href=#884 id=884 data-nosnippet>884</a>    }
-<a href=#885 id=885 data-nosnippet>885</a>
-<a href=#886 id=886 data-nosnippet>886</a>    <span class="attr">#[test]
-<a href=#887 id=887 data-nosnippet>887</a>    </span><span class="kw">fn </span>file_attr_maps_kind_mode_and_size() {
-<a href=#888 id=888 data-nosnippet>888</a>        <span class="kw">let </span>mk = |kind, perm| FileAttr {
-<a href=#889 id=889 data-nosnippet>889</a>            ino: <span class="number">42</span>,
-<a href=#890 id=890 data-nosnippet>890</a>            size: <span class="number">1234</span>,
-<a href=#891 id=891 data-nosnippet>891</a>            blocks: <span class="number">3</span>,
-<a href=#892 id=892 data-nosnippet>892</a>            atime: UNIX_EPOCH,
-<a href=#893 id=893 data-nosnippet>893</a>            mtime: UNIX_EPOCH,
-<a href=#894 id=894 data-nosnippet>894</a>            ctime: UNIX_EPOCH,
-<a href=#895 id=895 data-nosnippet>895</a>            kind,
-<a href=#896 id=896 data-nosnippet>896</a>            perm,
-<a href=#897 id=897 data-nosnippet>897</a>            nlink: <span class="number">1</span>,
-<a href=#898 id=898 data-nosnippet>898</a>            uid: <span class="number">501</span>,
-<a href=#899 id=899 data-nosnippet>899</a>            gid: <span class="number">20</span>,
-<a href=#900 id=900 data-nosnippet>900</a>        };
-<a href=#901 id=901 data-nosnippet>901</a>
-<a href=#902 id=902 data-nosnippet>902</a>        <span class="kw">let </span>reg = file_attr_to_fattr3(<span class="kw-2">&amp;</span>mk(FileKind::RegularFile, <span class="number">0o644</span>));
-<a href=#903 id=903 data-nosnippet>903</a>        <span class="macro">assert_eq!</span>(reg.type_, ftype3::NF3REG);
-<a href=#904 id=904 data-nosnippet>904</a>        <span class="macro">assert_eq!</span>(reg.mode, <span class="number">0o644</span>);
-<a href=#905 id=905 data-nosnippet>905</a>        <span class="macro">assert_eq!</span>(reg.size, <span class="number">1234</span>);
-<a href=#906 id=906 data-nosnippet>906</a>        <span class="macro">assert_eq!</span>(reg.fileid, <span class="number">42</span>);
-<a href=#907 id=907 data-nosnippet>907</a>        <span class="macro">assert_eq!</span>(reg.used, <span class="number">3 </span>* <span class="number">512</span>);
-<a href=#908 id=908 data-nosnippet>908</a>
-<a href=#909 id=909 data-nosnippet>909</a>        <span class="macro">assert_eq!</span>(
-<a href=#910 id=910 data-nosnippet>910</a>            file_attr_to_fattr3(<span class="kw-2">&amp;</span>mk(FileKind::Directory, <span class="number">0o755</span>)).type_,
-<a href=#911 id=911 data-nosnippet>911</a>            ftype3::NF3DIR
-<a href=#912 id=912 data-nosnippet>912</a>        );
-<a href=#913 id=913 data-nosnippet>913</a>        <span class="macro">assert_eq!</span>(
-<a href=#914 id=914 data-nosnippet>914</a>            file_attr_to_fattr3(<span class="kw-2">&amp;</span>mk(FileKind::Symlink, <span class="number">0o777</span>)).type_,
-<a href=#915 id=915 data-nosnippet>915</a>            ftype3::NF3LNK
-<a href=#916 id=916 data-nosnippet>916</a>        );
-<a href=#917 id=917 data-nosnippet>917</a>    }
+<a href=#862 id=862 data-nosnippet>862</a>        <span class="macro">assert_eq!</span>(
+<a href=#863 id=863 data-nosnippet>863</a>            vfs_err_to_nfsstat(E::NotADirectory),
+<a href=#864 id=864 data-nosnippet>864</a>            nfsstat3::NFS3ERR_NOTDIR
+<a href=#865 id=865 data-nosnippet>865</a>        );
+<a href=#866 id=866 data-nosnippet>866</a>        <span class="macro">assert_eq!</span>(vfs_err_to_nfsstat(E::IsADirectory), nfsstat3::NFS3ERR_ISDIR);
+<a href=#867 id=867 data-nosnippet>867</a>        <span class="macro">assert_eq!</span>(vfs_err_to_nfsstat(E::ReadOnly), nfsstat3::NFS3ERR_ROFS);
+<a href=#868 id=868 data-nosnippet>868</a>        <span class="macro">assert_eq!</span>(
+<a href=#869 id=869 data-nosnippet>869</a>            vfs_err_to_nfsstat(E::AlreadyExists),
+<a href=#870 id=870 data-nosnippet>870</a>            nfsstat3::NFS3ERR_EXIST
+<a href=#871 id=871 data-nosnippet>871</a>        );
+<a href=#872 id=872 data-nosnippet>872</a>        <span class="macro">assert_eq!</span>(vfs_err_to_nfsstat(E::NotEmpty), nfsstat3::NFS3ERR_NOTEMPTY);
+<a href=#873 id=873 data-nosnippet>873</a>        <span class="macro">assert_eq!</span>(vfs_err_to_nfsstat(E::NoSpace), nfsstat3::NFS3ERR_NOSPC);
+<a href=#874 id=874 data-nosnippet>874</a>        <span class="comment">// The traversal guard's InvalidArgument now maps to a distinct status.
+<a href=#875 id=875 data-nosnippet>875</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#876 id=876 data-nosnippet>876</a>            vfs_err_to_nfsstat(E::InvalidArgument),
+<a href=#877 id=877 data-nosnippet>877</a>            nfsstat3::NFS3ERR_INVAL
+<a href=#878 id=878 data-nosnippet>878</a>        );
+<a href=#879 id=879 data-nosnippet>879</a>        <span class="macro">assert_eq!</span>(vfs_err_to_nfsstat(E::Io), nfsstat3::NFS3ERR_IO);
+<a href=#880 id=880 data-nosnippet>880</a>        <span class="comment">// errno round-trips through VfsError.
+<a href=#881 id=881 data-nosnippet>881</a>        </span><span class="macro">assert_eq!</span>(E::from_errno(libc::ENOENT), E::NotFound);
+<a href=#882 id=882 data-nosnippet>882</a>        <span class="macro">assert_eq!</span>(E::from_errno(-<span class="number">12345</span>), E::Io);
+<a href=#883 id=883 data-nosnippet>883</a>    }
+<a href=#884 id=884 data-nosnippet>884</a>
+<a href=#885 id=885 data-nosnippet>885</a>    <span class="attr">#[test]
+<a href=#886 id=886 data-nosnippet>886</a>    </span><span class="kw">fn </span>system_time_converts_and_clamps_pre_epoch() {
+<a href=#887 id=887 data-nosnippet>887</a>        <span class="kw">let </span>t = system_time_to_nfstime(UNIX_EPOCH + Duration::new(<span class="number">1_700_000_000</span>, <span class="number">500</span>));
+<a href=#888 id=888 data-nosnippet>888</a>        <span class="macro">assert_eq!</span>(t.seconds, <span class="number">1_700_000_000</span>);
+<a href=#889 id=889 data-nosnippet>889</a>        <span class="macro">assert_eq!</span>(t.nseconds, <span class="number">500</span>);
+<a href=#890 id=890 data-nosnippet>890</a>        <span class="comment">// Pre-epoch times can't be represented; clamp to zero rather than panic.
+<a href=#891 id=891 data-nosnippet>891</a>        </span><span class="kw">let </span>pre = system_time_to_nfstime(UNIX_EPOCH - Duration::from_secs(<span class="number">10</span>));
+<a href=#892 id=892 data-nosnippet>892</a>        <span class="macro">assert_eq!</span>(pre.seconds, <span class="number">0</span>);
+<a href=#893 id=893 data-nosnippet>893</a>        <span class="macro">assert_eq!</span>(pre.nseconds, <span class="number">0</span>);
+<a href=#894 id=894 data-nosnippet>894</a>    }
+<a href=#895 id=895 data-nosnippet>895</a>
+<a href=#896 id=896 data-nosnippet>896</a>    <span class="attr">#[test]
+<a href=#897 id=897 data-nosnippet>897</a>    </span><span class="kw">fn </span>file_attr_maps_kind_mode_and_size() {
+<a href=#898 id=898 data-nosnippet>898</a>        <span class="kw">let </span>mk = |kind, perm| FileAttr {
+<a href=#899 id=899 data-nosnippet>899</a>            ino: <span class="number">42</span>,
+<a href=#900 id=900 data-nosnippet>900</a>            size: <span class="number">1234</span>,
+<a href=#901 id=901 data-nosnippet>901</a>            blocks: <span class="number">3</span>,
+<a href=#902 id=902 data-nosnippet>902</a>            atime: UNIX_EPOCH,
+<a href=#903 id=903 data-nosnippet>903</a>            mtime: UNIX_EPOCH,
+<a href=#904 id=904 data-nosnippet>904</a>            ctime: UNIX_EPOCH,
+<a href=#905 id=905 data-nosnippet>905</a>            kind,
+<a href=#906 id=906 data-nosnippet>906</a>            perm,
+<a href=#907 id=907 data-nosnippet>907</a>            nlink: <span class="number">1</span>,
+<a href=#908 id=908 data-nosnippet>908</a>            uid: <span class="number">501</span>,
+<a href=#909 id=909 data-nosnippet>909</a>            gid: <span class="number">20</span>,
+<a href=#910 id=910 data-nosnippet>910</a>        };
+<a href=#911 id=911 data-nosnippet>911</a>
+<a href=#912 id=912 data-nosnippet>912</a>        <span class="kw">let </span>reg = file_attr_to_fattr3(<span class="kw-2">&amp;</span>mk(FileKind::RegularFile, <span class="number">0o644</span>));
+<a href=#913 id=913 data-nosnippet>913</a>        <span class="macro">assert_eq!</span>(reg.type_, ftype3::NF3REG);
+<a href=#914 id=914 data-nosnippet>914</a>        <span class="macro">assert_eq!</span>(reg.mode, <span class="number">0o644</span>);
+<a href=#915 id=915 data-nosnippet>915</a>        <span class="macro">assert_eq!</span>(reg.size, <span class="number">1234</span>);
+<a href=#916 id=916 data-nosnippet>916</a>        <span class="macro">assert_eq!</span>(reg.fileid, <span class="number">42</span>);
+<a href=#917 id=917 data-nosnippet>917</a>        <span class="macro">assert_eq!</span>(reg.used, <span class="number">3 </span>* <span class="number">512</span>);
 <a href=#918 id=918 data-nosnippet>918</a>
-<a href=#919 id=919 data-nosnippet>919</a>    <span class="attr">#[cfg(unix)]
-<a href=#920 id=920 data-nosnippet>920</a>    #[test]
-<a href=#921 id=921 data-nosnippet>921</a>    </span><span class="kw">fn </span>os_str_from_nfs_bytes_roundtrips_arbitrary_bytes() {
-<a href=#922 id=922 data-nosnippet>922</a>        <span class="kw">use </span>std::os::unix::ffi::OsStrExt;
-<a href=#923 id=923 data-nosnippet>923</a>        <span class="comment">// On Unix, filenames are arbitrary byte sequences.
-<a href=#924 id=924 data-nosnippet>924</a>        </span><span class="kw">let </span>name = os_str_from_nfs_bytes(<span class="string">b"lib\xff.so"</span>).unwrap();
-<a href=#925 id=925 data-nosnippet>925</a>        <span class="macro">assert_eq!</span>(name.as_bytes(), <span class="string">b"lib\xff.so"</span>);
-<a href=#926 id=926 data-nosnippet>926</a>    }
-<a href=#927 id=927 data-nosnippet>927</a>}
+<a href=#919 id=919 data-nosnippet>919</a>        <span class="macro">assert_eq!</span>(
+<a href=#920 id=920 data-nosnippet>920</a>            file_attr_to_fattr3(<span class="kw-2">&amp;</span>mk(FileKind::Directory, <span class="number">0o755</span>)).type_,
+<a href=#921 id=921 data-nosnippet>921</a>            ftype3::NF3DIR
+<a href=#922 id=922 data-nosnippet>922</a>        );
+<a href=#923 id=923 data-nosnippet>923</a>        <span class="macro">assert_eq!</span>(
+<a href=#924 id=924 data-nosnippet>924</a>            file_attr_to_fattr3(<span class="kw-2">&amp;</span>mk(FileKind::Symlink, <span class="number">0o777</span>)).type_,
+<a href=#925 id=925 data-nosnippet>925</a>            ftype3::NF3LNK
+<a href=#926 id=926 data-nosnippet>926</a>        );
+<a href=#927 id=927 data-nosnippet>927</a>    }
+<a href=#928 id=928 data-nosnippet>928</a>
+<a href=#929 id=929 data-nosnippet>929</a>    <span class="attr">#[cfg(unix)]
+<a href=#930 id=930 data-nosnippet>930</a>    #[test]
+<a href=#931 id=931 data-nosnippet>931</a>    </span><span class="kw">fn </span>os_str_from_nfs_bytes_roundtrips_arbitrary_bytes() {
+<a href=#932 id=932 data-nosnippet>932</a>        <span class="kw">use </span>std::os::unix::ffi::OsStrExt;
+<a href=#933 id=933 data-nosnippet>933</a>        <span class="comment">// On Unix, filenames are arbitrary byte sequences.
+<a href=#934 id=934 data-nosnippet>934</a>        </span><span class="kw">let </span>name = os_str_from_nfs_bytes(<span class="string">b"lib\xff.so"</span>).unwrap();
+<a href=#935 id=935 data-nosnippet>935</a>        <span class="macro">assert_eq!</span>(name.as_bytes(), <span class="string">b"lib\xff.so"</span>);
+<a href=#936 id=936 data-nosnippet>936</a>    }
+<a href=#937 id=937 data-nosnippet>937</a>}
 </code></pre></div></section></main></body></html>
