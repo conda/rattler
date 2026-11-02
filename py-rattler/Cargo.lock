@@ -4175,7 +4175,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.55.4"
+version = "0.55.5"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -4233,7 +4233,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.12.0"
+version = "0.12.1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4318,7 +4318,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "dirs",
  "fs-err",
@@ -4367,7 +4367,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.34.4"
+version = "0.34.5"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4470,7 +4470,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.34.5"
+version = "0.34.6"
 dependencies = [
  "ambient-id",
  "apple-native-keyring-store",
@@ -4509,7 +4509,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.28.2"
+version = "0.28.3"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-tokio-tar",
@@ -4581,7 +4581,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.38.0"
+version = "0.38.1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4649,7 +4649,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4729,7 +4729,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_package_detectors"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "async-trait",
  "fs-err",
