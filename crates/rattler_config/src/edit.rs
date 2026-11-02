@@ -10,9 +10,13 @@
 
 use std::{path::Path, str::FromStr};
 
-use crate::config::{Config, ConfigBase};
+use crate::config::{
+    CommonConfig, Config, ConfigBase, NoExtension,
+    exclude_newer::{ExcludeNewerConfig, ExemptionTable},
+};
 use rattler_conda_types::PackageName;
 use thiserror::Error;
+use toml_edit::{InlineTable, Item, TableLike};
 
 #[derive(Error, Debug)]
 pub enum ConfigEditError {
@@ -237,6 +241,315 @@ fn is_known_key(key: &str, known: &[String]) -> bool {
     })
 }
 
+const EXCLUDE_NEWER: &str = "exclude-newer";
+
+/// Sets `key`, `exclude-newer` or a key inside it such as
+/// `exclude-newer.exemptions.ruff`, of `exclude_newer` to `value`, or unsets
+/// it if `value` is `None`, with the same parsing and validation as
+/// [`ConfigBase::set`]. This is for tools whose configuration isn't a
+/// [`ConfigBase`] but holds an `exclude-newer`.
+///
+/// Returns whether `exclude_newer` changed, e.g. `false` when unsetting a key
+/// that isn't set. Fails with [`ConfigEditError::UnknownKey`] if `key` is not
+/// `exclude-newer` or a key inside it.
+pub fn set_exclude_newer(
+    exclude_newer: &mut Option<ExcludeNewerConfig>,
+    key: &str,
+    value: Option<String>,
+) -> Result<bool, ConfigEditError> {
+    let segments = split_key(key);
+    if segments[0] != EXCLUDE_NEWER || segments.iter().any(String::is_empty) {
+        return Err(ConfigEditError::UnknownKey {
+            key: key.to_string(),
+            supported_keys: EXCLUDE_NEWER.to_string(),
+        });
+    }
+    let mut config = ConfigBase::<NoExtension> {
+        common: CommonConfig {
+            exclude_newer: exclude_newer.clone(),
+            ..CommonConfig::default()
+        },
+        ..ConfigBase::default()
+    };
+    config.set(key, value)?;
+    let changed = config.common.exclude_newer != *exclude_newer;
+    *exclude_newer = config.common.exclude_newer;
+    Ok(changed)
+}
+
+/// Like [`set_exclude_newer`], and writes the edit into `document`, the root
+/// table of the configuration file that `exclude_newer` is loaded from,
+/// keeping the comments and layout of the rest of it:
+/// - A cutoff without exemptions, e.g. `exclude-newer = "7d"`, is expanded
+///   into an inline table when a key inside it is edited.
+/// - Exemptions are matched by their normalized package name. Unlike
+///   [`ConfigBase::set`], an exemption keeps the name as it is written in the
+///   document, e.g. setting `exemptions.Ruff` replaces the value of `ruff`.
+/// - An exemption that consists of a version spec only, e.g.
+///   `ruff = ">=0.5"`, is expanded into an inline table when a field of it is
+///   edited.
+/// - Without exemptions, an inline `exclude-newer` is written as its cutoff
+///   alone, so removing the last exemption leaves e.g.
+///   `exclude-newer = "7d"`. A `[exclude-newer]` table is kept with only its
+///   `cutoff`, keeping its comments.
+///
+/// Returns whether `exclude_newer` changed. The document is only written if
+/// it did.
+pub fn set_exclude_newer_in_document(
+    document: &mut toml_edit::Table,
+    exclude_newer: &mut Option<ExcludeNewerConfig>,
+    key: &str,
+    value: Option<String>,
+) -> Result<bool, ConfigEditError> {
+    let changed = set_exclude_newer(exclude_newer, key, value)?;
+    if changed {
+        write_exclude_newer_edit(document, key, exclude_newer.as_ref())?;
+    }
+    Ok(changed)
+}
+
+/// Writes the edit of `key`, a key of `exclude-newer`, into `document`.
+/// `edited` is `exclude-newer` after the edit, as [`set_exclude_newer`]
+/// leaves it, and only the value of `key` is taken from it.
+fn write_exclude_newer_edit(
+    document: &mut toml_edit::Table,
+    key: &str,
+    edited: Option<&ExcludeNewerConfig>,
+) -> Result<(), ConfigEditError> {
+    let Some(edited) = edited else {
+        document.remove(EXCLUDE_NEWER);
+        return Ok(());
+    };
+
+    let segments = split_key(key);
+    let rest = &segments[1..];
+    let edited_in_place = !rest.is_empty()
+        && document
+            .get_mut(EXCLUDE_NEWER)
+            .and_then(|item| write_edited_value(item, rest, edited).transpose())
+            .transpose()?
+            .is_some();
+    if !edited_in_place {
+        // The whole value is replaced, e.g. when it isn't set yet.
+        let value = to_edit_value(&toml::Value::try_from(edited)?);
+        set_value(document, EXCLUDE_NEWER, value, false);
+    }
+    Ok(())
+}
+
+/// Writes the value of the key `rest` inside `exclude_newer` from `edited`.
+/// Returns `None` if `exclude_newer` doesn't have the shape the key needs.
+fn write_edited_value(
+    exclude_newer: &mut Item,
+    rest: &[String],
+    edited: &ExcludeNewerConfig,
+) -> Result<Option<()>, ConfigEditError> {
+    let new_value = edited_value(edited, rest)?;
+    expand_string(exclude_newer, "cutoff");
+    let mut inline = exclude_newer.is_inline_table();
+    let Some(table) = exclude_newer.as_table_like_mut() else {
+        return Ok(None);
+    };
+
+    let (leaf, parents) = rest
+        .split_last()
+        .expect("the key is inside `exclude-newer`");
+    let mut current: Option<&mut dyn TableLike> = Some(table);
+    for (depth, segment) in parents.iter().enumerate() {
+        let Some(table) = current else { break };
+        let spelling = existing_spelling(table, rest, depth).unwrap_or_else(|| segment.clone());
+        let child = match new_value {
+            Some(_) => {
+                let child = table
+                    .entry(&spelling)
+                    .or_insert_with(|| Item::Value(InlineTable::new().into()));
+                if is_exemption(rest, depth) {
+                    expand_string(child, "version");
+                }
+                if !child.is_table_like() {
+                    return Ok(None);
+                }
+                Some(child)
+            }
+            // Nothing is removed from a key that isn't set, or from a value
+            // that isn't a table, e.g. a field of a version-only exemption.
+            None => table
+                .get_mut(&spelling)
+                .filter(|child| child.is_table_like()),
+        };
+        inline |= child.as_ref().is_some_and(|child| child.is_inline_table());
+        current = child.and_then(Item::as_table_like_mut);
+    }
+    if let Some(current) = current {
+        let spelling =
+            existing_spelling(current, rest, parents.len()).unwrap_or_else(|| leaf.clone());
+        match new_value {
+            Some(value) => set_value(current, &spelling, to_edit_value(&value), inline),
+            None => remove_key(current, &spelling, inline),
+        }
+    }
+
+    let table = exclude_newer
+        .as_table_like_mut()
+        .expect("the type of `exclude-newer` is unchanged");
+    if table
+        .get("exemptions")
+        .and_then(Item::as_table_like)
+        .is_some_and(TableLike::is_empty)
+    {
+        table.remove("exemptions");
+    }
+    // Without exemptions, an inline value is written as its cutoff alone. A
+    // table keeps its header, as replacing it would drop the comments in and
+    // above it.
+    if edited.exemptions.is_empty()
+        && table.len() == 1
+        && let Item::Value(value) = exclude_newer
+    {
+        let decor = value.decor().clone();
+        *value = edited.cutoff.as_str().into();
+        *value.decor_mut() = decor;
+    }
+    Ok(Some(()))
+}
+
+/// The value of the key `rest` inside `exclude-newer` after the edit, or
+/// `None` if it is not set.
+fn edited_value(
+    edited: &ExcludeNewerConfig,
+    rest: &[String],
+) -> Result<Option<toml::Value>, ConfigEditError> {
+    Ok(match rest {
+        [cutoff] if cutoff == "cutoff" => Some(toml::Value::String(edited.cutoff.to_string())),
+        [exemptions] if exemptions == "exemptions" => (!edited.exemptions.is_empty())
+            .then(|| toml::Value::try_from(&edited.exemptions))
+            .transpose()?,
+        [exemptions, name, field @ ..] if exemptions == "exemptions" => {
+            let Some(exemption) = PackageName::from_str(name)
+                .ok()
+                .and_then(|name| edited.exemptions.get(&name))
+            else {
+                return Ok(None);
+            };
+            if field.is_empty() {
+                Some(toml::Value::try_from(exemption)?)
+            } else {
+                // A field is looked up in the table form, as an exemption
+                // that is a version spec only is written on its own.
+                let mut value = toml::Value::try_from(ExemptionTable::from(exemption))?;
+                for segment in field {
+                    match value {
+                        toml::Value::Table(mut table) => match table.remove(segment) {
+                            Some(next) => value = next,
+                            None => return Ok(None),
+                        },
+                        _ => return Ok(None),
+                    }
+                }
+                Some(value)
+            }
+        }
+        _ => None,
+    })
+}
+
+/// Is the segment of `rest` at `depth` the name of an exemption?
+fn is_exemption(rest: &[String], depth: usize) -> bool {
+    depth == 1 && rest[0] == "exemptions"
+}
+
+/// The key of `table` that the segment of `rest` at `depth` addresses, as it
+/// is written. Exemptions are matched by their normalized package name.
+fn existing_spelling(table: &dyn TableLike, rest: &[String], depth: usize) -> Option<String> {
+    let segment = &rest[depth];
+    if table.contains_key(segment) {
+        return Some(segment.clone());
+    }
+    if !is_exemption(rest, depth) {
+        return None;
+    }
+    let name = PackageName::from_str(segment).ok()?;
+    table
+        .iter()
+        .map(|(existing, _)| existing)
+        .find(|existing| PackageName::from_str(existing).ok().as_ref() == Some(&name))
+        .map(str::to_string)
+}
+
+/// Expands a string value into an inline table that holds it as `key`, e.g.
+/// the cutoff `"7d"` into `{ cutoff = "7d" }`, keeping its decor.
+fn expand_string(item: &mut Item, key: &str) {
+    if let Item::Value(value @ toml_edit::Value::String(_)) = item {
+        let decor = value.decor().clone();
+        let mut string = std::mem::replace(value, InlineTable::new().into());
+        string.decor_mut().clear();
+        let table = value.as_inline_table_mut().expect("just replaced");
+        table.insert(key, string);
+        *value.decor_mut() = decor;
+    }
+}
+
+/// Sets `key` of `table` to `value`, keeping the comments around a value it
+/// replaces. A table it replaces is removed, as its key is written as a table
+/// header. In an inline table, a new last value takes over the trailing
+/// whitespace of the previous one, e.g. adding `b` to `{ a = "1" }` gives
+/// `{ a = "1", b = "2" }` rather than `{ a = "1" , b = "2" }`.
+fn set_value(table: &mut dyn TableLike, key: &str, mut value: toml_edit::Value, inline: bool) {
+    match table.get_mut(key) {
+        Some(Item::Value(existing)) => {
+            *value.decor_mut() = existing.decor().clone();
+            *existing = value;
+        }
+        Some(_) => {
+            table.remove(key);
+            table.insert(key, Item::Value(value));
+        }
+        None => {
+            if inline
+                && let Some((_, Item::Value(last))) = table.iter_mut().last()
+                && let Some(suffix) = last.decor().suffix().cloned()
+            {
+                last.decor_mut().set_suffix("");
+                value.decor_mut().set_suffix(suffix);
+            }
+            table.insert(key, Item::Value(value));
+        }
+    }
+}
+
+/// Removes `key` from `table`. In an inline table, the value before the last
+/// one takes over its trailing whitespace, e.g. `{ a = "1", b = "2" }` becomes
+/// `{ a = "1" }` rather than `{ a = "1"}`.
+fn remove_key(table: &mut dyn TableLike, key: &str, inline: bool) {
+    let keys: Vec<String> = table.iter().map(|(k, _)| k.to_string()).collect();
+    let previous = match keys.as_slice() {
+        [.., previous, last] if last == key => Some(previous.clone()),
+        _ => None,
+    };
+    let Some(Item::Value(removed)) = table.remove(key) else {
+        return;
+    };
+    if inline
+        && let Some(previous) = previous
+        && let Some(Item::Value(previous)) = table.get_mut(&previous)
+    {
+        let suffix = removed
+            .decor()
+            .suffix()
+            .cloned()
+            .unwrap_or_else(|| " ".into());
+        previous.decor_mut().set_suffix(suffix);
+    }
+}
+
+/// Converts a TOML value into a value of a `toml_edit` document.
+fn to_edit_value(value: &toml::Value) -> toml_edit::Value {
+    value
+        .to_string()
+        .parse()
+        .expect("a serialized TOML value parses")
+}
+
 impl<T> ConfigBase<T>
 where
     T: Config,
@@ -350,6 +663,265 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Edits `key` of the configuration file `document` with
+    /// [`set_exclude_newer_in_document`] and checks that the written document
+    /// loads the edited `exclude-newer`, and is unchanged if it is.
+    fn edit_document(document: &str, key: &str, value: Option<&str>) -> String {
+        let (config, _) = ConfigBase::<NoExtension>::from_toml_str(document).unwrap();
+        let mut exclude_newer = config.common.exclude_newer;
+        let mut edited: toml_edit::DocumentMut = document.parse().unwrap();
+        let changed = set_exclude_newer_in_document(
+            edited.as_table_mut(),
+            &mut exclude_newer,
+            key,
+            value.map(str::to_string),
+        )
+        .unwrap();
+        let written = edited.to_string();
+        let (reloaded, _) = ConfigBase::<NoExtension>::from_toml_str(&written).unwrap();
+        assert_eq!(reloaded.common.exclude_newer, exclude_newer);
+        assert_eq!(changed, written != document, "{key}");
+        written
+    }
+
+    #[test]
+    fn write_exclude_newer_edit_keeps_comments_and_layout() {
+        let document = r#"# Packages
+default-channels = ["conda-forge"]
+
+[exclude-newer]
+cutoff = "7d" # a week
+[exclude-newer.exemptions]
+# keep ruff current
+ruff = "*"
+numpy = ">=2" # pinned
+
+[concurrency]
+solves = 2
+"#;
+        let document = edit_document(document, "exclude-newer.cutoff", Some("14d"));
+        let document = edit_document(
+            &document,
+            "exclude-newer.exemptions.numpy.build",
+            Some("py3*"),
+        );
+        let document = edit_document(&document, "exclude-newer.exemptions.Polars", Some("==1"));
+        let document = edit_document(&document, "exclude-newer.exemptions.RUFF", Some(">=0.5"));
+        assert_eq!(
+            document,
+            r#"# Packages
+default-channels = ["conda-forge"]
+
+[exclude-newer]
+cutoff = "14d" # a week
+[exclude-newer.exemptions]
+# keep ruff current
+ruff = ">=0.5"
+numpy = { version = ">=2", build = "py3*" } # pinned
+Polars = "==1"
+
+[concurrency]
+solves = 2
+"#
+        );
+
+        let document = edit_document(&document, "exclude-newer.exemptions.numpy.build", None);
+        let document = edit_document(&document, "exclude-newer.exemptions.polars", None);
+        assert_eq!(
+            document,
+            r#"# Packages
+default-channels = ["conda-forge"]
+
+[exclude-newer]
+cutoff = "14d" # a week
+[exclude-newer.exemptions]
+# keep ruff current
+ruff = ">=0.5"
+numpy = { version = ">=2" } # pinned
+
+[concurrency]
+solves = 2
+"#
+        );
+    }
+
+    #[test]
+    fn write_exclude_newer_edit_of_a_bare_cutoff() {
+        let document = "exclude-newer = \"7d\" # a week\n";
+        let document = edit_document(document, "exclude-newer.exemptions.ruff", Some("*"));
+        assert_eq!(
+            document,
+            "exclude-newer = { cutoff = \"7d\", exemptions = { ruff = \"*\" } } # a week\n"
+        );
+        let document = edit_document(
+            &document,
+            "exclude-newer.exemptions.ruff.build",
+            Some("py*"),
+        );
+        assert_eq!(
+            document,
+            "exclude-newer = { cutoff = \"7d\", exemptions = { ruff = { version = \"*\", build = \"py*\" } } } # a week\n"
+        );
+
+        // Without exemptions, the cutoff is written on its own.
+        let document = edit_document(&document, "exclude-newer.exemptions.Ruff", None);
+        assert_eq!(document, "exclude-newer = \"7d\" # a week\n");
+        let document = edit_document(&document, "exclude-newer.cutoff", Some("1d"));
+        assert_eq!(document, "exclude-newer = \"1d\" # a week\n");
+    }
+
+    #[test]
+    fn write_exclude_newer_edit_keeps_a_table_without_exemptions() {
+        let document = r#"# Packages
+# a week back
+[exclude-newer]
+cutoff = "7d" # a week
+
+[exclude-newer.exemptions]
+ruff = "*"
+
+[concurrency]
+solves = 2
+"#;
+        let document = edit_document(document, "exclude-newer.exemptions.ruff", None);
+        assert_eq!(
+            document,
+            r#"# Packages
+# a week back
+[exclude-newer]
+cutoff = "7d" # a week
+
+[concurrency]
+solves = 2
+"#
+        );
+        let document =
+            "exclude-newer.cutoff = \"7d\" # a week\nexclude-newer.exemptions.ruff = \"*\"\n";
+        let document = edit_document(document, "exclude-newer.exemptions", None);
+        assert_eq!(document, "exclude-newer.cutoff = \"7d\" # a week\n");
+    }
+
+    #[test]
+    fn write_exclude_newer_edit_adds_to_an_inline_table() {
+        let document = "exclude-newer = { cutoff = \"7d\", exemptions = { ruff = \"*\" } }\n";
+        let document = edit_document(document, "exclude-newer.exemptions.numpy", Some(">=2"));
+        assert_eq!(
+            document,
+            "exclude-newer = { cutoff = \"7d\", exemptions = { ruff = \"*\", numpy = \">=2\" } }\n"
+        );
+    }
+
+    #[test]
+    fn write_exclude_newer_edit_unsets_a_field_that_is_not_set() {
+        for document in [
+            "exclude-newer = { cutoff = \"7d\", exemptions = { ruff = \"*\" } }\n",
+            "[exclude-newer]\ncutoff = \"7d\"\n\n[exclude-newer.exemptions]\nruff = \"*\" # pinned\n",
+        ] {
+            for key in [
+                "exclude-newer.exemptions.numpy.build",
+                "exclude-newer.exemptions.ruff.build",
+                "exclude-newer.exemptions.numpy",
+            ] {
+                assert_eq!(edit_document(document, key, None), document, "{key}");
+            }
+        }
+        let document = "exclude-newer = \"7d\" # a week\n";
+        assert_eq!(
+            edit_document(document, "exclude-newer.exemptions.ruff.build", None),
+            document
+        );
+    }
+
+    #[test]
+    fn write_exclude_newer_edit_sets_the_cutoff_of_a_table() {
+        let document = "offline = true\n\n[exclude-newer] # header\ncutoff = \"7d\" # a week\n";
+        assert_eq!(
+            edit_document(document, "exclude-newer.cutoff", Some("14d")),
+            "offline = true\n\n[exclude-newer] # header\ncutoff = \"14d\" # a week\n"
+        );
+        assert_eq!(
+            edit_document(document, "exclude-newer.exemptions.ruff", None),
+            document
+        );
+        let document = "exclude-newer.cutoff = \"7d\" # a week\n";
+        assert_eq!(
+            edit_document(document, "exclude-newer.cutoff", Some("14d")),
+            "exclude-newer.cutoff = \"14d\" # a week\n"
+        );
+    }
+
+    #[test]
+    fn write_exclude_newer_edit_replaces_the_last_value_of_an_inline_table() {
+        let document = "exclude-newer = { cutoff = \"7d\", exemptions = { ruff = \"*\", polars = \"==1\" } }\n";
+        let document = edit_document(document, "exclude-newer.exemptions.polars", None);
+        let document = edit_document(&document, "exclude-newer.exemptions.numpy", Some(">=2"));
+        assert_eq!(
+            document,
+            "exclude-newer = { cutoff = \"7d\", exemptions = { ruff = \"*\", numpy = \">=2\" } }\n"
+        );
+    }
+
+    #[test]
+    fn write_exclude_newer_edit_of_the_whole_value() {
+        let document = "offline = true\n";
+        let document = edit_document(document, "exclude-newer", Some("7d"));
+        assert_eq!(document, "offline = true\nexclude-newer = \"7d\"\n");
+        let document = edit_document(&document, "exclude-newer.cutoff", Some("14d"));
+        assert_eq!(document, "offline = true\nexclude-newer = \"14d\"\n");
+        let document = edit_document(&document, "exclude-newer", None);
+        assert_eq!(document, "offline = true\n");
+    }
+
+    #[test]
+    fn set_exclude_newer_rejects_other_keys() {
+        let mut exclude_newer = None;
+        for key in ["offline", "exclude-newer..cutoff", "exclude-newerx"] {
+            assert!(matches!(
+                set_exclude_newer(&mut exclude_newer, key, Some("7d".to_string())),
+                Err(ConfigEditError::UnknownKey { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn set_exclude_newer_reports_whether_it_changed() {
+        let mut exclude_newer = None;
+        assert!(
+            !set_exclude_newer(&mut exclude_newer, "exclude-newer.exemptions.ruff", None).unwrap()
+        );
+        assert!(
+            set_exclude_newer(&mut exclude_newer, "exclude-newer", Some("7d".to_string())).unwrap()
+        );
+        assert!(
+            !set_exclude_newer(
+                &mut exclude_newer,
+                "exclude-newer.cutoff",
+                Some("7d".to_string())
+            )
+            .unwrap()
+        );
+        assert!(
+            !set_exclude_newer(
+                &mut exclude_newer,
+                "exclude-newer.exemptions.ruff.build",
+                None
+            )
+            .unwrap()
+        );
+        assert!(
+            set_exclude_newer(
+                &mut exclude_newer,
+                "exclude-newer.exemptions.Ruff",
+                Some("*".to_string())
+            )
+            .unwrap()
+        );
+        assert!(
+            set_exclude_newer(&mut exclude_newer, "exclude-newer.exemptions.ruff", None).unwrap()
+        );
+        assert_eq!(exclude_newer.unwrap().exemptions.len(), 0);
+    }
 
     #[test]
     fn split_key_plain() {

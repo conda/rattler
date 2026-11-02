@@ -101,6 +101,13 @@ pub enum InvalidExemptionSpecError {
     )]
     NotPackageArchive(Url),
 
+    /// The spec combines a `url` with fields other than `md5` and `sha256`.
+    /// A `url` names one package archive, so other fields are either
+    /// redundant or make the exemption match nothing, and tools that write
+    /// an exemption of a package archive as a `url` can't keep them.
+    #[error("an exemption with a `url` can't have match spec fields other than `md5` and `sha256`")]
+    UrlWithOtherFields,
+
     /// The solver can't use the spec as an exemption.
     #[error(transparent)]
     Solver(#[from] rattler_solve::InvalidExemptionError),
@@ -132,6 +139,15 @@ pub fn validate_exemption_spec(
             .is_some();
         if !is_archive {
             return Err(InvalidExemptionSpecError::NotPackageArchive(url.clone()));
+        }
+        let archive_spec = NamelessMatchSpec {
+            url: Some(url.clone()),
+            md5: spec.md5,
+            sha256: spec.sha256,
+            ..NamelessMatchSpec::default()
+        };
+        if selecting_spec != archive_spec {
+            return Err(InvalidExemptionSpecError::UrlWithOtherFields);
         }
     }
     rattler_solve::ExcludeNewer::validate_exemption(&MatchSpec::from_nameless(
@@ -401,7 +417,7 @@ fn channel_config() -> ChannelConfig {
 /// that select records are supported.
 #[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-struct ExemptionTable {
+pub(crate) struct ExemptionTable {
     #[serde(skip_serializing_if = "Option::is_none")]
     version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -843,12 +859,13 @@ mod tests {
             openssl = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000", md5 = "00000000000000000000000000000000" }
             libfoo = { file-name = "libfoo-1-0.conda", license = "MIT", license-family = "MIT" }
             libbar = { url = "https://example.com/libbar-1-0.conda" }
+            libbaz = { url = "https://example.com/libbaz-1-0.conda", sha256 = "0000000000000000000000000000000000000000000000000000000000000000", md5 = "00000000000000000000000000000000", flags = [], cutoff = "1d" }
             torch = { flags = ["cuda*"], track-features = ["mkl"] }
             jax = { version = "*", flags = [], track-features = [] }
             "#,
         )
         .unwrap();
-        assert_eq!(document.exclude_newer.exemptions.len(), 9);
+        assert_eq!(document.exclude_newer.exemptions.len(), 10);
         document.exclude_newer.validate().unwrap();
     }
 
@@ -872,6 +889,14 @@ mod tests {
             (
                 r#"{ url = "https://example.com/ruff" }"#,
                 "the `url` of an exemption must point to a package archive",
+            ),
+            (
+                r#"{ url = "https://example.com/ruff-0.1-0.conda", version = "==0.1" }"#,
+                "an exemption with a `url` can't have match spec fields other than `md5` and `sha256`",
+            ),
+            (
+                r#"{ url = "https://example.com/ruff-0.1-0.conda", channel = "conda-forge" }"#,
+                "an exemption with a `url` can't have match spec fields other than `md5` and `sha256`",
             ),
             (
                 r#"{ version = "*", cutoff = "2026-10-12T05:00:00" }"#,
@@ -979,6 +1004,14 @@ mod tests {
             ..NamelessMatchSpec::default()
         };
         assert!(validate_exemption_spec(&name, &archive).is_ok());
+        let archive_with_version = NamelessMatchSpec {
+            version: Some(version("==0.1")),
+            ..archive
+        };
+        assert_eq!(
+            validate_exemption_spec(&name, &archive_with_version),
+            Err(InvalidExemptionSpecError::UrlWithOtherFields)
+        );
     }
 
     #[test]
