@@ -256,8 +256,10 @@ fn is_known_key(key: &str, known: &[String]) -> bool {
 /// - An exemption that consists of a version spec only, e.g.
 ///   `ruff = ">=0.5"`, is expanded into an inline table when a field of it is
 ///   edited.
-/// - Without exemptions, `exclude-newer` is written as its cutoff alone, so
-///   removing the last exemption leaves e.g. `exclude-newer = "7d"`.
+/// - Without exemptions, an inline `exclude-newer` is written as its cutoff
+///   alone, so removing the last exemption leaves e.g.
+///   `exclude-newer = "7d"`. A `[exclude-newer]` table is kept with only its
+///   `cutoff`, keeping its comments.
 ///
 /// Fails with [`ConfigEditError::UnknownKey`] if `key` is not `exclude-newer`
 /// or a key inside it.
@@ -334,7 +336,6 @@ fn write_edited_value(
         None => remove_key(current, &spelling, inline),
     }
 
-    // Without exemptions, the cutoff is written on its own.
     let table = exclude_newer
         .as_table_like_mut()
         .expect("the type of `exclude-newer` is unchanged");
@@ -345,11 +346,13 @@ fn write_edited_value(
     {
         table.remove("exemptions");
     }
-    if edited.exemptions.is_empty() && table.len() == 1 {
-        let Item::Value(value) = exclude_newer else {
-            // A table header is replaced by the whole value.
-            return Ok(None);
-        };
+    // Without exemptions, an inline value is written as its cutoff alone. A
+    // table keeps its header, as replacing it would drop the comments in and
+    // above it.
+    if edited.exemptions.is_empty()
+        && table.len() == 1
+        && let Item::Value(value) = exclude_newer
+    {
         let decor = value.decor().clone();
         *value = edited.cutoff.as_str().into();
         *value.decor_mut() = decor;
@@ -705,11 +708,30 @@ solves = 2
     }
 
     #[test]
-    fn write_exclude_newer_edit_collapses_a_table_without_exemptions() {
-        let document =
-            "[exclude-newer]\ncutoff = \"7d\"\n\n[exclude-newer.exemptions]\nruff = \"*\"\n";
+    fn write_exclude_newer_edit_keeps_a_table_without_exemptions() {
+        let document = r#"# Packages
+# a week back
+[exclude-newer]
+cutoff = "7d" # a week
+
+[exclude-newer.exemptions]
+ruff = "*"
+
+[concurrency]
+solves = 2
+"#;
         let document = edit_document(document, "exclude-newer.exemptions.ruff", None);
-        assert_eq!(document, "exclude-newer = \"7d\"\n");
+        assert_eq!(
+            document,
+            r#"# Packages
+# a week back
+[exclude-newer]
+cutoff = "7d" # a week
+
+[concurrency]
+solves = 2
+"#
+        );
     }
 
     #[test]
