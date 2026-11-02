@@ -105,9 +105,7 @@ pub enum InvalidExemptionSpecError {
     /// A `url` names one package archive, so other fields are either
     /// redundant or make the exemption match nothing, and tools that write
     /// an exemption of a package archive as a `url` can't keep them.
-    #[error(
-        "an exemption with a `url` must not specify other match spec fields than `md5` and `sha256`, the `url` already selects a single package archive"
-    )]
+    #[error("an exemption with a `url` can't have match spec fields other than `md5` and `sha256`")]
     UrlWithOtherFields,
 
     /// The solver can't use the spec as an exemption.
@@ -894,11 +892,11 @@ mod tests {
             ),
             (
                 r#"{ url = "https://example.com/ruff-0.1-0.conda", version = "==0.1" }"#,
-                "an exemption with a `url` must not specify other match spec fields than `md5` and `sha256`",
+                "an exemption with a `url` can't have match spec fields other than `md5` and `sha256`",
             ),
             (
                 r#"{ url = "https://example.com/ruff-0.1-0.conda", channel = "conda-forge" }"#,
-                "an exemption with a `url` must not specify other match spec fields than `md5` and `sha256`",
+                "an exemption with a `url` can't have match spec fields other than `md5` and `sha256`",
             ),
             (
                 r#"{ version = "*", cutoff = "2026-10-12T05:00:00" }"#,
