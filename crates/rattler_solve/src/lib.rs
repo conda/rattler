@@ -567,13 +567,29 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     /// See [`Self::locked_packages`] for the borrowing rationale.
     pub pinned_packages: Vec<&'a RepoDataRecord>,
 
-    /// Records that the solver may select but has no preference for.
+    /// Records that are candidates in the solve, without any preference.
     ///
-    /// Unlike [`Self::locked_packages`] these records are not favored, and
-    /// unlike [`Self::pinned_packages`] they are not forced into the solution.
-    /// They are simply added as extra candidates next to other packages at the
-    /// highest priority tier. For example, these may represent packages that
-    /// already exist in the prefix.
+    /// Unlike [`Self::locked_packages`], these records are not favored, and
+    /// unlike [`Self::pinned_packages`], they do not restrict the candidates
+    /// for their package. Use them for records already installed in a prefix
+    /// that may come from channels no longer in [`Self::available_packages`].
+    ///
+    /// Channel priority treats each record as if it came from the
+    /// highest-priority channel in [`Self::available_packages`] that contains
+    /// a package with the same name, or from the highest-priority channel when
+    /// none does. As a result:
+    ///
+    /// - With [`ChannelPriority::Strict`], strict channel priority never
+    ///   removes these records, and they never cause a channel record to be
+    ///   removed.
+    /// - With [`ChannelPriority::Flexible`], they compete with the records of
+    ///   that channel.
+    /// - With [`ChannelPriority::Disabled`], they compete with all records.
+    ///
+    /// A record from a lower-priority channel therefore competes with
+    /// higher-priority channels. For example, an installed `foo 3.0` from a
+    /// lower-priority channel is selected over `foo 2.0` from a higher-priority
+    /// channel.
     pub additional_packages: Vec<&'a RepoDataRecord>,
 
     /// Virtual packages considered active

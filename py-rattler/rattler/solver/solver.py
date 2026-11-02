@@ -74,12 +74,21 @@ async def solve(
                  there is a variant available in the `pinned_packages` field it
                  will always select that version no matter what even if that
                  means other packages have to be downgraded.
-        additional_packages: Records that the solver may select but has no strong
-                preference for. Unlike `locked_packages`, these packages are not
-                favored. And unlike `pinned_packages`, these packages are not forced
-                into the solution. They are added as extra candidates next to other
-                packages at the highest priority tier. This can represent currently
-                installed packages that should be updated.
+        additional_packages: Records that are candidates in the solve, without any
+                 preference. Unlike `locked_packages`, these packages are not
+                 favored. And unlike `pinned_packages`, they do not restrict the candidates
+                 for their package. Use them for records already installed in a prefix that
+                 may come from channels no longer in `available_packages`. Channel priority
+                 treats each record as if it came from the highest-priority channel channel
+                 in `available_packages` that contains a package with the same name, or from
+                 the highest-priority channel when none does. As a result:
+                   - with `ChannelPriority.Strict`, strict channel priority never removes
+                     these records, and they never cause a channel record to be removed.
+                   - with `ChannelPriority.Flexible`, they compete with records from the same channel
+                   - with `ChannelPriority.Disabled`, they compete with all records
+                 A record from a lower-priority channel therefore competes with higher-priority
+                 channels. For example, an installed `foo 3.0` from a lower-priority channel is selected
+                 over `foo 2.0` from a higher-priority channel
         virtual_packages: A list of virtual packages considered active.
         channel_priority: (Default = ChannelPriority.Strict) When `ChannelPriority.Strict`
                  the channel that the package is first found in will be used as
@@ -216,12 +225,21 @@ async def solve_with_sparse_repodata(
                  there is a variant available in the `pinned_packages` field it
                  will always select that version no matter what even if that
                  means other packages have to be downgraded.
-        additional_packages: Records that the solver may select but has no strong
-                preference for. Unlike `locked_packages`, these packages are not
-                favored. And unlike `pinned_packages`, these packages are not forced
-                into the solution. They are added as extra candidates next to other
-                packages at the highest priority tier. This can represent currently
-                installed packages that should be updated.
+        additional_packages: Records that are candidates in the solve, without any
+                 preference. Unlike `locked_packages`, these packages are not
+                 favored. And unlike `pinned_packages`, they do not restrict the candidates
+                 for their package. Use them for records already installed in a prefix that
+                 may come from channels no longer in `available_packages`. Channel priority
+                 treats each record as if it came from the highest-priority channel channel
+                 in `available_packages` that contains a package with the same name, or from
+                 the highest-priority channel when none does. As a result:
+                   - with `ChannelPriority.Strict`, strict channel priority never removes
+                     these records, and they never cause a channel record to be removed.
+                   - with `ChannelPriority.Flexible`, they compete with records from the same channel
+                   - with `ChannelPriority.Disabled`, they compete with all records
+                 A record from a lower-priority channel therefore competes with higher-priority
+                 channels. For example, an installed `foo 3.0` from a lower-priority channel is selected
+                 over `foo 2.0` from a higher-priority channel
         virtual_packages: A list of virtual packages considered active.
         channel_priority: (Default = ChannelPriority.Strict) When `ChannelPriority.Strict`
                  the channel that the package is first found in will be used as
