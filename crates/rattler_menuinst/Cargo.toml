@@ -33,7 +33,7 @@ sha2 = { workspace = true }
 hex = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-quick-xml = "0.41"
+quick-xml = "0.42"
 configparser = { version = "3" }
 shlex = { workspace = true }
 
