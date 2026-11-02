@@ -18,11 +18,7 @@
 //! let env_hash = compute_env_hash(&lockfile, "default", platform)?;
 //! let cache = PackageCache::new(default_cache_dir()?.join("pkgs"));
 //!
-//! let config = MountConfig::new_read_only(
-//!     "/path/to/env".into(),
-//!     Transport::Auto,
-//!     env_hash,
-//! );
+//! let config = MountConfig::new("/path/to/env".into(), Transport::best(), env_hash);
 //! let handle = build_and_mount(&lockfile, "default", platform, &cache, &config).await?;
 //! // Environment is live at /path/to/env.
 //! // Dropping `handle` unmounts; call `handle.unmount().await` for explicit error handling.
@@ -38,7 +34,7 @@
 //! | macOS | NFS | NFS, FUSE (requires [macFUSE]) |
 //! | Windows | [ProjFS] | `ProjFS` |
 //!
-//! [`Transport::Auto`] selects the default for the current platform.
+//! [`Transport::best`]`()` selects the default for the current platform.
 //!
 //! **Why NFS on macOS?** FUSE on macOS requires [macFUSE], a third-party
 //! kernel extension that needs System Integrity Protection (SIP) to be
@@ -273,7 +269,7 @@ pub(crate) fn path_parse(
 ///
 /// Clobbered paths (the same path shipped by two packages) resolve last-writer-
 /// wins. The caller feeds packages in topological order (see
-/// [`build_metadata_tree`]), so the winner matches what `rattler`'s installer
+/// [`MetadataTree::build`]), so the winner matches what `rattler`'s installer
 /// keeps after `unclobber`. Replacing in place keeps `readdir` duplicate-free.
 fn upsert_file_node(
     node: MetadataNode,
@@ -406,13 +402,45 @@ pub(crate) fn new_empty_tree() -> (
 // Library API: mount orchestration
 // ---------------------------------------------------------------------------
 
-/// Opaque metadata tree produced by [`build_metadata_tree`].
+/// Opaque metadata tree produced by [`MetadataTree::build`].
 ///
 /// Pass to [`mount`] or [`build_and_mount`]; the internal representation is
 /// not stable and is intentionally not exposed. The newtype wrapper means
 /// downstream consumers cannot construct one directly — guaranteeing every
-/// mount went through `build_metadata_tree`'s validation.
+/// mount went through [`MetadataTree::build`]'s validation.
 pub struct MetadataTree(pub(crate) Vec<MetadataNode>);
+
+impl MetadataTree {
+    /// Build the in-memory metadata tree from a parsed lock file.
+    ///
+    /// Fetches packages from `package_cache` as needed, reads `PathsJson` for
+    /// each, and constructs the virtual directory tree with noarch Python path
+    /// rewriting and entry-point generation.
+    ///
+    /// Caller responsibilities:
+    /// - Parse the lock file once via [`LockFile::from_path`].
+    /// - Pick a [`Subdir`] (usually [`Subdir::current()`]).
+    /// - Construct a [`PackageCache`] (commonly via
+    ///   [`rattler_cache::default_cache_dir()`]). Decoupling the cache from
+    ///   this function lets pixi share its own cache and lets tests use a temp
+    ///   dir.
+    pub async fn build(
+        lockfile: &LockFile,
+        environment_name: &str,
+        platform: Subdir,
+        package_cache: &PackageCache,
+        mount_point: &Path,
+    ) -> anyhow::Result<Self> {
+        build_metadata_tree(
+            lockfile,
+            environment_name,
+            platform,
+            package_cache,
+            mount_point,
+        )
+        .await
+    }
+}
 
 /// Transport backend for the virtual filesystem.
 ///
@@ -420,9 +448,6 @@ pub struct MetadataTree(pub(crate) Vec<MetadataNode>);
 /// has a different default.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Transport {
-    /// Auto-detect the best backend for the current platform: FUSE on Linux,
-    /// NFS on macOS, `ProjFS` on Windows.
-    Auto,
     /// `NFSv3` userspace server on localhost. Works on all platforms without
     /// kernel extensions. On Windows, constrained to port 2049 and drive letters.
     ///
@@ -430,7 +455,7 @@ pub enum Transport {
     /// granted in unprivileged user namespaces. The adapter probes for
     /// passwordless `sudo` before attempting the mount and fails fast if it's
     /// not available. On Linux, prefer [`Transport::Fuse`] unless you
-    /// specifically need NFS parity with macOS — [`Transport::Auto`] already
+    /// specifically need NFS parity with macOS — [`Transport::best`]`()` already
     /// picks FUSE.
     Nfs,
     /// FUSE via libfuse3 (Linux) or macFUSE (macOS, requires `fuse` feature).
@@ -442,29 +467,27 @@ pub enum Transport {
 }
 
 impl Transport {
-    /// Short name for state file tracking.
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Auto => "auto",
-            Self::Nfs => "nfs",
-            Self::Fuse => "fuse",
-            Self::ProjFs => "projfs",
+    /// The best transport for the current platform: `ProjFS` on Windows, NFS on
+    /// macOS, FUSE elsewhere (Linux).
+    ///
+    /// Prefer this over a catch-all `Auto` enum variant so every [`Transport`]
+    /// value names a concrete backend and callers never have to resolve one.
+    pub fn best() -> Self {
+        if cfg!(target_os = "windows") {
+            Self::ProjFs
+        } else if cfg!(target_os = "macos") {
+            Self::Nfs
+        } else {
+            Self::Fuse
         }
     }
 
-    /// Resolve `Auto` to the platform-appropriate transport.
-    pub fn resolve(self) -> Self {
+    /// Short name for state file tracking.
+    pub fn name(self) -> &'static str {
         match self {
-            Self::Auto => {
-                if cfg!(target_os = "windows") {
-                    Self::ProjFs
-                } else if cfg!(target_os = "macos") {
-                    Self::Nfs
-                } else {
-                    Self::Fuse
-                }
-            }
-            other => other,
+            Self::Nfs => "nfs",
+            Self::Fuse => "fuse",
+            Self::ProjFs => "projfs",
         }
     }
 
@@ -473,8 +496,7 @@ impl Transport {
     /// Use this at config-parse time to reject invalid combinations early
     /// instead of waiting for [`mount`] to fail at runtime.
     pub fn is_available(self) -> bool {
-        match self.resolve() {
-            Self::Auto => unreachable!("resolve() never returns Auto"),
+        match self {
             Self::Fuse => cfg!(any(target_os = "linux", feature = "fuse")),
             Self::Nfs => cfg!(feature = "nfs"),
             Self::ProjFs => cfg!(target_os = "windows"),
@@ -536,10 +558,16 @@ pub enum OverlayMismatch {
 /// Configuration for mounting a virtual environment.
 ///
 /// Marked `#[non_exhaustive]` so new fields can be added without a `SemVer`
-/// break. Construct via [`MountConfig::new_read_only`] or
-/// [`MountConfig::new_writable`], optionally chaining
-/// [`with_allow_other`](MountConfig::with_allow_other) or
-/// [`with_overlay_mismatch`](MountConfig::with_overlay_mismatch).
+/// break. Start from [`MountConfig::new`] (read-only) and customize with the
+/// chained `with_*` builders or the `&mut self` `set_*` setters, e.g.
+///
+/// ```no_run
+/// # use std::path::PathBuf;
+/// # use rattler_vfs::{MountConfig, Mode, Transport, OverlayMismatch};
+/// let config = MountConfig::new("/env".into(), Transport::best(), "sha256:…".into())
+///     .with_writable(PathBuf::from("/overlay"))
+///     .with_overlay_mismatch(OverlayMismatch::Adopt);
+/// ```
 #[non_exhaustive]
 pub struct MountConfig {
     /// Directory where the virtual environment will appear.
@@ -548,7 +576,7 @@ pub struct MountConfig {
     /// Read-only or writable, and where the overlay lives.
     pub mode: Mode,
 
-    /// Transport backend. Use [`Transport::Auto`] to let the platform decide.
+    /// Transport backend. Use [`Transport::best`]`()` to let the platform decide.
     pub transport: Transport,
 
     /// Identity hash of the resolved environment, used to detect when the
@@ -566,8 +594,12 @@ pub struct MountConfig {
 }
 
 impl MountConfig {
-    /// Read-only mount. Writes return `EROFS`.
-    pub fn new_read_only(mount_point: PathBuf, transport: Transport, env_hash: String) -> Self {
+    /// A read-only mount config with default options. Customize it with the
+    /// `with_*` (chained, by value) or `set_*` (`&mut self`) builders.
+    ///
+    /// Read-only is the safe default; call [`with_writable`](Self::with_writable)
+    /// or [`with_mode`](Self::with_mode) for a writable overlay.
+    pub fn new(mount_point: PathBuf, transport: Transport, env_hash: String) -> Self {
         Self {
             mount_point,
             mode: Mode::ReadOnly,
@@ -578,58 +610,50 @@ impl MountConfig {
         }
     }
 
-    /// Read-only if the transport supports it, otherwise writable.
-    ///
-    /// On FUSE/NFS this behaves like [`Self::new_read_only`]. On `ProjFS` —
-    /// which cannot enforce read-only, since it has no pre-creation
-    /// notification — it falls through to a writable mount (logging a warning)
-    /// instead of erroring with [`MountError::ProjFsReadOnlyUnsupported`]. Use
-    /// this for cross-platform configs where `mount-read-only = true` should
-    /// still work on Windows.
-    pub fn new_read_only_if_supported(
-        mount_point: PathBuf,
-        transport: Transport,
-        env_hash: String,
-    ) -> Self {
-        Self {
-            mount_point,
-            mode: Mode::ReadOnlyIfSupported,
-            transport,
-            env_hash,
-            allow_other: false,
-            overlay_mismatch: OverlayMismatch::Error,
-        }
+    /// Set the read-only/writable [`Mode`] (chained).
+    pub fn with_mode(mut self, mode: Mode) -> Self {
+        self.mode = mode;
+        self
     }
 
-    /// Writable mount with a persistent COW overlay.
-    ///
-    /// `overlay_dir` is required for FUSE/NFS and must be a separate directory
-    /// from `mount_point`. Pass `None` for `ProjFS` — `ProjFS` uses the mount
-    /// point itself as the virtualization root.
-    pub fn new_writable(
-        mount_point: PathBuf,
-        overlay_dir: Option<PathBuf>,
-        transport: Transport,
-        env_hash: String,
-    ) -> Self {
-        Self {
-            mount_point,
-            mode: Mode::Writable { overlay_dir },
-            transport,
-            env_hash,
-            allow_other: false,
-            overlay_mismatch: OverlayMismatch::Error,
-        }
+    /// Make the mount writable with a persistent COW overlay at `overlay_dir`
+    /// (chained). Convenience for `with_mode(Mode::Writable { overlay_dir:
+    /// Some(overlay_dir) })`; for `ProjFS`, use [`with_mode`](Self::with_mode)
+    /// with `overlay_dir: None`.
+    pub fn with_writable(mut self, overlay_dir: PathBuf) -> Self {
+        self.mode = Mode::Writable {
+            overlay_dir: Some(overlay_dir),
+        };
+        self
     }
 
-    /// Allow other users to access the mount (FUSE only).
+    /// Allow other users to access the mount (FUSE only) (chained).
     pub fn with_allow_other(mut self, allow_other: bool) -> Self {
         self.allow_other = allow_other;
         self
     }
 
-    /// Set what to do when the overlay was created for a different environment.
+    /// Set what to do when the overlay was created for a different environment
+    /// (chained).
     pub fn with_overlay_mismatch(mut self, overlay_mismatch: OverlayMismatch) -> Self {
+        self.overlay_mismatch = overlay_mismatch;
+        self
+    }
+
+    /// Set the [`Mode`] in place, returning `&mut Self` for chaining.
+    pub fn set_mode(&mut self, mode: Mode) -> &mut Self {
+        self.mode = mode;
+        self
+    }
+
+    /// Set `allow_other` in place, returning `&mut Self` for chaining.
+    pub fn set_allow_other(&mut self, allow_other: bool) -> &mut Self {
+        self.allow_other = allow_other;
+        self
+    }
+
+    /// Set `overlay_mismatch` in place, returning `&mut Self` for chaining.
+    pub fn set_overlay_mismatch(&mut self, overlay_mismatch: OverlayMismatch) -> &mut Self {
         self.overlay_mismatch = overlay_mismatch;
         self
     }
@@ -717,7 +741,7 @@ type FetchedPackage = (PathBuf, PathsJson, bool, Vec<EntryPoint>);
 /// - Construct a [`PackageCache`] (commonly via
 ///   [`rattler_cache::default_cache_dir()`]). Decoupling the cache from this
 ///   function lets pixi share its own cache and lets tests use a temp dir.
-pub async fn build_metadata_tree(
+pub(crate) async fn build_metadata_tree(
     lockfile: &LockFile,
     environment_name: &str,
     platform: Subdir,
@@ -789,6 +813,14 @@ pub async fn build_metadata_tree(
             .cmp(&a.package_record.size.unwrap_or(0))
     });
 
+    let total_packages = conda_packages.len();
+    tracing::info!(
+        environment = environment_name,
+        platform = %platform,
+        packages = total_packages,
+        "building VFS metadata tree"
+    );
+
     // Fetch + parse packages in parallel (the expensive part); tree mutation
     // stays serial. Each task carries its `conda_packages` index so results can
     // be reordered deterministically regardless of completion order.
@@ -853,10 +885,13 @@ pub async fn build_metadata_tree(
     // deterministic order so clobbering resolves the same way every run.
     let mut fetched: Vec<Option<FetchedPackage>> =
         (0..conda_packages.len()).map(|_| None).collect();
+    let mut fetched_count = 0usize;
     while let Some(result) = join_set.join_next().await {
         let (idx, cache_path, paths_json, is_noarch_python, entry_points) =
             result.map_err(|e| anyhow::anyhow!("fetch task failed: {e}"))??;
         fetched[idx] = Some((cache_path, paths_json, is_noarch_python, entry_points));
+        fetched_count += 1;
+        tracing::debug!("fetched {fetched_count}/{total_packages} packages");
     }
 
     // Build in topological order so clobbering resolves like the installer:
@@ -902,6 +937,11 @@ pub async fn build_metadata_tree(
         tracing::debug!("parsed {} metadata entries", env_paths.len());
     }
 
+    tracing::info!(
+        nodes = env_paths.len(),
+        packages = total_packages,
+        "VFS metadata tree built"
+    );
     Ok(MetadataTree(env_paths))
 }
 
@@ -952,7 +992,7 @@ fn topological_order_of_records(records: &[PackageRecord]) -> Vec<usize> {
 
 /// Mount a pre-built metadata tree. Returns a handle that unmounts on drop.
 pub async fn mount(metadata: MetadataTree, config: &MountConfig) -> anyhow::Result<MountHandle> {
-    let transport = config.transport.resolve();
+    let transport = config.transport;
 
     // ProjFS-specific pre-flight checks: DLL availability, mode validity,
     // overlay state. Done before VFS construction so we don't waste offset
@@ -1023,6 +1063,14 @@ pub async fn mount(metadata: MetadataTree, config: &MountConfig) -> anyhow::Resu
         }
     }
 
+    let read_only = matches!(config.mode, Mode::ReadOnly | Mode::ReadOnlyIfSupported);
+    tracing::info!(
+        transport = transport.name(),
+        mount_point = %config.mount_point.display(),
+        read_only,
+        "mounting virtual environment"
+    );
+
     // Construct the VirtualFS once. Each transport branch consumes it.
     // VFS construction does eager prefix-offset computation, so we want
     // exactly one call per mount.
@@ -1030,9 +1078,9 @@ pub async fn mount(metadata: MetadataTree, config: &MountConfig) -> anyhow::Resu
 
     match transport {
         #[cfg(feature = "nfs")]
-        Transport::Nfs => Ok(MountHandle::Nfs(mount_nfs(vfs, config).await?)),
+        Transport::Nfs => Ok(MountHandle::Nfs(nfs_adapter::mount_nfs(vfs, config).await?)),
         #[cfg(any(target_os = "linux", feature = "fuse"))]
-        Transport::Fuse => Ok(MountHandle::Fuse(mount_fuse(vfs, config)?)),
+        Transport::Fuse => Ok(MountHandle::Fuse(fuse_adapter::mount_fuse(vfs, config)?)),
         #[cfg(target_os = "windows")]
         Transport::ProjFs => {
             let adapter = projfs_adapter::ProjFsAdapter::new(vfs);
@@ -1167,185 +1215,6 @@ pub fn compute_env_hash(
     Ok(format!("sha256:{}", hex::encode(hasher.finalize())))
 }
 
-// ---------------------------------------------------------------------------
-// Internal: transport-specific mount helpers
-// ---------------------------------------------------------------------------
-
-/// Mount via FUSE, with optional writable overlay.
-///
-/// The overlay is retried once if the env hash mismatches (environment updated).
-#[cfg(any(target_os = "linux", feature = "fuse"))]
-fn mount_fuse(vfs: VirtualFS, config: &MountConfig) -> anyhow::Result<fuser::BackgroundSession> {
-    use fuse_adapter::FuseAdapter;
-    use fuser::{Config as FuserConfig, MountOption, SessionACL};
-
-    let mut fuser_config = FuserConfig::default();
-    fuser_config.mount_options = vec![
-        MountOption::FSName("conda-packages".to_string()),
-        MountOption::NoAtime,
-    ];
-    if matches!(config.mode, Mode::ReadOnly | Mode::ReadOnlyIfSupported) {
-        fuser_config.mount_options.push(MountOption::RO);
-    }
-    if config.allow_other {
-        fuser_config.acl = SessionACL::All;
-    }
-
-    match &config.mode {
-        Mode::Writable {
-            overlay_dir: Some(overlay_dir),
-        } => {
-            let overlay = create_overlay(
-                vfs,
-                overlay_dir,
-                &config.env_hash,
-                "fuse",
-                config.overlay_mismatch,
-            )?;
-            let adapter = FuseAdapter::new(overlay);
-            Ok(fuser::spawn_mount(
-                adapter,
-                &config.mount_point,
-                &fuser_config,
-            )?)
-        }
-        Mode::Writable { overlay_dir: None } => {
-            anyhow::bail!(
-                "FUSE writable mode requires an overlay directory. Use \
-                 MountConfig::new_writable(.., Some(overlay_dir), ..) or \
-                 MountConfig::new_read_only(..) for a read-only mount."
-            );
-        }
-        Mode::ReadOnly | Mode::ReadOnlyIfSupported => {
-            let adapter = FuseAdapter::new(vfs);
-            Ok(fuser::spawn_mount(
-                adapter,
-                &config.mount_point,
-                &fuser_config,
-            )?)
-        }
-    }
-}
-
-/// Mount via NFS, with optional writable overlay.
-///
-/// The overlay is retried once if the env hash mismatches (environment updated).
-#[cfg(feature = "nfs")]
-async fn mount_nfs(
-    vfs: VirtualFS,
-    config: &MountConfig,
-) -> anyhow::Result<nfs_adapter::NfsMountHandle> {
-    use nfs_adapter::NfsAdapter;
-
-    let read_only = matches!(config.mode, Mode::ReadOnly | Mode::ReadOnlyIfSupported);
-
-    let bind_port = 0u16;
-
-    let server_handle = match &config.mode {
-        Mode::Writable {
-            overlay_dir: Some(overlay_dir),
-        } => {
-            let overlay = create_overlay(
-                vfs,
-                overlay_dir,
-                &config.env_hash,
-                "nfs",
-                config.overlay_mismatch,
-            )?;
-            NfsAdapter::new(overlay).serve(bind_port).await?
-        }
-        Mode::Writable { overlay_dir: None } => {
-            anyhow::bail!(
-                "NFS writable mode requires an overlay directory. Use \
-                 MountConfig::new_writable(.., Some(overlay_dir), ..) or \
-                 MountConfig::new_read_only(..) for a read-only mount."
-            );
-        }
-        Mode::ReadOnly | Mode::ReadOnlyIfSupported => NfsAdapter::new(vfs).serve(bind_port).await?,
-    };
-
-    let port = server_handle.port();
-
-    // `soft` with a bounded timeout so a dead userspace NFS server (e.g. the
-    // sidecar crashed) surfaces EIO to clients instead of wedging them in
-    // uninterruptible D-state on every access, which a hard mount would. The
-    // server is always local, so the usual soft-mount data-loss caveat is moot:
-    // if it dies, the mount is gone regardless. timeo is in deciseconds.
-    let mut opts = format!(
-        "noacl,nolock,soft,timeo=100,retrans=3,vers=3,tcp,port={port},mountport={port},rsize=1048576"
-    );
-    if read_only {
-        opts.push_str(",actimeo=3600,ro");
-    } else {
-        opts.push_str(",wsize=1048576");
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        let mnt = config.mount_point.display().to_string();
-        let status = tokio::process::Command::new("mount_nfs")
-            .args(["-o", &opts, "localhost:/", &mnt])
-            .status()
-            .await?;
-        if !status.success() {
-            server_handle.abort();
-            anyhow::bail!("NFS mount failed with exit status {status}");
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let mnt = config.mount_point.display().to_string();
-        // Probe passwordless sudo first — `mount -t nfs` needs CAP_SYS_ADMIN
-        // which isn't available in unprivileged user namespaces, so there's no
-        // userspace fallback we can reach for. Fail loudly instead of letting
-        // sudo prompt interactively (terrible UX in `pixi run`).
-        //
-        // TODO(bind-mount): investigate `unshare -Urm` + `mount --bind` as a
-        // rootless alternative transport on Linux. That would work in rootless
-        // containers where neither FUSE nor sudo is available.
-        let probe = tokio::process::Command::new("sudo")
-            .args(["-n", "true"])
-            .status()
-            .await;
-        match probe {
-            Ok(s) if s.success() => {}
-            _ => {
-                server_handle.abort();
-                return Err(MountError::SudoRequired.into());
-            }
-        }
-
-        let status = tokio::process::Command::new("sudo")
-            .args(["mount", "-t", "nfs", "-o", &opts, "localhost:/", &mnt])
-            .status()
-            .await?;
-        if !status.success() {
-            server_handle.abort();
-            anyhow::bail!("NFS mount failed with exit status {status}");
-        }
-    }
-
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    {
-        server_handle.abort();
-        anyhow::bail!("NFS mount is not supported on this platform. Use ProjFS on Windows.");
-    }
-
-    // Only reachable on the NFS-capable targets; on other platforms the block
-    // above diverges, so gate the success tail to avoid unreachable-code errors.
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    {
-        tracing::info!("mounted via NFS on {}", config.mount_point.display());
-
-        Ok(nfs_adapter::NfsMountHandle {
-            mount_point: config.mount_point.clone(),
-            server_handle,
-            unmounted: false,
-        })
-    }
-}
-
 /// Create an overlay, wiping and retrying transparently on state-version
 /// mismatch (internal schema change). Returns a structured error on env-hash
 /// mismatch so the caller can decide whether to wipe — the overlay may contain
@@ -1354,7 +1223,7 @@ async fn mount_nfs(
 /// Acquires the directory lock once and carries it through the wipe-and-retry
 /// path so no other process can sneak in between the wipe and the reload.
 #[cfg(any(feature = "nfs", target_os = "linux", feature = "fuse"))]
-fn create_overlay(
+pub(crate) fn create_overlay(
     vfs: VirtualFS,
     overlay_dir: &Path,
     env_hash: &str,
@@ -1426,7 +1295,7 @@ fn create_overlay(
 /// | macOS | FUSE / NFS | `umount -f` |
 /// | Windows | `ProjFS` | Not yet supported — returns an error |
 ///
-/// Pass [`Transport::Auto`] to use the platform default.
+/// Pass [`Transport::best`]`()` to use the platform default.
 ///
 /// **NFS on Linux note:** `umount -f` requires `CAP_SYS_ADMIN`.  If
 /// passwordless sudo is not available, this will fail.  Consider switching
@@ -1438,7 +1307,6 @@ fn create_overlay(
 /// A future version may support re-attaching to an existing virtualization
 /// root.
 pub fn force_unmount(mount_point: &Path, transport: Transport) -> anyhow::Result<()> {
-    let transport = transport.resolve();
     let mnt = mount_point.display().to_string();
 
     match transport {

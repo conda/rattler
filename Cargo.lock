@@ -6076,6 +6076,7 @@ dependencies = [
  "rattler_conda_types",
  "rattler_lock",
  "rattler_networking",
+ "rayon",
  "reflink-copy",
  "serde",
  "serde_json",

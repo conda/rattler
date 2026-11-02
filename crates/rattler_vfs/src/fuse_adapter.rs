@@ -21,7 +21,7 @@ use std::{
     time::Duration,
 };
 
-use crate::vfs_ops::{ContentSource, FileAttr, FileKind, VfsOps};
+use crate::vfs_ops::{ContentSource, Fh, FileAttr, FileKind, VfsOps};
 
 // ---------------------------------------------------------------------------
 // Conversions between crate-local types and fuser types
@@ -70,7 +70,7 @@ enum OpenFileContent {
     Passthrough { _backing_id: Arc<fuser::BackingId> },
     /// VFS-managed handle (overlay writable files). Reads/writes/release
     /// must be delegated back to the VFS using this key.
-    VfsManaged(u64),
+    VfsManaged(Fh),
     /// Inode-based reads for transformed/virtual content. Each `read()`
     /// call delegates to `VfsOps::read(ino, offset, size)`.
     InodeRead(u64),
@@ -126,7 +126,7 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                 let fattr: fuser::FileAttr = attr.into();
                 reply.entry(&Duration::MAX, &fattr, fuser::Generation(0));
             }
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
@@ -136,14 +136,14 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                 let fattr: fuser::FileAttr = attr.into();
                 reply.attr(&Duration::MAX, &fattr);
             }
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
     fn readlink(&self, _req: &Request, ino: INodeNo, reply: ReplyData) {
         match self.vfs.readlink(ino.0) {
             Ok(target) => reply.data(target.as_os_str().as_encoded_bytes()),
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
@@ -160,7 +160,7 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                     let fh = self.store_content(OpenFileContent::VfsManaged(vfs_fh));
                     reply.opened(FileHandle(fh), FopenFlags::empty());
                 }
-                Err(e) => reply.error(Errno::from_i32(e)),
+                Err(e) => reply.error(Errno::from_i32(e.errno())),
             }
             return;
         }
@@ -292,7 +292,7 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                 drop(lock); // release adapter lock before calling into VFS
                 match self.vfs.read_handle(vfs_fh, offset, size) {
                     Ok(data) => reply.data(&data),
-                    Err(e) => reply.error(Errno::from_i32(e)),
+                    Err(e) => reply.error(Errno::from_i32(e.errno())),
                 }
             }
             OpenFileContent::InodeRead(ino) => {
@@ -300,7 +300,7 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                 drop(lock); // release adapter lock before calling into VFS
                 match self.vfs.read(ino, offset, size) {
                     Ok(data) => reply.data(&data),
-                    Err(e) => reply.error(Errno::from_i32(e)),
+                    Err(e) => reply.error(Errno::from_i32(e.errno())),
                 }
             }
             _ => match content.as_bytes() {
@@ -359,7 +359,7 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                 }
                 reply.ok();
             }
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
@@ -387,7 +387,7 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                     FopenFlags::empty(),
                 );
             }
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
@@ -413,14 +413,14 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
         };
         match self.vfs.write(vfs_fh, offset, data) {
             Ok(written) => reply.written(written),
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
     fn unlink(&self, _req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEmpty) {
         match self.vfs.unlink(parent.0, name) {
             Ok(()) => reply.ok(),
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
@@ -438,14 +438,14 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                 let fattr: fuser::FileAttr = attr.into();
                 reply.entry(&Duration::MAX, &fattr, fuser::Generation(0));
             }
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
     fn rmdir(&self, _req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEmpty) {
         match self.vfs.rmdir(parent.0, name) {
             Ok(()) => reply.ok(),
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
@@ -464,7 +464,7 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
             .rename(parent.0, name, newparent.0, newname, flags.bits())
         {
             Ok(()) => reply.ok(),
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
         }
     }
 
@@ -491,7 +491,71 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                 let fattr: fuser::FileAttr = attr.into();
                 reply.attr(&Duration::MAX, &fattr);
             }
-            Err(e) => reply.error(Errno::from_i32(e)),
+            Err(e) => reply.error(Errno::from_i32(e.errno())),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Mount helper (moved from lib.rs — issue #2576)
+// ---------------------------------------------------------------------------
+
+use crate::{Mode, MountConfig, VirtualFS, create_overlay};
+
+/// Mount via FUSE, with optional writable overlay.
+///
+/// The overlay is retried once if the env hash mismatches (environment updated).
+#[cfg(any(target_os = "linux", feature = "fuse"))]
+pub(crate) fn mount_fuse(
+    vfs: VirtualFS,
+    config: &MountConfig,
+) -> anyhow::Result<fuser::BackgroundSession> {
+    use fuser::{Config as FuserConfig, MountOption, SessionACL};
+
+    let mut fuser_config = FuserConfig::default();
+    fuser_config.mount_options = vec![
+        MountOption::FSName("conda-packages".to_string()),
+        MountOption::NoAtime,
+    ];
+    if matches!(config.mode, Mode::ReadOnly | Mode::ReadOnlyIfSupported) {
+        fuser_config.mount_options.push(MountOption::RO);
+    }
+    if config.allow_other {
+        fuser_config.acl = SessionACL::All;
+    }
+
+    match &config.mode {
+        Mode::Writable {
+            overlay_dir: Some(overlay_dir),
+        } => {
+            let overlay = create_overlay(
+                vfs,
+                overlay_dir,
+                &config.env_hash,
+                "fuse",
+                config.overlay_mismatch,
+            )?;
+            let adapter = FuseAdapter::new(overlay);
+            Ok(fuser::spawn_mount(
+                adapter,
+                &config.mount_point,
+                &fuser_config,
+            )?)
+        }
+        Mode::Writable { overlay_dir: None } => {
+            anyhow::bail!(
+                "FUSE writable mode requires an overlay directory. Use \
+                 MountConfig::new(..).with_writable(overlay_dir) or \
+                 MountConfig::new(..) for a read-only mount."
+            );
+        }
+        Mode::ReadOnly | Mode::ReadOnlyIfSupported => {
+            let adapter = FuseAdapter::new(vfs);
+            Ok(fuser::spawn_mount(
+                adapter,
+                &config.mount_point,
+                &fuser_config,
+            )?)
         }
     }
 }
