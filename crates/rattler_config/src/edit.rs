@@ -301,54 +301,41 @@ pub fn set_exclude_newer_in_document(
     key: &str,
     value: Option<String>,
 ) -> Result<bool, ConfigEditError> {
-    let changed = set_exclude_newer(exclude_newer, key, value)?;
-    if changed {
-        write_exclude_newer_edit(document, key, exclude_newer.as_ref())?;
+    if !set_exclude_newer(exclude_newer, key, value)? {
+        return Ok(false);
     }
-    Ok(changed)
-}
-
-/// Writes the edit of `key`, a key of `exclude-newer`, into `document`.
-/// `edited` is `exclude-newer` after the edit, as [`set_exclude_newer`]
-/// leaves it, and only the value of `key` is taken from it.
-fn write_exclude_newer_edit(
-    document: &mut toml_edit::Table,
-    key: &str,
-    edited: Option<&ExcludeNewerConfig>,
-) -> Result<(), ConfigEditError> {
-    let Some(edited) = edited else {
+    let Some(edited) = exclude_newer.as_ref() else {
         document.remove(EXCLUDE_NEWER);
-        return Ok(());
+        return Ok(true);
     };
 
     let segments = split_key(key);
     let rest = &segments[1..];
     let edited_in_place = !rest.is_empty()
-        && document
-            .get_mut(EXCLUDE_NEWER)
-            .and_then(|item| write_edited_value(item, rest, edited).transpose())
-            .transpose()?
-            .is_some();
+        && match document.get_mut(EXCLUDE_NEWER) {
+            Some(item) => write_edited_value(item, rest, edited)?,
+            None => false,
+        };
     if !edited_in_place {
         // The whole value is replaced, e.g. when it isn't set yet.
         let value = to_edit_value(&toml::Value::try_from(edited)?);
         set_value(document, EXCLUDE_NEWER, value, false);
     }
-    Ok(())
+    Ok(true)
 }
 
 /// Writes the value of the key `rest` inside `exclude_newer` from `edited`.
-/// Returns `None` if `exclude_newer` doesn't have the shape the key needs.
+/// Returns `false` if `exclude_newer` doesn't have the shape the key needs.
 fn write_edited_value(
     exclude_newer: &mut Item,
     rest: &[String],
     edited: &ExcludeNewerConfig,
-) -> Result<Option<()>, ConfigEditError> {
+) -> Result<bool, ConfigEditError> {
     let new_value = edited_value(edited, rest)?;
     expand_string(exclude_newer, "cutoff");
     let mut inline = exclude_newer.is_inline_table();
     let Some(table) = exclude_newer.as_table_like_mut() else {
-        return Ok(None);
+        return Ok(false);
     };
 
     let (leaf, parents) = rest
@@ -367,7 +354,7 @@ fn write_edited_value(
                     expand_string(child, "version");
                 }
                 if !child.is_table_like() {
-                    return Ok(None);
+                    return Ok(false);
                 }
                 Some(child)
             }
@@ -410,7 +397,7 @@ fn write_edited_value(
         *value = edited.cutoff.as_str().into();
         *value.decor_mut() = decor;
     }
-    Ok(Some(()))
+    Ok(true)
 }
 
 /// The value of the key `rest` inside `exclude-newer` after the edit, or
@@ -436,17 +423,11 @@ fn edited_value(
             } else {
                 // A field is looked up in the table form, as an exemption
                 // that is a version spec only is written on its own.
-                let mut value = toml::Value::try_from(ExemptionTable::from(exemption))?;
-                for segment in field {
-                    match value {
-                        toml::Value::Table(mut table) => match table.remove(segment) {
-                            Some(next) => value = next,
-                            None => return Ok(None),
-                        },
-                        _ => return Ok(None),
-                    }
-                }
-                Some(value)
+                let table = toml::Value::try_from(ExemptionTable::from(exemption))?;
+                field
+                    .iter()
+                    .try_fold(&table, |value, segment| value.get(segment))
+                    .cloned()
             }
         }
         _ => None,
