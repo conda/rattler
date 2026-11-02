@@ -301,24 +301,12 @@ pub fn set_exclude_newer_in_document(
     key: &str,
     value: Option<String>,
 ) -> Result<bool, ConfigEditError> {
-    let changed = set_exclude_newer(exclude_newer, key, value)?;
-    if changed {
-        write_exclude_newer_edit(document, key, exclude_newer.as_ref())?;
+    if !set_exclude_newer(exclude_newer, key, value)? {
+        return Ok(false);
     }
-    Ok(changed)
-}
-
-/// Writes the edit of `key`, a key of `exclude-newer`, into `document`.
-/// `edited` is `exclude-newer` after the edit, as [`set_exclude_newer`]
-/// leaves it, and only the value of `key` is taken from it.
-fn write_exclude_newer_edit(
-    document: &mut toml_edit::Table,
-    key: &str,
-    edited: Option<&ExcludeNewerConfig>,
-) -> Result<(), ConfigEditError> {
-    let Some(edited) = edited else {
+    let Some(edited) = exclude_newer.as_ref() else {
         document.remove(EXCLUDE_NEWER);
-        return Ok(());
+        return Ok(true);
     };
 
     let segments = split_key(key);
@@ -333,7 +321,7 @@ fn write_exclude_newer_edit(
         let value = to_edit_value(&toml::Value::try_from(edited)?);
         set_value(document, EXCLUDE_NEWER, value, false);
     }
-    Ok(())
+    Ok(true)
 }
 
 /// Writes the value of the key `rest` inside `exclude_newer` from `edited`.
