@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ConfigEditError"]};
+window.SIDEBAR_ITEMS = {"enum":["ConfigEditError"],"fn":["set_exclude_newer","set_exclude_newer_in_document"]};
