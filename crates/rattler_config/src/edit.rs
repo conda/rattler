@@ -436,17 +436,11 @@ fn edited_value(
             } else {
                 // A field is looked up in the table form, as an exemption
                 // that is a version spec only is written on its own.
-                let mut value = toml::Value::try_from(ExemptionTable::from(exemption))?;
-                for segment in field {
-                    match value {
-                        toml::Value::Table(mut table) => match table.remove(segment) {
-                            Some(next) => value = next,
-                            None => return Ok(None),
-                        },
-                        _ => return Ok(None),
-                    }
-                }
-                Some(value)
+                let table = toml::Value::try_from(ExemptionTable::from(exemption))?;
+                field
+                    .iter()
+                    .try_fold(&table, |value, segment| value.get(segment))
+                    .cloned()
             }
         }
         _ => None,
