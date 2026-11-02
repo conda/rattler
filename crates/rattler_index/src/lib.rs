@@ -2308,9 +2308,6 @@ pub async fn ensure_channel_initialized_s3_with_channel_metadata(
 }
 
 #[cfg(test)]
-mod archive_reader_tests;
-
-#[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
