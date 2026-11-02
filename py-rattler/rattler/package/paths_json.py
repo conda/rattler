@@ -210,6 +210,24 @@ class PathsJson:
         """
         return "PathsJson()"
 
+    def to_json(self) -> str:
+        """
+        Returns a JSON string representation of the PathsJson.
+
+        Examples
+        --------
+        ```python
+        >>> paths = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
+        ... )
+        >>> json_data = paths.to_json()
+        >>> "paths" in json_data
+        True
+        >>>
+        ```
+        """
+        return self._inner.to_json()
+
 
 class PathsEntry:
     """
