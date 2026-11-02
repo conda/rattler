@@ -419,7 +419,7 @@ fn channel_config() -> ChannelConfig {
 /// that select records are supported.
 #[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-struct ExemptionTable {
+pub(crate) struct ExemptionTable {
     #[serde(skip_serializing_if = "Option::is_none")]
     version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
