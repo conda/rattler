@@ -44,6 +44,12 @@
       matchDepNames: ["getrandom_v03"],
       allowedVersions: "<0.4",
     },
+    {
+      description: "pyo3-ffi links the native Python library, so a build can contain only one pyo3 version. Crates that depend on pyo3 must therefore be updated together.",
+      matchManagers: ["cargo"],
+      matchPackageNames: ["pyo3", "pyo3-*", "pythonize"],
+      groupName: "pyo3",
+    },
   ],
   vulnerabilityAlerts: {
     commitMessageSuffix: "",
