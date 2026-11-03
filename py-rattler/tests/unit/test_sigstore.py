@@ -40,6 +40,7 @@ def test_verification_policy() -> None:
     assert policy.channel_check == ChannelCheck.WARN
     assert policy.max_sidecar_size == 1024
     assert Issuer.gitlab().url == "https://gitlab.com"
+    assert Issuer.codeberg().url == "https://codeberg.org/api/actions"
 
 
 def test_trusted_root_from_json() -> None:
