@@ -93,13 +93,14 @@ impl AsyncWriteGuard {
             let Some(mut file) = self.file.take() else {
                 return Ok(());
             };
-            // Write the ready state (in a blocking task)
+            // Write the ready state and release lock (in a blocking task)
             tokio::task::spawn_blocking(move || -> io::Result<()> {
                 file.seek(SeekFrom::Start(0))?;
                 let bytes = serde_json::to_vec(&GuardState::Ready)?;
                 file.write_all(&bytes)?;
                 file.set_len(bytes.len() as u64)?;
                 file.flush()?;
+                let _ = unlock(&file);
                 Ok(())
             })
             .await
@@ -295,5 +296,140 @@ mod sys {
                 Ok(())
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Duration;
+
+    use tempfile::TempDir;
+    use tokio::sync::Barrier;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_guard_lifecycle_clean_install() {
+        let temp_dir = TempDir::new().unwrap();
+        let prefix = temp_dir.path().join("prefix");
+
+        // 1. Initial creation of guard
+        let guard = AsyncPrefixGuard::new(&prefix).await.unwrap();
+        let guard_file_path = prefix.join(GUARD_PATH);
+        assert!(guard_file_path.parent().unwrap().exists());
+
+        // 2. Acquire exclusive write lock
+        let mut write_guard = guard.write().await.unwrap();
+        assert!(!write_guard.is_ready());
+
+        // 3. Mark state as installing
+        write_guard.begin().await.unwrap();
+        assert!(!write_guard.is_ready());
+
+        // 4. Finish installation and release lock
+        write_guard.finish().await.unwrap();
+
+        // 5. Verify ready state persisted on disk
+        let content = fs::read_to_string(&guard_file_path).unwrap();
+        assert!(content.contains("ready"));
+    }
+
+    #[tokio::test]
+    async fn test_guard_interrupted_install_remains_not_ready() {
+        let temp_dir = TempDir::new().unwrap();
+        let prefix = temp_dir.path().join("prefix");
+
+        // Step 1: Start install and drop write guard without calling finish() (simulates crash/cancellation)
+        {
+            let guard = AsyncPrefixGuard::new(&prefix).await.unwrap();
+            let mut write_guard = guard.write().await.unwrap();
+            write_guard.begin().await.unwrap();
+            // dropped here without finishing
+        }
+
+        // Step 2: Next guard must see it is NOT ready
+        let second_guard = AsyncPrefixGuard::new(&prefix).await.unwrap();
+        let second_write = second_guard.write().await.unwrap();
+        assert!(!second_write.is_ready());
+    }
+
+    #[tokio::test]
+    async fn test_guard_corrupt_file_recovery() {
+        let temp_dir = TempDir::new().unwrap();
+        let prefix = temp_dir.path().join("prefix");
+        fs::create_dir_all(&prefix).unwrap();
+
+        // Write arbitrary invalid JSON to guard file
+        let guard_file_path = prefix.join(GUARD_PATH);
+        fs::write(&guard_file_path, b"CORRUPTED_JSON_DATA_NON_UTF8\xFF\xFE").unwrap();
+
+        // AsyncWriteGuard should recover gracefully with GuardState::Unknown (not ready)
+        let guard = AsyncPrefixGuard::new(&prefix).await.unwrap();
+        let mut write_guard = guard.write().await.unwrap();
+        assert!(!write_guard.is_ready());
+
+        // Begin and finish can successfully heal/overwrite the corrupted file
+        write_guard.begin().await.unwrap();
+        write_guard.finish().await.unwrap();
+
+        let healed_guard = AsyncPrefixGuard::new(&prefix).await.unwrap();
+        let healed_write = healed_guard.write().await.unwrap();
+        assert!(healed_write.is_ready());
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_exclusive_mutual_exclusion() {
+        let temp_dir = TempDir::new().unwrap();
+        let prefix = Arc::new(temp_dir.path().join("prefix"));
+
+        // Ensure prefix dir exists
+        fs::create_dir_all(&*prefix).unwrap();
+
+        let barrier = Arc::new(Barrier::new(2));
+        let flag = Arc::new(AtomicBool::new(false));
+
+        let prefix_clone = Arc::clone(&prefix);
+        let barrier_clone = Arc::clone(&barrier);
+        let flag_clone = Arc::clone(&flag);
+
+        // Task 1 acquires the lock and holds it for 200ms
+        let handle1 = tokio::spawn(async move {
+            let guard = AsyncPrefixGuard::new(&prefix_clone).await.unwrap();
+            let mut write_guard = guard.write().await.unwrap();
+            write_guard.begin().await.unwrap();
+
+            flag_clone.store(true, Ordering::SeqCst);
+            barrier_clone.wait().await;
+
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            flag_clone.store(false, Ordering::SeqCst);
+            write_guard.finish().await.unwrap();
+        });
+
+        // Task 2 waits for barrier, tries to acquire lock; must wait until Task 1 finishes
+        let prefix_clone2 = Arc::clone(&prefix);
+        let barrier_clone2 = Arc::clone(&barrier);
+        let flag_clone2 = Arc::clone(&flag);
+
+        let handle2 = tokio::spawn(async move {
+            barrier_clone2.wait().await;
+            // Short delay to let task 1 definitely be inside holding the lock
+            tokio::time::sleep(Duration::from_millis(50)).await;
+
+            let guard = AsyncPrefixGuard::new(&prefix_clone2).await.unwrap();
+            let write_guard = guard.write().await.unwrap();
+
+            // When task 2 gets the lock, flag must have been set to false by Task 1
+            let state_when_acquired = flag_clone2.load(Ordering::SeqCst);
+            assert!(!state_when_acquired);
+            assert!(write_guard.is_ready());
+        });
+
+        let (res1, res2) = tokio::join!(handle1, handle2);
+        res1.unwrap();
+        res2.unwrap();
     }
 }
