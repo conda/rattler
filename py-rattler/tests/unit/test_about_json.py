@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from rattler import AboutJson
 
 
@@ -19,6 +21,37 @@ def test_about_json_extra_metadata() -> None:
     about.extra = updated
 
     assert about.extra == updated
+
+
+def test_about_json_extra_conversion() -> None:
+    about = AboutJson.from_str("{}")
+
+    about.extra = {
+        "flag": False,
+        "count": 2**63,
+        "ratio": 0.5,
+        "missing": None,
+        "pair": (1, True),
+        "order": {"z": 1, "a": 2},
+    }
+
+    assert about.extra == {
+        "flag": False,
+        "count": 2**63,
+        "ratio": 0.5,
+        "missing": None,
+        "pair": [1, True],
+        "order": {"z": 1, "a": 2},
+    }
+    assert type(about.extra["flag"]) is bool
+    assert list(about.extra["order"]) == ["z", "a"]
+
+    with pytest.raises(TypeError, match="keys must be strings"):
+        about.extra = {"nested": {1: "one"}}
+    with pytest.raises(TypeError, match="unsupported type 'object'"):
+        about.extra = {"value": object()}
+    with pytest.raises(ValueError):
+        about.extra = ["not", "a", "mapping"]  # ty: ignore[invalid-assignment]
 
 
 def test_about_json_to_json(test_data_dir: str) -> None:

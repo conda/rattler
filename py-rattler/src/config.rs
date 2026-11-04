@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use pyo3::{exceptions::PyValueError, prelude::*, pyclass, pymethods};
-use pythonize::pythonize;
 use rattler_config::{
     Config, ConfigBase,
     config::{run_post_link_scripts::RunPostLinkScripts, tls::TlsRootCerts},
@@ -36,10 +35,7 @@ impl From<PyConfig> for ConfigBase {
     }
 }
 
-/// Serialize a `serde` value into a Python object.
-fn to_py<'py, T: serde::Serialize>(py: Python<'py>, value: &T) -> PyResult<Bound<'py, PyAny>> {
-    pythonize(py, value).map_err(|err| PyValueError::new_err(err.to_string()))
-}
+use crate::serde_py::to_py;
 
 #[pymethods]
 impl PyConfig {
