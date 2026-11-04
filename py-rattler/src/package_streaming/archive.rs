@@ -42,7 +42,7 @@ fn parse_section(section: &str) -> PyResult<Section> {
 
 /// A conda package archive (local or remote) that is opened once and can then
 /// be read many times.
-#[pyclass(skip_from_py_object)]
+#[pyclass]
 #[derive(Clone)]
 pub struct PyPackageArchive {
     inner: PackageArchive,

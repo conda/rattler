@@ -3,11 +3,14 @@ use std::path::PathBuf;
 use pyo3::exceptions::PyValueError;
 use pyo3::{Bound, Py, PyAny, PyErr, PyResult, Python, pyclass, pymethods};
 use pyo3_async_runtimes::tokio::future_into_py;
-use pythonize::{depythonize, pythonize};
 use rattler_conda_types::package::{AboutJson, PackageFile};
 use url::Url;
 
-use crate::{error::PyRattlerError, networking::client::PyClientWithMiddleware};
+use crate::{
+    error::PyRattlerError,
+    networking::client::PyClientWithMiddleware,
+    serde_py::{from_py, to_py},
+};
 
 /// The `about.json` file contains metadata about the package
 #[pyclass(from_py_object)]
@@ -174,13 +177,12 @@ impl PyAboutJson {
     /// Extra metadata that was passed during the build
     #[getter]
     pub fn extra<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        pythonize(py, &self.inner.extra).map_err(|err| PyValueError::new_err(err.to_string()))
+        to_py(py, &self.inner.extra)
     }
 
     #[setter]
     pub fn set_extra(&mut self, value: Bound<'_, PyAny>) -> PyResult<()> {
-        self.inner.extra =
-            depythonize(&value).map_err(|err| PyValueError::new_err(err.to_string()))?;
+        self.inner.extra = from_py(&value)?;
         Ok(())
     }
 

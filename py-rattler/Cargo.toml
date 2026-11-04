@@ -73,7 +73,6 @@ pyo3 = { version = "0.30", features = [
   "jiff-02",
 ] }
 pyo3-async-runtimes = { version = "0.30", features = ["tokio-runtime"] }
-pythonize = "0.29"
 tokio = { version = "1", features = ["sync"] }
 
 reqwest = { version = "0.13", default-features = false }
@@ -92,7 +91,7 @@ pep508_rs = "0.9"
 serde = "1"
 serde_json = "1"
 tracing = "0.1"
-pyo3-file = "0.17"
+pyo3-file = "0.18"
 nix = { version = "0.31", features = ["process"], optional = true }
 
 [build-dependencies]
