@@ -119,7 +119,7 @@ fn try_detect_libc_version() -> Result<Option<(String, Version)>, DetectLibCErro
             return Ok(Some((String::from("glibc"), version)));
         }
 
-        // The glibc dynamic loader is executable even on minimal Yocto images.
+        // The glibc dynamic loader can be available even when userspace utilities are absent.
         for path in glibc_loader_paths() {
             if let Ok(output) = std::process::Command::new(path).arg("--version").output()
                 && output.status.success()
