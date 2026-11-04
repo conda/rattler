@@ -260,7 +260,7 @@ mod test {
 
     #[test]
     fn test_glibc_loader_version() {
-        let output = "ld.so (GNU libc) stable release version 2.39.\\nCopyright (C) 2024 Free Software Foundation, Inc.\n";
+        let output = "ld.so (GNU libc) stable release version 2.39.\nCopyright (C) 2024 Free Software Foundation, Inc.\n";
         assert_eq!(
             parse_glibc_loader_version(output).unwrap(),
             Some(Version::from_str("2.39").unwrap())
