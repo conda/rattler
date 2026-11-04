@@ -2,8 +2,8 @@ use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, ParseMatchSpecOptions, RepoDataRecord,
 };
 use rattler_solve::{
-    ChannelPriority, ChannelRepoData, ExcludeNewer, SolveError, SolveStrategy, SolverImpl,
-    SolverTask,
+    ChannelPriority, ChannelRepoData, ExcludeNewer, FlagPreference, SolveError, SolveStrategy,
+    SolverImpl, SolverTask,
 };
 use std::collections::HashMap;
 
@@ -31,6 +31,7 @@ pub struct SolverCase<'a> {
     exclude_newer: Option<ExcludeNewer>,
     strategy: SolveStrategy,
     dependency_overrides: Vec<(MatchSpec, MatchSpec)>,
+    flag_preferences: Vec<FlagPreference>,
     expect_present: Vec<PkgMatcher>,
     expect_absent: Vec<PkgMatcher>,
     expect_extras: HashMap<String, Vec<String>>,
@@ -66,6 +67,7 @@ impl<'a> SolverCase<'a> {
             exclude_newer: None,
             strategy: SolveStrategy::default(),
             dependency_overrides: Vec::new(),
+            flag_preferences: Vec::new(),
             expect_present: Vec::new(),
             expect_absent: Vec::new(),
             expect_extras: HashMap::new(),
@@ -186,6 +188,15 @@ impl<'a> SolverCase<'a> {
         self
     }
 
+    /// Sets the preferences for or against flagged variants.
+    pub fn flag_preferences(
+        mut self,
+        flag_preferences: impl IntoIterator<Item = FlagPreference>,
+    ) -> Self {
+        self.flag_preferences = flag_preferences.into_iter().collect();
+        self
+    }
+
     /// Registers packages that must appear in the solver result.
     pub fn expect_present<I, M>(mut self, pkgs: I) -> Self
     where
@@ -243,6 +254,7 @@ impl<'a> SolverCase<'a> {
             strategy: self.strategy,
             channel_priority: self.channel_priority,
             dependency_overrides: self.dependency_overrides.clone(),
+            flag_preferences: self.flag_preferences.clone(),
             ..self
                 .repositories
                 .iter()

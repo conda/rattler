@@ -167,6 +167,12 @@ impl super::SolverImpl for Solver {
             ]));
         }
 
+        if !task.flag_preferences.is_empty() {
+            return Err(SolveError::UnsupportedOperations(vec![
+                "flag_preferences".to_string(),
+            ]));
+        }
+
         for spec in task.specs.iter().chain(task.constraints.iter()) {
             ensure_matchspec_flags_supported(spec)?;
         }
