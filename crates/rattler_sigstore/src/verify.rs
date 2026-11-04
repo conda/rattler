@@ -19,6 +19,13 @@
 //!
 //! Which signing identities are trusted is decided afterwards by the
 //! [`VerificationPolicy`].
+//!
+//! Bundles are normally signed with the Sigstore public-good instance and
+//! recorded in its transparency log. GitHub signs attestations of private and
+//! internal repositories with its own instance instead, which keeps no log:
+//! such a bundle carries an RFC 3161 timestamp from GitHub's timestamp
+//! authority and is verified against GitHub's trusted root (see
+//! [`TrustedRoots`] and [`VerificationConfig::with_github_attestations`]).
 
 use jiff::Timestamp;
 use rattler_conda_types::RepoDataRecord;
@@ -29,14 +36,17 @@ use sigstore_types::{Artifact, Bundle, SignatureContent, TransparencyLogEntry, i
 use sigstore_verify::{
     VerificationPolicy as SigstoreVerificationPolicy, VerificationResult, Verifier,
     crypto::{CertificateInfo, FulcioCiClaims},
-    trust_root::{SigstoreInstance, TrustedRoot},
+    trust_root::{SigstoreInstance, TrustedRoot, TufConfig},
 };
 use tokio::sync::OnceCell;
 use url::Url;
 
 use crate::{
     error::{SigstoreError, SigstoreResult},
-    policy::{ChannelCheck, Publisher, VerificationPolicy, normalize_channel_url},
+    policy::{
+        ChannelCheck, Issuer, Publisher, VerificationConfig, VerificationPolicy,
+        normalize_channel_url,
+    },
     sidecar::{AttestationSidecar, fetch_sidecar},
 };
 
@@ -101,6 +111,11 @@ pub struct VerifiedAttestation {
     pub log_entry: Option<TransparencyLogEntry>,
     /// Which parts of the Sigstore verification were performed.
     pub checks: VerifiedChecks,
+    /// The Sigstore instance whose trusted root the bundle verified against:
+    /// [`SigstoreInstance::PublicGood`], or [`SigstoreInstance::GitHub`] for
+    /// an attestation of a private or internal GitHub repository, which is not
+    /// recorded in a public transparency log.
+    pub instance: SigstoreInstance,
     /// Non-fatal observations made during verification.
     pub warnings: Vec<String>,
 }
@@ -180,6 +195,53 @@ pub struct BundleVerification {
     pub rejected: Vec<RejectedAttestation>,
 }
 
+/// The trusted roots bundles are verified against.
+///
+/// Bundles with a transparency log entry are verified against the public-good
+/// root. Bundles without one can only come from GitHub's artifact attestation
+/// instance, which GitHub uses for private and internal repositories; they are
+/// verified against the GitHub root when one is provided and rejected
+/// otherwise.
+///
+#[derive(Debug, Clone, Copy)]
+pub struct TrustedRoots<'a> {
+    public_good: &'a TrustedRoot,
+    github: Option<&'a TrustedRoot>,
+}
+
+impl<'a> TrustedRoots<'a> {
+    /// Roots that only trust the public-good instance.
+    pub fn new(public_good: &'a TrustedRoot) -> Self {
+        Self {
+            public_good,
+            github: None,
+        }
+    }
+
+    /// Also trust GitHub's artifact attestation instance, whose bundles carry
+    /// no transparency log entry.
+    pub fn with_github(mut self, github: &'a TrustedRoot) -> Self {
+        self.github = Some(github);
+        self
+    }
+
+    /// The root bundles with a transparency log entry are verified against.
+    pub fn public_good(&self) -> &'a TrustedRoot {
+        self.public_good
+    }
+
+    /// The root of GitHub's artifact attestation instance, if trusted.
+    pub fn github(&self) -> Option<&'a TrustedRoot> {
+        self.github
+    }
+}
+
+impl<'a> From<&'a TrustedRoot> for TrustedRoots<'a> {
+    fn from(public_good: &'a TrustedRoot) -> Self {
+        Self::new(public_good)
+    }
+}
+
 /// Process-wide cache of the Sigstore production trusted root.
 ///
 /// Loading the root performs network I/O (TUF), so it is done once per
@@ -196,6 +258,29 @@ pub async fn production_trusted_root() -> SigstoreResult<&'static TrustedRoot> {
                 .map_err(|err| SigstoreError::TrustedRoot(err.to_string()))
         })
         .await
+}
+
+/// Process-wide cache of the trusted root of GitHub's artifact attestation
+/// instance.
+static GITHUB_TRUSTED_ROOT: OnceCell<TrustedRoot> = OnceCell::const_new();
+
+/// Returns the trusted root of GitHub's artifact attestation instance, which
+/// GitHub signs attestations of private and internal repositories with,
+/// fetching it through GitHub's TUF repository on first use.
+pub async fn github_trusted_root() -> SigstoreResult<&'static TrustedRoot> {
+    GITHUB_TRUSTED_ROOT
+        .get_or_try_init(|| async {
+            TrustedRoot::from_tuf(TufConfig::github())
+                .await
+                .map_err(|err| SigstoreError::TrustedRoot(err.to_string()))
+        })
+        .await
+}
+
+/// Returns true if `bundle` carries no transparency log entry, which is the
+/// case for bundles signed by GitHub's artifact attestation instance.
+fn lacks_transparency_log_entry(bundle: &Bundle) -> bool {
+    bundle.verification_material.tlog_entries.is_empty()
 }
 
 /// Returns the trusted root snapshot that is embedded in the binary.
@@ -216,11 +301,34 @@ pub fn embedded_trusted_root() -> SigstoreResult<TrustedRoot> {
 /// This performs Sigstore verification with the record's `sha256` as the
 /// artifact digest followed by the CEP 27 statement checks. It does not apply
 /// any trust policy: use the identities and issuers in the result for that.
+///
+/// Only `trusted_root` is trusted, so bundles without a transparency log
+/// entry (attestations of private GitHub repositories) are rejected. Use
+/// [`verify_bundles_with_trusted_roots`] to also trust GitHub's instance.
 pub fn verify_bundles(
     record: &RepoDataRecord,
     bundles: &[Bundle],
     channel_check: ChannelCheck,
     trusted_root: &TrustedRoot,
+) -> SigstoreResult<BundleVerification> {
+    verify_bundles_with_trusted_roots(
+        record,
+        bundles,
+        channel_check,
+        TrustedRoots::new(trusted_root),
+    )
+}
+
+/// Like [`verify_bundles`], but with the roots of several Sigstore instances.
+///
+/// Bundles without a transparency log entry are only accepted when
+/// `trusted_roots` includes GitHub's root, and only for GitHub Actions
+/// identities. See [`TrustedRoots`].
+pub fn verify_bundles_with_trusted_roots(
+    record: &RepoDataRecord,
+    bundles: &[Bundle],
+    channel_check: ChannelCheck,
+    trusted_roots: TrustedRoots<'_>,
 ) -> SigstoreResult<BundleVerification> {
     let filename = record.identifier.to_file_name();
     let sha256 = record
@@ -234,16 +342,34 @@ pub fn verify_bundles(
     );
     let expected_channel = expected_channel(record);
 
-    let verifier =
-        Verifier::new(trusted_root).map_err(|err| SigstoreError::TrustedRoot(err.to_string()))?;
-    // Publisher policy is applied separately to the verified identities.
-    let sigstore_policy = SigstoreVerificationPolicy::any_identity();
+    let public_good = InstanceVerifier::public_good(trusted_roots.public_good)?;
+    // Only build the GitHub verifier when a bundle needs it.
+    let github = match trusted_roots.github {
+        Some(root) if bundles.iter().any(lacks_transparency_log_entry) => {
+            Some(InstanceVerifier::github(root)?)
+        }
+        _ => None,
+    };
 
     let mut result = BundleVerification::default();
     for (index, bundle) in bundles.iter().enumerate() {
+        let instance = if lacks_transparency_log_entry(bundle) {
+            let Some(github) = &github else {
+                result.rejected.push(RejectedAttestation {
+                    index,
+                    reason: "the bundle has no transparency log entry, as signed by \
+                             GitHub's artifact attestation instance for private \
+                             repositories, which is not trusted"
+                        .to_string(),
+                });
+                continue;
+            };
+            github
+        } else {
+            &public_good
+        };
         match verify_bundle(
-            &verifier,
-            &sigstore_policy,
+            instance,
             artifact.clone(),
             bundle,
             &filename,
@@ -260,18 +386,76 @@ pub fn verify_bundles(
     Ok(result)
 }
 
+/// A verifier for the bundles of one Sigstore instance.
+struct InstanceVerifier {
+    instance: SigstoreInstance,
+    verifier: Verifier,
+    policy: SigstoreVerificationPolicy,
+}
+
+impl InstanceVerifier {
+    fn public_good(trusted_root: &TrustedRoot) -> SigstoreResult<Self> {
+        Ok(Self {
+            instance: SigstoreInstance::PublicGood,
+            verifier: Verifier::new(trusted_root)
+                .map_err(|err| SigstoreError::TrustedRoot(err.to_string()))?,
+            // Publisher policy is applied separately to the verified identities.
+            policy: SigstoreVerificationPolicy::any_identity(),
+        })
+    }
+
+    /// GitHub's instance keeps neither a transparency log nor a certificate
+    /// transparency log. The signing time is established by the RFC 3161
+    /// timestamp instead, which the verifier requires when there is no log
+    /// entry.
+    fn github(trusted_root: &TrustedRoot) -> SigstoreResult<Self> {
+        Ok(Self {
+            instance: SigstoreInstance::GitHub,
+            verifier: Verifier::new(trusted_root)
+                .map_err(|err| SigstoreError::TrustedRoot(err.to_string()))?,
+            policy: SigstoreVerificationPolicy::any_identity()
+                .skip_tlog_unsafe()
+                .skip_sct(),
+        })
+    }
+}
+
+/// Returns true if `issuer` is the GitHub Actions OIDC issuer, including the
+/// per-enterprise issuers of the form `<issuer>/<enterprise>`.
+fn is_github_actions_issuer(issuer: &str) -> bool {
+    let github_actions = Issuer::github_actions();
+    let github_actions = github_actions.as_str();
+    issuer == github_actions
+        || issuer
+            .strip_prefix(github_actions)
+            .is_some_and(|rest| rest.starts_with('/'))
+}
+
 fn verify_bundle(
-    verifier: &Verifier,
-    sigstore_policy: &SigstoreVerificationPolicy,
+    instance: &InstanceVerifier,
     artifact: Artifact<'_>,
     bundle: &Bundle,
     filename: &str,
     expected_channel: Option<&Url>,
     channel_check: ChannelCheck,
 ) -> Result<VerifiedAttestation, String> {
-    let outcome = verifier
-        .verify(artifact, bundle, sigstore_policy)
+    let outcome = instance
+        .verifier
+        .verify(artifact, bundle, &instance.policy)
         .map_err(|err| format!("sigstore verification failed: {err}"))?;
+
+    // Without a public log, nothing would reveal a certificate GitHub's
+    // instance issued for an identity it does not own, so only accept the
+    // identities GitHub itself vouches for.
+    if instance.instance == SigstoreInstance::GitHub
+        && !outcome.issuer().is_some_and(is_github_actions_issuer)
+    {
+        return Err(format!(
+            "the bundle was signed by GitHub's artifact attestation instance for issuer {}, \
+             but that instance is only trusted for GitHub Actions identities",
+            outcome.issuer().unwrap_or("<unknown issuer>")
+        ));
+    }
 
     let statement = statement_of(bundle)?;
     let target_channel = validate_statement(&statement, filename)?;
@@ -307,6 +491,7 @@ fn verify_bundle(
         certificate: outcome.certificate().cloned(),
         log_entry: bundle.verification_material.tlog_entries.first().cloned(),
         checks: VerifiedChecks::new(&outcome, bundle),
+        instance: instance.instance,
         warnings,
     })
 }
@@ -431,15 +616,66 @@ pub async fn verify_record(
         Ok(root) => root,
         Err(err) => return lenient(policy, err),
     };
-    verify_record_with_trusted_root(policy, record, client, trusted_root).await
+    verify_record_impl(
+        policy,
+        record,
+        client,
+        TrustedRoots::new(trusted_root),
+        FetchGithubRoot::IfNeeded,
+    )
+    .await
 }
 
 /// Like [`verify_record`] but with an explicitly provided trusted root.
+///
+/// Only `trusted_root` is trusted, so bundles without a transparency log
+/// entry (attestations of private GitHub repositories) are rejected. Use
+/// [`verify_record_with_trusted_roots`] to also trust GitHub's instance.
 pub async fn verify_record_with_trusted_root(
     policy: &VerificationPolicy,
     record: &RepoDataRecord,
     client: &ClientWithMiddleware,
     trusted_root: &TrustedRoot,
+) -> SigstoreResult<VerificationOutcome> {
+    verify_record_with_trusted_roots(policy, record, client, TrustedRoots::new(trusted_root)).await
+}
+
+/// Like [`verify_record`] but with explicitly provided trusted roots, without
+/// fetching any root over the network.
+///
+/// Bundles without a transparency log entry (attestations of private GitHub
+/// repositories) are rejected unless a GitHub root is added with
+/// [`TrustedRoots::with_github`].
+pub async fn verify_record_with_trusted_roots(
+    policy: &VerificationPolicy,
+    record: &RepoDataRecord,
+    client: &ClientWithMiddleware,
+    trusted_roots: TrustedRoots<'_>,
+) -> SigstoreResult<VerificationOutcome> {
+    verify_record_impl(
+        policy,
+        record,
+        client,
+        trusted_roots,
+        FetchGithubRoot::Never,
+    )
+    .await
+}
+
+/// Whether [`verify_record_impl`] may fetch GitHub's trusted root when the
+/// provided roots lack it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FetchGithubRoot {
+    IfNeeded,
+    Never,
+}
+
+async fn verify_record_impl(
+    policy: &VerificationPolicy,
+    record: &RepoDataRecord,
+    client: &ClientWithMiddleware,
+    mut trusted_roots: TrustedRoots<'_>,
+    fetch_github_root: FetchGithubRoot,
 ) -> SigstoreResult<VerificationOutcome> {
     let Some(config) = policy.config() else {
         return Ok(VerificationOutcome::default());
@@ -456,13 +692,23 @@ pub async fn verify_record_with_trusted_root(
         Err(err) => return lenient(policy, err),
     };
 
-    let outcome = apply_policy(
-        record,
-        &sidecar,
-        config.publisher(),
-        config.channel_check(),
-        trusted_root,
-    );
+    if !config.github_attestations() {
+        trusted_roots.github = None;
+    } else if trusted_roots.github.is_none()
+        && fetch_github_root == FetchGithubRoot::IfNeeded
+        && sidecar.bundles.iter().any(lacks_transparency_log_entry)
+    {
+        // Only reach out to GitHub's TUF repository when a bundle needs it. A
+        // failure only affects those bundles, which are then rejected.
+        match github_trusted_root().await {
+            Ok(root) => trusted_roots.github = Some(root),
+            Err(err) => tracing::warn!(
+                "failed to load the trusted root of GitHub's artifact attestation instance: {err}"
+            ),
+        }
+    }
+
+    let outcome = apply_policy(record, &sidecar, config, trusted_roots);
     match outcome {
         Ok(outcome) => Ok(outcome),
         Err(err) => lenient(policy, err),
@@ -486,11 +732,16 @@ fn record_metadata_error(record: &RepoDataRecord) -> Option<SigstoreError> {
 fn apply_policy(
     record: &RepoDataRecord,
     sidecar: &AttestationSidecar,
-    publisher: &Publisher,
-    channel_check: ChannelCheck,
-    trusted_root: &TrustedRoot,
+    config: &VerificationConfig,
+    trusted_roots: TrustedRoots<'_>,
 ) -> SigstoreResult<VerificationOutcome> {
-    let verification = verify_bundles(record, &sidecar.bundles, channel_check, trusted_root)?;
+    let publisher: &Publisher = config.publisher();
+    let verification = verify_bundles_with_trusted_roots(
+        record,
+        &sidecar.bundles,
+        config.channel_check(),
+        trusted_roots,
+    )?;
 
     let mut reasons: Vec<String> = verification
         .rejected

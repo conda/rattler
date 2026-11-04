@@ -173,6 +173,10 @@ pub struct VerificationConfig {
 
     /// How `targetChannel` is checked.
     channel_check: ChannelCheck,
+
+    /// Whether bundles from GitHub's artifact attestation instance are
+    /// accepted.
+    github_attestations: bool,
 }
 
 impl VerificationConfig {
@@ -185,6 +189,7 @@ impl VerificationConfig {
             publisher,
             max_sidecar_size: DEFAULT_MAX_SIDECAR_SIZE,
             channel_check: ChannelCheck::default(),
+            github_attestations: true,
         }
     }
 
@@ -203,6 +208,28 @@ impl VerificationConfig {
     pub fn with_channel_check(mut self, channel_check: ChannelCheck) -> Self {
         self.channel_check = channel_check;
         self
+    }
+
+    /// Sets whether attestations signed by GitHub's artifact attestation
+    /// instance are accepted. Enabled by default.
+    ///
+    /// GitHub signs attestations of private and internal repositories with its
+    /// own Sigstore instance, which keeps no public transparency log so that
+    /// nothing about the repository is published. Such a bundle carries an
+    /// RFC 3161 timestamp from GitHub's timestamp authority instead of a log
+    /// entry, so trusting it means trusting GitHub's certificate and timestamp
+    /// authorities without public auditability. Only certificates issued for
+    /// GitHub Actions identities are accepted from this instance; the
+    /// [`Publisher`] constraints apply as usual.
+    pub fn with_github_attestations(mut self, enabled: bool) -> Self {
+        self.github_attestations = enabled;
+        self
+    }
+
+    /// Whether attestations signed by GitHub's artifact attestation instance
+    /// are accepted. See [`Self::with_github_attestations`].
+    pub fn github_attestations(&self) -> bool {
+        self.github_attestations
     }
 
     /// The maximum sidecar size in bytes.
