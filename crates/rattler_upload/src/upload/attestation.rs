@@ -4,12 +4,13 @@
 
 use base64::Engine;
 use miette::{IntoDiagnostic, WrapErr};
+use rattler_sigstore::GitHubActionsIssuer;
 use reqwest::header;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sigstore_sign::{Attestation, SigningContext, SigningServices, oidc::IdentityToken};
-use sigstore_trust_root::SigningConfig as TufSigningConfig;
+use sigstore_trust_root::{SigningConfig as TufSigningConfig, SigstoreInstance};
 use std::path::Path;
 
 pub use crate::upload::opt::SigstoreInstanceChoice;
@@ -64,36 +65,6 @@ fn github_token_claims(token: &IdentityToken) -> Option<GitHubTokenClaims> {
     serde_json::from_slice(&bytes).ok()
 }
 
-/// Returns true if `issuer` is a GitHub Actions issuer:
-/// `https://token.actions.githubusercontent.com` for github.com,
-/// `https://token.actions.<tenant>.ghe.com` for GitHub Enterprise Cloud tenants
-/// with data residency, and either with an `/<enterprise>` path for
-/// enterprises with a customized issuer.
-fn is_github_actions_issuer(issuer: &str) -> bool {
-    let Ok(url) = url::Url::parse(issuer) else {
-        return false;
-    };
-    let plain = url.scheme() == "https"
-        && url.username().is_empty()
-        && url.password().is_none()
-        && url.port().is_none()
-        && url.query().is_none()
-        && url.fragment().is_none();
-    let Some(host) = url.host_str().filter(|_| plain) else {
-        return false;
-    };
-    host == "token.actions.githubusercontent.com"
-        || host
-            .strip_prefix("token.actions.")
-            .and_then(|rest| rest.strip_suffix(".ghe.com"))
-            .is_some_and(|tenant| {
-                !tenant.is_empty()
-                    && tenant
-                        .chars()
-                        .all(|c| c.is_ascii_alphanumeric() || c == '-')
-            })
-}
-
 /// Decides which instance to sign with. `auto` mirrors `actions/attest`:
 /// GitHub's instance for any GitHub repository that is not public, so that
 /// the name of a private repository never ends up in the public Rekor log.
@@ -104,7 +75,7 @@ fn resolve_instance(
     let claims = github_token_claims(token);
     let is_github = claims
         .as_ref()
-        .is_some_and(|claims| is_github_actions_issuer(&claims.iss));
+        .is_some_and(|claims| GitHubActionsIssuer::parse(&claims.iss).is_some());
     match choice {
         SigstoreInstanceChoice::PublicGood => Ok(ResolvedInstance::PublicGood),
         SigstoreInstanceChoice::Github if is_github => Ok(ResolvedInstance::GitHub),
@@ -126,17 +97,23 @@ fn resolve_instance(
     }
 }
 
-/// GitHub's signing services for the GitHub host this workflow runs on:
-/// `fulcio.githubapp.com` for github.com and `fulcio.<tenant>.ghe.com` for
-/// GitHub Enterprise Cloud tenants with data residency, like `actions/attest`.
-fn github_signing_services() -> SigningServices {
-    match std::env::var("GITHUB_SERVER_URL")
-        .ok()
-        .and_then(|server| url::Url::parse(&server).ok())
-        .and_then(|server| server.host_str().map(str::to_owned))
-    {
-        Some(host) => SigningServices::github_for_host(&host),
-        None => SigningServices::github(),
+/// GitHub's signing services for the GitHub host this workflow runs on, like
+/// `actions/attest`: the embedded signing config of GitHub's instance for
+/// github.com, and `fulcio.<host>` / `timestamp.<host>` for GitHub Enterprise
+/// Cloud tenants with data residency (`<tenant>.ghe.com`). None of them runs a
+/// transparency log.
+fn github_signing_services(server_url: Option<&str>) -> miette::Result<SigningServices> {
+    let host = server_url
+        .and_then(|server| url::Url::parse(server).ok())
+        .and_then(|server| server.host_str().map(str::to_ascii_lowercase))
+        .filter(|host| host != "github.com");
+    match host {
+        None => SigningServices::from_embedded(SigstoreInstance::GitHub)
+            .map_err(|e| miette::miette!("Failed to load GitHub's signing config: {}", e)),
+        Some(host) => Ok(SigningServices::without_transparency_log(
+            format!("https://fulcio.{host}"),
+            format!("https://timestamp.{host}/api/v1/timestamp"),
+        )),
     }
 }
 
@@ -193,7 +170,8 @@ pub async fn create_attestation(
     // Step 5: Pick the Sigstore instance and its signing services
     let signing_services = match resolve_instance(config.sigstore_instance, &identity_token)? {
         ResolvedInstance::GitHub => {
-            let services = github_signing_services();
+            let services =
+                github_signing_services(std::env::var("GITHUB_SERVER_URL").ok().as_deref())?;
             tracing::info!(
                 "Signing with GitHub's Sigstore instance ({}); the attestation is not recorded in a public transparency log",
                 services.fulcio_url()
@@ -402,23 +380,45 @@ mod tests {
     }
 
     #[test]
-    fn github_actions_issuer_matching() {
-        assert!(is_github_actions_issuer(GITHUB_ACTIONS_ISSUER));
-        assert!(is_github_actions_issuer(
-            "https://token.actions.githubusercontent.com/octocorp"
-        ));
-        assert!(is_github_actions_issuer(
-            "https://token.actions.octocorp.ghe.com"
-        ));
-        assert!(!is_github_actions_issuer(
-            "https://token.actions.githubusercontent.com.evil.example"
-        ));
-        assert!(!is_github_actions_issuer(
-            "https://token.actions.octocorp.ghe.com.evil.example"
-        ));
-        assert!(!is_github_actions_issuer(
-            "http://token.actions.githubusercontent.com"
-        ));
-        assert!(!is_github_actions_issuer("https://gitlab.com"));
+    fn github_signing_services_follow_the_server() {
+        for server in [
+            None,
+            Some("https://github.com"),
+            Some("https://GitHub.com/"),
+        ] {
+            let services = github_signing_services(server).unwrap();
+            assert_eq!(
+                services.fulcio_url(),
+                "https://fulcio.githubapp.com",
+                "{server:?}"
+            );
+            assert_eq!(
+                services.tsa_url(),
+                Some("https://timestamp.githubapp.com/api/v1/timestamp")
+            );
+            assert_eq!(services.rekor_url(), None);
+        }
+
+        let tenant = github_signing_services(Some("https://octocorp.ghe.com")).unwrap();
+        assert_eq!(tenant.fulcio_url(), "https://fulcio.octocorp.ghe.com");
+        assert_eq!(
+            tenant.tsa_url(),
+            Some("https://timestamp.octocorp.ghe.com/api/v1/timestamp")
+        );
+        assert_eq!(tenant.rekor_url(), None);
+    }
+
+    #[test]
+    fn tenant_tokens_sign_with_github() {
+        let tenant = token(json!({
+            "iss": "https://token.actions.octocorp.ghe.com",
+            "sub": "repo:org/repo:ref:refs/heads/main",
+            "exp": 9_999_999_999u64,
+            "repository_visibility": "private",
+        }));
+        assert_eq!(
+            resolve_instance(SigstoreInstanceChoice::Auto, &tenant).unwrap(),
+            ResolvedInstance::GitHub
+        );
     }
 }

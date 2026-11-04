@@ -46,8 +46,8 @@ pub mod verify;
 
 pub use error::{SigstoreError, SigstoreResult};
 pub use policy::{
-    ChannelCheck, GitHubTrustDomain, Identity, Issuer, Publisher, VerificationConfig,
-    VerificationPolicy,
+    ChannelCheck, GitHubActionsIssuer, GitHubTrustDomain, Identity, InvalidGitHubTrustDomain,
+    Issuer, Publisher, VerificationConfig, VerificationPolicy,
 };
 pub use sidecar::{
     AttestationSidecar, DEFAULT_MAX_SIDECAR_SIZE, SIDECAR_SUFFIX, fetch_bundles, fetch_sidecar,
