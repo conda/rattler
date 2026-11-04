@@ -6022,6 +6022,7 @@ dependencies = [
  "rattler_package_streaming",
  "rattler_redaction",
  "rattler_s3",
+ "rattler_sigstore",
  "rattler_solve",
  "reqwest",
  "serde",
