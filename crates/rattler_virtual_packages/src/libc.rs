@@ -100,29 +100,97 @@ fn try_detect_libc_version() -> Result<Option<(String, Version)>, DetectLibCErro
             return Ok(Some((String::from("glibc"), version)));
         }
 
-        // Fall back to running `ldd --version` to detect the libc version and family.
-        // `ldd` is shipped with libc so if an error occurred during its execution we
-        // can assume no libc is available on the system.
-        let output = match std::process::Command::new("ldd").arg("--version").output() {
-            Err(e) => {
-                tracing::info!(
-                    "failed to execute `ldd --version`: {e}. Assuming libc is not available."
-                );
-                return Ok(None);
+        // Try the system utilities before probing the dynamic loader directly.
+        // Minimal Linux distributions may ship glibc without ldd.
+        if let Ok(output) = std::process::Command::new("ldd").arg("--version").output() {
+            if output.status.success() {
+                if let Some(version) =
+                    parse_glibc_ldd_version(&String::from_utf8_lossy(&output.stdout))?
+                {
+                    return Ok(Some((String::from("glibc"), version)));
+                }
             }
-            Ok(output) => output,
-        };
+        }
 
-        Ok(
-            parse_glibc_ldd_version(&String::from_utf8_lossy(&output.stdout))?
-                .map(|version| (String::from("glibc"), version)),
-        )
+        if let Ok(output) = std::process::Command::new("getconf")
+            .arg("GNU_LIBC_VERSION")
+            .output()
+        {
+            if output.status.success() {
+                if let Some(version) =
+                    parse_getconf_glibc_version(&String::from_utf8_lossy(&output.stdout))?
+                {
+                    return Ok(Some((String::from("glibc"), version)));
+                }
+            }
+        }
+
+        // glibc's dynamic loader is itself executable. Unlike ldd/getconf, it
+        // is normally present even in minimal Yocto images. Use known ABI
+        // paths rather than searching the filesystem or executing arbitrary files.
+        for path in glibc_loader_paths() {
+            if let Ok(output) = std::process::Command::new(path).arg("--version").output() {
+                if output.status.success() {
+                    if let Some(version) =
+                        parse_glibc_loader_version(&String::from_utf8_lossy(&output.stdout))?
+                    {
+                        return Ok(Some((String::from("glibc"), version)));
+                    }
+                }
+            }
+        }
+
+        Ok(None)
     }
 
     #[cfg(not(target_os = "linux"))]
     {
         Ok(None)
     }
+}
+
+/// Common glibc interpreter paths for the current Linux target ABI.
+#[cfg(target_os = "linux")]
+fn glibc_loader_paths() -> &'static [&'static str] {
+    #[cfg(target_arch = "aarch64")]
+    { &["/lib/ld-linux-aarch64.so.1", "/lib64/ld-linux-aarch64.so.1"] }
+    #[cfg(target_arch = "x86_64")]
+    { &["/lib64/ld-linux-x86-64.so.2", "/lib/ld-linux-x86-64.so.2"] }
+    #[cfg(target_arch = "x86")]
+    { &["/lib/ld-linux.so.2", "/lib32/ld-linux.so.2"] }
+    #[cfg(target_arch = "arm")]
+    { &["/lib/ld-linux-armhf.so.3", "/lib/ld-linux.so.3"] }
+    #[cfg(target_arch = "riscv64")]
+    { &["/lib/ld-linux-riscv64-lp64d.so.1"] }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        target_arch = "x86",
+        target_arch = "arm",
+        target_arch = "riscv64"
+    )))]
+    { &[] }
+}
+
+#[cfg(any(test, target_os = "linux"))]
+fn parse_getconf_glibc_version(input: &str) -> Result<Option<Version>, DetectLibCError> {
+    let Some(raw) = input.trim().strip_prefix("glibc ") else {
+        return Ok(None);
+    };
+    Ok(Some(raw.parse()?))
+}
+
+#[cfg(any(test, target_os = "linux"))]
+fn parse_glibc_loader_version(input: &str) -> Result<Option<Version>, DetectLibCError> {
+    static LOADER_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+        regex::Regex::new(r"^ld\\.so \\(GNU libc\\).*?version ([0-9]+\\.[0-9]+)\\.").unwrap()
+    });
+    let version = input
+        .lines()
+        .next()
+        .and_then(|line| LOADER_RE.captures(line))
+        .and_then(|captures| captures.get(1));
+    version.map(|m| m.as_str().parse().map_err(Into::into)).transpose()
 }
 
 #[cfg(any(test, unix))]
@@ -181,4 +249,23 @@ mod test {
             Some(Version::from_str("2.39").unwrap())
         );
     }
+    #[test]
+    fn test_getconf_glibc_version() {
+        assert_eq!(
+            parse_getconf_glibc_version("glibc 2.39\\n").unwrap(),
+            Some(Version::from_str("2.39").unwrap())
+        );
+        assert_eq!(parse_getconf_glibc_version("musl 1.2.5\\n").unwrap(), None);
+    }
+
+    #[test]
+    fn test_glibc_loader_version() {
+        let output = "ld.so (GNU libc) stable release version 2.39.\\nCopyright (C) 2024 Free Software Foundation, Inc.\\n";
+        assert_eq!(
+            parse_glibc_loader_version(output).unwrap(),
+            Some(Version::from_str("2.39").unwrap())
+        );
+        assert_eq!(parse_glibc_loader_version("musl libc\\n").unwrap(), None);
+    }
+
 }
