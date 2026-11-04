@@ -37,7 +37,7 @@
     },
     "devDependencies": {
         "@jest/globals": "30.5.2",
-        "@rollup/plugin-commonjs": "28.0.9",
+        "@rollup/plugin-commonjs": "29.0.3",
         "@rollup/plugin-esm-shim": "0.1.8",
         "@rollup/plugin-node-resolve": "16.0.3",
         "@rollup/plugin-typescript": "12.3.1",
