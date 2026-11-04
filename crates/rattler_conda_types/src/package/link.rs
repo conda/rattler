@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use super::{EntryPoint, PackageFile};
 
 /// Describes python noarch specific entry points
-#[derive(Serialize, Clone, Debug, Deserialize)]
+#[derive(Serialize, Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct PythonEntryPoints {
     /// A list of commands that should execute certain python commands.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -14,7 +14,7 @@ pub struct PythonEntryPoints {
 }
 
 /// Links for specific types of noarch packages.
-#[derive(Serialize, Clone, Debug, Deserialize)]
+#[derive(Serialize, Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum NoArchLinks {
     /// Python noarch specific entry points.
@@ -28,7 +28,7 @@ pub enum NoArchLinks {
 ///
 /// The `link.json` file contains information about entrypoints that need to be installed for the package.
 #[sorted]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LinkJson {
     /// Links for specific noarch packages
     pub noarch: NoArchLinks,

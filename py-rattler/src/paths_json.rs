@@ -178,6 +178,13 @@ impl PyPathsJson {
         self.inner.paths_version = version;
     }
 
+    /// Returns a JSON string representation of the object.
+    pub fn to_json(&self) -> PyResult<String> {
+        serde_json::to_string_pretty(&self.inner).map_err(|e| {
+            PyValueError::new_err(format!("Failed to serialize PathsJson to JSON: {e}"))
+        })
+    }
+
     /// Sorts the entries in `paths` by their `relative_path` (`_path`).
     pub fn sort(&mut self) {
         self.inner
