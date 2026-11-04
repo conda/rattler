@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/conda/rattler/compare/rattler_vfs-v0.2.0...rattler_vfs-v0.2.1) - 2026-11-04
+
+### Other
+
+- *(ci)* Update Rust crate nfs3_server to 0.11 ([#3066](https://github.com/conda/rattler/pull/3066))
+
 ## [0.2.0](https://github.com/conda/rattler/compare/rattler_vfs-v0.1.4...rattler_vfs-v0.2.0) - 2026-11-02
 
 ### Other
