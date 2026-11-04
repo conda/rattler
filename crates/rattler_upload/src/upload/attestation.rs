@@ -14,9 +14,6 @@ use std::path::Path;
 
 pub use crate::upload::opt::SigstoreInstanceChoice;
 
-/// The OIDC issuer of GitHub Actions identity tokens.
-const GITHUB_ACTIONS_ISSUER: &str = "https://token.actions.githubusercontent.com";
-
 /// Conda V1 predicate
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CondaV1Predicate {
@@ -67,13 +64,34 @@ fn github_token_claims(token: &IdentityToken) -> Option<GitHubTokenClaims> {
     serde_json::from_slice(&bytes).ok()
 }
 
-/// Returns true if `issuer` is the GitHub Actions issuer, including the
-/// per-enterprise issuers of the form `<issuer>/<enterprise>`.
+/// Returns true if `issuer` is a GitHub Actions issuer:
+/// `https://token.actions.githubusercontent.com` for github.com,
+/// `https://token.actions.<tenant>.ghe.com` for GitHub Enterprise Cloud tenants
+/// with data residency, and either with an `/<enterprise>` path for
+/// enterprises with a customized issuer.
 fn is_github_actions_issuer(issuer: &str) -> bool {
-    issuer == GITHUB_ACTIONS_ISSUER
-        || issuer
-            .strip_prefix(GITHUB_ACTIONS_ISSUER)
-            .is_some_and(|rest| rest.starts_with('/'))
+    let Ok(url) = url::Url::parse(issuer) else {
+        return false;
+    };
+    let plain = url.scheme() == "https"
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.port().is_none()
+        && url.query().is_none()
+        && url.fragment().is_none();
+    let Some(host) = url.host_str().filter(|_| plain) else {
+        return false;
+    };
+    host == "token.actions.githubusercontent.com"
+        || host
+            .strip_prefix("token.actions.")
+            .and_then(|rest| rest.strip_suffix(".ghe.com"))
+            .is_some_and(|tenant| {
+                !tenant.is_empty()
+                    && tenant
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '-')
+            })
 }
 
 /// Decides which instance to sign with. `auto` mirrors `actions/attest`:
@@ -108,7 +126,9 @@ fn resolve_instance(
     }
 }
 
-/// GitHub's signing services for the GitHub host this workflow runs on.
+/// GitHub's signing services for the GitHub host this workflow runs on:
+/// `fulcio.githubapp.com` for github.com and `fulcio.<tenant>.ghe.com` for
+/// GitHub Enterprise Cloud tenants with data residency, like `actions/attest`.
 fn github_signing_services() -> SigningServices {
     match std::env::var("GITHUB_SERVER_URL")
         .ok()
@@ -238,7 +258,16 @@ async fn store_attestation_to_github(
     repo: &str,
     client: &ClientWithMiddleware,
 ) -> miette::Result<String> {
-    let url = format!("https://api.github.com/repos/{owner}/{repo}/attestations");
+    // `GITHUB_API_URL` points at the tenant's API on GitHub Enterprise Cloud
+    // with data residency (`https://api.<tenant>.ghe.com`).
+    let api_url = std::env::var("GITHUB_API_URL")
+        .ok()
+        .filter(|url| !url.is_empty())
+        .unwrap_or_else(|| "https://api.github.com".to_string());
+    let url = format!(
+        "{}/repos/{owner}/{repo}/attestations",
+        api_url.trim_end_matches('/')
+    );
 
     // Parse the bundle JSON to ensure it's valid
     let bundle: serde_json::Value = serde_json::from_str(bundle_json)
@@ -297,6 +326,8 @@ async fn store_attestation_to_github(
 
 #[cfg(test)]
 mod tests {
+    const GITHUB_ACTIONS_ISSUER: &str = "https://token.actions.githubusercontent.com";
+
     use super::*;
 
     fn token(claims: serde_json::Value) -> IdentityToken {
@@ -376,8 +407,17 @@ mod tests {
         assert!(is_github_actions_issuer(
             "https://token.actions.githubusercontent.com/octocorp"
         ));
+        assert!(is_github_actions_issuer(
+            "https://token.actions.octocorp.ghe.com"
+        ));
         assert!(!is_github_actions_issuer(
             "https://token.actions.githubusercontent.com.evil.example"
+        ));
+        assert!(!is_github_actions_issuer(
+            "https://token.actions.octocorp.ghe.com.evil.example"
+        ));
+        assert!(!is_github_actions_issuer(
+            "http://token.actions.githubusercontent.com"
         ));
         assert!(!is_github_actions_issuer("https://gitlab.com"));
     }

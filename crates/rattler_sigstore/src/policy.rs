@@ -72,6 +72,13 @@ impl Issuer {
         Self::new("https://token.actions.githubusercontent.com")
     }
 
+    /// The GitHub Actions OIDC issuer of a GitHub Enterprise Cloud tenant with
+    /// data residency, `https://token.actions.<tenant>.ghe.com`, where
+    /// `tenant` is the subdomain of the tenant's `<tenant>.ghe.com` host.
+    pub fn github_actions_tenant(tenant: &str) -> Self {
+        Self::new(format!("https://token.actions.{tenant}.ghe.com"))
+    }
+
     /// The GitLab CI OIDC issuer.
     pub fn gitlab() -> Self {
         Self::new("https://gitlab.com")
@@ -162,6 +169,54 @@ pub enum ChannelCheck {
     Ignore,
 }
 
+/// A GitHub artifact attestation trust domain: the Sigstore instance GitHub
+/// signs attestations of private and internal repositories with.
+///
+/// github.com uses one instance ([`Self::github_com`]). GitHub Enterprise Cloud
+/// tenants with data residency (`<tenant>.ghe.com`) use the instance of their
+/// region, such as `prod-weu-01`, which the tenant's `GET /meta` REST endpoint
+/// reports as `domains.artifact_attestations.trust_domain`. GitHub publishes
+/// the trusted root of every trust domain in its TUF repository
+/// (`tuf-repo.github.com`), which is where [`crate::github_trusted_root`]
+/// fetches it from.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GitHubTrustDomain(String);
+
+impl GitHubTrustDomain {
+    /// The trust domain of github.com.
+    pub fn github_com() -> Self {
+        Self(String::new())
+    }
+
+    /// The trust domain of a GitHub Enterprise Cloud data residency region,
+    /// such as `prod-weu-01`. An empty name is github.com's trust domain.
+    ///
+    /// The name is validated when its trusted root is fetched.
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+
+    /// The name of the trust domain, empty for github.com.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Whether this is github.com's trust domain.
+    pub fn is_github_com(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl std::fmt::Display for GitHubTrustDomain {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.is_github_com() {
+            f.write_str("github.com")
+        } else {
+            f.write_str(&self.0)
+        }
+    }
+}
+
 /// Configuration shared by the `Warn` and `Require` verification modes.
 #[derive(Debug, Clone)]
 pub struct VerificationConfig {
@@ -174,9 +229,9 @@ pub struct VerificationConfig {
     /// How `targetChannel` is checked.
     channel_check: ChannelCheck,
 
-    /// Whether bundles from GitHub's artifact attestation instance are
-    /// accepted.
-    github_attestations: bool,
+    /// The GitHub trust domains whose trusted roots [`crate::verify_record`]
+    /// loads for bundles without a transparency log entry.
+    github_trust_domains: Vec<GitHubTrustDomain>,
 }
 
 impl VerificationConfig {
@@ -189,7 +244,7 @@ impl VerificationConfig {
             publisher,
             max_sidecar_size: DEFAULT_MAX_SIDECAR_SIZE,
             channel_check: ChannelCheck::default(),
-            github_attestations: true,
+            github_trust_domains: vec![GitHubTrustDomain::github_com()],
         }
     }
 
@@ -210,8 +265,10 @@ impl VerificationConfig {
         self
     }
 
-    /// Sets whether attestations signed by GitHub's artifact attestation
-    /// instance are accepted. Enabled by default.
+    /// Sets the GitHub trust domains whose attestations
+    /// [`crate::verify_record`] accepts. Defaults to github.com only; pass an
+    /// empty list to only accept attestations signed with the Sigstore
+    /// public-good instance.
     ///
     /// GitHub signs attestations of private and internal repositories with its
     /// own Sigstore instance, which keeps no public transparency log so that
@@ -219,17 +276,29 @@ impl VerificationConfig {
     /// RFC 3161 timestamp from GitHub's timestamp authority instead of a log
     /// entry, so trusting it means trusting GitHub's certificate and timestamp
     /// authorities without public auditability. Only certificates issued for
-    /// GitHub Actions identities are accepted from this instance; the
+    /// GitHub Actions identities are accepted from these instances; the
     /// [`Publisher`] constraints apply as usual.
-    pub fn with_github_attestations(mut self, enabled: bool) -> Self {
-        self.github_attestations = enabled;
+    ///
+    /// Add the trust domain of a GitHub Enterprise Cloud data residency
+    /// region, such as `prod-weu-01`, to accept attestations from its
+    /// `*.ghe.com` tenants. Their identities are issued by
+    /// [`Issuer::github_actions_tenant`].
+    ///
+    /// This only selects which roots [`crate::verify_record`] fetches. The
+    /// functions taking [`crate::TrustedRoots`] trust exactly the roots they
+    /// are given.
+    pub fn with_github_trust_domains(
+        mut self,
+        trust_domains: impl IntoIterator<Item = GitHubTrustDomain>,
+    ) -> Self {
+        self.github_trust_domains = trust_domains.into_iter().collect();
         self
     }
 
-    /// Whether attestations signed by GitHub's artifact attestation instance
-    /// are accepted. See [`Self::with_github_attestations`].
-    pub fn github_attestations(&self) -> bool {
-        self.github_attestations
+    /// The GitHub trust domains whose attestations are accepted. See
+    /// [`Self::with_github_trust_domains`].
+    pub fn github_trust_domains(&self) -> &[GitHubTrustDomain] {
+        &self.github_trust_domains
     }
 
     /// The maximum sidecar size in bytes.

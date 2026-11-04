@@ -24,8 +24,9 @@
 //! recorded in its transparency log. GitHub signs attestations of private and
 //! internal repositories with its own instance instead, which keeps no log:
 //! such a bundle carries an RFC 3161 timestamp from GitHub's timestamp
-//! authority and is verified against GitHub's trusted root (see
-//! [`TrustedRoots`] and [`VerificationConfig::with_github_attestations`]).
+//! authority and is verified against the trusted root of a GitHub trust
+//! domain: github.com, or a GitHub Enterprise Cloud data residency region (see
+//! [`TrustedRoots`] and [`VerificationConfig::with_github_trust_domains`]).
 
 use jiff::Timestamp;
 use rattler_conda_types::RepoDataRecord;
@@ -36,7 +37,11 @@ use sigstore_types::{Artifact, Bundle, SignatureContent, TransparencyLogEntry, i
 use sigstore_verify::{
     VerificationPolicy as SigstoreVerificationPolicy, VerificationResult, Verifier,
     crypto::{CertificateInfo, FulcioCiClaims},
-    trust_root::{SigstoreInstance, TrustedRoot, TufConfig},
+    trust_root::{SigstoreInstance, TrustedRoot},
+};
+use std::{
+    collections::HashMap,
+    sync::{LazyLock, Mutex},
 };
 use tokio::sync::OnceCell;
 use url::Url;
@@ -44,7 +49,7 @@ use url::Url;
 use crate::{
     error::{SigstoreError, SigstoreResult},
     policy::{
-        ChannelCheck, Issuer, Publisher, VerificationConfig, VerificationPolicy,
+        ChannelCheck, GitHubTrustDomain, Publisher, VerificationConfig, VerificationPolicy,
         normalize_channel_url,
     },
     sidecar::{AttestationSidecar, fetch_sidecar},
@@ -198,15 +203,19 @@ pub struct BundleVerification {
 /// The trusted roots bundles are verified against.
 ///
 /// Bundles with a transparency log entry are verified against the public-good
-/// root. Bundles without one can only come from GitHub's artifact attestation
+/// root. Bundles without one can only come from a GitHub artifact attestation
 /// instance, which GitHub uses for private and internal repositories; they are
-/// verified against the GitHub root when one is provided and rejected
-/// otherwise.
+/// verified against the GitHub roots that were added, of which one must
+/// accept the bundle, and rejected when there are none.
 ///
-#[derive(Debug, Clone, Copy)]
+/// Like `gh attestation verify`, add the root of every GitHub trust domain
+/// whose attestations should be accepted: github.com and, for GitHub
+/// Enterprise Cloud tenants with data residency, the region of the tenant (see
+/// [`github_trusted_root`]).
+#[derive(Debug, Clone)]
 pub struct TrustedRoots<'a> {
     public_good: &'a TrustedRoot,
-    github: Option<&'a TrustedRoot>,
+    github: Vec<&'a TrustedRoot>,
 }
 
 impl<'a> TrustedRoots<'a> {
@@ -214,14 +223,14 @@ impl<'a> TrustedRoots<'a> {
     pub fn new(public_good: &'a TrustedRoot) -> Self {
         Self {
             public_good,
-            github: None,
+            github: Vec::new(),
         }
     }
 
-    /// Also trust GitHub's artifact attestation instance, whose bundles carry
-    /// no transparency log entry.
+    /// Also trust a GitHub artifact attestation instance, whose bundles carry
+    /// no transparency log entry. Can be called once per trust domain.
     pub fn with_github(mut self, github: &'a TrustedRoot) -> Self {
-        self.github = Some(github);
+        self.github.push(github);
         self
     }
 
@@ -230,9 +239,9 @@ impl<'a> TrustedRoots<'a> {
         self.public_good
     }
 
-    /// The root of GitHub's artifact attestation instance, if trusted.
-    pub fn github(&self) -> Option<&'a TrustedRoot> {
-        self.github
+    /// The roots of the trusted GitHub artifact attestation instances.
+    pub fn github(&self) -> &[&'a TrustedRoot] {
+        &self.github
     }
 }
 
@@ -260,21 +269,40 @@ pub async fn production_trusted_root() -> SigstoreResult<&'static TrustedRoot> {
         .await
 }
 
-/// Process-wide cache of the trusted root of GitHub's artifact attestation
-/// instance.
-static GITHUB_TRUSTED_ROOT: OnceCell<TrustedRoot> = OnceCell::const_new();
+/// Process-wide cache of the trusted roots of GitHub trust domains. Each
+/// configured trust domain gets one cell, which lives for the rest of the
+/// process; there are only a handful of trust domains.
+static GITHUB_TRUSTED_ROOTS: LazyLock<
+    Mutex<HashMap<GitHubTrustDomain, &'static OnceCell<TrustedRoot>>>,
+> = LazyLock::new(Default::default);
 
-/// Returns the trusted root of GitHub's artifact attestation instance, which
-/// GitHub signs attestations of private and internal repositories with,
+/// Returns the trusted root of a GitHub artifact attestation trust domain,
 /// fetching it through GitHub's TUF repository on first use.
-pub async fn github_trusted_root() -> SigstoreResult<&'static TrustedRoot> {
-    GITHUB_TRUSTED_ROOT
-        .get_or_try_init(|| async {
-            TrustedRoot::from_tuf(TufConfig::github())
-                .await
-                .map_err(|err| SigstoreError::TrustedRoot(err.to_string()))
-        })
-        .await
+///
+/// GitHub signs attestations of private and internal repositories with these
+/// instances: github.com with [`GitHubTrustDomain::github_com`], GitHub
+/// Enterprise Cloud tenants with data residency with the instance of their
+/// region. Failures are not cached so a later call can retry.
+pub async fn github_trusted_root(
+    trust_domain: &GitHubTrustDomain,
+) -> SigstoreResult<&'static TrustedRoot> {
+    let cell = {
+        let mut cells = GITHUB_TRUSTED_ROOTS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let cell: &mut &'static OnceCell<TrustedRoot> = cells
+            .entry(trust_domain.clone())
+            .or_insert_with(|| Box::leak(Box::new(OnceCell::new())));
+        *cell
+    };
+    cell.get_or_try_init(|| async {
+        TrustedRoot::github(trust_domain.as_str())
+            .await
+            .map_err(|err| {
+                SigstoreError::TrustedRoot(format!("GitHub trust domain {trust_domain}: {err}"))
+            })
+    })
+    .await
 }
 
 /// Returns true if `bundle` carries no transparency log entry, which is the
@@ -322,8 +350,8 @@ pub fn verify_bundles(
 /// Like [`verify_bundles`], but with the roots of several Sigstore instances.
 ///
 /// Bundles without a transparency log entry are only accepted when
-/// `trusted_roots` includes GitHub's root, and only for GitHub Actions
-/// identities. See [`TrustedRoots`].
+/// `trusted_roots` includes a GitHub root that verifies them, and only for
+/// GitHub Actions identities. See [`TrustedRoots`].
 pub fn verify_bundles_with_trusted_roots(
     record: &RepoDataRecord,
     bundles: &[Bundle],
@@ -343,18 +371,21 @@ pub fn verify_bundles_with_trusted_roots(
     let expected_channel = expected_channel(record);
 
     let public_good = InstanceVerifier::public_good(trusted_roots.public_good)?;
-    // Only build the GitHub verifier when a bundle needs it.
-    let github = match trusted_roots.github {
-        Some(root) if bundles.iter().any(lacks_transparency_log_entry) => {
-            Some(InstanceVerifier::github(root)?)
-        }
-        _ => None,
+    // Only build the GitHub verifiers when a bundle needs them.
+    let github = if bundles.iter().any(lacks_transparency_log_entry) {
+        trusted_roots
+            .github
+            .iter()
+            .map(|root| InstanceVerifier::github(root))
+            .collect::<SigstoreResult<Vec<_>>>()?
+    } else {
+        Vec::new()
     };
 
     let mut result = BundleVerification::default();
     for (index, bundle) in bundles.iter().enumerate() {
-        let instance = if lacks_transparency_log_entry(bundle) {
-            let Some(github) = &github else {
+        let instances = if lacks_transparency_log_entry(bundle) {
+            if github.is_empty() {
                 result.rejected.push(RejectedAttestation {
                     index,
                     reason: "the bundle has no transparency log entry, as signed by \
@@ -363,24 +394,44 @@ pub fn verify_bundles_with_trusted_roots(
                         .to_string(),
                 });
                 continue;
-            };
-            github
+            }
+            github.as_slice()
         } else {
-            &public_good
+            std::slice::from_ref(&public_good)
         };
-        match verify_bundle(
-            instance,
-            artifact.clone(),
-            bundle,
-            &filename,
-            expected_channel.as_ref(),
-            channel_check,
-        ) {
-            Ok(mut verified) => {
+
+        // A bundle names no trusted root, so try each candidate, as
+        // `gh attestation verify` does with several trusted roots.
+        let mut reasons = Vec::new();
+        let verified = instances.iter().find_map(|instance| {
+            match verify_bundle(
+                instance,
+                artifact.clone(),
+                bundle,
+                &filename,
+                expected_channel.as_ref(),
+                channel_check,
+            ) {
+                Ok(verified) => Some(verified),
+                Err(reason) => {
+                    reasons.push(if instances.len() > 1 {
+                        format!("{}: {reason}", instance.name)
+                    } else {
+                        reason
+                    });
+                    None
+                }
+            }
+        });
+        match verified {
+            Some(mut verified) => {
                 verified.index = index;
                 result.verified.push(verified);
             }
-            Err(reason) => result.rejected.push(RejectedAttestation { index, reason }),
+            None => result.rejected.push(RejectedAttestation {
+                index,
+                reason: reasons.join("; "),
+            }),
         }
     }
     Ok(result)
@@ -389,6 +440,8 @@ pub fn verify_bundles_with_trusted_roots(
 /// A verifier for the bundles of one Sigstore instance.
 struct InstanceVerifier {
     instance: SigstoreInstance,
+    /// Names the instance in rejection reasons.
+    name: String,
     verifier: Verifier,
     policy: SigstoreVerificationPolicy,
 }
@@ -397,6 +450,7 @@ impl InstanceVerifier {
     fn public_good(trusted_root: &TrustedRoot) -> SigstoreResult<Self> {
         Ok(Self {
             instance: SigstoreInstance::PublicGood,
+            name: "public-good instance".to_string(),
             verifier: Verifier::new(trusted_root)
                 .map_err(|err| SigstoreError::TrustedRoot(err.to_string()))?,
             // Publisher policy is applied separately to the verified identities.
@@ -411,6 +465,10 @@ impl InstanceVerifier {
     fn github(trusted_root: &TrustedRoot) -> SigstoreResult<Self> {
         Ok(Self {
             instance: SigstoreInstance::GitHub,
+            name: trusted_root
+                .certificate_authorities
+                .first()
+                .map_or_else(|| "GitHub instance".to_string(), |ca| ca.uri.clone()),
             verifier: Verifier::new(trusted_root)
                 .map_err(|err| SigstoreError::TrustedRoot(err.to_string()))?,
             policy: SigstoreVerificationPolicy::any_identity()
@@ -420,15 +478,34 @@ impl InstanceVerifier {
     }
 }
 
-/// Returns true if `issuer` is the GitHub Actions OIDC issuer, including the
-/// per-enterprise issuers of the form `<issuer>/<enterprise>`.
-fn is_github_actions_issuer(issuer: &str) -> bool {
-    let github_actions = Issuer::github_actions();
-    let github_actions = github_actions.as_str();
-    issuer == github_actions
-        || issuer
-            .strip_prefix(github_actions)
-            .is_some_and(|rest| rest.starts_with('/'))
+/// Returns true if `issuer` is a GitHub Actions OIDC issuer:
+/// `https://token.actions.githubusercontent.com` for github.com,
+/// `https://token.actions.<tenant>.ghe.com` for GitHub Enterprise Cloud tenants
+/// with data residency, and either with an `/<enterprise>` path for
+/// enterprises with a customized issuer.
+pub(crate) fn is_github_actions_issuer(issuer: &str) -> bool {
+    let Ok(url) = Url::parse(issuer) else {
+        return false;
+    };
+    let plain = url.scheme() == "https"
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.port().is_none()
+        && url.query().is_none()
+        && url.fragment().is_none();
+    let Some(host) = url.host_str().filter(|_| plain) else {
+        return false;
+    };
+    host == "token.actions.githubusercontent.com"
+        || host
+            .strip_prefix("token.actions.")
+            .and_then(|rest| rest.strip_suffix(".ghe.com"))
+            .is_some_and(|tenant| {
+                !tenant.is_empty()
+                    && tenant
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '-')
+            })
 }
 
 fn verify_bundle(
@@ -444,14 +521,14 @@ fn verify_bundle(
         .verify(artifact, bundle, &instance.policy)
         .map_err(|err| format!("sigstore verification failed: {err}"))?;
 
-    // Without a public log, nothing would reveal a certificate GitHub's
-    // instance issued for an identity it does not own, so only accept the
+    // Without a public log, nothing would reveal a certificate a GitHub
+    // instance issued for an identity GitHub does not own, so only accept the
     // identities GitHub itself vouches for.
     if instance.instance == SigstoreInstance::GitHub
         && !outcome.issuer().is_some_and(is_github_actions_issuer)
     {
         return Err(format!(
-            "the bundle was signed by GitHub's artifact attestation instance for issuer {}, \
+            "the bundle was signed by a GitHub artifact attestation instance for issuer {}, \
              but that instance is only trusted for GitHub Actions identities",
             outcome.issuer().unwrap_or("<unknown issuer>")
         ));
@@ -644,8 +721,9 @@ pub async fn verify_record_with_trusted_root(
 /// fetching any root over the network.
 ///
 /// Bundles without a transparency log entry (attestations of private GitHub
-/// repositories) are rejected unless a GitHub root is added with
-/// [`TrustedRoots::with_github`].
+/// repositories) are rejected unless GitHub roots are added with
+/// [`TrustedRoots::with_github`]; [`VerificationConfig::github_trust_domains`]
+/// is not consulted.
 pub async fn verify_record_with_trusted_roots(
     policy: &VerificationPolicy,
     record: &RepoDataRecord,
@@ -662,8 +740,8 @@ pub async fn verify_record_with_trusted_roots(
     .await
 }
 
-/// Whether [`verify_record_impl`] may fetch GitHub's trusted root when the
-/// provided roots lack it.
+/// Whether [`verify_record_impl`] may fetch the roots of the configured GitHub
+/// trust domains.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum FetchGithubRoot {
     IfNeeded,
@@ -692,19 +770,16 @@ async fn verify_record_impl(
         Err(err) => return lenient(policy, err),
     };
 
-    if !config.github_attestations() {
-        trusted_roots.github = None;
-    } else if trusted_roots.github.is_none()
-        && fetch_github_root == FetchGithubRoot::IfNeeded
+    if fetch_github_root == FetchGithubRoot::IfNeeded
         && sidecar.bundles.iter().any(lacks_transparency_log_entry)
     {
         // Only reach out to GitHub's TUF repository when a bundle needs it. A
         // failure only affects those bundles, which are then rejected.
-        match github_trusted_root().await {
-            Ok(root) => trusted_roots.github = Some(root),
-            Err(err) => tracing::warn!(
-                "failed to load the trusted root of GitHub's artifact attestation instance: {err}"
-            ),
+        for trust_domain in config.github_trust_domains() {
+            match github_trusted_root(trust_domain).await {
+                Ok(root) => trusted_roots.github.push(root),
+                Err(err) => tracing::warn!("{err}"),
+            }
         }
     }
 
@@ -869,6 +944,31 @@ mod tests {
             value["subject"] = subjects;
             let statement = parse_statement(value);
             assert!(validate_statement(&statement, FILENAME).is_err());
+        }
+    }
+
+    #[test]
+    fn github_actions_issuers() {
+        for issuer in [
+            "https://token.actions.githubusercontent.com",
+            "https://token.actions.githubusercontent.com/octocorp",
+            "https://token.actions.octocorp.ghe.com",
+            "https://token.actions.octo-corp.ghe.com/octocorp",
+        ] {
+            assert!(is_github_actions_issuer(issuer), "{issuer}");
+        }
+        for issuer in [
+            "https://token.actions.githubusercontent.com.evil.example",
+            "https://token.actions.ghe.com",
+            "https://token.actions.evil.example.ghe.com.evil.example",
+            "https://token.actions.a.b.ghe.com",
+            "http://token.actions.githubusercontent.com",
+            "https://token.actions.githubusercontent.com:8443",
+            "https://user@token.actions.githubusercontent.com",
+            "https://gitlab.com",
+            "not a url",
+        ] {
+            assert!(!is_github_actions_issuer(issuer), "{issuer}");
         }
     }
 

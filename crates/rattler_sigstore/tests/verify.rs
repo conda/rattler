@@ -515,7 +515,8 @@ fn bundles_without_a_transparency_log_need_the_github_root() {
     // is only trusted for GitHub Actions identities.
     let roots = TrustedRoots::new(&public_good).with_github(&github);
     let result =
-        verify_bundles_with_trusted_roots(&record, &bundles, ChannelCheck::Require, roots).unwrap();
+        verify_bundles_with_trusted_roots(&record, &bundles, ChannelCheck::Require, roots.clone())
+            .unwrap();
     assert!(result.verified.is_empty());
     let reason = &result.rejected[0].reason;
     assert!(!reason.contains("sigstore verification failed"), "{reason}");
@@ -539,8 +540,64 @@ fn bundles_without_a_transparency_log_need_the_github_root() {
     );
 }
 
+#[test]
+fn bundles_without_a_transparency_log_try_every_github_root() {
+    let channel = Url::parse("https://prefix.dev/private-channel/").unwrap();
+    let mut record = record(&channel, None);
+    record.package_record.sha256 = Some(
+        rattler_digest::parse_digest_from_hex::<Sha256>(GITHUB_PRIVATE_SUBJECT_SHA256).unwrap(),
+    );
+    let bundles =
+        rattler_sigstore::parse_bundles(&channel, format!("[{GITHUB_PRIVATE_BUNDLE}]").as_bytes())
+            .unwrap();
+    let public_good = trusted_root();
+    // Stands in for the root of a trust domain that did not sign the bundle,
+    // such as a GitHub Enterprise Cloud region.
+    let other_domain = TrustedRoot::from_embedded(SigstoreInstance::Staging).unwrap();
+    let github = TrustedRoot::from_embedded(SigstoreInstance::GitHub).unwrap();
+
+    // The root that does not issue the certificate fails Sigstore
+    // verification, the github.com root passes it and reaches the GitHub
+    // Actions identity check. Both reasons are reported.
+    let roots = TrustedRoots::new(&public_good)
+        .with_github(&other_domain)
+        .with_github(&github);
+    let result =
+        verify_bundles_with_trusted_roots(&record, &bundles, ChannelCheck::Require, roots).unwrap();
+    assert!(result.verified.is_empty());
+    let reason = &result.rejected[0].reason;
+    assert!(reason.contains("sigstore verification failed"), "{reason}");
+    assert!(
+        reason.contains("fulcio.githubapp.com: the bundle was signed by a GitHub"),
+        "{reason}"
+    );
+    assert!(
+        reason.contains("only trusted for GitHub Actions identities"),
+        "{reason}"
+    );
+}
+
+/// Verifies `record` with `roots` and returns why it was rejected.
+///
+/// The configured trust domains only select what `verify_record` fetches;
+/// explicitly passed roots are used as they are, so none are configured here.
+async fn rejection_reasons(record: &RepoDataRecord, roots: TrustedRoots<'_>) -> Vec<String> {
+    let config = VerificationConfig::new(Publisher::new()).with_github_trust_domains([]);
+    match verify_record_with_trusted_roots(
+        &VerificationPolicy::Require(config),
+        record,
+        &client(),
+        roots,
+    )
+    .await
+    {
+        Err(SigstoreError::VerificationFailed { reasons, .. }) => reasons,
+        other => panic!("unexpected outcome: {other:?}"),
+    }
+}
+
 #[tokio::test]
-async fn github_attestations_can_be_disabled() {
+async fn explicit_trusted_roots_decide_which_github_instances_are_trusted() {
     let dir = tempfile::tempdir().unwrap();
     let sidecar = format!("[{GITHUB_PRIVATE_BUNDLE}]");
     let subdir = dir.path().join("channel").join("osx-arm64");
@@ -559,34 +616,19 @@ async fn github_attestations_can_be_disabled() {
 
     let public_good = trusted_root();
     let github = TrustedRoot::from_embedded(SigstoreInstance::GitHub).unwrap();
-    let roots = TrustedRoots::new(&public_good).with_github(&github);
-    let reasons = |config: VerificationConfig| {
-        let record = record.clone();
-        async move {
-            match verify_record_with_trusted_roots(
-                &VerificationPolicy::Require(config),
-                &record,
-                &client(),
-                roots,
-            )
-            .await
-            {
-                Err(SigstoreError::VerificationFailed { reasons, .. }) => reasons,
-                other => panic!("unexpected outcome: {other:?}"),
-            }
-        }
-    };
-
-    let enabled = reasons(VerificationConfig::new(Publisher::new())).await;
+    let with_github = rejection_reasons(
+        &record,
+        TrustedRoots::new(&public_good).with_github(&github),
+    )
+    .await;
     assert!(
-        !enabled[0].contains("no transparency log entry"),
-        "{enabled:?}"
+        with_github[0].contains("only trusted for GitHub Actions identities"),
+        "{with_github:?}"
     );
 
-    let disabled =
-        reasons(VerificationConfig::new(Publisher::new()).with_github_attestations(false)).await;
+    let without_github = rejection_reasons(&record, TrustedRoots::new(&public_good)).await;
     assert!(
-        disabled[0].contains("no transparency log entry"),
-        "{disabled:?}"
+        without_github[0].contains("no transparency log entry"),
+        "{without_github:?}"
     );
 }
