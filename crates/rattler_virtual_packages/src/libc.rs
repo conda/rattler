@@ -183,7 +183,7 @@ fn parse_getconf_glibc_version(input: &str) -> Result<Option<Version>, DetectLib
 #[cfg(any(test, target_os = "linux"))]
 fn parse_glibc_loader_version(input: &str) -> Result<Option<Version>, DetectLibCError> {
     static LOADER_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
-        regex::Regex::new(r"^ld\\.so \\(GNU libc\\).*?version ([0-9]+\\.[0-9]+)\\.").unwrap()
+        regex::Regex::new(r"^ld\.so \(GNU libc\).*?version ([0-9]+\.[0-9]+)\.").unwrap()
     });
     let version = input
         .lines()
@@ -252,20 +252,20 @@ mod test {
     #[test]
     fn test_getconf_glibc_version() {
         assert_eq!(
-            parse_getconf_glibc_version("glibc 2.39\\n").unwrap(),
+            parse_getconf_glibc_version("glibc 2.39\n").unwrap(),
             Some(Version::from_str("2.39").unwrap())
         );
-        assert_eq!(parse_getconf_glibc_version("musl 1.2.5\\n").unwrap(), None);
+        assert_eq!(parse_getconf_glibc_version("musl 1.2.5\n").unwrap(), None);
     }
 
     #[test]
     fn test_glibc_loader_version() {
-        let output = "ld.so (GNU libc) stable release version 2.39.\\nCopyright (C) 2024 Free Software Foundation, Inc.\\n";
+        let output = "ld.so (GNU libc) stable release version 2.39.\\nCopyright (C) 2024 Free Software Foundation, Inc.\n";
         assert_eq!(
             parse_glibc_loader_version(output).unwrap(),
             Some(Version::from_str("2.39").unwrap())
         );
-        assert_eq!(parse_glibc_loader_version("musl libc\\n").unwrap(), None);
+        assert_eq!(parse_glibc_loader_version("musl libc\n").unwrap(), None);
     }
 
 }
