@@ -33,6 +33,7 @@ class ArchiveIdentifier:
     'python-3.11.0-h12345_0'
     >>> ident == ArchiveIdentifier.from_str("python-3.11.0-h12345_0")
     True
+    >>>
     ```
     """
 
@@ -86,6 +87,7 @@ class ArchiveIdentifier:
         '1.24.0'
         >>> ident.build_string
         'py310_0'
+        >>>
         ```
         """
         return cls._from_py_archive_identifier(PyArchiveIdentifier.from_str(string))
@@ -248,6 +250,7 @@ class CondaArchiveIdentifier:
     '.conda'
     >>> ident.to_file_name()
     'python-3.11.0-0.conda'
+    >>>
     ```
     """
 
