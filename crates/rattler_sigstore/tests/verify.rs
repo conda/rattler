@@ -9,8 +9,9 @@ use rattler_conda_types::{
 };
 use rattler_digest::{Sha256, Sha256Hash};
 use rattler_sigstore::{
-    ChannelCheck, Issuer, Publisher, SigstoreError, TrustedRoot, VerificationConfig,
-    VerificationPolicy, fetch_sidecar, verify_bundles, verify_record_with_trusted_root,
+    ChannelCheck, Issuer, Publisher, SigstoreError, TrustedRoot, TrustedRoots, VerificationConfig,
+    VerificationPolicy, fetch_sidecar, verify_bundles, verify_bundles_with_trusted_roots,
+    verify_record_with_trusted_root, verify_record_with_trusted_roots,
 };
 use reqwest_middleware::ClientWithMiddleware;
 use sigstore_verify::trust_root::SigstoreInstance;
@@ -471,4 +472,121 @@ async fn verify_record_end_to_end() {
             .await
             .unwrap();
     assert!(!outcome.is_verified());
+}
+
+/// A bundle signed by GitHub's artifact attestation instance: it carries an
+/// RFC 3161 timestamp from GitHub's TSA instead of a transparency log entry.
+/// It is one of GitHub's own immutable release attestations, signed for the
+/// identity `https://dotcom.releases.github.com` without an OIDC issuer rather
+/// than by a GitHub Actions workflow, so it passes Sigstore verification but
+/// must not be accepted as a publisher's attestation.
+const GITHUB_PRIVATE_BUNDLE: &str =
+    include_str!("../test-data/github-private-attestation.sigstore.json");
+const GITHUB_PRIVATE_SUBJECT_SHA256: &str =
+    "76f1fe8593bf227cca2c089e3c16dc95014a8d3e89c5dd220530469ca043c428";
+
+#[test]
+fn bundles_without_a_transparency_log_need_the_github_root() {
+    let channel = Url::parse("https://prefix.dev/private-channel/").unwrap();
+    let mut record = record(&channel, None);
+    record.package_record.sha256 = Some(
+        rattler_digest::parse_digest_from_hex::<Sha256>(GITHUB_PRIVATE_SUBJECT_SHA256).unwrap(),
+    );
+    let bundles =
+        rattler_sigstore::parse_bundles(&channel, format!("[{GITHUB_PRIVATE_BUNDLE}]").as_bytes())
+            .unwrap();
+    let public_good = trusted_root();
+    let github = TrustedRoot::from_embedded(SigstoreInstance::GitHub).unwrap();
+
+    // Only trusting the public-good instance rejects the bundle before any
+    // Sigstore verification, because it has no transparency log entry.
+    let result = verify_bundles(&record, &bundles, ChannelCheck::Require, &public_good).unwrap();
+    assert!(result.verified.is_empty());
+    assert!(
+        result.rejected[0]
+            .reason
+            .contains("no transparency log entry"),
+        "{}",
+        result.rejected[0].reason
+    );
+
+    // With GitHub's root the Sigstore layer passes (signature, certificate
+    // chain to GitHub's Fulcio, GitHub TSA timestamp), but GitHub's instance
+    // is only trusted for GitHub Actions identities.
+    let roots = TrustedRoots::new(&public_good).with_github(&github);
+    let result =
+        verify_bundles_with_trusted_roots(&record, &bundles, ChannelCheck::Require, roots).unwrap();
+    assert!(result.verified.is_empty());
+    let reason = &result.rejected[0].reason;
+    assert!(!reason.contains("sigstore verification failed"), "{reason}");
+    assert!(
+        reason.contains("only trusted for GitHub Actions identities"),
+        "{reason}"
+    );
+
+    // A different artifact digest fails the Sigstore layer itself.
+    let mut other = record.clone();
+    other.package_record.sha256 =
+        Some(rattler_digest::parse_digest_from_hex::<Sha256>(PACKAGE_SHA256).unwrap());
+    let result =
+        verify_bundles_with_trusted_roots(&other, &bundles, ChannelCheck::Require, roots).unwrap();
+    assert!(
+        result.rejected[0]
+            .reason
+            .contains("sigstore verification failed"),
+        "{}",
+        result.rejected[0].reason
+    );
+}
+
+#[tokio::test]
+async fn github_attestations_can_be_disabled() {
+    let dir = tempfile::tempdir().unwrap();
+    let sidecar = format!("[{GITHUB_PRIVATE_BUNDLE}]");
+    let subdir = dir.path().join("channel").join("osx-arm64");
+    std::fs::create_dir_all(&subdir).unwrap();
+    let sidecar_hash = rattler_digest::compute_bytes_digest::<Sha256>(sidecar.as_bytes());
+    std::fs::write(
+        subdir.join(format!("{PACKAGE}.sigs.{}", hex::encode(sidecar_hash))),
+        &sidecar,
+    )
+    .unwrap();
+    let channel = serve(dir.path()).await;
+    let mut record = record(&channel, Some(sidecar_hash));
+    record.package_record.sha256 = Some(
+        rattler_digest::parse_digest_from_hex::<Sha256>(GITHUB_PRIVATE_SUBJECT_SHA256).unwrap(),
+    );
+
+    let public_good = trusted_root();
+    let github = TrustedRoot::from_embedded(SigstoreInstance::GitHub).unwrap();
+    let roots = TrustedRoots::new(&public_good).with_github(&github);
+    let reasons = |config: VerificationConfig| {
+        let record = record.clone();
+        async move {
+            match verify_record_with_trusted_roots(
+                &VerificationPolicy::Require(config),
+                &record,
+                &client(),
+                roots,
+            )
+            .await
+            {
+                Err(SigstoreError::VerificationFailed { reasons, .. }) => reasons,
+                other => panic!("unexpected outcome: {other:?}"),
+            }
+        }
+    };
+
+    let enabled = reasons(VerificationConfig::new(Publisher::new())).await;
+    assert!(
+        !enabled[0].contains("no transparency log entry"),
+        "{enabled:?}"
+    );
+
+    let disabled =
+        reasons(VerificationConfig::new(Publisher::new()).with_github_attestations(false)).await;
+    assert!(
+        disabled[0].contains("no transparency log entry"),
+        "{disabled:?}"
+    );
 }

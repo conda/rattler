@@ -1,7 +1,7 @@
 //! Command-line options.
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use rattler_networking::AuthenticationStorage;
 use url::Url;
@@ -50,6 +50,24 @@ pub enum AttestationSource {
     /// No attestation.
     #[default]
     NoAttestation,
+}
+
+/// The Sigstore instance a generated attestation is signed with.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+pub enum SigstoreInstanceChoice {
+    /// GitHub's instance for private and internal GitHub repositories (as
+    /// reported by the GitHub Actions identity token), the public-good
+    /// instance otherwise. This matches what `actions/attest` does.
+    #[default]
+    Auto,
+    /// The Sigstore public-good instance. The signature, including the
+    /// repository, workflow and commit of the signer, is recorded in the
+    /// public Rekor transparency log.
+    PublicGood,
+    /// GitHub's artifact attestation instance. Nothing is published to a
+    /// transparency log; the bundle carries a timestamp from GitHub's
+    /// timestamp authority instead. Only works in GitHub Actions.
+    Github,
 }
 
 /// Common opts for upload operations
@@ -304,6 +322,21 @@ pub struct PrefixOpts {
     #[arg(long, requires = "generate_attestation")]
     pub store_github_attestation: bool,
 
+    /// The Sigstore instance to sign a generated attestation with.
+    ///
+    /// The public-good instance records the signer's repository, workflow and
+    /// commit in a public transparency log, which reveals the name of a
+    /// private repository. `auto` therefore uses GitHub's instance, which
+    /// keeps no public log, for private and internal GitHub repositories.
+    #[arg(
+        long,
+        value_enum,
+        default_value_t,
+        env = "RATTLER_SIGSTORE_INSTANCE",
+        requires = "generate_attestation"
+    )]
+    pub sigstore_instance: SigstoreInstanceChoice,
+
     /// Skip upload if package already exists.
     #[arg(short, long)]
     pub skip_existing: bool,
@@ -323,6 +356,7 @@ pub struct PrefixData {
     pub skip_existing: SkipExisting,
     pub force: ForceOverwrite,
     pub store_github_attestation: bool,
+    pub sigstore_instance: SigstoreInstanceChoice,
 }
 
 impl From<PrefixOpts> for PrefixData {
@@ -341,6 +375,7 @@ impl From<PrefixOpts> for PrefixData {
             value.force.into(),
             value.store_github_attestation,
         )
+        .with_sigstore_instance(value.sigstore_instance)
     }
 }
 
@@ -363,7 +398,14 @@ impl PrefixData {
             skip_existing,
             force,
             store_github_attestation,
+            sigstore_instance: SigstoreInstanceChoice::default(),
         }
+    }
+
+    /// Sets the Sigstore instance a generated attestation is signed with.
+    pub fn with_sigstore_instance(mut self, sigstore_instance: SigstoreInstanceChoice) -> Self {
+        self.sigstore_instance = sigstore_instance;
+        self
     }
 }
 
