@@ -100,43 +100,33 @@ fn try_detect_libc_version() -> Result<Option<(String, Version)>, DetectLibCErro
             return Ok(Some((String::from("glibc"), version)));
         }
 
-        // Try the system utilities before probing the dynamic loader directly.
         // Minimal Linux distributions may ship glibc without ldd.
-        if let Ok(output) = std::process::Command::new("ldd").arg("--version").output() {
-            if output.status.success() {
-                if let Some(version) =
-                    parse_glibc_ldd_version(&String::from_utf8_lossy(&output.stdout))?
-                {
-                    return Ok(Some((String::from("glibc"), version)));
-                }
-            }
+        if let Ok(output) = std::process::Command::new("ldd").arg("--version").output()
+            && output.status.success()
+            && let Some(version) =
+                parse_glibc_ldd_version(&String::from_utf8_lossy(&output.stdout))?
+        {
+            return Ok(Some((String::from("glibc"), version)));
         }
 
         if let Ok(output) = std::process::Command::new("getconf")
             .arg("GNU_LIBC_VERSION")
             .output()
+            && output.status.success()
+            && let Some(version) =
+                parse_getconf_glibc_version(&String::from_utf8_lossy(&output.stdout))?
         {
-            if output.status.success() {
-                if let Some(version) =
-                    parse_getconf_glibc_version(&String::from_utf8_lossy(&output.stdout))?
-                {
-                    return Ok(Some((String::from("glibc"), version)));
-                }
-            }
+            return Ok(Some((String::from("glibc"), version)));
         }
 
-        // glibc's dynamic loader is itself executable. Unlike ldd/getconf, it
-        // is normally present even in minimal Yocto images. Use known ABI
-        // paths rather than searching the filesystem or executing arbitrary files.
+        // The glibc dynamic loader is executable even on minimal Yocto images.
         for path in glibc_loader_paths() {
-            if let Ok(output) = std::process::Command::new(path).arg("--version").output() {
-                if output.status.success() {
-                    if let Some(version) =
-                        parse_glibc_loader_version(&String::from_utf8_lossy(&output.stdout))?
-                    {
-                        return Ok(Some((String::from("glibc"), version)));
-                    }
-                }
+            if let Ok(output) = std::process::Command::new(path).arg("--version").output()
+                && output.status.success()
+                && let Some(version) =
+                    parse_glibc_loader_version(&String::from_utf8_lossy(&output.stdout))?
+            {
+                return Ok(Some((String::from("glibc"), version)));
             }
         }
 
@@ -153,15 +143,25 @@ fn try_detect_libc_version() -> Result<Option<(String, Version)>, DetectLibCErro
 #[cfg(target_os = "linux")]
 fn glibc_loader_paths() -> &'static [&'static str] {
     #[cfg(target_arch = "aarch64")]
-    { &["/lib/ld-linux-aarch64.so.1", "/lib64/ld-linux-aarch64.so.1"] }
+    {
+        &["/lib/ld-linux-aarch64.so.1", "/lib64/ld-linux-aarch64.so.1"]
+    }
     #[cfg(target_arch = "x86_64")]
-    { &["/lib64/ld-linux-x86-64.so.2", "/lib/ld-linux-x86-64.so.2"] }
+    {
+        &["/lib64/ld-linux-x86-64.so.2", "/lib/ld-linux-x86-64.so.2"]
+    }
     #[cfg(target_arch = "x86")]
-    { &["/lib/ld-linux.so.2", "/lib32/ld-linux.so.2"] }
+    {
+        &["/lib/ld-linux.so.2", "/lib32/ld-linux.so.2"]
+    }
     #[cfg(target_arch = "arm")]
-    { &["/lib/ld-linux-armhf.so.3", "/lib/ld-linux.so.3"] }
+    {
+        &["/lib/ld-linux-armhf.so.3", "/lib/ld-linux.so.3"]
+    }
     #[cfg(target_arch = "riscv64")]
-    { &["/lib/ld-linux-riscv64-lp64d.so.1"] }
+    {
+        &["/lib/ld-linux-riscv64-lp64d.so.1"]
+    }
     #[cfg(not(any(
         target_arch = "aarch64",
         target_arch = "x86_64",
@@ -169,7 +169,9 @@ fn glibc_loader_paths() -> &'static [&'static str] {
         target_arch = "arm",
         target_arch = "riscv64"
     )))]
-    { &[] }
+    {
+        &[]
+    }
 }
 
 #[cfg(any(test, target_os = "linux"))]
@@ -190,7 +192,9 @@ fn parse_glibc_loader_version(input: &str) -> Result<Option<Version>, DetectLibC
         .next()
         .and_then(|line| LOADER_RE.captures(line))
         .and_then(|captures| captures.get(1));
-    version.map(|m| m.as_str().parse().map_err(Into::into)).transpose()
+    version
+        .map(|m| m.as_str().parse().map_err(Into::into))
+        .transpose()
 }
 
 #[cfg(any(test, unix))]
@@ -267,5 +271,4 @@ mod test {
         );
         assert_eq!(parse_glibc_loader_version("musl libc\n").unwrap(), None);
     }
-
 }
