@@ -13,11 +13,10 @@ use crate::{
     networking::client::authentication_storage_from_config, subdir::PySubdir,
 };
 use pyo3::exceptions::PyValueError;
+use pythonize::depythonize;
 use rattler_networking::AuthenticationStorage;
 use rattler_s3::{S3CredentialSource, S3Credentials};
 use std::path::PathBuf;
-
-use crate::serde_py::from_py;
 
 fn parse_package_revision_assignment(value: &str) -> PyResult<PackageRevisionAssignment> {
     match value {
@@ -59,7 +58,7 @@ pub fn py_index_fs<'py>(
         None => resolved.package_revision_assignment.unwrap_or_default(),
     };
     let repodata_revisions = match repodata_revisions {
-        Some(value) => from_py::<Vec<RepodataRevisionSelection>>(&value)?,
+        Some(value) => depythonize::<Vec<RepodataRevisionSelection>>(&value)?,
         None => resolved.repodata_revisions.clone().unwrap_or_default(),
     };
     let write_zst = write_zst.or(resolved.write_zst).unwrap_or(true);
@@ -122,7 +121,7 @@ pub fn py_index_s3<'py>(
         None => resolved.package_revision_assignment.unwrap_or_default(),
     };
     let repodata_revisions = match repodata_revisions {
-        Some(value) => from_py::<Vec<RepodataRevisionSelection>>(&value)?,
+        Some(value) => depythonize::<Vec<RepodataRevisionSelection>>(&value)?,
         None => resolved.repodata_revisions.clone().unwrap_or_default(),
     };
     let write_zst = write_zst.or(resolved.write_zst).unwrap_or(true);
@@ -141,7 +140,7 @@ pub fn py_index_s3<'py>(
         .and_then(|bucket| config.as_ref()?.inner.s3_options.0.get(bucket));
     let credentials = match credentials {
         Some(dict) => {
-            let credentials: S3Credentials = from_py(&dict)?;
+            let credentials: S3Credentials = depythonize(&dict)?;
             let auth_storage = match &config {
                 Some(config) => authentication_storage_from_config(config),
                 None => AuthenticationStorage::from_env_and_defaults(),

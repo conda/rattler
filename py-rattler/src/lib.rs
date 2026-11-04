@@ -37,7 +37,6 @@ mod exceptions;
 mod index_json;
 mod link_json;
 mod run_exports_json;
-mod serde_py;
 
 use std::ops::Deref;
 
