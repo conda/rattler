@@ -172,7 +172,10 @@ impl PyChannelInfo {
         self.inner
             .virtual_package_detectors
             .as_ref()
-            .map(|value| crate::serde_py::to_py(py, value))
+            .map(|value| {
+                pythonize::pythonize(py, value)
+                    .map_err(|err| pyo3::exceptions::PyValueError::new_err(err.to_string()))
+            })
             .transpose()
     }
 }

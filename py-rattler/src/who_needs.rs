@@ -10,7 +10,7 @@ use crate::{
 
 /// A record that references the package queried through
 /// `PyGateway::who_needs`.
-#[pyclass]
+#[pyclass(skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyDependent {
     /// The record that references the queried package.

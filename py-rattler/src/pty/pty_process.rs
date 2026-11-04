@@ -10,7 +10,7 @@ use std::process::Command;
 /// Options for creating a PTY process.
 ///
 /// Controls behavior like whether input is echoed back to the terminal.
-#[pyclass(from_py_object)]
+#[pyclass]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPtyProcessOptions {
