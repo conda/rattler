@@ -205,6 +205,8 @@ class PackageRecord:
         extra_depends: dict[str, list[str]] | None = None,
         flags: list[str] | None = None,
         attestations_sha256: bytes | None = None,
+        track_features: list[str] | None = None,
+        timestamp: datetime.datetime | None = None,
     ) -> None:
         if isinstance(subdir, str):
             try:
@@ -268,6 +270,10 @@ class PackageRecord:
             self._record.flags = flags
         if attestations_sha256 is not None:
             self._record.attestations_sha256 = attestations_sha256
+        if track_features is not None:
+            self._record.track_features = track_features
+        if timestamp is not None:
+            self.timestamp = timestamp
 
     @property
     def arch(self) -> str | None:
