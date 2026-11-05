@@ -4,15 +4,16 @@ use rattler_conda_types::Subdir;
 use rattler_conda_types::package::{FileMode, PathType, PrefixOffsets};
 use rayon::prelude::*;
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::HashMap,
     ffi::{OsStr, OsString},
     fs::{self, File},
-    io::{Read, Seek, SeekFrom},
+    io::Read,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
-    time::UNIX_EPOCH,
+    sync::{Arc, Mutex, OnceLock},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::scan_cache::{FileStamp, ScanCache, ScanEntry, ScanResult};
 use crate::vfs_ops::current_uid_gid;
 
 use crate::metadata_tree::{FileNode, MetadataNode};
@@ -65,9 +66,14 @@ pub(crate) fn target_prefix_for_platform(mount_point: &Path, platform: Subdir) -
 /// the value is an [`Arc<Mmap>`], which keeps the file mapped by the kernel on
 /// its own — a cached entry holds no Rust `File` and leaks no descriptor, so
 /// the bound only caps virtual-address use for very large environments.
+///
+/// Every entry carries a logical timestamp (set on insert, and refreshed by
+/// `get` under LRU), so a hit is `O(1)`; only an insert that overflows the
+/// bound pays an `O(n)` scan for the oldest entry. The mmap cache is hit on
+/// every read, so hits must not scan the cache.
 struct BoundedCache<V> {
-    map: HashMap<u64, V>,
-    order: VecDeque<u64>,
+    map: HashMap<u64, (V, u64)>,
+    tick: u64,
     max_entries: usize,
     touch_on_get: bool,
 }
@@ -76,35 +82,53 @@ impl<V> BoundedCache<V> {
     fn new(max_entries: usize, touch_on_get: bool) -> Self {
         Self {
             map: HashMap::new(),
-            order: VecDeque::new(),
+            tick: 0,
             max_entries,
             touch_on_get,
         }
     }
 
+    fn next_tick(&mut self) -> u64 {
+        self.tick += 1;
+        self.tick
+    }
+
     fn get(&mut self, ino: u64) -> Option<&V> {
-        if self.touch_on_get
-            && let Some(pos) = self.order.iter().position(|&i| i == ino)
-        {
-            self.order.remove(pos);
-            self.order.push_back(ino);
+        let tick = if self.touch_on_get {
+            Some(self.next_tick())
+        } else {
+            None
+        };
+        let (value, stamp) = self.map.get_mut(&ino)?;
+        if let Some(tick) = tick {
+            *stamp = tick;
         }
-        self.map.get(&ino)
+        Some(value)
     }
 
     fn insert(&mut self, ino: u64, value: V) {
-        // Only track order for genuinely new inodes so re-inserting the same
-        // key doesn't create a duplicate order entry.
-        if self.map.insert(ino, value).is_none() {
-            self.order.push_back(ino);
-            while self.map.len() > self.max_entries {
-                match self.order.pop_front() {
-                    Some(old) => {
-                        self.map.remove(&old);
-                    }
-                    None => break,
-                }
+        // Re-inserting an existing key updates the value in place and keeps
+        // its position (FIFO) or marks it as most recently used (LRU).
+        if let Some((existing, stamp)) = self.map.get_mut(&ino) {
+            *existing = value;
+            if self.touch_on_get {
+                self.tick += 1;
+                *stamp = self.tick;
             }
+            return;
+        }
+        let tick = self.next_tick();
+        self.map.insert(ino, (value, tick));
+        while self.map.len() > self.max_entries {
+            let Some(oldest) = self
+                .map
+                .iter()
+                .min_by_key(|(_, (_, stamp))| *stamp)
+                .map(|(&ino, _)| ino)
+            else {
+                break;
+            };
+            self.map.remove(&oldest);
         }
     }
 }
@@ -120,6 +144,60 @@ fn read_leading_bytes(path: &Path, n: usize) -> std::io::Result<Vec<u8>> {
     Ok(buf)
 }
 
+/// Locate the placeholder in `path`, reusing the result stored in
+/// `scan_cache` when it still applies. Returns the scan and whether it was
+/// freshly computed (`false` for a cache hit). The file is memory-mapped rather
+/// than read, so scanning a large binary doesn't copy it to the heap.
+fn scan_file(
+    path: &Path,
+    placeholder: &str,
+    mode: FileMode,
+    platform: Subdir,
+    scan_cache: Option<&ScanCache>,
+) -> Option<(ScanEntry, bool)> {
+    let warn = |e: &dyn std::fmt::Display| {
+        tracing::warn!(
+            "failed to read {} for offset computation: {}",
+            path.display(),
+            e
+        );
+    };
+    let file = File::open(path).map_err(|e| warn(&e)).ok()?;
+    let metadata = file.metadata().map_err(|e| warn(&e)).ok()?;
+    let stamp = FileStamp::of(&metadata)?;
+    if let Some(result) = scan_cache.and_then(|cache| cache.get(path, placeholder, &stamp)) {
+        let entry = ScanEntry {
+            stamp,
+            placeholder: placeholder.to_string(),
+            result: result.clone(),
+        };
+        return Some((entry, false));
+    }
+
+    // SAFETY: package cache files are immutable while mounted.
+    let source = unsafe { Mmap::map(&file) }.map_err(|e| warn(&e)).ok()?;
+    let result = match mode {
+        FileMode::Text => {
+            let (region_end, occurrences) =
+                crate::prefix_replacement::scan_text(&source, placeholder, &platform);
+            ScanResult::Text {
+                region_end,
+                occurrences,
+            }
+        }
+        FileMode::Binary => ScanResult::Binary(crate::prefix_replacement::plan_binary_replacement(
+            &source,
+            placeholder,
+        )),
+    };
+    let entry = ScanEntry {
+        stamp,
+        placeholder: placeholder.to_string(),
+        result,
+    };
+    Some((entry, true))
+}
+
 /// Pre-computed prefix-replacement plan for a file, keyed by inode.
 enum ReplacementPlan {
     /// Text file: shebang-aware plan — the shebang region is transformed once
@@ -133,7 +211,6 @@ enum ReplacementPlan {
 
 pub struct VirtualFS {
     metadata: Vec<MetadataNode>,
-    mount_point: PathBuf,
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     platform: Subdir,
     uid: u32,
@@ -149,32 +226,92 @@ pub struct VirtualFS {
     codesign_cache: Mutex<BoundedCache<Vec<u8>>>,
     /// Cache of memory-mapped source files, keyed by inode, so streaming a
     /// prefix-replaced file doesn't re-`open` + re-`mmap` it on every window.
+    /// Also backs plain (untransformed) reads from transports that address
+    /// reads by inode rather than by an open handle (NFS).
     mmap_cache: Mutex<BoundedCache<Arc<Mmap>>>,
+    /// Name → child index for directories with many children, indexed by the
+    /// directory's metadata index. Small directories (and files) hold `None`
+    /// and are searched linearly. Without this, every lookup in a large
+    /// directory (`lib/`, `site-packages/`) is a linear scan, and lookups are
+    /// the most frequent operation while e.g. Python resolves imports.
+    child_maps: Vec<Option<HashMap<OsString, usize>>>,
+    /// Lazily computed attributes per metadata index. The tree and the package
+    /// cache files backing it are immutable while mounted, so the `stat` of the
+    /// backing file only has to happen once per node.
+    attr_cache: Vec<OnceLock<FileAttr>>,
+    /// The target prefix spliced into placeholder files (see
+    /// [`target_prefix_for_platform`]), computed once instead of per read.
+    target_prefix: String,
+}
+
+/// Directories with more children than this get a hashed name index.
+const CHILD_MAP_THRESHOLD: usize = 16;
+
+/// Key under which a child name is stored in [`VirtualFS::child_maps`]:
+/// verbatim on Unix, ASCII-lowercased on Windows to match [`names_match`].
+fn child_key(name: &OsStr) -> std::borrow::Cow<'_, OsStr> {
+    #[cfg(windows)]
+    {
+        std::borrow::Cow::Owned(OsString::from(name.to_string_lossy().to_ascii_lowercase()))
+    }
+    #[cfg(not(windows))]
+    {
+        std::borrow::Cow::Borrowed(name)
+    }
 }
 
 impl VirtualFS {
     pub fn new(metadata: Vec<MetadataNode>, mount_point: &Path) -> Self {
-        Self::with_platform(
+        Self::new_with_scan_cache(metadata, mount_point, None)
+    }
+
+    /// Like [`VirtualFS::new`], but reuses (and updates) the placeholder scan
+    /// results stored at `scan_cache`, see [`crate::scan_cache`].
+    pub fn new_with_scan_cache(
+        metadata: Vec<MetadataNode>,
+        mount_point: &Path,
+        scan_cache: Option<&Path>,
+    ) -> Self {
+        Self::build(
             metadata,
             mount_point,
             Subdir::current().expect("host platform"),
+            scan_cache,
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn with_platform(
-        mut metadata: Vec<MetadataNode>,
+        metadata: Vec<MetadataNode>,
         mount_point: &Path,
         platform: Subdir,
     ) -> Self {
+        Self::build(metadata, mount_point, platform, None)
+    }
+
+    pub(crate) fn build(
+        mut metadata: Vec<MetadataNode>,
+        mount_point: &Path,
+        platform: Subdir,
+        scan_cache_path: Option<&Path>,
+    ) -> Self {
         let target_prefix = target_prefix_for_platform(mount_point, platform);
+        let scan_cache = scan_cache_path.map(|path| ScanCache::load(path, platform));
         // Compute replacement offsets and text-mode file sizes. Files without
         // recorded CEP offsets (still the common case for real packages) fall
         // back to reading and scanning their full contents; running that
         // serially on the caller's thread makes mount time grow with the total
         // byte size of every prefix-bearing file (all the `.so`s and
         // binaries). Scan files in parallel instead so mount time is bounded by
-        // the largest file rather than their sum.
-        let planned: Vec<(u64, ReplacementPlan, Option<u64>)> = (0..metadata.len())
+        // the largest file rather than their sum. Scan results are reused from
+        // (and recorded for) `scan_cache` when one is configured.
+        #[allow(clippy::type_complexity)]
+        let planned: Vec<(
+            u64,
+            ReplacementPlan,
+            Option<u64>,
+            Option<(PathBuf, ScanEntry, bool)>,
+        )> = (0..metadata.len())
             .into_par_iter()
             .filter_map(|i| {
                 let file = metadata[i].as_file()?;
@@ -230,6 +367,8 @@ impl VirtualFS {
                 let shebang_length = recorded_offsets.and_then(PrefixOffsets::shebang_length);
 
                 let mut computed_size: Option<u64> = None;
+                // The scan of this file, to store in the scan cache.
+                let mut scanned: Option<(PathBuf, ScanEntry, bool)> = None;
                 let plan = match placeholder.file_mode {
                     FileMode::Text => {
                         // With recorded offsets, construction reads at most the
@@ -271,8 +410,8 @@ impl VirtualFS {
                             None
                         };
 
-                        let (text_plan, source_len) = match recorded_plan {
-                            Some(plan) => match fs::symlink_metadata(&cache_path) {
+                        let (text_plan, source_len) = if let Some(plan) = recorded_plan {
+                            match fs::symlink_metadata(&cache_path) {
                                 Ok(m) => (plan, m.len() as usize),
                                 Err(e) => {
                                     tracing::warn!(
@@ -282,26 +421,46 @@ impl VirtualFS {
                                     );
                                     return None;
                                 }
-                            },
-                            None => match fs::read(&cache_path) {
-                                Ok(source) => {
-                                    let plan = crate::prefix_replacement::plan_text_replacement(
-                                        &source,
-                                        &placeholder.placeholder,
-                                        &target_prefix,
-                                        &platform,
-                                    );
-                                    (plan, source.len())
+                            }
+                        } else {
+                            let (entry, fresh) = scan_file(
+                                &cache_path,
+                                &placeholder.placeholder,
+                                FileMode::Text,
+                                platform,
+                                scan_cache.as_ref(),
+                            )?;
+                            let ScanResult::Text {
+                                region_end,
+                                occurrences,
+                            } = &entry.result
+                            else {
+                                unreachable!("text scan yields a text result")
+                            };
+                            let region = if *region_end > 0 {
+                                match read_leading_bytes(&cache_path, *region_end) {
+                                    Ok(region) if region.len() == *region_end => region,
+                                    Ok(_) | Err(_) => {
+                                        tracing::warn!(
+                                            "failed to read the shebang of {}",
+                                            cache_path.display()
+                                        );
+                                        return None;
+                                    }
                                 }
-                                Err(e) => {
-                                    tracing::warn!(
-                                        "failed to read {} for offset computation: {}",
-                                        cache_path.display(),
-                                        e
-                                    );
-                                    return None;
-                                }
-                            },
+                            } else {
+                                Vec::new()
+                            };
+                            let plan = crate::prefix_replacement::TextPlan::from_scan(
+                                &region,
+                                occurrences.iter().copied(),
+                                &placeholder.placeholder,
+                                &target_prefix,
+                                &platform,
+                            );
+                            let source_len = entry.stamp.len() as usize;
+                            scanned = Some((cache_path.clone(), entry, fresh));
+                            (plan, source_len)
                         };
 
                         // Post-replacement size: the transformed shebang region plus
@@ -320,33 +479,38 @@ impl VirtualFS {
                         } else if let Some(offsets) = recorded_offsets {
                             crate::prefix_replacement::cstrings_from_recorded(offsets.groups())
                         } else {
-                            match fs::read(&cache_path) {
-                                Ok(source) => crate::prefix_replacement::plan_binary_replacement(
-                                    &source,
-                                    &placeholder.placeholder,
-                                ),
-                                Err(e) => {
-                                    tracing::warn!(
-                                        "failed to read {} for offset computation: {}",
-                                        cache_path.display(),
-                                        e
-                                    );
-                                    return None;
-                                }
-                            }
+                            let (entry, fresh) = scan_file(
+                                &cache_path,
+                                &placeholder.placeholder,
+                                FileMode::Binary,
+                                platform,
+                                scan_cache.as_ref(),
+                            )?;
+                            let ScanResult::Binary(cstrings) = &entry.result else {
+                                unreachable!("binary scan yields a binary result")
+                            };
+                            let cstrings = cstrings.clone();
+                            scanned = Some((cache_path.clone(), entry, fresh));
+                            cstrings
                         };
                         ReplacementPlan::Binary(cstrings)
                     }
                 };
 
-                Some((ino, plan, computed_size))
+                Some((ino, plan, computed_size, scanned))
             })
             .collect();
 
         // Apply the parallel results sequentially: insert each plan and record
         // the transformed text-file sizes back into the metadata tree.
         let mut offset_cache = HashMap::with_capacity(planned.len());
-        for (ino, plan, computed_size) in planned {
+        let mut scans = Vec::new();
+        let mut any_fresh_scan = false;
+        for (ino, plan, computed_size, scanned) in planned {
+            if let Some((path, entry, fresh)) = scanned {
+                any_fresh_scan |= fresh;
+                scans.push((path, entry));
+            }
             if let Some(size) = computed_size {
                 metadata[(ino - 1) as usize]
                     .as_file_mut()
@@ -356,16 +520,62 @@ impl VirtualFS {
             offset_cache.insert(ino, plan);
         }
 
+        // Persist the scans when anything had to be scanned. Only this mount's
+        // files are written, so entries of replaced packages drop out.
+        if let Some(path) = scan_cache_path
+            && any_fresh_scan
+            && let Err(e) = ScanCache::store(path, platform, scans)
+        {
+            tracing::warn!("failed to write scan cache {}: {e}", path.display());
+        }
+
+        let child_maps = metadata
+            .iter()
+            .map(|node| {
+                let dir = node.as_directory()?;
+                if dir.children.len() <= CHILD_MAP_THRESHOLD {
+                    return None;
+                }
+                let mut map = HashMap::with_capacity(dir.children.len());
+                for &child in &dir.children {
+                    // Keep the first match, like the linear scan does.
+                    map.entry(child_key(metadata[child].file_name()).into_owned())
+                        .or_insert(child);
+                }
+                Some(map)
+            })
+            .collect();
+        let attr_cache = (0..metadata.len()).map(|_| OnceLock::new()).collect();
+        let (uid, gid) = current_uid_gid();
+
         VirtualFS {
             metadata,
-            mount_point: mount_point.to_path_buf(),
             platform,
-            uid: current_uid_gid().0,
-            gid: current_uid_gid().1,
+            uid,
+            gid,
             offset_cache,
             codesign_cache: Mutex::new(BoundedCache::new(16, false)),
-            mmap_cache: Mutex::new(BoundedCache::new(128, true)),
+            mmap_cache: Mutex::new(BoundedCache::new(4096, true)),
+            child_maps,
+            attr_cache,
+            target_prefix,
         }
+    }
+
+    /// The metadata index of the child of directory `parent_index` named
+    /// `name`, if any.
+    fn find_child(&self, parent_index: usize, name: &OsStr) -> Result<Option<usize>, VfsError> {
+        let Some(parent_directory) = self.metadata[parent_index].as_directory() else {
+            return Err(VfsError::NotADirectory);
+        };
+        if let Some(map) = &self.child_maps[parent_index] {
+            return Ok(map.get::<OsStr>(&child_key(name)).copied());
+        }
+        Ok(parent_directory
+            .children
+            .iter()
+            .copied()
+            .find(|&child| names_match(self.metadata[child].file_name(), name)))
     }
 
     /// Validate an inode number and return the 0-based metadata index.
@@ -408,9 +618,17 @@ impl VirtualFS {
         path.join(&file.file_name)
     }
 
-    fn _getattr(&self, child: &MetadataNode, child_index: &usize) -> FileAttr {
-        let ino = (child_index + 1) as u64;
-        match child {
+    /// The attributes of the node at metadata index `index`, computed on first
+    /// use and cached for the lifetime of the mount.
+    fn _getattr(&self, index: usize) -> FileAttr {
+        self.attr_cache[index]
+            .get_or_init(|| self.compute_attr(index))
+            .clone()
+    }
+
+    fn compute_attr(&self, index: usize) -> FileAttr {
+        let ino = (index + 1) as u64;
+        match &self.metadata[index] {
             MetadataNode::Directory(_) => self.make_attr(ino, 0, FileKind::Directory, 0o755),
             MetadataNode::File(file) => {
                 if let Some(ref content) = file.virtual_content {
@@ -424,6 +642,11 @@ impl VirtualFS {
                         // Override size if prefix replacement changes the file length
                         if let Some(computed) = file.computed_size {
                             attr.size = computed;
+                        } else if file.prefix_placeholder.is_none()
+                            && file.path_type != PathType::SoftLink
+                            && let Some(mtime) = self.pyc_source_mtime(file, &attr)
+                        {
+                            attr.mtime = mtime;
                         }
                         attr
                     }
@@ -436,29 +659,90 @@ impl VirtualFS {
         }
     }
 
+    /// The modification time to report for a Python source file so that the
+    /// bytecode the package ships for it in `__pycache__` is accepted.
+    ///
+    /// Python validates a timestamp-based `.pyc` by comparing the source
+    /// file's size and (truncated) mtime against the values recorded in the
+    /// `.pyc` header. Packages regularly ship `.pyc` files whose recorded mtime
+    /// is a second or two off from the mtime the `.py` file ends up with after
+    /// extraction (archive timestamp rounding), e.g. the Python standard library. On a
+    /// writable prefix Python rewrites such a `.pyc` once; on a read-only mount
+    /// it cannot, so it would recompile those modules on every start. Within a
+    /// small tolerance, and only when the size matches too, the `.pyc` was
+    /// compiled from this very source at build time, so report the mtime it
+    /// expects.
+    ///
+    /// Returns `None` when no adjustment is needed or no matching `.pyc`
+    /// exists.
+    fn pyc_source_mtime(&self, file: &FileNode, attr: &FileAttr) -> Option<SystemTime> {
+        /// Maximum mtime difference (in seconds) attributed to timestamp
+        /// rounding rather than a genuinely different source.
+        const TOLERANCE_SECS: i64 = 2;
+
+        let name = file.file_name.as_encoded_bytes();
+        let stem = name.strip_suffix(b".py")?;
+        if stem.is_empty() {
+            return None;
+        }
+        let source_secs =
+            i64::try_from(attr.mtime.duration_since(UNIX_EPOCH).ok()?.as_secs()).ok()?;
+        // CPython stores the low 32 bits of both values.
+        let source_mtime32 = source_secs as u32;
+        let source_size32 = attr.size as u32;
+
+        let pycache = self
+            .find_child(file.parent, OsStr::new("__pycache__"))
+            .ok()??;
+        let pycache_dir = self.metadata[pycache].as_directory()?;
+        for &candidate in &pycache_dir.children {
+            let Some(pyc) = self.metadata[candidate].as_file() else {
+                continue;
+            };
+            let pyc_name = pyc.file_name.as_encoded_bytes();
+            let matches_name = pyc_name
+                .strip_prefix(stem)
+                .is_some_and(|rest| rest.starts_with(b".") && rest.ends_with(b".pyc"));
+            if !matches_name || pyc.virtual_content.is_some() || pyc.prefix_placeholder.is_some() {
+                continue;
+            }
+            let Ok(header) = read_leading_bytes(&self._getpath(pyc), 16) else {
+                continue;
+            };
+            let Some(header) = header.get(..16) else {
+                continue;
+            };
+            let word = |i: usize| u32::from_le_bytes(header[i..i + 4].try_into().unwrap());
+            // flags == 0: timestamp-based pyc (not hash-based, PEP 552).
+            if word(4) != 0 || word(12) != source_size32 {
+                continue;
+            }
+            let pyc_mtime32 = word(8);
+            if pyc_mtime32 == source_mtime32 {
+                return None;
+            }
+            let diff = i64::from(pyc_mtime32.wrapping_sub(source_mtime32) as i32);
+            if diff.abs() <= TOLERANCE_SECS {
+                let secs = u64::try_from(source_secs + diff).ok()?;
+                return Some(UNIX_EPOCH + std::time::Duration::from_secs(secs));
+            }
+        }
+        None
+    }
+
     // -- Testable inner methods --
 
     pub(crate) fn do_lookup(&self, parent_ino: u64, name: &OsStr) -> Result<FileAttr, VfsError> {
         let parent_index = self.validate_ino(parent_ino)?;
-
-        let Some(parent_directory) = self.metadata[parent_index].as_directory() else {
-            return Err(VfsError::NotADirectory);
-        };
-
-        for child_index in parent_directory.children.iter() {
-            let child = &self.metadata[*child_index];
-            if names_match(child.file_name(), name) {
-                return Ok(self._getattr(child, child_index));
-            }
+        match self.find_child(parent_index, name)? {
+            Some(child_index) => Ok(self._getattr(child_index)),
+            None => Err(VfsError::NotFound),
         }
-
-        Err(VfsError::NotFound)
     }
 
     pub(crate) fn do_getattr(&self, ino: u64) -> Result<FileAttr, VfsError> {
         let index = self.validate_ino(ino)?;
-        let entry = &self.metadata[index];
-        Ok(self._getattr(entry, &index))
+        Ok(self._getattr(index))
     }
 
     pub(crate) fn do_readlink(&self, ino: u64) -> Result<PathBuf, VfsError> {
@@ -537,23 +821,15 @@ impl VirtualFS {
 
         let path = self._getpath(current_file);
 
-        // Files without prefix replacement: read directly from disk
+        // Files without prefix replacement: serve the source bytes from a
+        // cached mapping. Transports that address reads by inode (NFS) issue
+        // many reads per file; re-opening the file for each one costs an
+        // `open` + `seek` + `close` per request.
         if current_file.prefix_placeholder.is_none() {
-            let mut file = File::open(&path).map_err(|e| {
-                tracing::warn!("failed to open {}: {}", path.display(), e);
-                VfsError::Io
-            })?;
-            file.seek(SeekFrom::Start(offset)).map_err(|e| {
-                tracing::warn!("failed to seek {}: {}", path.display(), e);
-                VfsError::Io
-            })?;
-            let mut buf = vec![0u8; size as usize];
-            let n = file.read(&mut buf).map_err(|e| {
-                tracing::warn!("failed to read {}: {}", path.display(), e);
-                VfsError::Io
-            })?;
-            buf.truncate(n);
-            return Ok(buf);
+            let mmap = self.mmap_for(ino, &path)?;
+            let s = (offset as usize).min(mmap.len());
+            let e = s.saturating_add(size as usize).min(mmap.len());
+            return Ok(mmap[s..e].to_vec());
         }
 
         // Has prefix placeholder — use ranged replacement
@@ -562,10 +838,9 @@ impl VirtualFS {
         let mmap = self.mmap_for(ino, &path)?;
 
         // Must match the prefix used to build the plan in `with_platform`.
-        let target_prefix = target_prefix_for_platform(&self.mount_point, self.platform);
         let prefixes = crate::prefix_replacement::EncodedPrefixes::new(
             &placeholder.placeholder,
-            &target_prefix,
+            &self.target_prefix,
         );
 
         let start = offset as usize;
@@ -895,6 +1170,223 @@ mod tests {
         let vfs = VirtualFS::with_platform(env_paths, &mount_point, Subdir::Linux64);
 
         (tmpdir, vfs)
+    }
+
+    /// A `PathsEntry` for a plain hard-linked file.
+    fn plain_entry(path: &str) -> PathsEntry {
+        PathsEntry {
+            relative_path: PathBuf::from(path),
+            path_type: PathType::HardLink,
+            prefix_placeholder: None,
+            no_link: false,
+            sha256: None,
+            size_in_bytes: None,
+        }
+    }
+
+    /// Build a `VirtualFS` over the package directory `dir` with `paths`.
+    fn vfs_over(dir: &Path, paths: Vec<PathsEntry>, scan_cache: Option<&Path>) -> VirtualFS {
+        let paths_json = PathsJson {
+            paths,
+            paths_version: 1,
+        };
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
+        path_parse(
+            &paths_json,
+            dir,
+            None,
+            &mut env_paths,
+            &mut dir_indices,
+            &mut file_indices,
+        );
+        VirtualFS::build(
+            env_paths,
+            Path::new("/new/prefix"),
+            Subdir::Linux64,
+            scan_cache,
+        )
+    }
+
+    /// Resolve a `/`-separated path relative to the root to its attributes.
+    fn resolve(vfs: &VirtualFS, path: &str) -> Result<FileAttr, VfsError> {
+        let mut attr = vfs.do_getattr(1)?;
+        for component in path.split('/') {
+            attr = vfs.do_lookup(attr.ino, OsStr::new(component))?;
+        }
+        Ok(attr)
+    }
+
+    #[test]
+    fn test_lookup_in_large_directory() {
+        let tmpdir = TempDir::new().unwrap();
+        fs::create_dir_all(tmpdir.path().join("lib")).unwrap();
+        let names: Vec<String> = (0..CHILD_MAP_THRESHOLD * 3)
+            .map(|i| format!("file{i}.txt"))
+            .collect();
+        for name in &names {
+            fs::write(tmpdir.path().join("lib").join(name), name).unwrap();
+        }
+        let vfs = vfs_over(
+            tmpdir.path(),
+            names
+                .iter()
+                .map(|name| plain_entry(&format!("lib/{name}")))
+                .collect(),
+            None,
+        );
+        let lib = resolve(&vfs, "lib").unwrap();
+        assert!(vfs.child_maps[(lib.ino - 1) as usize].is_some());
+        for name in &names {
+            let attr = vfs.do_lookup(lib.ino, OsStr::new(name)).unwrap();
+            assert_eq!(vfs.do_read(attr.ino, 0, 100).unwrap(), name.as_bytes());
+        }
+        assert_eq!(
+            vfs.do_lookup(lib.ino, OsStr::new("missing.txt"))
+                .unwrap_err(),
+            VfsError::NotFound
+        );
+    }
+
+    /// Write a timestamp-based `.pyc` header recording `mtime` and `size`.
+    fn write_pyc(path: &Path, mtime: u32, size: u32) {
+        let mut header = vec![0x42, 0x42, 0x0d, 0x0a]; // magic
+        header.extend_from_slice(&0u32.to_le_bytes()); // flags
+        header.extend_from_slice(&mtime.to_le_bytes());
+        header.extend_from_slice(&size.to_le_bytes());
+        header.extend_from_slice(b"code");
+        fs::write(path, header).unwrap();
+    }
+
+    fn set_mtime(path: &Path, secs: u64) {
+        File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(UNIX_EPOCH + std::time::Duration::from_secs(secs))
+            .unwrap();
+    }
+
+    fn mtime_secs(attr: &FileAttr) -> u64 {
+        attr.mtime.duration_since(UNIX_EPOCH).unwrap().as_secs()
+    }
+
+    #[test]
+    fn test_py_mtime_matches_shipped_pyc() {
+        let tmpdir = TempDir::new().unwrap();
+        let pkg = tmpdir.path().join("pkg");
+        fs::create_dir_all(pkg.join("__pycache__")).unwrap();
+        let source = b"print('hi')\n";
+        let size = source.len() as u32;
+        let t = 1_700_000_000u64;
+
+        // Off by one second (archive rounding): reported as the pyc expects.
+        fs::write(pkg.join("near.py"), source).unwrap();
+        set_mtime(&pkg.join("near.py"), t);
+        write_pyc(
+            &pkg.join("__pycache__/near.cpython-312.pyc"),
+            (t - 1) as u32,
+            size,
+        );
+        // Far off: a genuinely different source, left alone.
+        fs::write(pkg.join("far.py"), source).unwrap();
+        set_mtime(&pkg.join("far.py"), t);
+        write_pyc(
+            &pkg.join("__pycache__/far.cpython-312.pyc"),
+            (t - 100) as u32,
+            size,
+        );
+        // Size differs: left alone.
+        fs::write(pkg.join("resized.py"), source).unwrap();
+        set_mtime(&pkg.join("resized.py"), t);
+        write_pyc(
+            &pkg.join("__pycache__/resized.cpython-312.pyc"),
+            (t - 1) as u32,
+            size + 1,
+        );
+        // No pyc at all.
+        fs::write(pkg.join("plain.py"), source).unwrap();
+        set_mtime(&pkg.join("plain.py"), t);
+
+        let vfs = vfs_over(
+            tmpdir.path(),
+            vec![
+                plain_entry("pkg/near.py"),
+                plain_entry("pkg/__pycache__/near.cpython-312.pyc"),
+                plain_entry("pkg/far.py"),
+                plain_entry("pkg/__pycache__/far.cpython-312.pyc"),
+                plain_entry("pkg/resized.py"),
+                plain_entry("pkg/__pycache__/resized.cpython-312.pyc"),
+                plain_entry("pkg/plain.py"),
+            ],
+            None,
+        );
+        assert_eq!(mtime_secs(&resolve(&vfs, "pkg/near.py").unwrap()), t - 1);
+        assert_eq!(mtime_secs(&resolve(&vfs, "pkg/far.py").unwrap()), t);
+        assert_eq!(mtime_secs(&resolve(&vfs, "pkg/resized.py").unwrap()), t);
+        assert_eq!(mtime_secs(&resolve(&vfs, "pkg/plain.py").unwrap()), t);
+        // getattr agrees with lookup.
+        let near = resolve(&vfs, "pkg/near.py").unwrap();
+        assert_eq!(mtime_secs(&vfs.do_getattr(near.ino).unwrap()), t - 1);
+    }
+
+    #[test]
+    fn test_scan_cache_reuses_scans() {
+        let tmpdir = TempDir::new().unwrap();
+        let pkg_dir = tmpdir.path().join("pkg");
+        fs::create_dir_all(pkg_dir.join("bin")).unwrap();
+        fs::create_dir_all(pkg_dir.join("lib")).unwrap();
+        fs::write(
+            pkg_dir.join("bin/tool"),
+            b"#!/old/prefix/bin/python\nimport os  # /old/prefix/share\n",
+        )
+        .unwrap();
+        fs::write(
+            pkg_dir.join("lib/libx.so"),
+            b"\x7fELF\0/old/prefix/lib\0tail",
+        )
+        .unwrap();
+        let placeholder = |file_mode| PrefixPlaceholder {
+            file_mode,
+            placeholder: "/old/prefix".to_string(),
+            experimental_offsets: None,
+        };
+        let paths = || {
+            vec![
+                PathsEntry {
+                    prefix_placeholder: Some(placeholder(FileMode::Text)),
+                    ..plain_entry("bin/tool")
+                },
+                PathsEntry {
+                    prefix_placeholder: Some(placeholder(FileMode::Binary)),
+                    ..plain_entry("lib/libx.so")
+                },
+            ]
+        };
+        let read_all = |vfs: &VirtualFS| -> Vec<Vec<u8>> {
+            ["bin/tool", "lib/libx.so"]
+                .iter()
+                .map(|path| {
+                    let attr = resolve(vfs, path).unwrap();
+                    vfs.do_read(attr.ino, 0, 4096).unwrap()
+                })
+                .collect()
+        };
+
+        let uncached = read_all(&vfs_over(&pkg_dir, paths(), None));
+        let cache_path = tmpdir.path().join("state/scan-cache.json");
+        let first = read_all(&vfs_over(&pkg_dir, paths(), Some(&cache_path)));
+        assert_eq!(first, uncached);
+        assert!(cache_path.exists());
+        let written = fs::read(&cache_path).unwrap();
+
+        // A second mount is served from the cache (and doesn't rewrite it).
+        let second = read_all(&vfs_over(&pkg_dir, paths(), Some(&cache_path)));
+        assert_eq!(second, uncached);
+        assert_eq!(fs::read(&cache_path).unwrap(), written);
+        assert_eq!(
+            second[0],
+            b"#!/new/prefix/bin/python\nimport os  # /new/prefix/share\n"
+        );
     }
 
     // --- lookup tests ---

@@ -120,6 +120,28 @@ pub fn plan_text_replacement(
     target: &str,
     platform: &Subdir,
 ) -> TextPlan {
+    let (region_end, occurrences) = scan_text(source, placeholder, platform);
+    TextPlan::from_scan(
+        &source[..region_end],
+        occurrences,
+        placeholder,
+        target,
+        platform,
+    )
+}
+
+/// The target-independent half of [`plan_text_replacement`]: the length of
+/// the shebang region and the placeholder occurrences after it, in file order.
+///
+/// The result only depends on the file contents, the placeholder and whether
+/// `platform` rewrites shebangs, so it can be cached and turned into a plan
+/// for any target with [`TextPlan::from_scan`] after re-reading just the
+/// shebang region.
+pub fn scan_text(
+    source: &[u8],
+    placeholder: &str,
+    platform: &Subdir,
+) -> (usize, Vec<(usize, OffsetEncoding)>) {
     let region_end = if platform.is_unix() && source.starts_with(b"#!") {
         source
             .iter()
@@ -128,22 +150,11 @@ pub fn plan_text_replacement(
     } else {
         0
     };
-
-    let transformed_region = if region_end > 0 {
-        replace_shebang_region(&source[..region_end], placeholder, target, platform)
-    } else {
-        Vec::new()
-    };
-
     let occurrences = find_text_occurrences(source, region_end, placeholder)
         .into_iter()
-        .map(|occurrence| (occurrence.offset, occurrence.encoding));
-    TextPlan::new(
-        occurrences,
-        region_end,
-        transformed_region,
-        &EncodedPrefixes::new(placeholder, target),
-    )
+        .map(|occurrence| (occurrence.offset, occurrence.encoding))
+        .collect();
+    (region_end, occurrences)
 }
 
 impl TextPlan {
@@ -170,6 +181,29 @@ impl TextPlan {
             region_end,
             transformed_region,
         }
+    }
+
+    /// Build a plan from the result of [`scan_text`]: `region` holds the
+    /// source's shebang region (empty when there is none) and `occurrences`
+    /// the placeholder occurrences after it, in file order.
+    pub fn from_scan(
+        region: &[u8],
+        occurrences: impl IntoIterator<Item = (usize, OffsetEncoding)>,
+        placeholder: &str,
+        target: &str,
+        platform: &Subdir,
+    ) -> TextPlan {
+        let transformed_region = if region.is_empty() {
+            Vec::new()
+        } else {
+            replace_shebang_region(region, placeholder, target, platform)
+        };
+        TextPlan::new(
+            occurrences,
+            region.len(),
+            transformed_region,
+            &EncodedPrefixes::new(placeholder, target),
+        )
     }
 
     /// Build a plan from the metadata recorded in `paths.json` instead of

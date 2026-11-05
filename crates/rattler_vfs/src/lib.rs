@@ -74,6 +74,7 @@ pub mod overlay_fs;
 pub mod prefix_replacement;
 #[cfg(target_os = "windows")]
 pub mod projfs_adapter;
+pub(crate) mod scan_cache;
 // Not gated on Windows: it is a pure-Rust comparator (no ProjFS/`windows`
 // dependency) so its unit tests can run on non-Windows CI, which cannot compile
 // the ProjFS adapter itself. See the module docs and issue #2581.
@@ -436,10 +437,42 @@ impl MetadataTree {
             environment_name,
             platform,
             package_cache,
+            default_client(),
             mount_point,
         )
         .await
     }
+
+    /// Like [`MetadataTree::build`], but downloads missing packages with
+    /// `client` instead of a default client without authentication, mirrors
+    /// or retries. Pass the client used for the rest of the operation (e.g.
+    /// the one that fetched repodata) so packages from authenticated channels
+    /// can be fetched and offline mode is respected.
+    pub async fn build_with_client(
+        lockfile: &LockFile,
+        environment_name: &str,
+        platform: Subdir,
+        package_cache: &PackageCache,
+        client: impl Into<LazyClient>,
+        mount_point: &Path,
+    ) -> anyhow::Result<Self> {
+        build_metadata_tree(
+            lockfile,
+            environment_name,
+            platform,
+            package_cache,
+            client.into(),
+            mount_point,
+        )
+        .await
+    }
+}
+
+/// A client without middleware, constructed on first use: building one eagerly
+/// walks the system certificate store (seconds on macOS), which a warm-cache
+/// mount never needs.
+fn default_client() -> LazyClient {
+    LazyClient::new(reqwest_middleware::ClientWithMiddleware::default)
 }
 
 /// Transport backend for the virtual filesystem.
@@ -591,6 +624,13 @@ pub struct MountConfig {
     /// What to do when the persistent overlay was created for a different
     /// version of the environment. Defaults to [`OverlayMismatch::Error`].
     pub overlay_mismatch: OverlayMismatch,
+
+    /// File in which to persist where prefix placeholders occur in the
+    /// environment's files, so a later mount of the same packages doesn't
+    /// have to read every prefix-bearing file again. `None` (the default)
+    /// scans on every mount. The cache is shared safely between concurrent
+    /// mounts and rebuilt when it is missing, stale or corrupt.
+    pub scan_cache: Option<PathBuf>,
 }
 
 impl MountConfig {
@@ -607,7 +647,15 @@ impl MountConfig {
             env_hash,
             allow_other: false,
             overlay_mismatch: OverlayMismatch::Error,
+            scan_cache: None,
         }
+    }
+
+    /// Persist placeholder scan results at `path` (chained), see
+    /// [`MountConfig::scan_cache`].
+    pub fn with_scan_cache(mut self, path: PathBuf) -> Self {
+        self.scan_cache = Some(path);
+        self
     }
 
     /// Set the read-only/writable [`Mode`] (chained).
@@ -746,6 +794,7 @@ pub(crate) async fn build_metadata_tree(
     environment_name: &str,
     platform: Subdir,
     package_cache: &PackageCache,
+    client: LazyClient,
     mount_point: &Path,
 ) -> anyhow::Result<MetadataTree> {
     let environment =
@@ -790,13 +839,6 @@ pub(crate) async fn build_metadata_tree(
 
     let (mut env_paths, mut directory_indices, mut file_indices) = new_empty_tree();
     let mount_str = mount_point.to_string_lossy().to_string();
-
-    // Build a single lazily-initialized HTTP client for the whole package loop.
-    // `LazyClient::default()` forces construction eagerly, which on macOS walks
-    // the keychain via `rustls_native_certs` and takes several seconds. Using
-    // `LazyClient::new` defers that work until the first cache miss, so
-    // warm-cache mounts skip it entirely.
-    let client = LazyClient::new(reqwest_middleware::ClientWithMiddleware::default);
 
     // Validate all packages up front so we can parallelize fetching.
     let mut conda_packages: Vec<_> = package_refs
@@ -1051,7 +1093,11 @@ pub async fn mount(metadata: MetadataTree, config: &MountConfig) -> anyhow::Resu
     // Construct the VirtualFS once. Each transport branch consumes it.
     // VFS construction does eager prefix-offset computation, so we want
     // exactly one call per mount.
-    let vfs = VirtualFS::new(metadata.0, &config.mount_point);
+    let vfs = VirtualFS::new_with_scan_cache(
+        metadata.0,
+        &config.mount_point,
+        config.scan_cache.as_deref(),
+    );
 
     match transport {
         #[cfg(feature = "nfs")]
@@ -1140,11 +1186,33 @@ pub async fn build_and_mount(
     package_cache: &PackageCache,
     config: &MountConfig,
 ) -> anyhow::Result<MountHandle> {
+    build_and_mount_with_client(
+        lockfile,
+        environment_name,
+        platform,
+        package_cache,
+        default_client(),
+        config,
+    )
+    .await
+}
+
+/// Like [`build_and_mount`], but downloads missing packages with `client`, see
+/// [`MetadataTree::build_with_client`].
+pub async fn build_and_mount_with_client(
+    lockfile: &LockFile,
+    environment_name: &str,
+    platform: Subdir,
+    package_cache: &PackageCache,
+    client: impl Into<LazyClient>,
+    config: &MountConfig,
+) -> anyhow::Result<MountHandle> {
     let metadata = build_metadata_tree(
         lockfile,
         environment_name,
         platform,
         package_cache,
+        client.into(),
         &config.mount_point,
     )
     .await?;
@@ -1348,6 +1416,17 @@ pub fn force_unmount(mount_point: &Path, transport: Transport) -> anyhow::Result
         Transport::Fuse => {
             #[cfg(target_os = "linux")]
             {
+                // A privileged process (which is also when fuser mounts with
+                // mount(2) directly, without fusermount3) can detach the mount
+                // itself; that also works where fusermount3 isn't installed.
+                if let Ok(c_path) =
+                    std::ffi::CString::new(mount_point.as_os_str().as_encoded_bytes())
+                {
+                    // SAFETY: `c_path` is a valid NUL-terminated path.
+                    if unsafe { libc::umount2(c_path.as_ptr(), libc::MNT_DETACH) } == 0 {
+                        return Ok(());
+                    }
+                }
                 let status = std::process::Command::new("fusermount3")
                     .args(["-uz", &mnt])
                     .status()?;
