@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [13.0.0](https://github.com/conda/rattler/compare/rattler_solve-v12.0.4...rattler_solve-v13.0.0) - 2026-11-05
+
+### Added
+
+- add `additional_packages` option to solver ([#2968](https://github.com/conda/rattler/pull/2968))
+
 ## [12.0.4](https://github.com/conda/rattler/compare/rattler_solve-v12.0.3...rattler_solve-v12.0.4) - 2026-11-04
 
 ### Other

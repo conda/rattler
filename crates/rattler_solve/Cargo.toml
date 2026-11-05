@@ -1,7 +1,7 @@
 [package]
 exclude = ["tests/**", "benches/**"]
 name = "rattler_solve"
-version = "12.0.4"
+version = "13.0.0"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to solve conda environments"
