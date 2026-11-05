@@ -567,6 +567,31 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     /// See [`Self::locked_packages`] for the borrowing rationale.
     pub pinned_packages: Vec<&'a RepoDataRecord>,
 
+    /// Records that are candidates in the solve, without any preference.
+    ///
+    /// Unlike [`Self::locked_packages`], these records are not favored, and
+    /// unlike [`Self::pinned_packages`], they do not restrict the candidates
+    /// for their package. Use them for records already installed in a prefix
+    /// that may come from channels no longer in [`Self::available_packages`].
+    ///
+    /// Channel priority treats each record as if it came from the
+    /// highest-priority channel in [`Self::available_packages`] that contains
+    /// a package with the same name, or from the highest-priority channel when
+    /// none does. As a result:
+    ///
+    /// - With [`ChannelPriority::Strict`], strict channel priority never
+    ///   removes these records, and they never cause a channel record to be
+    ///   removed.
+    /// - With [`ChannelPriority::Flexible`], they compete with the records of
+    ///   that channel.
+    /// - With [`ChannelPriority::Disabled`], they compete with all records.
+    ///
+    /// A record from a lower-priority channel therefore competes with
+    /// higher-priority channels. For example, an installed `foo 3.0` from a
+    /// lower-priority channel is selected over `foo 2.0` from a higher-priority
+    /// channel.
+    pub additional_packages: Vec<&'a RepoDataRecord>,
+
     /// Virtual packages considered active
     pub virtual_packages: Vec<GenericVirtualPackage>,
 
@@ -594,11 +619,12 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     /// - a relative duration, equivalent to the historical `min_age`
     ///   behavior.
     ///
-    /// The cutoff applies to `locked_packages` and `pinned_packages` as well.
-    /// A locked record newer than the cutoff is not favored, so the solver
-    /// picks a record the cutoff allows instead. With the `resolvo` backend,
-    /// a pinned record newer than the cutoff makes the solve unsatisfiable
-    /// when the package is needed, the same as with `excluded_candidates`.
+    /// The cutoff applies to `locked_packages`, `pinned_packages` and
+    /// `additional_packages` as well. A locked record newer than the cutoff
+    /// is not favored, so the solver picks a record the cutoff allows instead.
+    /// With the `resolvo` backend, a pinned record newer than the cutoff
+    /// makes the solve unsatisfiable when the package is needed, the same as
+    /// with `excluded_candidates`.
     pub exclude_newer: Option<ExcludeNewer>,
 
     /// The solve strategy.
@@ -651,6 +677,7 @@ impl<'r, T> SolverTask<'r, T> {
             available_packages,
             locked_packages: Vec::new(),
             pinned_packages: Vec::new(),
+            additional_packages: Vec::new(),
             virtual_packages: Vec::new(),
             specs: Vec::new(),
             constraints: Vec::new(),

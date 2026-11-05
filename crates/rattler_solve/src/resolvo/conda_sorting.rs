@@ -53,11 +53,16 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
     }
 
     /// Returns the channel-priority rank of a solvable. A lower rank indicates a
-    /// higher-priority channel. Records without a channel (and virtual packages
-    /// / extras) rank last.
+    /// higher-priority channel. Additional records rank with the
+    /// highest-priority tier that contains their package name. Records without
+    /// a channel (and virtual packages / extras) rank last.
     fn channel_rank(&self, id: SolvableId) -> u32 {
+        let provider = self.solver.provider();
+        if let Some(&rank) = provider.additional_ranks.get(&id) {
+            return rank;
+        }
         match self.solvable_record(id) {
-            SolverPackageRecord::Record(rec) => self.solver.provider().channel_rank(&rec.channel),
+            SolverPackageRecord::Record(rec) => provider.channel_rank(&rec.channel),
             SolverPackageRecord::Extra { .. } | SolverPackageRecord::VirtualPackage(..) => u32::MAX,
         }
     }
