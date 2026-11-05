@@ -7,7 +7,7 @@ detector by name, qualified with its registering channel, against the
 registration’s resolution channels for the host platform. The
 only virtual packages available to that solve are the client’s own. The
 resolved records are fingerprinted with the
-<a href="../../rattler_environment_digest/fn.environment_digest.html" title="fn rattler_environment_digest::environment_digest"><code>environment_digest</code></a>, and the environment lives in a directory named
+[<code>environment_digest</code>], and the environment lives in a directory named
 after that digest, so an environment is reused exactly when the resolved
 records are unchanged and reinstalled otherwise.</p>
 <p>Installation never runs link scripts. A prefix guard makes concurrent
