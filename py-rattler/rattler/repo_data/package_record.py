@@ -196,7 +196,7 @@ class PackageRecord:
         sha256: bytes | None = None,
         md5: bytes | None = None,
         size: int | None = None,
-        features: list[str] | None = None,
+        features: str | None = None,
         legacy_bz2_md5: bytes | None = None,
         legacy_bz2_size: int | None = None,
         license: str | None = None,
