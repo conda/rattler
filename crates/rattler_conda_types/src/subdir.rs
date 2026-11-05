@@ -26,8 +26,37 @@ pub const MAX_SUBDIR_LEN: usize = 32;
 /// ```
 ///
 /// The name is stored inline, so a `Subdir` is `Copy` and never allocates.
-#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+//
+// `PartialEq` and `Eq` must stay derived: matching on the associated
+// constants (`match subdir { Subdir::Win64 => .. }`) needs structural
+// equality.
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct Subdir(TinyAsciiStr<MAX_SUBDIR_LEN>);
+
+/// Returns the string stored in `name` without scanning it byte by byte.
+///
+/// [`TinyAsciiStr::as_str`] finds the end of the string with a byte-wise loop
+/// for every `N > 8`. A name is left-aligned and padded with zero bytes, and
+/// holds no zero byte itself, so its length is the position of its last
+/// non-zero byte plus one. Loading the bytes as two little-endian `u128`s finds
+/// that position with a single `leading_zeros` instruction.
+#[inline]
+fn inline_str(name: &TinyAsciiStr<32>) -> &str {
+    let bytes = name.all_bytes();
+    let (lo, hi) = bytes.split_at(16);
+    let word = |half: &[u8]| u128::from_le_bytes(half.try_into().expect("half of 32 bytes"));
+    let (lo, hi) = (word(lo), word(hi));
+    let len = if hi != 0 {
+        32 - (hi.leading_zeros() / 8) as usize
+    } else {
+        16 - (lo.leading_zeros() / 8) as usize
+    };
+    let bytes = &bytes[..len];
+    debug_assert_eq!(bytes, name.as_str().as_bytes());
+    // SAFETY: a `TinyAsciiStr` only ever holds ASCII bytes, so any prefix of
+    // its bytes is valid UTF-8.
+    unsafe { std::str::from_utf8_unchecked(bytes) }
+}
 
 /// Every subdir rattler has built-in knowledge of, in canonical order.
 const KNOWN_SUBDIRS: &[Subdir] = &[
@@ -69,7 +98,9 @@ const KNOWN_SUBDIRS: &[Subdir] = &[
 
 /// The `{os}` tokens that rattler knows to be unix-like. A subdir whose os
 /// token is missing here is not assumed to be unix, because its C library and
-/// path conventions are unknown.
+/// path conventions are unknown. `Subdir::is_unix` spells the same list out as
+/// a `match`; a test keeps the two in sync.
+#[cfg(test)]
 const UNIX_PLATFORMS: &[&str] = &[
     "linux",
     "osx",
@@ -383,8 +414,9 @@ impl Subdir {
     }
 
     /// Returns a string representation of the subdir.
+    #[inline]
     pub fn as_str(&self) -> &str {
-        self.0.as_str()
+        inline_str(&self.0)
     }
 
     /// Returns every subdir rattler has built-in knowledge of.
@@ -397,7 +429,7 @@ impl Subdir {
 
     /// Returns whether this is a subdir rattler has built-in knowledge of.
     pub fn is_known(&self) -> bool {
-        KNOWN_SUBDIRS.contains(self)
+        Self::from_known_str(self.as_str()).is_some()
     }
 
     /// Parses a subdir, accepting only names rattler has built-in knowledge
@@ -408,16 +440,62 @@ impl Subdir {
     /// `conda-forge` satisfies the CEP 26 subdir syntax, so `FromStr` accepts
     /// it and cannot be used to tell a subdir from a channel.
     pub fn from_known_str(name: &str) -> Option<Subdir> {
-        KNOWN_SUBDIRS
-            .iter()
-            .find(|subdir| subdir.as_str() == name)
-            .copied()
+        // A `match` compiles to a dispatch on the length followed by a few
+        // fixed-size comparisons, instead of a linear scan over every known
+        // subdir. Keep it in sync with `KNOWN_SUBDIRS`; a test checks that.
+        Some(match name {
+            "noarch" => Subdir::NoArch,
+            "linux-32" => Subdir::Linux32,
+            "linux-64" => Subdir::Linux64,
+            "linux-aarch64" => Subdir::LinuxAarch64,
+            "linux-armv6l" => Subdir::LinuxArmV6l,
+            "linux-armv7l" => Subdir::LinuxArmV7l,
+            "linux-loongarch64" => Subdir::LinuxLoongArch64,
+            "linux-ppc64le" => Subdir::LinuxPpc64le,
+            "linux-ppc64" => Subdir::LinuxPpc64,
+            "linux-ppc" => Subdir::LinuxPpc,
+            "linux-s390x" => Subdir::LinuxS390X,
+            "linux-riscv32" => Subdir::LinuxRiscv32,
+            "linux-riscv64" => Subdir::LinuxRiscv64,
+            "freebsd-32" => Subdir::FreeBsd32,
+            "freebsd-64" => Subdir::FreeBsd64,
+            "freebsd-arm64" => Subdir::FreeBsdArm64,
+            "freebsd-ppc64le" => Subdir::FreeBsdPpc64le,
+            "freebsd-ppc64" => Subdir::FreeBsdPpc64,
+            "osx-64" => Subdir::Osx64,
+            "osx-arm64" => Subdir::OsxArm64,
+            "ios-arm64" => Subdir::IosArm64,
+            "iossimulator-arm64" => Subdir::IosSimulatorArm64,
+            "iossimulator-64" => Subdir::IosSimulator64,
+            "android-aarch64" => Subdir::AndroidAarch64,
+            "android-armv7a" => Subdir::AndroidArmV7a,
+            "android-64" => Subdir::Android64,
+            "android-32" => Subdir::Android32,
+            "win-32" => Subdir::Win32,
+            "win-64" => Subdir::Win64,
+            "win-arm64" => Subdir::WinArm64,
+            "emscripten-wasm32" => Subdir::EmscriptenWasm32,
+            "emscripten-wasm64" => Subdir::EmscriptenWasm64,
+            "wasi-wasm32" => Subdir::WasiWasm32,
+            "zos-z" => Subdir::ZosZ,
+            _ => return None,
+        })
     }
 
     /// Returns the `{os}` part of the subdir (e.g. `linux`, `win`, `osx`,
     /// `freebsd`, `ios`, `iossimulator`, `android`), or `None` for `noarch`.
     pub fn only_platform(&self) -> Option<&str> {
-        self.as_str().split_once('-').map(|(platform, _)| platform)
+        self.split().map(|(platform, _)| platform)
+    }
+
+    /// Splits the subdir into its `{os}` and `{arch}` parts, or `None` for
+    /// `noarch`. A plain byte search beats `str::split_once` on names this
+    /// short.
+    #[inline]
+    fn split(&self) -> Option<(&str, &str)> {
+        let name = self.as_str();
+        let dash = name.bytes().position(|b| b == b'-')?;
+        Some((&name[..dash], &name[dash + 1..]))
     }
 
     /// Returns the architecture of the subdir, or `None` for `noarch`.
@@ -425,7 +503,7 @@ impl Subdir {
     /// Conda spells `x86` and `x86_64` as `-32` and `-64` in the subdir; both are
     /// reported here under their canonical architecture name.
     pub fn arch(&self) -> Option<Arch> {
-        let (_, arch) = self.as_str().split_once('-')?;
+        let (_, arch) = self.split()?;
         Some(match arch {
             "32" => Arch::X86,
             "64" => Arch::X86_64,
@@ -465,8 +543,19 @@ impl Subdir {
 
     /// Returns true if the subdir is a unix based subdir.
     pub fn is_unix(&self) -> bool {
-        self.only_platform()
-            .is_some_and(|platform| UNIX_PLATFORMS.contains(&platform))
+        // Keep in sync with `UNIX_PLATFORMS`; a test checks that.
+        matches!(
+            self.only_platform(),
+            Some("linux" | "osx" | "ios" | "iossimulator" | "android" | "freebsd" | "emscripten")
+        )
+    }
+}
+
+impl std::hash::Hash for Subdir {
+    #[inline]
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Hashes only the name, not the zero padding, and agrees with `Eq`.
+        self.as_str().hash(state);
     }
 }
 
@@ -477,8 +566,11 @@ impl PartialOrd for Subdir {
 }
 
 impl Ord for Subdir {
+    #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
-        self.as_str().cmp(other.as_str())
+        // The padding is zero and a name never contains a zero byte, so
+        // comparing the padded buffers orders names exactly like `str` does.
+        self.0.all_bytes().cmp(other.0.all_bytes())
     }
 }
 
@@ -520,13 +612,13 @@ impl FromStr for Subdir {
     type Err = ParseSubdirError;
 
     fn from_str(name: &str) -> Result<Self, Self::Err> {
-        if let Some(known) = Subdir::from_known_str(name) {
-            return Ok(known);
-        }
+        // A known subdir is stored exactly like any other valid name, so there
+        // is no need to look it up first.
+        //
         // The CEP 26 rules are a subset of what `TinyAsciiStr` accepts, so a
         // valid name always fits.
         match TinyAsciiStr::try_from_str(name) {
-            Ok(name) if is_valid_subdir_name(name.as_str()) => Ok(Subdir(name)),
+            Ok(tiny) if is_valid_subdir_name(name) => Ok(Subdir(tiny)),
             _ => Err(ParseSubdirError {
                 name: name.to_owned(),
             }),
@@ -568,9 +660,45 @@ impl<'de> serde::Deserialize<'de> for Subdir {
     where
         D: Deserializer<'de>,
     {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(serde::de::Error::custom)
+        deserializer.deserialize_str(FromStrVisitor::<Subdir>::new("a conda subdir name"))
+    }
+}
+
+/// Deserializes a [`FromStr`] type straight from the borrowed or transient
+/// string the format hands out, instead of allocating a `String` first.
+struct FromStrVisitor<T> {
+    expecting: &'static str,
+    _type: std::marker::PhantomData<T>,
+}
+
+impl<T> FromStrVisitor<T> {
+    fn new(expecting: &'static str) -> Self {
+        Self {
+            expecting,
+            _type: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<T> serde::de::Visitor<'_> for FromStrVisitor<T>
+where
+    T: FromStr,
+    T::Err: fmt::Display,
+{
+    type Value = T;
+
+    fn expecting(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(self.expecting)
+    }
+
+    fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<T, E> {
+        value.parse().map_err(E::custom)
+    }
+
+    fn visit_bytes<E: serde::de::Error>(self, value: &[u8]) -> Result<T, E> {
+        let value = std::str::from_utf8(value)
+            .map_err(|_err| E::invalid_value(serde::de::Unexpected::Bytes(value), &self))?;
+        self.visit_str(value)
     }
 }
 
@@ -585,7 +713,11 @@ pub const MAX_ARCH_LEN: usize = MAX_SUBDIR_LEN;
 /// constants and can be listed with [`Arch::known`], but any lowercase ASCII
 /// name parses, so [`Subdir::arch`] also works for subdirs rattler does not
 /// know.
-#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+//
+// `PartialEq` and `Eq` must stay derived: matching on the associated
+// constants (`match subdir { Subdir::Win64 => .. }`) needs structural
+// equality.
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct Arch(TinyAsciiStr<MAX_ARCH_LEN>);
 
 /// Every architecture rattler has built-in knowledge of, in canonical order.
@@ -680,8 +812,9 @@ impl Arch {
     }
 
     /// Returns a string representation of the arch.
+    #[inline]
     pub fn as_str(&self) -> &str {
-        self.0.as_str()
+        inline_str(&self.0)
     }
 
     /// Returns every architecture rattler has built-in knowledge of.
@@ -692,7 +825,35 @@ impl Arch {
     /// Returns whether this is an architecture rattler has built-in knowledge
     /// of.
     pub fn is_known(&self) -> bool {
-        KNOWN_ARCHES.contains(self)
+        // Keep in sync with `KNOWN_ARCHES`; a test checks that.
+        matches!(
+            self.as_str(),
+            "x86"
+                | "x86_64"
+                | "aarch64"
+                | "arm64"
+                | "armv6l"
+                | "armv7l"
+                | "armv7a"
+                | "loongarch64"
+                | "ppc64le"
+                | "ppc64"
+                | "ppc"
+                | "s390x"
+                | "riscv32"
+                | "riscv64"
+                | "wasm32"
+                | "wasm64"
+                | "z"
+        )
+    }
+}
+
+impl std::hash::Hash for Arch {
+    #[inline]
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Hashes only the name, not the zero padding, and agrees with `Eq`.
+        self.as_str().hash(state);
     }
 }
 
@@ -703,8 +864,11 @@ impl PartialOrd for Arch {
 }
 
 impl Ord for Arch {
+    #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
-        self.as_str().cmp(other.as_str())
+        // The padding is zero and a name never contains a zero byte, so
+        // comparing the padded buffers orders names exactly like `str` does.
+        self.0.all_bytes().cmp(other.0.all_bytes())
     }
 }
 
@@ -770,9 +934,7 @@ impl<'de> serde::Deserialize<'de> for Arch {
     where
         D: Deserializer<'de>,
     {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(serde::de::Error::custom)
+        deserializer.deserialize_str(FromStrVisitor::<Arch>::new("a conda architecture name"))
     }
 }
 
@@ -951,6 +1113,106 @@ mod tests {
         assert_eq!(Subdir::from_known_str("conda-forge"), None);
         assert_eq!(Subdir::from_known_str("linux-64"), Some(Subdir::Linux64));
         assert_eq!(Subdir::from_known_str("linux-esp32s3"), None);
+    }
+
+    #[test]
+    fn test_known_lookups_match_tables() {
+        // `from_known_str`, `is_known` and `is_unix` are spelled out as
+        // `match`es for speed; they must agree with the tables.
+        for subdir in Subdir::known() {
+            assert_eq!(Subdir::from_known_str(subdir.as_str()), Some(subdir));
+            assert_eq!(
+                subdir.is_unix(),
+                subdir
+                    .only_platform()
+                    .is_some_and(|platform| UNIX_PLATFORMS.contains(&platform)),
+                "is_unix disagrees with UNIX_PLATFORMS for {subdir}"
+            );
+        }
+        for platform in UNIX_PLATFORMS {
+            let subdir: Subdir = format!("{platform}-64").parse().unwrap();
+            assert!(subdir.is_unix(), "{subdir} should be unix");
+        }
+        // Every arm of `from_known_str` is in `KNOWN_SUBDIRS`: there are as
+        // many distinct hits as table entries.
+        let hits = Subdir::known()
+            .filter_map(|subdir| Subdir::from_known_str(subdir.as_str()))
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(hits.len(), Subdir::known().len());
+
+        for arch in Arch::known() {
+            assert!(arch.is_known(), "{arch} should be known");
+        }
+        let matched = KNOWN_ARCHES
+            .iter()
+            .filter(|arch| arch.as_str().parse::<Arch>().unwrap().is_known())
+            .count();
+        assert_eq!(matched, KNOWN_ARCHES.len());
+        assert!(!"esp32s3".parse::<Arch>().unwrap().is_known());
+    }
+
+    #[test]
+    fn test_as_str_lengths() {
+        // The length is derived from the padded buffer; check both halves and
+        // the boundary between them.
+        for len in 1..=MAX_SUBDIR_LEN - 2 {
+            let name = format!("a-{}", "b".repeat(len));
+            let subdir: Subdir = name.parse().unwrap();
+            assert_eq!(subdir.as_str(), name);
+        }
+        for len in 1..=MAX_ARCH_LEN {
+            let name = "x".repeat(len);
+            let arch: Arch = name.parse().unwrap();
+            assert_eq!(arch.as_str(), name);
+        }
+    }
+
+    #[test]
+    fn test_ordering_and_hashing_follow_the_name() {
+        use std::hash::BuildHasher;
+
+        let mut names = Subdir::known()
+            .map(|subdir| subdir.as_str().to_string())
+            .chain(["linux-esp32s3", "linux-6", "linux-64a", "a-b", "z-z"].map(String::from))
+            .collect::<Vec<_>>();
+        let mut subdirs = names
+            .iter()
+            .map(|name| name.parse::<Subdir>().unwrap())
+            .collect::<Vec<_>>();
+        names.sort();
+        subdirs.sort();
+        assert_eq!(
+            subdirs.iter().map(Subdir::as_str).collect::<Vec<_>>(),
+            names
+        );
+
+        let state = std::hash::RandomState::new();
+        let parsed: Subdir = "linux-64".parse().unwrap();
+        assert_eq!(parsed, Subdir::Linux64);
+        assert_eq!(state.hash_one(parsed), state.hash_one(Subdir::Linux64));
+        assert_ne!(Subdir::Linux64, Subdir::Linux32);
+    }
+
+    #[test]
+    fn test_deserialize_without_allocating_a_string() {
+        // Borrowed, owned and byte inputs all deserialize.
+        assert_eq!(
+            serde_json::from_str::<Subdir>("\"linux-64\"").unwrap(),
+            Subdir::Linux64
+        );
+        assert_eq!(
+            serde_json::from_value::<Subdir>(serde_json::json!("linux-esp32s3"))
+                .unwrap()
+                .as_str(),
+            "linux-esp32s3"
+        );
+        assert_eq!(
+            serde_json::from_str::<Arch>("\"x86_64\"").unwrap(),
+            Arch::X86_64
+        );
+        let err = serde_json::from_str::<Subdir>("\"Linux-64\"").unwrap_err();
+        assert!(err.to_string().contains("not a valid subdir name"), "{err}");
+        assert!(serde_json::from_str::<Subdir>("42").is_err());
     }
 
     #[test]

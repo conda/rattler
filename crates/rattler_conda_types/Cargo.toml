@@ -106,3 +106,7 @@ harness = false
 [[bench]]
 name = "string_matcher"
 harness = false
+
+[[bench]]
+name = "subdir"
+harness = false
