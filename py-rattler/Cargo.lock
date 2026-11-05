@@ -1655,7 +1655,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1843,7 +1843,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2992,7 +2992,7 @@ version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a1886916523694cd6ea3d175f03a1e5010699a2a4cc13696d83d7bea1d80638"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4075,7 +4075,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5116,7 +5116,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5174,7 +5174,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5639,7 +5639,7 @@ dependencies = [
 [[package]]
 name = "sigstore-bundle"
 version = "0.15.1"
-source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#6151b944f4139ed74c6f672cd2000e9a19f76e7e"
+source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#c477d06ada232ac115165c4d7d15656e13bcb543"
 dependencies = [
  "jiff",
  "sigstore-types",
@@ -5649,7 +5649,7 @@ dependencies = [
 [[package]]
 name = "sigstore-crypto"
 version = "0.15.1"
-source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#6151b944f4139ed74c6f672cd2000e9a19f76e7e"
+source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#c477d06ada232ac115165c4d7d15656e13bcb543"
 dependencies = [
  "aws-lc-rs",
  "const-oid 0.9.6",
@@ -5666,7 +5666,7 @@ dependencies = [
 [[package]]
 name = "sigstore-merkle"
 version = "0.15.1"
-source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#6151b944f4139ed74c6f672cd2000e9a19f76e7e"
+source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#c477d06ada232ac115165c4d7d15656e13bcb543"
 dependencies = [
  "sigstore-crypto",
  "sigstore-types",
@@ -5676,7 +5676,7 @@ dependencies = [
 [[package]]
 name = "sigstore-rekor"
 version = "0.15.1"
-source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#6151b944f4139ed74c6f672cd2000e9a19f76e7e"
+source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#c477d06ada232ac115165c4d7d15656e13bcb543"
 dependencies = [
  "base64",
  "hex",
@@ -5691,7 +5691,7 @@ dependencies = [
 [[package]]
 name = "sigstore-trust-root"
 version = "0.15.1"
-source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#6151b944f4139ed74c6f672cd2000e9a19f76e7e"
+source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#c477d06ada232ac115165c4d7d15656e13bcb543"
 dependencies = [
  "directories",
  "jiff",
@@ -5707,7 +5707,7 @@ dependencies = [
 [[package]]
 name = "sigstore-tsa"
 version = "0.15.1"
-source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#6151b944f4139ed74c6f672cd2000e9a19f76e7e"
+source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#c477d06ada232ac115165c4d7d15656e13bcb543"
 dependencies = [
  "cms",
  "const-oid 0.9.6",
@@ -5726,7 +5726,7 @@ dependencies = [
 [[package]]
 name = "sigstore-tuf"
 version = "0.15.1"
-source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#6151b944f4139ed74c6f672cd2000e9a19f76e7e"
+source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#c477d06ada232ac115165c4d7d15656e13bcb543"
 dependencies = [
  "glob",
  "hex",
@@ -5745,7 +5745,7 @@ dependencies = [
 [[package]]
 name = "sigstore-types"
 version = "0.15.1"
-source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#6151b944f4139ed74c6f672cd2000e9a19f76e7e"
+source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#c477d06ada232ac115165c4d7d15656e13bcb543"
 dependencies = [
  "base64",
  "hex",
@@ -5759,7 +5759,7 @@ dependencies = [
 [[package]]
 name = "sigstore-verify"
 version = "0.15.1"
-source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#6151b944f4139ed74c6f672cd2000e9a19f76e7e"
+source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#c477d06ada232ac115165c4d7d15656e13bcb543"
 dependencies = [
  "base64",
  "const-oid 0.9.6",
@@ -6024,10 +6024,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.6",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6736,7 +6736,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7337,14 +7337,14 @@ dependencies = [
 [[patch.unused]]
 name = "sigstore-fulcio"
 version = "0.15.1"
-source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#6151b944f4139ed74c6f672cd2000e9a19f76e7e"
+source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#c477d06ada232ac115165c4d7d15656e13bcb543"
 
 [[patch.unused]]
 name = "sigstore-oidc"
 version = "0.15.1"
-source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#6151b944f4139ed74c6f672cd2000e9a19f76e7e"
+source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#c477d06ada232ac115165c4d7d15656e13bcb543"
 
 [[patch.unused]]
 name = "sigstore-sign"
 version = "0.15.1"
-source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#6151b944f4139ed74c6f672cd2000e9a19f76e7e"
+source = "git+https://github.com/wolfv/sigstore-rust?branch=feat%2Fsign-without-tlog#c477d06ada232ac115165c4d7d15656e13bcb543"

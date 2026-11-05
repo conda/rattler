@@ -477,15 +477,20 @@ impl InstanceVerifier {
         trust_domain: &GitHubTrustDomain,
         trusted_root: &TrustedRoot,
     ) -> SigstoreResult<Self> {
+        let instance = SigstoreInstance::GitHub;
+        let mut policy = SigstoreVerificationPolicy::any_identity();
+        if !instance.runs_transparency_log() {
+            // An instance without a transparency log runs no certificate
+            // transparency log either, so its certificates carry no SCT.
+            policy = policy.skip_tlog_unsafe().skip_sct();
+        }
         Ok(Self {
-            instance: SigstoreInstance::GitHub,
+            instance,
             name: format!("GitHub instance of {trust_domain}"),
             github_trust_domain: Some(trust_domain.clone()),
             verifier: Verifier::new(trusted_root)
                 .map_err(|err| SigstoreError::TrustedRoot(err.to_string()))?,
-            policy: SigstoreVerificationPolicy::any_identity()
-                .skip_tlog_unsafe()
-                .skip_sct(),
+            policy,
         })
     }
 }
