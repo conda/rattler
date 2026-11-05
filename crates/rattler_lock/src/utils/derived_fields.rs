@@ -134,7 +134,9 @@ pub(crate) fn derive_channel_from_location(url: &UrlOrPath) -> Option<ChannelUrl
 }
 
 pub(crate) fn derive_arch_and_platform(subdir: &str) -> (Option<String>, Option<String>) {
-    let platform = rattler_conda_types::Subdir::from_known_str(subdir);
+    // The input is already known to be a subdir, not a URL segment that might
+    // belong to the channel, so any CEP 26 subdir is accepted here.
+    let platform = subdir.parse::<rattler_conda_types::Subdir>().ok();
     platform.map_or((None, None), |p| {
         (
             p.arch().map(|arch| arch.to_string()),
@@ -294,6 +296,10 @@ mod test {
         );
         assert_eq!(derive_arch_and_platform("noarch"), (None, None));
         assert_eq!(derive_arch_and_platform("unknown"), (None, None));
+        assert_eq!(
+            derive_arch_and_platform("linux-esp32s3"),
+            (Some("esp32s3".to_string()), Some("linux".to_string()))
+        );
         assert_eq!(derive_arch_and_platform("win-64-2"), (None, None));
         assert_eq!(
             derive_arch_and_platform("emscripten-wasm32"),
