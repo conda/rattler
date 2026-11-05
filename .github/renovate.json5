@@ -45,6 +45,18 @@
       allowedVersions: "<0.4",
     },
     {
+      description: "TypeScript 7.0 ships no JS compiler API, which @rollup/plugin-typescript and ts-jest need. Allow 7 once TypeScript ships the API and both tools support it.",
+      matchManagers: ["npm"],
+      matchPackageNames: ["typescript"],
+      allowedVersions: "<7",
+    },
+    {
+      description: "conda-forge still builds against openssl 3 (krb5, libcurl, cmake and python require openssl <4), so the pixi environments cannot be solved with openssl 4. Allow 4 once conda-forge has migrated.",
+      matchManagers: ["pixi"],
+      matchPackageNames: ["openssl"],
+      allowedVersions: "<4",
+    },
+    {
       description: "pyo3-ffi links the native Python library, so a build can contain only one pyo3 version. Crates that depend on pyo3 must therefore be updated together.",
       matchManagers: ["cargo", "custom.regex"],
       matchPackageNames: ["pyo3", "pyo3-*", "pythonize"],
