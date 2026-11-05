@@ -180,6 +180,33 @@ def test_flags_roundtrip_preserves_unknown_strings(tmp_path: Path) -> None:
     assert record.flags == ["another-future-flag"]
 
 
+def test_track_features_via_init() -> None:
+    record = PackageRecord(
+        name="numpy",
+        version="1.5.1",
+        build=BuildString("py27_p4"),
+        build_number=4,
+        subdir="linux-64",
+        track_features=["mkl"],
+    )
+    assert record.track_features == ["mkl"]
+    assert json.loads(record.to_json())["track_features"] == "mkl"
+
+
+def test_timestamp_via_init() -> None:
+    when = datetime.datetime(2023, 1, 1, tzinfo=datetime.timezone.utc)
+    record = PackageRecord(
+        name="numpy",
+        version="1.5.1",
+        build=BuildString("py27_p4"),
+        build_number=4,
+        subdir="linux-64",
+        timestamp=when,
+    )
+    assert record.timestamp == when
+    assert json.loads(record.to_json())["timestamp"] == int(when.timestamp() * 1000)
+
+
 def test_extra_depends_default_empty() -> None:
     record = PackageRecord(
         name="requests", version="2.28.0", build=BuildString("py_0"), build_number=0, subdir="noarch"
