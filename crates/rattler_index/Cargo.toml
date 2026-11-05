@@ -1,5 +1,6 @@
 [package]
-exclude = ["tests/**"]
+# Library tests need the shared backend in packaged sources.
+exclude = ["tests/**", "!tests/integration/etag_memory_backend.rs"]
 name = "rattler_index"
 version = "0.34.6"
 edition.workspace = true
@@ -37,6 +38,7 @@ path = "src/main.rs"
 thiserror = { workspace = true }
 ahash = { workspace = true }
 anyhow = { workspace = true }
+astral_async_zip = { workspace = true }
 bytes = { workspace = true }
 indexmap = { workspace = true }
 jiff = { workspace = true }
@@ -77,6 +79,8 @@ zstd = { workspace = true }
 retry-policies = { workspace = true }
 
 [dev-dependencies]
+axum = { workspace = true }
+zip = { workspace = true }
 rattler_repodata_gateway = { path = "../rattler_repodata_gateway", default-features = false, features = [
   "sparse",
 ] }

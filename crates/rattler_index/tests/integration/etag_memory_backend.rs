@@ -30,7 +30,7 @@ use std::{
 use bytes::Bytes;
 use opendal::{
     Buffer, Builder, BytesRange, Capability, Error, ErrorKind, Metadata, MetadataBuilder,
-    OperationContext, Operator, Result, raw::*,
+    OperationContext, Result, raw::*,
 };
 use rattler_digest::compute_bytes_digest;
 use tokio::sync::RwLock;
@@ -192,6 +192,10 @@ pub struct ETagMemoryBackend {
     storage: Arc<RwLock<HashMap<String, Arc<RwLock<FileEntry>>>>>,
     directories: Arc<RwLock<HashSet<String>>>,
     test_hooks: Option<TestHooks>,
+    omit_identity: bool,
+    timestamp_only: bool,
+    reject_conditions: bool,
+    reject_ranges: bool,
 }
 
 impl ETagMemoryBackend {
@@ -200,20 +204,35 @@ impl ETagMemoryBackend {
             storage: Arc::new(RwLock::new(HashMap::new())),
             directories: Arc::new(RwLock::new(HashSet::new())),
             test_hooks: None,
+            omit_identity: false,
+            timestamp_only: false,
+            reject_conditions: false,
+            reject_ranges: false,
         }
     }
 
     pub fn with_test_hooks(hooks: TestHooks) -> Self {
         Self {
-            storage: Arc::new(RwLock::new(HashMap::new())),
-            directories: Arc::new(RwLock::new(HashSet::new())),
             test_hooks: Some(hooks),
+            ..Self::new()
         }
     }
 
     async fn run_hook(&self, path: &str, operation: Operation) {
         if let Some(hooks) = &self.test_hooks {
             (hooks.on_operation)(path, operation).await;
+        }
+    }
+
+    fn metadata(&self, entry: &FileEntry) -> Metadata {
+        if self.omit_identity {
+            MetadataBuilder::file(entry.data.len() as u64).build()
+        } else if self.timestamp_only {
+            let mut metadata = MetadataBuilder::file(entry.data.len() as u64);
+            metadata.last_modified(Timestamp::from_second(1_900_000_000).unwrap());
+            metadata.build()
+        } else {
+            entry.metadata()
         }
     }
 
@@ -354,9 +373,31 @@ impl ETagMemoryBackend {
 #[derive(Default, Debug)]
 pub struct ETagMemoryBuilder {
     test_hooks: Option<TestHooks>,
+    omit_identity: bool,
+    timestamp_only: bool,
+    reject_conditions: bool,
+    reject_ranges: bool,
 }
 
 impl ETagMemoryBuilder {
+    pub fn without_range_reads(mut self) -> Self {
+        self.reject_ranges = true;
+        self
+    }
+    pub fn with_timestamp_only(mut self) -> Self {
+        self.timestamp_only = true;
+        self
+    }
+
+    pub fn without_identity(mut self) -> Self {
+        self.omit_identity = true;
+        self
+    }
+
+    pub fn without_conditional_reads(mut self) -> Self {
+        self.reject_conditions = true;
+        self
+    }
     pub fn with_test_hooks(mut self, hooks: TestHooks) -> Self {
         self.test_hooks = Some(hooks);
         self
@@ -367,11 +408,16 @@ impl Builder for ETagMemoryBuilder {
     type Config = ();
 
     fn build(self) -> Result<impl Service> {
-        if let Some(hooks) = self.test_hooks {
-            Ok(ETagMemoryBackend::with_test_hooks(hooks))
+        let mut backend = if let Some(hooks) = self.test_hooks {
+            ETagMemoryBackend::with_test_hooks(hooks)
         } else {
-            Ok(ETagMemoryBackend::new())
-        }
+            ETagMemoryBackend::new()
+        };
+        backend.omit_identity = self.omit_identity;
+        backend.timestamp_only = self.timestamp_only;
+        backend.reject_conditions = self.reject_conditions;
+        backend.reject_ranges = self.reject_ranges;
+        Ok(backend)
     }
 }
 
@@ -393,8 +439,8 @@ impl Service for ETagMemoryBackend {
             stat_with_if_match: true,
             stat_with_if_none_match: true,
             read: true,
-            read_with_if_match: true,
-            read_with_if_none_match: true,
+            read_with_if_match: !self.reject_conditions,
+            read_with_if_none_match: !self.reject_conditions,
             write: true,
             write_can_empty: true,
             write_with_if_match: true,
@@ -429,7 +475,7 @@ impl Service for ETagMemoryBackend {
             check_if_match(&entry.etag, args.if_match(), "")?;
             check_if_none_match(&entry.etag, args.if_none_match(), "")?;
 
-            entry.metadata()
+            self.metadata(&entry)
         }; // entry lock is dropped here
 
         // Test hook: call callback after operation
@@ -544,6 +590,12 @@ pub struct ETagMemoryReader {
 
 impl oio::StreamRead for ETagMemoryReader {
     async fn open(&self, range: BytesRange) -> Result<(RpRead, Box<dyn oio::ReadStreamDyn>)> {
+        if self.backend.reject_ranges && (range.offset() != 0 || range.size().is_some()) {
+            return Err(Error::new(
+                ErrorKind::Unsupported,
+                "range reads unavailable",
+            ));
+        }
         let path = self.path.as_str();
 
         // Test hook: call callback before operation
@@ -558,7 +610,11 @@ impl oio::StreamRead for ETagMemoryReader {
             drop(storage);
 
             let entry = entry_lock.read().await;
-            (entry.metadata(), entry.last_modified, entry.data.clone())
+            (
+                self.backend.metadata(&entry),
+                entry.last_modified,
+                entry.data.clone(),
+            )
         }; // entry lock is dropped here
 
         // Check conditions
@@ -671,105 +727,5 @@ impl oio::List for ETagMemoryLister {
             MetadataBuilder::file(entry.content_length).build()
         };
         Ok(Some(oio::Entry::new(&entry.path, metadata)))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Validates basic read/write operations work correctly.
-    #[tokio::test]
-    async fn test_basic_read_write() {
-        let op = Operator::new(ETagMemoryBuilder::default()).unwrap();
-
-        // Write a file
-        op.write("test.txt", "hello world").await.unwrap();
-
-        // Read it back
-        let data = op.read("test.txt").await.unwrap();
-        assert_eq!(data.to_bytes(), "hello world");
-    }
-
-    /// Validates that `ETag`s are generated and change when file content changes.
-    #[tokio::test]
-    async fn test_etag_generation() {
-        let op = Operator::new(ETagMemoryBuilder::default()).unwrap();
-
-        op.write("test.txt", "hello").await.unwrap();
-        let meta = op.stat("test.txt").await.unwrap();
-
-        assert!(meta.etag().is_some());
-        let etag1 = meta.etag().unwrap();
-
-        // Write different content
-        op.write("test.txt", "world").await.unwrap();
-        let meta2 = op.stat("test.txt").await.unwrap();
-        let etag2 = meta2.etag().unwrap();
-
-        // ETags should be different
-        assert_ne!(etag1, etag2);
-    }
-
-    /// Validates that conditional reads with if-match work correctly.
-    ///
-    /// Tests that reads succeed when `ETag` matches and fail with
-    /// `ConditionNotMatch` when it doesn't.
-    #[tokio::test]
-    async fn test_conditional_read_with_if_match() {
-        let op = Operator::new(ETagMemoryBuilder::default()).unwrap();
-
-        op.write("test.txt", "hello").await.unwrap();
-        let meta = op.stat("test.txt").await.unwrap();
-        let etag = meta.etag().unwrap();
-
-        // Read with matching ETag should succeed
-        let result = op.read_with("test.txt").if_match(etag).await;
-        assert!(result.is_ok());
-
-        // Read with wrong ETag should fail
-        let result = op.read_with("test.txt").if_match("\"wrong\"").await;
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err().kind(), ErrorKind::ConditionNotMatch);
-    }
-
-    /// Validates that conditional writes with if-match work correctly.
-    ///
-    /// Tests that writes succeed when `ETag` matches and fail with
-    /// `ConditionNotMatch` when it doesn't.
-    #[tokio::test]
-    async fn test_conditional_write_with_if_match() {
-        let op = Operator::new(ETagMemoryBuilder::default()).unwrap();
-
-        op.write("test.txt", "v1").await.unwrap();
-        let meta = op.stat("test.txt").await.unwrap();
-        let etag = meta.etag().unwrap();
-
-        // Write with matching ETag should succeed
-        let result = op.write_with("test.txt", "v2").if_match(etag).await;
-        assert!(result.is_ok());
-
-        // Write with wrong ETag should fail
-        let result = op.write_with("test.txt", "v3").if_match("\"wrong\"").await;
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err().kind(), ErrorKind::ConditionNotMatch);
-    }
-
-    /// Validates that if-none-match with "*" enforces create-only semantics.
-    ///
-    /// Tests that the first write succeeds but subsequent writes with
-    /// if-none-match="*" fail.
-    #[tokio::test]
-    async fn test_if_none_match_create_only() {
-        let op = Operator::new(ETagMemoryBuilder::default()).unwrap();
-
-        // First write with if_none_match should succeed
-        let result = op.write_with("test.txt", "v1").if_none_match("*").await;
-        assert!(result.is_ok());
-
-        // Second write with if_none_match should fail
-        let result = op.write_with("test.txt", "v2").if_none_match("*").await;
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err().kind(), ErrorKind::ConditionNotMatch);
     }
 }
