@@ -1,49 +1,40 @@
-name: Check PR
+name: Vouch Check PR
 
-# `pull_request_target` is needed to label/close PRs from forks. The workflow
-# never checks out or executes PR code.
+# `pull_request_target` is needed to close pull requests from forks. The
+# workflow only runs code from the default branch, never from the pull request.
 on: # zizmor: ignore[dangerous-triggers]
   pull_request_target:
-    types: [opened, reopened]
-  issue_comment:
-    types: [created]
+    types:
+      - opened
+      - reopened
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
-  pull-requests: write
+permissions: {}
 
 jobs:
   check:
+    if: github.repository == 'conda/rattler'
     runs-on: ubuntu-latest
-    if: >-
-      github.event_name == 'pull_request_target' ||
-      (github.event_name == 'issue_comment' &&
-       github.event.issue.pull_request &&
-       contains(github.event.comment.body, '/recheck'))
+    concurrency:
+      group: vouch-check-pr-${{ github.event.pull_request.number }}
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
-      - uses: mitchellh/vouch/action/check-pr@d66fa29a64600490892131ad87597c30c91fcac4 # v1.5.0
-        id: check-pr
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          pr-number: ${{ github.event.pull_request.number || github.event.issue.number }}
-          auto-close: true
-          vouched-repo: prefix-dev/vouched
-          vouched-file: VOUCHED.td
-          require-vouch: false
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
+        with:
+          environments: vouch
+          cache: false
+      - name: Check pull request author
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Label PR
-        if: steps.check-pr.outputs.status == 'closed'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              labels: ['denounced']
-            })
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          pixi run --locked --environment vouch vouch gh-check-pr "$PR_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --vouched-repo prefix-dev/vouched \
+            --vouched-file VOUCHED.td \
+            --require-vouch=true --auto-close=true --dry-run=false

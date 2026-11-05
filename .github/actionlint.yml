@@ -1,0 +1,5 @@
+paths:
+  .github/workflows/vouch-manage-by-issue.yml:
+    # actionlint does not know `concurrency.queue` yet: https://github.com/rhysd/actionlint/issues/654
+    ignore:
+      - 'unexpected key "queue" for "concurrency" section'
