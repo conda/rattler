@@ -102,7 +102,7 @@ deploy-dev = { cmd = "mike deploy --push dev devel", depends-on = [
 ] }
 
 [feature.repl.dependencies]
-ipython = ">=8.29.0,<9"
+ipython = ">=9.17.1,<10"
 [feature.repl.tasks]
 repl = "ipython"
 
