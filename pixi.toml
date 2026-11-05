@@ -77,8 +77,6 @@ lefthook = ">=2.0.11,<3"
 actionlint = ">=1.7.7,<2"
 zizmor = ">=1.29.0,<2"
 shellcheck = ">=0.11.0,<0.12"
-[feature.lint.target.unix.dependencies]
-vouch = "*"
 
 [feature.lint.tasks]
 actionlint = { cmd = "actionlint", env = { SHELLCHECK_OPTS = "-e SC2086 -e SC2046 -e SC2028" } }
@@ -102,6 +100,16 @@ cargo-clippy = "cargo clippy --all-targets --workspace -- -D warnings -Dclippy::
 
 [environments]
 lint = { features = ["lint"], solve-group = "default" }
+
+[feature.vouch]
+platforms = ["linux-64"]
+
+[feature.vouch.dependencies]
+vouch = ">=1.5.0,<2"
+
+[environments.vouch]
+features = ["vouch"]
+no-default-feature = true
 
 #------------------------------
 # Breaking API change detection

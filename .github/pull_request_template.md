@@ -1,46 +1,24 @@
 ### Description
 
-<!--- Please include a summary of the change and which issue is fixed. --->
-<!--- Please also include relevant motivation and context. -->
-
-<!--- Add visual representation of the effect of the change when possible, e.g. before and after screenshots, code snippets, etc. --->
-
 Fixes #{issue}
 
-### How Has This Been Tested?
+*Ping the maintainers you discussed this contribution with here:* @{github-handle}
 
-<!-- Please describe the tests that you ran to verify your changes. Provide instructions so we can reproduce while reviewing your changes. -->
+---
+
+<!-- Please include a human-written summary of the change and which issue is fixed, with relevant motivation and context. See CONTRIBUTING.md and AI_POLICY.md. -->
+
+Summary:
+
+<!-- Add visual representation of the effect of the change when possible, e.g. before and after screenshots, code snippets, etc. -->
 
 ### AI Disclosure
-<!--- Uncomment the following if your PR does not contain AI-generated content. --->
-<!--- This PR doesn't contain AI-generated content. --->
-<!--- Remove this section if your PR does not contain AI-generated content. --->
-- [ ] This PR contains AI-generated content.
-  - [ ] I have tested any AI-generated content in my PR.
-  - [ ] I take responsibility for any AI-generated content in my PR.
-<!--- If you used AI to generate code, please specify the tool used and the prompt below. --->
-Tools: {e.g., Claude, Codex, GitHub Copilot, ChatGPT, etc.}
 
-<!-- Add your prompt here, this helps us understand your results.
-```plaintext
-TODO
-```
--->
+<!-- Disclose the tools used and the extent of any AI assistance. Remove this section if no AI was used. -->
+
+Tools and extent:
 
 ### Checklist:
-<!--- Remove the non relevant items. --->
-- [ ] I have performed a self-review of my own code
-- [ ] I have commented my code, particularly in hard-to-understand areas
-- [ ] I have made corresponding changes to the documentation
-- [ ] I have added sufficient tests to cover my changes.
-
-<!-- Just as a reminder, everyone in all conda org spaces (including PRs)
-     must follow the Conda Org Code of Conduct (link below).
-
-     Finally, once again, thanks for your time and effort. If you have any
-     feedback in regards to your experience contributing here, please
-     let us know!
-
-     Helpful links:
-       - Conda Org COC: https://github.com/conda/.github/blob/main/CODE_OF_CONDUCT.md
-       - Contributing docs: https://github.com/conda/.github/blob/main/CONTRIBUTING.md -->
+- [ ] I've discussed the proposed changes with a maintainer.
+- [ ] I understand the purpose of my changes and how they interact with the greater system.
+- [ ] User-facing changes are documented and prose in the documentation has been written/edited/reviewed by hand.
