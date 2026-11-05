@@ -14,6 +14,8 @@ We use a vouch system to mitigate spam. Before opening a pull request:
 1. [Open a discussion in the "Vouch Request" category](https://github.com/conda/rattler/discussions/new?category=vouch-request). Briefly introduce yourself and describe what you want to change and why. Write this yourself, without AI.
 2. A maintainer will comment `vouch` if approved.
 
+For an existing pull request, a maintainer can instead comment `vouch` on the pull request to vouch for its author.
+
 If you are already vouched for another project using the shared registry, such as [Pixi](https://github.com/prefix-dev/pixi), you don't need to request it again.
 Pull requests from unvouched contributors are automatically closed.
 A vouch is not approval of a specific change: agree on it with a maintainer before opening a pull request.
