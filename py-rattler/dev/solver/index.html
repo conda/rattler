@@ -4210,7 +4210,7 @@ is set and is shared by all packages and channels.</p>
   </span>
 
 <a href="#rattler.solver.solver.solve" class="headerlink" title="Permanent link">#</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">solve</span><span class="p">(</span><span class="n">sources</span><span class="p">,</span> <span class="n">specs</span><span class="p">,</span> <span class="n">gateway</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">platforms</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">locked_packages</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">pinned_packages</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">virtual_packages</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">channel_priority</span><span class="o">=</span><span class="n">ChannelPriority</span><span class="o">.</span><span class="n">Strict</span><span class="p">,</span> <span class="n">exclude_newer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">strategy</span><span class="o">=</span><span class="s1">'highest'</span><span class="p">,</span> <span class="n">constraints</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">channel_relations</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">channel_relations_max_depth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">add_pip_as_python_dependency</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">timestamp_policy</span><span class="o">=</span><span class="s1">'require-timestamp'</span><span class="p">,</span> <span class="n">package_format_selection</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">solve</span><span class="p">(</span><span class="n">sources</span><span class="p">,</span> <span class="n">specs</span><span class="p">,</span> <span class="n">gateway</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">platforms</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">locked_packages</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">pinned_packages</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">additional_packages</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">virtual_packages</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">channel_priority</span><span class="o">=</span><span class="n">ChannelPriority</span><span class="o">.</span><span class="n">Strict</span><span class="p">,</span> <span class="n">exclude_newer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">strategy</span><span class="o">=</span><span class="s1">'highest'</span><span class="p">,</span> <span class="n">constraints</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">channel_relations</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">channel_relations_max_depth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">add_pip_as_python_dependency</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">timestamp_policy</span><span class="o">=</span><span class="s1">'require-timestamp'</span><span class="p">,</span> <span class="n">package_format_selection</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4341,6 +4341,36 @@ that should be present in the environment.</p>
      there is a variant available in the <code>pinned_packages</code> field it
      will always select that version no matter what even if that
      means other packages have to be downgraded.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>additional_packages</code>
+            </td>
+            <td>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Records that are candidates in the solve, without any
+     preference. Unlike <code>locked_packages</code>, these packages are not
+     favored. And unlike <code>pinned_packages</code>, they do not restrict the candidates
+     for their package. Use them for records already installed in a prefix that
+     may come from channels no longer in <code>available_packages</code>. Channel priority
+     treats each record as if it came from the highest-priority channel channel
+     in <code>available_packages</code> that contains a package with the same name, or from
+     the highest-priority channel when none does. As a result:
+       - with <code>ChannelPriority.Strict</code>, strict channel priority never removes
+         these records, and they never cause a channel record to be removed.
+       - with <code>ChannelPriority.Flexible</code>, they compete with records from the same channel
+       - with <code>ChannelPriority.Disabled</code>, they compete with all records
+     A record from a lower-priority channel therefore competes with higher-priority
+     channels. For example, an installed <code>foo 3.0</code> from a lower-priority channel is selected
+     over <code>foo 2.0</code> from a higher-priority channel</p>
               </div>
             </td>
             <td>
@@ -4608,7 +4638,7 @@ the same build is available in more than one format. Applies to every source.
   </span>
 
 <a href="#rattler.solver.solver.solve_with_sparse_repodata" class="headerlink" title="Permanent link">#</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">solve_with_sparse_repodata</span><span class="p">(</span><span class="n">specs</span><span class="p">,</span> <span class="n">sparse_repodata</span><span class="p">,</span> <span class="n">locked_packages</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">pinned_packages</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">virtual_packages</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">channel_priority</span><span class="o">=</span><span class="n">ChannelPriority</span><span class="o">.</span><span class="n">Strict</span><span class="p">,</span> <span class="n">exclude_newer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">strategy</span><span class="o">=</span><span class="s1">'highest'</span><span class="p">,</span> <span class="n">constraints</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">package_format_selection</span><span class="o">=</span><span class="n">PackageFormatSelection</span><span class="o">.</span><span class="n">PREFER_CONDA</span><span class="p">,</span> <span class="n">add_pip_as_python_dependency</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">timestamp_policy</span><span class="o">=</span><span class="s1">'require-timestamp'</span><span class="p">)</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">solve_with_sparse_repodata</span><span class="p">(</span><span class="n">specs</span><span class="p">,</span> <span class="n">sparse_repodata</span><span class="p">,</span> <span class="n">locked_packages</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">pinned_packages</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">additional_packages</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">virtual_packages</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">channel_priority</span><span class="o">=</span><span class="n">ChannelPriority</span><span class="o">.</span><span class="n">Strict</span><span class="p">,</span> <span class="n">exclude_newer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">strategy</span><span class="o">=</span><span class="s1">'highest'</span><span class="p">,</span> <span class="n">constraints</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">package_format_selection</span><span class="o">=</span><span class="n">PackageFormatSelection</span><span class="o">.</span><span class="n">PREFER_CONDA</span><span class="p">,</span> <span class="n">add_pip_as_python_dependency</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">timestamp_policy</span><span class="o">=</span><span class="s1">'require-timestamp'</span><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4703,6 +4733,36 @@ repodata.</p>
      there is a variant available in the <code>pinned_packages</code> field it
      will always select that version no matter what even if that
      means other packages have to be downgraded.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>additional_packages</code>
+            </td>
+            <td>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Records that are candidates in the solve, without any
+     preference. Unlike <code>locked_packages</code>, these packages are not
+     favored. And unlike <code>pinned_packages</code>, they do not restrict the candidates
+     for their package. Use them for records already installed in a prefix that
+     may come from channels no longer in <code>available_packages</code>. Channel priority
+     treats each record as if it came from the highest-priority channel channel
+     in <code>available_packages</code> that contains a package with the same name, or from
+     the highest-priority channel when none does. As a result:
+       - with <code>ChannelPriority.Strict</code>, strict channel priority never removes
+         these records, and they never cause a channel record to be removed.
+       - with <code>ChannelPriority.Flexible</code>, they compete with records from the same channel
+       - with <code>ChannelPriority.Disabled</code>, they compete with all records
+     A record from a lower-priority channel therefore competes with higher-priority
+     channels. For example, an installed <code>foo 3.0</code> from a lower-priority channel is selected
+     over <code>foo 2.0</code> from a higher-priority channel</p>
               </div>
             </td>
             <td>
