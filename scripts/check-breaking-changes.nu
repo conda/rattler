@@ -11,7 +11,10 @@
 # `breaking-changes.md`.
 
 const repo_root = path self ..
-const public_target_kinds = ["lib", "rlib", "dylib", "cdylib", "staticlib", "proc-macro"]
+# cargo-semver-checks 0.51 cannot check proc-macro crates. Support landed in
+# obi1kenobi/cargo-semver-checks#1753 after 0.51.0; add "proc-macro" back once a
+# release containing it is used.
+const public_target_kinds = ["lib", "rlib", "dylib", "cdylib", "staticlib"]
 # cargo-semver-checks builds each side through an isolated placeholder project and
 # runs `cargo update`, so the workspace lockfile is not an input to its API comparison.
 const workspace_files = ["rust-toolchain", "rust-toolchain.toml"]
