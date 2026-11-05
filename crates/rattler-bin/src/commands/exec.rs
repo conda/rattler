@@ -607,12 +607,9 @@ async fn mount_prefix(options: MountPrefixOptions<'_>) -> miette::Result<ExecMou
         .context("failed to create mount point")?;
 
     // ProjFS on Windows has no read-only mode, so ask for read-only where it is
-    // supported and let it fall through to writable on Windows. Placeholder
-    // scan results are cached next to the lock file, so warm runs don't read
-    // every prefix-bearing file again.
+    // supported and let it fall through to writable on Windows.
     let config = MountConfig::new(mount_point.clone(), Transport::best(), env_hash.to_string())
-        .with_mode(Mode::ReadOnlyIfSupported)
-        .with_scan_cache(state_dir.join("scan-cache.json"));
+        .with_mode(Mode::ReadOnlyIfSupported);
 
     tracing::info!("mounting environment at {}", mount_point.display());
     let handle = build_and_mount_with_client(

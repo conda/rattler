@@ -17,6 +17,8 @@ use std::{
 
 use rattler_conda_types::package::{PathType, PrefixPlaceholder};
 
+use crate::package_index::{FileStat, ScanResult};
+
 #[derive(Debug)]
 pub struct DirectoryNode {
     pub prefix_path: PathBuf,
@@ -51,6 +53,12 @@ pub struct FileNode {
     /// When set (e.g. for noarch Python files where the virtual path differs from
     /// the on-disk cache path), `_getpath()` uses this instead of `parent.prefix_path`.
     pub cache_prefix_path: Option<PathBuf>,
+    /// The backing file's attributes, when known from the package index.
+    /// Saves a `stat` per file.
+    pub(crate) stat: Option<FileStat>,
+    /// Where the prefix placeholder occurs, when known from the package
+    /// index. Saves reading the file at mount time.
+    pub(crate) scan: Option<ScanResult>,
 }
 
 impl FileNode {
@@ -70,6 +78,8 @@ impl FileNode {
             virtual_content: None,
             computed_size: None,
             cache_prefix_path: None,
+            stat: None,
+            scan: None,
         }
     }
 
@@ -83,6 +93,8 @@ impl FileNode {
             virtual_content: Some(content),
             computed_size: None,
             cache_prefix_path: None,
+            stat: None,
+            scan: None,
         }
     }
 }
@@ -90,7 +102,9 @@ impl FileNode {
 #[derive(Debug)]
 pub enum MetadataNode {
     Directory(DirectoryNode),
-    File(FileNode),
+    /// Boxed: a file node is several times the size of a directory node, and
+    /// trees hold thousands of nodes that get moved around while building.
+    File(Box<FileNode>),
 }
 
 impl MetadataNode {
@@ -115,17 +129,17 @@ impl MetadataNode {
         path_type: PathType,
         prefix_placeholder: Option<PrefixPlaceholder>,
     ) -> Self {
-        MetadataNode::File(FileNode::new(
+        MetadataNode::File(Box::new(FileNode::new(
             file_name,
             parent,
             cache_base_path,
             path_type,
             prefix_placeholder,
-        ))
+        )))
     }
 
     pub fn new_virtual_file(file_name: OsString, parent: usize, content: Vec<u8>) -> Self {
-        MetadataNode::File(FileNode::new_virtual(file_name, parent, content))
+        MetadataNode::File(Box::new(FileNode::new_virtual(file_name, parent, content)))
     }
 
     pub fn as_directory(&self) -> Option<&DirectoryNode> {

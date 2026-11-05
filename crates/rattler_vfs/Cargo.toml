@@ -19,6 +19,7 @@ memmap2 = { workspace = true }
 rayon = { workspace = true }
 rattler = { workspace = true, default-features = false }
 reflink-copy = { workspace = true }
+rkyv = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

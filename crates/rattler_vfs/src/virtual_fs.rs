@@ -1,7 +1,7 @@
 use memmap2::Mmap;
 use rattler::install::link::CStringOccurrences;
 use rattler_conda_types::Subdir;
-use rattler_conda_types::package::{FileMode, PathType, PrefixOffsets};
+use rattler_conda_types::package::PathType;
 use rayon::prelude::*;
 use std::{
     collections::HashMap,
@@ -13,7 +13,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::scan_cache::{FileStamp, ScanCache, ScanEntry, ScanResult};
+use crate::package_index::ScanResult;
 use crate::vfs_ops::current_uid_gid;
 
 use crate::metadata_tree::{FileNode, MetadataNode};
@@ -144,60 +144,6 @@ fn read_leading_bytes(path: &Path, n: usize) -> std::io::Result<Vec<u8>> {
     Ok(buf)
 }
 
-/// Locate the placeholder in `path`, reusing the result stored in
-/// `scan_cache` when it still applies. Returns the scan and whether it was
-/// freshly computed (`false` for a cache hit). The file is memory-mapped rather
-/// than read, so scanning a large binary doesn't copy it to the heap.
-fn scan_file(
-    path: &Path,
-    placeholder: &str,
-    mode: FileMode,
-    platform: Subdir,
-    scan_cache: Option<&ScanCache>,
-) -> Option<(ScanEntry, bool)> {
-    let warn = |e: &dyn std::fmt::Display| {
-        tracing::warn!(
-            "failed to read {} for offset computation: {}",
-            path.display(),
-            e
-        );
-    };
-    let file = File::open(path).map_err(|e| warn(&e)).ok()?;
-    let metadata = file.metadata().map_err(|e| warn(&e)).ok()?;
-    let stamp = FileStamp::of(&metadata)?;
-    if let Some(result) = scan_cache.and_then(|cache| cache.get(path, placeholder, &stamp)) {
-        let entry = ScanEntry {
-            stamp,
-            placeholder: placeholder.to_string(),
-            result: result.clone(),
-        };
-        return Some((entry, false));
-    }
-
-    // SAFETY: package cache files are immutable while mounted.
-    let source = unsafe { Mmap::map(&file) }.map_err(|e| warn(&e)).ok()?;
-    let result = match mode {
-        FileMode::Text => {
-            let (region_end, occurrences) =
-                crate::prefix_replacement::scan_text(&source, placeholder, &platform);
-            ScanResult::Text {
-                region_end,
-                occurrences,
-            }
-        }
-        FileMode::Binary => ScanResult::Binary(crate::prefix_replacement::plan_binary_replacement(
-            &source,
-            placeholder,
-        )),
-    };
-    let entry = ScanEntry {
-        stamp,
-        placeholder: placeholder.to_string(),
-        result,
-    };
-    Some((entry, true))
-}
-
 /// Pre-computed prefix-replacement plan for a file, keyed by inode.
 enum ReplacementPlan {
     /// Text file: shebang-aware plan — the shebang region is transformed once
@@ -262,21 +208,10 @@ fn child_key(name: &OsStr) -> std::borrow::Cow<'_, OsStr> {
 
 impl VirtualFS {
     pub fn new(metadata: Vec<MetadataNode>, mount_point: &Path) -> Self {
-        Self::new_with_scan_cache(metadata, mount_point, None)
-    }
-
-    /// Like [`VirtualFS::new`], but reuses (and updates) the placeholder scan
-    /// results stored at `scan_cache`, see [`crate::scan_cache`].
-    pub fn new_with_scan_cache(
-        metadata: Vec<MetadataNode>,
-        mount_point: &Path,
-        scan_cache: Option<&Path>,
-    ) -> Self {
         Self::build(
             metadata,
             mount_point,
             Subdir::current().expect("host platform"),
-            scan_cache,
         )
     }
 
@@ -286,37 +221,34 @@ impl VirtualFS {
         mount_point: &Path,
         platform: Subdir,
     ) -> Self {
-        Self::build(metadata, mount_point, platform, None)
+        Self::build(metadata, mount_point, platform)
     }
 
     pub(crate) fn build(
         mut metadata: Vec<MetadataNode>,
         mount_point: &Path,
         platform: Subdir,
-        scan_cache_path: Option<&Path>,
     ) -> Self {
         let target_prefix = target_prefix_for_platform(mount_point, platform);
-        let scan_cache = scan_cache_path.map(|path| ScanCache::load(path, platform));
-        // Compute replacement offsets and text-mode file sizes. Files without
-        // recorded CEP offsets (still the common case for real packages) fall
-        // back to reading and scanning their full contents; running that
-        // serially on the caller's thread makes mount time grow with the total
-        // byte size of every prefix-bearing file (all the `.so`s and
-        // binaries). Scan files in parallel instead so mount time is bounded by
-        // the largest file rather than their sum. Scan results are reused from
-        // (and recorded for) `scan_cache` when one is configured.
-        #[allow(clippy::type_complexity)]
-        let planned: Vec<(
-            u64,
-            ReplacementPlan,
-            Option<u64>,
-            Option<(PathBuf, ScanEntry, bool)>,
-        )> = (0..metadata.len())
+
+        // Placeholder locations come from the package index (see
+        // `crate::package_index`) when the tree was built from one; take them
+        // out of the nodes, they are turned into plans below.
+        let scans: Vec<Option<ScanResult>> = metadata
+            .iter_mut()
+            .map(|node| node.as_file_mut().and_then(|file| file.scan.take()))
+            .collect();
+
+        // Compute replacement plans and text-mode file sizes. Without an index
+        // the placeholder is located now, which may mean reading and scanning
+        // the whole file; do that in parallel so mount time is bounded by the
+        // largest file rather than their sum.
+        let planned: Vec<(u64, ReplacementPlan, Option<u64>)> = scans
             .into_par_iter()
-            .filter_map(|i| {
+            .enumerate()
+            .filter_map(|(i, scan)| {
                 let file = metadata[i].as_file()?;
                 let placeholder = file.prefix_placeholder.as_ref()?;
-
                 let ino = (i + 1) as u64;
 
                 // Resolve the on-disk cache path, preferring cache_prefix_path
@@ -330,89 +262,27 @@ impl VirtualFS {
                     p.join(prefix).join(&file.file_name)
                 };
 
-                // Build the replacement plan. Both modes prefer the offsets
-                // recorded in paths.json — that metadata exists precisely so
-                // consumers don't have to scan file contents. Per the CEP, rattler
-                // applies exactly the groups its own search-based replacement
-                // covers, which is every encoding the CEP defines, so every
-                // recorded group is spliced. `None` sends the file down the
-                // scanning fallback — the field is absent (pre-CEP package),
-                // structurally invalid, or recorded for another file mode. The
-                // recorded offsets are then trusted as-is (the ranged reads are
-                // total, so a non-conformant producer yields wrong bytes for its
-                // own package, never a panic).
-                let recorded_offsets = match &placeholder.experimental_offsets {
-                    None => None,
-                    Some(Ok(offsets)) if offsets.file_mode() == placeholder.file_mode => {
-                        Some(offsets)
-                    }
-                    Some(Ok(offsets)) => {
-                        tracing::warn!(
-                            "{}: offsets recorded for file mode {:?} but the file is {:?}; \
-                             falling back to scanning",
-                            cache_path.display(),
-                            offsets.file_mode(),
-                            placeholder.file_mode
-                        );
-                        None
-                    }
-                    Some(Err(e)) => {
-                        tracing::warn!(
-                            "{}: unusable offset metadata ({e}); falling back to scanning",
-                            cache_path.display()
-                        );
-                        None
-                    }
+                let scan = match scan {
+                    Some(scan) => scan,
+                    None => crate::package_index::locate_placeholder(
+                        &cache_path,
+                        placeholder,
+                        platform,
+                    )?,
                 };
-                let shebang_length = recorded_offsets.and_then(PrefixOffsets::shebang_length);
 
-                let mut computed_size: Option<u64> = None;
-                // The scan of this file, to store in the scan cache.
-                let mut scanned: Option<(PathBuf, ScanEntry, bool)> = None;
-                let plan = match placeholder.file_mode {
-                    FileMode::Text => {
-                        // With recorded offsets, construction reads at most the
-                        // shebang region (`shebang_length` bytes) — the one part
-                        // of the transformation a bare offset list can't express.
-                        let recorded_plan = if let Some(offsets) = recorded_offsets {
-                            let region = match shebang_length {
-                                Some(len) if len > 0 => {
-                                    match read_leading_bytes(&cache_path, len) {
-                                        Ok(region) => region,
-                                        Err(e) => {
-                                            tracing::warn!(
-                                                "failed to read {} for offset computation: {}",
-                                                cache_path.display(),
-                                                e
-                                            );
-                                            return None;
-                                        }
-                                    }
-                                }
-                                _ => Vec::new(),
-                            };
-                            let plan = crate::prefix_replacement::TextPlan::from_recorded(
-                                &region,
-                                offsets.groups(),
-                                &placeholder.placeholder,
-                                &target_prefix,
-                                &platform,
-                            );
-                            if plan.is_none() {
-                                tracing::warn!(
-                                    "{}: recorded shebang_length does not match the file \
-                                     contents; falling back to scanning",
-                                    cache_path.display()
-                                );
-                            }
-                            plan
-                        } else {
-                            None
-                        };
-
-                        let (text_plan, source_len) = if let Some(plan) = recorded_plan {
-                            match fs::symlink_metadata(&cache_path) {
-                                Ok(m) => (plan, m.len() as usize),
+                match scan {
+                    ScanResult::Binary(cstrings) => {
+                        Some((ino, ReplacementPlan::Binary(cstrings), None))
+                    }
+                    ScanResult::Text {
+                        region_end,
+                        occurrences,
+                    } => {
+                        let source_len = match &file.stat {
+                            Some(stat) => stat.len,
+                            None => match fs::symlink_metadata(&cache_path) {
+                                Ok(m) => m.len(),
                                 Err(e) => {
                                     tracing::warn!(
                                         "failed to stat {} for offset computation: {}",
@@ -421,96 +291,44 @@ impl VirtualFS {
                                     );
                                     return None;
                                 }
+                            },
+                        };
+                        // The shebang region is transformed as a whole, so it is
+                        // the one part of the file that has to be read here.
+                        let region = if region_end > 0 {
+                            match read_leading_bytes(&cache_path, region_end) {
+                                Ok(region) if region.len() == region_end => region,
+                                Ok(_) | Err(_) => {
+                                    tracing::warn!(
+                                        "failed to read the shebang of {}",
+                                        cache_path.display()
+                                    );
+                                    return None;
+                                }
                             }
                         } else {
-                            let (entry, fresh) = scan_file(
-                                &cache_path,
-                                &placeholder.placeholder,
-                                FileMode::Text,
-                                platform,
-                                scan_cache.as_ref(),
-                            )?;
-                            let ScanResult::Text {
-                                region_end,
-                                occurrences,
-                            } = &entry.result
-                            else {
-                                unreachable!("text scan yields a text result")
-                            };
-                            let region = if *region_end > 0 {
-                                match read_leading_bytes(&cache_path, *region_end) {
-                                    Ok(region) if region.len() == *region_end => region,
-                                    Ok(_) | Err(_) => {
-                                        tracing::warn!(
-                                            "failed to read the shebang of {}",
-                                            cache_path.display()
-                                        );
-                                        return None;
-                                    }
-                                }
-                            } else {
-                                Vec::new()
-                            };
-                            let plan = crate::prefix_replacement::TextPlan::from_scan(
-                                &region,
-                                occurrences.iter().copied(),
-                                &placeholder.placeholder,
-                                &target_prefix,
-                                &platform,
-                            );
-                            let source_len = entry.stamp.len() as usize;
-                            scanned = Some((cache_path.clone(), entry, fresh));
-                            (plan, source_len)
+                            Vec::new()
                         };
-
+                        let plan = crate::prefix_replacement::TextPlan::from_scan(
+                            &region,
+                            occurrences,
+                            &placeholder.placeholder,
+                            &target_prefix,
+                            &platform,
+                        );
                         // Post-replacement size: the transformed shebang region plus
                         // the unchanged body length plus the per-occurrence delta.
-                        let new_size = text_plan.output_len(source_len) as u64;
-                        computed_size = Some(new_size);
-
-                        ReplacementPlan::Text(text_plan)
+                        let new_size = plan.output_len(source_len as usize) as u64;
+                        Some((ino, ReplacementPlan::Text(plan), Some(new_size)))
                     }
-                    FileMode::Binary => {
-                        let cstrings = if platform.is_windows() {
-                            // Like the installer, leave binaries untouched on
-                            // Windows: DLLs have no rpath to patch. No c-strings
-                            // make the ranged reads serve the bytes verbatim.
-                            Vec::new()
-                        } else if let Some(offsets) = recorded_offsets {
-                            crate::prefix_replacement::cstrings_from_recorded(offsets.groups())
-                        } else {
-                            let (entry, fresh) = scan_file(
-                                &cache_path,
-                                &placeholder.placeholder,
-                                FileMode::Binary,
-                                platform,
-                                scan_cache.as_ref(),
-                            )?;
-                            let ScanResult::Binary(cstrings) = &entry.result else {
-                                unreachable!("binary scan yields a binary result")
-                            };
-                            let cstrings = cstrings.clone();
-                            scanned = Some((cache_path.clone(), entry, fresh));
-                            cstrings
-                        };
-                        ReplacementPlan::Binary(cstrings)
-                    }
-                };
-
-                Some((ino, plan, computed_size, scanned))
+                }
             })
             .collect();
 
         // Apply the parallel results sequentially: insert each plan and record
         // the transformed text-file sizes back into the metadata tree.
         let mut offset_cache = HashMap::with_capacity(planned.len());
-        let mut scans = Vec::new();
-        let mut any_fresh_scan = false;
-        for (ino, plan, computed_size, scanned) in planned {
-            if let Some((path, entry, fresh)) = scanned {
-                any_fresh_scan |= fresh;
-                scans.push((path, entry));
-            }
+        for (ino, plan, computed_size) in planned {
             if let Some(size) = computed_size {
                 metadata[(ino - 1) as usize]
                     .as_file_mut()
@@ -518,15 +336,6 @@ impl VirtualFS {
                     .computed_size = Some(size);
             }
             offset_cache.insert(ino, plan);
-        }
-
-        // Persist the scans when anything had to be scanned. Only this mount's
-        // files are written, so entries of replaced packages drop out.
-        if let Some(path) = scan_cache_path
-            && any_fresh_scan
-            && let Err(e) = ScanCache::store(path, platform, scans)
-        {
-            tracing::warn!("failed to write scan cache {}: {e}", path.display());
         }
 
         let child_maps = metadata
@@ -635,10 +444,26 @@ impl VirtualFS {
                     return self.make_attr(ino, content.len() as u64, FileKind::RegularFile, 0o775);
                 }
 
-                let path = self._getpath(file);
-                match fs::symlink_metadata(&path) {
-                    Ok(metadata) => {
-                        let mut attr = FileAttr::from_metadata(&metadata, ino);
+                // Attributes recorded in the package index, else a `stat`.
+                let attr = match &file.stat {
+                    Some(stat) => Ok(FileAttr {
+                        ino,
+                        size: stat.len,
+                        blocks: stat.blocks,
+                        atime: stat.mtime,
+                        mtime: stat.mtime,
+                        ctime: stat.ctime,
+                        kind: stat.kind,
+                        perm: stat.perm,
+                        nlink: 1,
+                        uid: stat.uid,
+                        gid: stat.gid,
+                    }),
+                    None => fs::symlink_metadata(self._getpath(file))
+                        .map(|metadata| FileAttr::from_metadata(&metadata, ino)),
+                };
+                match attr {
+                    Ok(mut attr) => {
                         // Override size if prefix replacement changes the file length
                         if let Some(computed) = file.computed_size {
                             attr.size = computed;
@@ -651,7 +476,7 @@ impl VirtualFS {
                         attr
                     }
                     Err(e) => {
-                        tracing::warn!("failed to stat {}: {}", path.display(), e);
+                        tracing::warn!("failed to stat {}: {}", self._getpath(file).display(), e);
                         self.make_attr(ino, 0, FileKind::RegularFile, 0o644)
                     }
                 }
@@ -706,18 +531,25 @@ impl VirtualFS {
             if !matches_name || pyc.virtual_content.is_some() || pyc.prefix_placeholder.is_some() {
                 continue;
             }
-            let Ok(header) = read_leading_bytes(&self._getpath(pyc), 16) else {
-                continue;
+            // `(flags, source mtime, source size)`, from the package index
+            // when available.
+            let header = if let Some(header) = pyc.stat.as_ref().and_then(|stat| stat.pyc_header) {
+                header
+            } else {
+                let Ok(bytes) = read_leading_bytes(&self._getpath(pyc), 16) else {
+                    continue;
+                };
+                let Some(bytes) = bytes.get(..16) else {
+                    continue;
+                };
+                let word = |i: usize| u32::from_le_bytes(bytes[i..i + 4].try_into().unwrap());
+                (word(4), word(8), word(12))
             };
-            let Some(header) = header.get(..16) else {
-                continue;
-            };
-            let word = |i: usize| u32::from_le_bytes(header[i..i + 4].try_into().unwrap());
             // flags == 0: timestamp-based pyc (not hash-based, PEP 552).
-            if word(4) != 0 || word(12) != source_size32 {
+            let (flags, pyc_mtime32, pyc_size32) = header;
+            if flags != 0 || pyc_size32 != source_size32 {
                 continue;
             }
-            let pyc_mtime32 = word(8);
             if pyc_mtime32 == source_mtime32 {
                 return None;
             }
@@ -1185,7 +1017,7 @@ mod tests {
     }
 
     /// Build a `VirtualFS` over the package directory `dir` with `paths`.
-    fn vfs_over(dir: &Path, paths: Vec<PathsEntry>, scan_cache: Option<&Path>) -> VirtualFS {
+    fn vfs_over(dir: &Path, paths: Vec<PathsEntry>) -> VirtualFS {
         let paths_json = PathsJson {
             paths,
             paths_version: 1,
@@ -1199,12 +1031,7 @@ mod tests {
             &mut dir_indices,
             &mut file_indices,
         );
-        VirtualFS::build(
-            env_paths,
-            Path::new("/new/prefix"),
-            Subdir::Linux64,
-            scan_cache,
-        )
+        VirtualFS::build(env_paths, Path::new("/new/prefix"), Subdir::Linux64)
     }
 
     /// Resolve a `/`-separated path relative to the root to its attributes.
@@ -1232,7 +1059,6 @@ mod tests {
                 .iter()
                 .map(|name| plain_entry(&format!("lib/{name}")))
                 .collect(),
-            None,
         );
         let lib = resolve(&vfs, "lib").unwrap();
         assert!(vfs.child_maps[(lib.ino - 1) as usize].is_some());
@@ -1318,7 +1144,6 @@ mod tests {
                 plain_entry("pkg/__pycache__/resized.cpython-312.pyc"),
                 plain_entry("pkg/plain.py"),
             ],
-            None,
         );
         assert_eq!(mtime_secs(&resolve(&vfs, "pkg/near.py").unwrap()), t - 1);
         assert_eq!(mtime_secs(&resolve(&vfs, "pkg/far.py").unwrap()), t);
@@ -1327,66 +1152,6 @@ mod tests {
         // getattr agrees with lookup.
         let near = resolve(&vfs, "pkg/near.py").unwrap();
         assert_eq!(mtime_secs(&vfs.do_getattr(near.ino).unwrap()), t - 1);
-    }
-
-    #[test]
-    fn test_scan_cache_reuses_scans() {
-        let tmpdir = TempDir::new().unwrap();
-        let pkg_dir = tmpdir.path().join("pkg");
-        fs::create_dir_all(pkg_dir.join("bin")).unwrap();
-        fs::create_dir_all(pkg_dir.join("lib")).unwrap();
-        fs::write(
-            pkg_dir.join("bin/tool"),
-            b"#!/old/prefix/bin/python\nimport os  # /old/prefix/share\n",
-        )
-        .unwrap();
-        fs::write(
-            pkg_dir.join("lib/libx.so"),
-            b"\x7fELF\0/old/prefix/lib\0tail",
-        )
-        .unwrap();
-        let placeholder = |file_mode| PrefixPlaceholder {
-            file_mode,
-            placeholder: "/old/prefix".to_string(),
-            experimental_offsets: None,
-        };
-        let paths = || {
-            vec![
-                PathsEntry {
-                    prefix_placeholder: Some(placeholder(FileMode::Text)),
-                    ..plain_entry("bin/tool")
-                },
-                PathsEntry {
-                    prefix_placeholder: Some(placeholder(FileMode::Binary)),
-                    ..plain_entry("lib/libx.so")
-                },
-            ]
-        };
-        let read_all = |vfs: &VirtualFS| -> Vec<Vec<u8>> {
-            ["bin/tool", "lib/libx.so"]
-                .iter()
-                .map(|path| {
-                    let attr = resolve(vfs, path).unwrap();
-                    vfs.do_read(attr.ino, 0, 4096).unwrap()
-                })
-                .collect()
-        };
-
-        let uncached = read_all(&vfs_over(&pkg_dir, paths(), None));
-        let cache_path = tmpdir.path().join("state/scan-cache.json");
-        let first = read_all(&vfs_over(&pkg_dir, paths(), Some(&cache_path)));
-        assert_eq!(first, uncached);
-        assert!(cache_path.exists());
-        let written = fs::read(&cache_path).unwrap();
-
-        // A second mount is served from the cache (and doesn't rewrite it).
-        let second = read_all(&vfs_over(&pkg_dir, paths(), Some(&cache_path)));
-        assert_eq!(second, uncached);
-        assert_eq!(fs::read(&cache_path).unwrap(), written);
-        assert_eq!(
-            second[0],
-            b"#!/new/prefix/bin/python\nimport os  # /new/prefix/share\n"
-        );
     }
 
     // --- lookup tests ---
