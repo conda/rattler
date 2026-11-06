@@ -119,16 +119,21 @@ impl<V> BoundedCache<V> {
         }
         let tick = self.next_tick();
         self.map.insert(ino, (value, tick));
-        while self.map.len() > self.max_entries {
-            let Some(oldest) = self
+        if self.map.len() > self.max_entries {
+            // Evict the oldest eighth in one go rather than just the single
+            // oldest entry: finding the oldest is a scan of the whole cache,
+            // and a workload streaming more files than the cache holds would
+            // otherwise pay that scan on every insert.
+            let evict = self.map.len() - self.max_entries + self.max_entries / 8;
+            let mut stamps: Vec<(u64, u64)> = self
                 .map
                 .iter()
-                .min_by_key(|(_, (_, stamp))| *stamp)
-                .map(|(&ino, _)| ino)
-            else {
-                break;
-            };
-            self.map.remove(&oldest);
+                .map(|(&ino, &(_, stamp))| (stamp, ino))
+                .collect();
+            stamps.select_nth_unstable(evict - 1);
+            for &(_, ino) in &stamps[..evict] {
+                self.map.remove(&ino);
+            }
         }
     }
 }
@@ -142,6 +147,19 @@ fn read_leading_bytes(path: &Path, n: usize) -> std::io::Result<Vec<u8>> {
     let mut buf = Vec::new();
     File::open(path)?.take(n as u64).read_to_end(&mut buf)?;
     Ok(buf)
+}
+
+/// Positioned read that doesn't move a shared file cursor.
+fn read_at(file: &File, buf: &mut [u8], offset: u64) -> std::io::Result<usize> {
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::FileExt::read_at(file, buf, offset)
+    }
+    #[cfg(windows)]
+    {
+        // Moves the cursor, but every read passes its own offset.
+        std::os::windows::fs::FileExt::seek_read(file, buf, offset)
+    }
 }
 
 /// Pre-computed prefix-replacement plan for a file, keyed by inode.
@@ -172,15 +190,21 @@ pub struct VirtualFS {
     codesign_cache: Mutex<BoundedCache<Vec<u8>>>,
     /// Cache of memory-mapped source files, keyed by inode, so streaming a
     /// prefix-replaced file doesn't re-`open` + re-`mmap` it on every window.
-    /// Also backs plain (untransformed) reads from transports that address
-    /// reads by inode rather than by an open handle (NFS).
     mmap_cache: Mutex<BoundedCache<Arc<Mmap>>>,
+    /// Open backing files for plain (untransformed) reads by inode, which NFS
+    /// and FUSE without open handles issue. Read with `pread` rather than
+    /// memory-mapped: mapping and unmapping a file per read stream costs page
+    /// faults, and every unmap in a multi-threaded process interrupts all
+    /// CPUs to flush their TLBs. Bounded well below the usual descriptor
+    /// limit.
+    file_cache: Mutex<BoundedCache<Arc<File>>>,
     /// Name → child index for directories with many children, indexed by the
-    /// directory's metadata index. Small directories (and files) hold `None`
-    /// and are searched linearly. Without this, every lookup in a large
-    /// directory (`lib/`, `site-packages/`) is a linear scan, and lookups are
-    /// the most frequent operation while e.g. Python resolves imports.
-    child_maps: Vec<Option<HashMap<OsString, usize>>>,
+    /// directory's metadata index and built on the first lookup in that
+    /// directory (a run touches few of them). Small directories are searched
+    /// linearly. Without this, every lookup in a large directory (`lib/`,
+    /// `site-packages/`) is a linear scan, and lookups are the most frequent
+    /// operation while e.g. Python resolves imports.
+    child_maps: Vec<OnceLock<HashMap<OsString, usize>>>,
     /// Lazily computed attributes per metadata index. The tree and the package
     /// cache files backing it are immutable while mounted, so the `stat` of the
     /// backing file only has to happen once per node.
@@ -234,96 +258,104 @@ impl VirtualFS {
         // Placeholder locations come from the package index (see
         // `crate::package_index`) when the tree was built from one; take them
         // out of the nodes, they are turned into plans below.
-        let scans: Vec<Option<ScanResult>> = metadata
+        // Only the (few) files with a placeholder need a plan.
+        let work: Vec<(usize, Option<ScanResult>)> = metadata
             .iter_mut()
-            .map(|node| node.as_file_mut().and_then(|file| file.scan.take()))
+            .enumerate()
+            .filter_map(|(i, node)| {
+                let file = node.as_file_mut()?;
+                file.prefix_placeholder.as_ref()?;
+                Some((i, file.scan.take()))
+            })
             .collect();
+        let needs_scanning = work.iter().any(|(_, scan)| scan.is_none());
 
         // Compute replacement plans and text-mode file sizes. Without an index
         // the placeholder is located now, which may mean reading and scanning
         // the whole file; do that in parallel so mount time is bounded by the
-        // largest file rather than their sum.
-        let planned: Vec<(u64, ReplacementPlan, Option<u64>)> = scans
-            .into_par_iter()
-            .enumerate()
-            .filter_map(|(i, scan)| {
-                let file = metadata[i].as_file()?;
-                let placeholder = file.prefix_placeholder.as_ref()?;
-                let ino = (i + 1) as u64;
+        // largest file rather than their sum. With every location known from
+        // the index a plan costs at most a short read, not worth the thread
+        // pool.
+        let plan_file = |(i, scan): (usize, Option<ScanResult>)| {
+            let file = metadata[i].as_file()?;
+            let placeholder = file.prefix_placeholder.as_ref()?;
+            let ino = (i + 1) as u64;
 
-                // Resolve the on-disk cache path, preferring cache_prefix_path
-                // (set for noarch Python files where virtual path differs from cache path).
-                let cache_path = {
-                    let p = (*file.cache_base_path).to_path_buf();
-                    let prefix = match &file.cache_prefix_path {
-                        Some(cp) => cp.as_path(),
-                        None => &metadata[file.parent].as_directory().unwrap().prefix_path,
-                    };
-                    p.join(prefix).join(&file.file_name)
+            // Resolve the on-disk cache path, preferring cache_prefix_path
+            // (set for noarch Python files where virtual path differs from cache path).
+            let cache_path = {
+                let p = (*file.cache_base_path).to_path_buf();
+                let prefix = match &file.cache_prefix_path {
+                    Some(cp) => cp.as_path(),
+                    None => &metadata[file.parent].as_directory().unwrap().prefix_path,
                 };
+                p.join(prefix).join(&file.file_name)
+            };
 
-                let scan = match scan {
-                    Some(scan) => scan,
-                    None => crate::package_index::locate_placeholder(
-                        &cache_path,
-                        placeholder,
-                        platform,
-                    )?,
-                };
-
-                match scan {
-                    ScanResult::Binary(cstrings) => {
-                        Some((ino, ReplacementPlan::Binary(cstrings), None))
-                    }
-                    ScanResult::Text {
-                        region_end,
-                        occurrences,
-                    } => {
-                        let source_len = match &file.stat {
-                            Some(stat) => stat.len,
-                            None => match fs::symlink_metadata(&cache_path) {
-                                Ok(m) => m.len(),
-                                Err(e) => {
-                                    tracing::warn!(
-                                        "failed to stat {} for offset computation: {}",
-                                        cache_path.display(),
-                                        e
-                                    );
-                                    return None;
-                                }
-                            },
-                        };
-                        // The shebang region is transformed as a whole, so it is
-                        // the one part of the file that has to be read here.
-                        let region = if region_end > 0 {
-                            match read_leading_bytes(&cache_path, region_end) {
-                                Ok(region) if region.len() == region_end => region,
-                                Ok(_) | Err(_) => {
-                                    tracing::warn!(
-                                        "failed to read the shebang of {}",
-                                        cache_path.display()
-                                    );
-                                    return None;
-                                }
-                            }
-                        } else {
-                            Vec::new()
-                        };
-                        let plan = crate::prefix_replacement::TextPlan::from_scan(
-                            &region,
-                            occurrences,
-                            &placeholder.placeholder,
-                            &target_prefix,
-                            &platform,
-                        );
-                        // Post-replacement size: the transformed shebang region plus
-                        // the unchanged body length plus the per-occurrence delta.
-                        let new_size = plan.output_len(source_len as usize) as u64;
-                        Some((ino, ReplacementPlan::Text(plan), Some(new_size)))
-                    }
+            let scan = match scan {
+                Some(scan) => scan,
+                None => {
+                    crate::package_index::locate_placeholder(&cache_path, placeholder, platform)?
                 }
-            })
-            .collect();
+            };
+
+            match scan {
+                ScanResult::Binary(cstrings) => {
+                    Some((ino, ReplacementPlan::Binary(cstrings), None))
+                }
+                ScanResult::Text {
+                    region_end,
+                    occurrences,
+                } => {
+                    let source_len = match &file.stat {
+                        Some(stat) => stat.len,
+                        None => match fs::symlink_metadata(&cache_path) {
+                            Ok(m) => m.len(),
+                            Err(e) => {
+                                tracing::warn!(
+                                    "failed to stat {} for offset computation: {}",
+                                    cache_path.display(),
+                                    e
+                                );
+                                return None;
+                            }
+                        },
+                    };
+                    // The shebang region is transformed as a whole, so it is
+                    // the one part of the file that has to be read here.
+                    let region = if region_end > 0 {
+                        match read_leading_bytes(&cache_path, region_end) {
+                            Ok(region) if region.len() == region_end => region,
+                            Ok(_) | Err(_) => {
+                                tracing::warn!(
+                                    "failed to read the shebang of {}",
+                                    cache_path.display()
+                                );
+                                return None;
+                            }
+                        }
+                    } else {
+                        Vec::new()
+                    };
+                    let plan = crate::prefix_replacement::TextPlan::from_scan(
+                        &region,
+                        occurrences,
+                        &placeholder.placeholder,
+                        &target_prefix,
+                        &platform,
+                    );
+                    // Post-replacement size: the transformed shebang region plus
+                    // the unchanged body length plus the per-occurrence delta.
+                    let new_size = plan.output_len(source_len as usize) as u64;
+                    Some((ino, ReplacementPlan::Text(plan), Some(new_size)))
+                }
+            }
+        };
+        let planned: Vec<(u64, ReplacementPlan, Option<u64>)> = if needs_scanning {
+            work.into_par_iter().filter_map(plan_file).collect()
+        } else {
+            work.into_iter().filter_map(plan_file).collect()
+        };
 
         // Apply the parallel results sequentially: insert each plan and record
         // the transformed text-file sizes back into the metadata tree.
@@ -338,22 +370,7 @@ impl VirtualFS {
             offset_cache.insert(ino, plan);
         }
 
-        let child_maps = metadata
-            .iter()
-            .map(|node| {
-                let dir = node.as_directory()?;
-                if dir.children.len() <= CHILD_MAP_THRESHOLD {
-                    return None;
-                }
-                let mut map = HashMap::with_capacity(dir.children.len());
-                for &child in &dir.children {
-                    // Keep the first match, like the linear scan does.
-                    map.entry(child_key(metadata[child].file_name()).into_owned())
-                        .or_insert(child);
-                }
-                Some(map)
-            })
-            .collect();
+        let child_maps = (0..metadata.len()).map(|_| OnceLock::new()).collect();
         let attr_cache = (0..metadata.len()).map(|_| OnceLock::new()).collect();
         let (uid, gid) = current_uid_gid();
 
@@ -364,7 +381,8 @@ impl VirtualFS {
             gid,
             offset_cache,
             codesign_cache: Mutex::new(BoundedCache::new(16, false)),
-            mmap_cache: Mutex::new(BoundedCache::new(4096, true)),
+            mmap_cache: Mutex::new(BoundedCache::new(1024, true)),
+            file_cache: Mutex::new(BoundedCache::new(256, true)),
             child_maps,
             attr_cache,
             target_prefix,
@@ -377,7 +395,16 @@ impl VirtualFS {
         let Some(parent_directory) = self.metadata[parent_index].as_directory() else {
             return Err(VfsError::NotADirectory);
         };
-        if let Some(map) = &self.child_maps[parent_index] {
+        if parent_directory.children.len() > CHILD_MAP_THRESHOLD {
+            let map = self.child_maps[parent_index].get_or_init(|| {
+                let mut map = HashMap::with_capacity(parent_directory.children.len());
+                for &child in &parent_directory.children {
+                    // Keep the first match, like the linear scan does.
+                    map.entry(child_key(self.metadata[child].file_name()).into_owned())
+                        .or_insert(child);
+                }
+                map
+            });
             return Ok(map.get::<OsStr>(&child_key(name)).copied());
         }
         Ok(parent_directory
@@ -633,6 +660,20 @@ impl VirtualFS {
         Ok(mmap)
     }
 
+    /// The open backing file of `ino`, reusing a cached descriptor.
+    fn file_for(&self, ino: u64, node: &FileNode) -> Result<Arc<File>, VfsError> {
+        if let Some(file) = self.file_cache.lock().unwrap().get(ino).cloned() {
+            return Ok(file);
+        }
+        let path = self._getpath(node);
+        let file = Arc::new(File::open(&path).map_err(|e| {
+            tracing::warn!("failed to open {}: {}", path.display(), e);
+            VfsError::Io
+        })?);
+        self.file_cache.lock().unwrap().insert(ino, file.clone());
+        Ok(file)
+    }
+
     pub(crate) fn do_read(&self, ino: u64, offset: u64, size: u32) -> Result<Vec<u8>, VfsError> {
         let index = self.validate_ino(ino)?;
 
@@ -651,18 +692,34 @@ impl VirtualFS {
             return Ok(content[start..end].to_vec());
         }
 
-        let path = self._getpath(current_file);
-
-        // Files without prefix replacement: serve the source bytes from a
-        // cached mapping. Transports that address reads by inode (NFS) issue
-        // many reads per file; re-opening the file for each one costs an
-        // `open` + `seek` + `close` per request.
+        // Files without prefix replacement: read the source bytes from a
+        // cached open file. Transports that address reads by inode (NFS, FUSE
+        // without opens) issue many reads per file; re-opening the file for
+        // each one costs an `open` + `close` per request.
         if current_file.prefix_placeholder.is_none() {
-            let mmap = self.mmap_for(ino, &path)?;
-            let s = (offset as usize).min(mmap.len());
-            let e = s.saturating_add(size as usize).min(mmap.len());
-            return Ok(mmap[s..e].to_vec());
+            let file = self.file_for(ino, current_file)?;
+            let mut buf = vec![0u8; size as usize];
+            let mut filled = 0;
+            while filled < buf.len() {
+                match read_at(&file, &mut buf[filled..], offset + filled as u64) {
+                    Ok(0) => break,
+                    Ok(n) => filled += n,
+                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                    Err(e) => {
+                        tracing::warn!(
+                            "failed to read {}: {}",
+                            self._getpath(current_file).display(),
+                            e
+                        );
+                        return Err(VfsError::Io);
+                    }
+                }
+            }
+            buf.truncate(filled);
+            return Ok(buf);
         }
+
+        let path = self._getpath(current_file);
 
         // Has prefix placeholder — use ranged replacement
         let placeholder = current_file.prefix_placeholder.as_ref().unwrap();
@@ -1061,11 +1118,13 @@ mod tests {
                 .collect(),
         );
         let lib = resolve(&vfs, "lib").unwrap();
-        assert!(vfs.child_maps[(lib.ino - 1) as usize].is_some());
+        // The name index of a large directory is built on its first lookup.
+        assert!(vfs.child_maps[(lib.ino - 1) as usize].get().is_none());
         for name in &names {
             let attr = vfs.do_lookup(lib.ino, OsStr::new(name)).unwrap();
             assert_eq!(vfs.do_read(attr.ino, 0, 100).unwrap(), name.as_bytes());
         }
+        assert!(vfs.child_maps[(lib.ino - 1) as usize].get().is_some());
         assert_eq!(
             vfs.do_lookup(lib.ino, OsStr::new("missing.txt"))
                 .unwrap_err(),

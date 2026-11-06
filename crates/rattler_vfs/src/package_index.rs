@@ -287,6 +287,11 @@ impl IndexBytes {
         unsafe { rkyv::access_unchecked::<ArchivedPackageIndex>(bytes) }
     }
 
+    /// The number of files in the package.
+    pub(crate) fn file_count(&self) -> usize {
+        self.archived().files.len()
+    }
+
     pub(crate) fn files(&self) -> impl Iterator<Item = FileRef<'_>> {
         self.archived().files.iter().map(|file| FileRef { file })
     }

@@ -1017,6 +1017,18 @@ pub(crate) async fn build_metadata_tree(
         tracing::debug!("fetched {fetched_count}/{total_packages} packages");
     }
 
+    // Size the tree for every package up front: growing the node list and
+    // the clobber map while inserting thousands of files means repeated
+    // rehashing, copying and page faults.
+    let total_files: usize = fetched
+        .iter()
+        .flatten()
+        .map(|(_, index, _)| index.file_count())
+        .sum();
+    env_paths.reserve(total_files + total_files / 4);
+    file_indices.reserve(total_files);
+    directory_indices.reserve(total_files / 4);
+
     // Build in topological order so clobbering resolves like the installer:
     // the last (most dependent / noarch) package wins in `upsert_file_node`.
     let records: Vec<PackageRecord> = conda_packages
