@@ -17,6 +17,7 @@ use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{
     ChannelPriority, ExcludeNewer, SolveError, SolveStrategy, SolverImpl, SolverTask,
 };
+use rstest::rstest;
 use url::Url;
 
 mod conditional_tests;
@@ -2036,22 +2037,30 @@ fn version_tie_channels() -> (Vec<RepoDataRecord>, Vec<RepoDataRecord>) {
     (channel_a, channel_b)
 }
 
-#[test]
-fn channel_priority_version_first_breaks_version_ties_by_channel() {
+/// - Disabled channel priority doesn't consult the channel, so the version tie
+/// goes to the higher build number from the lower-priority channel.
+/// - Version-first channel priority breaks the tie by the channel order before
+/// the build number, matching conda's sort order for disabled channel
+/// priority. A higher version wins under both modes regardless of the channel
+/// order.
+#[rstest]
+#[case::disabled(ChannelPriority::Disabled, "channel-b")]
+#[case::version_first(ChannelPriority::VersionFirst, "channel-a")]
+fn channel_priority_version_tie(
+    #[case] channel_priority: ChannelPriority,
+    #[case] tie_winner: &str,
+) {
     let (channel_a, channel_b) = version_tie_channels();
 
-    // A version tie is broken by the channel order, not by the build number,
-    // matching conda's sort order for disabled channel priority.
     let task = SolverTask {
         specs: vec![MatchSpec::from_str("foo", ParseStrictness::Lenient).unwrap()],
-        channel_priority: ChannelPriority::VersionFirst,
+        channel_priority,
         ..SolverTask::from_iter([&channel_a, &channel_b])
     };
     let records = rattler_solve::resolvo::Solver.solve(task).unwrap().records;
     assert_eq!(records.len(), 1);
-    assert_eq!(records[0].channel.as_deref(), Some("channel-a"));
+    assert_eq!(records[0].channel.as_deref(), Some(tie_winner));
 
-    // A higher version still wins regardless of the channel order.
     let channel_b_newer = vec![
         PackageBuilder::new("foo")
             .version("2.0")
@@ -2060,24 +2069,8 @@ fn channel_priority_version_first_breaks_version_ties_by_channel() {
     ];
     let task = SolverTask {
         specs: vec![MatchSpec::from_str("foo", ParseStrictness::Lenient).unwrap()],
-        channel_priority: ChannelPriority::VersionFirst,
+        channel_priority,
         ..SolverTask::from_iter([&channel_a, &channel_b_newer])
-    };
-    let records = rattler_solve::resolvo::Solver.solve(task).unwrap().records;
-    assert_eq!(records.len(), 1);
-    assert_eq!(records[0].channel.as_deref(), Some("channel-b"));
-}
-
-#[test]
-fn channel_priority_disabled_breaks_version_ties_by_build_number() {
-    let (channel_a, channel_b) = version_tie_channels();
-
-    // Disabled channel priority never consults the channel: the version tie
-    // goes to the higher build number from the lower-priority channel.
-    let task = SolverTask {
-        specs: vec![MatchSpec::from_str("foo", ParseStrictness::Lenient).unwrap()],
-        channel_priority: ChannelPriority::Disabled,
-        ..SolverTask::from_iter([&channel_a, &channel_b])
     };
     let records = rattler_solve::resolvo::Solver.solve(task).unwrap().records;
     assert_eq!(records.len(), 1);
