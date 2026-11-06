@@ -40,7 +40,7 @@ networkx = "*"
 types-networkx = "*"
 
 ruff = ">=0.14.1"
-ty = ">=0.0.90,<0.0.91"
+ty = ">=0.0.91,<0.0.92"
 nushell = ">=0.106.1"
 
 pytest = ">=9,<10"
