@@ -966,16 +966,16 @@ impl NamelessMatchSpec {
         let (input, brackets) = strip_brackets(input)?;
         let input = input.trim();
 
-        // Parse url or path spec
-        if let Some(url) = parse_url_like(input)? {
-            return Ok(NamelessMatchSpec {
-                url: Some(url),
-                ..NamelessMatchSpec::default()
-            });
-        }
-
         let mut match_spec =
             parse_bracket_vec_into_components(brackets, NamelessMatchSpec::default(), options)?;
+
+        // Parse url or path spec
+        if match_spec.url.is_none()
+            && let Some(url) = parse_url_like(input)?
+        {
+            match_spec.url = Some(url);
+            return Ok(match_spec);
+        }
 
         // 5. Strip of ':' to find channel and namespace
         // This assumes the [*] portions is stripped off, and then strip reverse to
@@ -1077,14 +1077,12 @@ pub(crate) fn matchspec_parser(
         let name = archive.and_then(|a| PackageNameMatcher::from_str(&a.identifier.name).ok());
 
         if let Some(name) = name {
-            // Only return the 'url' and 'name' to avoid miss parsing the rest of the
-            // information. e.g. when a version is provided in the url is not the
-            // actual version this might be a problem when solving.
-            return Ok(MatchSpec {
-                url: Some(url),
-                name,
-                ..Default::default()
-            });
+            // Only set the 'url' and 'name' on nameless_match_spec to avoid miss parsing
+            // information from the URL filename (e.g. when a version is provided in the url
+            // that is not the actual version this might be a problem when solving).
+            // Explicit bracket attributes (e.g. md5, sha256) in nameless_match_spec are preserved.
+            nameless_match_spec.url = Some(url);
+            return Ok(MatchSpec::from_nameless(nameless_match_spec, name));
         } else {
             // TODO: This should also work without a proper name from the url filename
             // If we can't figure out the name from the URL, return an error
@@ -1804,6 +1802,60 @@ mod tests {
         .unwrap();
 
         assert_eq!(spec.url, Some(Url::parse("https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda").unwrap()));
+    }
+
+    #[test]
+    fn test_parsing_url_with_bracket_attributes() {
+        let spec = MatchSpec::from_str(
+            "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda[sha256=315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3,md5=8b1a9953c4611296a827abf8c47804d7,license=BSD-3-Clause]",
+            Strict,
+        )
+        .unwrap();
+
+        assert_eq!(
+            spec.url,
+            Some(Url::parse("https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda").unwrap())
+        );
+        assert_eq!(spec.name, "py-rattler".parse().unwrap());
+        assert_eq!(
+            spec.sha256,
+            Some(
+                parse_digest_from_hex::<Sha256>(
+                    "315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3"
+                )
+                .unwrap()
+            )
+        );
+        assert_eq!(
+            spec.md5,
+            Some(parse_digest_from_hex::<Md5>("8b1a9953c4611296a827abf8c47804d7").unwrap())
+        );
+        assert_eq!(spec.license, Some("BSD-3-Clause".to_string()));
+
+        // Also verify NamelessMatchSpec preserves bracket attributes with URL
+        let nameless = NamelessMatchSpec::from_str(
+            "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda[sha256=315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3,md5=8b1a9953c4611296a827abf8c47804d7]",
+            Strict,
+        )
+        .unwrap();
+
+        assert_eq!(
+            nameless.url,
+            Some(Url::parse("https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda").unwrap())
+        );
+        assert_eq!(
+            nameless.sha256,
+            Some(
+                parse_digest_from_hex::<Sha256>(
+                    "315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3"
+                )
+                .unwrap()
+            )
+        );
+        assert_eq!(
+            nameless.md5,
+            Some(parse_digest_from_hex::<Md5>("8b1a9953c4611296a827abf8c47804d7").unwrap())
+        );
     }
 
     #[test]
