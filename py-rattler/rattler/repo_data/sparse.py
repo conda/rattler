@@ -63,9 +63,8 @@ class PackageFormatSelection(Enum):
 
 class SparseRepoData:
     """
-    A class to enable loading records from a `repodata.json` file on demand.
-    Since most of the time you don't need all the records from the `repodata.json`
-    this can help provide some significant speedups.
+    Load package records on demand from repodata JSON in a file or in memory.
+    This allows callers to deserialize only the packages they need.
     """
 
     def __init__(
@@ -91,18 +90,48 @@ class SparseRepoData:
             )
         self._sparse = PySparseRepoData(channel._channel, subdir, str(path))
 
+    @classmethod
+    def from_bytes(cls, channel: Channel, subdir: str, data: bytes) -> SparseRepoData:
+        """Load sparse repodata from uncompressed UTF-8 JSON bytes.
+
+        The returned instance owns a copy of the data and does not access the
+        filesystem. The caller can release the original bytes after this call.
+
+        Examples
+        --------
+        ```python
+        >>> channel = Channel("https://example.org/channel")
+        >>> data = b'{"packages": {}}'
+        >>> with SparseRepoData.from_bytes(channel, "linux-64", data) as repo:
+        ...     repo.package_names()
+        []
+        >>>
+        ```
+        """
+        if not isinstance(channel, Channel):
+            raise TypeError(
+                "SparseRepoData.from_bytes received unsupported type "
+                f" {type(channel).__name__!r} for the `channel` parameter"
+            )
+        if not isinstance(subdir, str):
+            raise TypeError(
+                "SparseRepoData.from_bytes received unsupported type "
+                f" {type(subdir).__name__!r} for the `subdir` parameter"
+            )
+        if not isinstance(data, bytes):
+            raise TypeError(
+                f"SparseRepoData.from_bytes received unsupported type  {type(data).__name__!r} for the `data` parameter"
+            )
+        return cls._from_py_sparse_repo_data(PySparseRepoData.from_bytes(channel._channel, subdir, data))
+
     def close(self) -> None:
         """
-        Closes any mapped resources associated with this `SparseRepoData`
-        instance. It is good practice to call this method when you are done
-        with it. This is especially important if you want to modify or delete
-        the file from which this instance was created.
+        Close this instance and release its mapped file or owned JSON bytes.
+        Storage still used by an active operation remains available until that
+        operation finishes. Call this method when you are done with the repodata,
+        or use the instance as a context manager.
 
-        This method will release all resources associated with this instance,
-        including those that are currently being used on another thread. This
-        method will block until all resources are released.
-
-        This method has no effect if the file is already closed. Once the
+        This method has no effect if the instance is already closed. Once the
         instance is closed, any operation on the instance will raise a
         `ValueError`.
 
