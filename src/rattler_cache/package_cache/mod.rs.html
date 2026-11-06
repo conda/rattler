@@ -38,7 +38,7 @@
 <a href=#36 id=36 data-nosnippet>36</a><span class="kw">use </span>tracing::instrument;
 <a href=#37 id=37 data-nosnippet>37</a><span class="kw">use </span>url::Url;
 <a href=#38 id=38 data-nosnippet>38</a>
-<a href=#39 id=39 data-nosnippet>39</a><span class="kw">use </span><span class="kw">crate</span>::validation::{ValidationMode, validate_package_directory};
+<a href=#39 id=39 data-nosnippet>39</a><span class="kw">use </span><span class="kw">crate</span>::validation::{ValidationMode, validate_package_directory_lazily};
 <a href=#40 id=40 data-nosnippet>40</a>
 <a href=#41 id=41 data-nosnippet>41</a><span class="kw">mod </span>cache_key;
 <a href=#42 id=42 data-nosnippet>42</a><span class="kw">mod </span>cache_lock;
@@ -1292,7 +1292,7 @@
 <a href=#1290 id=1290 data-nosnippet>1290</a>
 <a href=#1291 id=1291 data-nosnippet>1291</a>        <span class="comment">// Validate the package directory.
 <a href=#1292 id=1292 data-nosnippet>1292</a>        </span><span class="kw">let </span>validation_result = tokio::task::spawn_blocking(<span class="kw">move </span>|| {
-<a href=#1293 id=1293 data-nosnippet>1293</a>            validate_package_directory(<span class="kw-2">&amp;</span>path_inner, validation_mode)
+<a href=#1293 id=1293 data-nosnippet>1293</a>            validate_package_directory_lazily(<span class="kw-2">&amp;</span>path_inner, validation_mode)
 <a href=#1294 id=1294 data-nosnippet>1294</a>        })
 <a href=#1295 id=1295 data-nosnippet>1295</a>        .<span class="kw">await</span>;
 <a href=#1296 id=1296 data-nosnippet>1296</a>
@@ -1308,7 +1308,7 @@
 <a href=#1306 id=1306 data-nosnippet>1306</a>                    sha256: locked_sha256,
 <a href=#1307 id=1307 data-nosnippet>1307</a>                    path,
 <a href=#1308 id=1308 data-nosnippet>1308</a>                    index_json: <span class="prelude-val">Some</span>(index_json),
-<a href=#1309 id=1309 data-nosnippet>1309</a>                    paths_json: <span class="prelude-val">Some</span>(paths_json),
+<a href=#1309 id=1309 data-nosnippet>1309</a>                    paths_json,
 <a href=#1310 id=1310 data-nosnippet>1310</a>                });
 <a href=#1311 id=1311 data-nosnippet>1311</a>            }
 <a href=#1312 id=1312 data-nosnippet>1312</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(e)) =&gt; {
