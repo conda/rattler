@@ -71,6 +71,7 @@ pub(crate) mod metadata_tree;
 pub mod nfs_adapter;
 pub mod overlay;
 pub mod overlay_fs;
+pub(crate) mod package_index;
 pub mod prefix_replacement;
 #[cfg(target_os = "windows")]
 pub mod projfs_adapter;
@@ -82,6 +83,7 @@ pub mod vfs_ops;
 pub mod virtual_fs;
 
 use std::{
+    borrow::Cow,
     collections::HashMap,
     ffi::OsString,
     path::{Path, PathBuf},
@@ -94,7 +96,9 @@ use rattler::install::{get_windows_launcher, python_entry_point_template};
 use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::PackageRecord;
 use rattler_conda_types::Subdir;
-use rattler_conda_types::package::{EntryPoint, LinkJson, NoArchLinks, PackageFile, PathsJson};
+#[cfg(test)]
+use rattler_conda_types::package::PathsJson;
+use rattler_conda_types::package::{EntryPoint, PrefixPlaceholder};
 use rattler_lock::LockFile;
 use rattler_networking::LazyClient;
 use virtual_fs::VirtualFS;
@@ -183,84 +187,190 @@ pub enum MountError {
 /// For noarch Python packages, pass `python_info` to rewrite paths:
 /// `site-packages/` → `lib/pythonX.Y/site-packages/` and
 /// `python-scripts/` → `bin/`.
+#[cfg(test)]
 pub(crate) fn path_parse(
     paths_json: &PathsJson,
     cache_path: &Path,
     python_info: Option<&PythonInfo>,
     env_paths: &mut Vec<MetadataNode>,
     directory_indices: &mut HashMap<PathBuf, usize>,
-    file_indices: &mut HashMap<PathBuf, usize>,
+    file_indices: &mut FileIndices,
 ) {
     let cachepath: Arc<Path> = cache_path.into();
+    let mut parent_memo = None;
 
     for path in &paths_json.paths {
-        // For noarch Python packages, rewrite site-packages/ and python-scripts/ paths
-        let (virtual_path, cache_prefix_override) = match python_info {
-            Some(info) => {
-                let rewritten = info.get_python_noarch_target_path(&path.relative_path);
-                if rewritten.as_ref() == path.relative_path {
-                    (path.relative_path.clone(), None)
-                } else {
-                    let original_parent = path
-                        .relative_path
-                        .parent()
-                        .map_or_else(|| PathBuf::from("."), |p| PathBuf::from(".").join(p));
-                    (rewritten.into_owned(), Some(original_parent))
-                }
-            }
-            None => (path.relative_path.clone(), None),
-        };
-
-        let parent_directory = virtual_path.parent().unwrap_or(Path::new("."));
-        let mut parent_index = 0;
-
-        for component in parent_directory.components() {
-            let current_path = env_paths[parent_index]
-                .as_directory()
-                .expect("parent is always a directory")
-                .prefix_path
-                .join(component);
-
-            if let Some(&index) = directory_indices.get(&current_path) {
-                parent_index = index;
-            } else {
-                let new_dir = MetadataNode::new_directory(current_path.clone(), parent_index);
-                let child_index = env_paths.len();
-
-                env_paths.push(new_dir);
-                env_paths[parent_index]
-                    .as_directory_mut()
-                    .expect("parent is a directory")
-                    .children
-                    .push(child_index);
-
-                directory_indices.insert(current_path, child_index);
-                parent_index = child_index;
-            }
-        }
-
-        let file_name = virtual_path.file_name().expect("files always have names");
-
+        let placed = place_package_file(
+            &path.relative_path,
+            python_info,
+            env_paths,
+            directory_indices,
+            &mut parent_memo,
+        );
         let mut file_entry = MetadataNode::new_file(
-            file_name.into(),
-            parent_index,
+            placed.file_name,
+            placed.parent_index,
             cachepath.clone(),
             path.path_type,
             path.prefix_placeholder.clone(),
         );
-        if let Some(ref override_path) = cache_prefix_override {
-            file_entry.as_file_mut().unwrap().cache_prefix_path = Some(override_path.clone());
+        file_entry.as_file_mut().unwrap().cache_prefix_path = placed.cache_prefix_override;
+        upsert_file_node(
+            file_entry,
+            placed.parent_index,
+            placed.file_key,
+            env_paths,
+            file_indices,
+        );
+    }
+}
+
+/// Like [`path_parse`], from a package's index (see [`package_index`]): the
+/// file list, attributes and placeholder locations come from the index, so
+/// nothing has to be parsed, `stat`ed or scanned.
+pub(crate) fn index_parse(
+    index: &package_index::IndexBytes,
+    cache_path: &Path,
+    python_info: Option<&PythonInfo>,
+    env_paths: &mut Vec<MetadataNode>,
+    directory_indices: &mut HashMap<PathBuf, usize>,
+    file_indices: &mut FileIndices,
+) {
+    let cachepath: Arc<Path> = cache_path.into();
+    let mut parent_memo = None;
+
+    for file in index.files() {
+        let placed = place_package_file(
+            Path::new(file.path()),
+            python_info,
+            env_paths,
+            directory_indices,
+            &mut parent_memo,
+        );
+        let (placeholder, scan) = match file.placeholder() {
+            Some((placeholder, file_mode, scan)) => (
+                Some(PrefixPlaceholder {
+                    file_mode,
+                    placeholder: placeholder.to_string(),
+                    experimental_offsets: None,
+                }),
+                scan,
+            ),
+            None => (None, None),
+        };
+        let mut file_entry = MetadataNode::new_file(
+            placed.file_name,
+            placed.parent_index,
+            cachepath.clone(),
+            file.path_type(),
+            placeholder,
+        );
+        let node = file_entry.as_file_mut().unwrap();
+        node.cache_prefix_path = placed.cache_prefix_override;
+        node.stat = file.stat();
+        node.scan = scan;
+        upsert_file_node(
+            file_entry,
+            placed.parent_index,
+            placed.file_key,
+            env_paths,
+            file_indices,
+        );
+    }
+}
+
+/// Identifies a file in the tree: its parent directory's index and its name.
+/// Cheaper to hash than the file's full path.
+type FileKey = (usize, OsString);
+
+/// Maps every file in the tree to its node, for clobber resolution (see
+/// [`upsert_file_node`]).
+pub(crate) type FileIndices = HashMap<FileKey, usize>;
+
+/// Where a package file goes in the tree, see [`place_package_file`].
+struct PlacedFile {
+    parent_index: usize,
+    file_name: OsString,
+    /// The file's directory in the package cache when it differs from its
+    /// directory in the environment (noarch Python files).
+    cache_prefix_override: Option<PathBuf>,
+    /// The file's identity in the environment, for clobber detection.
+    file_key: FileKey,
+}
+
+/// Find (creating as needed) the directory a package file at `relative_path`
+/// goes into, applying the noarch Python path rewriting.
+///
+/// `parent_memo` remembers the last directory resolved. Package file lists
+/// are sorted, so consecutive files mostly share a directory and skip walking
+/// (and hashing) every path component again.
+fn place_package_file(
+    relative_path: &Path,
+    python_info: Option<&PythonInfo>,
+    env_paths: &mut Vec<MetadataNode>,
+    directory_indices: &mut HashMap<PathBuf, usize>,
+    parent_memo: &mut Option<(PathBuf, usize)>,
+) -> PlacedFile {
+    // For noarch Python packages, rewrite site-packages/ and python-scripts/ paths
+    let (virtual_path, cache_prefix_override) = match python_info {
+        Some(info) => {
+            let rewritten = info.get_python_noarch_target_path(relative_path);
+            if rewritten.as_ref() == relative_path {
+                (Cow::Borrowed(relative_path), None)
+            } else {
+                let original_parent = relative_path
+                    .parent()
+                    .map_or_else(|| PathBuf::from("."), |p| PathBuf::from(".").join(p));
+                (rewritten, Some(original_parent))
+            }
         }
+        None => (Cow::Borrowed(relative_path), None),
+    };
 
-        // Clobber key: the file's virtual path under the prefix.
-        let parent_prefix = env_paths[parent_index]
-            .as_directory()
-            .expect("parent is always a directory")
-            .prefix_path
-            .clone();
-        let file_key = parent_prefix.join(file_name);
+    let parent_directory = virtual_path.parent().unwrap_or(Path::new("."));
+    let parent_index = match parent_memo {
+        Some((memo_path, memo_index)) if memo_path.as_path() == parent_directory => *memo_index,
+        _ => {
+            let mut parent_index = 0;
+            for component in parent_directory.components() {
+                let current_path = env_paths[parent_index]
+                    .as_directory()
+                    .expect("parent is always a directory")
+                    .prefix_path
+                    .join(component);
 
-        upsert_file_node(file_entry, parent_index, file_key, env_paths, file_indices);
+                if let Some(&index) = directory_indices.get(&current_path) {
+                    parent_index = index;
+                } else {
+                    let new_dir = MetadataNode::new_directory(current_path.clone(), parent_index);
+                    let child_index = env_paths.len();
+
+                    env_paths.push(new_dir);
+                    env_paths[parent_index]
+                        .as_directory_mut()
+                        .expect("parent is a directory")
+                        .children
+                        .push(child_index);
+
+                    directory_indices.insert(current_path, child_index);
+                    parent_index = child_index;
+                }
+            }
+            *parent_memo = Some((parent_directory.to_path_buf(), parent_index));
+            parent_index
+        }
+    };
+
+    let file_name = virtual_path.file_name().expect("files always have names");
+
+    // Clobber key: the file's virtual path under the prefix.
+    let file_key = (parent_index, file_name.to_os_string());
+
+    PlacedFile {
+        parent_index,
+        file_name: file_name.to_os_string(),
+        cache_prefix_override,
+        file_key,
     }
 }
 
@@ -274,9 +384,9 @@ pub(crate) fn path_parse(
 fn upsert_file_node(
     node: MetadataNode,
     parent_index: usize,
-    file_key: PathBuf,
+    file_key: FileKey,
     env_paths: &mut Vec<MetadataNode>,
-    file_indices: &mut HashMap<PathBuf, usize>,
+    file_indices: &mut FileIndices,
 ) {
     if let Some(&existing) = file_indices.get(&file_key) {
         env_paths[existing] = node;
@@ -366,7 +476,7 @@ pub(crate) fn add_entry_points(
     platform: Subdir,
     env_paths: &mut Vec<MetadataNode>,
     directory_indices: &mut HashMap<PathBuf, usize>,
-    file_indices: &mut HashMap<PathBuf, usize>,
+    file_indices: &mut FileIndices,
 ) {
     // `./bin` (Unix) or `./Scripts` (Windows), matching the tree's convention.
     let bin_dir = Path::new(".").join(&python_info.bin_dir);
@@ -374,7 +484,7 @@ pub(crate) fn add_entry_points(
 
     for ep in entry_points {
         for artifact in entry_point_artifacts(target_prefix, ep, python_info, platform) {
-            let file_key = bin_dir.join(&artifact.file_name);
+            let file_key = (bin_index, artifact.file_name.clone());
             let node =
                 MetadataNode::new_virtual_file(artifact.file_name, bin_index, artifact.content);
             upsert_file_node(node, bin_index, file_key, env_paths, file_indices);
@@ -386,11 +496,7 @@ pub(crate) fn add_entry_points(
 /// `(env_paths, directory_indices, file_indices)`. The two index maps track
 /// directory and file node indices by virtual path; `file_indices` drives
 /// clobber resolution (see [`upsert_file_node`]).
-pub(crate) fn new_empty_tree() -> (
-    Vec<MetadataNode>,
-    HashMap<PathBuf, usize>,
-    HashMap<PathBuf, usize>,
-) {
+pub(crate) fn new_empty_tree() -> (Vec<MetadataNode>, HashMap<PathBuf, usize>, FileIndices) {
     let env_paths = vec![MetadataNode::new_directory(PathBuf::from("."), 0)];
     let mut directory_indices = HashMap::new();
     directory_indices.insert(PathBuf::from("."), 0);
@@ -436,10 +542,42 @@ impl MetadataTree {
             environment_name,
             platform,
             package_cache,
+            default_client(),
             mount_point,
         )
         .await
     }
+
+    /// Like [`MetadataTree::build`], but downloads missing packages with
+    /// `client` instead of a default client without authentication, mirrors
+    /// or retries. Pass the client used for the rest of the operation (e.g.
+    /// the one that fetched repodata) so packages from authenticated channels
+    /// can be fetched and offline mode is respected.
+    pub async fn build_with_client(
+        lockfile: &LockFile,
+        environment_name: &str,
+        platform: Subdir,
+        package_cache: &PackageCache,
+        client: impl Into<LazyClient>,
+        mount_point: &Path,
+    ) -> anyhow::Result<Self> {
+        build_metadata_tree(
+            lockfile,
+            environment_name,
+            platform,
+            package_cache,
+            client.into(),
+            mount_point,
+        )
+        .await
+    }
+}
+
+/// A client without middleware, constructed on first use: building one eagerly
+/// walks the system certificate store (seconds on macOS), which a warm-cache
+/// mount never needs.
+fn default_client() -> LazyClient {
+    LazyClient::new(reqwest_middleware::ClientWithMiddleware::default)
 }
 
 /// Transport backend for the virtual filesystem.
@@ -725,9 +863,8 @@ impl MountHandle {
     }
 }
 
-/// A fetched-and-parsed conda package:
-/// `(cache_path, paths_json, is_noarch_python, entry_points)`.
-type FetchedPackage = (PathBuf, PathsJson, bool, Vec<EntryPoint>);
+/// A fetched and indexed conda package: `(cache_path, index, is_noarch_python)`.
+type FetchedPackage = (PathBuf, package_index::IndexBytes, bool);
 
 /// Build the in-memory metadata tree from a parsed lock file.
 ///
@@ -746,6 +883,7 @@ pub(crate) async fn build_metadata_tree(
     environment_name: &str,
     platform: Subdir,
     package_cache: &PackageCache,
+    client: LazyClient,
     mount_point: &Path,
 ) -> anyhow::Result<MetadataTree> {
     let environment =
@@ -790,13 +928,6 @@ pub(crate) async fn build_metadata_tree(
 
     let (mut env_paths, mut directory_indices, mut file_indices) = new_empty_tree();
     let mount_str = mount_point.to_string_lossy().to_string();
-
-    // Build a single lazily-initialized HTTP client for the whole package loop.
-    // `LazyClient::default()` forces construction eagerly, which on macOS walks
-    // the keychain via `rustls_native_certs` and takes several seconds. Using
-    // `LazyClient::new` defers that work until the first cache miss, so
-    // warm-cache mounts skip it entirely.
-    let client = LazyClient::new(reqwest_middleware::ClientWithMiddleware::default);
 
     // Validate all packages up front so we can parallelize fetching.
     let mut conda_packages: Vec<_> = package_refs
@@ -858,25 +989,17 @@ pub(crate) async fn build_metadata_tree(
                 )
                 .await?;
 
-            // Parse paths.json inside the spawned task to avoid blocking the
-            // main runtime thread.
+            // Load (or build) the package's index off the async runtime: a
+            // first mount of a package reads and scans its files.
             let path = cache_metadata.path().to_path_buf();
-            let paths_json = PathsJson::from_package_directory_with_deprecated_fallback(&path)?;
+            let index = tokio::task::spawn_blocking({
+                let path = path.clone();
+                move || package_index::load_or_build(&path, platform)
+            })
+            .await
+            .map_err(|e| anyhow::anyhow!("indexing task failed: {e}"))??;
 
-            // For noarch python packages, also load link.json for entry points.
-            let entry_points: Vec<EntryPoint> = if is_noarch_python {
-                LinkJson::from_package_directory(&path)
-                    .ok()
-                    .and_then(|lj| match lj.noarch {
-                        NoArchLinks::Python(ep) => Some(ep.entry_points),
-                        NoArchLinks::Generic => None,
-                    })
-                    .unwrap_or_default()
-            } else {
-                Vec::new()
-            };
-
-            Ok::<_, anyhow::Error>((idx, path, paths_json, is_noarch_python, entry_points))
+            Ok::<_, anyhow::Error>((idx, path, index, is_noarch_python))
         });
     }
 
@@ -887,12 +1010,24 @@ pub(crate) async fn build_metadata_tree(
         (0..conda_packages.len()).map(|_| None).collect();
     let mut fetched_count = 0usize;
     while let Some(result) = join_set.join_next().await {
-        let (idx, cache_path, paths_json, is_noarch_python, entry_points) =
+        let (idx, cache_path, index, is_noarch_python) =
             result.map_err(|e| anyhow::anyhow!("fetch task failed: {e}"))??;
-        fetched[idx] = Some((cache_path, paths_json, is_noarch_python, entry_points));
+        fetched[idx] = Some((cache_path, index, is_noarch_python));
         fetched_count += 1;
         tracing::debug!("fetched {fetched_count}/{total_packages} packages");
     }
+
+    // Size the tree for every package up front: growing the node list and
+    // the clobber map while inserting thousands of files means repeated
+    // rehashing, copying and page faults.
+    let total_files: usize = fetched
+        .iter()
+        .flatten()
+        .map(|(_, index, _)| index.file_count())
+        .sum();
+    env_paths.reserve(total_files + total_files / 4);
+    file_indices.reserve(total_files);
+    directory_indices.reserve(total_files / 4);
 
     // Build in topological order so clobbering resolves like the installer:
     // the last (most dependent / noarch) package wins in `upsert_file_node`.
@@ -901,8 +1036,7 @@ pub(crate) async fn build_metadata_tree(
         .map(|p| p.package_record.clone())
         .collect();
     for idx in topological_order_of_records(&records) {
-        let Some((cache_path, paths_json, is_noarch_python, entry_points)) = fetched[idx].take()
-        else {
+        let Some((cache_path, index, is_noarch_python)) = fetched[idx].take() else {
             continue;
         };
 
@@ -911,8 +1045,8 @@ pub(crate) async fn build_metadata_tree(
         } else {
             None
         };
-        path_parse(
-            &paths_json,
+        index_parse(
+            &index,
             &cache_path,
             noarch_python_info,
             &mut env_paths,
@@ -920,6 +1054,16 @@ pub(crate) async fn build_metadata_tree(
             &mut file_indices,
         );
 
+        // Only noarch Python packages get entry points, like the installer.
+        let entry_points: Vec<EntryPoint> = index
+            .entry_points()
+            .filter(|_| is_noarch_python)
+            .map(|(command, module, function)| EntryPoint {
+                command: command.to_string(),
+                module: module.to_string(),
+                function: function.to_string(),
+            })
+            .collect();
         if let Some(ref python_info) = python_info
             && !entry_points.is_empty()
         {
@@ -1140,11 +1284,33 @@ pub async fn build_and_mount(
     package_cache: &PackageCache,
     config: &MountConfig,
 ) -> anyhow::Result<MountHandle> {
+    build_and_mount_with_client(
+        lockfile,
+        environment_name,
+        platform,
+        package_cache,
+        default_client(),
+        config,
+    )
+    .await
+}
+
+/// Like [`build_and_mount`], but downloads missing packages with `client`, see
+/// [`MetadataTree::build_with_client`].
+pub async fn build_and_mount_with_client(
+    lockfile: &LockFile,
+    environment_name: &str,
+    platform: Subdir,
+    package_cache: &PackageCache,
+    client: impl Into<LazyClient>,
+    config: &MountConfig,
+) -> anyhow::Result<MountHandle> {
     let metadata = build_metadata_tree(
         lockfile,
         environment_name,
         platform,
         package_cache,
+        client.into(),
         &config.mount_point,
     )
     .await?;
@@ -1348,6 +1514,37 @@ pub fn force_unmount(mount_point: &Path, transport: Transport) -> anyhow::Result
         Transport::Fuse => {
             #[cfg(target_os = "linux")]
             {
+                // A privileged process (which is also when fuser mounts with
+                // mount(2) directly, without fusermount3) can detach the mount
+                // itself; that also works where fusermount3 isn't installed.
+                // Only for FUSE mounts, like fusermount3: `statfs` reports the
+                // filesystem type, and fails with ENOTCONN for a FUSE mount
+                // whose server died. Never follow a symlink at the mount point.
+                if let Ok(c_path) =
+                    std::ffi::CString::new(mount_point.as_os_str().as_encoded_bytes())
+                {
+                    const FUSE_SUPER_MAGIC: i64 = 0x6573_5546;
+                    // SAFETY: `c_path` is a valid NUL-terminated path and
+                    // `statfs` only writes to the struct we pass.
+                    let is_fuse = unsafe {
+                        let mut stat: libc::statfs = std::mem::zeroed();
+                        if libc::statfs(c_path.as_ptr(), &mut stat) == 0 {
+                            #[allow(clippy::unnecessary_cast)]
+                            let fs_type = stat.f_type as i64;
+                            fs_type == FUSE_SUPER_MAGIC
+                        } else {
+                            std::io::Error::last_os_error().raw_os_error() == Some(libc::ENOTCONN)
+                        }
+                    };
+                    // SAFETY: as above.
+                    if is_fuse
+                        && unsafe {
+                            libc::umount2(c_path.as_ptr(), libc::MNT_DETACH | libc::UMOUNT_NOFOLLOW)
+                        } == 0
+                    {
+                        return Ok(());
+                    }
+                }
                 let status = std::process::Command::new("fusermount3")
                     .args(["-uz", &mnt])
                     .status()?;
@@ -1413,6 +1610,116 @@ mod tests {
     use super::*;
     use rattler_conda_types::package::{PathType, PathsEntry, PathsJson};
     use std::path::PathBuf;
+
+    /// A tree built from a package's index matches one built from its
+    /// `paths.json`: same layout, attributes and (prefix-replaced) contents.
+    #[test]
+    fn index_parse_matches_path_parse() {
+        use crate::vfs_ops::VfsOps;
+        use rattler_conda_types::package::{FileMode, PrefixPlaceholder};
+
+        let dir = tempfile::tempdir().unwrap();
+        let pkg = dir.path();
+        std::fs::create_dir_all(pkg.join("info")).unwrap();
+        std::fs::create_dir_all(pkg.join("bin")).unwrap();
+        std::fs::create_dir_all(pkg.join("lib/python3.12/__pycache__")).unwrap();
+        std::fs::write(
+            pkg.join("bin/tool"),
+            b"#!/old/prefix/bin/python\nprint('/old/prefix')\n",
+        )
+        .unwrap();
+        std::fs::write(pkg.join("lib/libx.so"), b"\x7fELF\0/old/prefix/lib\0tail").unwrap();
+        std::fs::write(pkg.join("lib/python3.12/m.py"), b"x = 1\n").unwrap();
+        std::fs::write(
+            pkg.join("lib/python3.12/__pycache__/m.cpython-312.pyc"),
+            b"pyc",
+        )
+        .unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("libx.so", pkg.join("lib/libx.so.1")).unwrap();
+        let entry = |path: &str, path_type, mode: Option<FileMode>| PathsEntry {
+            relative_path: PathBuf::from(path),
+            path_type,
+            prefix_placeholder: mode.map(|file_mode| PrefixPlaceholder {
+                file_mode,
+                placeholder: "/old/prefix".to_string(),
+                experimental_offsets: None,
+            }),
+            no_link: false,
+            sha256: None,
+            size_in_bytes: None,
+        };
+        let mut paths = vec![
+            entry("bin/tool", PathType::HardLink, Some(FileMode::Text)),
+            entry("lib/libx.so", PathType::HardLink, Some(FileMode::Binary)),
+            entry("lib/python3.12/m.py", PathType::HardLink, None),
+            entry(
+                "lib/python3.12/__pycache__/m.cpython-312.pyc",
+                PathType::HardLink,
+                None,
+            ),
+        ];
+        if cfg!(unix) {
+            paths.push(entry("lib/libx.so.1", PathType::SoftLink, None));
+        }
+        let paths_json = PathsJson {
+            paths,
+            paths_version: 1,
+        };
+        std::fs::write(
+            pkg.join("info/paths.json"),
+            serde_json::to_vec(&paths_json).unwrap(),
+        )
+        .unwrap();
+
+        let platform = Subdir::current().unwrap();
+        let mount_point = Path::new("/new/prefix");
+        let from_json = {
+            let (mut nodes, mut dirs, mut files) = new_empty_tree();
+            path_parse(&paths_json, pkg, None, &mut nodes, &mut dirs, &mut files);
+            VirtualFS::with_platform(nodes, mount_point, platform)
+        };
+        let from_index = {
+            let index = package_index::load_or_build(pkg, platform).unwrap();
+            let (mut nodes, mut dirs, mut files) = new_empty_tree();
+            index_parse(&index, pkg, None, &mut nodes, &mut dirs, &mut files);
+            VirtualFS::with_platform(nodes, mount_point, platform)
+        };
+
+        let walk = |vfs: &VirtualFS| {
+            let mut out = Vec::new();
+            let mut stack = vec![(1u64, PathBuf::new())];
+            while let Some((ino, path)) = stack.pop() {
+                for entry in vfs.readdir(ino, 0).unwrap() {
+                    if entry.name == "." || entry.name == ".." {
+                        continue;
+                    }
+                    let child = path.join(&entry.name);
+                    let attr = vfs.lookup(ino, &entry.name).unwrap();
+                    let content = match attr.kind {
+                        crate::vfs_ops::FileKind::Directory => {
+                            stack.push((attr.ino, child.clone()));
+                            Vec::new()
+                        }
+                        crate::vfs_ops::FileKind::Symlink => vfs
+                            .readlink(attr.ino)
+                            .unwrap()
+                            .into_os_string()
+                            .into_encoded_bytes(),
+                        crate::vfs_ops::FileKind::RegularFile => {
+                            vfs.read(attr.ino, 0, 1 << 20).unwrap()
+                        }
+                    };
+                    out.push((child, attr.kind, attr.size, attr.mtime, attr.perm, content));
+                }
+            }
+            out.sort_by(|a, b| a.0.cmp(&b.0));
+            out
+        };
+        let expected = walk(&from_json);
+        assert_eq!(expected.len(), if cfg!(unix) { 9 } else { 8 });
+        assert_eq!(walk(&from_index), expected);
+    }
 
     fn make_paths_json(paths: Vec<&str>) -> PathsJson {
         PathsJson {
@@ -2026,19 +2333,13 @@ mod projfs_tests {
     fn tree() -> MetadataTree {
         let (mut nodes, mut dirs, mut files) = new_empty_tree();
         let top = MetadataNode::new_virtual_file("top.txt".into(), 0, b"top".to_vec());
-        upsert_file_node(
-            top,
-            0,
-            Path::new(".").join("top.txt"),
-            &mut nodes,
-            &mut files,
-        );
+        upsert_file_node(top, 0, (0, "top.txt".into()), &mut nodes, &mut files);
         let pkg = ensure_directory(Path::new(".").join("pkg"), 0, &mut nodes, &mut dirs);
         let hello = MetadataNode::new_virtual_file("hello.txt".into(), pkg, b"hello".to_vec());
         upsert_file_node(
             hello,
             pkg,
-            Path::new(".").join("pkg").join("hello.txt"),
+            (pkg, "hello.txt".into()),
             &mut nodes,
             &mut files,
         );

@@ -150,6 +150,7 @@ reqwest-middleware = { package = "astral-reqwest-middleware", version = "0.5" }
 reqwest-retry = { package = "astral-reqwest-retry", version = "0.9" }
 resolvo = { version = ">=0.12.1, <0.13" }
 retry-policies = { version = "0.5", default-features = false }
+rkyv = { version = "0.8.18", default-features = false, features = ["std", "bytecheck"] }
 rmp = { version = "0.8" }
 rmp-serde = { version = "1" }
 rstest = { version = "0.28" }

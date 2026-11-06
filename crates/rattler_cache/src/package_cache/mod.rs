@@ -36,7 +36,7 @@ use simple_spawn_blocking::Cancelled;
 use tracing::instrument;
 use url::Url;
 
-use crate::validation::{ValidationMode, validate_package_directory};
+use crate::validation::{ValidationMode, validate_package_directory_lazily};
 
 mod cache_key;
 mod cache_lock;
@@ -1290,7 +1290,7 @@ where
 
         // Validate the package directory.
         let validation_result = tokio::task::spawn_blocking(move || {
-            validate_package_directory(&path_inner, validation_mode)
+            validate_package_directory_lazily(&path_inner, validation_mode)
         })
         .await;
 
@@ -1306,7 +1306,7 @@ where
                     sha256: locked_sha256,
                     path,
                     index_json: Some(index_json),
-                    paths_json: Some(paths_json),
+                    paths_json,
                 });
             }
             Ok(Err(e)) => {
