@@ -994,7 +994,7 @@ pub(crate) async fn build_metadata_tree(
             let path = cache_metadata.path().to_path_buf();
             let index = tokio::task::spawn_blocking({
                 let path = path.clone();
-                move || package_index::load_or_build(&path, platform, is_noarch_python)
+                move || package_index::load_or_build(&path, platform)
             })
             .await
             .map_err(|e| anyhow::anyhow!("indexing task failed: {e}"))??;
@@ -1054,8 +1054,10 @@ pub(crate) async fn build_metadata_tree(
             &mut file_indices,
         );
 
+        // Only noarch Python packages get entry points, like the installer.
         let entry_points: Vec<EntryPoint> = index
             .entry_points()
+            .filter(|_| is_noarch_python)
             .map(|(command, module, function)| EntryPoint {
                 command: command.to_string(),
                 module: module.to_string(),
@@ -1515,11 +1517,31 @@ pub fn force_unmount(mount_point: &Path, transport: Transport) -> anyhow::Result
                 // A privileged process (which is also when fuser mounts with
                 // mount(2) directly, without fusermount3) can detach the mount
                 // itself; that also works where fusermount3 isn't installed.
+                // Only for FUSE mounts, like fusermount3: `statfs` reports the
+                // filesystem type, and fails with ENOTCONN for a FUSE mount
+                // whose server died. Never follow a symlink at the mount point.
                 if let Ok(c_path) =
                     std::ffi::CString::new(mount_point.as_os_str().as_encoded_bytes())
                 {
-                    // SAFETY: `c_path` is a valid NUL-terminated path.
-                    if unsafe { libc::umount2(c_path.as_ptr(), libc::MNT_DETACH) } == 0 {
+                    const FUSE_SUPER_MAGIC: i64 = 0x6573_5546;
+                    // SAFETY: `c_path` is a valid NUL-terminated path and
+                    // `statfs` only writes to the struct we pass.
+                    let is_fuse = unsafe {
+                        let mut stat: libc::statfs = std::mem::zeroed();
+                        if libc::statfs(c_path.as_ptr(), &mut stat) == 0 {
+                            #[allow(clippy::unnecessary_cast)]
+                            let fs_type = stat.f_type as i64;
+                            fs_type == FUSE_SUPER_MAGIC
+                        } else {
+                            std::io::Error::last_os_error().raw_os_error() == Some(libc::ENOTCONN)
+                        }
+                    };
+                    // SAFETY: as above.
+                    if is_fuse
+                        && unsafe {
+                            libc::umount2(c_path.as_ptr(), libc::MNT_DETACH | libc::UMOUNT_NOFOLLOW)
+                        } == 0
+                    {
                         return Ok(());
                     }
                 }
@@ -1658,7 +1680,7 @@ mod tests {
             VirtualFS::with_platform(nodes, mount_point, platform)
         };
         let from_index = {
-            let index = package_index::load_or_build(pkg, platform, false).unwrap();
+            let index = package_index::load_or_build(pkg, platform).unwrap();
             let (mut nodes, mut dirs, mut files) = new_empty_tree();
             index_parse(&index, pkg, None, &mut nodes, &mut dirs, &mut files);
             VirtualFS::with_platform(nodes, mount_point, platform)

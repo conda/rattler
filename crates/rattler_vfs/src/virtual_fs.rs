@@ -106,6 +106,10 @@ impl<V> BoundedCache<V> {
         Some(value)
     }
 
+    fn clear(&mut self) {
+        self.map.clear();
+    }
+
     fn insert(&mut self, ino: u64, value: V) {
         // Re-inserting an existing key updates the value in place and keeps
         // its position (FIFO) or marks it as most recently used (LRU).
@@ -147,6 +151,43 @@ fn read_leading_bytes(path: &Path, n: usize) -> std::io::Result<Vec<u8>> {
     let mut buf = Vec::new();
     File::open(path)?.take(n as u64).read_to_end(&mut buf)?;
     Ok(buf)
+}
+
+/// How many backing files [`VirtualFS`] keeps open: a small share of the
+/// process's descriptor limit (macOS defaults to a soft limit of 256), and no
+/// more than 256.
+fn file_cache_capacity() -> usize {
+    #[cfg(unix)]
+    {
+        let mut limit = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
+        // SAFETY: `getrlimit` only writes to the struct we pass.
+        if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut limit) } == 0 {
+            let soft = usize::try_from(limit.rlim_cur).unwrap_or(usize::MAX);
+            return (soft / 8).clamp(8, 256);
+        }
+        32
+    }
+    #[cfg(not(unix))]
+    {
+        256
+    }
+}
+
+/// Whether opening a file failed because the process or system ran out of
+/// file descriptors.
+fn is_out_of_descriptors(error: &std::io::Error) -> bool {
+    #[cfg(unix)]
+    {
+        matches!(error.raw_os_error(), Some(libc::EMFILE | libc::ENFILE))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = error;
+        false
+    }
 }
 
 /// Positioned read that doesn't move a shared file cursor.
@@ -382,7 +423,7 @@ impl VirtualFS {
             offset_cache,
             codesign_cache: Mutex::new(BoundedCache::new(16, false)),
             mmap_cache: Mutex::new(BoundedCache::new(1024, true)),
-            file_cache: Mutex::new(BoundedCache::new(256, true)),
+            file_cache: Mutex::new(BoundedCache::new(file_cache_capacity(), true)),
             child_maps,
             attr_cache,
             target_prefix,
@@ -666,7 +707,17 @@ impl VirtualFS {
             return Ok(file);
         }
         let path = self._getpath(node);
-        let file = Arc::new(File::open(&path).map_err(|e| {
+        let file = match File::open(&path) {
+            // Out of descriptors (the process limit is shared with whatever
+            // else the host process does): give back the cached ones and try
+            // once more before failing the read.
+            Err(e) if is_out_of_descriptors(&e) => {
+                self.file_cache.lock().unwrap().clear();
+                File::open(&path)
+            }
+            result => result,
+        };
+        let file = Arc::new(file.map_err(|e| {
             tracing::warn!("failed to open {}: {}", path.display(), e);
             VfsError::Io
         })?);

@@ -268,6 +268,10 @@ async fn create_exec_prefix(
         // could not see files stored in the directory underneath.
         let state_dir = prefix;
         let lockfile_path = state_dir.join("lock.yml");
+        // Earlier versions mounted the environment at what is now the state
+        // directory; a run of one of those that was killed leaves a dead mount
+        // here, which would make every file operation below fail.
+        clear_stale_mount(&state_dir);
 
         let (lockfile, client): (LockFile, LazyClient) =
             if lockfile_path.exists() && !force_reinstall {
@@ -306,9 +310,20 @@ async fn create_exec_prefix(
                 let tmp_path = state_dir.join(format!("lock.yml.{}.tmp", std::process::id()));
                 lockfile
                     .to_path(&tmp_path)
-                    .and_then(|()| std::fs::rename(&tmp_path, &lockfile_path))
                     .into_diagnostic()
                     .context("failed to write cached lock file")?;
+                if let Err(e) = std::fs::rename(&tmp_path, &lockfile_path) {
+                    // On Windows the rename fails while a concurrent run has
+                    // the cached lock file open. That run wrote an equivalent
+                    // solve, so carry on with ours in memory.
+                    let _ = std::fs::remove_file(&tmp_path);
+                    if !lockfile_path.is_file() {
+                        return Err(e)
+                            .into_diagnostic()
+                            .context("failed to write cached lock file");
+                    }
+                    tracing::debug!("not replacing cached lock file: {e}");
+                }
                 (lockfile, download_client.into())
             };
 
@@ -494,34 +509,96 @@ fn should_force_unmount(_path: &Path) -> bool {
 /// A live `--dematerialized` environment. Keep it alive for as long as the
 /// prefix is in use, then call [`ExecMount::unmount`].
 struct ExecMount {
-    handle: MountHandle,
+    /// `None` once unmounted.
+    handle: Option<MountHandle>,
     mount_point: PathBuf,
     /// Exclusive lock on the mount point, held while it is mounted. A run
     /// that finds the lock taken knows the mount is live (not stale) and
-    /// mounts elsewhere instead of tearing it down.
-    _lock: std::fs::File,
+    /// mounts elsewhere instead of tearing it down. Released before the lock
+    /// file is removed (Windows can't delete an open file).
+    lock: Option<std::fs::File>,
     /// Whether the mount point is private to this run and should be removed
     /// after unmounting.
     ephemeral: bool,
 }
 
 impl ExecMount {
-    async fn unmount(self) -> miette::Result<()> {
-        self.handle
-            .unmount()
-            .await
-            .map_err(|e| miette::miette!("failed to unmount environment: {e}"))?;
-        if self.ephemeral {
-            #[cfg(windows)]
-            let removed = rattler_vfs::remove_projfs_root(&self.mount_point);
-            #[cfg(not(windows))]
-            let removed = std::fs::remove_dir(&self.mount_point);
-            if let Err(e) = removed {
-                tracing::debug!("failed to remove {}: {e}", self.mount_point.display());
-            }
-            let _ = std::fs::remove_file(self.mount_point.with_extension("lock"));
+    async fn unmount(mut self) -> miette::Result<()> {
+        if let Some(handle) = self.handle.take() {
+            handle
+                .unmount()
+                .await
+                .map_err(|e| miette::miette!("failed to unmount environment: {e}"))?;
         }
+        self.remove_ephemeral_mount_point();
         Ok(())
+    }
+
+    fn remove_ephemeral_mount_point(&mut self) {
+        if self.ephemeral {
+            self.ephemeral = false;
+            drop(self.lock.take());
+            remove_mount_point(&self.mount_point);
+        }
+    }
+}
+
+impl Drop for ExecMount {
+    /// Error paths drop the mount without calling [`ExecMount::unmount`]:
+    /// dropping the handle unmounts (best effort), then clean up as usual.
+    fn drop(&mut self) {
+        drop(self.handle.take());
+        self.remove_ephemeral_mount_point();
+    }
+}
+
+/// Remove an (unmounted) private mount point and its lock file.
+fn remove_mount_point(mount_point: &Path) {
+    #[cfg(windows)]
+    let removed = rattler_vfs::remove_projfs_root(mount_point);
+    #[cfg(not(windows))]
+    let removed = std::fs::remove_dir(mount_point);
+    if let Err(e) = removed {
+        tracing::debug!("failed to remove {}: {e}", mount_point.display());
+    }
+    let _ = std::fs::remove_file(mount_point.with_extension("lock"));
+}
+
+/// Detach a mount left at `path` by a run that was killed, if there is one.
+fn clear_stale_mount(path: &Path) {
+    if should_force_unmount(path) {
+        let _ = force_unmount(path, Transport::best());
+    }
+}
+
+/// Clean up the private `mnt-<pid>` mount points of runs that are gone: a
+/// private mount point whose lock nobody holds belonged to a run that was
+/// killed before it could remove it, and may still be a dead mount.
+fn sweep_stale_private_mount_points(state_dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(state_dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let is_private_lock = path.extension().is_some_and(|ext| ext == "lock")
+            && path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .and_then(|stem| stem.strip_prefix("mnt-"))
+                .is_some_and(|pid| !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit()));
+        if !is_private_lock {
+            continue;
+        }
+        let Ok(lock) = std::fs::OpenOptions::new().write(true).open(&path) else {
+            continue;
+        };
+        if lock.try_lock().is_err() {
+            continue; // in use by a live run
+        }
+        let mount_point = path.with_extension("");
+        clear_stale_mount(&mount_point);
+        drop(lock);
+        remove_mount_point(&mount_point);
     }
 }
 
@@ -553,6 +630,7 @@ fn claim_mount_point(state_dir: &Path) -> miette::Result<(PathBuf, std::fs::File
     std::fs::create_dir_all(state_dir)
         .into_diagnostic()
         .context("failed to create environment directory")?;
+    sweep_stale_private_mount_points(state_dir);
     if let Some((mount_point, lock)) = try_claim("mnt")? {
         return Ok((mount_point, lock, false));
     }
@@ -599,9 +677,7 @@ async fn mount_prefix(options: MountPrefixOptions<'_>) -> miette::Result<ExecMou
     //
     // This has to happen before creating the directory: a dead FUSE mount
     // can't even be `stat`ed (ENOTCONN), so creating it would fail.
-    if should_force_unmount(&mount_point) {
-        let _ = force_unmount(&mount_point, Transport::best());
-    }
+    clear_stale_mount(&mount_point);
     std::fs::create_dir_all(&mount_point)
         .into_diagnostic()
         .context("failed to create mount point")?;
@@ -624,9 +700,9 @@ async fn mount_prefix(options: MountPrefixOptions<'_>) -> miette::Result<ExecMou
     .map_err(|e| miette::miette!("failed to mount environment: {e}"))?;
 
     Ok(ExecMount {
-        handle,
+        handle: Some(handle),
         mount_point,
-        _lock: lock,
+        lock: Some(lock),
         ephemeral,
     })
 }

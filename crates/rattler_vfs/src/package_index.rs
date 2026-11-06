@@ -44,7 +44,13 @@ use crate::vfs_ops::FileKind;
 pub(crate) const INDEX_PATH: &str = "info/rattler-vfs-index.rkyv";
 
 /// Bump whenever the layout or the meaning of the stored data changes.
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
+
+/// Bytes before the archive in [`INDEX_PATH`]: a magic number and the
+/// xxh3 hash of the archive. Sixteen bytes keep the archive aligned in the
+/// (page-aligned) mapping.
+const HEADER_LEN: usize = 16;
+const MAGIC: &[u8; 8] = b"rvfsidx\0";
 
 // ---------------------------------------------------------------------------
 // Stored format
@@ -54,9 +60,10 @@ const VERSION: u32 = 1;
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub(crate) struct PackageIndex {
     version: u32,
-    /// Whether the scans were made for a Windows target, where binaries are
-    /// never patched and shebangs are not rewritten.
-    windows_target: bool,
+    /// The target family the scans were made for (see [`target_family`]):
+    /// binaries are never patched on Windows, and shebangs are only rewritten
+    /// on Unix.
+    target_family: u8,
     /// Identity of the package's file list when the index was built.
     paths_json: Stamp,
     /// Entry points from `info/link.json` (noarch Python packages only).
@@ -268,7 +275,7 @@ fn encoding_from_u8(index: u8) -> Option<OffsetEncoding> {
 
 /// The bytes of a validated index archive.
 pub(crate) enum IndexBytes {
-    /// Memory-mapped from [`INDEX_PATH`].
+    /// Memory-mapped from [`INDEX_PATH`], including its header.
     Mapped(Mmap),
     /// Built during this mount.
     Owned(AlignedVec),
@@ -277,7 +284,7 @@ pub(crate) enum IndexBytes {
 impl IndexBytes {
     pub(crate) fn archived(&self) -> &ArchivedPackageIndex {
         let bytes: &[u8] = match self {
-            Self::Mapped(mmap) => mmap,
+            Self::Mapped(mmap) => &mmap[HEADER_LEN..],
             Self::Owned(bytes) => bytes,
         };
         // SAFETY: both variants are only constructed from bytes that passed
@@ -307,14 +314,30 @@ impl IndexBytes {
     }
 }
 
-/// Whether `bytes` are an index of the current version for a target like
-/// `platform` whose file list still has the given stamp.
-fn validate(bytes: &[u8], platform: Subdir, paths_json: &Stamp) -> bool {
+/// Which of the target properties the scans depend on hold for `platform`.
+fn target_family(platform: Subdir) -> u8 {
+    u8::from(platform.is_windows()) | (u8::from(platform.is_unix()) << 1)
+}
+
+/// Whether `file` (header and archive, as stored at [`INDEX_PATH`]) is an
+/// intact index of the current version for a target like `platform` whose
+/// file list still has the given stamp.
+///
+/// The checksum catches corruption that still forms a structurally valid
+/// archive (a flipped bit in a path or an offset), which `rkyv` validation
+/// alone would accept.
+fn validate(file: &[u8], platform: Subdir, paths_json: &Stamp) -> bool {
+    let Some((header, bytes)) = file.split_at_checked(HEADER_LEN) else {
+        return false;
+    };
+    if &header[..8] != MAGIC || header[8..] != xxhash_rust::xxh3::xxh3_64(bytes).to_le_bytes() {
+        return false;
+    }
     let Ok(index) = rkyv::access::<ArchivedPackageIndex, rancor::Error>(bytes) else {
         return false;
     };
     index.version.to_native() == VERSION
-        && index.windows_target == platform.is_windows()
+        && index.target_family == target_family(platform)
         && index.paths_json.len.to_native() == paths_json.len
         && index.paths_json.mtime_secs.to_native() == paths_json.mtime_secs
         && index.paths_json.mtime_nanos.to_native() == paths_json.mtime_nanos
@@ -336,11 +359,11 @@ fn file_list_stamp(package_dir: &Path) -> Option<Stamp> {
 
 /// Load the index of the package extracted at `package_dir`, building (and
 /// trying to store) it when there is no usable one.
-pub(crate) fn load_or_build(
-    package_dir: &Path,
-    platform: Subdir,
-    is_noarch_python: bool,
-) -> anyhow::Result<IndexBytes> {
+///
+/// Entry points are recorded whenever the package has a noarch Python
+/// `link.json`, so the stored index doesn't depend on how the caller
+/// classified the package; callers decide whether to use them.
+pub(crate) fn load_or_build(package_dir: &Path, platform: Subdir) -> anyhow::Result<IndexBytes> {
     let stamp = file_list_stamp(package_dir);
     let index_path = package_dir.join(INDEX_PATH);
 
@@ -355,17 +378,13 @@ pub(crate) fn load_or_build(
     }
 
     let paths_json = PathsJson::from_package_directory_with_deprecated_fallback(package_dir)?;
-    let entry_points = if is_noarch_python {
-        LinkJson::from_package_directory(package_dir)
-            .ok()
-            .and_then(|link| match link.noarch {
-                NoArchLinks::Python(ep) => Some(ep.entry_points),
-                NoArchLinks::Generic => None,
-            })
-            .unwrap_or_default()
-    } else {
-        Vec::new()
-    };
+    let entry_points = LinkJson::from_package_directory(package_dir)
+        .ok()
+        .and_then(|link| match link.noarch {
+            NoArchLinks::Python(ep) => Some(ep.entry_points),
+            NoArchLinks::Generic => None,
+        })
+        .unwrap_or_default();
     let index = build(
         package_dir,
         &paths_json,
@@ -400,13 +419,20 @@ pub(crate) fn load_or_build(
     Ok(IndexBytes::Owned(bytes))
 }
 
-/// Atomically write `bytes` to `path`.
+/// Atomically write the archive `bytes`, behind a checksummed header, to
+/// `path`.
 fn store(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let mut tmp_name = path.file_name().unwrap_or_default().to_os_string();
     tmp_name.push(format!(".{}.tmp", std::process::id()));
     let tmp = path.with_file_name(tmp_name);
+    let mut header = [0u8; HEADER_LEN];
+    header[..8].copy_from_slice(MAGIC);
+    header[8..].copy_from_slice(&xxhash_rust::xxh3::xxh3_64(bytes).to_le_bytes());
     let result = File::create(&tmp)
-        .and_then(|mut file| file.write_all(bytes))
+        .and_then(|mut file| {
+            file.write_all(&header)?;
+            file.write_all(bytes)
+        })
         .and_then(|()| fs::rename(&tmp, path));
     if result.is_err() {
         let _ = fs::remove_file(&tmp);
@@ -434,7 +460,7 @@ fn build(
         .collect();
     PackageIndex {
         version: VERSION,
-        windows_target: platform.is_windows(),
+        target_family: target_family(platform),
         paths_json: paths_json_stamp,
         entry_points,
         files,
@@ -510,7 +536,14 @@ fn index_file(package_dir: &Path, entry: &PathsEntry, platform: Subdir) -> Index
             }),
         });
     IndexFile {
-        path: entry.relative_path.to_string_lossy().replace('\\', "/"),
+        // Join the components with `/` rather than rewriting separators: on
+        // Unix a backslash is an ordinary file-name character.
+        path: entry
+            .relative_path
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/"),
         path_type: match entry.path_type {
             PathType::HardLink => 0,
             PathType::SoftLink => 1,
@@ -705,7 +738,7 @@ mod tests {
     #[test]
     fn builds_stores_and_reloads() {
         let dir = package();
-        let built = load_or_build(dir.path(), Subdir::Linux64, false).unwrap();
+        let built = load_or_build(dir.path(), Subdir::Linux64).unwrap();
         assert!(matches!(built, IndexBytes::Owned(_)));
         assert!(dir.path().join(INDEX_PATH).exists());
 
@@ -737,7 +770,7 @@ mod tests {
         assert_eq!(file("bin/tool").stat().unwrap().len, 39);
 
         // A second load maps the stored index and sees the same data.
-        let loaded = load_or_build(dir.path(), Subdir::Linux64, false).unwrap();
+        let loaded = load_or_build(dir.path(), Subdir::Linux64).unwrap();
         assert!(matches!(loaded, IndexBytes::Mapped(_)));
         assert_eq!(
             loaded.files().map(|f| f.placeholder()).collect::<Vec<_>>(),
@@ -748,10 +781,10 @@ mod tests {
     #[test]
     fn rebuilds_when_stale_or_corrupt() {
         let dir = package();
-        load_or_build(dir.path(), Subdir::Linux64, false).unwrap();
+        load_or_build(dir.path(), Subdir::Linux64).unwrap();
 
         // Another target family invalidates the scans.
-        let other = load_or_build(dir.path(), Subdir::Win64, false).unwrap();
+        let other = load_or_build(dir.path(), Subdir::Win64).unwrap();
         assert!(matches!(other, IndexBytes::Owned(_)));
         let (_, _, scan) = other
             .files()
@@ -763,7 +796,7 @@ mod tests {
 
         // A corrupt index is rebuilt.
         fs::write(dir.path().join(INDEX_PATH), b"garbage").unwrap();
-        let rebuilt = load_or_build(dir.path(), Subdir::Linux64, false).unwrap();
+        let rebuilt = load_or_build(dir.path(), Subdir::Linux64).unwrap();
         assert!(matches!(rebuilt, IndexBytes::Owned(_)));
         assert_eq!(rebuilt.files().count(), 3);
 
@@ -772,7 +805,66 @@ mod tests {
         let mut contents = fs::read(&paths_json).unwrap();
         contents.push(b' ');
         fs::write(&paths_json, contents).unwrap();
-        let rebuilt = load_or_build(dir.path(), Subdir::Linux64, false).unwrap();
+        let rebuilt = load_or_build(dir.path(), Subdir::Linux64).unwrap();
         assert!(matches!(rebuilt, IndexBytes::Owned(_)));
+    }
+
+    #[test]
+    fn rebuilds_when_a_bit_flips() {
+        let dir = package();
+        load_or_build(dir.path(), Subdir::Linux64).unwrap();
+        let index_path = dir.path().join(INDEX_PATH);
+        let mut bytes = fs::read(&index_path).unwrap();
+        // Corrupt a path string inside the archive: still a structurally
+        // valid archive, but the checksum no longer matches.
+        let pos = bytes
+            .windows(8)
+            .position(|w| w == b"bin/tool")
+            .expect("path stored in the archive");
+        bytes[pos] ^= 0x01;
+        fs::write(&index_path, &bytes).unwrap();
+        let rebuilt = load_or_build(dir.path(), Subdir::Linux64).unwrap();
+        assert!(matches!(rebuilt, IndexBytes::Owned(_)));
+        assert!(rebuilt.files().any(|f| f.path() == "bin/tool"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn keeps_backslashes_in_unix_file_names() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::create_dir_all(root.join("info")).unwrap();
+        fs::create_dir_all(root.join("lib/systemd")).unwrap();
+        fs::write(root.join("lib/systemd/a\\x2db.mount"), b"unit").unwrap();
+        let paths = PathsJson {
+            paths: vec![entry("lib/systemd/a\\x2db.mount", None)],
+            paths_version: 1,
+        };
+        fs::write(
+            root.join("info/paths.json"),
+            serde_json::to_vec(&paths).unwrap(),
+        )
+        .unwrap();
+        let index = load_or_build(root, Subdir::Linux64).unwrap();
+        let file = index.files().next().unwrap();
+        assert_eq!(file.path(), "lib/systemd/a\\x2db.mount");
+        assert_eq!(file.stat().unwrap().len, 4);
+    }
+
+    #[test]
+    fn records_entry_points_of_noarch_python_packages() {
+        let dir = package();
+        fs::write(
+            dir.path().join("info/link.json"),
+            br#"{"noarch": {"type": "python", "entry_points": ["tool = pkg.cli:main"]}, "package_metadata_version": 1}"#,
+        )
+        .unwrap();
+        for _ in 0..2 {
+            let index = load_or_build(dir.path(), Subdir::Linux64).unwrap();
+            assert_eq!(
+                index.entry_points().collect::<Vec<_>>(),
+                vec![("tool", "pkg.cli", "main")]
+            );
+        }
     }
 }

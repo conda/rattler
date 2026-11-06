@@ -699,8 +699,11 @@ pub(crate) fn mount_fuse(
     if config.allow_other {
         fuser_config.acl = SessionACL::All;
     }
+    // Serve read-only mounts from several threads. A writable overlay stays
+    // single-threaded: its copy-up (check whether the upper file exists, then
+    // copy) is not safe against a concurrent request for the same file.
     #[cfg(target_os = "linux")]
-    {
+    if matches!(config.mode, Mode::ReadOnly | Mode::ReadOnlyIfSupported) {
         fuser_config.n_threads = Some(fuse_worker_threads());
     }
 

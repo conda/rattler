@@ -160,8 +160,6 @@ pub fn validate_package_directory(
     Ok((index_json, paths))
 }
 
-/// Determine whether the files in the specified directory match wat is expected
-/// according to the passed in [`PathsJson`].
 /// Archive hashes cannot detect changes to the wheel conversion layout, so a
 /// package converted from a wheel by an older layout is invalid.
 fn check_wheel_conversion(package_dir: &Path) -> Result<(), PackageValidationError> {
@@ -206,6 +204,8 @@ pub(crate) fn validate_package_directory_lazily(
     Ok((index_json, None))
 }
 
+/// Determine whether the files in the specified directory match wat is expected
+/// according to the passed in [`PathsJson`].
 pub fn validate_package_directory_from_paths(
     package_dir: &Path,
     paths: &PathsJson,
