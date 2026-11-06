@@ -630,3 +630,21 @@ class IndexJson:
         Returns a representation of the IndexJson.
         """
         return "IndexJson()"
+
+    def to_json(self) -> str:
+        """
+        Returns a JSON string representation of the IndexJson.
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
+        ... )
+        >>> json_data = idx_json.to_json()
+        >>> "conda" in json_data
+        True
+        >>>
+        ```
+        """
+        return self._inner.to_json()

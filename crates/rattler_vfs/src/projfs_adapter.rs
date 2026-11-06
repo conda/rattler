@@ -19,7 +19,9 @@ use std::os::windows::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use windows::Win32::Foundation::ERROR_FILE_NOT_FOUND;
+use windows::Win32::Foundation::{
+    ERROR_FILE_NOT_FOUND, ERROR_FILE_SYSTEM_VIRTUALIZATION_UNAVAILABLE,
+};
 use windows::Win32::Storage::ProjectedFileSystem::*;
 use windows::core::{GUID, HRESULT, PCWSTR};
 
@@ -285,6 +287,51 @@ impl Drop for ProjFsHandle {
             }
         }
     }
+}
+
+/// Whether `err` is ProjFS refusing I/O inside a virtualization root that has
+/// no running provider (os error 369).
+pub(crate) fn is_provider_unavailable(err: &std::io::Error) -> bool {
+    err.raw_os_error() == Some(ERROR_FILE_SYSTEM_VIRTUALIZATION_UNAVAILABLE.0 as i32)
+}
+
+/// Delete `root`, which may be a stopped virtualization root.
+///
+/// See [`crate::remove_projfs_root`].
+pub(crate) fn remove_virtualization_root(root: &Path) -> anyhow::Result<()> {
+    match std::fs::remove_dir_all(root) {
+        Ok(()) => return Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) if is_provider_unavailable(&e) => {}
+        Err(e) => return Err(e.into()),
+    }
+
+    // A stopped root: serve it again with a provider that projects nothing,
+    // so its on-disk contents (hydrated files, placeholders, files the user
+    // created) become accessible and deletable.
+    tracing::debug!(root = %root.display(), "restarting ProjFS to delete a stopped root");
+    let (nodes, _, _) = crate::new_empty_tree();
+    let vfs = crate::virtual_fs::VirtualFS::new(nodes, root);
+    let handle = ProjFsAdapter::new(vfs).start(root)?;
+    let cleared = remove_dir_contents(root);
+    handle.unmount()?;
+    cleared?;
+
+    std::fs::remove_dir(root)?;
+    Ok(())
+}
+
+/// Remove everything inside `dir`, but not `dir` itself.
+fn remove_dir_contents(dir: &Path) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            std::fs::remove_dir_all(entry.path())?;
+        } else {
+            std::fs::remove_file(entry.path())?;
+        }
+    }
+    Ok(())
 }
 
 // Placeholder GUID for our virtualization root

@@ -27,6 +27,7 @@ pub struct SolverCase<'a> {
     constraints: Vec<MatchSpec>,
     locked_packages: Vec<RepoDataRecord>,
     pinned_packages: Vec<RepoDataRecord>,
+    additional_packages: Vec<RepoDataRecord>,
     virtual_packages: Vec<GenericVirtualPackage>,
     exclude_newer: Option<ExcludeNewer>,
     strategy: SolveStrategy,
@@ -62,6 +63,7 @@ impl<'a> SolverCase<'a> {
             constraints: Vec::new(),
             locked_packages: Vec::new(),
             pinned_packages: Vec::new(),
+            additional_packages: Vec::new(),
             virtual_packages: Vec::new(),
             exclude_newer: None,
             strategy: SolveStrategy::default(),
@@ -148,6 +150,15 @@ impl<'a> SolverCase<'a> {
     #[allow(dead_code)]
     pub fn pinned_packages(mut self, packages: impl IntoIterator<Item = RepoDataRecord>) -> Self {
         self.pinned_packages = packages.into_iter().collect();
+        self
+    }
+
+    /// Provides packages that are selectable but neither favored nor pinned.
+    pub fn additional_packages(
+        mut self,
+        packages: impl IntoIterator<Item = RepoDataRecord>,
+    ) -> Self {
+        self.additional_packages = packages.into_iter().collect();
         self
     }
 
@@ -238,6 +249,7 @@ impl<'a> SolverCase<'a> {
             constraints: self.constraints.clone(),
             locked_packages: self.locked_packages.iter().collect(),
             pinned_packages: self.pinned_packages.iter().collect(),
+            additional_packages: self.additional_packages.iter().collect(),
             virtual_packages: self.virtual_packages.clone(),
             exclude_newer: self.exclude_newer.clone(),
             strategy: self.strategy,

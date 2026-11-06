@@ -29,7 +29,7 @@ jobs:
     name: Check intra-doc links
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
       - name: Set up pixi
@@ -106,7 +106,7 @@ jobs:
             }
     steps:
       - name: Checkout source code
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
@@ -144,7 +144,7 @@ jobs:
           echo "CARGO_BUILD_OPTIONS=${CARGO_BUILD_OPTIONS} --no-default-features --features rustls" >> $GITHUB_OUTPUT
 
       - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@3f13feab2962a87273d379ebc36ea159527e6cc9 # v1.3.2
+        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
         if: startsWith(matrix.os, 'ubuntu')
         with:
           # this might remove tools that are actually needed,
@@ -176,7 +176,7 @@ jobs:
 
       - name: Install cargo nextest
         if: ${{ !matrix.skip-tests }}
-        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2.87.30
         with:
           tool: cargo-nextest
 

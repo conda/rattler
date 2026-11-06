@@ -257,4 +257,11 @@ impl PyAboutJson {
     pub fn set_summary(&mut self, value: Option<String>) {
         self.inner.summary = value;
     }
+
+    /// Returns a JSON string representation of the object.
+    pub fn to_json(&self) -> PyResult<String> {
+        serde_json::to_string_pretty(&self.inner).map_err(|e| {
+            PyValueError::new_err(format!("Failed to serialize AboutJson to JSON: {e}"))
+        })
+    }
 }

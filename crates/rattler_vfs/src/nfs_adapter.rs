@@ -18,11 +18,11 @@ use nfs3_server::vfs::{
 };
 use nfs3_types::nfs3::{
     Nfs3Option, createverf3, fattr3, filename3, ftype3, nfspath3, nfsstat3, nfstime3, sattr3,
-    specdata3,
+    specdata3, stable_how,
 };
 use nfs3_types::xdr_codec::Opaque;
 
-use crate::vfs_ops::{FileAttr, FileKind, VfsOps};
+use crate::vfs_ops::{Fh, FileAttr, FileKind, VfsError, VfsOps};
 
 /// LRU cache of open write handles, keyed by inode.
 ///
@@ -34,7 +34,7 @@ use crate::vfs_ops::{FileAttr, FileKind, VfsOps};
 /// touch.
 struct WriteHandleCache {
     /// inode → file handle
-    map: HashMap<u64, u64>,
+    map: HashMap<u64, Fh>,
     /// Insertion / touch order. The front is the least recently used.
     order: VecDeque<u64>,
 }
@@ -48,7 +48,7 @@ impl WriteHandleCache {
     }
 
     /// Get the handle for `ino`, marking it as most recently used.
-    fn get(&mut self, ino: u64) -> Option<u64> {
+    fn get(&mut self, ino: u64) -> Option<Fh> {
         let fh = *self.map.get(&ino)?;
         // Move ino to the back (most recently used). O(N) for N <= 64 is fine;
         // swap to a real LRU crate if MAX_WRITE_HANDLES grows.
@@ -59,13 +59,13 @@ impl WriteHandleCache {
         Some(fh)
     }
 
-    fn insert(&mut self, ino: u64, fh: u64) {
+    fn insert(&mut self, ino: u64, fh: Fh) {
         self.map.insert(ino, fh);
         self.order.push_back(ino);
     }
 
     /// Evict and return the least recently used `(ino, fh)` pair.
-    fn pop_lru(&mut self) -> Option<(u64, u64)> {
+    fn pop_lru(&mut self) -> Option<(u64, Fh)> {
         let ino = self.order.pop_front()?;
         let fh = self.map.remove(&ino)?;
         Some((ino, fh))
@@ -150,7 +150,7 @@ impl<T: VfsOps> NfsAdapter<T> {
     /// Handles are cached to avoid reopening on consecutive writes to the same file.
     /// When the cache exceeds `MAX_WRITE_HANDLES`, the least recently used
     /// handle is evicted (see [`WriteHandleCache::pop_lru`]).
-    fn get_write_handle(&self, ino: u64) -> Result<u64, nfsstat3> {
+    fn get_write_handle(&self, ino: u64) -> Result<Fh, nfsstat3> {
         let mut cache = self.write_handles.lock().unwrap();
         if let Some(fh) = cache.get(ino) {
             return Ok(fh);
@@ -162,7 +162,7 @@ impl<T: VfsOps> NfsAdapter<T> {
                 break;
             }
         }
-        let fh = self.vfs.open_write(ino).map_err(errno_to_nfsstat)?;
+        let fh = self.vfs.open_write(ino).map_err(vfs_err_to_nfsstat)?;
         cache.insert(ino, fh);
         Ok(fh)
     }
@@ -353,17 +353,19 @@ fn os_str_from_nfs_bytes(bytes: &[u8]) -> Result<OsString, nfsstat3> {
     }
 }
 
-fn errno_to_nfsstat(errno: i32) -> nfsstat3 {
-    match errno {
-        libc::ENOENT => nfsstat3::NFS3ERR_NOENT,
-        libc::EACCES => nfsstat3::NFS3ERR_ACCES,
-        libc::ENOTDIR => nfsstat3::NFS3ERR_NOTDIR,
-        libc::EISDIR => nfsstat3::NFS3ERR_ISDIR,
-        libc::EROFS => nfsstat3::NFS3ERR_ROFS,
-        libc::EEXIST => nfsstat3::NFS3ERR_EXIST,
-        libc::ENOTEMPTY => nfsstat3::NFS3ERR_NOTEMPTY,
-        libc::ENOSPC => nfsstat3::NFS3ERR_NOSPC,
-        _ => nfsstat3::NFS3ERR_IO,
+fn vfs_err_to_nfsstat(err: VfsError) -> nfsstat3 {
+    match err {
+        VfsError::NotFound => nfsstat3::NFS3ERR_NOENT,
+        VfsError::PermissionDenied => nfsstat3::NFS3ERR_ACCES,
+        VfsError::NotADirectory => nfsstat3::NFS3ERR_NOTDIR,
+        VfsError::IsADirectory => nfsstat3::NFS3ERR_ISDIR,
+        VfsError::ReadOnly => nfsstat3::NFS3ERR_ROFS,
+        VfsError::AlreadyExists => nfsstat3::NFS3ERR_EXIST,
+        VfsError::NotEmpty => nfsstat3::NFS3ERR_NOTEMPTY,
+        VfsError::NoSpace => nfsstat3::NFS3ERR_NOSPC,
+        VfsError::InvalidArgument => nfsstat3::NFS3ERR_INVAL,
+        VfsError::NotPermitted => nfsstat3::NFS3ERR_PERM,
+        VfsError::Io => nfsstat3::NFS3ERR_IO,
     }
 }
 
@@ -408,7 +410,7 @@ impl<T: VfsOps> NfsReadFileSystem for NfsAdapter<T> {
         let name_bytes = filename.0.as_ref().to_vec();
         tokio::task::spawn_blocking(move || {
             let name = &os_str_from_nfs_bytes(&name_bytes)?;
-            let attr = vfs.lookup(parent_ino, name).map_err(errno_to_nfsstat)?;
+            let attr = vfs.lookup(parent_ino, name).map_err(vfs_err_to_nfsstat)?;
             Ok(FileHandleU64::new(attr.ino))
         })
         .await
@@ -422,7 +424,7 @@ impl<T: VfsOps> NfsReadFileSystem for NfsAdapter<T> {
         let vfs = self.vfs.clone();
         let ino = id.as_u64();
         tokio::task::spawn_blocking(move || {
-            let attr = vfs.getattr(ino).map_err(errno_to_nfsstat)?;
+            let attr = vfs.getattr(ino).map_err(vfs_err_to_nfsstat)?;
             Ok(file_attr_to_fattr3(&attr))
         })
         .await
@@ -441,7 +443,7 @@ impl<T: VfsOps> NfsReadFileSystem for NfsAdapter<T> {
         let vfs = self.vfs.clone();
         let ino = id.as_u64();
         tokio::task::spawn_blocking(move || {
-            let data = vfs.read(ino, offset, count).map_err(errno_to_nfsstat)?;
+            let data = vfs.read(ino, offset, count).map_err(vfs_err_to_nfsstat)?;
             let eof = (data.len() as u32) < count;
             Ok((data, eof))
         })
@@ -460,7 +462,7 @@ impl<T: VfsOps> NfsReadFileSystem for NfsAdapter<T> {
         let vfs = self.vfs.clone();
         let ino = dirid.as_u64();
         tokio::task::spawn_blocking(move || {
-            let dir_entries = vfs.readdir(ino, cookie).map_err(errno_to_nfsstat)?;
+            let dir_entries = vfs.readdir(ino, cookie).map_err(vfs_err_to_nfsstat)?;
             let mut entries = Vec::with_capacity(dir_entries.len());
             for (i, de) in dir_entries.into_iter().enumerate() {
                 let attr = vfs.getattr(de.ino).ok().map(|a| file_attr_to_fattr3(&a));
@@ -485,7 +487,7 @@ impl<T: VfsOps> NfsReadFileSystem for NfsAdapter<T> {
         let vfs = self.vfs.clone();
         let ino = id.as_u64();
         tokio::task::spawn_blocking(move || {
-            let target = vfs.readlink(ino).map_err(errno_to_nfsstat)?;
+            let target = vfs.readlink(ino).map_err(vfs_err_to_nfsstat)?;
             let bytes = target.as_os_str().as_encoded_bytes().to_vec();
             Ok(nfspath3(Opaque::owned(bytes)))
         })
@@ -514,7 +516,7 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
                 Nfs3Option::Some(m) => Some(m),
                 Nfs3Option::None => None,
             };
-            let attr = vfs.setattr(ino, size, mode).map_err(errno_to_nfsstat)?;
+            let attr = vfs.setattr(ino, size, mode).map_err(vfs_err_to_nfsstat)?;
             Ok(file_attr_to_fattr3(&attr))
         })
         .await
@@ -524,12 +526,16 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
         })
     }
 
+    /// Every write is passed straight to the VFS backing file, so it is
+    /// reported as `FILE_SYNC` regardless of the stability the client asked
+    /// for, and `commit` has nothing left to flush.
     async fn write(
         &self,
         id: &FileHandleU64,
         offset: u64,
         data: &[u8],
-    ) -> Result<fattr3, nfsstat3> {
+        _stable: stable_how,
+    ) -> Result<(fattr3, stable_how), nfsstat3> {
         let ino = id.as_u64();
         let data = data.to_vec();
 
@@ -545,7 +551,7 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
                 .await
                 .unwrap_or_else(|e| {
                     tracing::error!("NFS write handler panicked: {e}");
-                    Err(libc::EIO)
+                    Err(VfsError::Io)
                 });
 
             match write_result {
@@ -555,14 +561,14 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
                         .await
                         .unwrap_or_else(|e| {
                             tracing::error!("NFS handler panicked: {e}");
-                            Err(libc::EIO)
+                            Err(VfsError::Io)
                         })
-                        .map(|attr| file_attr_to_fattr3(&attr))
-                        .map_err(errno_to_nfsstat);
+                        .map(|attr| (file_attr_to_fattr3(&attr), stable_how::FILE_SYNC))
+                        .map_err(vfs_err_to_nfsstat);
                 }
                 // Evicted handle on the first try: fall through to reopen+retry.
-                Err(libc::EIO) if attempt == 0 => {}
-                Err(e) => return Err(errno_to_nfsstat(e)),
+                Err(VfsError::Io) if attempt == 0 => {}
+                Err(e) => return Err(vfs_err_to_nfsstat(e)),
             }
         }
         Err(nfsstat3::NFS3ERR_IO)
@@ -585,7 +591,7 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
             let name = &os_str_from_nfs_bytes(&name_bytes)?;
             let (file_attr, fh) = vfs
                 .create(parent_ino, name, mode)
-                .map_err(errno_to_nfsstat)?;
+                .map_err(vfs_err_to_nfsstat)?;
             vfs.release_write(fh);
             Ok((
                 FileHandleU64::new(file_attr.ino),
@@ -615,7 +621,7 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
                 tracing::warn!(
                     "create_exclusive failed: parent={parent_ino} name={name:?} errno={errno}"
                 );
-                errno_to_nfsstat(errno)
+                vfs_err_to_nfsstat(errno)
             })?;
             vfs.release_write(fh);
             Ok(FileHandleU64::new(file_attr.ino))
@@ -639,7 +645,7 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
             let name = &os_str_from_nfs_bytes(&name_bytes)?;
             let dir_attr = vfs
                 .mkdir(parent_ino, name, 0o755)
-                .map_err(errno_to_nfsstat)?;
+                .map_err(vfs_err_to_nfsstat)?;
             Ok((
                 FileHandleU64::new(dir_attr.ino),
                 file_attr_to_fattr3(&dir_attr),
@@ -662,7 +668,7 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
         let name_bytes = filename.0.as_ref().to_vec();
         tokio::task::spawn_blocking(move || {
             let name = &os_str_from_nfs_bytes(&name_bytes)?;
-            vfs.unlink(parent_ino, name).map_err(errno_to_nfsstat)
+            vfs.unlink(parent_ino, name).map_err(vfs_err_to_nfsstat)
         })
         .await
         .unwrap_or_else(|e| {
@@ -687,7 +693,7 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
             let from = os_str_from_nfs_bytes(&from_name)?;
             let to = os_str_from_nfs_bytes(&to_name)?;
             vfs.rename(from_parent, &from, to_parent, &to, 0)
-                .map_err(errno_to_nfsstat)
+                .map_err(vfs_err_to_nfsstat)
         })
         .await
         .unwrap_or_else(|e| {
@@ -704,5 +710,228 @@ impl<T: VfsOps> NfsFileSystem for NfsAdapter<T> {
         _attr: &sattr3,
     ) -> Result<(FileHandleU64, fattr3), nfsstat3> {
         Err(nfsstat3::NFS3ERR_NOTSUPP)
+    }
+
+    async fn commit(&self, _id: &FileHandleU64, _offset: u64, _count: u32) -> Result<(), nfsstat3> {
+        // Writes are always reported as `FILE_SYNC`, so there is no
+        // uncommitted data to flush.
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Mount helper (moved from lib.rs — issue #2576)
+// ---------------------------------------------------------------------------
+
+use crate::{Mode, MountConfig, VirtualFS, create_overlay};
+// `MountError::SudoRequired` is only referenced on the Linux mount path.
+#[cfg(target_os = "linux")]
+use crate::MountError;
+
+/// Mount via NFS, with optional writable overlay.
+///
+/// The overlay is retried once if the env hash mismatches (environment updated).
+#[cfg(feature = "nfs")]
+pub(crate) async fn mount_nfs(
+    vfs: VirtualFS,
+    config: &MountConfig,
+) -> anyhow::Result<NfsMountHandle> {
+    let read_only = matches!(config.mode, Mode::ReadOnly | Mode::ReadOnlyIfSupported);
+
+    let bind_port = 0u16;
+
+    let server_handle = match &config.mode {
+        Mode::Writable {
+            overlay_dir: Some(overlay_dir),
+        } => {
+            let overlay = create_overlay(
+                vfs,
+                overlay_dir,
+                &config.env_hash,
+                "nfs",
+                config.overlay_mismatch,
+            )?;
+            NfsAdapter::new(overlay).serve(bind_port).await?
+        }
+        Mode::Writable { overlay_dir: None } => {
+            anyhow::bail!(
+                "NFS writable mode requires an overlay directory. Use \
+                 MountConfig::new(..).with_writable(overlay_dir) or \
+                 MountConfig::new(..) for a read-only mount."
+            );
+        }
+        Mode::ReadOnly | Mode::ReadOnlyIfSupported => NfsAdapter::new(vfs).serve(bind_port).await?,
+    };
+
+    let port = server_handle.port();
+
+    // `soft` with a bounded timeout so a dead userspace NFS server (e.g. the
+    // sidecar crashed) surfaces EIO to clients instead of wedging them in
+    // uninterruptible D-state on every access, which a hard mount would. The
+    // server is always local, so the usual soft-mount data-loss caveat is moot:
+    // if it dies, the mount is gone regardless. timeo is in deciseconds.
+    let mut opts = format!(
+        "noacl,nolock,soft,timeo=100,retrans=3,vers=3,tcp,port={port},mountport={port},rsize=1048576"
+    );
+    if read_only {
+        opts.push_str(",actimeo=3600,ro");
+    } else {
+        opts.push_str(",wsize=1048576");
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let mnt = config.mount_point.display().to_string();
+        let status = tokio::process::Command::new("mount_nfs")
+            .args(["-o", &opts, "localhost:/", &mnt])
+            .status()
+            .await?;
+        if !status.success() {
+            server_handle.abort();
+            anyhow::bail!("NFS mount failed with exit status {status}");
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let mnt = config.mount_point.display().to_string();
+        // Probe passwordless sudo first — `mount -t nfs` needs CAP_SYS_ADMIN
+        // which isn't available in unprivileged user namespaces, so there's no
+        // userspace fallback we can reach for. Fail loudly instead of letting
+        // sudo prompt interactively (terrible UX in `pixi run`).
+        //
+        // TODO(bind-mount): investigate `unshare -Urm` + `mount --bind` as a
+        // rootless alternative transport on Linux. That would work in rootless
+        // containers where neither FUSE nor sudo is available.
+        let probe = tokio::process::Command::new("sudo")
+            .args(["-n", "true"])
+            .status()
+            .await;
+        match probe {
+            Ok(s) if s.success() => {}
+            _ => {
+                server_handle.abort();
+                return Err(MountError::SudoRequired.into());
+            }
+        }
+
+        let status = tokio::process::Command::new("sudo")
+            .args(["mount", "-t", "nfs", "-o", &opts, "localhost:/", &mnt])
+            .status()
+            .await?;
+        if !status.success() {
+            server_handle.abort();
+            anyhow::bail!("NFS mount failed with exit status {status}");
+        }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        server_handle.abort();
+        anyhow::bail!("NFS mount is not supported on this platform. Use ProjFS on Windows.");
+    }
+
+    // Only reachable on the NFS-capable targets; on other platforms the block
+    // above diverges, so gate the success tail to avoid unreachable-code errors.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        tracing::info!("mounted via NFS on {}", config.mount_point.display());
+
+        Ok(NfsMountHandle {
+            mount_point: config.mount_point.clone(),
+            server_handle,
+            unmounted: false,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::vfs_ops::FileAttr;
+    use std::time::{Duration, UNIX_EPOCH};
+
+    #[test]
+    fn errno_maps_to_expected_nfsstat() {
+        use crate::vfs_ops::VfsError as E;
+        assert_eq!(vfs_err_to_nfsstat(E::NotFound), nfsstat3::NFS3ERR_NOENT);
+        assert_eq!(
+            vfs_err_to_nfsstat(E::PermissionDenied),
+            nfsstat3::NFS3ERR_ACCES
+        );
+        assert_eq!(
+            vfs_err_to_nfsstat(E::NotADirectory),
+            nfsstat3::NFS3ERR_NOTDIR
+        );
+        assert_eq!(vfs_err_to_nfsstat(E::IsADirectory), nfsstat3::NFS3ERR_ISDIR);
+        assert_eq!(vfs_err_to_nfsstat(E::ReadOnly), nfsstat3::NFS3ERR_ROFS);
+        assert_eq!(
+            vfs_err_to_nfsstat(E::AlreadyExists),
+            nfsstat3::NFS3ERR_EXIST
+        );
+        assert_eq!(vfs_err_to_nfsstat(E::NotEmpty), nfsstat3::NFS3ERR_NOTEMPTY);
+        assert_eq!(vfs_err_to_nfsstat(E::NoSpace), nfsstat3::NFS3ERR_NOSPC);
+        // The traversal guard's InvalidArgument now maps to a distinct status.
+        assert_eq!(
+            vfs_err_to_nfsstat(E::InvalidArgument),
+            nfsstat3::NFS3ERR_INVAL
+        );
+        assert_eq!(vfs_err_to_nfsstat(E::Io), nfsstat3::NFS3ERR_IO);
+        // errno round-trips through VfsError.
+        assert_eq!(E::from_errno(libc::ENOENT), E::NotFound);
+        assert_eq!(E::from_errno(-12345), E::Io);
+    }
+
+    #[test]
+    fn system_time_converts_and_clamps_pre_epoch() {
+        let t = system_time_to_nfstime(UNIX_EPOCH + Duration::new(1_700_000_000, 500));
+        assert_eq!(t.seconds, 1_700_000_000);
+        assert_eq!(t.nseconds, 500);
+        // Pre-epoch times can't be represented; clamp to zero rather than panic.
+        let pre = system_time_to_nfstime(UNIX_EPOCH - Duration::from_secs(10));
+        assert_eq!(pre.seconds, 0);
+        assert_eq!(pre.nseconds, 0);
+    }
+
+    #[test]
+    fn file_attr_maps_kind_mode_and_size() {
+        let mk = |kind, perm| FileAttr {
+            ino: 42,
+            size: 1234,
+            blocks: 3,
+            atime: UNIX_EPOCH,
+            mtime: UNIX_EPOCH,
+            ctime: UNIX_EPOCH,
+            kind,
+            perm,
+            nlink: 1,
+            uid: 501,
+            gid: 20,
+        };
+
+        let reg = file_attr_to_fattr3(&mk(FileKind::RegularFile, 0o644));
+        assert_eq!(reg.type_, ftype3::NF3REG);
+        assert_eq!(reg.mode, 0o644);
+        assert_eq!(reg.size, 1234);
+        assert_eq!(reg.fileid, 42);
+        assert_eq!(reg.used, 3 * 512);
+
+        assert_eq!(
+            file_attr_to_fattr3(&mk(FileKind::Directory, 0o755)).type_,
+            ftype3::NF3DIR
+        );
+        assert_eq!(
+            file_attr_to_fattr3(&mk(FileKind::Symlink, 0o777)).type_,
+            ftype3::NF3LNK
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn os_str_from_nfs_bytes_roundtrips_arbitrary_bytes() {
+        use std::os::unix::ffi::OsStrExt;
+        // On Unix, filenames are arbitrary byte sequences.
+        let name = os_str_from_nfs_bytes(b"lib\xff.so").unwrap();
+        assert_eq!(name.as_bytes(), b"lib\xff.so");
     }
 }

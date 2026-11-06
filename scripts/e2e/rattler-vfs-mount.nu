@@ -89,7 +89,7 @@ def start_and_wait [lock: string, mount: string, transport: string, overlay_args
     # `terminated by signal` as a fatal error from the spawned job.
     let fs_job = job spawn {
         try {
-            ^rattler mount $lock $mount --transport $transport ...$overlay_args out+err> $log
+            ^rattler mount $lock --mount-point $mount --transport $transport ...$overlay_args out+err> $log
         } catch { }
     }
 

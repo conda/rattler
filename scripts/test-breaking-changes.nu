@@ -96,6 +96,9 @@ assert equal (
     select-changed-crates $current_metadata $baseline_metadata ["Cargo.toml"] ["shared"]
 ) ["a"]
 assert equal (
+    select-changed-crates $current_metadata $baseline_metadata ["crates/proc/src/lib.rs"]
+) []
+assert equal (
     select-changed-crates $current_metadata $baseline_metadata ["Cargo.toml"] [] true
 ) ["a"]
 assert equal (

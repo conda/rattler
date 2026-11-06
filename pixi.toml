@@ -45,12 +45,12 @@ rattler = "cargo run --bin rattler --release --"
 doc = "RUSTDOCFLAGS='-Dwarnings -Wunreachable-pub' cargo doc --no-deps --all --all-features"
 
 [dependencies]
-cxx-compiler = "~=1.11.0"
+cxx-compiler = "~=2.0.0"
 openssl = "~=3.1"
 make = "~=4.3"
 pkg-config = "~=0.29.2"
 rust = "~=1.99.0"
-cmake = "~=3.31.8"
+cmake = "~=4.4.4"
 cargo-nextest = ">=0.9.91,<0.10"
 # for rust-analyzer
 rust-src = "~=1.99.0"
@@ -58,7 +58,7 @@ cargo-insta = ">=1.48.0,<2"
 go = ">=1.27.1,<2"
 
 [target.linux-64.dependencies]
-clang = ">=18.1.8,<19.0"
+clang = ">=23.1.3,<23.2"
 compilers = ">=1.6.0"
 mold = ">=2.33.0,<3.0"
 
@@ -77,8 +77,6 @@ lefthook = ">=2.0.11,<3"
 actionlint = ">=1.7.7,<2"
 zizmor = ">=1.29.0,<2"
 shellcheck = ">=0.11.0,<0.12"
-[feature.lint.target.unix.dependencies]
-vouch = "*"
 
 [feature.lint.tasks]
 actionlint = { cmd = "actionlint", env = { SHELLCHECK_OPTS = "-e SC2086 -e SC2046 -e SC2028" } }
@@ -102,6 +100,16 @@ cargo-clippy = "cargo clippy --all-targets --workspace -- -D warnings -Dclippy::
 
 [environments]
 lint = { features = ["lint"], solve-group = "default" }
+
+[feature.vouch]
+platforms = ["linux-64"]
+
+[feature.vouch.dependencies]
+vouch = ">=1.5.0,<2"
+
+[environments.vouch]
+features = ["vouch"]
+no-default-feature = true
 
 #------------------------------
 # Breaking API change detection

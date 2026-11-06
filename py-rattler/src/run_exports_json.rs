@@ -1,4 +1,6 @@
-use pyo3::{Bound, Py, PyAny, PyErr, PyResult, Python, pyclass, pymethods};
+use pyo3::{
+    Bound, Py, PyAny, PyErr, PyResult, Python, exceptions::PyValueError, pyclass, pymethods,
+};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::package::{PackageFile, RunExportsJson};
 use rattler_package_streaming::seek::read_package_file;
@@ -193,5 +195,17 @@ impl PyRunExportsJson {
     #[setter]
     pub fn set_strong_constrains(&mut self, strong_constrains: Vec<String>) {
         self.inner.strong_constrains = strong_constrains;
+    }
+
+    /// Test if all fields are empty
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    /// Returns a JSON string representation of the object.
+    pub fn to_json(&self) -> PyResult<String> {
+        serde_json::to_string_pretty(&self.inner).map_err(|e| {
+            PyValueError::new_err(format!("Failed to serialize RunExportsJson to JSON: {e}"))
+        })
     }
 }

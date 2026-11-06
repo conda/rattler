@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.58.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.58.1...rattler_conda_types-v0.58.2) - 2026-11-04
+
+### Added
+
+- *(py-rattler)* expose LinkJson and NoArchLinks models for package entrypoints ([#3077](https://github.com/conda/rattler/pull/3077))
+
 ## [0.58.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.58.0...rattler_conda_types-v0.58.1) - 2026-10-30
 
 ### Fixed

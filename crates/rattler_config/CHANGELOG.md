@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1](https://github.com/conda/rattler/compare/rattler_config-v0.12.0...rattler_config-v0.12.1) - 2026-11-04
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.12.0](https://github.com/conda/rattler/compare/rattler_config-v0.11.0...rattler_config-v0.12.0) - 2026-11-02
+
+### Fixed
+
+- *(config)* reject exclude-newer url exemptions with other fields and keep layout when editing exclude-newer ([#3082](https://github.com/conda/rattler/pull/3082))
+
+### Other
+
+- *(config)* simplify the exclude-newer document edit ([#3085](https://github.com/conda/rattler/pull/3085))
+
 ## [0.11.0](https://github.com/conda/rattler/compare/rattler_config-v0.10.0...rattler_config-v0.11.0) - 2026-10-30
 
 ### Fixed
