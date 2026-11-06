@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2](https://github.com/conda/rattler/compare/rattler_vfs-v0.2.1...rattler_vfs-v0.2.2) - 2026-11-06
+
+### Added
+
+- *(exec)* mount temporary environments via rattler_vfs ([#2618](https://github.com/conda/rattler/pull/2618))
+
 ## [0.2.1](https://github.com/conda/rattler/compare/rattler_vfs-v0.2.0...rattler_vfs-v0.2.1) - 2026-11-04
 
 ### Other

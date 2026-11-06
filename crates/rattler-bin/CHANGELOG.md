@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.16](https://github.com/conda/rattler/compare/rattler-bin-v0.5.15...rattler-bin-v0.5.16) - 2026-11-06
+
+### Added
+
+- *(rattler_solve)* add version-first channel priority, matching conda's disabled sort order ([#2974](https://github.com/conda/rattler/pull/2974))
+- *(exec)* mount temporary environments via rattler_vfs ([#2618](https://github.com/conda/rattler/pull/2618))
+
 ## [0.5.15](https://github.com/conda/rattler/compare/rattler-bin-v0.5.14...rattler-bin-v0.5.15) - 2026-11-04
 
 ### Other
