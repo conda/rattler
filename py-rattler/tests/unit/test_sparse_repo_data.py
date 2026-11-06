@@ -63,17 +63,17 @@ def test_from_bytes_close_keeps_loaded_records_alive() -> None:
 @pytest.mark.parametrize("data", ["{}", bytearray(b"{}"), memoryview(b"{}"), {}, None])
 def test_from_bytes_rejects_non_bytes_input(data: object) -> None:
     with pytest.raises(TypeError, match="data"):
-        SparseRepoData.from_bytes(Channel("https://example.org/channel"), "linux-64", data)  # type: ignore[arg-type]
+        SparseRepoData.from_bytes(Channel("https://example.org/channel"), "linux-64", data)  # ty: ignore[invalid-argument-type]
 
 
 def test_from_bytes_rejects_invalid_channel_type() -> None:
     with pytest.raises(TypeError, match="channel"):
-        SparseRepoData.from_bytes("channel", "linux-64", b"{}")  # type: ignore[arg-type]
+        SparseRepoData.from_bytes("channel", "linux-64", b"{}")  # ty: ignore[invalid-argument-type]
 
 
 def test_from_bytes_rejects_invalid_subdir_type() -> None:
     with pytest.raises(TypeError, match="subdir"):
-        SparseRepoData.from_bytes(Channel("https://example.org/channel"), 1, b"{}")  # type: ignore[arg-type]
+        SparseRepoData.from_bytes(Channel("https://example.org/channel"), 1, b"{}")  # ty: ignore[invalid-argument-type]
 
 
 @pytest.mark.parametrize("data", [b"", b"{", b"\xff"])
