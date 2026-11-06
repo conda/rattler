@@ -2333,19 +2333,13 @@ mod projfs_tests {
     fn tree() -> MetadataTree {
         let (mut nodes, mut dirs, mut files) = new_empty_tree();
         let top = MetadataNode::new_virtual_file("top.txt".into(), 0, b"top".to_vec());
-        upsert_file_node(
-            top,
-            0,
-            Path::new(".").join("top.txt"),
-            &mut nodes,
-            &mut files,
-        );
+        upsert_file_node(top, 0, (0, "top.txt".into()), &mut nodes, &mut files);
         let pkg = ensure_directory(Path::new(".").join("pkg"), 0, &mut nodes, &mut dirs);
         let hello = MetadataNode::new_virtual_file("hello.txt".into(), pkg, b"hello".to_vec());
         upsert_file_node(
             hello,
             pkg,
-            Path::new(".").join("pkg").join("hello.txt"),
+            (pkg, "hello.txt".into()),
             &mut nodes,
             &mut files,
         );

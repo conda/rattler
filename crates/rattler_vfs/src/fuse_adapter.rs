@@ -122,7 +122,9 @@ impl<T: VfsOps> FuseAdapter<T> {
         }
     }
 
-    /// Mark the mounted tree as immutable, see [`FuseAdapter::read_only`].
+    /// Mark the mounted tree as immutable. The kernel then skips `OPEN` and
+    /// `RELEASE` for regular files (when passthrough isn't in use), which a
+    /// writable mount can't do because writes need handles.
     pub fn with_read_only(mut self, read_only: bool) -> Self {
         self.read_only = read_only;
         self
