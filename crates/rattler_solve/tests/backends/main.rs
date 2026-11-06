@@ -1685,6 +1685,15 @@ mod resolvo {
     fn test_additional_packages() {
         crate::solver_case_tests::solve_additional_packages::<rattler_solve::resolvo::Solver>();
     }
+
+    /// Not part of `solver_backend_tests!` because libsolv does not support
+    /// version-first channel priority.
+    #[test]
+    fn test_additional_packages_version_first() {
+        crate::solver_case_tests::solve_additional_packages_version_first::<
+            rattler_solve::resolvo::Solver,
+        >();
+    }
 }
 
 #[derive(Default)]

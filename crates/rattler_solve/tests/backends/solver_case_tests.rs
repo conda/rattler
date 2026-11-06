@@ -397,3 +397,43 @@ pub(super) fn solve_additional_packages<T: SolverImpl + Default>() {
             .expect_absent([("foo", "3.0")]),
     ]);
 }
+
+/// Under version-first channel priority, an additional record ranks with the
+/// highest-priority tier that contains its package. A version tie with a
+/// record from that tier is broken by the build number, while a record from a
+/// lower-priority tier loses the tie even with a higher build number. This
+/// matches conda's behavior for disabled channel priority.
+///
+/// N.B. Only the resolvo backend supports version-first channel priority.
+pub(super) fn solve_additional_packages_version_first<T: SolverImpl + Default>() {
+    let foo_installed = PackageBuilder::new("foo")
+        .version("2.0")
+        .build_string("1")
+        .build_number(1)
+        .channel("removed")
+        .build();
+    let foo_current = PackageBuilder::new("foo")
+        .version("2.0")
+        .build_string("0")
+        .build_number(0)
+        .channel("current")
+        .build();
+    let foo_lower = PackageBuilder::new("foo")
+        .version("2.0")
+        .build_string("5")
+        .build_number(5)
+        .channel("lower")
+        .build();
+
+    SolverCase::new(
+        "version-first priority ranks additional packages with the tier of their package",
+    )
+    .repository([foo_current.clone()])
+    .repository([foo_lower.clone()])
+    .specs(["foo"])
+    .channel_priority(ChannelPriority::VersionFirst)
+    .additional_packages([foo_installed.clone()])
+    .expect_present([&foo_installed])
+    .expect_absent([&foo_current, &foo_lower])
+    .run::<T>();
+}
