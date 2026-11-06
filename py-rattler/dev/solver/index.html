@@ -4368,6 +4368,8 @@ that should be present in the environment.</p>
          these records, and they never cause a channel record to be removed.
        - with <code>ChannelPriority.Flexible</code>, they compete with records from the same channel
        - with <code>ChannelPriority.Disabled</code>, they compete with all records
+       - with <code>ChannelPriority.VersionFirst</code>, they compete with all records and
+         rank with that channel when versions tie
      A record from a lower-priority channel therefore competes with higher-priority
      channels. For example, an installed <code>foo 3.0</code> from a lower-priority channel is selected
      over <code>foo 2.0</code> from a higher-priority channel</p>
@@ -4402,10 +4404,8 @@ that should be present in the environment.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>(Default = ChannelPriority.Strict) When <code>ChannelPriority.Strict</code>
-     the channel that the package is first found in will be used as
-     the only channel for that package. When <code>ChannelPriority.Disabled</code>
-     it will search for every package in every channel.</p>
+                <p>(Default = ChannelPriority.Strict) How the order of the
+     channels affects the solve, see <code>ChannelPriority</code> for available modes.</p>
               </div>
             </td>
             <td>
@@ -4760,6 +4760,8 @@ repodata.</p>
          these records, and they never cause a channel record to be removed.
        - with <code>ChannelPriority.Flexible</code>, they compete with records from the same channel
        - with <code>ChannelPriority.Disabled</code>, they compete with all records
+       - with <code>ChannelPriority.VersionFirst</code>, they compete with all records and
+         rank with that channel when versions tie
      A record from a lower-priority channel therefore competes with higher-priority
      channels. For example, an installed <code>foo 3.0</code> from a lower-priority channel is selected
      over <code>foo 2.0</code> from a higher-priority channel</p>
@@ -4794,10 +4796,8 @@ repodata.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>(Default = ChannelPriority.Strict) When <code>ChannelPriority.Strict</code>
-     the channel that the package is first found in will be used as
-     the only channel for that package. When <code>ChannelPriority.Disabled</code>
-     it will search for every package in every channel.</p>
+                <p>(Default = ChannelPriority.Strict) How the order of the
+     channels affects the solve, see <code>ChannelPriority</code> for available modes.</p>
               </div>
             </td>
             <td>
