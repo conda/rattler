@@ -145,18 +145,7 @@ pub fn validate_package_directory(
         Ok(paths) => paths,
     };
 
-    // Archive hashes cannot detect changes to the wheel conversion layout.
-    match WheelJson::from_package_directory(package_dir) {
-        Ok(wheel) if wheel.conversion_version != CONVERSION_VERSION => {
-            return Err(PackageValidationError::OutdatedWheelConversion {
-                found: wheel.conversion_version,
-                expected: CONVERSION_VERSION,
-            });
-        }
-        Ok(_) => {}
-        Err(e) if e.kind() == ErrorKind::NotFound => {}
-        Err(e) => return Err(PackageValidationError::ReadWheelJsonError(e)),
-    }
+    check_wheel_conversion(package_dir)?;
 
     // In Skip mode, only validate that index.json and paths.json exist and are readable.
     // Skip all file validation checks.
@@ -173,6 +162,50 @@ pub fn validate_package_directory(
 
 /// Determine whether the files in the specified directory match wat is expected
 /// according to the passed in [`PathsJson`].
+/// Archive hashes cannot detect changes to the wheel conversion layout, so a
+/// package converted from a wheel by an older layout is invalid.
+fn check_wheel_conversion(package_dir: &Path) -> Result<(), PackageValidationError> {
+    match WheelJson::from_package_directory(package_dir) {
+        Ok(wheel) if wheel.conversion_version != CONVERSION_VERSION => {
+            Err(PackageValidationError::OutdatedWheelConversion {
+                found: wheel.conversion_version,
+                expected: CONVERSION_VERSION,
+            })
+        }
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(PackageValidationError::ReadWheelJsonError(e)),
+    }
+}
+
+/// Like [`validate_package_directory`], but in [`ValidationMode::Skip`] only
+/// checks that the package's file list exists instead of parsing it, and
+/// returns no [`PathsJson`].
+///
+/// Parsing `paths.json` is a large part of validating a cached package (it
+/// lists, and hex-decodes a hash for, every file), and in skip mode nothing
+/// uses the result unless the caller needs the file list, which it can read
+/// itself. The package cache uses this so that consumers that don't need the
+/// file list (or read it elsewhere) don't pay for parsing it.
+pub(crate) fn validate_package_directory_lazily(
+    package_dir: &Path,
+    mode: ValidationMode,
+) -> Result<(IndexJson, Option<PathsJson>), PackageValidationError> {
+    if mode != ValidationMode::Skip {
+        let (index_json, paths_json) = validate_package_directory(package_dir, mode)?;
+        return Ok((index_json, Some(paths_json)));
+    }
+
+    let index_json = IndexJson::from_package_directory(package_dir)
+        .map_err(PackageValidationError::ReadIndexJsonError)?;
+    let info = package_dir.join("info");
+    if !info.join("paths.json").is_file() && !info.join("files").is_file() {
+        return Err(PackageValidationError::MetadataMissing);
+    }
+    check_wheel_conversion(package_dir)?;
+    Ok((index_json, None))
+}
+
 pub fn validate_package_directory_from_paths(
     package_dir: &Path,
     paths: &PathsJson,
@@ -323,6 +356,7 @@ mod test {
     use super::{
         PackageEntryValidationError, PackageValidationError, ValidationMode,
         validate_package_directory, validate_package_directory_from_paths,
+        validate_package_directory_lazily,
     };
 
     #[rstest]
@@ -434,6 +468,39 @@ mod test {
                 PackageEntryValidationError::ExpectedSymlink
             )) if path == entry.relative_path
         );
+    }
+
+    /// In skip mode the file list is only checked for existence, not parsed;
+    /// other modes still return it.
+    #[test]
+    fn test_lazy_validation() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let info = temp_dir.path().join("info");
+        std::fs::create_dir_all(&info).unwrap();
+        std::fs::write(
+            info.join("index.json"),
+            r#"{"name": "foo", "version": "1.0", "build": "0", "build_number": 0}"#,
+        )
+        .unwrap();
+
+        // No file list at all.
+        assert_matches!(
+            validate_package_directory_lazily(temp_dir.path(), ValidationMode::Skip),
+            Err(PackageValidationError::MetadataMissing)
+        );
+
+        std::fs::write(
+            info.join("paths.json"),
+            r#"{"paths": [], "paths_version": 1}"#,
+        )
+        .unwrap();
+        let (index, paths) =
+            validate_package_directory_lazily(temp_dir.path(), ValidationMode::Skip).unwrap();
+        assert_eq!(index.name.as_normalized(), "foo");
+        assert!(paths.is_none());
+        let (_, paths) =
+            validate_package_directory_lazily(temp_dir.path(), ValidationMode::Fast).unwrap();
+        assert!(paths.unwrap().paths.is_empty());
     }
 
     #[test]
