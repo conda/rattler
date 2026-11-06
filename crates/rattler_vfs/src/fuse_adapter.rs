@@ -444,6 +444,24 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
         }
     }
 
+    fn ioctl(
+        &self,
+        _req: &Request,
+        _ino: INodeNo,
+        _fh: FileHandle,
+        _flags: fuser::IoctlFlags,
+        _cmd: u32,
+        _in_data: &[u8],
+        _out_size: u32,
+        reply: fuser::ReplyIoctl,
+    ) {
+        // Package files are never terminals or devices. Programs probe every
+        // file they open (Python's `open()` asks `isatty()`), and the kernel
+        // forwards each probe here; answer it directly instead of through
+        // fuser's default, which logs a warning per call.
+        reply.error(Errno::ENOTTY);
+    }
+
     fn getxattr(
         &self,
         _req: &Request,
