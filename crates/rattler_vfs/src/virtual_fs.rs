@@ -10,7 +10,7 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, OnceLock},
-    time::{SystemTime, UNIX_EPOCH},
+    time::UNIX_EPOCH,
 };
 
 use crate::package_index::ScanResult;
@@ -535,11 +535,6 @@ impl VirtualFS {
                         // Override size if prefix replacement changes the file length
                         if let Some(computed) = file.computed_size {
                             attr.size = computed;
-                        } else if file.prefix_placeholder.is_none()
-                            && file.path_type != PathType::SoftLink
-                            && let Some(mtime) = self.pyc_source_mtime(file, &attr)
-                        {
-                            attr.mtime = mtime;
                         }
                         attr
                     }
@@ -550,84 +545,6 @@ impl VirtualFS {
                 }
             }
         }
-    }
-
-    /// The modification time to report for a Python source file so that the
-    /// bytecode the package ships for it in `__pycache__` is accepted.
-    ///
-    /// Python validates a timestamp-based `.pyc` by comparing the source
-    /// file's size and (truncated) mtime against the values recorded in the
-    /// `.pyc` header. Packages regularly ship `.pyc` files whose recorded mtime
-    /// is a second or two off from the mtime the `.py` file ends up with after
-    /// extraction (archive timestamp rounding), e.g. the Python standard library. On a
-    /// writable prefix Python rewrites such a `.pyc` once; on a read-only mount
-    /// it cannot, so it would recompile those modules on every start. Within a
-    /// small tolerance, and only when the size matches too, the `.pyc` was
-    /// compiled from this very source at build time, so report the mtime it
-    /// expects.
-    ///
-    /// Returns `None` when no adjustment is needed or no matching `.pyc`
-    /// exists.
-    fn pyc_source_mtime(&self, file: &FileNode, attr: &FileAttr) -> Option<SystemTime> {
-        /// Maximum mtime difference (in seconds) attributed to timestamp
-        /// rounding rather than a genuinely different source.
-        const TOLERANCE_SECS: i64 = 2;
-
-        let name = file.file_name.as_encoded_bytes();
-        let stem = name.strip_suffix(b".py")?;
-        if stem.is_empty() {
-            return None;
-        }
-        let source_secs =
-            i64::try_from(attr.mtime.duration_since(UNIX_EPOCH).ok()?.as_secs()).ok()?;
-        // CPython stores the low 32 bits of both values.
-        let source_mtime32 = source_secs as u32;
-        let source_size32 = attr.size as u32;
-
-        let pycache = self
-            .find_child(file.parent, OsStr::new("__pycache__"))
-            .ok()??;
-        let pycache_dir = self.metadata[pycache].as_directory()?;
-        for &candidate in &pycache_dir.children {
-            let Some(pyc) = self.metadata[candidate].as_file() else {
-                continue;
-            };
-            let pyc_name = pyc.file_name.as_encoded_bytes();
-            let matches_name = pyc_name
-                .strip_prefix(stem)
-                .is_some_and(|rest| rest.starts_with(b".") && rest.ends_with(b".pyc"));
-            if !matches_name || pyc.virtual_content.is_some() || pyc.prefix_placeholder.is_some() {
-                continue;
-            }
-            // `(flags, source mtime, source size)`, from the package index
-            // when available.
-            let header = if let Some(header) = pyc.stat.as_ref().and_then(|stat| stat.pyc_header) {
-                header
-            } else {
-                let Ok(bytes) = read_leading_bytes(&self._getpath(pyc), 16) else {
-                    continue;
-                };
-                let Some(bytes) = bytes.get(..16) else {
-                    continue;
-                };
-                let word = |i: usize| u32::from_le_bytes(bytes[i..i + 4].try_into().unwrap());
-                (word(4), word(8), word(12))
-            };
-            // flags == 0: timestamp-based pyc (not hash-based, PEP 552).
-            let (flags, pyc_mtime32, pyc_size32) = header;
-            if flags != 0 || pyc_size32 != source_size32 {
-                continue;
-            }
-            if pyc_mtime32 == source_mtime32 {
-                return None;
-            }
-            let diff = i64::from(pyc_mtime32.wrapping_sub(source_mtime32) as i32);
-            if diff.abs() <= TOLERANCE_SECS {
-                let secs = u64::try_from(source_secs + diff).ok()?;
-                return Some(UNIX_EPOCH + std::time::Duration::from_secs(secs));
-            }
-        }
-        None
     }
 
     // -- Testable inner methods --
@@ -1181,87 +1098,6 @@ mod tests {
                 .unwrap_err(),
             VfsError::NotFound
         );
-    }
-
-    /// Write a timestamp-based `.pyc` header recording `mtime` and `size`.
-    fn write_pyc(path: &Path, mtime: u32, size: u32) {
-        let mut header = vec![0x42, 0x42, 0x0d, 0x0a]; // magic
-        header.extend_from_slice(&0u32.to_le_bytes()); // flags
-        header.extend_from_slice(&mtime.to_le_bytes());
-        header.extend_from_slice(&size.to_le_bytes());
-        header.extend_from_slice(b"code");
-        fs::write(path, header).unwrap();
-    }
-
-    fn set_mtime(path: &Path, secs: u64) {
-        File::options()
-            .write(true)
-            .open(path)
-            .unwrap()
-            .set_modified(UNIX_EPOCH + std::time::Duration::from_secs(secs))
-            .unwrap();
-    }
-
-    fn mtime_secs(attr: &FileAttr) -> u64 {
-        attr.mtime.duration_since(UNIX_EPOCH).unwrap().as_secs()
-    }
-
-    #[test]
-    fn test_py_mtime_matches_shipped_pyc() {
-        let tmpdir = TempDir::new().unwrap();
-        let pkg = tmpdir.path().join("pkg");
-        fs::create_dir_all(pkg.join("__pycache__")).unwrap();
-        let source = b"print('hi')\n";
-        let size = source.len() as u32;
-        let t = 1_700_000_000u64;
-
-        // Off by one second (archive rounding): reported as the pyc expects.
-        fs::write(pkg.join("near.py"), source).unwrap();
-        set_mtime(&pkg.join("near.py"), t);
-        write_pyc(
-            &pkg.join("__pycache__/near.cpython-312.pyc"),
-            (t - 1) as u32,
-            size,
-        );
-        // Far off: a genuinely different source, left alone.
-        fs::write(pkg.join("far.py"), source).unwrap();
-        set_mtime(&pkg.join("far.py"), t);
-        write_pyc(
-            &pkg.join("__pycache__/far.cpython-312.pyc"),
-            (t - 100) as u32,
-            size,
-        );
-        // Size differs: left alone.
-        fs::write(pkg.join("resized.py"), source).unwrap();
-        set_mtime(&pkg.join("resized.py"), t);
-        write_pyc(
-            &pkg.join("__pycache__/resized.cpython-312.pyc"),
-            (t - 1) as u32,
-            size + 1,
-        );
-        // No pyc at all.
-        fs::write(pkg.join("plain.py"), source).unwrap();
-        set_mtime(&pkg.join("plain.py"), t);
-
-        let vfs = vfs_over(
-            tmpdir.path(),
-            vec![
-                plain_entry("pkg/near.py"),
-                plain_entry("pkg/__pycache__/near.cpython-312.pyc"),
-                plain_entry("pkg/far.py"),
-                plain_entry("pkg/__pycache__/far.cpython-312.pyc"),
-                plain_entry("pkg/resized.py"),
-                plain_entry("pkg/__pycache__/resized.cpython-312.pyc"),
-                plain_entry("pkg/plain.py"),
-            ],
-        );
-        assert_eq!(mtime_secs(&resolve(&vfs, "pkg/near.py").unwrap()), t - 1);
-        assert_eq!(mtime_secs(&resolve(&vfs, "pkg/far.py").unwrap()), t);
-        assert_eq!(mtime_secs(&resolve(&vfs, "pkg/resized.py").unwrap()), t);
-        assert_eq!(mtime_secs(&resolve(&vfs, "pkg/plain.py").unwrap()), t);
-        // getattr agrees with lookup.
-        let near = resolve(&vfs, "pkg/near.py").unwrap();
-        assert_eq!(mtime_secs(&vfs.do_getattr(near.ino).unwrap()), t - 1);
     }
 
     // --- lookup tests ---

@@ -91,6 +91,11 @@ pub struct Opt {
     /// moderately sized environments that are only run a handful of times;
     /// for environments that are reused often, the default on-disk install
     /// is faster.
+    ///
+    /// Like an installed environment, the mount is writable and what programs
+    /// write into it persists across runs (kept in an overlay next to the
+    /// mount); `--force-reinstall` discards it. A run started while another
+    /// run of the same environment is active gets a read-only view.
     #[clap(long)]
     pub dematerialized: bool,
 }
@@ -333,7 +338,7 @@ async fn create_exec_prefix(
             package_cache: &package_cache,
             client,
             state_dir: &state_dir,
-            env_hash: &env_hash,
+            fresh: force_reinstall,
         })
         .await?;
         return Ok((mount.mount_point.clone(), Some(mount)));
@@ -651,7 +656,8 @@ struct MountPrefixOptions<'a> {
     client: LazyClient,
     /// Directory holding the environment's state and mount point(s).
     state_dir: &'a Path,
-    env_hash: &'a str,
+    /// Discard what earlier runs wrote into the environment.
+    fresh: bool,
 }
 
 /// Mounts `lockfile` below `state_dir` via `rattler_vfs`, returning the live
@@ -663,7 +669,7 @@ async fn mount_prefix(options: MountPrefixOptions<'_>) -> miette::Result<ExecMou
         package_cache,
         client,
         state_dir,
-        env_hash,
+        fresh,
     } = options;
     let (mount_point, lock, ephemeral) = claim_mount_point(state_dir)?;
 
@@ -678,26 +684,67 @@ async fn mount_prefix(options: MountPrefixOptions<'_>) -> miette::Result<ExecMou
     // This has to happen before creating the directory: a dead FUSE mount
     // can't even be `stat`ed (ENOTCONN), so creating it would fail.
     clear_stale_mount(&mount_point);
+
+    // The environment is writable, like an installed one: what programs
+    // write (Python rewriting stale bytecode, `pip install`, ...) persists
+    // across runs. On ProjFS the mount point itself holds those writes;
+    // elsewhere they go to an overlay next to it. A run that mounts at a
+    // private mount point (because another run holds the shared one) can't
+    // share the overlay and gets a read-only view instead.
+    let overlay_dir = state_dir.join("overlay");
+    if fresh && !ephemeral {
+        discard_writes(&mount_point, &overlay_dir);
+    }
     std::fs::create_dir_all(&mount_point)
         .into_diagnostic()
         .context("failed to create mount point")?;
-
-    // ProjFS on Windows has no read-only mode, so ask for read-only where it is
-    // supported and let it fall through to writable on Windows.
-    let config = MountConfig::new(mount_point.clone(), Transport::best(), env_hash.to_string())
-        .with_mode(Mode::ReadOnlyIfSupported);
+    let mode = if ephemeral || cfg!(windows) {
+        // ProjFS has no read-only mode and falls through to writable.
+        Mode::ReadOnlyIfSupported
+    } else {
+        Mode::Writable {
+            overlay_dir: Some(overlay_dir.clone()),
+        }
+    };
+    // Identify the overlay by the packages it was made for, not the specs, so
+    // a re-solve that picks different packages starts from a clean overlay.
+    let env_hash = rattler_vfs::compute_env_hash(lockfile, DEFAULT_ENVIRONMENT_NAME, platform)
+        .map_err(|e| miette::miette!("failed to hash environment: {e}"))?;
+    let config = MountConfig::new(mount_point.clone(), Transport::best(), env_hash).with_mode(mode);
 
     tracing::info!("mounting environment at {}", mount_point.display());
-    let handle = build_and_mount_with_client(
-        lockfile,
-        DEFAULT_ENVIRONMENT_NAME,
-        platform,
-        package_cache,
-        client,
-        &config,
-    )
-    .await
-    .map_err(|e| miette::miette!("failed to mount environment: {e}"))?;
+    let mut retried = false;
+    let handle = loop {
+        match build_and_mount_with_client(
+            lockfile,
+            DEFAULT_ENVIRONMENT_NAME,
+            platform,
+            package_cache,
+            client.clone(),
+            &config,
+        )
+        .await
+        {
+            Ok(handle) => break handle,
+            // The overlay holds writes made on top of other packages: they
+            // could shadow files of the new ones, so start over without them.
+            Err(e)
+                if !retried
+                    && matches!(
+                        e.downcast_ref::<rattler_vfs::MountError>(),
+                        Some(rattler_vfs::MountError::OverlayEnvHashMismatch { .. })
+                    ) =>
+            {
+                tracing::info!("environment changed; discarding its earlier writes");
+                discard_writes(&mount_point, &overlay_dir);
+                std::fs::create_dir_all(&mount_point)
+                    .into_diagnostic()
+                    .context("failed to create mount point")?;
+                retried = true;
+            }
+            Err(e) => return Err(miette::miette!("failed to mount environment: {e}")),
+        }
+    };
 
     Ok(ExecMount {
         handle: Some(handle),
@@ -705,6 +752,27 @@ async fn mount_prefix(options: MountPrefixOptions<'_>) -> miette::Result<ExecMou
         lock: Some(lock),
         ephemeral,
     })
+}
+
+/// Remove what earlier runs wrote into the environment (it must not be
+/// mounted): the overlay, or on `ProjFS` the mount point holding the writes.
+fn discard_writes(mount_point: &Path, overlay_dir: &Path) {
+    #[cfg(windows)]
+    let removed = {
+        let _ = overlay_dir;
+        rattler_vfs::remove_projfs_root(mount_point).map_err(std::io::Error::other)
+    };
+    #[cfg(not(windows))]
+    let removed = {
+        let _ = mount_point;
+        match std::fs::remove_dir_all(overlay_dir) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            result => result,
+        }
+    };
+    if let Err(e) = removed {
+        tracing::warn!("failed to discard earlier writes to the environment: {e}");
+    }
 }
 
 fn parse_specs(raw: &[String]) -> miette::Result<Vec<MatchSpec>> {

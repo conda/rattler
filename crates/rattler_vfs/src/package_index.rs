@@ -44,7 +44,7 @@ use crate::vfs_ops::FileKind;
 pub(crate) const INDEX_PATH: &str = "info/rattler-vfs-index.rkyv";
 
 /// Bump whenever the layout or the meaning of the stored data changes.
-const VERSION: u32 = 2;
+const VERSION: u32 = 3;
 
 /// Bytes before the archive in [`INDEX_PATH`]: a magic number and the
 /// xxh3 hash of the archive. Sixteen bytes keep the archive aligned in the
@@ -108,8 +108,6 @@ struct IndexStat {
     uid: u32,
     gid: u32,
     kind: u8,
-    /// `(flags, source mtime, source size)` from the header of a `.pyc` file.
-    pyc_header: Option<(u32, u32, u32)>,
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -149,8 +147,6 @@ pub(crate) struct FileStat {
     pub(crate) uid: u32,
     pub(crate) gid: u32,
     pub(crate) kind: FileKind,
-    /// `(flags, source mtime, source size)` of a `.pyc` file's header.
-    pub(crate) pyc_header: Option<(u32, u32, u32)>,
 }
 
 /// Where the placeholder occurs in one file, independent of the target prefix.
@@ -196,10 +192,6 @@ impl<'a> FileRef<'a> {
             uid: stat.uid.to_native(),
             gid: stat.gid.to_native(),
             kind: kind_from_u8(stat.kind),
-            pyc_header: stat
-                .pyc_header
-                .as_ref()
-                .map(|h| (h.0.to_native(), h.1.to_native(), h.2.to_native())),
         })
     }
 
@@ -484,10 +476,6 @@ fn index_file(package_dir: &Path, entry: &PathsEntry, platform: Subdir) -> Index
         };
         let (mtime_secs, mtime_nanos) = split(attr.mtime);
         let (ctime_secs, ctime_nanos) = split(attr.ctime);
-        let is_pyc = entry
-            .relative_path
-            .extension()
-            .is_some_and(|ext| ext == "pyc");
         IndexStat {
             len: attr.size,
             blocks: attr.blocks,
@@ -499,9 +487,6 @@ fn index_file(package_dir: &Path, entry: &PathsEntry, platform: Subdir) -> Index
             uid: attr.uid,
             gid: attr.gid,
             kind: kind_to_u8(kind),
-            pyc_header: (is_pyc && kind == FileKind::RegularFile)
-                .then(|| read_pyc_header(&path))
-                .flatten(),
         }
     });
     let placeholder = entry
@@ -552,14 +537,6 @@ fn index_file(package_dir: &Path, entry: &PathsEntry, platform: Subdir) -> Index
         stat,
         placeholder,
     }
-}
-
-/// `(flags, source mtime, source size)` from a `.pyc` header.
-fn read_pyc_header(path: &Path) -> Option<(u32, u32, u32)> {
-    let mut header = [0u8; 16];
-    File::open(path).ok()?.read_exact(&mut header).ok()?;
-    let word = |i: usize| u32::from_le_bytes(header[i..i + 4].try_into().unwrap());
-    Some((word(4), word(8), word(12)))
 }
 
 /// Where `placeholder` occurs in the file at `path`, preferring the offsets
@@ -760,13 +737,6 @@ mod tests {
         };
         assert_eq!(cstrings.len(), 1);
         assert_eq!(cstrings[0].offsets, vec![5]);
-        assert_eq!(
-            file("lib/__pycache__/m.cpython-312.pyc")
-                .stat()
-                .unwrap()
-                .pyc_header,
-            Some((0, 7, 9))
-        );
         assert_eq!(file("bin/tool").stat().unwrap().len, 39);
 
         // A second load maps the stored index and sees the same data.

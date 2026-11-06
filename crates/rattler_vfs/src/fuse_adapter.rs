@@ -9,7 +9,6 @@ use fuser::{
     Request,
 };
 use libc::EIO;
-use memmap2::Mmap;
 use std::{
     collections::HashMap,
     ffi::OsStr,
@@ -63,8 +62,6 @@ impl From<FileAttr> for fuser::FileAttr {
 enum OpenFileContent {
     /// Materialized content from the VFS (e.g. after prefix replacement).
     Materialized(Vec<u8>),
-    /// Raw mmap of the cache file (no prefix replacement needed).
-    Mapped(Mmap),
     /// Kernel handles reads directly via the backing fd (Linux 6.9+).
     /// The `BackingId` must stay alive until `release()`.
     Passthrough { _backing_id: Arc<fuser::BackingId> },
@@ -80,7 +77,6 @@ impl OpenFileContent {
     fn as_bytes(&self) -> Option<&[u8]> {
         match self {
             Self::Materialized(buf) => Some(buf),
-            Self::Mapped(mmap) => Some(mmap.as_ref()),
             Self::Passthrough { .. } | Self::VfsManaged(_) | Self::InodeRead(_) => None,
         }
     }
@@ -98,9 +94,14 @@ pub struct FuseAdapter<T: VfsOps> {
     /// Whether the kernel accepts `ENOSYS` from `open` as "this filesystem
     /// needs no open/release" (`FUSE_NO_OPEN_SUPPORT`).
     no_open_supported: AtomicBool,
-    /// Whether the mounted tree can never change. Enables kernel-side caching
-    /// that would be wrong for a writable overlay: negative lookups and
-    /// directory listings.
+    /// Whether the mounted tree can never change. Lets the kernel skip
+    /// `OPEN`/`RELEASE` entirely (see [`FuseAdapter::skip_opens`]), which a
+    /// writable mount can't: writes need handles.
+    ///
+    /// Negative lookups and directory listings are cached either way: every
+    /// change to a writable overlay goes through this mount, and the kernel
+    /// updates its dentries and invalidates cached listings on the creates,
+    /// renames and unlinks it forwards.
     read_only: bool,
 }
 
@@ -198,7 +199,7 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                 let fattr: fuser::FileAttr = attr.into();
                 reply.entry(&TTL, &fattr, fuser::Generation(0));
             }
-            Err(VfsError::NotFound) if self.read_only => {
+            Err(VfsError::NotFound) => {
                 // A successful reply with inode 0 is a negative entry: the
                 // kernel caches the absence of `name` for the entry TTL.
                 // Interpreters probe many paths that don't exist (Python
@@ -308,9 +309,10 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                             // Passthrough negotiated but not usable at runtime
                             // (registering a backing file needs CAP_SYS_ADMIN,
                             // so this is the norm for unprivileged users);
-                            // disable and fall back to mmap for this and future opens.
+                            // disable and serve reads ourselves for this and
+                            // future opens.
                             tracing::debug!(
-                                "FUSE passthrough unavailable at runtime ({}), falling back to mmap",
+                                "FUSE passthrough unavailable at runtime ({}), serving reads",
                                 e
                             );
                             self.passthrough_enabled.store(false, Ordering::Relaxed);
@@ -318,37 +320,16 @@ impl<T: VfsOps> Filesystem for FuseAdapter<T> {
                                 reply.error(Errno::ENOSYS);
                                 return;
                             }
-                            let mmap = match unsafe { Mmap::map(&file) } {
-                                Ok(m) => m,
-                                Err(e) => {
-                                    tracing::warn!("failed to mmap {}: {}", path.display(), e);
-                                    reply.error(Errno::from_i32(EIO));
-                                    return;
-                                }
-                            };
-                            let fh = self.store_content(OpenFileContent::Mapped(mmap));
+                            let fh = self.store_content(OpenFileContent::InodeRead(ino.0));
                             reply.opened(FileHandle(fh), FopenFlags::FOPEN_KEEP_CACHE);
                         }
                     };
                 } else {
-                    // Passthrough not available — mmap and serve normally
-                    let file = match File::open(&path) {
-                        Ok(f) => f,
-                        Err(e) => {
-                            tracing::warn!("failed to open {}: {}", path.display(), e);
-                            reply.error(Errno::from_i32(EIO));
-                            return;
-                        }
-                    };
-                    let mmap = match unsafe { Mmap::map(&file) } {
-                        Ok(m) => m,
-                        Err(e) => {
-                            tracing::warn!("failed to mmap {}: {}", path.display(), e);
-                            reply.error(Errno::from_i32(EIO));
-                            return;
-                        }
-                    };
-                    let fh = self.store_content(OpenFileContent::Mapped(mmap));
+                    // Passthrough not available: serve reads by inode. Not
+                    // memory-mapped per open: unmapping in a multi-threaded
+                    // process interrupts every CPU to flush its TLB, which
+                    // dominated tools that open many files.
+                    let fh = self.store_content(OpenFileContent::InodeRead(ino.0));
                     reply.opened(FileHandle(fh), FopenFlags::FOPEN_KEEP_CACHE);
                 }
             }
@@ -699,11 +680,10 @@ pub(crate) fn mount_fuse(
     if config.allow_other {
         fuser_config.acl = SessionACL::All;
     }
-    // Serve read-only mounts from several threads. A writable overlay stays
-    // single-threaded: its copy-up (check whether the upper file exists, then
-    // copy) is not safe against a concurrent request for the same file.
+    // The writable overlay serializes its mutating operations itself, so
+    // both modes can be served from several threads.
     #[cfg(target_os = "linux")]
-    if matches!(config.mode, Mode::ReadOnly | Mode::ReadOnlyIfSupported) {
+    {
         fuser_config.n_threads = Some(fuse_worker_threads());
     }
 

@@ -95,7 +95,20 @@ pub struct OverlayFS<T: VfsOps> {
     /// Lower inodes promoted to upper layer via rename or `open_write` COW.
     /// Maps `lower_ino` → `upper_ino` so the kernel's cached handle still works.
     promoted: Mutex<HashMap<u64, u64>>,
+    /// Serializes operations that change the upper layer. Several of them
+    /// check the upper layer and then act on it (e.g. copy-up: "not in upper
+    /// yet, so copy it"), which two concurrent requests for the same file
+    /// would interleave. Reads don't take it: copy-ups are staged and
+    /// renamed into place, so a reader sees either the lower or the complete
+    /// upper file.
+    mutation: Mutex<()>,
+    /// Counter for staging file names in [`COW_STAGING_DIRNAME`].
+    next_staging: AtomicU64,
 }
+
+/// Directory inside the overlay where copy-ups are written before being
+/// renamed into place. Hidden from listings and emptied when mounting.
+pub(crate) const COW_STAGING_DIRNAME: &str = ".rattler_vfs_cow";
 
 impl<T: VfsOps> OverlayFS<T> {
     /// Wrap a lower VFS with a pre-loaded overlay state.
@@ -120,8 +133,12 @@ impl<T: VfsOps> OverlayFS<T> {
             open_files: Mutex::new(HashMap::new()),
             next_fh: AtomicU64::new(1),
             promoted: Mutex::new(HashMap::new()),
+            mutation: Mutex::new(()),
+            next_staging: AtomicU64::new(0),
         };
 
+        // Leftovers of copy-ups interrupted by a crash.
+        let _ = fs::remove_dir_all(overlay_dir.join(COW_STAGING_DIRNAME));
         overlay.scan_upper(&overlay_dir)?;
         Ok(overlay)
     }
@@ -163,6 +180,7 @@ impl<T: VfsOps> OverlayFS<T> {
                 || name == STATE_TMP_FILENAME
                 || name == STATE_LOCK_FILENAME
                 || name == STATE_JOURNAL_FILENAME
+                || name == COW_STAGING_DIRNAME
             {
                 continue;
             }
@@ -331,26 +349,40 @@ impl<T: VfsOps> OverlayFS<T> {
             return Ok(upper_path);
         }
 
-        if let Ok(ContentSource::Direct(source)) = self.lower.content_source(lower_ino) {
-            reflink_copy::reflink_or_copy(&source, &upper_path).map_err(|e| {
-                tracing::warn!("COW copy failed {:?} -> {:?}: {}", source, upper_path, e);
-                VfsError::Io
-            })?;
+        // Copy into a staging file and rename it into place, so a concurrent
+        // reader never sees a partially copied upper file.
+        let staging_dir = self.overlay_dir.join(COW_STAGING_DIRNAME);
+        fs::create_dir_all(&staging_dir).map_err(|e| {
+            tracing::warn!("failed to create {:?}: {}", staging_dir, e);
+            VfsError::Io
+        })?;
+        let staging = staging_dir.join(
+            self.next_staging
+                .fetch_add(1, Ordering::Relaxed)
+                .to_string(),
+        );
+        let copied = if let Ok(ContentSource::Direct(source)) = self.lower.content_source(lower_ino)
+        {
+            reflink_copy::reflink_or_copy(&source, &staging).map(|_| ())
         } else {
             // Transformed or Virtual — read all content via the VFS
             let data = self.lower.read(lower_ino, 0, u32::MAX)?;
-            fs::write(&upper_path, &data).map_err(|e| {
-                tracing::warn!("COW write failed {:?}: {}", upper_path, e);
-                VfsError::Io
-            })?;
-        }
-
+            fs::write(&staging, &data)
+        };
         // Preserve the source's permission bits. `fs::write` creates 0644 and
         // reflink/copy does not reliably carry the mode across platforms, so an
         // executable such as `bin/python` would otherwise come up non-executable
         // after a `chmod`/`mv`/truncate and fail to run.
-        if let Some(attr) = lower_attr {
-            set_file_permissions(&upper_path, u32::from(attr.perm)).ok();
+        let copied = copied.and_then(|()| {
+            if let Some(attr) = &lower_attr {
+                set_file_permissions(&staging, u32::from(attr.perm)).ok();
+            }
+            fs::rename(&staging, &upper_path)
+        });
+        if let Err(e) = copied {
+            let _ = fs::remove_file(&staging);
+            tracing::warn!("COW copy to {:?} failed: {}", upper_path, e);
+            return Err(VfsError::Io);
         }
 
         Ok(upper_path)
@@ -495,6 +527,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
     }
 
     fn open_write(&self, ino: u64) -> Result<Fh, VfsError> {
+        let _mutation = self.mutation.lock().unwrap();
         let (virtual_path, needs_cow_from) = match self.resolve_ino(ino)? {
             ResolvedIno::Upper(path) => {
                 let p = self.upper_path(&path);
@@ -591,6 +624,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
                 if name == STATE_FILENAME
                     || name == STATE_LOCK_FILENAME
                     || name == STATE_JOURNAL_FILENAME
+                    || name == COW_STAGING_DIRNAME
                     || name.to_str().is_some_and(|s| s.ends_with(".tmp"))
                 {
                     continue;
@@ -642,6 +676,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
     }
 
     fn create(&self, parent: u64, name: &OsStr, mode: u32) -> Result<(FileAttr, Fh), VfsError> {
+        let _mutation = self.mutation.lock().unwrap();
         let virtual_path = self.resolve_path(parent, name).inspect_err(|&e| {
             tracing::warn!(
                 "overlay create: resolve_path failed for parent={} name={:?}: errno={}",
@@ -716,6 +751,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
     }
 
     fn unlink(&self, parent: u64, name: &OsStr) -> Result<(), VfsError> {
+        let _mutation = self.mutation.lock().unwrap();
         let virtual_path = self.resolve_path(parent, name)?;
         let upper_path = self.upper_path(&virtual_path);
 
@@ -772,6 +808,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
     }
 
     fn mkdir(&self, parent: u64, name: &OsStr, mode: u32) -> Result<FileAttr, VfsError> {
+        let _mutation = self.mutation.lock().unwrap();
         let virtual_path = self.resolve_path(parent, name)?;
         let upper_path = self.upper_path(&virtual_path);
 
@@ -799,6 +836,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
     }
 
     fn rmdir(&self, parent: u64, name: &OsStr) -> Result<(), VfsError> {
+        let _mutation = self.mutation.lock().unwrap();
         let virtual_path = self.resolve_path(parent, name)?;
         let upper_path = self.upper_path(&virtual_path);
 
@@ -847,6 +885,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
         newname: &OsStr,
         flags: u32,
     ) -> Result<(), VfsError> {
+        let _mutation = self.mutation.lock().unwrap();
         // Handle RENAME_NOREPLACE: fail if destination exists
         #[cfg(target_os = "linux")]
         if flags & libc::RENAME_NOREPLACE != 0 {
@@ -963,6 +1002,7 @@ impl<T: VfsOps> VfsOps for OverlayFS<T> {
         size: Option<u64>,
         mode: Option<u32>,
     ) -> Result<FileAttr, VfsError> {
+        let _mutation = self.mutation.lock().unwrap();
         // Only COW for meaningful mutations (size/mode), not timestamp updates.
         // Combined with noatime mount option, this avoids copying large binaries
         // just because something read them.
@@ -1882,6 +1922,70 @@ mod tests {
         // read with lower inode should return modified content
         let data = ofs.read(4, 0, 1024).unwrap();
         assert_eq!(data, b"modified content");
+    }
+
+    /// Concurrent copy-ups of the same file never expose a partial copy or
+    /// lose a write, and the staging area stays out of listings.
+    #[test]
+    fn test_concurrent_copy_up() {
+        // The race is timing dependent: repeat it on fresh overlays.
+        for _ in 0..25 {
+            concurrent_copy_up_round();
+        }
+    }
+
+    fn concurrent_copy_up_round() {
+        let tmp = TempDir::new().unwrap();
+        let ofs = std::sync::Arc::new(
+            OverlayFS::new(
+                MockLowerWithFiles,
+                tmp.path().join("upper"),
+                "hash".into(),
+                "test".into(),
+            )
+            .unwrap(),
+        );
+        let lib = ofs.lookup(1, OsStr::new("lib")).unwrap();
+        let python = ofs.lookup(lib.ino, OsStr::new("python")).unwrap();
+        let foo = ofs.lookup(python.ino, OsStr::new("foo.py")).unwrap();
+
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let reader = {
+            let (ofs, stop) = (ofs.clone(), stop.clone());
+            std::thread::spawn(move || {
+                while !stop.load(Ordering::Relaxed) {
+                    let data = ofs.read(foo.ino, 0, 1024).unwrap();
+                    assert!(
+                        data == b"foo content" || data == b"FOO CONTENT",
+                        "partial or empty read: {data:?}"
+                    );
+                }
+            })
+        };
+        let writers: Vec<_> = (0..8)
+            .map(|_| {
+                let ofs = ofs.clone();
+                std::thread::spawn(move || {
+                    let fh = ofs.open_write(foo.ino).unwrap();
+                    ofs.write(fh, 0, b"FOO CONTENT").unwrap();
+                    ofs.release_write(fh);
+                })
+            })
+            .collect();
+        for writer in writers {
+            writer.join().unwrap();
+        }
+        stop.store(true, Ordering::Relaxed);
+        reader.join().unwrap();
+
+        assert_eq!(ofs.read(foo.ino, 0, 1024).unwrap(), b"FOO CONTENT");
+        let root: Vec<_> = ofs
+            .readdir(1, 0)
+            .unwrap()
+            .into_iter()
+            .map(|e| e.name)
+            .collect();
+        assert!(!root.iter().any(|name| name == COW_STAGING_DIRNAME));
     }
 
     #[test]
