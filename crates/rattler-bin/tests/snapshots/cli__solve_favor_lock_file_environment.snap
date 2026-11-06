@@ -1,0 +1,7 @@
+---
+source: crates/rattler-bin/tests/cli.rs
+expression: "solve_favor_channel(&[\"foo\", \"--favor\", FAVOR_LOCK_FILE, \"-e\", \"old\"])"
+---
+file:///[ROOT]/test-data/channels/favor/noarch/bar-1.0-0.tar.bz2
+https://example.com/old/noarch/foo-0.5-0.tar.bz2
+file:///[ROOT]/test-data/channels/favor/noarch/qux-1.0-0.tar.bz2

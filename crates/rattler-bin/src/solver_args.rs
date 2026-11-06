@@ -1,22 +1,28 @@
 //! Command line options shared by every command that resolves an environment.
 
-use std::{collections::HashSet, fmt, str::FromStr, time::Duration};
+use std::{
+    collections::{BTreeSet, HashSet},
+    fmt,
+    str::FromStr,
+    time::Duration,
+};
 
 use clap::ValueEnum;
-use miette::IntoDiagnostic;
+use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::{
-    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, ParseMatchSpecOptions,
-    RepoDataRecord, SolverResult, Subdir, Version, package::BuildString,
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
+    ParseMatchSpecOptions, RepoDataRecord, SolverResult, Subdir, Version, package::BuildString,
 };
 use rattler_config::{ConfigBase, NoExtension};
-use rattler_repodata_gateway::{MultiSource, RepoData, Source};
+use rattler_repodata_gateway::{Gateway, MultiSource, RepoData, RepoDataQueryOutput, Source};
 use rattler_solve::{
     ChannelRepoData, IntoRepoData, SolveError, SolverImpl, SolverTask, libsolv_c, resolvo,
 };
 use rattler_virtual_packages::{VirtualPackageOverrides, VirtualPackages};
 
-use crate::commands::gateway::resolve_channels;
+use crate::commands::{gateway::resolve_channels, progress::wrap_in_async_progress};
 use crate::exclude_newer::{ExcludeNewer, NamedCutoff};
+use crate::favor_sources::{LockFileSelection, RecordSource, SelectedRecords};
 
 /// Options that configure how an environment is solved.
 ///
@@ -110,6 +116,33 @@ pub struct SolverArgs {
     /// Policy for selecting package timestamps when using `--exclude-newer`.
     #[clap(long, default_value = "require-timestamp")]
     timestamp_policy: TimestampPolicy,
+
+    /// Prefer the packages from SOURCE, so the solution changes them as little
+    /// as possible.
+    ///
+    /// SOURCE is a lock file (e.g. pixi.lock), a prefix, a conda-meta/*.json
+    /// record, or a path or URL to a .conda or .tar.bz2 package. A favored
+    /// package is only part of the solution if a spec requires it. The solver
+    /// may still pick another version of it when the specs require that.
+    /// May be specified multiple times, earlier sources win.
+    #[clap(long, value_name = "SOURCE")]
+    favor: Vec<RecordSource>,
+
+    /// Require the packages from SOURCE to stay exactly as they are.
+    ///
+    /// Takes the same sources as `--favor`. A pinned package is only part of
+    /// the solution if a spec requires it, but if it is, it is exactly the
+    /// pinned package, even if that means other packages have to be
+    /// downgraded. A spec that conflicts with a pin fails the solve. A pin
+    /// wins over a favor of the same package.
+    #[clap(long, value_name = "SOURCE")]
+    pin: Vec<RecordSource>,
+
+    /// The lock file environment that `--favor` and `--pin` read.
+    ///
+    /// The packages of the platform given with `--platform` are read.
+    #[clap(short, long, default_value = "default")]
+    environment: String,
 }
 
 /// A `--channel` value: a single channel, or a multichannel given as
@@ -395,6 +428,53 @@ impl SolverArgs {
         Ok(Some(
             exclude_newer.with_timestamp_policy(self.timestamp_policy.into()),
         ))
+    }
+
+    /// Loads the records reachable from `specs` and `extra_names` for the
+    /// solve platform and `noarch`, and prints the warnings of the query.
+    pub async fn query_repodata(
+        &self,
+        gateway: &Gateway,
+        channels: &[Source],
+        specs: &[MatchSpec],
+        constraints: &[MatchSpec],
+        extra_names: BTreeSet<PackageName>,
+    ) -> miette::Result<RepoDataQueryOutput> {
+        let platform = self.platform()?;
+        let specs = specs
+            .iter()
+            .cloned()
+            .chain(extra_names.into_iter().map(MatchSpec::from));
+        let mut query = gateway
+            .query(channels.iter().cloned(), [platform, Subdir::NoArch], specs)
+            .recursive(true);
+        if !self.has_explicit_virtual_packages() {
+            query = query
+                .virtual_package_detectors(platform)
+                .constraints(constraints.iter().cloned());
+        }
+        let repo_data = wrap_in_async_progress("loading repodata", query)
+            .await
+            .into_diagnostic()
+            .context("failed to load repodata")?;
+
+        // Surface any non-fatal CEP-42 channel-relation problems.
+        for warning in &repo_data.warnings {
+            eprintln!("warning: {warning}");
+        }
+        Ok(repo_data)
+    }
+
+    /// Reads the local `--favor` and `--pin` sources.
+    pub fn selected_records(&self) -> miette::Result<SelectedRecords> {
+        SelectedRecords::load(
+            &self.favor,
+            &self.pin,
+            &LockFileSelection {
+                environment: &self.environment,
+                platform: self.platform()?,
+            },
+        )
     }
 
     /// Solves the task with the selected backend.

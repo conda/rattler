@@ -66,6 +66,7 @@ rattler = { workspace = true, features = ["indicatif", "cli-tools", "auth-intera
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_config = { workspace = true, default-features = false, features = ["edit"] }
 rattler_index = { workspace = true, default-features = false }
+rattler_lock = { workspace = true }
 rattler_networking = { workspace = true, default-features = false, features = [
   "system-integration",
   "netrc-rs",
