@@ -533,6 +533,14 @@ pub enum ChannelPriority {
     /// For a given package, candidates from higher-priority channel's are exhausted
     /// before falling back to the next channel, regardless of the version.
     Flexible,
+
+    /// Like [`ChannelPriority::Disabled`], the package version takes
+    /// precedence over the channel. Unlike it, the channel order still breaks
+    /// ties between candidates with the same version, before the build number
+    /// is compared. This matches conda's documented sort order when its
+    /// channel priority is set to disabled. Only supported by the resolvo
+    /// backend.
+    VersionFirst,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// Represents a dependency resolution task, to be solved by one of the backends
@@ -585,6 +593,8 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     /// - With [`ChannelPriority::Flexible`], they compete with the records of
     ///   that channel.
     /// - With [`ChannelPriority::Disabled`], they compete with all records.
+    /// - With [`ChannelPriority::VersionFirst`], they compete with all records
+    ///   and rank with that channel when versions tie.
     ///
     /// A record from a lower-priority channel therefore competes with
     /// higher-priority channels. For example, an installed `foo 3.0` from a
@@ -606,8 +616,7 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     /// The timeout after which the solver should stop
     pub timeout: Option<std::time::Duration>,
 
-    /// The channel priority to solve with, either [`ChannelPriority::Strict`]
-    /// or [`ChannelPriority::Disabled`]
+    /// The channel priority to solve with, see [`ChannelPriority`].
     pub channel_priority: ChannelPriority,
 
     /// Exclude packages newer than the configured cutoff.
@@ -794,7 +803,10 @@ impl<'a, T: IntoIterator<Item = &'a RepoDataRecord>, S: SolverRepoData<'a>> Into
 /// that package, while channels outside the multichannel are still excluded.
 /// With [`ChannelPriority::Flexible`] the solver does not prefer an earlier
 /// member over a later one. The order of the members only breaks ties between
-/// otherwise identical candidates.
+/// otherwise identical candidates. With [`ChannelPriority::VersionFirst`] a
+/// version tie between two members falls through to the build number, since
+/// the members share a rank, while a tie with a channel outside the
+/// multichannel goes to the earlier tier.
 ///
 /// For backends that support channel-specific match specs, a spec whose
 /// channel name equals the name of the multichannel (e.g. `defaults::python`)

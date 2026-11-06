@@ -1,0 +1,23 @@
+{
+  "info": {
+    "subdir": "noarch"
+  },
+  "packages": {
+    "foo-1.0-3.tar.bz2": {
+      "build": "3",
+      "build_number": 3,
+      "depends": [],
+      "license": "MIT",
+      "name": "foo",
+      "noarch": "generic",
+      "md5": "cccccccccccccccccccccccccccccccc",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "size": 100,
+      "subdir": "noarch",
+      "timestamp": 1700000000000,
+      "version": "1.0"
+    }
+  },
+  "packages.conda": {},
+  "repodata_version": 1
+}
