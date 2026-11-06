@@ -148,17 +148,7 @@ pub trait Shell {
     /// macOS versions fall back to newline-separated records because their
     /// `/usr/bin/env` does not support `-0`.
     fn print_env(&self, f: &mut impl Write) -> std::fmt::Result {
-        #[cfg(target_os = "macos")]
-        {
-            writeln!(
-                f,
-                r#"/bin/sh -c '/usr/bin/env -0 2>/dev/null || /usr/bin/env'"#
-            )
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            writeln!(f, "/usr/bin/env -0")
-        }
+        default_print_env(f)
     }
 
     /// Write the script to the writer and do some post-processing for
@@ -211,6 +201,20 @@ pub trait Shell {
         // Default implementation that just unsets both variables
         self.unset_env_var(f, backup_key)?;
         self.unset_env_var(f, key)
+    }
+}
+
+fn default_print_env(f: &mut impl Write) -> std::fmt::Result {
+    #[cfg(target_os = "macos")]
+    {
+        writeln!(
+            f,
+            r#"/bin/sh -c '/usr/bin/env -0 2>/dev/null || /usr/bin/env'"#
+        )
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        writeln!(f, "/usr/bin/env -0")
     }
 }
 
@@ -316,6 +320,23 @@ pub struct Bash {
 }
 
 impl Shell for Bash {
+    fn print_env(&self, f: &mut impl Write) -> std::fmt::Result {
+        match self.flavor {
+            // Use shell builtins rather than `/usr/bin/env`: on macOS, SIP
+            // strips `DYLD_*` variables from the environment of protected
+            // binaries such as `/usr/bin/env`.
+            BashFlavor::Bash | BashFlavor::Brush => writeln!(
+                f,
+                r#"for __rattler_v in $(compgen -e); do printf '%s=%s\0' "$__rattler_v" "${{!__rattler_v}}"; done"#
+            ),
+            // Other sh-family shells have no portable builtin to list exported
+            // variables.
+            BashFlavor::Sh | BashFlavor::Dash | BashFlavor::Ksh | BashFlavor::BusyBox => {
+                default_print_env(f)
+            }
+        }
+    }
+
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
         validate_env_var_name(env_var)?;
 
@@ -482,6 +503,14 @@ impl Shell for Bash {
 pub struct Zsh;
 
 impl Shell for Zsh {
+    // See `Bash::print_env`.
+    fn print_env(&self, f: &mut impl Write) -> std::fmt::Result {
+        writeln!(
+            f,
+            r#"for __rattler_v in ${{(k)parameters[(R)*export*]}}; do printf '%s=%s\0' "$__rattler_v" "${{(P)__rattler_v}}"; done"#
+        )
+    }
+
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
         validate_env_var_name(env_var)?;
         let value = escape_double_quoted(value);
@@ -804,6 +833,15 @@ impl Shell for PowerShell {
 pub struct Fish;
 
 impl Shell for Fish {
+    // See `Bash::print_env`. Quoted expansion joins list variables the way
+    // fish exports them: with `:` for path variables, with spaces otherwise.
+    fn print_env(&self, f: &mut impl Write) -> std::fmt::Result {
+        writeln!(
+            f,
+            r#"for __rattler_v in (set -nx); printf '%s=%s\0' $__rattler_v "$$__rattler_v"; end"#
+        )
+    }
+
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
         validate_env_var_name(env_var)?;
         let value = escape_double_quoted(value);
@@ -1593,5 +1631,54 @@ mod tests {
             parsed_env,
             HashMap::from([("VAR1", "value1"), ("VAR2", "value2")])
         );
+    }
+
+    #[test]
+    fn test_print_env() {
+        let mut out = String::new();
+        Bash::default().print_env(&mut out).unwrap();
+        assert_eq!(
+            out,
+            "for __rattler_v in $(compgen -e); do printf '%s=%s\\0' \"$__rattler_v\" \"${!__rattler_v}\"; done\n"
+        );
+
+        let mut out = String::new();
+        Bash {
+            flavor: BashFlavor::Brush,
+        }
+        .print_env(&mut out)
+        .unwrap();
+        assert_eq!(
+            out,
+            "for __rattler_v in $(compgen -e); do printf '%s=%s\\0' \"$__rattler_v\" \"${!__rattler_v}\"; done\n"
+        );
+
+        let mut out = String::new();
+        Zsh.print_env(&mut out).unwrap();
+        assert_eq!(
+            out,
+            "for __rattler_v in ${(k)parameters[(R)*export*]}; do printf '%s=%s\\0' \"$__rattler_v\" \"${(P)__rattler_v}\"; done\n"
+        );
+
+        let mut out = String::new();
+        Fish.print_env(&mut out).unwrap();
+        assert_eq!(
+            out,
+            "for __rattler_v in (set -nx); printf '%s=%s\\0' $__rattler_v \"$$__rattler_v\"; end\n"
+        );
+
+        let mut out = String::new();
+        Bash {
+            flavor: BashFlavor::Sh,
+        }
+        .print_env(&mut out)
+        .unwrap();
+        #[cfg(target_os = "macos")]
+        assert_eq!(
+            out,
+            "/bin/sh -c '/usr/bin/env -0 2>/dev/null || /usr/bin/env'\n"
+        );
+        #[cfg(not(target_os = "macos"))]
+        assert_eq!(out, "/usr/bin/env -0\n");
     }
 }
