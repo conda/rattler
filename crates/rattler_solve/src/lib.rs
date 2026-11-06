@@ -593,6 +593,8 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     /// - With [`ChannelPriority::Flexible`], they compete with the records of
     ///   that channel.
     /// - With [`ChannelPriority::Disabled`], they compete with all records.
+    /// - With [`ChannelPriority::VersionFirst`], they compete with all records
+    ///   and rank with that channel when versions tie.
     ///
     /// A record from a lower-priority channel therefore competes with
     /// higher-priority channels. For example, an installed `foo 3.0` from a
