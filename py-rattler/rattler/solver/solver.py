@@ -86,20 +86,14 @@ async def solve(
                      these records, and they never cause a channel record to be removed.
                    - with `ChannelPriority.Flexible`, they compete with records from the same channel
                    - with `ChannelPriority.Disabled`, they compete with all records
+                   - with `ChannelPriority.VersionFirst`, they compete with all records and
+                     rank with that channel when versions tie
                  A record from a lower-priority channel therefore competes with higher-priority
                  channels. For example, an installed `foo 3.0` from a lower-priority channel is selected
                  over `foo 2.0` from a higher-priority channel
         virtual_packages: A list of virtual packages considered active.
-        channel_priority: (Default = ChannelPriority.Strict) When `ChannelPriority.Strict`
-                 the channel that the package is first found in will be used as
-                 the only channel for that package. When `ChannelPriority.Flexible`
-                 higher-priority channels are preferred, but packages can still
-                 come from lower-priority channels, when needed. When
-                 `ChannelPriority.Disabled` it will search for every package in
-                 every channel. When `ChannelPriority.VersionFirst` it also
-                 searches every channel, but the channel order breaks ties
-                 between candidates with the same version, similar to conda's
-                 disabled channel priority.
+        channel_priority: (Default = ChannelPriority.Strict) How the order of the
+                 channels affects the solve, see `ChannelPriority` for available modes.
         timeout:    The maximum time the solver is allowed to run.
         exclude_newer: Exclude any record that is newer than the given datetime,
             or newer than the cutoff produced by subtracting a timedelta from now.
@@ -243,20 +237,14 @@ async def solve_with_sparse_repodata(
                      these records, and they never cause a channel record to be removed.
                    - with `ChannelPriority.Flexible`, they compete with records from the same channel
                    - with `ChannelPriority.Disabled`, they compete with all records
+                   - with `ChannelPriority.VersionFirst`, they compete with all records and
+                     rank with that channel when versions tie
                  A record from a lower-priority channel therefore competes with higher-priority
                  channels. For example, an installed `foo 3.0` from a lower-priority channel is selected
                  over `foo 2.0` from a higher-priority channel
         virtual_packages: A list of virtual packages considered active.
-        channel_priority: (Default = ChannelPriority.Strict) When `ChannelPriority.Strict`
-                 the channel that the package is first found in will be used as
-                 the only channel for that package. When `ChannelPriority.Flexible`
-                 higher-priority channels are preferred, but packages can still
-                 come from lower-priority channels when needed. When
-                 `ChannelPriority.Disabled` it will search for every package in
-                 every channel. When `ChannelPriority.VersionFirst` it also
-                 searches every channel, but the channel order breaks ties
-                 between candidates with the same version, like conda's disabled
-                 channel priority.
+        channel_priority: (Default = ChannelPriority.Strict) How the order of the
+                 channels affects the solve, see `ChannelPriority` for available modes.
         timeout:    The maximum time the solver is allowed to run.
         exclude_newer: Exclude any record that is newer than the given datetime,
             or newer than the cutoff produced by subtracting a timedelta from now.
