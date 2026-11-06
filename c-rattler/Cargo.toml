@@ -1,0 +1,50 @@
+[package]
+name = "rattler-c"
+version = "0.1.0"
+edition = "2024"
+license = "BSD-3-Clause"
+description = "C bindings to the rattler library"
+publish = false
+
+[lib]
+# The produced library is called `librattler` (`rattler.h`, `rattler.pc`).
+name = "rattler"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[features]
+default = ["rustls"]
+# Required by cargo-c, see https://github.com/lu-zero/cargo-c#usage
+capi = []
+# TLS backend selection. The C API does not perform any network IO yet, so these
+# features are currently no-ops. They exist so packaging recipes (e.g.
+# conda-forge with native-tls/openssl, Homebrew with rustls) can already select
+# a backend and keep working once networking functionality is exposed.
+native-tls = []
+rustls = []
+
+[dependencies]
+rattler_conda_types = { path = "../crates/rattler_conda_types", default-features = false }
+
+[dev-dependencies]
+cbindgen = { version = "0.29", default-features = false }
+
+[package.metadata.capi.header]
+name = "rattler"
+subdirectory = "rattler"
+# The header is generated with cbindgen by `tests/header.rs` and checked in so
+# changes to the C API are visible in code review.
+generation = false
+
+[package.metadata.capi.install.include]
+asset = [{ from = "include/rattler/rattler.h" }]
+
+[package.metadata.capi.library]
+name = "rattler"
+
+[package.metadata.capi.pkg_config]
+name = "rattler"
+filename = "rattler"
+description = "C bindings to the rattler library for conda package management"
+
+# Prevent package from thinking it's in the workspace
+[workspace]

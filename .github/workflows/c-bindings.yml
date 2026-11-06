@@ -1,0 +1,58 @@
+name: C bindings CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - crates/**
+      - Cargo.*
+
+      # When something in the bindings themselves changes
+      - "c-rattler/**/*"
+
+      # Or when this workflow changes
+      - ".github/workflows/c-bindings.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  RUST_BACKTRACE: 1
+
+jobs:
+  format_lint_test:
+    name: Format, Lint and Test the C bindings (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
+        with:
+          manifest-path: c-rattler/pixi.toml
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: c-rattler
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Format and Lint
+        working-directory: c-rattler
+        run: |
+          pixi run fmt-check
+          pixi run lint
+
+      # Includes a check that the checked-in `rattler.h` is up to date and, on
+      # unix, compiles and runs a C program against the installed library.
+      - name: Run tests
+        working-directory: c-rattler
+        run: pixi run test
