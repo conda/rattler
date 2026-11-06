@@ -401,8 +401,16 @@ impl Gateway {
         subdirs: SubdirSelection,
         mode: CacheClearMode,
     ) -> Result<(), std::io::Error> {
+        // Remember which subdirs of this channel were loaded. Clearing every
+        // subdir also has to reach those rattler has no built-in knowledge of,
+        // which `Subdir::known` does not list.
+        let mut loaded_subdirs: Vec<Subdir> = Vec::new();
         self.inner.subdirs.retain(|key, _| {
-            key.0.base_url != channel.base_url || !subdirs.contains(key.1.as_str())
+            let keep = key.0.base_url != channel.base_url || !subdirs.contains(key.1.as_str());
+            if !keep {
+                loaded_subdirs.push(key.1);
+            }
+            keep
         });
         self.inner.notices.remove(&channel.base_url);
         self.inner.notice_fetch_locks.remove(&channel.base_url);
@@ -412,7 +420,15 @@ impl Gateway {
             use std::str::FromStr;
 
             let platforms_to_clear: Vec<Subdir> = match &subdirs {
-                SubdirSelection::All => Subdir::known().collect(),
+                SubdirSelection::All => {
+                    let mut all: Vec<Subdir> = Subdir::known().collect();
+                    for subdir in loaded_subdirs {
+                        if !all.contains(&subdir) {
+                            all.push(subdir);
+                        }
+                    }
+                    all
+                }
                 SubdirSelection::Some(subdirs) => subdirs
                     .iter()
                     .filter_map(|subdir| Subdir::from_str(subdir).ok())
@@ -440,7 +456,7 @@ impl Gateway {
         }
 
         #[cfg(target_arch = "wasm32")]
-        let _ = mode;
+        let _ = (mode, loaded_subdirs);
 
         Ok(())
     }
@@ -1740,6 +1756,74 @@ mod test {
             .collect();
         removed.sort();
         assert_eq!(removed, ["foo-0.1-0.tar.bz2", "foo-2.0-0.conda"]);
+    }
+
+    /// Clearing every subdir of a channel from disk also has to clear subdirs
+    /// rattler has no built-in knowledge of, which `Subdir::known` omits.
+    #[tokio::test]
+    async fn test_clear_disk_cache_of_unknown_subdir() {
+        let subdir: Subdir = "linux-esp32s3".parse().unwrap();
+        assert!(!subdir.is_known());
+
+        let channel_dir = tempfile::tempdir().unwrap();
+        let subdir_path = channel_dir.path().join(subdir.as_str());
+        std::fs::create_dir_all(&subdir_path).unwrap();
+        std::fs::write(
+            subdir_path.join("repodata.json"),
+            make_repodata("testpkg", "1.0.0").replace("linux-64", subdir.as_str()),
+        )
+        .unwrap();
+        let server = SimpleChannelServer::new(channel_dir.path()).await;
+        let channel = server.channel();
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        let query = |gateway: &Gateway| {
+            gateway
+                .query(
+                    vec![channel.clone()],
+                    vec![subdir],
+                    vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
+                )
+                .recursive(false)
+        };
+        let cache_only = || {
+            Gateway::builder()
+                .with_cache_dir(cache_dir.path().to_path_buf())
+                .with_channel_config(crate::ChannelConfig {
+                    default: SourceConfig {
+                        cache_action: CacheAction::ForceCacheOnly,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                })
+                .finish()
+        };
+
+        // Populate the disk cache and check that it can be read back.
+        let gateway = Gateway::builder()
+            .with_cache_dir(cache_dir.path().to_path_buf())
+            .finish();
+        query(&gateway).await.unwrap();
+        let cached = query(&cache_only()).await.unwrap();
+        assert_eq!(cached.iter().map(RepoData::len).sum::<usize>(), 1);
+
+        gateway
+            .clear_repodata_cache(
+                &channel,
+                SubdirSelection::All,
+                super::CacheClearMode::InMemoryAndDisk,
+            )
+            .unwrap();
+
+        // The cached repodata is gone, so a cache-only query finds nothing.
+        let after_clear = query(&cache_only()).await;
+        if let Ok(data) = after_clear {
+            assert_eq!(
+                data.iter().map(RepoData::len).sum::<usize>(),
+                0,
+                "the disk cache of {subdir} should have been cleared"
+            );
+        }
     }
 
     /// Integration test that verifies cache clearing actually works end-to-end.
