@@ -46,7 +46,8 @@ pub mod verify;
 
 pub use error::{SigstoreError, SigstoreResult};
 pub use policy::{
-    ChannelCheck, Identity, Issuer, Publisher, VerificationConfig, VerificationPolicy,
+    ChannelCheck, GitHubActionsIssuer, GitHubTrustDomain, Identity, InvalidGitHubTrustDomain,
+    Issuer, Publisher, VerificationConfig, VerificationPolicy,
 };
 pub use sidecar::{
     AttestationSidecar, DEFAULT_MAX_SIDECAR_SIZE, SIDECAR_SUFFIX, fetch_bundles, fetch_sidecar,
@@ -59,9 +60,11 @@ pub use sigstore_types::{Bundle, TransparencyLogEntry};
 /// come from `sigstore-crypto` and are re-exported here so that a consumer of
 /// this crate does not have to depend on it directly.
 pub use sigstore_verify::crypto::{CertificateInfo, FulcioCiClaims};
-pub use sigstore_verify::trust_root::TrustedRoot;
+pub use sigstore_verify::trust_root::{SigstoreInstance, TrustedRoot};
 pub use verify::{
     BundleVerification, CONDA_PUBLISH_PREDICATE_TYPE, CondaPublishPredicate, RejectedAttestation,
-    VerificationOutcome, VerifiedAttestation, VerifiedChecks, embedded_trusted_root,
-    production_trusted_root, verify_bundles, verify_record, verify_record_with_trusted_root,
+    TrustedRoots, VerificationOutcome, VerifiedAttestation, VerifiedChecks, embedded_trusted_root,
+    github_trusted_root, production_trusted_root, verify_bundles,
+    verify_bundles_with_trusted_roots, verify_record, verify_record_with_trusted_root,
+    verify_record_with_trusted_roots,
 };

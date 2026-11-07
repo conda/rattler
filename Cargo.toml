@@ -271,3 +271,18 @@ rattler_virtual_package_detectors = { path = "crates/rattler_virtual_package_det
 
 # This is also a rattler crate, but we only pin it to minor version
 simple_spawn_blocking = { path = "crates/simple_spawn_blocking", version = "1.1", default-features = false }
+
+# TODO: remove once sigstore-sign 0.16 is released (https://github.com/sigstore/sigstore-rust/pull/346)
+[patch.crates-io]
+sigstore-bundle = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
+sigstore-crypto = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
+sigstore-fulcio = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
+sigstore-merkle = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
+sigstore-oidc = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
+sigstore-rekor = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
+sigstore-sign = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
+sigstore-trust-root = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
+sigstore-tsa = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
+sigstore-tuf = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
+sigstore-types = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
+sigstore-verify = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }

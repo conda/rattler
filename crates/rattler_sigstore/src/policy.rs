@@ -72,6 +72,13 @@ impl Issuer {
         Self::new("https://token.actions.githubusercontent.com")
     }
 
+    /// The GitHub Actions OIDC issuer of a GitHub Enterprise Cloud tenant with
+    /// data residency, `https://token.actions.<tenant>.ghe.com`, where
+    /// `tenant` is the subdomain of the tenant's `<tenant>.ghe.com` host.
+    pub fn github_actions_tenant(tenant: &str) -> Self {
+        Self::new(format!("https://token.actions.{tenant}.ghe.com"))
+    }
+
     /// The GitLab CI OIDC issuer.
     pub fn gitlab() -> Self {
         Self::new("https://gitlab.com")
@@ -162,6 +169,136 @@ pub enum ChannelCheck {
     Ignore,
 }
 
+/// A GitHub artifact attestation trust domain: the Sigstore instance GitHub
+/// signs attestations of private and internal repositories with.
+///
+/// github.com uses one instance ([`Self::github_com`]). GitHub Enterprise Cloud
+/// tenants with data residency (`<tenant>.ghe.com`) use the instance of their
+/// region ([`Self::region`]), such as `prod-weu-01`, which the tenant's
+/// `GET /meta` REST endpoint reports as
+/// `domains.artifact_attestations.trust_domain`. GitHub publishes the trusted
+/// root of every trust domain in its TUF repository (`tuf-repo.github.com`),
+/// which is where [`crate::github_trusted_root`] fetches it from.
+///
+/// Parses from `github.com` or a region name, and displays the same way.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GitHubTrustDomain {
+    /// `None` for github.com.
+    region: Option<String>,
+}
+
+/// A GitHub trust domain name that is not `github.com` and not a valid region
+/// name (ASCII letters, digits and `-`).
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("invalid GitHub trust domain {0:?}: expected github.com or a region such as prod-weu-01")]
+pub struct InvalidGitHubTrustDomain(pub String);
+
+impl GitHubTrustDomain {
+    /// The trust domain of github.com.
+    pub fn github_com() -> Self {
+        Self { region: None }
+    }
+
+    /// The trust domain of a GitHub Enterprise Cloud data residency region,
+    /// such as `prod-weu-01`.
+    pub fn region(name: impl Into<String>) -> Result<Self, InvalidGitHubTrustDomain> {
+        let name = name.into();
+        let valid = !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+        if valid {
+            Ok(Self { region: Some(name) })
+        } else {
+            Err(InvalidGitHubTrustDomain(name))
+        }
+    }
+
+    /// The region name, or `None` for github.com.
+    pub fn region_name(&self) -> Option<&str> {
+        self.region.as_deref()
+    }
+
+    /// Whether this is github.com's trust domain.
+    pub fn is_github_com(&self) -> bool {
+        self.region.is_none()
+    }
+
+    /// The TUF target GitHub publishes this trust domain's trusted root as.
+    pub(crate) fn trusted_root_target(&self) -> String {
+        match &self.region {
+            None => "trusted_root.json".to_string(),
+            Some(region) => format!("{region}.trusted_root.json"),
+        }
+    }
+
+    /// Whether this trust domain's instance issues certificates for `issuer`:
+    /// github.com's for github.com workflows, a region's for the workflows of
+    /// GitHub Enterprise Cloud tenants. Which region a tenant lives in is not
+    /// part of its issuer, so any region accepts any tenant.
+    pub fn issues_for(&self, issuer: &GitHubActionsIssuer) -> bool {
+        match issuer {
+            GitHubActionsIssuer::GitHubCom => self.is_github_com(),
+            GitHubActionsIssuer::Tenant(_) => !self.is_github_com(),
+        }
+    }
+}
+
+impl std::str::FromStr for GitHubTrustDomain {
+    type Err = InvalidGitHubTrustDomain;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.eq_ignore_ascii_case("github.com") {
+            Ok(Self::github_com())
+        } else {
+            Self::region(s)
+        }
+    }
+}
+
+impl std::fmt::Display for GitHubTrustDomain {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.region.as_deref().unwrap_or("github.com"))
+    }
+}
+
+/// A GitHub Actions OIDC issuer, which identifies the GitHub a workflow ran on.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum GitHubActionsIssuer {
+    /// `https://token.actions.githubusercontent.com`: github.com.
+    GitHubCom,
+    /// `https://token.actions.<tenant>.ghe.com`: a GitHub Enterprise Cloud
+    /// tenant with data residency.
+    Tenant(String),
+}
+
+impl GitHubActionsIssuer {
+    /// Recognizes a GitHub Actions issuer, including the `/<enterprise>` path
+    /// of enterprises with a customized issuer. Returns `None` for any other
+    /// issuer.
+    pub fn parse(issuer: &str) -> Option<Self> {
+        let url = Url::parse(issuer).ok()?;
+        let plain = url.scheme() == "https"
+            && url.username().is_empty()
+            && url.password().is_none()
+            && url.port().is_none()
+            && url.query().is_none()
+            && url.fragment().is_none();
+        if !plain {
+            return None;
+        }
+        let host = url.host_str()?;
+        if host == "token.actions.githubusercontent.com" {
+            return Some(Self::GitHubCom);
+        }
+        let tenant = host
+            .strip_prefix("token.actions.")?
+            .strip_suffix(".ghe.com")?;
+        let valid = !tenant.is_empty()
+            && tenant
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-');
+        valid.then(|| Self::Tenant(tenant.to_string()))
+    }
+}
+
 /// Configuration shared by the `Warn` and `Require` verification modes.
 #[derive(Debug, Clone)]
 pub struct VerificationConfig {
@@ -173,6 +310,10 @@ pub struct VerificationConfig {
 
     /// How `targetChannel` is checked.
     channel_check: ChannelCheck,
+
+    /// The GitHub trust domains whose trusted roots [`crate::verify_record`]
+    /// loads for bundles without a transparency log entry.
+    github_trust_domains: Vec<GitHubTrustDomain>,
 }
 
 impl VerificationConfig {
@@ -185,6 +326,7 @@ impl VerificationConfig {
             publisher,
             max_sidecar_size: DEFAULT_MAX_SIDECAR_SIZE,
             channel_check: ChannelCheck::default(),
+            github_trust_domains: vec![GitHubTrustDomain::github_com()],
         }
     }
 
@@ -203,6 +345,42 @@ impl VerificationConfig {
     pub fn with_channel_check(mut self, channel_check: ChannelCheck) -> Self {
         self.channel_check = channel_check;
         self
+    }
+
+    /// Sets the GitHub trust domains whose attestations
+    /// [`crate::verify_record`] accepts. Defaults to github.com only; pass an
+    /// empty list to only accept attestations signed with the Sigstore
+    /// public-good instance.
+    ///
+    /// GitHub signs attestations of private and internal repositories with its
+    /// own Sigstore instance, which keeps no public transparency log so that
+    /// nothing about the repository is published. Such a bundle carries an
+    /// RFC 3161 timestamp from GitHub's timestamp authority instead of a log
+    /// entry, so trusting it means trusting GitHub's certificate and timestamp
+    /// authorities without public auditability. Only certificates issued for
+    /// GitHub Actions identities are accepted from these instances; the
+    /// [`Publisher`] constraints apply as usual.
+    ///
+    /// Add the trust domain of a GitHub Enterprise Cloud data residency
+    /// region, such as `prod-weu-01`, to accept attestations from its
+    /// `*.ghe.com` tenants. Their identities are issued by
+    /// [`Issuer::github_actions_tenant`].
+    ///
+    /// This only selects which roots [`crate::verify_record`] fetches. The
+    /// functions taking [`crate::TrustedRoots`] trust exactly the roots they
+    /// are given.
+    pub fn with_github_trust_domains(
+        mut self,
+        trust_domains: impl IntoIterator<Item = GitHubTrustDomain>,
+    ) -> Self {
+        self.github_trust_domains = trust_domains.into_iter().collect();
+        self
+    }
+
+    /// The GitHub trust domains whose attestations are accepted. See
+    /// [`Self::with_github_trust_domains`].
+    pub fn github_trust_domains(&self) -> &[GitHubTrustDomain] {
+        &self.github_trust_domains
     }
 
     /// The maximum sidecar size in bytes.
@@ -288,6 +466,74 @@ fn wildcard_match(pattern: &str, text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn github_actions_issuers() {
+        for (issuer, expected) in [
+            (
+                "https://token.actions.githubusercontent.com",
+                GitHubActionsIssuer::GitHubCom,
+            ),
+            (
+                "https://token.actions.githubusercontent.com/octocorp",
+                GitHubActionsIssuer::GitHubCom,
+            ),
+            (
+                "https://token.actions.octocorp.ghe.com",
+                GitHubActionsIssuer::Tenant("octocorp".to_string()),
+            ),
+            (
+                "https://token.actions.octo-corp.ghe.com/octocorp",
+                GitHubActionsIssuer::Tenant("octo-corp".to_string()),
+            ),
+        ] {
+            assert_eq!(
+                GitHubActionsIssuer::parse(issuer),
+                Some(expected),
+                "{issuer}"
+            );
+        }
+        for issuer in [
+            "https://token.actions.githubusercontent.com.evil.example",
+            "https://token.actions.ghe.com",
+            "https://token.actions.evil.example.ghe.com.evil.example",
+            "https://token.actions.a.b.ghe.com",
+            "http://token.actions.githubusercontent.com",
+            "https://token.actions.githubusercontent.com:8443",
+            "https://user@token.actions.githubusercontent.com",
+            "https://gitlab.com",
+            "not a url",
+        ] {
+            assert_eq!(GitHubActionsIssuer::parse(issuer), None, "{issuer}");
+        }
+    }
+
+    #[test]
+    fn github_trust_domains() {
+        let github_com: GitHubTrustDomain = "github.com".parse().unwrap();
+        assert!(github_com.is_github_com());
+        assert_eq!(github_com.to_string(), "github.com");
+        assert_eq!(github_com.trusted_root_target(), "trusted_root.json");
+
+        let region: GitHubTrustDomain = "prod-weu-01".parse().unwrap();
+        assert_eq!(region.region_name(), Some("prod-weu-01"));
+        assert_eq!(region.to_string(), "prod-weu-01");
+        assert_eq!(
+            region.trusted_root_target(),
+            "prod-weu-01.trusted_root.json"
+        );
+
+        for invalid in ["", "../root", "prod/weu", "prod weu", "prod.weu"] {
+            assert!(GitHubTrustDomain::region(invalid).is_err(), "{invalid:?}");
+        }
+
+        // Each instance only issues for the identities of its own domain.
+        let tenant = GitHubActionsIssuer::Tenant("octocorp".to_string());
+        assert!(github_com.issues_for(&GitHubActionsIssuer::GitHubCom));
+        assert!(!github_com.issues_for(&tenant));
+        assert!(region.issues_for(&tenant));
+        assert!(!region.issues_for(&GitHubActionsIssuer::GitHubCom));
+    }
 
     #[test]
     fn wildcard_matching() {
