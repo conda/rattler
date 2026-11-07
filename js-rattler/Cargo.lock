@@ -2110,7 +2110,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.12.3"
+version = "0.12.4"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2319,7 +2319,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.38.3"
+version = "0.38.4"
 dependencies = [
  "ahash",
  "anyhow",
