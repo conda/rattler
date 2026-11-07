@@ -445,16 +445,19 @@ pub(crate) fn entry_point_artifacts(
 ) -> Vec<EntryPointArtifact> {
     if platform.is_windows() {
         let script = python_entry_point_template(target_prefix, true, ep, python_info);
-        vec![
-            EntryPointArtifact {
-                file_name: format!("{}-script.py", ep.command).into(),
-                content: script.into_bytes(),
-            },
-            EntryPointArtifact {
+        let mut artifacts = vec![EntryPointArtifact {
+            file_name: format!("{}-script.py", ep.command).into(),
+            content: script.into_bytes(),
+        }];
+        // A Windows subdir rattler ships no launcher for (any CEP 26
+        // `win-{arch}` parses) gets the script without an `.exe`.
+        if let Some(launcher) = get_windows_launcher(platform) {
+            artifacts.push(EntryPointArtifact {
                 file_name: format!("{}.exe", ep.command).into(),
-                content: get_windows_launcher(&platform).to_vec(),
-            },
-        ]
+                content: launcher.to_vec(),
+            });
+        }
+        artifacts
     } else {
         let script = python_entry_point_template(target_prefix, false, ep, python_info);
         vec![EntryPointArtifact {
@@ -2301,7 +2304,7 @@ packages:
         assert_eq!(arts.len(), 2);
         assert_eq!(
             by_name(".exe").content,
-            rattler::install::get_windows_launcher(&Subdir::Win64),
+            rattler::install::get_windows_launcher(Subdir::Win64).unwrap(),
         );
         assert!(!by_name("-script.py").content.starts_with(b"#!"));
 
