@@ -4191,7 +4191,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.55.7"
+version = "0.55.8"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -4249,7 +4249,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.12.3"
+version = "0.12.4"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4383,7 +4383,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.34.7"
+version = "0.34.8"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4597,7 +4597,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.38.3"
+version = "0.38.4"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4745,7 +4745,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_package_detectors"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "async-trait",
  "fs-err",
