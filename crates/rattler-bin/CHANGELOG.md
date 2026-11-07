@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.17](https://github.com/conda/rattler/compare/rattler-bin-v0.5.16...rattler-bin-v0.5.17) - 2026-11-07
+
+### Other
+
+- *(exec)* faster `--dematerialized` environments with a writable overlay ([#3139](https://github.com/conda/rattler/pull/3139))
+
 ## [0.5.16](https://github.com/conda/rattler/compare/rattler-bin-v0.5.15...rattler-bin-v0.5.16) - 2026-11-06
 
 ### Added
