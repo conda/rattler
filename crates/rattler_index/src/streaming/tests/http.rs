@@ -147,10 +147,7 @@ async fn s3_metadata_requests_are_bounded_and_transfer_only_small_ranges() {
         .await
         .unwrap()
         .unwrap();
-        assert_eq!(
-            serde_json::to_value(actual.record).unwrap(),
-            serde_json::to_value(expected.record).unwrap()
-        );
+        assert_records_match(&actual, &expected);
         let reads = reads.lock().unwrap();
         assert_eq!((reads[0].start, reads[0].end), (0, size));
         assert!(reads.len() <= 12, "excessive serial GETs: {reads:?}");
