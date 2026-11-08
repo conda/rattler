@@ -610,7 +610,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/linux-64/libzlib-1.3.2-h25fd6f3_3.conda
       - conda: https://prefix.dev/conda-forge/linux-64/nushell-0.116.1-h2db10af_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/openssl-3.6.5-h781a0a9_0.conda
-      - conda: https://prefix.dev/conda-forge/linux-64/rustfs-1.0.4-h69120f2_0.conda
+      - conda: https://prefix.dev/conda-forge/linux-64/rustfs-1.0.4-h69120f2_1.conda
       - conda: https://prefix.dev/conda-forge/linux-64/rustfs-cli-0.1.36-hf19af3b_1.conda
       - conda: https://prefix.dev/conda-forge/noarch/ca-certificates-2026.10.23-hbd8a1cb_0.conda
       - conda_source: rattler[4adccf06] @ crates/rattler-bin
@@ -626,7 +626,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/osx-64/nushell-0.116.1-h569766a_0.conda
       - conda: https://prefix.dev/conda-forge/osx-64/openssl-3.6.5-h332eb6d_0.conda
       - conda: https://prefix.dev/conda-forge/osx-64/pcre2-10.47-h31793e3_1.conda
-      - conda: https://prefix.dev/conda-forge/osx-64/rustfs-1.0.4-ha368cfd_0.conda
+      - conda: https://prefix.dev/conda-forge/osx-64/rustfs-1.0.4-ha368cfd_1.conda
       - conda: https://prefix.dev/conda-forge/osx-64/rustfs-cli-0.1.36-he704061_1.conda
       - conda_source: rattler[648da8af] @ crates/rattler-bin
       - conda_source: rattler_index[e045c39d] @ crates/rattler_index
@@ -641,7 +641,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/osx-arm64/nushell-0.116.1-hf5e37c6_0.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/openssl-3.6.5-h55eecbc_0.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/pcre2-10.47-he63d830_1.conda
-      - conda: https://prefix.dev/conda-forge/osx-arm64/rustfs-1.0.4-h1a79e51_0.conda
+      - conda: https://prefix.dev/conda-forge/osx-arm64/rustfs-1.0.4-h1a79e51_1.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/rustfs-cli-0.1.36-hc2d82ec_1.conda
       - conda_source: rattler[5deb5a88] @ crates/rattler-bin
       - conda_source: rattler_index[30fb5c4c] @ crates/rattler_index
@@ -650,7 +650,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/win-64/libzlib-1.3.2-hfd05255_3.conda
       - conda: https://prefix.dev/conda-forge/win-64/nushell-0.116.1-he61bdd1_0.conda
       - conda: https://prefix.dev/conda-forge/win-64/openssl-3.6.5-hf411b9b_0.conda
-      - conda: https://prefix.dev/conda-forge/win-64/rustfs-1.0.4-h3acf7e8_0.conda
+      - conda: https://prefix.dev/conda-forge/win-64/rustfs-1.0.4-h3acf7e8_1.conda
       - conda: https://prefix.dev/conda-forge/win-64/rustfs-cli-0.1.36-h18a1a76_1.conda
       - conda: https://prefix.dev/conda-forge/win-64/ucrt-10.0.26100.0-h57928b3_0.conda
       - conda: https://prefix.dev/conda-forge/win-64/vc-14.5-ha367084_42.conda
@@ -2351,9 +2351,9 @@ packages:
     - __glibc >=2.17
   size: 7783
   timestamp: 1792818704394
-- conda: https://prefix.dev/conda-forge/linux-64/rustfs-1.0.4-h69120f2_0.conda
-  sha256: 9798678eb9c2b5a12bccf5c51edc442d1afcfdcdb25a14c08781f26f82ada688
-  md5: ff69e31e5b5c787a821c0e5d83bf5f3c
+- conda: https://prefix.dev/conda-forge/linux-64/rustfs-1.0.4-h69120f2_1.conda
+  sha256: 48bd013c5b54bef3402895dcf60de1d140069903fe290f9f07c08d9c0b83bb22
+  md5: bbc3a03c7ef1342d41222f9fe65d1e93
   depends:
   - __glibc >=2.17,<3.0.a0
   - libgcc >=15
@@ -2363,8 +2363,8 @@ packages:
   license: Apache-2.0
   license_family: APACHE
   run_exports: {}
-  size: 225879843
-  timestamp: 1792949482948
+  size: 226169301
+  timestamp: 1794038807595
 - conda: https://prefix.dev/conda-forge/linux-64/rustfs-cli-0.1.36-hf19af3b_1.conda
   sha256: 70162bd7f1f0b84866083af89f0baa22eaabf55bf34ef8fc58a31d7e84eabaff
   md5: 725a8be2384cfc9a042cd6e790558dbf
@@ -4452,19 +4452,19 @@ packages:
     - __osx >=11.0
   size: 7771
   timestamp: 1792818800473
-- conda: https://prefix.dev/conda-forge/osx-64/rustfs-1.0.4-ha368cfd_0.conda
-  sha256: 9bc8039fc614e3c3cc34bd6d67ec248fad321f0a34cd512963fe77dd0526b0a8
-  md5: 3bf78d177e9931527575bc0074c7c31f
+- conda: https://prefix.dev/conda-forge/osx-64/rustfs-1.0.4-ha368cfd_1.conda
+  sha256: b0692ed51781f9e0c760dbc14ed9cdbc802cbf88f10010febbf83b4c86a9f682
+  md5: 30345fb1bd828ec0914f90b586e1ee50
   depends:
-  - libcxx >=21
   - __osx >=11.0
+  - libcxx >=21
   constrains:
   - __osx >=11.0
   license: Apache-2.0
   license_family: APACHE
   run_exports: {}
-  size: 222257576
-  timestamp: 1792949616312
+  size: 222275027
+  timestamp: 1794038907369
 - conda: https://prefix.dev/conda-forge/osx-64/rustfs-cli-0.1.36-he704061_1.conda
   sha256: 1fd9622ae991fd1c725d6c32147af9784bc08acdc19219278247f54b9f0d9912
   md5: 89689c3392c1a6fc2355ae780c45ece8
@@ -5966,19 +5966,19 @@ packages:
     - __osx >=11.0
   size: 7802
   timestamp: 1792818717109
-- conda: https://prefix.dev/conda-forge/osx-arm64/rustfs-1.0.4-h1a79e51_0.conda
-  sha256: 201fe2905cdf88e07de2e0f656ea8aa62a9094c7d0c948795e02fb860eb8e39f
-  md5: 1f80f2bd3574101d603ed5aec75891d9
+- conda: https://prefix.dev/conda-forge/osx-arm64/rustfs-1.0.4-h1a79e51_1.conda
+  sha256: 219d1a57bab14166cf244d69bae673b163bc60cbbd4ca8c2d9664469fbb2de1a
+  md5: d626fe0667c179a8a104a6fb6ccdba58
   depends:
-  - libcxx >=21
   - __osx >=11.0
+  - libcxx >=21
   constrains:
   - __osx >=11.0
   license: Apache-2.0
   license_family: APACHE
   run_exports: {}
-  size: 209360218
-  timestamp: 1792949508448
+  size: 209381378
+  timestamp: 1794038858981
 - conda: https://prefix.dev/conda-forge/osx-arm64/rustfs-cli-0.1.36-hc2d82ec_1.conda
   sha256: 4e80b63b65bdf481773050f8f491bae8e477006cd1ef2715b4b5da77d7a48467
   md5: e3205a1261bfbf7e652f8d08fc88b1be
@@ -6881,9 +6881,9 @@ packages:
   run_exports: {}
   size: 7159
   timestamp: 1792818699415
-- conda: https://prefix.dev/conda-forge/win-64/rustfs-1.0.4-h3acf7e8_0.conda
-  sha256: 96f7846706d5fba142dbb4d5a0618283a3e311d52b6e7811cc8937dd81830a0d
-  md5: 704954110f0de67992c19a7b2c898fc3
+- conda: https://prefix.dev/conda-forge/win-64/rustfs-1.0.4-h3acf7e8_1.conda
+  sha256: ebd30edece980ade10d34794d7dbad3e72df7ed4a325cdceb5f0c5d98a149985
+  md5: b49f10c62aff2cb3dab16cbe37034d45
   depends:
   - vc >=14.3,<15
   - vc14_runtime >=14.44.35208
@@ -6892,8 +6892,8 @@ packages:
   license: Apache-2.0
   license_family: APACHE
   run_exports: {}
-  size: 253292918
-  timestamp: 1792949495744
+  size: 253494652
+  timestamp: 1794038816280
 - conda: https://prefix.dev/conda-forge/win-64/rustfs-cli-0.1.36-h18a1a76_1.conda
   sha256: fb87a503b33a3d2ae4bcb328df789589cd89a00bcb727c7e2117732d480d40fd
   md5: 5b178a3254495a406d705cfd8d2149be
