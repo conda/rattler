@@ -147,6 +147,10 @@ pub struct QuetzOpts {
     /// Force overwrite existing packages
     #[arg(long)]
     pub force: bool,
+
+    /// Skip upload if package already exists.
+    #[arg(short, long, alias = "skip-if-exists")]
+    pub skip_existing: bool,
 }
 
 #[derive(Debug)]
@@ -156,23 +160,43 @@ pub struct QuetzData {
     pub channels: String,
     pub api_key: Option<String>,
     pub force: ForceOverwrite,
+    pub skip_existing: SkipExisting,
 }
 
 impl From<QuetzOpts> for QuetzData {
     fn from(value: QuetzOpts) -> Self {
-        Self::new(value.url, value.channels, value.api_key, value.force.into())
+        Self::new(
+            value.url,
+            value.channels,
+            value.api_key,
+            value.force.into(),
+            value.skip_existing.into(),
+        )
     }
 }
 
 impl QuetzData {
     /// Create a new instance of `QuetzData`
-    pub fn new(url: Url, channels: String, api_key: Option<String>, force: ForceOverwrite) -> Self {
+    pub fn new(
+        url: Url,
+        channels: String,
+        api_key: Option<String>,
+        force: ForceOverwrite,
+        skip_existing: SkipExisting,
+    ) -> Self {
         Self {
             url: url.into(),
             channels,
             api_key,
             force,
+            skip_existing,
         }
+    }
+
+    /// Set whether to skip existing packages.
+    pub fn with_skip_existing(mut self, skip_existing: SkipExisting) -> Self {
+        self.skip_existing = skip_existing;
+        self
     }
 }
 
@@ -201,6 +225,10 @@ pub struct ArtifactoryOpts {
     /// Your Artifactory token for bearer authentication.
     #[arg(short, long, env = "ARTIFACTORY_TOKEN", conflicts_with_all = ["username", "password"])]
     pub token: Option<String>,
+
+    /// Skip upload if package already exists.
+    #[arg(short, long, alias = "skip-if-exists")]
+    pub skip_existing: bool,
 }
 
 /// Authentication provided directly for an Artifactory upload.
@@ -218,13 +246,15 @@ pub struct ArtifactoryData {
     pub url: UrlWithTrailingSlash,
     pub channels: String,
     pub authentication: Option<ArtifactoryAuthentication>,
+    pub skip_existing: SkipExisting,
 }
 
 impl TryFrom<ArtifactoryOpts> for ArtifactoryData {
     type Error = miette::Error;
 
     fn try_from(value: ArtifactoryOpts) -> Result<Self, Self::Error> {
-        let data = Self::new(value.url, value.channels);
+        let mut data =
+            Self::new(value.url, value.channels).with_skip_existing(value.skip_existing.into());
 
         if let Some(username) = value.username {
             let password = value
@@ -248,7 +278,14 @@ impl ArtifactoryData {
             url: url.into(),
             channels,
             authentication: None,
+            skip_existing: SkipExisting(false),
         }
+    }
+
+    /// Set whether to skip existing packages.
+    pub fn with_skip_existing(mut self, skip_existing: SkipExisting) -> Self {
+        self.skip_existing = skip_existing;
+        self
     }
 
     /// Use HTTP bearer authentication with the given token.
@@ -305,7 +342,7 @@ pub struct PrefixOpts {
     pub store_github_attestation: bool,
 
     /// Skip upload if package already exists.
-    #[arg(short, long)]
+    #[arg(short, long, alias = "skip-if-exists")]
     pub skip_existing: bool,
 
     /// Force overwrite existing packages
@@ -390,6 +427,10 @@ pub struct AnacondaOpts {
     /// Replace files on conflict
     #[arg(long, short, env = "ANACONDA_FORCE")]
     pub force: bool,
+
+    /// Skip upload if package already exists.
+    #[arg(short, long, alias = "skip-if-exists")]
+    pub skip_existing: bool,
 }
 
 #[cfg(feature = "s3")]
@@ -428,6 +469,10 @@ pub struct S3Opts {
     /// Replace files if it already exists.
     #[arg(long)]
     pub force: bool,
+
+    /// Skip upload if package already exists.
+    #[arg(short, long, alias = "skip-if-exists")]
+    pub skip_existing: bool,
 }
 
 #[derive(Debug)]
@@ -438,6 +483,7 @@ pub struct AnacondaData {
     pub api_key: Option<String>,
     pub url: UrlWithTrailingSlash,
     pub force: ForceOverwrite,
+    pub skip_existing: SkipExisting,
 }
 
 impl From<AnacondaOpts> for AnacondaData {
@@ -448,6 +494,7 @@ impl From<AnacondaOpts> for AnacondaData {
             value.api_key,
             value.url,
             value.force.into(),
+            value.skip_existing.into(),
         )
     }
 }
@@ -460,6 +507,7 @@ impl AnacondaData {
         api_key: Option<String>,
         url: Option<Url>,
         force: ForceOverwrite,
+        skip_existing: SkipExisting,
     ) -> Self {
         Self {
             owner,
@@ -469,7 +517,14 @@ impl AnacondaData {
                 .unwrap_or_else(|| Url::parse("https://api.anaconda.org").unwrap())
                 .into(),
             force,
+            skip_existing,
         }
+    }
+
+    /// Set whether to skip existing packages.
+    pub fn with_skip_existing(mut self, skip_existing: SkipExisting) -> Self {
+        self.skip_existing = skip_existing;
+        self
     }
 }
 
@@ -497,6 +552,10 @@ pub struct CloudsmithOpts {
     /// Force overwrite existing packages
     #[arg(long, env = "CLOUDSMITH_FORCE")]
     pub force: bool,
+
+    /// Skip upload if package already exists.
+    #[arg(short, long, alias = "skip-if-exists")]
+    pub skip_existing: bool,
 }
 
 #[derive(Debug)]
@@ -507,11 +566,14 @@ pub struct CloudsmithData {
     pub api_key: Option<String>,
     pub url: UrlWithTrailingSlash,
     pub force: ForceOverwrite,
+    pub skip_existing: SkipExisting,
 }
 
 impl From<CloudsmithOpts> for CloudsmithData {
     fn from(value: CloudsmithOpts) -> Self {
-        Self::new(value.owner, value.repo, value.api_key, value.url).with_force(value.force.into())
+        Self::new(value.owner, value.repo, value.api_key, value.url)
+            .with_force(value.force.into())
+            .with_skip_existing(value.skip_existing.into())
     }
 }
 
@@ -526,12 +588,19 @@ impl CloudsmithData {
                 .unwrap_or_else(|| Url::parse("https://api.cloudsmith.io/v1").unwrap())
                 .into(),
             force: ForceOverwrite(false),
+            skip_existing: SkipExisting(false),
         }
     }
 
     /// Set whether to overwrite existing packages.
     pub fn with_force(mut self, force: ForceOverwrite) -> Self {
         self.force = force;
+        self
+    }
+
+    /// Set whether to skip existing packages.
+    pub fn with_skip_existing(mut self, skip_existing: SkipExisting) -> Self {
+        self.skip_existing = skip_existing;
         self
     }
 }
@@ -570,6 +639,10 @@ pub struct CondaForgeOpts {
     /// Dry run, don't actually upload anything
     #[arg(long, env = "DRY_RUN")]
     pub dry_run: bool,
+
+    /// Skip upload if package already exists.
+    #[arg(short, long, alias = "skip-if-exists")]
+    pub skip_existing: bool,
 }
 
 #[derive(Debug)]
@@ -583,6 +656,7 @@ pub struct CondaForgeData {
     pub validation_endpoint: Url,
     pub provider: Option<String>,
     pub dry_run: bool,
+    pub skip_existing: SkipExisting,
 }
 
 impl From<CondaForgeOpts> for CondaForgeData {
@@ -596,6 +670,7 @@ impl From<CondaForgeOpts> for CondaForgeData {
             value.validation_endpoint,
             value.provider,
             value.dry_run,
+            value.skip_existing.into(),
         )
     }
 }
@@ -612,6 +687,7 @@ impl CondaForgeData {
         validation_endpoint: Option<Url>,
         provider: Option<String>,
         dry_run: bool,
+        skip_existing: SkipExisting,
     ) -> Self {
         Self {
             staging_token,
@@ -626,6 +702,7 @@ impl CondaForgeData {
             }),
             provider,
             dry_run,
+            skip_existing,
         }
     }
 }

@@ -98,6 +98,7 @@ pub async fn upload_packages_to_conda_forge(
                     &conda_forge_data.staging_channel,
                     std::slice::from_ref(&channel),
                     ForceOverwrite(false),
+                    conda_forge_data.skip_existing,
                     &package,
                 )
                 .await?;

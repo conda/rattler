@@ -73,6 +73,7 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
                 &args.package_files,
                 s3_opts.attestation.as_deref(),
                 s3_opts.force,
+                s3_opts.skip_existing,
             )
             .await
         }

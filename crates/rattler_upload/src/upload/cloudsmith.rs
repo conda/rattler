@@ -6,6 +6,7 @@ use serde::Deserialize;
 use tracing::{debug, info};
 
 use crate::tool_configuration::APP_USER_AGENT;
+use crate::upload::opt::SkipExisting;
 
 /// Chunk size for multi-part uploads (100 MB).
 pub const CHUNK_SIZE: usize = 1024 * 1024 * 100;
@@ -295,7 +296,8 @@ impl Cloudsmith {
         &self,
         file_identifier: &str,
         republish: bool,
-    ) -> Result<PackageResponse, CloudsmithError> {
+        skip_existing: SkipExisting,
+    ) -> Result<Option<PackageResponse>, CloudsmithError> {
         let url = self
             .url
             .join(&format!(
@@ -320,10 +322,22 @@ impl Cloudsmith {
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
             let body = resp.text().await.into_diagnostic()?;
+            if (status == 409
+                || (status == 400
+                    && (body.to_lowercase().contains("already exists")
+                        || body.to_lowercase().contains("duplicate"))))
+                && skip_existing.is_enabled()
+            {
+                return Ok(None);
+            }
             return Err(CloudsmithError::PackageCreationFailed { status, body });
         }
 
-        resp.json().await.into_diagnostic().map_err(Into::into)
+        resp.json()
+            .await
+            .into_diagnostic()
+            .map(Some)
+            .map_err(Into::into)
     }
 }
 
@@ -487,9 +501,10 @@ mod test {
         assert!(chunk_count.load(Ordering::SeqCst) >= 1);
 
         let pkg = client
-            .create_package(&upload_resp.identifier, false)
+            .create_package(&upload_resp.identifier, false, SkipExisting(false))
             .await
-            .expect("create_package failed");
+            .expect("create_package failed")
+            .unwrap();
         assert_eq!(pkg.slug_perm, "mp-slug-perm");
     }
 
@@ -531,16 +546,60 @@ mod test {
         );
 
         let pkg = client
-            .create_package("test-file-id", true)
+            .create_package("test-file-id", true, SkipExisting(false))
             .await
-            .expect("create_package failed");
+            .expect("create_package failed")
+            .unwrap();
         assert_eq!(pkg.slug_perm, "pkg-slug-perm");
         assert!(republish_seen.load(Ordering::SeqCst));
 
         let _ = client
-            .create_package("test-file-id", false)
+            .create_package("test-file-id", false, SkipExisting(false))
             .await
             .expect("create_package failed");
         assert!(!republish_seen.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn test_cloudsmith_create_package_skip_existing() {
+        let router = Router::new().route(
+            "/packages/{owner}/{repo}/upload/conda/",
+            post(|| async {
+                (
+                    StatusCode::CONFLICT,
+                    [("content-type", "application/json")],
+                    serde_json::json!({"error": "Package already exists"}).to_string(),
+                )
+            }),
+        );
+
+        let url = crate::upload::test_utils::start_test_server(router).await;
+        let client = Cloudsmith::new(
+            "test-api-key".to_string(),
+            url.into(),
+            "test-owner".to_string(),
+            "test-repo".to_string(),
+        );
+
+        let res = client
+            .create_package("test-file-id", false, SkipExisting(true))
+            .await;
+        assert!(res.is_ok(), "{:?}", res.unwrap_err());
+        assert!(
+            res.unwrap().is_none(),
+            "expected None when skipping existing"
+        );
+
+        let err = client
+            .create_package("test-file-id", false, SkipExisting(false))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                CloudsmithError::PackageCreationFailed { status: 409, .. }
+            ),
+            "expected PackageCreationFailed(409), got: {err:?}"
+        );
     }
 }

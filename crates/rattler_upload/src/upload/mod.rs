@@ -135,7 +135,7 @@ pub async fn upload_package_to_quetz(
             .query(&[("force", force), ("sha256", &hash)])
             .header("X-API-Key", token.clone());
 
-        send_request_with_retry(prepared_request, package_file).await?;
+        send_request_with_retry(prepared_request, package_file, quetz_data.skip_existing).await?;
     }
 
     info!("Packages successfully uploaded to Quetz server");
@@ -205,6 +205,23 @@ pub async fn upload_package_to_artifactory(
             ))
             .into_diagnostic()?;
 
+        if artifactory_data.skip_existing.is_enabled() {
+            let head_request = client.request(Method::HEAD, upload_url.clone());
+            let head_request = match &authentication {
+                Authentication::BearerToken(token) => head_request.bearer_auth(token),
+                Authentication::BasicHTTP { username, password } => {
+                    head_request.basic_auth(username, Some(password))
+                }
+                _ => unreachable!("Artifactory authentication was validated above"),
+            };
+            if let Ok(head_resp) = head_request.send().await {
+                if head_resp.status().is_success() {
+                    info!("Skip existing package: {}", package_name);
+                    continue;
+                }
+            }
+        }
+
         let prepared_request = client.request(Method::PUT, upload_url);
         let prepared_request = match &authentication {
             Authentication::BearerToken(token) => prepared_request.bearer_auth(token),
@@ -214,7 +231,12 @@ pub async fn upload_package_to_artifactory(
             _ => unreachable!("Artifactory authentication was validated above"),
         };
 
-        send_request_with_retry(prepared_request, package_file).await?;
+        send_request_with_retry(
+            prepared_request,
+            package_file,
+            artifactory_data.skip_existing,
+        )
+        .await?;
     }
 
     info!("Packages successfully uploaded to Artifactory server");
@@ -265,6 +287,7 @@ pub async fn upload_package_to_anaconda(
                     &anaconda_data.owner,
                     &anaconda_data.channels,
                     anaconda_data.force,
+                    anaconda_data.skip_existing,
                     &package,
                 )
                 .await?;
@@ -348,12 +371,17 @@ pub async fn upload_package_to_cloudsmith(
             .create_package(
                 &upload_response.identifier,
                 cloudsmith_data.force.is_enabled(),
+                cloudsmith_data.skip_existing,
             )
             .await?;
-        info!(
-            "Package created: slug_perm={}, slug={}",
-            pkg_response.slug_perm, pkg_response.slug
-        );
+        if let Some(pkg_response) = pkg_response {
+            info!(
+                "Package created: slug_perm={}, slug={}",
+                pkg_response.slug_perm, pkg_response.slug
+            );
+        } else {
+            info!("Skip existing package: {}", filename);
+        }
     }
 
     info!("Packages successfully uploaded to Cloudsmith");
@@ -363,7 +391,8 @@ pub async fn upload_package_to_cloudsmith(
 async fn send_request_with_retry(
     prepared_request: reqwest::RequestBuilder,
     package_file: &Path,
-) -> miette::Result<reqwest::Response> {
+    skip_existing: opt::SkipExisting,
+) -> miette::Result<()> {
     let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
     let mut current_try = 0;
 
@@ -376,11 +405,23 @@ async fn send_request_with_retry(
         let response = send_request(request, package_file).await?;
 
         if response.status().is_success() {
-            return Ok(response);
+            return Ok(());
         }
 
         let status = response.status();
         let body = response.text().await.into_diagnostic()?;
+
+        if status == StatusCode::CONFLICT && skip_existing.is_enabled() {
+            info!(
+                "Skip existing package: {}",
+                package_file
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+            );
+            return Ok(());
+        }
+
         let err = miette::miette!(
             "Failed to upload package file: {}\nStatus: {}\nBody: {}",
             package_file.display(),
@@ -883,5 +924,179 @@ mod test {
         ])
         .unwrap();
         assert!(!opts_default.force);
+    }
+
+    #[test]
+    fn test_skip_existing_and_alias_opts() {
+        #[cfg(feature = "s3")]
+        use crate::upload::opt::S3Opts;
+        use crate::upload::opt::{
+            AnacondaOpts, ArtifactoryOpts, CloudsmithOpts, CondaForgeOpts, PrefixOpts, QuetzOpts,
+        };
+        use clap::Parser;
+
+        // Prefix
+        let opts =
+            PrefixOpts::try_parse_from(["prefix", "--channel", "test", "--skip-existing"]).unwrap();
+        assert!(opts.skip_existing);
+        let opts = PrefixOpts::try_parse_from(["prefix", "--channel", "test", "--skip-if-exists"])
+            .unwrap();
+        assert!(opts.skip_existing);
+
+        // Anaconda
+        let opts = AnacondaOpts::try_parse_from(["anaconda", "--owner", "test", "--skip-existing"])
+            .unwrap();
+        assert!(opts.skip_existing);
+        let opts =
+            AnacondaOpts::try_parse_from(["anaconda", "--owner", "test", "--skip-if-exists"])
+                .unwrap();
+        assert!(opts.skip_existing);
+
+        // Quetz
+        let opts = QuetzOpts::try_parse_from([
+            "quetz",
+            "--url",
+            "http://localhost",
+            "--channel",
+            "test",
+            "--skip-existing",
+        ])
+        .unwrap();
+        assert!(opts.skip_existing);
+        let opts = QuetzOpts::try_parse_from([
+            "quetz",
+            "--url",
+            "http://localhost",
+            "--channel",
+            "test",
+            "--skip-if-exists",
+        ])
+        .unwrap();
+        assert!(opts.skip_existing);
+
+        // Artifactory
+        let opts = ArtifactoryOpts::try_parse_from([
+            "artifactory",
+            "--url",
+            "http://localhost",
+            "--channel",
+            "test",
+            "--skip-existing",
+        ])
+        .unwrap();
+        assert!(opts.skip_existing);
+        let opts = ArtifactoryOpts::try_parse_from([
+            "artifactory",
+            "--url",
+            "http://localhost",
+            "--channel",
+            "test",
+            "--skip-if-exists",
+        ])
+        .unwrap();
+        assert!(opts.skip_existing);
+
+        // Cloudsmith
+        let opts = CloudsmithOpts::try_parse_from([
+            "cloudsmith",
+            "--owner",
+            "test",
+            "--repo",
+            "test",
+            "--skip-existing",
+        ])
+        .unwrap();
+        assert!(opts.skip_existing);
+        let opts = CloudsmithOpts::try_parse_from([
+            "cloudsmith",
+            "--owner",
+            "test",
+            "--repo",
+            "test",
+            "--skip-if-exists",
+        ])
+        .unwrap();
+        assert!(opts.skip_existing);
+
+        // CondaForge
+        let opts = CondaForgeOpts::try_parse_from([
+            "conda-forge",
+            "--staging-token",
+            "token",
+            "--feedstock",
+            "feedstock",
+            "--feedstock-token",
+            "token",
+            "--skip-existing",
+        ])
+        .unwrap();
+        assert!(opts.skip_existing);
+        let opts = CondaForgeOpts::try_parse_from([
+            "conda-forge",
+            "--staging-token",
+            "token",
+            "--feedstock",
+            "feedstock",
+            "--feedstock-token",
+            "token",
+            "--skip-if-exists",
+        ])
+        .unwrap();
+        assert!(opts.skip_existing);
+
+        // S3
+        #[cfg(feature = "s3")]
+        {
+            let opts =
+                S3Opts::try_parse_from(["s3", "--channel", "s3://bucket/test", "--skip-existing"])
+                    .unwrap();
+            assert!(opts.skip_existing);
+            let opts =
+                S3Opts::try_parse_from(["s3", "--channel", "s3://bucket/test", "--skip-if-exists"])
+                    .unwrap();
+            assert!(opts.skip_existing);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_quetz_upload_skip_existing() {
+        let router = Router::new().fallback(|| async { StatusCode::CONFLICT });
+        let url = test_utils::start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let quetz_data = crate::upload::opt::QuetzData::new(
+            url,
+            "test-channel".to_string(),
+            Some("test-token".to_string()),
+            crate::upload::opt::ForceOverwrite(false),
+            crate::upload::opt::SkipExisting(true),
+        );
+
+        let result =
+            super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+    }
+
+    #[tokio::test]
+    async fn test_artifactory_upload_skip_existing_head() {
+        // HEAD returns 200 OK, meaning package exists -> should be skipped without PUT
+        let router = Router::new().route(
+            "/{channel}/{subdir}/{filename}",
+            axum::routing::head(|| async { StatusCode::OK })
+                .put(|| async { StatusCode::INTERNAL_SERVER_ERROR }),
+        );
+        let url = test_utils::start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let artifactory_data =
+            crate::upload::opt::ArtifactoryData::new(url, "test-channel".to_string())
+                .with_bearer_auth("test-token".to_string())
+                .with_skip_existing(crate::upload::opt::SkipExisting(true));
+
+        let result = super::upload_package_to_artifactory(
+            &storage,
+            &vec![test_package_path()],
+            artifactory_data,
+        )
+        .await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
     }
 }

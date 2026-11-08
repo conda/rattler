@@ -30,8 +30,17 @@ pub async fn upload_package_to_s3(
     credentials: S3CredentialSource,
     package_files: &[PathBuf],
     force: bool,
+    skip_existing: bool,
 ) -> miette::Result<()> {
-    upload_package_to_s3_with_attestation(channel, credentials, package_files, None, force).await
+    upload_package_to_s3_with_attestation(
+        channel,
+        credentials,
+        package_files,
+        None,
+        force,
+        skip_existing,
+    )
+    .await
 }
 
 /// Uploads packages and an optional attestation sidecar to a channel in an S3
@@ -47,6 +56,7 @@ pub async fn upload_package_to_s3_with_attestation(
     package_files: &[PathBuf],
     attestation: Option<&Path>,
     force: bool,
+    skip_existing: bool,
 ) -> miette::Result<()> {
     if attestation.is_some() && package_files.len() != 1 {
         miette::bail!("an attestation can only be uploaded with exactly one package");
@@ -76,7 +86,10 @@ pub async fn upload_package_to_s3_with_attestation(
         .map(|package_file| {
             let op = op.clone();
             let channel = &channel;
-            async move { upload_single_package(&op, channel, bucket, package_file, force).await }
+            async move {
+                upload_single_package(&op, channel, bucket, package_file, force, skip_existing)
+                    .await
+            }
         })
         .buffer_unordered(PACKAGE_CONCURRENCY)
         .collect::<Vec<_>>()
@@ -157,6 +170,7 @@ async fn upload_single_package(
     bucket: &str,
     package_file: &Path,
     force: bool,
+    skip_existing: bool,
 ) -> miette::Result<()> {
     let package = ExtractedPackage::from_package_file(package_file)?;
     let subdir = package
@@ -201,8 +215,15 @@ async fn upload_single_package(
         .await
     {
         Err(e) if e.kind() == ErrorKind::ConditionNotMatch => {
+            if skip_existing {
+                tracing::info!(
+                    "Skip existing package: s3://{bucket}{}/{key}",
+                    channel.path().to_string()
+                );
+                return Ok(());
+            }
             miette::bail!(
-                "Package s3://{bucket}{}/{key} already exists. Use --force to overwrite.",
+                "Package s3://{bucket}{}/{key} already exists. Use --skip-existing to skip or --force to overwrite.",
                 channel.path().to_string()
             );
         }
@@ -238,8 +259,15 @@ async fn upload_single_package(
 
     match writer.close().await {
         Err(e) if e.kind() == ErrorKind::ConditionNotMatch => {
+            if skip_existing {
+                tracing::info!(
+                    "Skip existing package: s3://{bucket}{}/{key}",
+                    channel.path().to_string()
+                );
+                return Ok(());
+            }
             miette::bail!(
-                "Package s3://{bucket}{}/{key} already exists. Use --force to overwrite.",
+                "Package s3://{bucket}{}/{key} already exists. Use --skip-existing to skip or --force to overwrite.",
                 channel.path().to_string()
             );
         }
@@ -296,5 +324,33 @@ mod tests {
         publish_attestation_sidecar(&op, mutable_key, bytes)
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_s3_upload_package_skip_existing() {
+        use super::upload_single_package;
+        use crate::upload::test_utils::test_package_path;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let op =
+            opendal::Operator::new(Fs::default().root(temp_dir.path().to_str().unwrap())).unwrap();
+        let channel = url::Url::parse("s3://test-bucket/test-channel").unwrap();
+        let package_path = test_package_path();
+
+        // First upload succeeds
+        let res =
+            upload_single_package(&op, &channel, "test-bucket", &package_path, false, false).await;
+        assert!(res.is_ok(), "{:?}", res.unwrap_err());
+
+        // Second upload without skip_existing fails with conflict
+        let res =
+            upload_single_package(&op, &channel, "test-bucket", &package_path, false, false).await;
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("already exists"));
+
+        // Second upload with skip_existing succeeds
+        let res =
+            upload_single_package(&op, &channel, "test-bucket", &package_path, false, true).await;
+        assert!(res.is_ok(), "{:?}", res.unwrap_err());
     }
 }
