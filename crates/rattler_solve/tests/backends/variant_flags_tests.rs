@@ -4,7 +4,7 @@ use super::helpers::{PackageBuilder, SolverCase, run_solver_cases};
 use rattler_conda_types::Flag;
 #[cfg(feature = "libsolv_c")]
 use rattler_conda_types::{MatchSpec, MatchSpecCondition, ParseMatchSpecOptions, RepodataRevision};
-use rattler_solve::{FlagPreference, SolverImpl};
+use rattler_solve::{ChannelPriority, FlagPreference, SolverImpl};
 #[cfg(feature = "libsolv_c")]
 use rattler_solve::{SolveError, SolverTask};
 
@@ -139,6 +139,47 @@ pub(super) fn solve_flag_preferences_order_variants<T: SolverImpl + Default>() {
             .flag_preferences([prefer("debug")])
             .expect_present([&consumer, &release])
             .expect_absent([&debug]),
+    ]);
+
+    // A preference only reorders variants within one channel; it never pulls
+    // a variant from a lower-priority channel.
+    let release_high = PackageBuilder::new("foo")
+        .version("1.0.0")
+        .build_string("release_0")
+        .flags(["release"])
+        .channel("high")
+        .build();
+    let debug_low = PackageBuilder::new("foo")
+        .version("1.0.0")
+        .build_string("debug_0")
+        .flags(["debug"])
+        .channel("low")
+        .build();
+    run_solver_cases::<T>(&[
+        SolverCase::new("flexible channel priority outranks a preferred flag")
+            .repository(vec![release_high.clone()])
+            .repository(vec![debug_low.clone()])
+            .channel_priority(ChannelPriority::Flexible)
+            .specs(["foo"])
+            .flag_preferences([prefer("debug")])
+            .expect_present([&release_high])
+            .expect_absent([&debug_low]),
+        SolverCase::new("version-first channel priority outranks a preferred flag")
+            .repository(vec![release_high.clone()])
+            .repository(vec![debug_low.clone()])
+            .channel_priority(ChannelPriority::VersionFirst)
+            .specs(["foo"])
+            .flag_preferences([prefer("debug")])
+            .expect_present([&release_high])
+            .expect_absent([&debug_low]),
+        SolverCase::new("disabled channel priority lets the preference decide")
+            .repository(vec![release_high.clone()])
+            .repository(vec![debug_low.clone()])
+            .channel_priority(ChannelPriority::Disabled)
+            .specs(["foo"])
+            .flag_preferences([prefer("debug")])
+            .expect_present([&debug_low])
+            .expect_absent([&release_high]),
     ]);
 }
 
