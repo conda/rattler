@@ -23,7 +23,10 @@ from rattler.match_spec import MatchSpec, NamelessMatchSpec
 from rattler.networking import Client, fetch_repo_data
 from rattler.package import (
     AboutJson,
+    ArchiveIdentifier,
     BuildString,
+    CondaArchiveIdentifier,
+    CondaArchiveType,
     EntryPoint,
     FileMode,
     IndexJson,
@@ -101,6 +104,7 @@ del _get_rattler_version
 
 __all__ = [
     "AboutJson",
+    "ArchiveIdentifier",
     "BuildString",
     "CacheIndex",
     "CertificateClaims",
@@ -112,6 +116,8 @@ __all__ = [
     "ChannelPriority",
     "ChannelRelations",
     "Client",
+    "CondaArchiveIdentifier",
+    "CondaArchiveType",
     "CondaLockedBinaryPackage",
     "CondaLockedPackage",
     "CondaLockedSourcePackage",
