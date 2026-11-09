@@ -56,6 +56,11 @@ class Issuer:
         """Return the GitLab CI OIDC issuer."""
         return cls("https://gitlab.com")
 
+    @classmethod
+    def codeberg(cls) -> Issuer:
+        """Return the Codeberg Actions (Forgejo) OIDC issuer."""
+        return cls("https://codeberg.org/api/actions")
+
 
 @dataclass(frozen=True)
 class Publisher:
