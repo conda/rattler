@@ -515,50 +515,57 @@ fn segments_starts_with<
     a: A,
     b: B, // the prefix we're looking for in 'a'
 ) -> bool {
-    let mut a = a.fuse();
-    let mut b = b.peekable();
-    while let Some(prefix_segment) = b.next() {
-        let is_last_prefix_segment = b.peek().is_none();
-        let matches = match a.next() {
-            Some(segment) => segment_starts_with(&segment, &prefix_segment, is_last_prefix_segment),
-            // The version has fewer segments than the prefix. A missing segment
-            // is equal to a segment of zeros.
-            None => prefix_segment.is_zero(),
+    let mut had_extra_left = false;
+    for ranges in a.zip_longest(b) {
+        let (left, right) = match ranges {
+            EitherOrBoth::Both(left, right) => {
+                // Previous segment had extra left components, but there are more
+                // prefix segments - this is a structural mismatch.
+                // E.g., "1.1c.1" does NOT start with "1.1.1"
+                if had_extra_left {
+                    return false;
+                }
+                (left, right)
+            }
+            // Extra segments in version after prefix is exhausted - OK
+            // E.g., "1.0.1.2" starts with "1.0.1"
+            EitherOrBoth::Left(_) => return true,
+            EitherOrBoth::Right(segment) => {
+                // Prefix has more segments. Zero segments are OK (implicit zeros),
+                // e.g. "1.0" starts with "1.0.0". But like above, the previous
+                // segment must not have had extra components, e.g. "1.1c" does
+                // NOT start with "1.1.0" because "1c" != "1".
+                if !had_extra_left && segment.is_zero() {
+                    continue;
+                }
+                return false;
+            }
         };
-        if !matches {
-            return false;
-        }
-    }
-    true
-}
-
-/// Returns true if the components of `segment` match the components of
-/// `prefix`, treating missing components as `0`. If `allow_extra` is true,
-/// non-zero components in `segment` after the end of `prefix` are allowed.
-fn segment_starts_with(
-    segment: &SegmentIter<'_>,
-    prefix: &SegmentIter<'_>,
-    allow_extra: bool,
-) -> bool {
-    for components in segment.components().zip_longest(prefix.components()) {
-        match components {
-            EitherOrBoth::Both(a, b) => {
-                if a != b {
-                    return false;
+        had_extra_left = false;
+        for values in left.components().zip_longest(right.components()) {
+            match values {
+                EitherOrBoth::Both(a, b) => {
+                    if a != b {
+                        return false;
+                    }
                 }
-            }
-            // The version segment has more components than the prefix segment.
-            EitherOrBoth::Left(component) => {
-                if allow_extra {
-                    return true;
+                // Extra components in version segment. Zero components are OK (implicit zeros).
+                // E.g., "1.1c0.1" starts with "1.1c.1"
+                // Non-zero extra components are only OK if this is the last prefix segment.
+                // E.g., "1.0.1c" starts with "1.0.1"
+                EitherOrBoth::Left(component) => {
+                    if component.is_zero() {
+                        continue;
+                    }
+                    had_extra_left = true;
+                    break;
                 }
-                if !component.is_zero() {
-                    return false;
-                }
-            }
-            // The prefix segment has more components than the version segment.
-            EitherOrBoth::Right(component) => {
-                if !component.is_zero() {
+                // Missing component in version. Zero components are OK (implicit zeros).
+                // E.g., "1.1c.1" starts with "1.1c0.1"
+                EitherOrBoth::Right(component) => {
+                    if component.is_zero() {
+                        continue;
+                    }
                     return false;
                 }
             }
