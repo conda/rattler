@@ -100,19 +100,6 @@ pyo3-build-config = "0.30"
 
 
 [patch.crates-io]
-# TODO: remove once sigstore-rust 0.16 is released (see the workspace Cargo.toml).
-sigstore-bundle = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
-sigstore-crypto = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
-sigstore-fulcio = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
-sigstore-merkle = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
-sigstore-oidc = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
-sigstore-rekor = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
-sigstore-sign = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
-sigstore-trust-root = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
-sigstore-tsa = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
-sigstore-tuf = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
-sigstore-types = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
-sigstore-verify = { git = "https://github.com/wolfv/sigstore-rust", branch = "feat/sign-without-tlog" }
 
 # Prevent package from thinking it's in the workspace
 [workspace]

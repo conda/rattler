@@ -469,23 +469,25 @@ impl InstanceVerifier {
         })
     }
 
-    /// GitHub's instance keeps neither a transparency log nor a certificate
-    /// transparency log. The signing time is established by the RFC 3161
-    /// timestamp instead, which the verifier requires when there is no log
-    /// entry.
+    /// The policy follows what the trusted root advertises. GitHub's roots
+    /// list neither a transparency log nor a certificate transparency log, so
+    /// bundles carry no log entry and certificates no SCT; the signing time
+    /// is established by the RFC 3161 timestamp instead, which the verifier
+    /// requires when there is no log entry. Should a root ever list a log,
+    /// the corresponding check is enforced again.
     fn github(
         trust_domain: &GitHubTrustDomain,
         trusted_root: &TrustedRoot,
     ) -> SigstoreResult<Self> {
-        let instance = SigstoreInstance::GitHub;
         let mut policy = SigstoreVerificationPolicy::any_identity();
-        if !instance.runs_transparency_log() {
-            // An instance without a transparency log runs no certificate
-            // transparency log either, so its certificates carry no SCT.
-            policy = policy.skip_tlog_unsafe().skip_sct();
+        if trusted_root.tlogs.is_empty() {
+            policy = policy.skip_tlog_unsafe();
+        }
+        if trusted_root.ctlogs.is_empty() {
+            policy = policy.skip_sct();
         }
         Ok(Self {
-            instance,
+            instance: SigstoreInstance::GitHub,
             name: format!("GitHub instance of {trust_domain}"),
             github_trust_domain: Some(trust_domain.clone()),
             verifier: Verifier::new(trusted_root)
