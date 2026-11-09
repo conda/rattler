@@ -1,0 +1,27 @@
+---
+source: crates/rattler_solve/tests/backends/main.rs
+expression: result.unwrap_err()
+---
+The following packages are incompatible
+├─ vscode-langservers-extracted * cannot be installed because there are no viable options:
+│  ├─ vscode-langservers-extracted 4.10.0 (build hede6621_0) would require
+│  │  └─ (A) nodejs 22.*, which cannot be installed because there are no viable options:
+│  │     └─ nodejs 22.3.0=h3fe1c63_0 | 22.4.0=h3fe1c63_0 | ... | 22.23.2=h35957e4_0, which conflicts with nodejs >=26.8.2,<27.0a0 (C), >=24.21.0,<25.0a0 (D), >=26.8.1,<27.0a0 (E) and >=24.19.0,<25.0a0 (F)
+│  └─ vscode-langservers-extracted 4.10.0 (build ha4bf28d_0) would require
+│     └─ (B) nodejs 20.*, which cannot be installed because there are no viable options:
+│        └─ nodejs 20.1.0=ha2ed473_0 | 20.5.1=h5f47a4d_1 | ... | 20.20.2=hf0fe506_0, which conflicts with nodejs >=26.8.2,<27.0a0 (C), >=24.21.0,<25.0a0 (D), >=26.8.1,<27.0a0 (E) and >=24.19.0,<25.0a0 (F)
+└─ diffle !=0.0.2 cannot be installed because there are no viable options:
+   ├─ diffle 0.1.5 | 0.1.6 | 0.1.7 (build hd1b9f45_0) would require
+   │  └─ (C) nodejs >=26.8.2,<27.0a0, which cannot be installed because there are no viable options:
+   │     └─ nodejs 26.8.2 | 26.10.0 (build h8d74fab_0), which conflicts with nodejs 22.* (A) and 20.* (B)
+   ├─ diffle 0.1.5 | 0.1.6 | 0.1.7 (build h63323fe_0) would require
+   │  └─ (D) nodejs >=24.21.0,<25.0a0, which cannot be installed because there are no viable options:
+   │     └─ nodejs 24.21.0 (build hb275ff0_0), which conflicts with nodejs 22.* (A) and 20.* (B)
+   ├─ diffle 0.1.0=hd1b9f45_0 | 0.1.0=hd1b9f45_1 | ... | 0.1.4=hd1b9f45_0 would require
+   │  └─ (E) nodejs >=26.8.1,<27.0a0, which cannot be installed because there are no viable options:
+   │     ├─ nodejs 26.8.2 | 26.10.0 (build h8d74fab_0), which conflicts with nodejs 22.* (A) and 20.* (B)
+   │     └─ nodejs 26.8.1 (build h8d74fab_1), which conflicts with nodejs 22.* (A) and 20.* (B)
+   └─ diffle 0.1.0=h63323fe_0 | 0.1.0=h63323fe_1 | ... | 0.1.4=h63323fe_0 would require
+      └─ (F) nodejs >=24.19.0,<25.0a0, which cannot be installed because there are no viable options:
+         ├─ nodejs 24.21.0 (build hb275ff0_0), which conflicts with nodejs 22.* (A) and 20.* (B)
+         └─ nodejs 24.19.0=h654b19f_0 | 24.19.0=hb275ff0_1, which conflicts with nodejs 22.* (A) and 20.* (B)

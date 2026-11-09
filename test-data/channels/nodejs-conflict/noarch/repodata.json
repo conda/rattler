@@ -1,0 +1,521 @@
+{
+  "info": {
+    "subdir": "noarch"
+  },
+  "packages": {},
+  "packages.conda": {
+    "ca-certificates-2025.1.31-h4c7d964_1.conda": {
+      "build": "h4c7d964_1",
+      "build_number": 1,
+      "depends": [
+        "__win"
+      ],
+      "license": "ISC",
+      "md5": "fb8af741d752521fb48b8d116c9b044e",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "d6326613de7aea644f4c3b5fadd87d7b19714fe2ba31c9e2d2cdd65830f95cd4",
+      "size": 159328,
+      "subdir": "noarch",
+      "timestamp": 1745260551365,
+      "version": "2025.1.31"
+    },
+    "ca-certificates-2025.1.31-hbd8a1cb_1.conda": {
+      "build": "hbd8a1cb_1",
+      "build_number": 1,
+      "depends": [
+        "__unix"
+      ],
+      "license": "ISC",
+      "md5": "e74273d9fc5ab633d613cde474b55157",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "43878eddf8eb46e3ba7fcbe77a2f8d00aab9a66d9ff63bc4d072b7af17481197",
+      "size": 158834,
+      "subdir": "noarch",
+      "timestamp": 1745260472197,
+      "version": "2025.1.31"
+    },
+    "ca-certificates-2025.10.5-h4c7d964_0.conda": {
+      "build": "h4c7d964_0",
+      "build_number": 0,
+      "depends": [
+        "__win"
+      ],
+      "license": "ISC",
+      "md5": "e54200a1cd1fe33d61c9df8d3b00b743",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "bfb7f9f242f441fdcd80f1199edd2ecf09acea0f2bcef6f07d7cbb1a8131a345",
+      "size": 156354,
+      "subdir": "noarch",
+      "timestamp": 1759649104842,
+      "version": "2025.10.5"
+    },
+    "ca-certificates-2025.10.5-hbd8a1cb_0.conda": {
+      "build": "hbd8a1cb_0",
+      "build_number": 0,
+      "depends": [
+        "__unix"
+      ],
+      "license": "ISC",
+      "md5": "f9e5fbc24009179e8b0409624691758a",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "3b5ad78b8bb61b6cdc0978a6a99f8dfb2cc789a451378d054698441005ecbdb6",
+      "size": 155907,
+      "subdir": "noarch",
+      "timestamp": 1759649036195,
+      "version": "2025.10.5"
+    },
+    "ca-certificates-2025.11.12-h4c7d964_0.conda": {
+      "build": "h4c7d964_0",
+      "build_number": 0,
+      "depends": [
+        "__win"
+      ],
+      "license": "ISC",
+      "md5": "f98fb7db808b94bc1ec5b0e62f9f1069",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "686a13bd2d4024fc99a22c1e0e68a7356af3ed3304a8d3ff6bb56249ad4e82f0",
+      "size": 152827,
+      "subdir": "noarch",
+      "timestamp": 1762967310929,
+      "version": "2025.11.12"
+    },
+    "ca-certificates-2025.11.12-hbd8a1cb_0.conda": {
+      "build": "hbd8a1cb_0",
+      "build_number": 0,
+      "depends": [
+        "__unix"
+      ],
+      "license": "ISC",
+      "md5": "f0991f0f84902f6b6009b4d2350a83aa",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "b986ba796d42c9d3265602bc038f6f5264095702dd546c14bc684e60c385e773",
+      "size": 152432,
+      "subdir": "noarch",
+      "timestamp": 1762967197890,
+      "version": "2025.11.12"
+    },
+    "ca-certificates-2025.4.26-h4c7d964_0.conda": {
+      "build": "h4c7d964_0",
+      "build_number": 0,
+      "depends": [
+        "__win"
+      ],
+      "license": "ISC",
+      "md5": "23c7fd5062b48d8294fc7f61bf157fba",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "1454f3f53a3b828d3cb68a3440cb0fa9f1cc0e3c8c26e9e023773dc19d88cc06",
+      "size": 152945,
+      "subdir": "noarch",
+      "timestamp": 1745653639656,
+      "version": "2025.4.26"
+    },
+    "ca-certificates-2025.4.26-hbd8a1cb_0.conda": {
+      "build": "hbd8a1cb_0",
+      "build_number": 0,
+      "depends": [
+        "__unix"
+      ],
+      "license": "ISC",
+      "md5": "95db94f75ba080a22eb623590993167b",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "2a70ed95ace8a3f8a29e6cd1476a943df294a7111dfb3e152e3478c4c889b7ac",
+      "size": 152283,
+      "subdir": "noarch",
+      "timestamp": 1745653616541,
+      "version": "2025.4.26"
+    },
+    "ca-certificates-2025.6.15-h4c7d964_0.conda": {
+      "build": "h4c7d964_0",
+      "build_number": 0,
+      "depends": [
+        "__win"
+      ],
+      "license": "ISC",
+      "md5": "b01649832f7bc7ff94f8df8bd2ee6457",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "065241ba03ef3ee8200084c075cbff50955a7e711765395ff34876dbc51a6bb9",
+      "size": 151351,
+      "subdir": "noarch",
+      "timestamp": 1749990170707,
+      "version": "2025.6.15"
+    },
+    "ca-certificates-2025.6.15-hbd8a1cb_0.conda": {
+      "build": "hbd8a1cb_0",
+      "build_number": 0,
+      "depends": [
+        "__unix"
+      ],
+      "license": "ISC",
+      "md5": "72525f07d72806e3b639ad4504c30ce5",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "7cfec9804c84844ea544d98bda1d9121672b66ff7149141b8415ca42dfcd44f6",
+      "size": 151069,
+      "subdir": "noarch",
+      "timestamp": 1749990087500,
+      "version": "2025.6.15"
+    },
+    "ca-certificates-2025.7.14-h4c7d964_0.conda": {
+      "build": "h4c7d964_0",
+      "build_number": 0,
+      "depends": [
+        "__win"
+      ],
+      "license": "ISC",
+      "md5": "40334594f5916bc4c0a0313d64bfe046",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "a7fe9bce8a0f9f985d44940ec13a297df571ee70fb2264b339c62fa190b2c437",
+      "size": 155882,
+      "subdir": "noarch",
+      "timestamp": 1752482396143,
+      "version": "2025.7.14"
+    },
+    "ca-certificates-2025.7.14-hbd8a1cb_0.conda": {
+      "build": "hbd8a1cb_0",
+      "build_number": 0,
+      "depends": [
+        "__unix"
+      ],
+      "license": "ISC",
+      "md5": "d16c90324aef024877d8713c0b7fea5b",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "29defbd83c7829788358678ec996adeee252fa4d4274b7cd386c1ed73d2b201e",
+      "size": 155658,
+      "subdir": "noarch",
+      "timestamp": 1752482350666,
+      "version": "2025.7.14"
+    },
+    "ca-certificates-2025.7.9-h4c7d964_0.conda": {
+      "build": "h4c7d964_0",
+      "build_number": 0,
+      "depends": [
+        "__win"
+      ],
+      "license": "ISC",
+      "md5": "c7a9b2d28779665c251e6a4db1f8cd23",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "35c83fc1cab4b9aedba317ba617e37fee20e5ed1cf7135d8eba6f4d8cdf9c4b3",
+      "size": 152706,
+      "subdir": "noarch",
+      "timestamp": 1752037404993,
+      "version": "2025.7.9"
+    },
+    "ca-certificates-2025.7.9-hbd8a1cb_0.conda": {
+      "build": "hbd8a1cb_0",
+      "build_number": 0,
+      "depends": [
+        "__unix"
+      ],
+      "license": "ISC",
+      "md5": "54521bf3b59c86e2f55b7294b40a04dc",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "d2d7327b09d990d0f51e7aec859a5879743675e377fcf9b4ec4db2dbeb75e15d",
+      "size": 152448,
+      "subdir": "noarch",
+      "timestamp": 1752037382564,
+      "version": "2025.7.9"
+    },
+    "ca-certificates-2025.8.3-h4c7d964_0.conda": {
+      "build": "h4c7d964_0",
+      "build_number": 0,
+      "depends": [
+        "__win"
+      ],
+      "license": "ISC",
+      "md5": "c9e0c0f82f6e63323827db462b40ede8",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "3b82f62baad3fd33827b01b0426e8203a2786c8f452f633740868296bcbe8485",
+      "size": 154489,
+      "subdir": "noarch",
+      "timestamp": 1754210967212,
+      "version": "2025.8.3"
+    },
+    "ca-certificates-2025.8.3-hbd8a1cb_0.conda": {
+      "build": "hbd8a1cb_0",
+      "build_number": 0,
+      "depends": [
+        "__unix"
+      ],
+      "license": "ISC",
+      "md5": "74784ee3d225fc3dca89edb635b4e5cc",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "837b795a2bb39b75694ba910c13c15fa4998d4bb2a622c214a6a5174b2ae53d1",
+      "size": 154402,
+      "subdir": "noarch",
+      "timestamp": 1754210968730,
+      "version": "2025.8.3"
+    },
+    "ca-certificates-2026.1.4-h4c7d964_0.conda": {
+      "build": "h4c7d964_0",
+      "build_number": 0,
+      "depends": [
+        "__win"
+      ],
+      "license": "ISC",
+      "md5": "84d389c9eee640dda3d26fc5335c67d8",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "4ddcb01be03f85d3db9d881407fb13a673372f1b9fac9c836ea441893390e049",
+      "size": 147139,
+      "subdir": "noarch",
+      "timestamp": 1767500904211,
+      "version": "2026.1.4"
+    },
+    "ca-certificates-2026.1.4-hbd8a1cb_0.conda": {
+      "build": "hbd8a1cb_0",
+      "build_number": 0,
+      "depends": [
+        "__unix"
+      ],
+      "license": "ISC",
+      "md5": "bddacf101bb4dd0e51811cb69c7790e2",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "b5974ec9b50e3c514a382335efa81ed02b05906849827a34061c496f4defa0b2",
+      "size": 146519,
+      "subdir": "noarch",
+      "timestamp": 1767500828366,
+      "version": "2026.1.4"
+    },
+    "ca-certificates-2026.2.25-h4c7d964_0.conda": {
+      "build": "h4c7d964_0",
+      "build_number": 0,
+      "depends": [
+        "__win"
+      ],
+      "license": "ISC",
+      "md5": "f001e6e220355b7f87403a4d0e5bf1ca",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "37950019c59b99585cee5d30dbc2cc9696ed4e11f5742606a4db1621ed8f94d6",
+      "size": 147734,
+      "subdir": "noarch",
+      "timestamp": 1772006322223,
+      "version": "2026.2.25"
+    },
+    "ca-certificates-2026.2.25-hbd8a1cb_0.conda": {
+      "build": "hbd8a1cb_0",
+      "build_number": 0,
+      "depends": [
+        "__unix"
+      ],
+      "license": "ISC",
+      "md5": "4492fd26db29495f0ba23f146cd5638d",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "67cc7101b36421c5913a1687ef1b99f85b5d6868da3abbf6ec1a4181e79782fc",
+      "size": 147413,
+      "subdir": "noarch",
+      "timestamp": 1772006283803,
+      "version": "2026.2.25"
+    },
+    "ca-certificates-2026.4.22-h4c7d964_0.conda": {
+      "build": "h4c7d964_0",
+      "build_number": 0,
+      "depends": [
+        "__win"
+      ],
+      "license": "ISC",
+      "md5": "56fb2c6c73efc627b40c77d14caecfba",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "6f4ff81534c19e76acf52fcabf4a258088a932b8f1ac56e9a59e98f6051f8e46",
+      "size": 131388,
+      "subdir": "noarch",
+      "timestamp": 1776865633471,
+      "version": "2026.4.22"
+    },
+    "ca-certificates-2026.4.22-hbd8a1cb_0.conda": {
+      "build": "hbd8a1cb_0",
+      "build_number": 0,
+      "depends": [
+        "__unix"
+      ],
+      "license": "ISC",
+      "md5": "e18ad67cf881dcadee8b8d9e2f8e5f73",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "c9dbcc8039a52023660d6d1bbf87594a93dd69c6ac5a2a44323af2c92976728d",
+      "size": 131039,
+      "subdir": "noarch",
+      "timestamp": 1776865545798,
+      "version": "2026.4.22"
+    },
+    "ca-certificates-2026.5.20-h4c7d964_0.conda": {
+      "build": "h4c7d964_0",
+      "build_number": 0,
+      "depends": [
+        "__win"
+      ],
+      "license": "ISC",
+      "md5": "c9b86eece2f944541b86441c94117ab3",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "86981d764e4ea1883409d30447ff9da46127426d31a63df08315aaded768e652",
+      "size": 130182,
+      "subdir": "noarch",
+      "timestamp": 1779289939595,
+      "version": "2026.5.20"
+    },
+    "ca-certificates-2026.5.20-hbd8a1cb_0.conda": {
+      "build": "hbd8a1cb_0",
+      "build_number": 0,
+      "depends": [
+        "__unix"
+      ],
+      "license": "ISC",
+      "md5": "489b8e97e666c93f68fdb35c3c9b957f",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "9812a303a1395e1dafbd92e5bc8a1ff6013bcbba0a09c7f03a8d23e43560aa9b",
+      "size": 129868,
+      "subdir": "noarch",
+      "timestamp": 1779289852439,
+      "version": "2026.5.20"
+    },
+    "ca-certificates-2026.6.17-h4c7d964_0.conda": {
+      "build": "h4c7d964_0",
+      "build_number": 0,
+      "depends": [
+        "__win"
+      ],
+      "license": "ISC",
+      "md5": "b9696b2cf00dfeec138c70cee38ed192",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "7f458e4a82514d7bebbfef23d92817794a16aaf1c748a15f04870d4fb49aeab2",
+      "size": 129352,
+      "subdir": "noarch",
+      "timestamp": 1781709016515,
+      "version": "2026.6.17"
+    },
+    "ca-certificates-2026.6.17-hbd8a1cb_0.conda": {
+      "build": "hbd8a1cb_0",
+      "build_number": 0,
+      "depends": [
+        "__unix"
+      ],
+      "license": "ISC",
+      "md5": "a9965dd99f683c5f444428f896635716",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "f8e3c730fa14ee3f170493779f06522c4acf89169f43db4f039727709b6419cf",
+      "size": 128866,
+      "subdir": "noarch",
+      "timestamp": 1781708962055,
+      "version": "2026.6.17"
+    },
+    "ca-certificates-2026.7.22-h4c7d964_0.conda": {
+      "build": "h4c7d964_0",
+      "build_number": 0,
+      "depends": [
+        "__win"
+      ],
+      "license": "ISC",
+      "md5": "e27d2ac27b096dc51fedfcf775a53f9b",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "95e8e74062a5fe5f870ac8c90302b6e89945165fdaed7810606e84ddee6aac12",
+      "size": 132136,
+      "subdir": "noarch",
+      "timestamp": 1784754918886,
+      "version": "2026.7.22"
+    },
+    "ca-certificates-2026.7.22-hbd8a1cb_0.conda": {
+      "build": "hbd8a1cb_0",
+      "build_number": 0,
+      "depends": [
+        "__unix"
+      ],
+      "license": "ISC",
+      "md5": "0f51e2391ade309db462a55611263e9c",
+      "name": "ca-certificates",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "0a0544cf95f64394fe4959286f5c71f5444ad58feb0602e53becb27448d24da6",
+      "size": 131780,
+      "subdir": "noarch",
+      "timestamp": 1784754889428,
+      "version": "2026.7.22"
+    },
+    "vscode-langservers-extracted-4.10.0-ha4bf28d_0.conda": {
+      "build": "ha4bf28d_0",
+      "build_number": 0,
+      "depends": [
+        "nodejs 20.*"
+      ],
+      "license": "MIT",
+      "license_family": "MIT",
+      "md5": "fbfceef2c980faa2a5196ab29709492d",
+      "name": "vscode-langservers-extracted",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "5a737711e0ccdc5c76cbfc523812acf5e2325dccd4a5774c1809160bc38eea69",
+      "size": 10442190,
+      "subdir": "noarch",
+      "timestamp": 1733558716595,
+      "version": "4.10.0"
+    },
+    "vscode-langservers-extracted-4.10.0-hede6621_0.conda": {
+      "build": "hede6621_0",
+      "build_number": 0,
+      "depends": [
+        "nodejs 22.*"
+      ],
+      "license": "MIT",
+      "license_family": "MIT",
+      "md5": "ba92f01bcc589c092a3ac565ac2635d8",
+      "name": "vscode-langservers-extracted",
+      "noarch": "generic",
+      "run_exports": {},
+      "sha256": "e8e3871714a586fe7fb1f98d59a75012d63d486c5c91ac079122a01a32dc44ff",
+      "size": 10442231,
+      "subdir": "noarch",
+      "timestamp": 1733558754983,
+      "version": "4.10.0"
+    }
+  },
+  "repodata_version": 2
+}
